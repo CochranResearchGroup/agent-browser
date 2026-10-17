@@ -7229,6 +7229,7 @@ Workflow:
   Independent principal/native safety releases capture; SiteGuide company verification still follows.
   Verified clean failed login may retire as helper_attempt_released; attempted/unknown history stays.
   Trusted untouched-input or independently empty protected-field proof needs native safety; no replay.
+  Exact current identifiers need no clear/retype; unknown prior delivery still requires readback.
   browser_tab list observes owned popup children; login continuation verifies new destinations.
   BILL and QBO starter SiteGuides share routines; reviewed controls configure private receiving.
   prepare_login freezes controls; validate_plan rejects changed or stale evidence before input.

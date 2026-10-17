@@ -51,3 +51,31 @@ async function popupScenario({lostDismissal=false}={}){
 await popupScenario();
 await popupScenario({lostDismissal:true});
 console.log('Native receiving browser: recognized popup dismissed once before hit-tested submit; unknown dismissal cannot replay');
+
+// A controlled identifier may restore its known account after an attempted clear.
+// Exact current equality needs no destructive replacement or native input.
+let prefilledDispatches=0,prefilledChanged=false,prefilledReadbacks=0;
+const prefilled=createNativeReceivingBrowser({desktop,guards,
+ async readObservation(){return {binding:{...binding},origin:'https://accounts.example.test',state:'identifier_required',accountMatched:true,visiblePassword:false,maskedPassword:true,viewport:{width:1440,height:813,devicePixelRatio:1,focused:true,visible:true},controls:{identifier:{selector:'#prefilled',count:1,tag:'INPUT',type:'text',visible:true,enabled:true,hitTarget:true,rect:{x:prefilledChanged?120:100,y:100,width:200,height:30}}}};},
+ async inputMatches({selector,value}){prefilledReadbacks++;assert.equal(selector,'#prefilled');return value==='owned-user';},
+ remote:{async observe(){return {...desktop};},async observation(){return {windows:{windows:[{id:42,active:true,processIdentity:{pid:123,start_token:'456'}}]}};},async captureRegion(_desktop,request){return {region:request.region,capture:{sha256:'prefilled-proof'}};},async input(){prefilledDispatches++;return {delivery:'dispatched'};}},
+});
+const prefilledBefore=await prefilled.observe(binding);
+await prefilled.fill({binding,observation:prefilledBefore,control:'identifier',value:'owned-user',guard:async()=>{}});
+assert.equal(prefilledDispatches,0,'Exact prefilled identifier must not be cleared or typed');
+assert.equal(prefilledReadbacks,1);
+prefilledChanged=true;
+await assert.rejects(prefilled.fill({binding,observation:prefilledBefore,control:'identifier',value:'owned-user',guard:async()=>{}}));
+assert.equal(prefilledReadbacks,1,'Stale controls cannot claim equality');assert.equal(prefilledDispatches,0);
+console.log('Native receiving browser: exact prefilled identifier preserved, stale equality refused');
+let identifierAckLost=false,identifierUnknownDispatches=0;
+const identifierUnknown=createNativeReceivingBrowser({desktop,guards,
+ async readObservation(){return {binding:{...binding},origin:'https://accounts.example.test',state:'identifier_required',accountMatched:true,visiblePassword:false,maskedPassword:true,viewport:{width:1440,height:813,devicePixelRatio:1,focused:true,visible:true},controls:{identifier:{selector:'#identifier',count:1,tag:'INPUT',type:'text',visible:true,enabled:true,hitTarget:true,rect:{x:100,y:100,width:200,height:30}}}};},
+ async inputMatches(){return identifierAckLost;},
+ remote:{async observe(){return {...desktop};},async observation(){return {windows:{windows:[{id:42,active:true,processIdentity:{pid:123,start_token:'456'}}]}};},async captureRegion(_desktop,request){return {region:request.region,capture:{sha256:'unknown-proof'}};},async input(){identifierUnknownDispatches++;identifierAckLost=true;throw Error('Unknown identifier delivery');}},
+});
+const unknownIdentifierBefore=await identifierUnknown.observe(binding),unknownIdentifierInput={binding,observation:unknownIdentifierBefore,control:'identifier',value:'owned-user',guard:async()=>{}};
+await assert.rejects(identifierUnknown.fill(unknownIdentifierInput));
+await assert.rejects(identifierUnknown.fill(unknownIdentifierInput));
+assert.equal(identifierUnknownDispatches,1);
+console.log('Native receiving browser: unknown identifier delivery cannot be converted into equality success');

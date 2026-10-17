@@ -919,6 +919,8 @@ authority. The default Agent Browser MCP catalog is unchanged.
 The trusted hosted receiver sequences observed identifier/password states and
 configured private MFA callbacks. Remote View delivers exact-owner native input;
 recognized popups can receive one guarded Escape before fresh hit-tested submit.
+A current, exact identifier match is preserved without clearing or retyping.
+Password and factor fields still require their normal private replacement checks.
 Unknown dismissal or input acknowledgments cannot replay. Receiving ports stay
 inside the trusted host, while software and agents consume the same public
 routines. See [the routine guide](skills/agent-browser/references/playbooks.md)

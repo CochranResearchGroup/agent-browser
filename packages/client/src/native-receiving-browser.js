@@ -63,6 +63,16 @@ export function createNativeReceivingBrowser({readObservation,inputMatches,remot
   observe,
   async fill(input){
    if(!['identifier','password','mfa'].includes(input.control)||typeof input.value!=='string')throw refused();
+   if(input.control==='identifier'){
+    await input.guard();const current=await observe(input.binding),c=current.controls.identifier;
+    const prefix=current.fingerprint+'\0identifier\0';if(dispatched.has(prefix+'clear')||dispatched.has(prefix+'type'))throw unknown();
+    if(current.fingerprint!==input.observation.fingerprint||!c||c.count!==1||c.tag!=='INPUT'||!['text','email','tel','number'].includes(c.type??'')||!c.visible||!c.enabled||!c.hitTarget)throw refused();
+    // Preserve a current exact identifier. Controlled pages can refill it after
+    // clearing; no clear, key delivery or private-field shortcut is necessary.
+    if(await inputMatches({binding:input.binding,control:input.control,selector:c.selector,value:input.value,guard:input.guard})){
+     await input.guard();const after=await observe(input.binding);if(after.fingerprint!==current.fingerprint)throw refused();return;
+    }
+   }
    await dispatch({...input,phase:'clear'});
    // Native text delivery can change keyboard mappings. Acknowledged empty
    // readback must precede typing, rather than relying on retained selection.

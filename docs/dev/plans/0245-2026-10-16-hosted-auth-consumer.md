@@ -160,3 +160,27 @@ requests and peer assignments remain preserved, owned process residue is zero.
 The real request724e55df remains held. Actual QBO continuation is being read
 once after this qualification, without login input, replay or new challenge.
 QBO principal/company and BILL remain incomplete.
+
+## BILL prefilled identifier packet
+
+Exact existing live source metadata and current existing-profile/native ownership
+are qualified without credential guessing, vault enumeration or new trust. One
+actual BILL request stops uncertain/held after one source read and identifier
+intent, with password/MFA counts zero. Preserve its consumed checkpoint. A
+red/green native-port regression now preserves an exact current identifier
+without unnecessary clear/type, while an additional red/green guard prevents
+unknown prior delivery from becoming equality success. Independent installed
+prefilled-email dummy safety/cleanup is pending. Current actual BILL clean-login
+readback is a separate prepared candidate. No successor or acceptance follows
+until exact current negative/native proof and independent native qualification
+pass. U4 actual account/company and final U5 review remain incomplete.
+
+
+Installed prefilled-email qualification now passes in
+docs/dev/receipts/p245/native-prefilled-identifier.json. One identifier submission,
+three native operations and one synthetic password text delivery verify two
+fewer operations and one fewer text delivery than the prior native fixture.
+Website-driven protected clearing, independent native safety, same-request
+release, restart/no-replay and canary checks pass. Original configuration, bots,
+retained requests and peers are preserved; owned process residue is zero. Actual
+BILL remains held pending its own independent current-clean-login proof.

@@ -439,3 +439,57 @@ generated-script email regex was escaped incorrectly. That private log is
 retained mode0600. Subsequent classifiers redact before output and test the
 redactor against a synthetic email/code string. No password or MFA value was
 printed. This is a diagnostic-output defect, not a successful privacy guard.
+
+## BILL exact source and prefilled identifier packet
+
+Existing named auth metadata and supported existing-profile lookup select the
+BILL receiving target. Targeted metadata-only reads through the already trusted
+LastPass owner qualify one exact live account record, excluding the explicitly
+staging record. No new unlock, trust enrollment, full record export or vault
+listing is used. Record origin and current login origin remain distinct. Private
+source references, account identifiers and receiving tuples stay outside this repo.
+Current native assignment, Service State browser PID, exact profile process census,
+executable and process birth are independently joined. The physical browser owner
+changed before input while the logical full target and native assignment remained.
+Old guards correctly refuse. A separate current-owner config preserves the old one.
+
+A one-pixel DOM/native width mismatch refuses preflight. Exact native maximize is
+acknowledged but does not change DOM width. Unsupported browser_viewport RPC is
+refused; supported browser_command viewport sizing produces1440x813 at DPR1.
+Final preflight passes exact current owner, receiving tuple, identifier uniqueness,
+visibility and hit testing with zero source/input effects. A private wrapper
+composes the QBOv3 host and existing generic LastPass store/runner. Its activation
+preserves QBO configuration, all prior requests/bots and audit counters.
+
+One BILL request5a4e7a25 starts under attempt1/max1. It retrieves one source and
+records one identifier-fill intent, then stops uncertain/held with
+native_identifier_unsettled/auth_input_unknown. Password/MFA counts remain zero.
+No operation-lock refusal occurred. Fresh metadata shows the original expected
+identifier still present and focused, and no populated protected control.
+The request and checkpoint stay consumed and held; no replay or new grant follows
+from page state. Current evidence does not distinguish page refill, native chord
+outcome and immediate readback timing, so no exact root cause is claimed.
+
+The narrower reproducible seam is unnecessary replacement of an already exact
+identifier. A controlled-prefill regression first fails with auth_input_unknown.
+The native port now checks current exact identifier equality under unchanged
+control/native-owner guards and skips clear/type only for that match. A second
+regression first catches equality success after unknown native delivery; the
+repair retains dispatch history and refuses that shortcut. Password/factor
+replacement and unknown-ack rules stay unchanged. Native port tests, hosted
+receiver/playbook/helper tests, fixture guards, service-client checks, workspace
+fmt/strict Clippy and docs build pass. Installed independent prefilled-email
+native dummy qualification is running in /tmp/p245-hosted-b6NI0Z; its final
+safety/cleanup receipt is still pending. No BILL account/company acceptance is
+claimed. A separate private current-clean-login readback candidate is prepared,
+not activated or reconciled. Final U4/U5 gates remain open.
+
+
+Installed prefilled-email qualification now passes in
+docs/dev/receipts/p245/native-prefilled-identifier.json. One identifier submission,
+three native operations and one synthetic password text delivery verify two
+fewer operations and one fewer text delivery than the prior native fixture.
+Website-driven protected clearing, independent native safety, same-request
+release, restart/no-replay and canary checks pass. Original configuration, bots,
+retained requests and peers are preserved; owned process residue is zero. Actual
+BILL remains held pending its own independent current-clean-login proof.

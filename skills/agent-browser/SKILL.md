@@ -120,7 +120,10 @@ verification; missing evidence stays held. `helper_attempt_released` is terminal
 failed login after trusted untouched-input proof or independently empty protected
 fields, plus clean-login/native safety. Preserve attempted/unknown effects;
 readback cannot clear controls or retrieve another factor. Keep its checkpoint;
-the playbook cannot replay it. Read the routine guide for exact setup.
+the playbook cannot replay it. A trusted native receiving port preserves an
+exact current identifier match without clearing or retyping. Unknown prior input
+cannot become equality success; password and factor checks remain unchanged.
+Read the routine guide for exact setup.
 Task tab listing discovers attributable popups after the capture barrier is ready.
 For `collect_posts`, supply reviewed guide and item/page/scroll budgets. Empty output
 is unproven unless `noResultsVerified`; preserve partial results and their reason.
