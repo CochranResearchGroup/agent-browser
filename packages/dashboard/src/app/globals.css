@@ -5642,12 +5642,12 @@ button {
 
 .native-tab-dialog-actions button:disabled { opacity: .5; cursor: default; }
 
-.native-handoff-drawer { left: calc(var(--native-handoff-rail-width, 224px) + 8px); translate: 0 -50%; width: max-content; min-width: min(420px, calc(100vw - var(--native-handoff-rail-width, 224px) - 24px)); max-width: min(1000px, calc(100vw - var(--native-handoff-rail-width, 224px) - 24px)); animation: none; transition: none; }
+.native-handoff-drawer { left: calc(var(--native-handoff-rail-width, 224px) + 8px); translate: 0 -50%; width: min(1240px, calc(100vw - var(--native-handoff-rail-width, 224px) - 24px)); min-width: min(420px, calc(100vw - var(--native-handoff-rail-width, 224px) - 24px)); max-width: min(1240px, calc(100vw - var(--native-handoff-rail-width, 224px) - 24px)); animation: none; transition: none; }
 .native-handoff-drawer[data-state="open"] { animation: native-handoff-enter 140ms ease-out both; }
 @keyframes native-handoff-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .native-handoff-drawer input { display: block; box-sizing: border-box; width: 100%; min-width: 0; padding: 6px; border: 1px solid #555560; color: inherit; background: #202023; }
 .native-handoff-table { color: inherit; width: 100%; border-collapse: collapse; text-align: left; }
-.native-handoff-table th, .native-handoff-table td { padding: 8px; vertical-align: top; max-width: 240px; overflow-wrap: anywhere; border-bottom: 1px solid #3a3a40; }
+.native-handoff-table th, .native-handoff-table td { padding: 8px; vertical-align: top; overflow-wrap: anywhere; border-bottom: 1px solid #3a3a40; }
 .native-handoff-table th, .native-handoff-table small { color: #aaaab4; font-weight: normal; }
 .native-handoff-table td > :is(span, strong, small, time) { display: block; margin-bottom: 4px; }
 .native-handoff-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
@@ -5658,7 +5658,7 @@ button {
 .native-handoff-table .native-handoff-detail-row td { max-width: none; }
 .native-handoff-drawer .native-handoff-details > div { grid-template-columns: 70px minmax(0, 1fr); }
 @media (max-width: 600px) {
-  .native-handoff-drawer { left: 16px; min-width: min(420px, calc(100vw - 32px)); max-width: calc(100vw - 32px); }
+  .native-handoff-drawer { left: 16px; width: calc(100vw - 32px); min-width: min(420px, calc(100vw - 32px)); max-width: calc(100vw - 32px); }
   .native-handoff-table, .native-handoff-table tbody { display: block; }
   .native-handoff-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .native-handoff-table tr { display: grid; grid-template-columns: minmax(0, 1fr); padding: 8px 0; border-bottom: 1px solid #45454d; }
@@ -5673,3 +5673,21 @@ button {
 .native-handoff-policy select, .native-handoff-policy button { color: inherit; background: #242427; border: 1px solid #555560; border-radius: 4px; padding: 5px 8px; font: inherit; }
 .native-handoff-policy select { margin-left: 8px; }
 .native-handoff-policy button:disabled { opacity: .5; cursor: default; }
+
+.native-handoff-filter { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.native-handoff-drawer .native-handoff-filter input { display: inline-block; width: auto; accent-color: #a5b4fc; }
+.native-handoff-sort { display: inline-flex; gap: 6px; align-items: center; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+.native-handoff-sort svg { flex-shrink: 0; }
+.native-handoff-table th:last-child { width: 196px; }
+.native-handoff-table tr[data-link-state="expired"] { background: #fbbf240a; }
+.native-handoff-inactive { color: #fbbf24; }
+.native-handoff-drawer a { color: #93c5fd; }
+.native-handoff-drawer .native-handoff-actions a { color: #93c5fd; border-color: #6080a8; }
+
+.native-handoff-table tr[data-link-state="expired"] td:first-child strong { color: #fbbf24; }
+@media (max-width: 600px) {
+  .native-handoff-table thead { display: block; position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
+  .native-handoff-table thead tr { display: flex; flex-wrap: wrap; gap: 12px; }
+  .native-handoff-table th { padding: 0; }
+  .native-handoff-table th:last-child { display: none; }
+}

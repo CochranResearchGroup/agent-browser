@@ -32,6 +32,7 @@ function Fixture() {
   const [selection, setSelection] = useState(() => readDashboardWorkspaceUrlSelection());
   const [availableTabs, setAvailableTabs] = useState(fixtureTabs);
   const [refreshing, setRefreshing] = useState(false);
+  const [desktopUnavailable, setDesktopUnavailable] = useState(false);
   const [availableHandoffs, setAvailableHandoffs] = useState<typeof handoffs | undefined>(fixtureHandoffs);
   const failHandoffRefresh = useRef(false);
   const pauseRefresh = useRef(false);
@@ -46,6 +47,8 @@ function Fixture() {
     } finally { setRefreshing(false); }
   };
   useEffect(() => {
+    const replace = (event: Event) => setAvailableHandoffs((event as CustomEvent).detail);
+    window.addEventListener("fixture-handoffs-records", replace);
     const empty = () => setAvailableHandoffs([]);
     const unavailable = () => setAvailableHandoffs(undefined);
     const fail = () => { failHandoffRefresh.current = true; };
@@ -65,6 +68,7 @@ function Fixture() {
     window.addEventListener("fixture-handoffs-used", used);
     window.addEventListener("fixture-handoffs-repair", repair);
     return () => {
+      window.removeEventListener("fixture-handoffs-records", replace);
       window.removeEventListener("fixture-handoffs-empty", empty);
       window.removeEventListener("fixture-handoffs-unavailable", unavailable);
       window.removeEventListener("fixture-handoffs-fail", fail);
@@ -77,6 +81,8 @@ function Fixture() {
     };
   }, []);
   useEffect(() => {
+    const withoutDesktop = () => setDesktopUnavailable(true);
+    window.addEventListener("fixture-desktop-unavailable", withoutDesktop);
     const removeSelected = () => setAvailableTabs(current => current.filter(tab => tab.id !== readDashboardWorkspaceUrlSelection().tabId));
     const pause = () => { pauseRefresh.current = true; };
     const finish = () => { pauseRefresh.current = false; releaseRefresh.current?.(); releaseRefresh.current = null; };
@@ -84,6 +90,7 @@ function Fixture() {
     window.addEventListener("fixture-pause-refresh", pause);
     window.addEventListener("fixture-finish-refresh", finish);
     return () => {
+      window.removeEventListener("fixture-desktop-unavailable", withoutDesktop);
       window.removeEventListener("fixture-remove-selected-tab", removeSelected);
       window.removeEventListener("fixture-pause-refresh", pause);
       window.removeEventListener("fixture-finish-refresh", finish);
@@ -97,7 +104,7 @@ function Fixture() {
   }, []);
   const selectedTab = availableTabs.find(tab => tab.id === selection.tabId);
   return <CompactNativeWorkspace runtimeEnvironment="development" nodes={nodes as any} handoffs={availableHandoffs as any} tabs={availableTabs} selection={selection} userLabel="Synthetic operator" onLogout={() => {}} onRefresh={refresh}>
-    <NativeTaskViewport hasSelection={Boolean(selection.tabId)} loading={refreshing} onRefresh={refresh} target={selectedTab ? {
+    <NativeTaskViewport desktopUnavailable={desktopUnavailable} hasSelection={Boolean(selection.tabId)} loading={refreshing} onRefresh={refresh} target={selectedTab && !desktopUnavailable ? {
       browserId: selection.browserId!, sessionName: selection.sessionId!, targetId: `target-${selection.tabId}`,
       displayAllocationId: selection.browserId === "carol-browser" ? "desktop-b" : "desktop-a",
     } : null} />

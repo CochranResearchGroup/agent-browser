@@ -48,8 +48,11 @@ Return, store, and reopen only `handoffUrl` at `/remote-view/<handoff-id>`. Neve
 
 Open the dashboard root `/` or `/browsers` for the native browser workspace.
 Select the owned tab, inspect Properties or Share its durable link, and use
-Handoffs for retained records and independent policies. Refresh retains the
-requested identity. Diagnostics at `/service` keeps Service inspection,
+Handoffs for retained records and independent policies. Sort the drawer by task,
+creation or link expiry. Inactive links are amber and hidden by default behind
+Show inactive; target expiry does not imply link expiry. Icon controls have hover
+help. Managed ownership alone does not prove a native desktop is available.
+Refresh retains the requested identity. Diagnostics at `/service` keeps Service inspection,
 Selection, Activity, Chat, Console, Network, Storage and Extensions optional.
 `?view=service:<name>` and the selected workspace/browser/session/tab/profile/job
 query fields remain supported for diagnostic links. Native Remote View uses its

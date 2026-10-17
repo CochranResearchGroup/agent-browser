@@ -1,6 +1,20 @@
 import type { ServiceManagedWorkspace } from '@agent-browser/client/service-observability';
 import type { WorkspaceServiceBrowser, WorkspaceServiceSession, WorkspaceServiceTab } from './service-workspaces.ts';
 
+/** Choose a viewer from available presentation evidence, not managed ownership
+ * alone. A retained tab without a desktop must not masquerade as a missing tab
+ * or acquire a different browser's stream. */
+export function managedWorkspaceViewport(workspace: ServiceManagedWorkspace | undefined, browserId: string | null, tabId: string | null, selectedStreamAvailable: boolean) {
+  const browser = browserId ? workspace?.browsers[browserId] : null;
+  const tab = tabId ? workspace?.tabs[tabId.replace(/^target:/, '')] : null;
+  const session = tab ? workspace?.sessions[tab.sessionId] : null;
+  const target = browser?.desktop && tab?.browserId === browser.id && session?.browserId === browser.id
+    ? { browserId: browser.id, sessionName: session.name, targetId: tab.targetId, displayAllocationId: browser.desktop.desktop_id }
+    : null;
+  const desktopUnavailable = Boolean(browser && !browser.desktop && tab?.browserId === browser.id && session?.browserId === browser.id && !selectedStreamAvailable);
+  return { target, desktopUnavailable, useNativeViewport: Boolean((browser && (browser.desktop || !selectedStreamAvailable)) || (!browserId && !tabId)) };
+}
+
 /** Adapt the public owner snapshot without inventing viewer or child authority. */
 export function managedWorkspaceSources(workspace?: ServiceManagedWorkspace): {
   browsers: WorkspaceServiceBrowser[]; sessions: WorkspaceServiceSession[]; tabs: WorkspaceServiceTab[];

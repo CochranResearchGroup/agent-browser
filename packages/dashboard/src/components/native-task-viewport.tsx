@@ -20,9 +20,10 @@ type ViewState = { identity: string; status: "opening" | "opened" | "failed"; ur
  * selects the exact owned task and embeds only its ready durable handoff.
  * A missing selected target preserves the requested identity and offers inventory refresh.
  * Known access recourse selects bounded guidance without exposing producer diagnostics. */
-export function NativeTaskViewport({ target, hasSelection, loading = false, onRefresh }: {
+export function NativeTaskViewport({ target, hasSelection, desktopUnavailable = false, loading = false, onRefresh }: {
   target: NativeTaskViewportTarget | null;
   hasSelection?: boolean;
+  desktopUnavailable?: boolean;
   loading?: boolean;
   onRefresh?: () => Promise<void>;
 }) {
@@ -79,9 +80,11 @@ export function NativeTaskViewport({ target, hasSelection, loading = false, onRe
   }, [browserId, sessionName, targetId, displayAllocationId, identity, attempt]);
 
   const current = view?.identity === identity ? view : null;
-  return <section className="native-task-viewport" aria-label="Native desktop" data-native-task-state={selectionMissing ? loading ? "refreshing" : "missing" : current?.status ?? "unselected"}>
+  return <section className="native-task-viewport" aria-label="Native desktop" data-native-task-state={selectionMissing ? loading ? "refreshing" : desktopUnavailable ? "unavailable" : "missing" : current?.status ?? "unselected"}>
     {!target ? selectionMissing ? <div role={loading ? "status" : "alert"} className="native-task-message">
-      <p>{loading ? "Refreshing selected tab…" : "The selected tab cannot be shown. Refresh browsers or select another tab."}</p>
+      <p>{loading ? "Refreshing selected tab…" : desktopUnavailable
+        ? "This browser has no native desktop to display. Refresh browsers to check availability, or continue through the workflow that owns this task."
+        : "The selected tab cannot be shown. Refresh browsers or select another tab."}</p>
       {onRefresh && <button type="button" disabled={loading} onClick={() => void onRefresh()}>{loading ? "Refreshing browsers" : "Refresh browsers"}</button>}
     </div> : <p className="native-task-message">Select a tab to open its native desktop.</p>
       : current?.status === "failed" ? <div role="alert" className="native-task-message">

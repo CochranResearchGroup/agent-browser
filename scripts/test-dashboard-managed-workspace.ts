@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { tabDescription } from '../packages/dashboard/src/lib/tab-description.ts';
-import { managedWorkspaceSources } from '../packages/dashboard/src/lib/managed-workspace.ts';
+import { managedWorkspaceSources, managedWorkspaceViewport } from '../packages/dashboard/src/lib/managed-workspace.ts';
 
 const sources = managedWorkspaceSources({
   schemaVersion: 'agent-browser.managed-workspace.v1', source: 'managed-owner',
@@ -40,3 +40,19 @@ assert.equal(tabDescription({taskLabel:'Review task',url:'data:text/html,code'})
 assert.equal(tabDescription({title:'Observed title',taskLabel:'Supplied task'}), 'Observed title');
 assert.equal(tabDescription({}), 'Untitled tab');
 console.log('Managed owner inventory dashboard adapter checks passed');
+
+const retained = {
+  schemaVersion: 'agent-browser.managed-workspace.v1', source: 'managed-owner',
+  browsers: { b: { id: 'b', profileId: 'p', pid: 42, desktop: null, activeSessionIds: ['s'], state: 'reported' } },
+  sessions: { s: { id: 's', name: 'alice', profileId: 'p', browserId: 'b' } },
+  tabs: { t: { id: 't', targetId: 'exact-target', browserId: 'b', sessionId: 's' } },
+} as any;
+assert.deepEqual(managedWorkspaceViewport(retained, 'b', 't', false), { target: null, desktopUnavailable: true, useNativeViewport: true }, 'present retained tab without a desktop needs availability guidance, not missing-tab feedback');
+assert.deepEqual(managedWorkspaceViewport(retained, 'b', 't', true), { target: null, desktopUnavailable: false, useNativeViewport: false }, 'an available stream remains usable for a browser without a desktop');
+assert.deepEqual(managedWorkspaceViewport(retained, 'b', 'missing', false), { target: null, desktopUnavailable: false, useNativeViewport: true }, 'a missing tab without a desktop still needs missing-target guidance');
+retained.browsers.b.desktop = { desktop_id: 'owned-desktop', generation: 1 };
+assert.deepEqual(managedWorkspaceViewport(retained, 'b', 'target:t', true).target, { browserId: 'b', sessionName: 'alice', targetId: 'exact-target', displayAllocationId: 'owned-desktop' });
+assert.equal(managedWorkspaceViewport(retained, 'b', 't', true).useNativeViewport, true, 'native desktop takes precedence over compatibility stream');
+assert.equal(managedWorkspaceViewport(retained, 'b', 'missing', false).desktopUnavailable, false, 'missing selected tab remains a distinct error');
+retained.sessions.s.browserId = 'peer';
+assert.equal(managedWorkspaceViewport(retained, 'b', 't', true).target, null, 'never route a tab through a different session owner');

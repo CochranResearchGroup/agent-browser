@@ -1,6 +1,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: UX301
+    product_lane: PL-BUGFIX
+    objective: Improve handoff inventory usability and explain unavailable managed desktops
+    branch: fix/dashboard-handoff-polish
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#301]
+    plan_state: IN_PROGRESS
+    custody_state: ACTIVE
+    dependencies: []
+    overlaps: [P237, P240]
+    reconciled_overlaps: ["P237 integrated; existing dashboard primary reused with installed candidate pins retained; P240 foreign resource checkout preserved. UX301 owns compact workspace/drawer, viewer selection and matching guidance only."]
+    validation_status: Chromium component and managed selector regressions, projection/context/inspector and handoff contracts, dashboard/docs builds, format and strict Clippy pass; no production publication
+    updated_at: 2026-10-17
+
   - id: P247
     product_lane: PL-BUGFIX
     objective: Check selected plan and evidence discoverability
