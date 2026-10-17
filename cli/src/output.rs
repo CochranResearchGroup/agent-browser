@@ -5641,6 +5641,8 @@ The runtime-host unit uses KillMode=process to preserve retained browser and
 display descendants. Browser and route cleanup still require ownership checks.
 Supervisor startup recreates a missing socket directory with private
 permissions before writing its authentication token, including after reboot.
+Retained-task recovery rechecks interrupted launch custody without a host restart.
+Only proven process and profile absence settles occupancy; history is preserved.
 
 Operations:
   (none)               Show current session name
@@ -7227,6 +7229,13 @@ Workflow:
   Use browser_discover only when advanced metadata is needed.
   category=playbooks exposes SiteGuide inspection and verify_login in browser_command.
   Software login-playbook composes these routines with trusted shared auth-helper custody.
+  Installed hosted-auth-helper discovery keeps bearer material private; callerTaskId identifies Codex work.
+  The receiving browser task/profile/browser/tab is frozen separately; select configured account/source refs.
+  Login playbook reconcile:true reads back the same checkpoint without new credentials or input replay.
+  Independent principal/native safety releases capture; SiteGuide company verification still follows.
+  Verified clean failed login may retire as helper_attempt_released; attempted/unknown history stays.
+  Trusted untouched-input or independently empty protected-field proof needs native safety; no replay.
+  Exact current identifiers need no clear/retype; unknown prior delivery still requires readback.
   browser_tab list observes owned popup children; login continuation verifies new destinations.
   BILL and QBO starter SiteGuides share routines; reviewed controls configure private receiving.
   prepare_login freezes controls; validate_plan rejects changed or stale evidence before input.

@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "scope": "Installed native clean failed-login retirement; no real account acceptance",
+  "fixtureRoot": "/tmp/p245-hosted-PX5D6Z",
+  "startedAt": "2026-10-16T18:01:42.830Z",
+  "finishedAt": "2026-10-16T18:03:21.153Z",
+  "driverSHA256": "9b0f5c8fa813aa8ba6e409ac28f3784c6459a60053e1a32a08089c5cc3e0ae9d",
+  "producer": {
+    "identity": "3c97417d7db23e01e79af034cb5c58327a51f61dab95302e23e3dde1c8145938",
+    "files": 615,
+    "sourceRevision": "b2480ba37b21ba4a45cda48046499319dc41a291",
+    "node": "v24.18.0"
+  },
+  "agent": {
+    "path": "/tmp/p237-native-candidates-20261015/agent-browser-integrated-6fc7f26e0",
+    "sha256": "25b07b1639bc640d770c350a56a4b73d0c4778c9b52574c3ed5329ebfeb0b4d4"
+  },
+  "browser": {
+    "path": "/home/ecochran76/workspace.local/chromium/artifacts/chromium-stealthcdp-candidates/stable-153-production-507c6ee3/153.0.8010.36+stealthcdp.8f0f14239da1/chrome-linux/chrome",
+    "sha256": "70bb98cb3aea3dd5dabbd9ebd0420fab93949d7566c119dcd4ab1738947cb078"
+  },
+  "consumerHashes": {
+    "packages/client/src/login-playbook.js": "764f9897c44415dce34c28f276032bae9724022cc48edbf25138bac1be303dcd",
+    "packages/client/src/hosted-auth-helper.js": "f5057df2bd2f6d217cf66ce3a881d8ac73e5af53d795875de14bfd8f87c44c0a",
+    "packages/client/src/playbooks.js": "7a8bc8d0ba0066582823dc24f7509c8f938af66aa58f4ececcc05e4dd05257e8"
+  },
+  "nativeHostSHA256": "006919abcb14de0802647855bb4db981790cafe4682b1f274901fe8d7c6c933e",
+  "nativeModuleHashes": {
+    "receiver": "cde5ad946ed88ab76a37a7492d0ae9f12bdd9de6ec72f5f61e45d2a32541f28b",
+    "browser": "0255025584059c006bbe217753cac7db27568ce75b59b255597782bc96e19f45"
+  },
+  "passed": true,
+  "consumerReadbackMode": true,
+  "heldRestartPreserved": true,
+  "state": "released",
+  "captureState": "ready",
+  "effectState": "unknown",
+  "websiteSubmissions": 0,
+  "identifierSubmissions": 0,
+  "protectedInputAudit": {
+    "version": 1,
+    "passwordFills": 0,
+    "mfaFills": 0
+  },
+  "nativeInputAudit": {
+    "privateSubmissions": 1,
+    "nativeOperationDispatches": 2,
+    "nativeTextDispatches": 1
+  },
+  "nativeSafety": {
+    "safe": true,
+    "bytes": 28661,
+    "sha256": "d50dfa34acfcb255a650b537ceccc3133871185a4a1445878dc68e0158830138",
+    "exactOwner": true,
+    "credentialAbsent": true,
+    "knownLoginVerified": true,
+    "protectedInputNotAttempted": true,
+    "checks": {
+      "sameObservation": true,
+      "domClear": true,
+      "nativeLoginHeader": true,
+      "credentialAbsent": true,
+      "untouchedPassword": true,
+      "untouchedFactor": true
+    },
+    "smallTextDiagnostics": {
+      "nativeUser": false,
+      "nativeContinue": false
+    }
+  },
+  "hostAudit": {
+    "sourceReads": 1,
+    "privateSubmissions": 0,
+    "observerDispatches": 1
+  },
+  "canaryJournalScan": {
+    "unitCount": 77,
+    "bytes": 11981,
+    "matches": 0
+  },
+  "artifactScan": {
+    "root": "/tmp/p245-hosted-PX5D6Z",
+    "files": 136,
+    "bytes": 6973016,
+    "matches": 0,
+    "oversizedSkipped": 0,
+    "symlinksSkipped": 0,
+    "protectedSourceExcluded": true,
+    "browserUserDataExcluded": true
+  },
+  "independentLoginStillRequired": true,
+  "completedRestartPreserved": true,
+  "replayRefused": true,
+  "cleanup": {
+    "originalConfigAndBotsPreserved": true,
+    "ownedProcessResidue": 0,
+    "peerAssignmentsPreserved": true,
+    "complete": true
+  }
+}

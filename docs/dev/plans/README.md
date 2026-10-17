@@ -1,5 +1,10 @@
 # Active plan index
 
+[P245: existing-host QBO and BILL authentication](0245-2026-10-16-hosted-auth-consumer.md),
+#290; all nine workflow evidence items qualified, final Standards/Spec review
+remediated, canonical publication next. Private account/source values remain
+outside the product repository.
+
 [P246: reliable local check results](0246-2026-10-16-local-check-results.md), #295; completed bounded check-result collection, actual CLI regression and existing tooling/selector qualification.
 
 [P244: ordinary denial isolation](0244-2026-10-14-ordinary-denial-isolation.md),

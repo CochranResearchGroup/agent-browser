@@ -59,8 +59,19 @@ provider integration or completed login automation.
 
 `@agent-browser/client/login-playbook` exports `createLoginPlaybook` with an
 existing routine client, a trusted auth-helper callback and a durable metadata
-checkpoint store. It uses request_login, inspect_request and authenticate;
-credentials and MFA values remain inside the helper's receiving adapter.
+checkpoint store. Use `connectHostedAuthHelper()` from
+`@agent-browser/client/hosted-auth-helper` for verified installed SDK discovery.
+Pass its `helper` and attested `callerTaskId` to the login playbook. Discovery
+keeps bearer material inside the private producer transport. Configured
+`list_accounts` metadata and the existing source owner select account/source;
+a browser profile name is not a credential reference.
+
+An ordinary Codex caller needs no Bots roster entry or TUI. Its callerTaskId
+identifies its work, while taskId addresses the browser. Version2 independently
+freezes the exact receiving provider/task/profile/browser/tab. The hosted path
+uses request_login, inspect_request and begin_authentication; legacy callbacks
+retain authenticate. Credentials and factors stay inside trusted host receiving
+ports. The existing Bots service continues to own auth; no new service is made.
 
 Each advance returns the next actionable state. Preserve the original scope,
 task and expiry when continuing. The adapter records intent before submission
@@ -68,14 +79,47 @@ and inspects the original request after a timeout or restart. It never blindly
 resubmits an uncertain login. Completion requires helper captureState ready
 plus current SiteGuide evidence for the intended account and company.
 
-The owned dummy fixture qualifies actual helper-source private filling and a
-guarded human-MFA wait. Independent Remote View capture suppression, actual
-LastPass/passkeys, automated MFA providers and installed helper readiness are
-separate capability or qualification gaps. Task tab listing attributes live
-popup opener chains through the existing owner. After private capture is ready,
-the adapter verifies new owned destinations and continues in the sole matching
-page. It preserves peer tabs and refuses ambiguous destinations. Extension-created
-tabs without an attributable opener still need a producer target-binding contract.
+After independent human/browser completion, call
+`login.advance({...originalOptions, reconcile: true})` with the original durable
+checkpoint. It reads back the same request and cannot create a replacement,
+retrieve credentials, start private authentication or replay unknown input.
+Running work is inspected. Missing checkpoints fail; unsupported readback returns
+helper_reconciliation_unavailable. Expiry/revocation are never renewed.
+
+The trusted receiver independently verifies the current principal and supplies
+reconciliation-specific native safety evidence. A saved email on a login chooser
+is not authentication. Missing safety stays held even if the principal matches;
+negative readback sends no input. Company verification remains an independent
+SiteGuide step after helper capture is ready.
+
+A failed login-only request may retire with helper_attempt_released only when
+its trusted owner proves from durable before-effect records that no protected
+input was attempted, or independently proves every current protected field empty,
+and independently verifies a current clean login/native capture. Current safety
+does not erase a recorded password/factor attempt. Readback cannot clear fields
+or fetch another credential/factor. Timeout or page state alone is insufficient.
+The old request, target, expiry and input history remain; earlier effects stay unknown.
+The playbook reports failed and cannot replay that grant. Preserve its checkpoint;
+a subsequent operation is separately selected under the task's authority.
+
+Shared host receiving ports sequence observed identifier/password and configured
+private MFA states. Remote View supplies process/window/visual-fenced native
+input with private empty-field/value checks. A trusted observation may identify
+a dismissible popup for one guarded Escape before a fresh hit-tested submit;
+unknown dismissal or submit acknowledgments never authorize replay. An exact
+current identifier match is preserved without clearing or retyping after fresh
+control and native-owner checks. Unknown prior delivery cannot become equality
+success. Password and factor replacement checks remain unchanged.
+
+The installed independent native dummy qualifies hosted discovery, private input,
+observer/native safety, held-request restart and independent readback. Real
+account/company acceptance, password-manager/passkeys and automated MFA remain
+separate qualifications. Cooperative privacy does not suppress unintegrated
+Remote View capture or existing viewer streams. Task tab listing attributes live
+popup opener chains; after capture is ready, the playbook continues in the sole
+verified owned destination while preserving peers. Unattributable extension tabs
+still need an owner binding rather than a guessed URL. The default Agent Browser
+MCP catalog is unchanged.
 
 ## QBO and receiving controls
 

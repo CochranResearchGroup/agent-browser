@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "scope": "Installed independent native dummy via explicit public playbook reconciliation; not real QBO/BILL acceptance",
+  "fixtureRoot": "/tmp/p245-hosted-Cn08LT",
+  "startedAt": "2026-10-16T17:28:48.248Z",
+  "finishedAt": "2026-10-16T17:31:31.376Z",
+  "passed": true,
+  "producer": {
+    "identity": "2ff5f086004ac256140b8f4dc0608e19b21ec82125e29c89562795d3581d3517",
+    "files": 615,
+    "sourceRevision": "47352cd9b9ea8f04bac4094a267f247a75a37b0f",
+    "node": "v24.18.0"
+  },
+  "agent": {
+    "path": "/tmp/p237-native-candidates-20261015/agent-browser-integrated-6fc7f26e0",
+    "sha256": "25b07b1639bc640d770c350a56a4b73d0c4778c9b52574c3ed5329ebfeb0b4d4"
+  },
+  "browser": {
+    "path": "/home/ecochran76/workspace.local/chromium/artifacts/chromium-stealthcdp-candidates/stable-153-production-507c6ee3/153.0.8010.36+stealthcdp.8f0f14239da1/chrome-linux/chrome",
+    "sha256": "70bb98cb3aea3dd5dabbd9ebd0420fab93949d7566c119dcd4ab1738947cb078"
+  },
+  "consumerHashes": {
+    "packages/client/src/login-playbook.js": "b3e65bf4f831d586ff00c832fadde3e214eef8d3d4325262599534bf5c701c4c",
+    "packages/client/src/hosted-auth-helper.js": "f5057df2bd2f6d217cf66ce3a881d8ac73e5af53d795875de14bfd8f87c44c0a",
+    "packages/client/src/playbooks.js": "7a8bc8d0ba0066582823dc24f7509c8f938af66aa58f4ececcc05e4dd05257e8"
+  },
+  "nativeHostSHA256": "fe91fb9b2eef493277af0c0338d99388ed1652bfc1714c438ee789ab986d6300",
+  "nativeModuleHashes": {
+    "receiver": "c4e4ac12f78e4137e85746209faeffb86c4bbdd54a9fbb60d1bc644002cffef0",
+    "browser": "0255025584059c006bbe217753cac7db27568ce75b59b255597782bc96e19f45"
+  },
+  "consumerReadbackMode": true,
+  "heldRestartPreserved": true,
+  "independentReconciliationWithoutReplay": true,
+  "websiteSubmissions": 1,
+  "identifierSubmissions": 1,
+  "hostAudit": {
+    "sourceReads": 1,
+    "privateSubmissions": 0,
+    "observerDispatches": 1
+  },
+  "nativeInputAudit": {
+    "privateSubmissions": 1,
+    "nativeOperationDispatches": 6,
+    "nativeTextDispatches": 2
+  },
+  "nativeSafety": {
+    "safe": true,
+    "bytes": 51099,
+    "sha256": "98bace0929ae487501e7027494b6f550ccd9205d804be0417dc3c8e38f6c8e70",
+    "exactOwner": true,
+    "credentialAbsent": true
+  },
+  "canaryJournalScan": {
+    "unitCount": 77,
+    "bytes": 11986,
+    "matches": 0
+  },
+  "artifactScan": {
+    "root": "/tmp/p245-hosted-Cn08LT",
+    "files": 135,
+    "bytes": 6971012,
+    "matches": 0,
+    "oversizedSkipped": 0,
+    "symlinksSkipped": 0,
+    "protectedSourceExcluded": true,
+    "browserUserDataExcluded": true
+  },
+  "completedRestartPreserved": true,
+  "replayRefused": true,
+  "independentWrongCompanyRejected": true,
+  "cleanup": {
+    "originalConfigAndBotsPreserved": true,
+    "ownedProcessResidue": 0,
+    "peerAssignmentsPreserved": true,
+    "complete": true
+  }
+}

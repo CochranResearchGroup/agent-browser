@@ -1,6 +1,23 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P245
+    product_lane: PL-AUTH
+    objective: Complete hosted-helper login and company verification for QBO then BILL
+    plan: docs/dev/plans/0245-2026-10-16-hosted-auth-consumer.md
+    branch: auth/shared-helper-290
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#290]
+    plan_state: IN_PROGRESS
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [ecochran76/grok-bots#51]
+    overlaps: [P242, P237]
+    reconciled_overlaps: ["P242/P237 source integrated; P245 owns login/helper consumption and site verification; preserve foreign checkouts"]
+    validation_status: Installed independent native and actual QBO/BILL account-company qualified; 16-check integration batch passed and one bounded Standards finding remediated
+    limitations: ["QBO numeric realm ID and API readiness not live-proven", "BILL MFA not exercised", "Canonical publication pending"]
+    updated_at: 2026-10-17
+
   - id: P246
     product_lane: PL-PLATFORM
     objective: Preserve independent local check results and fail false-green batches

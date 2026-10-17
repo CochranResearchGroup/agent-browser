@@ -1,6 +1,6 @@
 # Runbook
 
-Updated: 2026-10-14
+Updated: 2026-10-17
 
 ## Local validation result collection
 
@@ -11,6 +11,10 @@ P246/#295 completes this bounded tooling repair with seven CLI regressions and
 existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 
 ## Current execution
+
+### 2026-10-17 P245 hosted QBO and BILL
+
+[P245](docs/dev/plans/0245-2026-10-16-hosted-auth-consumer.md) qualifies all [nine evidence items](docs/dev/receipts/p245/issue-290-acceptance.json), actual QBO/BILL account/company and exact native cleanup. The [review and history](docs/dev/notes/0245-2026-10-16-hosted-auth-consumer.md#final-review-and-retrospective) retain one remediated Standards finding, no Spec defect and the renewed effort bound. Next: canonical PR and shared-guidance publication; no more login/provider work or production Agent Browser replacement.
 
 ### 2026-10-14 P244 ordinary denial isolation
 

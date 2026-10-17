@@ -1,0 +1,14 @@
+{
+  "scope": "Exact existing QBO identifier field only; no protected source retrieval or submit",
+  "passed": true,
+  "sourceSha256": "1b1ae2bd0ea495b8211ed6a652d8350ac6dba54b0119748815a71195c4645ffb",
+  "identifierMatched": true,
+  "submitDispatched": false,
+  "protectedSourceReads": 0,
+  "limitations": [
+    "Not a hosted credential journey",
+    "No password or factor input",
+    "No independent QBO company proof"
+  ],
+  "privateEvidence": "Operator-owned native identifier qualification receipt"
+}

@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "workItem": "CochranResearchGroup/agent-browser#290",
+  "productLane": "PL-AUTH",
+  "evidenceBoundary": "All nine workflow evidence items and final bounded review qualified; canonical publication pending",
+  "requirements": [
+    {
+      "id": "installed_discovery",
+      "requirement": "Installed supported discovery and private transport",
+      "evidenceQualified": true,
+      "receipts": [
+        "docs/dev/receipts/p245/hosted-dummy.json",
+        "docs/dev/receipts/p245/actual-qbo-installed-helper.json",
+        "docs/dev/receipts/p245/actual-bill-installed-helper.json"
+      ]
+    },
+    {
+      "id": "shared_public_binding",
+      "requirement": "Software and agent routines share distinct attested caller and exact receiving binding",
+      "evidenceQualified": true,
+      "receipts": [
+        "docs/dev/receipts/p245/consumer-native-reconciliation.json",
+        "docs/dev/receipts/p245/actual-qbo-installed-helper.json",
+        "docs/dev/receipts/p245/actual-bill-installed-helper.json"
+      ]
+    },
+    {
+      "id": "actual_qbo",
+      "requirement": "Actual existing-profile QBO with authorized MFA and independently verified intended company display",
+      "evidenceQualified": true,
+      "receipts": [
+        "docs/dev/receipts/p245/actual-qbo-installed-helper.json"
+      ]
+    },
+    {
+      "id": "actual_bill",
+      "requirement": "Actual existing-profile BILL through same generic store/receiver with independent account/company",
+      "evidenceQualified": true,
+      "receipts": [
+        "docs/dev/receipts/p245/actual-bill-installed-helper.json"
+      ]
+    },
+    {
+      "id": "existing_owner_metadata",
+      "requirement": "Owner metadata first; exact existing protected source references, no guessing/export/new trust",
+      "evidenceQualified": true,
+      "receipts": [
+        "docs/dev/receipts/p245/actual-bill-installed-helper.json",
+        "docs/dev/receipts/p245/actual-qbo-installed-helper.json"
+      ]
+    },
+    {
+      "id": "meaningful_regressions",
+      "requirement": "Distinct identities and wrong binding/account/company, source no-input, stale controls, owned popup and unknown-ack no-replay",
+      "evidenceQualified": true,
+      "receipts": [
+        "docs/dev/receipts/p245/consumer-native-reconciliation.json",
+        "docs/dev/receipts/p245/native-prefilled-identifier.json"
+      ]
+    },
+    {
+      "id": "same_request_return",
+      "requirement": "Same-request current owner readback and supported nonsecret continuation preserve full target/peers",
+      "evidenceQualified": true,
+      "receipts": [
+        "docs/dev/receipts/p245/native-staged-dummy.json",
+        "docs/dev/receipts/p245/native-post-attempt-clean.json",
+        "docs/dev/receipts/p245/actual-qbo-installed-helper.json",
+        "docs/dev/receipts/p245/actual-bill-installed-helper.json"
+      ]
+    },
+    {
+      "id": "dummy_then_real",
+      "requirement": "Installed independent native dummy precedes actual QBO then BILL, with original limitations retained",
+      "evidenceQualified": true,
+      "receipts": [
+        "docs/dev/receipts/p245/hosted-dummy.json",
+        "docs/dev/receipts/p245/native-staged-dummy.json",
+        "docs/dev/receipts/p245/native-post-attempt-clean.json",
+        "docs/dev/receipts/p245/native-prefilled-identifier.json",
+        "docs/dev/receipts/p245/actual-qbo-installed-helper.json",
+        "docs/dev/receipts/p245/actual-bill-installed-helper.json"
+      ]
+    },
+    {
+      "id": "docs_identity_cleanup",
+      "requirement": "Client/help/agent/docs plus source-installed/native identity and exact owned cleanup",
+      "evidenceQualified": true,
+      "receipts": [
+        "docs/dev/receipts/p245/native-post-attempt-clean.json",
+        "docs/dev/receipts/p245/native-prefilled-identifier.json",
+        "docs/dev/receipts/p245/actual-qbo-installed-helper.json",
+        "docs/dev/receipts/p245/actual-bill-installed-helper.json"
+      ]
+    }
+  ],
+  "sourceNativePortCommit": "ed3342f27",
+  "sourceNativePortSHA256": "a86c56943f1486c5139fe991f81fe1a41d046a0adab520d624fd30e46ba86308",
+  "validationTier": "focused provider-free plus explicit installed/native and actual-provider acceptance; not comprehensive or platform matrix",
+  "limits": [
+    "QBO company display verified; numeric realm ID and OAuth/API readiness not live-proven",
+    "BILL MFA not exercised",
+    "Private per-profile source mapping and UI guides retained outside product repo; starter templates require review",
+    "Remote View overall doctor retains pre-existing stopped-slot8 failures and unqualified public viewer proof",
+    "Producer broader suite failures/stall retained; affected combined lane224pass20skip",
+    "Existing actual profiles remain open for user continuation; zero-owned-residue applies to disposable fixtures",
+    "No formal release or Agent Browser production binary replacement claimed"
+  ],
+  "standardsReview": "one accepted discoverability finding, remediated",
+  "specReview": "no accepted defects",
+  "canonicalPublication": "pending",
+  "reviewDiscoveryCycles": 1,
+  "boundedRemediationCycles": 1,
+  "frozenReviewBase": "e9507f65224c478950a144f16f0d962f94c81186",
+  "frozenReviewHead": "26180eb75600b1bd47183808a089b21b71df0ffe",
+  "reviewArtifact": "docs/dev/notes/0245-2026-10-16-hosted-auth-consumer.md#final-review-and-retrospective",
+  "finalValidation": "docs/dev/receipts/p245/final-validation.json"
+}

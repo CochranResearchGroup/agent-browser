@@ -7,6 +7,8 @@
  * Compose the supported auth-helper operations with existing-task SiteGuide
  * verification. The trusted helper owns receiving input and capture privacy.
  * Checkpoints contain metadata only and must be durable before authentication.
+ * Explicit reconcile mode reads back an existing hosted request without creating
+ * a replacement or replaying private input; company verification remains fresh.
  * @param {Dependencies} dependencies
  */
 export function createLoginPlaybook({browser,helper,checkpoints}) {
@@ -23,7 +25,10 @@ export function createLoginPlaybook({browser,helper,checkpoints}) {
      * @param {LoginOptions} options
      */
     async advance(options) {
-      const {taskId,guideId,accountRef,organizationRef,scope,expiresAt}=options;
+      const {taskId,guideId,accountRef,organizationRef,scope,expiresAt,callerTaskId}=options;
+      if(callerTaskId!==undefined && (typeof callerTaskId!=='string' || !callerTaskId))throw Error('login_caller_invalid');
+      if(options.reconcile!==undefined&&typeof options.reconcile!=='boolean')throw Error('login_reconciliation_invalid');
+      if(options.reconcile&&callerTaskId===undefined)throw Error('hosted_caller_required_for_reconciliation');
       const key=`${taskId}/${guideId}`;
       if(busy.has(key))throw Error('login_playbook_busy');
       busy.add(key);
@@ -35,10 +40,12 @@ export function createLoginPlaybook({browser,helper,checkpoints}) {
         }
         const binding=JSON.stringify({taskId,guideId,accountRef,organizationRef,
           scope:Object.fromEntries([...fields,'capabilities'].map(field=>[field,scope[field]])),expiresAt,
-          authenticationMethod:options.authenticationMethod??'password'});
+          authenticationMethod:options.authenticationMethod??'password',...(callerTaskId===undefined?{}:{callerTaskId})});
         /** @type {Checkpoint|null} */
         let checkpoint=await checkpoints.load(key);
+        let receivingTarget=checkpoint?.receivingTarget;
         if(checkpoint && checkpoint.binding!==binding)throw Error('checkpoint_binding_mismatch');
+        if(!checkpoint&&options.reconcile)throw Error('checkpoint_required_for_reconciliation');
         if(!checkpoint) {
           const observed=await browser.verifyLogin({taskId,guideId,accountRef,organizationRef});
           if(observed.status==='completed' || observed.status==='failed' || observed.status==='adaptation_required')return observed;
@@ -49,11 +56,16 @@ export function createLoginPlaybook({browser,helper,checkpoints}) {
           const preparation=await browser.prepareLogin({taskId,guideId,accountRef,organizationRef});
           if(!preparation.plan)return preparation;
           const preparedPlan=preparation.plan;
+          if(callerTaskId!==undefined) {
+            if(['profileId','browserId','tabId'].some(field=>typeof observed[field]!=='string' || !observed[field]))throw Error('receiving_binding_required');
+            receivingTarget={provider:'agent-browser',taskId,profileId:observed.profileId,browserId:observed.browserId,tabId:observed.tabId};
+          }
           let requested;
-          try {requested=await helper('request_login',{...scope,expiresAt});}
+          try {requested=await helper('request_login',{...scope,expiresAt,...(callerTaskId===undefined?{}:{contractVersion:2,receivingTarget})});}
           catch {return result('waiting','helper_unavailable','no_effect');}
           if(!matches(requested))throw Error('helper_binding_mismatch');
           checkpoint={binding,requestId:requested.requestId,attempted:false,
+            ...(callerTaskId===undefined?{}:{callerTaskId,receivingTarget}),
             profileId:observed.profileId,browserId:observed.browserId,tabId:observed.tabId,
             ...(preparedPlan?{preparedPlan}:{}),
             knownTabIds:browser.listTabs ? (await browser.listTabs(taskId)).tabs.map(tab=>tab.tabId) : [observed.tabId]};
@@ -65,6 +77,17 @@ export function createLoginPlaybook({browser,helper,checkpoints}) {
         if(!matches(summary) || summary.requestId!==checkpoint.requestId)throw Error('helper_binding_mismatch');
         if(summary.state==='pending')return result('waiting','approval_required','no_effect',checkpoint);
         if(['denied','revoked'].includes(summary.state))return result('failed',`helper_${summary.state}`,checkpoint.attempted?'unknown':'no_effect',checkpoint);
+        if(summary.state==='released')return result('failed','helper_attempt_released',checkpoint.attempted?'unknown':'no_effect',checkpoint);
+        if(options.reconcile){
+          if(summary.running||!['uncertain','authenticated'].includes(summary.state))return result('waiting','helper_running_or_uncertain',checkpoint.attempted?'unknown':'no_effect',checkpoint);
+          // Explicit readback only. Never create a replacement request or make
+          // this checkpoint eligible for another private authentication.
+          try{summary=await helper('reconcile_authentication',{requestId:checkpoint.requestId});}
+          catch{return result('waiting','helper_reconciliation_unavailable','unknown',checkpoint);}
+          if(!matches(summary)||summary.requestId!==checkpoint.requestId)throw Error('helper_binding_mismatch');
+          if(summary.state==='released')return result('failed','helper_attempt_released','unknown',checkpoint);
+          if(!['uncertain','authenticated'].includes(summary.state))return result('waiting','helper_running_or_uncertain','unknown',checkpoint);
+        }
         if(summary.state==='authenticated') {
           if(summary.captureState!=='ready')return result('waiting','private_capture_held','unknown',checkpoint);
           return await verifyReceiving(checkpoint);
@@ -124,7 +147,7 @@ export function createLoginPlaybook({browser,helper,checkpoints}) {
         // Persist before any call that can submit. Failure to save makes no input.
         checkpoint={...checkpoint,attempted:true};
         await checkpoints.save(key,checkpoint);
-        try {summary=await helper('authenticate',{requestId:checkpoint.requestId});}
+        try {summary=await helper(callerTaskId===undefined?'authenticate':'begin_authentication',{requestId:checkpoint.requestId});}
         catch(error) {
           const code=error && typeof error==='object' && 'code' in error ? error.code : undefined;
           if(['auth_not_authorized','auth_capture_held','auth_target_busy'].includes(String(code))) {
@@ -142,7 +165,11 @@ export function createLoginPlaybook({browser,helper,checkpoints}) {
 
         /** @param {Record<string, any>} value */
         function matches(value) {
-          return typeof value?.requestId==='string' && value.taskId===taskId && value.expiresAt===expiresAt &&
+          const target=checkpoint?.receivingTarget??receivingTarget;
+          const receivingMatches=callerTaskId===undefined || value.contractVersion===2 && target &&
+            Object.keys(value.receivingTarget??{}).length===5 &&
+            (/** @type {const} */ (['provider','taskId','profileId','browserId','tabId'])).every(field=>value.receivingTarget?.[field]===target[field]);
+          return receivingMatches && typeof value?.requestId==='string' && value.taskId===(callerTaskId??taskId) && value.expiresAt===expiresAt &&
             fields.every(field=>value.scope?.[field]===scope[field]) && JSON.stringify(value.scope?.capabilities)==='["login"]';
         }
         /** @param {Checkpoint} current */

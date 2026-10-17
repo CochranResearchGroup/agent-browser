@@ -1,0 +1,108 @@
+{
+  "qualification": "Actual existing-profile BILL through installed Bots-host helper and public routine",
+  "qualifiedAt": "2026-10-17T03:46:43.013Z",
+  "producer": {
+    "identity": "dac7d1f3779da30b09bfccd6a7f87e7e07bc4bf4d5f5b93db81a223a6cd24606",
+    "sourceRevision": "4643858676f87723b17362b75c4c8b0266264ca5",
+    "canonicalMerge": "d399f5a4181447160eeaac3693170d39c596eb74"
+  },
+  "remoteView": {
+    "binarySHA256": "c8f69f031603fb64b6a3c711f22d6223ea51688a6c096d7bcceff30c2f87c7f8",
+    "sourceRevision": "41cf66dfa8dd3cfd022736969bcf8a96bfb0a58b",
+    "canonicalMerge": "47cab3e993c148779ef984f68ea1cde76acbc6f1"
+  },
+  "consumerNativePortSHA256": "a86c56943f1486c5139fe991f81fe1a41d046a0adab520d624fd30e46ba86308",
+  "privateHostModuleSHA256": "d95791200f6cc1cff8dccad64e9ae401df6ef77404e2432e99a48d4914b3ab5b",
+  "helper": {
+    "producerRequestState": "authenticated",
+    "captureState": "ready",
+    "effectState": "verified",
+    "originalExpiryPreserved": true,
+    "originalTargetPreserved": true
+  },
+  "publicRoutine": {
+    "completed": true,
+    "sameLogicalTarget": true,
+    "wrongAccountRejected": true,
+    "wrongCompanyRejected": true,
+    "exactCompanyDisplayVerifiedAgainstOwnerMetadata": true,
+    "originalAuthenticationCheckpointRetained": true,
+    "newHelperOperations": 0
+  },
+  "nativeSafety": {
+    "safe": true,
+    "checks": {
+      "domClear": true,
+      "noProtectedControlVisible": true,
+      "nativePasswordAbsent": true,
+      "nativeNoSixDigitFactor": true,
+      "fullWindow": true,
+      "exactOwner": true
+    },
+    "bytes": 109653,
+    "sha256": "bd31dd18e52836e287891f730d252263e7e9007d85c6a05c520de8322a3aec31",
+    "audit": {
+      "sourceAttempts": 2,
+      "sourceCompleted": 2,
+      "identifierFills": 2,
+      "passwordFills": 1,
+      "mfaFills": 0,
+      "mfaSubmits": 0
+    },
+    "at": "2026-10-17T03:46:12.595Z"
+  },
+  "actualAudit": {
+    "totalAcrossRetainedHistory": {
+      "sourceAttempts": 2,
+      "sourceCompleted": 2,
+      "identifierFills": 2,
+      "passwordFills": 1,
+      "mfaFills": 0,
+      "mfaSubmits": 0
+    },
+    "currentRequestOnly": {
+      "sourceAttempts": 1,
+      "sourceCompleted": 1,
+      "identifierFills": 1,
+      "passwordFills": 1,
+      "mfaFills": 0,
+      "mfaSubmits": 0
+    },
+    "identifierFillCountsRepresentIntentNotNativeDispatchCounts": true
+  },
+  "continuation": {
+    "sameRequestAndFullTarget": true,
+    "observedNonsecretSettingsNavigation": true,
+    "credentialOriginRemainsLoginOrigin": true,
+    "initialHomeOriginUnmodelledAndHeld": true,
+    "qualifiedProtectedProfileOriginMatchesStoredRecordOrigin": true,
+    "hostNotRestartedAfterPassword": true,
+    "credentialAwareSafetyCacheUsed": true
+  },
+  "priorAttempt": {
+    "releasedCaptureReady": true,
+    "originalExpiryAndTargetPreserved": true,
+    "unknownEffectAndConsumedCheckpointPreserved": true,
+    "passwordAndMfaDispatchCounts": 0,
+    "retirementSourceReads": 0,
+    "retirementPrivateInputs": 0
+  },
+  "readbackAndVerification": {
+    "sameRequest": true,
+    "sourceReads": 0,
+    "privateInputs": 0,
+    "noGrantRenewal": true,
+    "noMfaRequestedOrDispatched": true
+  },
+  "sourceMapping": {
+    "existingNamedAuthMetadataOnly": true,
+    "exactLiveLastPassReferenceQualified": true,
+    "explicitStagingRecordExcluded": true,
+    "noNewUnlockOrTrust": true,
+    "noVaultEnumerationOrRecordExport": true
+  },
+  "priorFailedReceiptsAndControllersRetained": true,
+  "privateIdentityAndCompanyValuesExcluded": true,
+  "qboAcceptedAtDocumentedDisplayBoundary": true,
+  "wholeIssueReviewPending": true
+}

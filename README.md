@@ -57,6 +57,8 @@ The handoff URL resolves the current owned desktop and redirects to native Remot
 
 After human assistance, call `browser_continue` with the same `taskId`. It returns the task's current profile, browser, tab and URL without navigating again. Continue ordinary page actions with that task ID.
 
+Retained-task recovery rechecks interrupted launch custody when the host is already running. Only proven process and profile absence settles that launch's occupancy; its history remains intact, and unproven absence still blocks replacement.
+
 The default MCP catalog contains 12 workflow tools: `browser_open`, `browser_navigate`,
 `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
 `browser_handoff`, `browser_continue`, `browser_close`, `browser_command` and `browser_discover`.
@@ -891,6 +893,39 @@ trusted shared auth-helper connection and a durable metadata checkpoint store.
 It persists submission custody and reconciles the same request after an unknown
 result. See the routine guide below for observer privacy requirements and current
 helper/provider qualification gaps.
+For the existing Bots-hosted helper, use
+`@agent-browser/client/hosted-auth-helper` and `connectHostedAuthHelper()`.
+It verifies the installed candidate and loads its supported private SDK without
+returning bearer material. Pass its `helper` and attested `callerTaskId` to the
+login playbook. The caller's Codex work ID differs from the receiving browser
+`taskId`; the producer freezes the exact task/profile/browser/tab independently.
+Choose configured account/source/origin metadata through `list_accounts` and the
+existing source owner. A browser profile name is not a credential reference.
+
+After human completion or an uncertain result, call
+`login.advance({...originalOptions, reconcile: true})` with the same durable
+checkpoint. This is readback only: it cannot create a replacement request,
+retrieve credentials or repeat private input. Independent current principal and
+native safety proof must release capture before the SiteGuide verifies company.
+Missing safety stays held; expiry and revocation are not renewed. A failed login
+can retire as `helper_attempt_released` only with trusted durable evidence that
+protected input was never attempted, or independent proof that every current
+protected field is empty, plus fresh clean-login/native safety. The latter never
+erases a recorded password/factor attempt. Keep
+its checkpoint and unknown input history; the playbook sends no further
+input. A subsequent operation is a separately selected attempt under its task
+authority. The default Agent Browser MCP catalog is unchanged.
+
+The trusted hosted receiver sequences observed identifier/password states and
+configured private MFA callbacks. Remote View delivers exact-owner native input;
+recognized popups can receive one guarded Escape before fresh hit-tested submit.
+A current, exact identifier match is preserved without clearing or retyping.
+Password and factor fields still require their normal private replacement checks.
+Unknown dismissal or input acknowledgments cannot replay. Receiving ports stay
+inside the trusted host, while software and agents consume the same public
+routines. See [the routine guide](skills/agent-browser/references/playbooks.md)
+for discovery, binding, safety and real-provider qualification boundaries.
+
 Task tab listing attributes live popup opener chains. Private login continuation
 checks new task-owned destinations for the intended account/company while
 preserving peers and pre-login tabs.

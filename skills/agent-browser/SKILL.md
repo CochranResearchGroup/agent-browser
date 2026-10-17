@@ -113,12 +113,29 @@ login or guide development. `verify_login` requires intended account/company evi
 QBO browser login and OAuth/API readiness are separate. The login client
 `@agent-browser/client/login-playbook` requires preparation and validation, masked
 password input and checkpoint persistence. Use `reviewedPlan` for reviewed changes;
-inspect the same helper request after uncertainty and never resubmit lost login.
+use `connectHostedAuthHelper()` for installed private SDK discovery and pass its
+attested `callerTaskId` separately from the browser `taskId`. Select configured
+account/source metadata through the existing owner, never from a profile name.
+After independent human/browser completion, `advance({...originalOptions,
+reconcile:true})` reads back the same checkpoint without credential retrieval or
+input replay. Current principal/native safety must release capture before company
+verification; missing evidence stays held. `helper_attempt_released` is terminal
+failed login after trusted untouched-input proof or independently empty protected
+fields, plus clean-login/native safety. Preserve attempted/unknown effects;
+readback cannot clear controls or retrieve another factor. Keep its checkpoint;
+the playbook cannot replay it. A trusted native receiving port preserves an
+exact current identifier match without clearing or retyping. Unknown prior input
+cannot become equality success; password and factor checks remain unchanged.
+Read the routine guide for exact setup.
 Task tab listing discovers attributable popups after the capture barrier is ready.
 For `collect_posts`, supply reviewed guide and item/page/scroll budgets. Empty output
 is unproven unless `noResultsVerified`; preserve partial results and their reason.
 
 ## Read more only when needed
+
+Retained-task recovery rechecks interrupted launch custody in the running host.
+It requires proven process and profile absence, preserves launch history, and
+leaves other profiles' claims unchanged. Continue through the original taskId.
 
 New-process memory pressure uses eligible owner cleanup and a bounded wait;
 continue existing tasks through their taskId. Completed session/tab history is
