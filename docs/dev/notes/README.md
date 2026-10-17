@@ -22,6 +22,8 @@ integration by itself.
 
 ## PL-BUGFIX | Current Defect Evidence
 
+- [Native handoff assignment history repair](2026-10-17-native-handoff-assignment-history.md)
+
 - [PR302 complete dashboard review](2026-10-17-pr302-review.md)
 
 - [Rail speed and accuracy audit](2026-10-17-rail-audit.md)

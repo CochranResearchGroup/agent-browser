@@ -6420,6 +6420,8 @@ Deletion preserves the tab, browser, session and pending-human hold across resta
 Closing the last live tab closes its owned browser and retains handoff records.
 Automatic expiry retires unprotected empty peers without creating replacement tabs.
 Active viewers defer retirement; shared browsers remain outside process custody.
+Handoff presentation ignores released assignment history, but requires one active
+assignment for the exact desktop generation matching published browser custody.
 Software prepare_human with pendingHumanRetentionMs records a separate unused-tab hold.
 Positive values set its maximum duration; 0 sets no automatic deadline.
 Authenticated navigation registers a continuation with the native viewer. Redirects

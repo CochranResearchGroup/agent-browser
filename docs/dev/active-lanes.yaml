@@ -14,8 +14,8 @@ lanes:
     dependencies: []
     overlaps: [P237, P240]
     reconciled_overlaps: ["P237 integrated; existing dashboard primary reused with installed candidate pins retained; P240 foreign resource checkout preserved. UX301 owns observed workspace presence, bounded Remote View reads, generated display types, rail/viewer consumers and guidance. P240 TTL and cleanup remain unchanged."]
-    shared_source_coordination: "User-authorized follow-up owns bounded handoff-observation versus TTL reaper isolation in browser_session_host.rs and pool fixtures. P240 is completed with a clean retained checkout; its archive, quota and resource policies remain authoritative and unchanged. No production effects."
-    validation_status: Full PR302 Standards and Spec review complete; missing-PID ambiguity corrected with red-green and eight workspace tests; prior rail and reaper gates reused; format, strict Clippy and policy pass; sealed production-shaped candidate 72dbd4b77068 from clean 053408dfb verified; no production publication
+    shared_source_coordination: "User-authorized follow-up owns handoff-observation versus TTL reaper isolation, plus current-active assignment selection in remote_view_session_effects.rs and host pool fixtures. P240 is completed with a clean retained checkout; its archive, quota and resource policies remain authoritative and unchanged. No production effects."
+    validation_status: Native assignment-history source repair passes minimized red-green and nine-check batch with 18 Rust tests; earlier candidate retained; updated build and development/native qualification pending
     updated_at: 2026-10-17
 
   - id: P247

@@ -63,6 +63,7 @@ Selection, Activity, Chat, Console, Network, Storage and Extensions optional.
 query fields remain supported for diagnostic links. Native Remote View uses its
 existing authentication; dashboard logout remains separate.
 Same-link native auth selects the addressed tab and waits for owner preparation without replay.
+Current handoff presentation ignores released desktop-assignment history. It still requires one active assignment for the exact desktop generation and an exact match to published browser custody; multiple active assignments or a mismatch remain unavailable.
 
 ## Sharing a profile between tasks
 
