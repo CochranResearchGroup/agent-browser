@@ -1,6 +1,6 @@
 # Plan 0245: Existing-host QBO and BILL authentication
 
-Status: IN_PROGRESS
+Status: COMPLETED
 Product lane: PL-AUTH
 Work item: CochranResearchGroup/agent-browser#290
 Owner: ecochran76
@@ -36,8 +36,14 @@ restart/no-replay and zero owned residue. Its two regressions prove exact curren
 identifier preservation and refusal after unknown prior native delivery. All
 nine acceptance evidence items are assembled. The final 16-check integration
 batch passes; one bounded Standards discoverability finding is remediated and
-Spec has no accepted defect. Canonical publication remains the next delivery
-step. No additional provider exercise is required.
+Spec has no accepted defect. Canonical PR297 is merged as
+c27f04a3117bca17adc7b33994d38ab80341067f. Scoped accepted auth guidance is
+published to the shared skill and routine reference with preimages and exact
+post-write checks. All nine bounded outcomes are accepted; no further login or
+provider exercise is required. Final read-only helper state remains authenticated
+and capture ready for both requests, with zero active auth operations. The
+production Agent Browser binary is unchanged. Wider runtime/suite limits remain
+explicit. This plan is complete at those boundaries.
 Producer docs PR69 closes Plan0012 at646b681; Remote View docs PR446 closes its
 Plan0127 at its own installed/adoption boundary. Their wider doctor/suite limits
 are retained. Earlier checkpoints below preserve diagnostic history.
@@ -208,3 +214,20 @@ Website-driven protected clearing, independent native safety, same-request
 release, restart/no-replay and canary checks pass. Original configuration, bots,
 retained requests and peers are preserved; owned process residue is zero. Actual
 BILL remains held pending its own independent current-clean-login proof.
+
+
+## Accepted delivery closeout
+
+PR297 owns canonical source integration. The review's single discoverability
+remediation changes documentation only; all16integration checks and installed
+native/actual-provider receipts retain their evidenced source identities.
+Shared guidance publication is scoped to P245's auth section and routine
+reference. Unrelated installed guidance is preserved; a full skill-file sync and
+source-only CLI recovery paragraph publication are not claimed. Receipt:
+docs/dev/receipts/p245/shared-auth-guidance-publication.json.
+
+Actual existing profiles remain available for user continuation. Two owned
+native fixture roots have zero process residue in a fresh OS readback; unrelated
+processes and source/candidate checkouts are preserved. Closing this plan grants
+no new auth, source retrieval, replay, provider or cleanup authority.
+Memory disposition: queued. Queue acceptance is not persistence/retrieval proof.
