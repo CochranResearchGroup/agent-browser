@@ -1520,9 +1520,25 @@ fn dashboard_ingress_first_response_timeout(request: &[u8]) -> Duration {
                 let path = path.split('?').next().unwrap_or(path);
                 path.starts_with("/api/remote-view/") && path.ends_with("/presentation")
             });
-    if native_handoff {
-        // Browser recovery can precede the redirect. Keep ingress attached for
-        // its 20-second owner preparation and 90-second resolution budgets.
+    let native_resume = request.starts_with(b"POST ")
+        && std::str::from_utf8(request)
+            .ok()
+            .and_then(|request| request.lines().next()?.split_whitespace().nth(1))
+            .and_then(|path| {
+                path.strip_prefix("/api/native-remote-view/")?
+                    .strip_suffix("/resume")
+            })
+            .is_some_and(|id| {
+                !id.is_empty()
+                    && id.len() <= 128
+                    && id
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+            });
+    if native_handoff || native_resume {
+        // Both handoff paths can prepare the owner before their first response.
+        // Preserve the existing 20-second preparation and 90-second resolution
+        // budget. POST delivery still cannot replay to a fallback backend.
         return Duration::from_secs(120);
     }
     if request.starts_with(b"GET ")
@@ -3234,6 +3250,86 @@ mod tests {
         backend.await.unwrap();
         ingress.await.unwrap();
         assert!(response.ends_with(b"committed"));
+    }
+
+    #[tokio::test]
+    async fn native_resume_waits_for_owner_without_replaying_to_fallback() {
+        for (path, ready) in [
+            ("/api/native-remote-view/opaque-a/resume", true),
+            ("/api/native-remote-view/opaque-a/nested/resume", false),
+        ] {
+            let backend_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+            let backend_port = backend_listener.local_addr().unwrap().port();
+            let fallback_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+            let fallback_port = fallback_listener.local_addr().unwrap().port();
+            let mut registry = DashboardIngressRegistry::new(DashboardBackend::new(
+                "generation-old",
+                fallback_port,
+                "old-manifest",
+            ));
+            registry
+                .stage_candidate(DashboardBackend::new(
+                    "generation-new",
+                    backend_port,
+                    "new-manifest",
+                ))
+                .unwrap();
+            registry
+                .commit_candidate(CandidateOperatorJourney::ready(ready_evidence(
+                    "generation-new",
+                )))
+                .unwrap();
+            let expected_path = path.to_owned();
+            let backend = tokio::spawn(async move {
+                let (mut connection, _) = backend_listener.accept().await.unwrap();
+                let request = read_initial_http_request(&mut connection).await.unwrap();
+                assert!(request.starts_with(format!("POST {expected_path} ").as_bytes()));
+                assert!(String::from_utf8_lossy(&request)
+                    .contains("Bearer synthetic-native-capability"));
+                tokio::time::sleep(Duration::from_millis(2_100)).await;
+                // The malformed-path case deliberately retains the ordinary
+                // short budget, so its selected connection may already be gone.
+                let _ = connection.write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\nConnection: close\r\n\r\nnative-ready",
+                ).await;
+            });
+            let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let ingress = tokio::spawn(async move {
+                let (mut connection, _) = listener.accept().await.unwrap();
+                proxy_ingress_request(&mut connection, &registry).await;
+            });
+            let mut client = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+            client.write_all(format!(
+                "POST {path} HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer synthetic-native-capability\r\nContent-Length: 0\r\n\r\n"
+            ).as_bytes()).await.unwrap();
+            client.shutdown().await.unwrap();
+            let mut response = Vec::new();
+            timeout(Duration::from_secs(8), client.read_to_end(&mut response))
+                .await
+                .unwrap()
+                .unwrap();
+            backend.await.unwrap();
+            ingress.await.unwrap();
+            let text = String::from_utf8_lossy(&response);
+            if ready {
+                assert!(
+                    text.starts_with("HTTP/1.1 200"),
+                    "native owner preparation was cut off: {text}"
+                );
+                assert!(response.ends_with(b"native-ready"));
+            } else {
+                assert!(text.starts_with("HTTP/1.1 502"));
+                assert!(text.contains("mutation_outcome_unknown"));
+                assert!(text.contains("\"retrySafe\":false"));
+            }
+            assert!(
+                timeout(Duration::from_millis(50), fallback_listener.accept())
+                    .await
+                    .is_err(),
+                "a delivered native POST was replayed to fallback"
+            );
+        }
     }
 
     #[test]

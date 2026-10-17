@@ -6496,6 +6496,7 @@ Upgrades preserve legacy link expiry, including perpetual links.
 Reconnect using the same handoff URL. Opening it restores an idle-cleaned
 retained browser before redirecting to its native desktop, without viewer grants.
 Opening the same handoff uses native authentication before selecting its addressed tab.
+The continuation waits for owner preparation; a delivered request is not replayed.
 Ordinary automation also recovers retained idle browsers without opening the link first.
 On Linux, exact-profile opens reconcile current process and CDP evidence before
 placement. Stale inventory does not require manual attach or revision repair.

@@ -1137,3 +1137,39 @@ repository-scoped worktree closeout operation. Fresh path and worktree-inventory
 readback confirm removal; no candidate pins existed. The foreign operational
 checkout remains preserved, including its applied ingress files until its owner
 reconciles canonical main.
+
+### Native resume response-budget gap isolated
+
+Candidate e44e9f2ba is installed in development as0.28.0-b138f0592012. Both
+doctors, development-only skill sync and three launch cycles pass; production
+identity is unchanged. A new actual native continuation still returns503.
+Socket observation proves authorization reaches the private owner callback, and
+the callback returns a typed502 mutation_outcome_unknown: stable ingress accepts
+the request but stops waiting for its first response after two seconds. Owner
+selection continues and commits Alpha; successful use stays unrecorded because
+no qualified viewer frame follows. This specific failure is not an authorization
+denial. Independent earlier WAN/LAN timeouts remain separate observations.
+
+A positively identified dedicated gateway restart tests the retained-connection
+hypothesis and does not change the failure. Only that development unit restarts;
+its producer binary/configuration remain unchanged. The diagnostic owner request
+is effectful and is not counted as a passing user workflow. Its unknown outcome
+is inspected before further recovery effects.
+
+A real TCP ingress regression reproduces the exact502 against a delayed valid
+native-resume POST. The narrow classification now gives that path the existing
+bounded native-handoff preparation budget. Its GREEN checks a completed response,
+no fallback replay, and preservation of the ordinary short budget and unknown
+outcome for a malformed nested path. Backend capability authentication and all
+other request classes remain unchanged. Surrounding ingress and quality gates,
+then a newly pinned development candidate and actual native input, remain the
+required sequence before full completion.
+
+The corrected native-resume budget passes all38 surrounding ingress tests and39
+output tests, formatting and strict workspace Clippy. Handoff guidance,
+durable-handoff, policy wiring and docs build pass. The prior320 Remote View,
+66 dashboard HTTP and153 browser-session checks remain applicable to their
+unchanged source. The running development ingress executable was independently
+read back as the installed b138f0592012 binary, confirming the new predicate must
+be published to that service rather than only to its backend. A final pinned
+candidate and real same-link native selection/input remain pending.
