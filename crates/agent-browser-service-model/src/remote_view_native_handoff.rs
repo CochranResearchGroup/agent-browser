@@ -206,13 +206,28 @@ impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
         if before.target != registered.target {
             return Err(RemoteViewApplicationResponseError::StaleTarget.into());
         }
-        let response: UseResponse = serde_json::from_value(self.request(
-            RemoteViewApplicationRequest::ObserveNativeHandoffUse {
-                correlation_id: registered.correlation_id.clone(),
-                target_digest: registered.target_digest.clone(),
-            },
-        )?)
-        .map_err(|_| RemoteViewApplicationResponseError::InvalidShape)?;
+        let response = match self.request(RemoteViewApplicationRequest::ObserveNativeHandoffUse {
+            correlation_id: registered.correlation_id.clone(),
+            target_digest: registered.target_digest.clone(),
+        }) {
+            // Producer expiry may remove the short context entirely. Only this
+            // exact private response allows fresh preparation. It cannot prove
+            // human use, clear a hold, or extend the durable link lifetime.
+            Err(RemoteViewApplicationAdapterError::Transport(
+                crate::RemoteViewApplicationTransportError::NativeObservationMissing,
+            )) => {
+                if self.observe_assignment(assignment)?.target != before.target {
+                    return Err(RemoteViewApplicationResponseError::StaleTarget.into());
+                }
+                return Ok(RemoteViewNativeHandoffUseRead {
+                    state: RemoteViewNativeHandoffUseState::Expired,
+                    observation: registered.clone(),
+                });
+            }
+            Err(error) => return Err(error),
+            Ok(value) => serde_json::from_value::<UseResponse>(value)
+                .map_err(|_| RemoteViewApplicationResponseError::InvalidShape)?,
+        };
         let observation = response.observation;
         observation.validate()?;
         let mut original = observation.clone();

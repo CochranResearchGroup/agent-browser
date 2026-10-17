@@ -6363,6 +6363,8 @@ Software callers set handoffOperation=set_tab_lifetime with tabInactivityMs.
 Software inspect exposes original taskMetadata with supplied or unknown attribution.
 firstHumanUseAtMs records qualified first use separately from creation attribution.
 Native human handoffs prepare observation before the operator opens the link.
+An exact producer missing-context read refreshes observation under current
+assignment checks without changing the link, task or pending-human hold.
 The public URL uses native Remote View authentication without a dashboard login.
 Its read-only redirect carries qualified observation context; navigation alone
 never acknowledges successful viewer use. Owner maintenance refreshes expired

@@ -174,7 +174,7 @@ impl RemoteViewApplicationTransport for PoolTransport {
                     .native_observations
                     .values_mut()
                     .find(|record| record["correlationId"] == *correlation_id)
-                    .unwrap();
+                    .ok_or(RemoteViewApplicationTransportError::NativeObservationMissing)?;
                 assert_eq!(record["targetDigest"], *target_digest);
                 if record["used"].is_null() && !expired {
                     if let Some(at) = used_at {
@@ -5023,6 +5023,33 @@ fn native_use_owner_reconciles_registration_restart_generation_and_publication_c
         "native_use_pending"
     );
     assert!(consumer.state().pending_human_tabs.contains_key(tab));
+    // Producer retention can remove the context entirely. The owner must
+    // recreate only that short context, preserving the exact task and hold.
+    let link_before_missing = consumer.state().remote_view_tab_handoffs[id].clone();
+    let hold_before_missing = consumer.state().pending_human_tabs[tab].clone();
+    provider.borrow_mut().native_observations.clear();
+    consumer.reap(112).unwrap();
+    let refreshed = prepare(&mut consumer, 112);
+    assert_eq!(refreshed["success"], true, "{refreshed}");
+    assert_ne!(
+        refreshed["data"]["correlationId"],
+        resumed["data"]["correlationId"]
+    );
+    let link_after_missing = &consumer.state().remote_view_tab_handoffs[id];
+    assert_eq!(link_after_missing.tab_id, link_before_missing.tab_id);
+    assert_eq!(
+        link_after_missing.created_at_ms,
+        link_before_missing.created_at_ms
+    );
+    assert_eq!(
+        link_after_missing.expires_at_ms,
+        link_before_missing.expires_at_ms
+    );
+    assert_eq!(
+        consumer.state().pending_human_tabs[tab],
+        hold_before_missing
+    );
+    assert_eq!(calls.get(), 1, "refresh must not launch another browser");
     provider.borrow_mut().native_observation_expired = true;
     assert_eq!(
         observe(&mut consumer, 113)["data"]["status"],

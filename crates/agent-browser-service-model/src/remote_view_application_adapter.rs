@@ -20,6 +20,8 @@ pub enum RemoteViewApplicationTransportError {
     /// Exact prepare rejection proves no new retirement fence was created by
     /// this request. It does not settle an earlier application close attempt.
     IdleRetirementDeferred,
+    /// Exact private producer read proves the short native context is absent.
+    NativeObservationMissing,
 }
 
 pub trait RemoteViewApplicationTransport {

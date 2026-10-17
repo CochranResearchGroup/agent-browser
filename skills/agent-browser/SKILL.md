@@ -76,7 +76,7 @@ Tab-targeted automation can run without either tab being physically visible. Ser
 
 Close only the task's session. Closing one session must preserve its peers; the final session releases the browser. Do not delete the shared profile to clean up a task. If a site requires foreground execution, serialize that part of the workflow.
 
-A failed native handoff observation does not acknowledge human use or renew retention. Eligible TTL cleanup still runs under its existing activity and publication checks before the owner reports the observation error. A failed reaper response can therefore follow committed cleanup; read current owner state before deciding what remains.
+An exact private producer `native_use_missing` response refreshes only the short native observation after current assignment readback. It preserves the durable link, addressed tab, first-use history and pending-human hold; timeouts, other errors and changed generations remain failures. A failed native handoff observation does not acknowledge human use or renew retention. Eligible TTL cleanup still runs under its existing activity and publication checks before the owner reports the observation error. A failed reaper response can therefore follow committed cleanup; read current owner state before deciding what remains.
 
 Disposable quota retirement remains under development. Its admission includes verified child processes of the selected browser; unrelated or unverified processes using the profile still defer retirement. Retain pending-human, viewer, controller, operation and peer protections.
 

@@ -4,18 +4,18 @@ lanes:
   - id: UX301
     product_lane: PL-BUGFIX
     objective: Improve handoff inventory and reconcile live rail with Remote View and browser observations
-    branch: fix/dashboard-handoff-polish
+    branch: fix/native-handoff-observation-recovery
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#301]
     plan_state: IN_PROGRESS
-    custody_state: INTEGRATED
+    custody_state: ACTIVE_WORKTREE
     pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/302
     integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/302
     dependencies: []
     overlaps: [P237, P240]
     reconciled_overlaps: ["P237 integrated; existing dashboard primary reused with installed candidate pins retained; P240 foreign resource checkout preserved. UX301 owns observed workspace presence, bounded Remote View reads, generated display types, rail/viewer consumers and guidance. P240 TTL and cleanup remain unchanged."]
-    shared_source_coordination: "User-authorized follow-up owns handoff-observation versus TTL reaper isolation, plus current-active assignment selection in remote_view_session_effects.rs and host pool fixtures. P240 is completed with a clean retained checkout; its archive, quota and resource policies remain authoritative and unchanged. The diagnostic slice had no production effects; the later explicit upgrade is recorded below. UX301 also owns the read-only single-flight native observation worker and additive sample-age projection; provider APIs and lifecycle policy remain unchanged."
+    shared_source_coordination: "User-authorized follow-up owns handoff-observation versus TTL reaper isolation, plus current-active assignment selection in remote_view_session_effects.rs and host pool fixtures. P240 is completed with a clean retained checkout; its archive, quota and resource policies remain authoritative and unchanged. The diagnostic slice had no production effects; the later explicit upgrade is recorded below. Follow-up owns exact producer missing-context continuation, private HTTP classification and native observation fixtures. UX301 also owns the read-only single-flight native observation worker and additive sample-age projection; provider APIs and lifecycle policy remain unchanged."
     validation_status: PR302 integrated; sealed source c134b56c1 binary 186b5640bb5f passes exact development native rail/input, doctors and three launch cycles; production transaction upgrade-30a272ee accepted with matching installed and live runtime-host checksums, doctor passing and protected profiles/handoffs retained; wider summary latency remains about 3s
     updated_at: 2026-10-17
 

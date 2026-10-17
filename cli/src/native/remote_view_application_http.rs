@@ -128,6 +128,16 @@ impl RemoteViewApplicationTransport for RemoteViewApplicationHttp {
                         return Err(Error::IdleRetirementDeferred);
                     }
                     if status == reqwest::StatusCode::BAD_REQUEST
+                        && envelope_operation == "observe_native_handoff_use"
+                        && value.get("schema_version").and_then(Value::as_u64) == Some(1)
+                        && value.get("code").and_then(Value::as_str) == Some("native_use_missing")
+                        && value.get("message").and_then(Value::as_str)
+                            == Some("native handoff observation unavailable")
+                        && value.get("retryable").and_then(Value::as_bool) == Some(false)
+                    {
+                        return Err(Error::NativeObservationMissing);
+                    }
+                    if status == reqwest::StatusCode::BAD_REQUEST
                         && matches!(envelope_operation.as_str(), "issue_view")
                         && value.get("schema_version").and_then(Value::as_u64) == Some(1)
                         && value.get("code").and_then(Value::as_str)
@@ -378,6 +388,63 @@ mod tests {
             let mut transport =
                 RemoteViewApplicationHttp::new(&origin, Duration::from_secs(5)).unwrap();
             let envelope = serde_json::from_value(fixture["requests"][index].clone()).unwrap();
+            assert_eq!(transport.request(&envelope), Err(expected));
+            handle.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn native_missing_response_is_scoped_to_exact_private_read() {
+        for (operation, code, schema, retryable, expected) in [
+            (
+                "observe_native_handoff_use",
+                "native_use_missing",
+                1,
+                false,
+                Error::NativeObservationMissing,
+            ),
+            (
+                "inventory",
+                "native_use_missing",
+                1,
+                false,
+                Error::OutcomeUnknown,
+            ),
+            (
+                "observe_native_handoff_use",
+                "provider_unavailable",
+                1,
+                false,
+                Error::OutcomeUnknown,
+            ),
+            (
+                "observe_native_handoff_use",
+                "native_use_missing",
+                2,
+                false,
+                Error::OutcomeUnknown,
+            ),
+            (
+                "observe_native_handoff_use",
+                "native_use_missing",
+                1,
+                true,
+                Error::OutcomeUnknown,
+            ),
+        ] {
+            let body = serde_json::json!({"schema_version":schema,"code":code,"message":"native handoff observation unavailable","retryable":retryable}).to_string();
+            let (origin, handle) = server(format!("HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body));
+            let request = if operation == "inventory" {
+                serde_json::json!({"operation":operation})
+            } else {
+                serde_json::json!({"operation":operation,"correlation_id":"a".repeat(64),"target_digest":"synthetic-target"})
+            };
+            let envelope = serde_json::from_value(
+                serde_json::json!({"application":"agent-browser","request":request}),
+            )
+            .unwrap();
+            let mut transport =
+                RemoteViewApplicationHttp::new(&origin, Duration::from_secs(5)).unwrap();
             assert_eq!(transport.request(&envelope), Err(expected));
             handle.join().unwrap();
         }
