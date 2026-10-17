@@ -22,13 +22,13 @@ let observedRuntimeGeneration: string | null = null;
 
 /**
  * Share the large Service Status projection across dashboard components.
- * The ten-second freshness bound spans the five-second and seven-second UI
- * poll intervals while preserving a finite, frequently refreshed left rail.
+ * The live summary has a two-second cache bound, shorter than the three-second
+ * workspace poll. Ancillary diagnostics retain their ten-second shared cache.
  * Explicit workspace refresh revalidates both document and HTTP snapshots.
  */
 export async function fetchSharedServiceStatus(revalidate = false): Promise<Response> {
   return fetchCoordinatedDashboardRead(`${SERVICE_API_BASE}/status?projection=dashboard-summary`, {
-    freshForMs: SHARED_SERVICE_READ_TTL_MS,
+    freshForMs: 2000,
     revalidate,
   });
 }

@@ -54,7 +54,10 @@ Show inactive; target expiry does not imply link expiry. Icon controls have hove
 help. Managed ownership alone does not prove a native desktop is available.
 The rail requires fresh matching native-window, browser-process and tab evidence
 for managed desktop tasks. Empty desktops and unverified/ended tabs stay out of
-live navigation; retained handoffs remain available. Refresh retains the requested identity. Diagnostics at `/service` keeps Service inspection,
+live navigation; retained handoffs remain available. The rail polls every three
+seconds after completion; diagnostics do not block it and stale evidence expires
+independently after 30 seconds. Search uses displayed labels and navigable URLs,
+not embedded document payloads. Refresh retains the requested identity. Diagnostics at `/service` keeps Service inspection,
 Selection, Activity, Chat, Console, Network, Storage and Extensions optional.
 `?view=service:<name>` and the selected workspace/browser/session/tab/profile/job
 query fields remain supported for diagnostic links. Native Remote View uses its

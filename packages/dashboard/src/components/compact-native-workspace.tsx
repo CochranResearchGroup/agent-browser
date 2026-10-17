@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, LogOut, Monitor, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Link2, Wrench } from "lucide-react";
+import { buildNativeRailGroups } from "@/lib/native-rail";
 import { tabDescription } from "@/lib/tab-description";
 import { queueWorkspaceFocusRequest } from "@/lib/workspace-focus-request";
 import type { WorkspaceNode, WorkspaceServiceTab } from "@/lib/service-workspaces";
@@ -112,13 +113,7 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
     // writeDashboardWorkspaceUrlSelection dispatches the canonical selection event.
   };
   const search = query.trim().toLowerCase();
-  const browsers = [...new Map(nodes.filter(node => node.live && node.browserId).map(node => [node.browserId, node])).values()];
-  const groups = browsers.map(node => {
-    const browserTabs = tabs.filter(tab => (tab.managedTask !== true || tab.presence?.state === "live") && tab.browserId === node.browserId && tab.lifecycle !== "closed" && tab.lifecycle !== "expired" && !closedTabs.has(tab.id));
-    const browserMatches = `${node.label} ${node.profileId ?? ""}`.toLowerCase().includes(search);
-    return { node, browserTabs, visibleTabs: browserTabs.filter(tab => !search || browserMatches || `${tab.title ?? ""} ${tab.taskLabel ?? ""} ${tab.url ?? ""}`.toLowerCase().includes(search)), browserMatches };
-  }).filter(group => group.browserTabs.length > 0 && (!search || group.browserMatches || group.visibleTabs.length));
-  const unverifiedTabs = tabs.some(tab => tab.managedTask && (!tab.presence || tab.presence.state === "unknown"));
+  const { groups, browserCount, unverifiedTabs } = useMemo(() => buildNativeRailGroups(nodes, tabs, closedTabs, query), [nodes, tabs, closedTabs, query]);
   return (
     <main ref={root} className="native-workspace" style={{ gridTemplateColumns: collapsed ? "40px minmax(0, 1fr)" : `${width}px minmax(0, 1fr)` }}>
       <aside className="native-workspace-rail" aria-label="Browsers and tabs">
@@ -141,7 +136,7 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
                 {open && visibleTabs.map(tab => <NativeTabActions key={tab.id} node={node} tab={tab} shareBusy={shareBusy} onShare={opener => void shareTab(tab, opener)} onClosed={() => tabClosed(tab)}><button type="button" className="native-workspace-tab" aria-label={tabDescription(tab)} aria-current={selection.browserId === node.browserId && selection.tabId === tab.id ? "page" : undefined} onClick={() => selectTab(node, tab)} title={tab.url ?? undefined}><span>{tabDescription(tab)}</span></button></NativeTabActions>)}
               </section>;
             })}
-            {search && browsers.length > 0 && !groups.length && <p role="status" className="native-workspace-empty">No matching browsers or tabs</p>}
+            {search && browserCount > 0 && !groups.length && <p role="status" className="native-workspace-empty">No matching browsers or tabs</p>}
             {!groups.length && !search && <p className="native-workspace-empty">{loading ? "Loading browsers…" : unverifiedTabs ? "Browser presence could not be verified. Refresh browsers to check again." : "No active browsers"}</p>}
           </nav>
         </>}

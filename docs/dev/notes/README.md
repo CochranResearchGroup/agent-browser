@@ -22,6 +22,8 @@ integration by itself.
 
 ## PL-BUGFIX | Current Defect Evidence
 
+- [Rail speed and accuracy audit](2026-10-17-rail-audit.md)
+
 - [Dashboard handoff list and desktop availability](2026-10-17-dashboard-handoff-polish.md)
 
 [P247 planning completeness evidence](0247-2026-10-17-planning-completeness.md) records selected-lane omission fixtures and validation for #299.

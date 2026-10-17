@@ -82,6 +82,11 @@ function Fixture() {
     };
   }, []);
   useEffect(() => {
+    const scale = (event: Event) => {
+      const count = Math.min(1000, Math.max(0, Number((event as CustomEvent).detail)));
+      setAvailableTabs(Array.from({length: count}, (_, index) => ({...tabs[1], id: `scale-${index}`, targetId: `scale-target-${index}`, title: `Scale ${String(index).padStart(4, '0')}`})));
+    };
+    window.addEventListener("fixture-scale", scale);
     const presence = (event: Event) => {
       const state = (event as CustomEvent).detail;
       setAvailableTabs(current => current.map(tab => tab.managedTask ? { ...tab, presence: { state } } : tab));
@@ -96,6 +101,7 @@ function Fixture() {
     window.addEventListener("fixture-pause-refresh", pause);
     window.addEventListener("fixture-finish-refresh", finish);
     return () => {
+      window.removeEventListener("fixture-scale", scale);
       window.removeEventListener("fixture-presence", presence);
       window.removeEventListener("fixture-desktop-unavailable", withoutDesktop);
       window.removeEventListener("fixture-remove-selected-tab", removeSelected);

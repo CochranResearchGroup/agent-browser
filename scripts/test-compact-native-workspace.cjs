@@ -822,6 +822,22 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     assert.equal(await page.getByRole('button', { name: 'Alice invoice', exact: true }).count(), 1, 'an unavailable desktop does not erase the retained tab');
     assert.equal(requests.length, beforeUnavailable, 'unavailable desktop must not reopen or select a different task');
     await page.screenshot({ path: path.join(artifacts, 'workspace-desktop-unavailable.png') });
+    await page.setViewportSize({width:1280,height:720});
+    const mountStart = performance.now();
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('fixture-scale', {detail:200})));
+    await page.waitForFunction(() => document.querySelectorAll('.native-workspace-tab').length === 200);
+    const mount200Ms = performance.now() - mountStart;
+    const searches = [];
+    for (const index of [199, 123, 85, 67, 12]) {
+      await page.getByRole('searchbox').fill('');
+      await page.waitForFunction(() => document.querySelectorAll('.native-workspace-tab').length === 200);
+      const started = performance.now();
+      await page.getByRole('searchbox').fill(`Scale ${String(index).padStart(4, '0')}`);
+      await page.waitForFunction(() => document.querySelectorAll('.native-workspace-tab').length === 1);
+      assert.equal(await page.locator('.native-workspace-tab').getAttribute('aria-label'), `Scale ${String(index).padStart(4, '0')}`);
+      searches.push(performance.now() - started);
+    }
+    fs.writeFileSync(path.join(artifacts,'rail-render-timing.json'),JSON.stringify({tabs:200,mount200Ms,searchRoundTripMs:searches,note:'actual Chromium component; timing includes automation transport'},null,2));
     console.log(JSON.stringify({ success: true, artifacts, seam: 'actual compact component in Chromium; synthetic inventory and viewer boundary' }));
   } finally {
     releaseHeldFocus?.(null);

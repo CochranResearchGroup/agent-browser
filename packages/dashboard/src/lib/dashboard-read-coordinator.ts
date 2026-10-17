@@ -30,6 +30,7 @@ type DashboardReadEnvironment = {
   maxSnapshotBytes: number;
   maxSnapshotEntries: number;
   monotonicNow: () => number;
+  requestTimeoutMs: number;
 };
 
 const DEFAULT_MAX_SNAPSHOT_BYTES = 24 * 1024 * 1024;
@@ -69,6 +70,7 @@ export class DashboardReadCoordinator {
         0,
         Math.floor(environment.maxSnapshotEntries ?? DEFAULT_MAX_SNAPSHOT_ENTRIES),
       ),
+      requestTimeoutMs: environment.requestTimeoutMs ?? 8000,
       monotonicNow: environment.monotonicNow ?? (() => globalThis.performance.now()),
     };
   }
@@ -110,6 +112,7 @@ export class DashboardReadCoordinator {
         method: "GET",
         cache: "no-store",
         credentials: "same-origin",
+        signal: AbortSignal.timeout(this.environment.requestTimeoutMs),
         // Chromium also adds no-cache to ordinary no-store fetches. Keep
         // operator revalidation distinct from background transport behavior.
         headers: policy.revalidate ? { "X-Agent-Browser-Revalidate": "1" } : undefined,

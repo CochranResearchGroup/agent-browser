@@ -77,6 +77,7 @@ export type UseSelectedWorkspaceContextResult = {
   context: SelectedWorkspaceContext;
   projection: WorkspaceViewProjection;
   sourceSnapshotIdentity: number;
+  presenceCurrent: boolean;
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -96,6 +97,17 @@ export function useSelectedWorkspaceContext(
   const [error, setError] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState(() => Date.now());
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
+  const resourcesGeneration = useRef(0);
+  const observation = useRef<{ token: number | null; firstSeen: number }>({ token: null, firstSeen: 0 });
+  const [, expireObservation] = useState(0);
+  const presenceCurrent = observation.current.token !== null && performance.now() - observation.current.firstSeen < 30_000;
+  useEffect(() => {
+    if (observation.current.token === null) return;
+    const remaining = 30_000 - (performance.now() - observation.current.firstSeen);
+    if (remaining <= 0) return;
+    const timer = setTimeout(() => expireObservation(value => value + 1), remaining);
+    return () => clearTimeout(timer);
+  }, [serviceStatus, refreshedAt]);
 
   const load = useCallback((revalidate = false): Promise<void> => {
     if (!enabled) return Promise.resolve();
@@ -103,18 +115,22 @@ export function useSelectedWorkspaceContext(
     const request = (async () => {
       setLoading(true);
       try {
-        const [statusResponse, resourcesResponse] = await Promise.all([
-          fetchSharedServiceStatus(revalidate),
-          fetchSharedServiceResources(revalidate).catch(() => null),
-        ]);
+        // Diagnostic resources must never hold up live browser inventory.
+        const resourceGeneration = ++resourcesGeneration.current;
+        void fetchSharedServiceResources(revalidate).then(async response => {
+          const result = response.ok ? await response.json() as ApiResponse<ServiceResourcesData> : null;
+          if (resourcesGeneration.current === resourceGeneration) setServiceResources(result?.success ? result.data ?? null : null);
+        }).catch(() => {
+          if (resourcesGeneration.current === resourceGeneration) setServiceResources(null);
+        });
+        const statusResponse = await fetchSharedServiceStatus(revalidate);
         if (!statusResponse.ok) throw new Error(`HTTP ${statusResponse.status}`);
         const json = (await statusResponse.json()) as ApiResponse<ServiceStatusData>;
-        const resourcesJson = resourcesResponse?.ok
-          ? ((await resourcesResponse.json()) as ApiResponse<ServiceResourcesData>)
-          : null;
         if (!json.success) throw new Error(json.error || "Service status unavailable");
+        const token = json.data?.browserRuntime?.workspace?.observedAtMs;
+        if (typeof token !== "number" || !Number.isFinite(token) || token < 0) observation.current.token = null;
+        else if (token !== observation.current.token) observation.current = { token, firstSeen: performance.now() };
         setServiceStatus(json.data ?? null);
-        setServiceResources(resourcesJson?.success ? resourcesJson.data ?? null : null);
         setError(null);
         setRefreshedAt(Date.now());
       } catch (err) {
@@ -150,7 +166,7 @@ export function useSelectedWorkspaceContext(
 
   useEffect(() => {
     if (!enabled) return;
-    return startCompletionDrivenDashboardPoll(() => load(), 7000);
+    return startCompletionDrivenDashboardPoll(() => load(), 3000);
   }, [enabled, load]);
 
   const daemonTabsByPort = useMemo(() => {
@@ -170,7 +186,7 @@ export function useSelectedWorkspaceContext(
   }, [daemonSessions, getEngineForPort]);
 
   const { context, projection, nodes, tabs } = useMemo(() => {
-    const managed = managedWorkspaceSources(serviceStatus?.browserRuntime?.workspace);
+    const managed = managedWorkspaceSources(serviceStatus?.browserRuntime?.workspace, presenceCurrent);
     const mergeById = <T extends { id: string }>(legacy: T[], owned: T[]): T[] =>
       [...new Map([...legacy, ...owned].map(record => [record.id, record])).values()];
     const serviceBrowsers = mergeById(Object.values(serviceStatus?.service_state?.browsers ?? {}), managed.browsers);
@@ -257,9 +273,10 @@ export function useSelectedWorkspaceContext(
     serviceResources,
     serviceStatus,
     preferences?.revision,
+    presenceCurrent,
   ]);
 
-  return { context, projection, nodes, tabs, managedWorkspace: serviceStatus?.browserRuntime?.workspace, sourceSnapshotIdentity: refreshedAt, loading, error, refresh };
+  return { context, projection, nodes, tabs, presenceCurrent, managedWorkspace: serviceStatus?.browserRuntime?.workspace, sourceSnapshotIdentity: refreshedAt, loading, error, refresh };
 }
 
 function workspaceProjectionBrowser(browser: WorkspaceServiceBrowser): WorkspaceViewBrowserSource {

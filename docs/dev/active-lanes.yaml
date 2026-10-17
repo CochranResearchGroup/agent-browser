@@ -14,7 +14,7 @@ lanes:
     dependencies: []
     overlaps: [P237, P240]
     reconciled_overlaps: ["P237 integrated; existing dashboard primary reused with installed candidate pins retained; P240 foreign resource checkout preserved. UX301 owns observed workspace presence, bounded Remote View reads, generated display types, rail/viewer consumers and guidance. P240 TTL and cleanup remain unchanged."]
-    validation_status: Seven focused Rust tests, composed Chromium rail/viewport recovery and zero residue, twelve contract/client/projection/policy checks, dashboard/docs builds, format and strict Clippy pass; source only, no production publication
+    validation_status: Rail audit repairs qualified; seventeen-check browser/client/build batch, eight focused Rust tests, cache expiry regression, format and strict Clippy pass; 28x measured grouping improvement; no production publication
     updated_at: 2026-10-17
 
   - id: P247

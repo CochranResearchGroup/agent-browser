@@ -2485,10 +2485,52 @@ fn apply_dashboard_status_flight_completion(
     }
 }
 
+#[cfg(test)]
+#[test]
+fn dashboard_summary_cache_expires_before_live_rail_poll() {
+    let summary = dashboard_status_cache_ttl("/api/service/status?projection=dashboard-summary");
+    assert!(summary < Duration::from_secs(3));
+    assert_eq!(
+        dashboard_status_cache_ttl("/api/service/resources"),
+        Duration::from_secs(10)
+    );
+    let mut cache = DashboardServiceStatusCache::default();
+    let key = |path: &str| DashboardServiceStatusCacheKey {
+        backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+        port: 1,
+        path: path.into(),
+    };
+    for path in [
+        "/api/service/status?projection=dashboard-summary",
+        "/api/service/resources",
+    ] {
+        cache.entries.insert(
+            key(path),
+            DashboardServiceStatusCacheEntry::Ready {
+                completed_at: Instant::now() - Duration::from_secs(3),
+                response: vec![],
+            },
+        );
+    }
+    prune_expired_dashboard_status_entries(&mut cache);
+    assert!(!cache
+        .entries
+        .contains_key(&key("/api/service/status?projection=dashboard-summary")));
+    assert!(cache.entries.contains_key(&key("/api/service/resources")));
+}
+
+fn dashboard_status_cache_ttl(path: &str) -> Duration {
+    if path == "/api/service/status?projection=dashboard-summary" {
+        Duration::from_secs(2)
+    } else {
+        DASHBOARD_SERVICE_STATUS_CACHE_TTL
+    }
+}
+
 fn prune_expired_dashboard_status_entries(cache: &mut DashboardServiceStatusCache) {
-    cache.entries.retain(|_, entry| match entry {
+    cache.entries.retain(|key, entry| match entry {
         DashboardServiceStatusCacheEntry::Ready { completed_at, .. } => {
-            completed_at.elapsed() < DASHBOARD_SERVICE_STATUS_CACHE_TTL
+            completed_at.elapsed() < dashboard_status_cache_ttl(&key.path)
         }
         DashboardServiceStatusCacheEntry::InFlight { .. } => true,
     });

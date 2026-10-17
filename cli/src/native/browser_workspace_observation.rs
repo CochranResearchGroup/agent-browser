@@ -75,12 +75,17 @@ async fn targets(browser: &ManagedBrowserInstance) -> Observation {
 /// Failure and unfinished reads stay unknown. Only a successful exact join makes
 /// a tab live; a missing process, target or native window proves display absence.
 pub(super) async fn enrich(state: BrowserSessionState, status: &mut Value) {
+    let occupied = state
+        .tabs
+        .values()
+        .map(|tab| tab.browser_id.as_str())
+        .collect::<BTreeSet<_>>();
     let browsers = state
         .browsers
         .values()
         .filter(|browser| {
             !state.idle_closed_browsers.contains_key(&browser.id)
-                && state.tabs.values().any(|tab| tab.browser_id == browser.id)
+                && occupied.contains(browser.id.as_str())
         })
         .cloned()
         .collect::<Vec<_>>();
@@ -97,26 +102,16 @@ pub(super) async fn enrich(state: BrowserSessionState, status: &mut Value) {
         }
         super::super::browser_session_remote_view::observe_workspace_desktops(&desktops)
     });
-    let collect = async {
-        let observations = stream::iter(browsers)
-            .map(|browser| async move {
-                let result = tokio::time::timeout(Duration::from_millis(600), targets(&browser))
-                    .await
-                    .unwrap_or_default();
-                (browser.id, result)
-            })
-            .buffer_unordered(4);
-        tokio::pin!(observations);
-        let mut result = BTreeMap::new();
-        let _ = tokio::time::timeout(Duration::from_millis(800), async {
-            while let Some((id, observed)) = observations.next().await {
-                result.insert(id, observed);
-            }
-        })
-        .await;
-        result
-    };
+    static CURSOR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let offset = CURSOR.fetch_add(4, std::sync::atomic::Ordering::Relaxed);
+    let collect = collect_browsers(browsers, offset);
     let (observed, native) = tokio::join!(collect, native);
+    // Move past the completed batch, rather than advancing only four slots
+    // when a healthy large inventory fits many more probes into the budget.
+    CURSOR.fetch_add(
+        observed.len().saturating_sub(4),
+        std::sync::atomic::Ordering::Relaxed,
+    );
     let native = native.unwrap_or_default();
     if let Some(workspace) = status.get_mut("workspace") {
         workspace["observedAtMs"] = json!(std::time::SystemTime::now()
@@ -134,6 +129,33 @@ pub(super) async fn enrich(state: BrowserSessionState, status: &mut Value) {
         };
         publish(&state, browser, observation, presence, status);
     }
+}
+
+async fn collect_browsers(
+    mut browsers: Vec<ManagedBrowserInstance>,
+    offset: usize,
+) -> BTreeMap<String, Observation> {
+    if !browsers.is_empty() {
+        let count = browsers.len();
+        browsers.rotate_left(offset % count);
+    }
+    let observations = stream::iter(browsers)
+        .map(|browser| async move {
+            let result = tokio::time::timeout(Duration::from_millis(600), targets(&browser))
+                .await
+                .unwrap_or_default();
+            (browser.id, result)
+        })
+        .buffer_unordered(4);
+    tokio::pin!(observations);
+    let mut result = BTreeMap::new();
+    let _ = tokio::time::timeout(Duration::from_millis(800), async {
+        while let Some((id, observed)) = observations.next().await {
+            result.insert(id, observed);
+        }
+    })
+    .await;
+    result
 }
 
 fn browser_presence(
@@ -507,5 +529,50 @@ mod tests {
             state, original,
             "observation must not rewrite TTL, tasks or custody"
         );
+    }
+    #[tokio::test]
+    async fn workspace_collection_rotates_past_slow_browsers() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!(
+            "ws://{}/devtools/browser/slow",
+            listener.local_addr().unwrap()
+        );
+        let server = tokio::spawn(async move {
+            let mut clients = tokio::task::JoinSet::new();
+            loop {
+                let (socket, _) = listener.accept().await.unwrap();
+                clients.spawn(async move {
+                    let _websocket = tokio_tungstenite::accept_async(socket).await.unwrap();
+                    std::future::pending::<()>().await;
+                });
+            }
+        });
+        let mut browsers = (0..8)
+            .map(|index| ManagedBrowserInstance {
+                id: format!("slow-{index}"),
+                profile_id: "p".into(),
+                pid: std::process::id(),
+                cdp_endpoint: endpoint.clone(),
+                desktop: None,
+                active_session_ids: vec![],
+            })
+            .collect::<Vec<_>>();
+        browsers.push(ManagedBrowserInstance {
+            id: "last-missing".into(),
+            profile_id: "p".into(),
+            pid: 0,
+            cdp_endpoint: endpoint,
+            desktop: None,
+            active_session_ids: vec![],
+        });
+        let first = collect_browsers(browsers.clone(), 0).await;
+        assert!(!first.contains_key("last-missing"));
+        let next = collect_browsers(browsers, 4).await;
+        assert!(
+            matches!(next.get("last-missing"), Some(Observation::Absent)),
+            "later groups must receive a turn even when earlier CDP clients stall"
+        );
+        server.abort();
+        let _ = server.await;
     }
 }

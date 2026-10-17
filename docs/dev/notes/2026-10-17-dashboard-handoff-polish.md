@@ -88,3 +88,15 @@ are the retained schema qualification.
 Private check logs and synthetic screenshots are under the task's local evidence
 packet. Prior UI failure logs remain retained. No production binary, native
 provider configuration, TTL cleanup policy or private task was changed.
+
+
+## Rail speed and accuracy audit
+
+The user requested a rail audit after the presence repair. UX301 remains primary
+writer. Audit scope covers refresh/cache delay, stalled reads, observation freshness,
+collector fairness, exact selection, and grouping/render work. No new endpoint,
+provider mutation, task relaunch or production installation is authorized by this
+audit. Repairs and measurements stay on PR302; P240 TTL/cleanup remains separate.
+
+The [rail audit](2026-10-17-rail-audit.md) records the subsequent speed/accuracy
+repairs, measured grouping/rendering results, and retained validation failures.

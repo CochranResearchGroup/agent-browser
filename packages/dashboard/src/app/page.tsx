@@ -706,7 +706,7 @@ function NativeBrowserWorkspace({ user, onLogout }: {
   const browserId = selectedWorkspace.context.selection.browserId;
   const tabId = selectedWorkspace.context.selection.tabId?.replace(/^target:/, "");
   const viewport = managedWorkspaceViewport(inventory, browserId, tabId ?? null,
-    selectedWorkspace.projection.selected?.browser.id === browserId && selectedWorkspace.projection.selected.canView);
+    selectedWorkspace.projection.selected?.browser.id === browserId && selectedWorkspace.projection.selected.canView, selectedWorkspace.presenceCurrent);
   useStreamSync(activePort, Boolean(selectedWorkspace.context.node) && !viewport.useNativeViewport && !readWorkspaceViewportRoute());
   return <CompactNativeWorkspace runtimeEnvironment={runtimeEnvironment} nodes={selectedWorkspace.nodes} tabs={selectedWorkspace.tabs}
     handoffs={inventory?.handoffs ? Object.values(inventory.handoffs) : undefined}

@@ -57,6 +57,11 @@ The rail joins Remote View application windows with live browser process and
 exact tab observations. Empty desktops, ended tabs and unverified managed records
 are excluded. Failed or stale observations preserve selection and retained links;
 a later successful refresh can restore the same tab without recreating it.
+The live rail polls three seconds after each completed read, with a two-second
+summary cache. Slow diagnostics do not delay it. Observation freshness expires
+independently after 30 seconds using elapsed time, even if the next read stalls.
+Search matches displayed tab labels and URLs, excluding embedded document payloads.
+
 
 
 Policies opens link lifetime controls for a retained record. Choose Perpetual or
