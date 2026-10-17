@@ -1065,15 +1065,24 @@ export interface ServiceManagedHandoff {
 }
 
 /** Owner-published inventory; reported is not native viewer readiness. */
+/** Fresh read-only presence; absence of this field means unverified. */
+export interface ServiceManagedPresence {
+  state: 'live' | 'absent' | 'unknown';
+  source?: 'remote-view-and-cdp' | 'cdp';
+}
+
 export interface ServiceManagedWorkspace {
   schemaVersion: 'agent-browser.managed-workspace.v1';
   source: 'managed-owner';
+  /** Time of bounded live observations; absent or stale means unverified. */
+  observedAtMs?: number;
   /** Absent on older owners; empty means no retained links. */
   handoffs?: Record<string, ServiceManagedHandoff>;
   browsers: Record<string, {
     id: string; profileId: string; pid: number;
     desktop: { desktop_id: string; generation: number; friendly_route_label: string } | null;
     activeSessionIds: string[]; state: 'reported' | 'sleeping';
+    presence?: ServiceManagedPresence;
   }>;
   sessions: Record<string, {
     id: string; name: string; profileId: string; browserId: string;
@@ -1081,6 +1090,7 @@ export interface ServiceManagedWorkspace {
   }>;
   tabs: Record<string, {
     id: string; targetId: string; browserId: string; sessionId: string;
+    presence?: ServiceManagedPresence;
     createdAtMs: number; url: string | null;
     /** Live exact-target observation; absent on older owners or unavailable targets. */
     title?: string | null;

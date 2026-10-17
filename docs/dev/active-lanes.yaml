@@ -3,7 +3,7 @@ work_item_tracking: required
 lanes:
   - id: UX301
     product_lane: PL-BUGFIX
-    objective: Improve handoff inventory usability and explain unavailable managed desktops
+    objective: Improve handoff inventory and reconcile live rail with Remote View and browser observations
     branch: fix/dashboard-handoff-polish
     target: main
     accountable_owner: ecochran76
@@ -13,8 +13,8 @@ lanes:
     pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/302
     dependencies: []
     overlaps: [P237, P240]
-    reconciled_overlaps: ["P237 integrated; existing dashboard primary reused with installed candidate pins retained; P240 foreign resource checkout preserved. UX301 owns compact workspace/drawer, viewer selection and matching guidance only."]
-    validation_status: Chromium component and managed selector regressions, projection/context/inspector and handoff contracts, dashboard/docs builds, format and strict Clippy pass; no production publication
+    reconciled_overlaps: ["P237 integrated; existing dashboard primary reused with installed candidate pins retained; P240 foreign resource checkout preserved. UX301 owns observed workspace presence, bounded Remote View reads, generated display types, rail/viewer consumers and guidance. P240 TTL and cleanup remain unchanged."]
+    validation_status: Seven focused Rust tests, composed Chromium rail/viewport recovery and zero residue, twelve contract/client/projection/policy checks, dashboard/docs builds, format and strict Clippy pass; source only, no production publication
     updated_at: 2026-10-17
 
   - id: P247

@@ -43,3 +43,48 @@ Production installation and actual retained private-task recovery are not claime
 The reported production task was inspected read-only; raw runtime facts and private
 identifiers remain outside the repository. Existing provider assignment ambiguity
 from the previous production smoke is separate and unchanged by this UI slice.
+
+## User-directed live rail reconciliation
+
+The same issue and primary checkout now own a bounded correction to the existing
+read-only observed workspace status. Remote View supplies current desktop/window
+presence; Agent Browser joins the exact browser process and CDP page target.
+Neither a retained task, an allocated desktop nor a browser-looking window title
+proves a live owned tab. No new endpoint or viewer is introduced. Provider reads
+remain bounded; failed or incomplete observation is unknown, not deletion proof.
+The rail excludes unverified/absent managed tabs and empty groups, preserves the
+requested identity and handoff records, and updates on later successful polls.
+P240 TTL and cleanup semantics remain untouched. UX301 is primary writer for the
+observation adapter, generated display contract and rail consumer; foreign source
+and production state remain preserved.
+
+
+### Live rail qualification
+
+Seven focused Rust tests pass, including the exact process/CDP read path, native
+window-to-process-family matching, empty and peer desktops, stale generations,
+missing tab targets, unknown reads, retained-state preservation and later recovery.
+The native adapter fixture asserts exactly inventory, observe, windows, observe;
+any effect operation fails the fixture. Released historical assignments are ignored
+for presence; multiple active assignments remain unknown. This does not repair the
+separate native handoff issuance lookup.
+
+The Chromium fixture composes the real rail and task viewport. Absence removes
+Alice's group and frame while retaining the requested URL; unknown observation
+shows distinct guidance. Fresh evidence restores Alice and prepares only that exact
+existing target. An empty desktop never appears as a browser. Its fresh owned
+process census is empty after cleanup. The metadata collector itself issues no
+focus, grant, launch, cleanup or durable-state write. Reopening the selected native
+presentation after verified recovery remains the normal addressed-tab workflow.
+
+The twelve-check contract/client/projection/policy batch passes. Generated client
+parity, dashboard and docs builds, format and strict workspace Clippy pass. Presence
+is additive in the existing workspace schema. Missing or older-owner evidence and
+observations older than 30 seconds are unverified rather than live. An optional
+independent Python schema probe could not run because jsonschema is not installed;
+no result from that probe is claimed. Existing contract and generated-type gates
+are the retained schema qualification.
+
+Private check logs and synthetic screenshots are under the task's local evidence
+packet. Prior UI failure logs remain retained. No production binary, native
+provider configuration, TTL cleanup policy or private task was changed.

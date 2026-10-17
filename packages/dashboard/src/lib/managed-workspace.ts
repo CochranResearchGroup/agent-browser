@@ -1,6 +1,21 @@
 import type { ServiceManagedWorkspace } from '@agent-browser/client/service-observability';
 import type { WorkspaceServiceBrowser, WorkspaceServiceSession, WorkspaceServiceTab } from './service-workspaces.ts';
 
+/** A failed poll must not keep a previous live observation indefinitely. */
+function currentPresence(workspace?: ServiceManagedWorkspace): boolean {
+  const age = Date.now() - (workspace?.observedAtMs ?? Number.NaN);
+  return Number.isFinite(age) && age >= 0 && age <= 30_000;
+}
+
+function tabPresence(workspace: ServiceManagedWorkspace, tab: ServiceManagedWorkspace['tabs'][string]): 'live' | 'absent' | 'unknown' {
+  if (!currentPresence(workspace)) return 'unknown';
+  const browser = workspace.browsers[tab.browserId];
+  const session = workspace.sessions[tab.sessionId];
+  if (!browser || !session || session.browserId !== browser.id) return 'unknown';
+  if (browser.presence?.state === 'absent' || tab.presence?.state === 'absent') return 'absent';
+  return browser.presence?.state === 'live' && tab.presence?.state === 'live' ? 'live' : 'unknown';
+}
+
 /** Choose a viewer from available presentation evidence, not managed ownership
  * alone. A retained tab without a desktop must not masquerade as a missing tab
  * or acquire a different browser's stream. */
@@ -8,11 +23,14 @@ export function managedWorkspaceViewport(workspace: ServiceManagedWorkspace | un
   const browser = browserId ? workspace?.browsers[browserId] : null;
   const tab = tabId ? workspace?.tabs[tabId.replace(/^target:/, '')] : null;
   const session = tab ? workspace?.sessions[tab.sessionId] : null;
-  const target = browser?.desktop && tab?.browserId === browser.id && session?.browserId === browser.id
+  const knownTab = tab?.browserId === browser?.id && session?.browserId === browser?.id;
+  const presence = workspace && tab ? tabPresence(workspace, tab) : 'unknown';
+  const presenceUnavailable = Boolean(browser && knownTab && presence !== 'live');
+  const target = presence === 'live' && browser?.desktop && tab?.browserId === browser.id && session?.browserId === browser.id
     ? { browserId: browser.id, sessionName: session.name, targetId: tab.targetId, displayAllocationId: browser.desktop.desktop_id }
     : null;
-  const desktopUnavailable = Boolean(browser && !browser.desktop && tab?.browserId === browser.id && session?.browserId === browser.id && !selectedStreamAvailable);
-  return { target, desktopUnavailable, useNativeViewport: Boolean((browser && (browser.desktop || !selectedStreamAvailable)) || (!browserId && !tabId)) };
+  const desktopUnavailable = Boolean(!presenceUnavailable && browser && !browser.desktop && tab?.browserId === browser.id && session?.browserId === browser.id && !selectedStreamAvailable);
+  return { target, desktopUnavailable, presenceUnavailable: presenceUnavailable && presence !== 'live' ? presence : null, useNativeViewport: Boolean((browser && (browser.desktop || presenceUnavailable || !selectedStreamAvailable)) || (!browserId && !tabId)) };
 }
 
 /** Adapt the public owner snapshot without inventing viewer or child authority. */
@@ -22,6 +40,7 @@ export function managedWorkspaceSources(workspace?: ServiceManagedWorkspace): {
   if (!workspace || workspace.schemaVersion !== 'agent-browser.managed-workspace.v1' || workspace.source !== 'managed-owner') {
     return { browsers: [], sessions: [], tabs: [] };
   }
+  const current = currentPresence(workspace);
   const text = (value: unknown): string | null => typeof value === 'string' && value.trim() ? value : null;
   return {
     browsers: Object.values(workspace.browsers).map(browser => ({
@@ -29,7 +48,7 @@ export function managedWorkspaceSources(workspace?: ServiceManagedWorkspace): {
       displayAllocationId: browser.desktop?.desktop_id ?? null,
       displayName: browser.profileId,
       activeSessionIds: browser.activeSessionIds,
-      health: browser.state === 'sleeping' ? 'not_started' : 'reported',
+      health: browser.state === 'sleeping' || browser.presence?.state === 'absent' ? 'not_started' : current && browser.presence?.state === 'live' ? 'reported' : 'unknown',
       // No operatorVisibleProof or controllable stream follows from inventory.
     })),
     sessions: Object.values(workspace.sessions).map(session => {
@@ -45,7 +64,8 @@ export function managedWorkspaceSources(workspace?: ServiceManagedWorkspace): {
       managedTask: true,
       id: tab.id, browserId: tab.browserId, targetId: tab.targetId,
       sessionId: tab.sessionId, ownerSessionId: workspace.sessions[tab.sessionId]?.name ?? null,
-      lifecycle: 'ready', url: tab.url, title: text(tab.title), taskLabel: text(tab.taskMetadata?.taskName),
+      presence: { state: tabPresence(workspace, tab) },
+      lifecycle: tabPresence(workspace, tab) === 'live' ? 'ready' : tabPresence(workspace, tab) === 'absent' ? 'expired' : 'unknown', url: tab.url, title: text(tab.title), taskLabel: text(tab.taskMetadata?.taskName),
       taskMetadata: tab.taskMetadata,
       profileId: workspace.browsers[tab.browserId]?.profileId ?? null,
       desktopId: workspace.browsers[tab.browserId]?.desktop?.desktop_id ?? null,

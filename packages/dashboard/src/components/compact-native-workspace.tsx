@@ -114,10 +114,11 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
   const search = query.trim().toLowerCase();
   const browsers = [...new Map(nodes.filter(node => node.live && node.browserId).map(node => [node.browserId, node])).values()];
   const groups = browsers.map(node => {
-    const browserTabs = tabs.filter(tab => tab.browserId === node.browserId && tab.lifecycle !== "closed" && tab.lifecycle !== "expired" && !closedTabs.has(tab.id));
+    const browserTabs = tabs.filter(tab => (tab.managedTask !== true || tab.presence?.state === "live") && tab.browserId === node.browserId && tab.lifecycle !== "closed" && tab.lifecycle !== "expired" && !closedTabs.has(tab.id));
     const browserMatches = `${node.label} ${node.profileId ?? ""}`.toLowerCase().includes(search);
     return { node, browserTabs, visibleTabs: browserTabs.filter(tab => !search || browserMatches || `${tab.title ?? ""} ${tab.taskLabel ?? ""} ${tab.url ?? ""}`.toLowerCase().includes(search)), browserMatches };
-  }).filter(group => !search || group.browserMatches || group.visibleTabs.length);
+  }).filter(group => group.browserTabs.length > 0 && (!search || group.browserMatches || group.visibleTabs.length));
+  const unverifiedTabs = tabs.some(tab => tab.managedTask && (!tab.presence || tab.presence.state === "unknown"));
   return (
     <main ref={root} className="native-workspace" style={{ gridTemplateColumns: collapsed ? "40px minmax(0, 1fr)" : `${width}px minmax(0, 1fr)` }}>
       <aside className="native-workspace-rail" aria-label="Browsers and tabs">
@@ -141,7 +142,7 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
               </section>;
             })}
             {search && browsers.length > 0 && !groups.length && <p role="status" className="native-workspace-empty">No matching browsers or tabs</p>}
-            {!browsers.length && <p className="native-workspace-empty">{loading ? "Loading browsers…" : "No active browsers"}</p>}
+            {!groups.length && !search && <p className="native-workspace-empty">{loading ? "Loading browsers…" : unverifiedTabs ? "Browser presence could not be verified. Refresh browsers to check again." : "No active browsers"}</p>}
           </nav>
         </>}
         {!collapsed && <div role="separator" tabIndex={0} aria-label="Browser rail width" aria-orientation="vertical" aria-valuemin={180} aria-valuemax={400} aria-valuenow={width} className="native-workspace-resize" onKeyDown={event => {

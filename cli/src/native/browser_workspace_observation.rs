@@ -1,41 +1,79 @@
-//! Bounded live display metadata for the managed inventory. This does not launch,
-//! recover, activate, attach to a page, or change durable browser/session state.
+//! Bounded read-only presence and display metadata for the managed inventory.
+//! Remote View owns desktop application observation; the browser owner joins
+//! exact process and CDP targets. No launch, recovery, activation or state writes.
 
-use agent_browser_service_model::{BrowserSessionState, ManagedBrowserInstance};
+use agent_browser_service_model::{
+    BrowserSessionState, ManagedBrowserInstance, RemoteViewApplicationWindows,
+};
 use futures_util::{stream, StreamExt};
-use serde_json::Value;
+use serde_json::{json, Value};
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
-async fn targets(browser: &ManagedBrowserInstance) -> Option<Value> {
-    use crate::process_identity::{observe_process, ProcessObservation};
-    let before = observe_process(browser.pid);
-    if !matches!(before, ProcessObservation::Observed(_)) {
-        return None;
-    }
-    let endpoint = reqwest::Url::parse(&browser.cdp_endpoint).ok()?;
-    if !matches!(endpoint.scheme(), "ws" | "wss")
-        || !matches!(
-            endpoint.host_str(),
-            Some("localhost" | "127.0.0.1" | "[::1]")
-        )
-        || !endpoint.username().is_empty()
-        || endpoint.password().is_some()
-    {
-        return None;
-    }
-    let client = agent_browser_cdp::client::CdpClient::connect(&browser.cdp_endpoint)
-        .await
-        .ok()?;
-    let result = client
-        .send_command_no_params("Target.getTargets", None)
-        .await
-        .ok()?;
-    (observe_process(browser.pid) == before).then_some(result)
+#[derive(Default)]
+enum Observation {
+    Absent,
+    #[default]
+    Unknown,
+    Live {
+        targets: Value,
+        processes: BTreeSet<u32>,
+    },
 }
 
-/// Join observed metadata only to exact owner browser/session/target identities.
-/// Missing/slow targets retain their stored URL and an unknown title. Inventory
-/// evidence is descriptive and never grants lifecycle or viewer authority.
+async fn targets(browser: &ManagedBrowserInstance) -> Observation {
+    use crate::process_identity::{observe_process, ProcessObservation};
+    let before = observe_process(browser.pid);
+    match before {
+        ProcessObservation::Missing => return Observation::Absent,
+        ProcessObservation::Failed { .. } => return Observation::Unknown,
+        ProcessObservation::Observed(_) => {}
+    }
+    let read = async {
+        let endpoint = reqwest::Url::parse(&browser.cdp_endpoint).ok()?;
+        if !matches!(endpoint.scheme(), "ws" | "wss")
+            || !matches!(
+                endpoint.host_str(),
+                Some("localhost" | "127.0.0.1" | "[::1]")
+            )
+            || !endpoint.username().is_empty()
+            || endpoint.password().is_some()
+        {
+            return None;
+        }
+        let client = agent_browser_cdp::client::CdpClient::connect(&browser.cdp_endpoint)
+            .await
+            .ok()?;
+        let processes = client
+            .send_command_no_params("SystemInfo.getProcessInfo", None)
+            .await
+            .ok()?;
+        let processes = processes["processInfo"].as_array()?;
+        if !processes.iter().any(|process| {
+            process["type"] == "browser" && process["id"].as_u64() == Some(u64::from(browser.pid))
+        }) {
+            return None;
+        }
+        let process_ids = processes
+            .iter()
+            .filter_map(|process| process["id"].as_u64().and_then(|id| u32::try_from(id).ok()))
+            .collect();
+        let targets = client
+            .send_command_no_params("Target.getTargets", None)
+            .await
+            .ok()?;
+        targets["targetInfos"].as_array()?;
+        (observe_process(browser.pid) == before).then_some(Observation::Live {
+            targets,
+            processes: process_ids,
+        })
+    };
+    read.await.unwrap_or_default()
+}
+
+/// Publish fresh descriptive presence without changing TTL, handoffs or custody.
+/// Failure and unfinished reads stay unknown. Only a successful exact join makes
+/// a tab live; a missing process, target or native window proves display absence.
 pub(super) async fn enrich(state: BrowserSessionState, status: &mut Value) {
     let browsers = state
         .browsers
@@ -46,36 +84,111 @@ pub(super) async fn enrich(state: BrowserSessionState, status: &mut Value) {
         })
         .cloned()
         .collect::<Vec<_>>();
-    let observations = stream::iter(browsers)
-        .map(|browser| async move {
-            let result = tokio::time::timeout(Duration::from_millis(600), targets(&browser))
-                .await
-                .ok()
-                .flatten();
-            (browser, result)
-        })
-        .buffer_unordered(4);
-    tokio::pin!(observations);
-    // One slow browser must not hold the status request indefinitely. Drop all
-    // unfinished clients at the deadline; CdpClient releases its background tasks.
-    let _ = tokio::time::timeout(Duration::from_millis(800), async {
-        while let Some((browser, observed)) = observations.next().await {
-            if let Some(observed) = observed {
-                join(&state, &browser, &observed, status);
-            }
+    let desktops = browsers
+        .iter()
+        .filter_map(|browser| browser.desktop.clone())
+        .map(|desktop| ((desktop.desktop_id.clone(), desktop.generation), desktop))
+        .collect::<BTreeMap<_, _>>()
+        .into_values()
+        .collect::<Vec<_>>();
+    let native = tokio::task::spawn_blocking(move || {
+        if desktops.is_empty() {
+            return BTreeMap::new();
         }
-    })
-    .await;
+        super::super::browser_session_remote_view::observe_workspace_desktops(&desktops)
+    });
+    let collect = async {
+        let observations = stream::iter(browsers)
+            .map(|browser| async move {
+                let result = tokio::time::timeout(Duration::from_millis(600), targets(&browser))
+                    .await
+                    .unwrap_or_default();
+                (browser.id, result)
+            })
+            .buffer_unordered(4);
+        tokio::pin!(observations);
+        let mut result = BTreeMap::new();
+        let _ = tokio::time::timeout(Duration::from_millis(800), async {
+            while let Some((id, observed)) = observations.next().await {
+                result.insert(id, observed);
+            }
+        })
+        .await;
+        result
+    };
+    let (observed, native) = tokio::join!(collect, native);
+    let native = native.unwrap_or_default();
+    if let Some(workspace) = status.get_mut("workspace") {
+        workspace["observedAtMs"] = json!(std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|time| time.as_millis() as u64)
+            .unwrap_or_default());
+    }
+    for browser in state.browsers.values() {
+        let sleeping = state.idle_closed_browsers.contains_key(&browser.id);
+        let observation = observed.get(&browser.id).unwrap_or(&Observation::Unknown);
+        let presence = if sleeping {
+            "absent"
+        } else {
+            browser_presence(browser, observation, &native)
+        };
+        publish(&state, browser, observation, presence, status);
+    }
 }
 
-fn join(
+fn browser_presence(
+    browser: &ManagedBrowserInstance,
+    observation: &Observation,
+    native: &BTreeMap<(String, u64), Option<RemoteViewApplicationWindows>>,
+) -> &'static str {
+    let processes = match observation {
+        Observation::Absent => return "absent",
+        Observation::Unknown => return "unknown",
+        Observation::Live { processes, .. } => processes,
+    };
+    let Some(desktop) = &browser.desktop else {
+        return "live";
+    };
+    match native.get(&(desktop.desktop_id.clone(), desktop.generation)) {
+        Some(Some(windows))
+            if windows.desktop_id != desktop.desktop_id
+                || windows.generation != desktop.generation =>
+        {
+            "unknown"
+        }
+        Some(Some(windows))
+            if windows
+                .windows
+                .iter()
+                .any(|window| window.pid.is_some_and(|pid| processes.contains(&pid))) =>
+        {
+            "live"
+        }
+        Some(_) => "absent",
+        None => "unknown",
+    }
+}
+
+fn publish(
     state: &BrowserSessionState,
     browser: &ManagedBrowserInstance,
-    observed: &Value,
+    observation: &Observation,
+    presence: &str,
     status: &mut Value,
 ) {
-    let Some(targets) = observed["targetInfos"].as_array() else {
+    let Some(published) = status
+        .pointer_mut("/workspace/browsers")
+        .and_then(|browsers| browsers.get_mut(&browser.id))
+    else {
         return;
+    };
+    if published["id"] != browser.id || published["pid"].as_u64() != Some(u64::from(browser.pid)) {
+        return;
+    }
+    published["presence"] = json!({"state": presence, "source": if browser.desktop.is_some() { "remote-view-and-cdp" } else { "cdp" }});
+    let targets = match observation {
+        Observation::Live { targets, .. } => targets["targetInfos"].as_array(),
+        _ => None,
     };
     for tab in state
         .tabs
@@ -90,8 +203,7 @@ fn join(
             continue;
         }
         let Some(published) = status
-            .get_mut("workspace")
-            .and_then(|workspace| workspace.get_mut("tabs"))
+            .pointer_mut("/workspace/tabs")
             .and_then(|tabs| tabs.get_mut(&tab.id))
         else {
             continue;
@@ -102,17 +214,24 @@ fn join(
         {
             continue;
         }
-        let Some(target) = targets
-            .iter()
-            .find(|target| target["targetId"] == tab.target_id && target["type"] == "page")
-        else {
-            continue;
+        let target = targets.and_then(|targets| {
+            targets
+                .iter()
+                .find(|target| target["targetId"] == tab.target_id && target["type"] == "page")
+        });
+        let tab_presence = if presence == "live" && target.is_none() {
+            "absent"
+        } else {
+            presence
         };
-        if let Some(title) = target["title"].as_str() {
-            published["title"] = Value::String(title.to_owned());
-        }
-        if let Some(url) = target["url"].as_str() {
-            published["url"] = Value::String(url.to_owned());
+        published["presence"] = json!({"state": tab_presence});
+        if let Some(target) = target {
+            if let Some(title) = target["title"].as_str() {
+                published["title"] = Value::String(title.to_owned());
+            }
+            if let Some(url) = target["url"].as_str() {
+                published["url"] = Value::String(url.to_owned());
+            }
         }
     }
 }
@@ -134,6 +253,10 @@ mod tests {
         let server = tokio::spawn(async move {
             let (socket, _) = listener.accept().await.unwrap();
             let mut ws = tokio_tungstenite::accept_async(socket).await.unwrap();
+            let request: Value =
+                serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+            assert_eq!(request["method"], "SystemInfo.getProcessInfo");
+            ws.send(tokio_tungstenite::tungstenite::Message::Text(json!({"id":request["id"],"result":{"processInfo":[{"type":"browser","id":std::process::id()}]}}).to_string())).await.unwrap();
             let request: Value =
                 serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
             assert_eq!(
@@ -204,12 +327,20 @@ mod tests {
                 last_activity_at_ms: 1,
             },
         );
-        let mut status = json!({"workspace":{"tabs":{
+        let mut status = json!({"workspace":{"browsers":{"browser":{"id":"browser","pid":std::process::id()}},"tabs":{
             "tab":{"browserId":"browser","sessionId":"session","targetId":"target","url":"old"},
             "foreign":{"browserId":"foreign","sessionId":"session","targetId":"target","title":"Preserved"}
         }}});
         enrich(state.clone(), &mut status).await;
         server.await.unwrap();
+        assert_eq!(
+            status["workspace"]["browsers"]["browser"]["presence"]["state"],
+            "live"
+        );
+        assert_eq!(
+            status["workspace"]["tabs"]["tab"]["presence"]["state"],
+            "live"
+        );
         assert_eq!(
             status["workspace"]["tabs"]["tab"]["title"],
             "P237 installed dev inspection"
@@ -225,15 +356,156 @@ mod tests {
         );
         let before = status.clone();
         status["workspace"]["tabs"]["tab"]["targetId"] = json!("replacement");
-        join(
+        publish(
             &state,
             &state.browsers["browser"],
-            &json!({"targetInfos":[{"targetId":"target","type":"page","title":"Wrong"}]}),
+            &Observation::Live {
+                targets: json!({"targetInfos":[{"targetId":"target","type":"page","title":"Wrong"}]}),
+                processes: BTreeSet::new(),
+            },
+            "live",
             &mut status,
         );
         assert_eq!(
             status["workspace"]["tabs"]["tab"]["title"],
             before["workspace"]["tabs"]["tab"]["title"]
+        );
+    }
+    #[test]
+    fn workspace_presence_requires_native_window_and_exact_browser_family() {
+        let mut browser = ManagedBrowserInstance {
+            id: "browser".into(),
+            profile_id: "profile".into(),
+            pid: 42,
+            cdp_endpoint: "ws://127.0.0.1:1".into(),
+            desktop: Some(agent_browser_service_model::RemoteViewFixedDesktop {
+                desktop_id: "owned".into(),
+                generation: 7,
+                friendly_route_label: "Synthetic".into(),
+            }),
+            active_session_ids: vec![],
+        };
+        let observed = Observation::Live {
+            targets: json!({"targetInfos":[]}),
+            processes: BTreeSet::from([42, 43]),
+        };
+        let key = ("owned".into(), 7);
+        let mut native = BTreeMap::new();
+        assert_eq!(browser_presence(&browser, &observed, &native), "unknown");
+        native.insert(key.clone(), None);
+        assert_eq!(browser_presence(&browser, &observed, &native), "absent");
+        let mut windows: RemoteViewApplicationWindows = serde_json::from_value(json!({"schemaVersion":1,"operation":"desktop.windows","desktopId":"owned","generation":7,"viewingGeneration":1,"windows":[]})).unwrap();
+        native.insert(key.clone(), Some(windows.clone()));
+        assert_eq!(
+            browser_presence(&browser, &observed, &native),
+            "absent",
+            "empty desktop is not a browser"
+        );
+        windows.windows.push(serde_json::from_value(json!({"id":1,"pid":99,"title":"Chrome","class":"Chromium","x":0,"y":0,"width":100,"height":100,"active":true,"maximized":true})).unwrap());
+        native.insert(key.clone(), Some(windows.clone()));
+        assert_eq!(
+            browser_presence(&browser, &observed, &native),
+            "absent",
+            "a peer browser window cannot satisfy this browser's identity"
+        );
+        windows.windows[0].pid = Some(43);
+        native.insert(key.clone(), Some(windows.clone()));
+        assert_eq!(browser_presence(&browser, &observed, &native), "live");
+        windows.generation = 8;
+        native.insert(key, Some(windows));
+        assert_eq!(
+            browser_presence(&browser, &observed, &native),
+            "unknown",
+            "stale provider generation is not absence proof"
+        );
+        assert_eq!(
+            browser_presence(&browser, &Observation::Absent, &native),
+            "absent"
+        );
+        browser.desktop = None;
+        assert_eq!(
+            browser_presence(&browser, &observed, &BTreeMap::new()),
+            "live",
+            "an observed headless browser needs no invented native desktop"
+        );
+    }
+
+    #[test]
+    fn workspace_presence_retains_tasks_but_marks_missing_targets_absent() {
+        let mut state = BrowserSessionState::default();
+        let browser = ManagedBrowserInstance {
+            id: "browser".into(),
+            profile_id: "profile".into(),
+            pid: 42,
+            cdp_endpoint: "ws://127.0.0.1:1".into(),
+            desktop: None,
+            active_session_ids: vec!["session".into()],
+        };
+        state.browsers.insert(browser.id.clone(), browser.clone());
+        state.sessions.insert(
+            "session".into(),
+            ManagedBrowserSession {
+                id: "session".into(),
+                name: "task".into(),
+                profile_id: "profile".into(),
+                browser_id: "browser".into(),
+                created_at_ms: 1,
+                last_activity_at_ms: 1,
+                expires_at_ms: 2,
+                current_tab_id: Some("tab".into()),
+            },
+        );
+        state.tabs.insert(
+            "tab".into(),
+            ManagedBrowserTab {
+                id: "tab".into(),
+                target_id: "exact".into(),
+                browser_id: "browser".into(),
+                session_id: "session".into(),
+                created_at_ms: 1,
+                last_activity_at_ms: 1,
+            },
+        );
+        let mut status = json!({"workspace":{"browsers":{"browser":{"id":"browser","pid":42}},"tabs":{"tab":{"browserId":"browser","sessionId":"session","targetId":"exact","url":"retained"}},"handoffs":{"link":{"handoffId":"link"}}}});
+        let original = state.clone();
+        let missing = Observation::Live {
+            targets: json!({"targetInfos":[{"targetId":"peer","type":"page"}]}),
+            processes: BTreeSet::from([42]),
+        };
+        publish(&state, &browser, &missing, "live", &mut status);
+        assert_eq!(
+            status["workspace"]["browsers"]["browser"]["presence"]["state"],
+            "live"
+        );
+        assert_eq!(
+            status["workspace"]["tabs"]["tab"]["presence"]["state"],
+            "absent"
+        );
+        assert_eq!(status["workspace"]["tabs"]["tab"]["url"], "retained");
+        publish(
+            &state,
+            &browser,
+            &Observation::Unknown,
+            "unknown",
+            &mut status,
+        );
+        assert_eq!(
+            status["workspace"]["tabs"]["tab"]["presence"]["state"],
+            "unknown"
+        );
+        let restored = Observation::Live {
+            targets: json!({"targetInfos":[{"targetId":"exact","type":"page","title":"Restored"}]}),
+            processes: BTreeSet::from([42]),
+        };
+        publish(&state, &browser, &restored, "live", &mut status);
+        assert_eq!(
+            status["workspace"]["tabs"]["tab"]["presence"]["state"],
+            "live"
+        );
+        assert_eq!(status["workspace"]["handoffs"]["link"]["handoffId"], "link");
+        assert_eq!(
+            state, original,
+            "observation must not rewrite TTL, tasks or custody"
         );
     }
 }

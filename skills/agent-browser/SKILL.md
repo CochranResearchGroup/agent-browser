@@ -52,7 +52,9 @@ Handoffs for retained records and independent policies. Sort the drawer by task,
 creation or link expiry. Inactive links are amber and hidden by default behind
 Show inactive; target expiry does not imply link expiry. Icon controls have hover
 help. Managed ownership alone does not prove a native desktop is available.
-Refresh retains the requested identity. Diagnostics at `/service` keeps Service inspection,
+The rail requires fresh matching native-window, browser-process and tab evidence
+for managed desktop tasks. Empty desktops and unverified/ended tabs stay out of
+live navigation; retained handoffs remain available. Refresh retains the requested identity. Diagnostics at `/service` keeps Service inspection,
 Selection, Activity, Chat, Console, Network, Storage and Extensions optional.
 `?view=service:<name>` and the selected workspace/browser/session/tab/profile/job
 query fields remain supported for diagnostic links. Native Remote View uses its

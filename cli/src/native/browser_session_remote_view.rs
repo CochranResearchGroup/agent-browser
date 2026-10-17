@@ -58,6 +58,85 @@ pub(super) fn configured_remote_view() -> Result<Option<RemoteViewRuntimeContext
     )
 }
 
+/// Read native application presence without acquiring desktops, issuing grants
+/// or changing retained tasks. Missing active assignment is positive absence;
+/// failed/ambiguous reads are omitted and remain unknown to the consumer.
+pub(crate) fn observe_workspace_desktops(
+    desktops: &[RemoteViewFixedDesktop],
+) -> std::collections::BTreeMap<(String, u64), Option<RemoteViewApplicationWindows>> {
+    let result = std::collections::BTreeMap::new();
+    let Ok(Some(origin)) = setting("AGENT_BROWSER_REMOTE_VIEW_ORIGIN") else {
+        return result;
+    };
+    let Ok(application) = setting("AGENT_BROWSER_REMOTE_VIEW_APPLICATION") else {
+        return result;
+    };
+    let Ok(transport) = RemoteViewApplicationHttp::new(&origin, Duration::from_millis(100)) else {
+        return result;
+    };
+    let Ok(mut adapter) = RemoteViewApplicationAdapter::new(
+        application.unwrap_or_else(|| "agent-browser".into()),
+        transport,
+    ) else {
+        return result;
+    };
+    // Rotate the first desktop so a slow provider cannot starve later groups.
+    static CURSOR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let offset = CURSOR.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    observe_workspace_desktops_with(&mut adapter, desktops, offset)
+}
+
+fn observe_workspace_desktops_with<T: RemoteViewApplicationTransport>(
+    adapter: &mut RemoteViewApplicationAdapter<T>,
+    desktops: &[RemoteViewFixedDesktop],
+    offset: usize,
+) -> std::collections::BTreeMap<(String, u64), Option<RemoteViewApplicationWindows>> {
+    let mut result = std::collections::BTreeMap::new();
+    let deadline = std::time::Instant::now() + Duration::from_millis(450);
+    let Ok(inventory) = adapter.inventory() else {
+        return result;
+    };
+    for desktop in desktops
+        .iter()
+        .cycle()
+        .skip(offset % desktops.len().max(1))
+        .take(desktops.len())
+    {
+        if std::time::Instant::now() >= deadline {
+            break;
+        }
+        let key = (desktop.desktop_id.clone(), desktop.generation);
+        match active_workspace_assignment(&inventory, desktop) {
+            Ok(Some(assignment)) => {
+                if let Ok(windows) = adapter.windows(assignment) {
+                    result.insert(key, Some(windows));
+                }
+            }
+            Ok(None) => {
+                result.insert(key, None);
+            }
+            Err(()) => {}
+        }
+    }
+    result
+}
+
+fn active_workspace_assignment<'a>(
+    inventory: &'a RemoteViewApplicationInventory,
+    desktop: &RemoteViewFixedDesktop,
+) -> Result<Option<&'a RemoteViewAssignmentRecord>, ()> {
+    let mut matching = inventory.assignments.iter().filter(|assignment| {
+        assignment.desktop_id == desktop.desktop_id
+            && assignment.generation == desktop.generation
+            && assignment.state == RemoteViewAssignmentState::Active
+    });
+    let assignment = matching.next();
+    if matching.next().is_some() {
+        return Err(());
+    }
+    Ok(assignment)
+}
+
 /// Run from the background reaper after releasing the session-host mutex.
 /// Public acquisition custody coalesces requests from other daemon processes;
 /// no foreground operation waits for spare provisioning.
@@ -701,6 +780,112 @@ fn owned_desktop_route(
 #[cfg(test)]
 mod desktop_handoff_tests {
     use super::*;
+
+    #[test]
+    fn workspace_assignment_ignores_released_history_and_rejects_ambiguity() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
+        ))
+        .unwrap();
+        let mut inventory: RemoteViewApplicationInventory =
+            serde_json::from_value(fixture["inventory"].clone()).unwrap();
+        let active = inventory.assignments[0].clone();
+        let desktop = RemoteViewFixedDesktop {
+            desktop_id: active.desktop_id.clone(),
+            generation: active.generation,
+            friendly_route_label: "Synthetic".into(),
+        };
+        let mut released = active.clone();
+        released.assignment_id = "old-released".into();
+        released.state = RemoteViewAssignmentState::Released;
+        inventory.assignments.push(released);
+        assert_eq!(
+            active_workspace_assignment(&inventory, &desktop).unwrap(),
+            Some(&active)
+        );
+        inventory.assignments.push(active.clone());
+        assert!(active_workspace_assignment(&inventory, &desktop).is_err());
+        inventory
+            .assignments
+            .retain(|assignment| assignment.state == RemoteViewAssignmentState::Released);
+        assert_eq!(
+            active_workspace_assignment(&inventory, &desktop).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn workspace_native_observation_uses_only_public_reads() {
+        struct Reads {
+            fixture: serde_json::Value,
+            operations: std::sync::Arc<std::sync::Mutex<Vec<&'static str>>>,
+            fail: bool,
+        }
+        impl RemoteViewApplicationTransport for Reads {
+            fn request(
+                &mut self,
+                envelope: &RemoteViewApplicationEnvelope,
+            ) -> Result<serde_json::Value, RemoteViewApplicationTransportError> {
+                let key = match &envelope.request {
+                    RemoteViewApplicationRequest::Inventory {} => "inventory",
+                    RemoteViewApplicationRequest::ObserveAssignment { .. } => {
+                        "assignmentObservation"
+                    }
+                    RemoteViewApplicationRequest::Windows { .. } => "windows",
+                    _ => panic!("presence observation attempted an effect"),
+                };
+                self.operations.lock().unwrap().push(key);
+                if self.fail {
+                    return Err(RemoteViewApplicationTransportError::Unavailable);
+                }
+                Ok(self.fixture[key].clone())
+            }
+        }
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
+        ))
+        .unwrap();
+        let desktop = RemoteViewFixedDesktop {
+            desktop_id: fixture["assignment"]["desktopId"].as_str().unwrap().into(),
+            generation: 7,
+            friendly_route_label: "Synthetic".into(),
+        };
+        let operations = std::sync::Arc::new(std::sync::Mutex::new(vec![]));
+        let mut adapter = RemoteViewApplicationAdapter::new(
+            "agent-browser".into(),
+            Reads {
+                fixture: fixture.clone(),
+                operations: operations.clone(),
+                fail: false,
+            },
+        )
+        .unwrap();
+        let result =
+            observe_workspace_desktops_with(&mut adapter, std::slice::from_ref(&desktop), 0);
+        assert!(result[&(desktop.desktop_id.clone(), 7)].is_some());
+        assert_eq!(
+            *operations.lock().unwrap(),
+            [
+                "inventory",
+                "assignmentObservation",
+                "windows",
+                "assignmentObservation"
+            ]
+        );
+        let mut adapter = RemoteViewApplicationAdapter::new(
+            "agent-browser".into(),
+            Reads {
+                fixture,
+                operations,
+                fail: true,
+            },
+        )
+        .unwrap();
+        assert!(
+            observe_workspace_desktops_with(&mut adapter, &[desktop], 0).is_empty(),
+            "provider failure is unknown, not empty-desktop proof"
+        );
+    }
 
     #[test]
     fn desktop_handoff_requires_current_owned_assignment_and_viewing_generation() {

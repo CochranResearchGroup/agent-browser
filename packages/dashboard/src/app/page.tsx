@@ -713,7 +713,7 @@ function NativeBrowserWorkspace({ user, onLogout }: {
     selection={selectedWorkspace.context.selection} userLabel={user.displayName || user.username}
     onLogout={onLogout} onRefresh={selectedWorkspace.refresh} loading={selectedWorkspace.loading} error={selectedWorkspace.error}
     diagnosticsHref={dashboardSectionUrl("service")}>
-    {viewport.useNativeViewport ? <NativeTaskViewport target={viewport.target} desktopUnavailable={viewport.desktopUnavailable} hasSelection={Boolean(tabId)} loading={selectedWorkspace.loading} onRefresh={selectedWorkspace.refresh} /> : <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context}
+    {viewport.useNativeViewport ? <NativeTaskViewport target={viewport.target} desktopUnavailable={viewport.desktopUnavailable} presenceUnavailable={viewport.presenceUnavailable} hasSelection={Boolean(tabId)} loading={selectedWorkspace.loading} onRefresh={selectedWorkspace.refresh} /> : <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context}
       projection={selectedWorkspace.projection} onRefresh={selectedWorkspace.refresh} onSelectStream={workspaceViewPreferences.write} />}
   </CompactNativeWorkspace>;
 }

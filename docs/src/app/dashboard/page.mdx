@@ -53,6 +53,11 @@ Show inactive is enabled; an expired task can still have an active link.
 Icon controls expose hover help. A task without a native desktop uses its
 available browser stream; otherwise it reports desktop availability separately
 from a missing tab.
+The rail joins Remote View application windows with live browser process and
+exact tab observations. Empty desktops, ended tabs and unverified managed records
+are excluded. Failed or stale observations preserve selection and retained links;
+a later successful refresh can restore the same tab without recreating it.
+
 
 Policies opens link lifetime controls for a retained record. Choose Perpetual or
 a finite duration in seconds; the finite window starts when saved. This leaves
