@@ -9,7 +9,8 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#301]
     plan_state: IN_PROGRESS
-    custody_state: ACTIVE
+    custody_state: PR_OPEN
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/302
     dependencies: []
     overlaps: [P237, P240]
     reconciled_overlaps: ["P237 integrated; existing dashboard primary reused with installed candidate pins retained; P240 foreign resource checkout preserved. UX301 owns compact workspace/drawer, viewer selection and matching guidance only."]
