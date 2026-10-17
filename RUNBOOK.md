@@ -12,6 +12,17 @@ existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 
 ## Current execution
 
+### 2026-10-17 UX301 combined dashboard upgrade
+
+[PR302](https://github.com/CochranResearchGroup/agent-browser/pull/302) is canonical.
+The [upgrade receipt](docs/dev/notes/2026-10-17-pr302-production-upgrade.md) binds
+sealed source `c134b56c1`, binary `186b5640bb5f`, exact development native/rail
+qualification and accepted production transaction
+`upgrade-30a272ee-8e74-4fb3-90ad-217b6bc94233`. Production generation
+`0.28.0-186b5640bb5f-404d965103a6` is ready, install doctor passes, and protected
+profiles/handoffs remain present. The known approximately three-second summary
+latency remains open; no formal release or private account workflow was run.
+
 ### 2026-10-17 P245 hosted QBO and BILL
 
 [P245](docs/dev/plans/0245-2026-10-16-hosted-auth-consumer.md) completes all [nine bounded outcomes](docs/dev/receipts/p245/issue-290-acceptance.json): actual QBO/BILL account/company, native safety and zero owned residue. PR297 is canonical; scoped shared-auth guidance is published. The [review/history](docs/dev/notes/0245-2026-10-16-hosted-auth-consumer.md#final-review-and-retrospective) retain 16 passed checks, one remediated Standards finding, no Spec defect and the renewed effort bound. No further #290 login/provider work is required; production Agent Browser is unchanged. Memory: queued, not persistence proof.
