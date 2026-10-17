@@ -200,4 +200,4 @@ acceptance are unverified. P237's separate dirty lifecycle/UI work is preserved.
 
 ### 2026-10-17 P247 selected planning completeness
 
-[P247](docs/dev/plans/0247-2026-10-17-planning-completeness.md) completes bounded selected-lane documentation checks. The [evidence](docs/dev/notes/0247-2026-10-17-planning-completeness.md) records 67 tests, selected P245/P247, policy/docs gates and corrected legacy-header failure. Source integration is pending; no runtime effects.
+[P247](docs/dev/plans/0247-2026-10-17-planning-completeness.md) completes bounded selected-lane documentation checks. The [evidence](docs/dev/notes/0247-2026-10-17-planning-completeness.md) records 67 tests, selected P245/P247, policy/docs gates and corrected legacy-header failure. PR300 owns canonical integration; no runtime effects.

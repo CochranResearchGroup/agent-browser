@@ -12,7 +12,7 @@ Base: 0cf8e5bc8d057eb8b5856dcfceb856bf6b19c1a3
 
 Selected-lane completeness is implemented and qualified. All 67 auditor tests,
 selected P245/P247 checks, policy wiring, docs build and changed links pass.
-Canonical integration is pending; no runtime effects.
+PR300 owns canonical integration; no runtime effects.
 
 ## Outcome and scope
 

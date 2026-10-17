@@ -10,7 +10,9 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#299]
     plan_state: COMPLETED
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/300
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/300
     dependencies: []
     overlaps: [P246, P240]
     reconciled_overlaps: ["P247 owns planning auditor, fixtures and its own documentation entries; preserve P246 runner and P240 resource surfaces and foreign checkouts"]
