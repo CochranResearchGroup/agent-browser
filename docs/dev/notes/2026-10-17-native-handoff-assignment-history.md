@@ -117,4 +117,3 @@ the synchronous timeout or relabel unknown as live. Regression acceptance must
 include a provider taking longer than 100 ms, a fast dashboard response, eventual
 live convergence, stale-result expiry, failure invalidation and no observation
 effects. Rebuild and repeat combined development acceptance after that repair.
-
