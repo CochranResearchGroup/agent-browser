@@ -10,12 +10,12 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#312]
     pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/313
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    dependencies: [UX301]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: [UX301, CochranResearchGroup/remote-view#468]
     overlaps: [P240]
     reconciled_overlaps: ["Reuses clean dashboard primary and retains prior sealed candidates. UX301 integrated; P240 completed and foreign checkout preserved. P248 owns observed workspace cold presence, native task selection and bounded retirement adapter contention, preserving existing TTL, quota and ownership policy."]
-    validation_status: Direct-owner source and development acceptance pass; Native pixels 4762/3722 ms, handoff 1303 ms; production-shaped qualification pending
+    validation_status: PR313/314 and Native PR469 installed; real production pixels 4503/3083 ms, zero startup audio contexts, 45-second singular viewer, sound controls and protected custody pass. Desktop 8 health and new-desktop readback remain separate. Installed sealed candidates retained for parent dashboard custody.
     updated_at: 2026-10-18
 
   - id: UX301
