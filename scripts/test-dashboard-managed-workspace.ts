@@ -64,7 +64,11 @@ assert.equal(managedWorkspaceViewport(retained, 'b', 't', true).presenceUnavaila
 retained.browsers.b.presence.state = 'live';
 retained.tabs.t.presence.state = 'unknown';
 assert.equal(managedWorkspaceSources(retained).tabs[0].lifecycle, 'unknown');
-assert.equal(managedWorkspaceViewport(retained, 'b', 't', true).presenceUnavailable, 'unknown');
+assert.equal(managedWorkspaceViewport(retained, 'b', 't', true).target?.targetId, 'exact-target', 'an explicitly selected current task can request authoritative handoff proof while descriptive presence is unknown');
+assert.equal(managedWorkspaceSources(retained).tabs[0].presence?.state, 'unknown', 'selection must not invent live rail evidence');
+retained.browsers.b.activeSessionIds = [];
+assert.equal(managedWorkspaceViewport(retained, 'b', 't', true).target, null, 'unknown presence must not bypass inactive owner binding');
+retained.browsers.b.activeSessionIds = ['s'];
 retained.tabs.t.presence.state = 'live';
 retained.observedAtMs = Date.now() - 31_000;
 assert.equal(managedWorkspaceSources(retained).tabs[0].presence?.state, 'unknown', 'stale successful polls must not leave ghost tabs live');

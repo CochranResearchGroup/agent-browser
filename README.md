@@ -819,6 +819,11 @@ reported records. Unavailable inventory is distinct from an empty list.
 The drawer expands on wide screens. Sort by task name, creation time or link
 expiry using the column controls. Inactive links are amber and hidden until
 Show inactive is enabled; an expired task can still have an active link.
+Selecting a current owned task can verify its native handoff immediately while
+background presence is still unknown. The rail does not label it live until the
+census confirms it. Handoff preparation focuses and maximizes the exact task
+once, then embeds only the ready Native viewer; it never launches a replacement.
+
 Icon controls expose hover help. A task without a native desktop uses its
 available browser stream; otherwise it reports desktop availability separately
 from a missing tab.

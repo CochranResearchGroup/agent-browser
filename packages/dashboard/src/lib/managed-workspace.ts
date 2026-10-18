@@ -17,17 +17,20 @@ function tabPresence(workspace: ServiceManagedWorkspace, tab: ServiceManagedWork
   return browser.presence?.state === 'live' && tab.presence?.state === 'live' ? 'live' : 'unknown';
 }
 
-/** Choose a viewer from available presentation evidence, not managed ownership
- * alone. A retained tab without a desktop must not masquerade as a missing tab
- * or acquire a different browser's stream. */
+/** Select an exact current task for authoritative handoff verification. Unknown
+ * descriptive presence need not wait for another census poll: handoff preparation
+ * checks live ownership and focus before returning a ready viewer. Stale, absent
+ * and mismatched records cannot select a target or acquire a peer's stream. */
 export function managedWorkspaceViewport(workspace: ServiceManagedWorkspace | undefined, browserId: string | null, tabId: string | null, selectedStreamAvailable: boolean, current = currentPresence(workspace)) {
   const browser = browserId ? workspace?.browsers[browserId] : null;
   const tab = tabId ? workspace?.tabs[tabId.replace(/^target:/, '')] : null;
   const session = tab ? workspace?.sessions[tab.sessionId] : null;
-  const knownTab = tab?.browserId === browser?.id && session?.browserId === browser?.id;
+  const knownTab = Boolean(browser && tab && session
+    && tab.browserId === browser.id && session.browserId === browser.id
+    && session.profileId === browser.profileId && browser.activeSessionIds.includes(session.id));
   const presence = workspace && tab ? tabPresence(workspace, tab, current) : 'unknown';
   const presenceUnavailable = Boolean(browser && knownTab && presence !== 'live');
-  const target = presence === 'live' && browser?.desktop && tab?.browserId === browser.id && session?.browserId === browser.id
+  const target = current && presence !== 'absent' && knownTab && browser?.desktop && tab && session
     ? { browserId: browser.id, sessionName: session.name, targetId: tab.targetId, displayAllocationId: browser.desktop.desktop_id }
     : null;
   const desktopUnavailable = Boolean(!presenceUnavailable && browser && !browser.desktop && tab?.browserId === browser.id && session?.browserId === browser.id && !selectedStreamAvailable);

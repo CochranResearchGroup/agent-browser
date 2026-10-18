@@ -692,6 +692,11 @@ origin. Deploy that origin's native viewer paths, assets and WebSocket routes
 through the existing Remote View gateway and its authentication. A separate
 Remote View hostname alone cannot satisfy the native workspace framing policy.
 
+Selecting a current owned task can verify its native handoff immediately while
+background presence is still unknown. The rail does not label it live until the
+census confirms it. Handoff preparation focuses and maximizes the exact task
+once, then embeds only the ready Native viewer; it never launches a replacement.
+
 After a service restart, selecting an existing live task reconnects its recorded browser without changing its process, tab, profile or document. A browser that cannot be verified remains unavailable; selection does not launch a replacement.
 
 The native gateway rejects prefetch and non-document continuation requests,

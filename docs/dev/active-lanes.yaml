@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P248
+    product_lane: PL-BUGFIX
+    objective: Reduce selected desktop cold-open waiting and retirement contention
+    plan: docs/dev/plans/0248-2026-10-18-dashboard-cold-open.md
+    branch: fix/dashboard-cold-open-248
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#312]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [UX301]
+    overlaps: [P240]
+    reconciled_overlaps: ["Reuses clean dashboard primary and retains prior sealed candidates. UX301 integrated; P240 completed and foreign checkout preserved. P248 owns observed workspace cold presence, native task selection and bounded retirement adapter contention, preserving existing TTL, quota and ownership policy."]
+    validation_status: Real production diagnosis retained; red-green repair qualification pending
+    updated_at: 2026-10-18
+
   - id: UX301
     product_lane: PL-BUGFIX
     objective: Improve handoff inventory and reconcile live rail with Remote View and browser observations

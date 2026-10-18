@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  postServiceRequest, requestServiceRemoteViewHandoff, requireServiceRequestSuccess,
+  requestServiceRemoteViewHandoff,
   ServiceOperationError, ServiceRequestHttpError,
 } from "@agent-browser/client/service-request";
 import { queueWorkspaceFocusRequest } from "@/lib/workspace-focus-request";
@@ -52,16 +52,12 @@ export function NativeTaskViewport({ target, hasSelection, desktopUnavailable = 
           browserId, sessionName, serviceName: "agent-browser-dashboard",
           agentName: "operator", taskName: "Select native browser task", jobTimeoutMs: 10000,
         };
-        const selected = await postServiceRequest({
-          baseUrl: window.location.origin,
-          signal: AbortSignal.timeout(15000),
-          request: { ...attribution, action: "view_focus", params: { targetId, sessionName, operatorFocus: true, maximize: true } },
-        });
-        if (generation.current !== current) return;
-        requireServiceRequestSuccess(selected);
         const handoff = await requestServiceRemoteViewHandoff({
           ...attribution, baseUrl: window.location.origin,
-          displayAllocationId, params: { targetId }, signal: AbortSignal.timeout(15000),
+          // Preparing an existing-task handoff already performs signed focus.
+          // Keep it in the display queue so a later selection wins after this
+          // effect completes, with the same native maximize behavior.
+          displayAllocationId, params: { targetId, maximize: true }, signal: AbortSignal.timeout(15000),
         });
         if (generation.current !== current) return;
         const url = new URL(handoff.handoffUrl, window.location.href);
