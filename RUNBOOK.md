@@ -14,7 +14,7 @@ existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 
 ### 2026-10-18 selected desktop cold-open repair
 
-[P248](docs/dev/plans/0248-2026-10-18-dashboard-cold-open.md), #312, has the PR313 direct-owner backend repair installed as production-shaped binary `d7e98494e92a`. Production first open is 4323 ms, but repeat is 8665 ms: an aging census tears down the viewer and repeats the handoff. The [evidence note](docs/dev/notes/0248-2026-10-18-dashboard-cold-open.md) retains both verdicts and unchanged Native/process custody. The mounted frontend regression and repair now preserve an exact already-requested connection through census expiry; installed qualification of that continuation remains pending. P248 stays open.
+[P248](docs/dev/plans/0248-2026-10-18-dashboard-cold-open.md), #312, completes selected-existing-desktop cold open. PR313/314 are installed as sealed Agent Browser binary `046384df95ad`; Native PR469 audio startup repair executes `e417e2d5a4f9`. Actual production first/repeat pixels take 4503/3083 ms, with zero startup audio contexts and one connected viewer through 45 seconds. Sound enable/volume/mute/resume and protected Native/browser/configuration custody pass. The [accepted evidence](docs/dev/notes/0248-2026-10-18-dashboard-cold-open.md) retains prior timing failures and the separate pre-existing Desktop 8 health/new-desktop readback limits.
 
 ### 2026-10-18 fast rail and native iframe installed
 
