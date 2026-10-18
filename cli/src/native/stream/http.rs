@@ -1625,6 +1625,15 @@ where
     F: FnOnce(String, Value) -> Fut,
     Fut: std::future::Future<Output = Result<String, String>>,
 {
+    if query_params(query)
+        .iter()
+        .any(|(key, value)| key == "projection" && value == "workspace")
+    {
+        let browser_runtime = crate::native::browser_session_store::BrowserSessionSqliteStore::default_observed_workspace_status().await?;
+        return Ok(
+            json!({"success": true, "data": {"browserRuntime": browser_runtime}}).to_string(),
+        );
+    }
     relay(
         session_name.to_string(),
         service_status_command(query).await,
@@ -4619,6 +4628,21 @@ mod tests {
             split_path_query("/api/service/status"),
             ("/api/service/status", None)
         );
+    }
+
+    #[tokio::test]
+    async fn workspace_status_does_not_wait_for_service_reconciliation() {
+        let response = service_status_http_with_relay(
+            "workspace-test",
+            Some("projection=workspace"),
+            |_, _| async { panic!("live inventory entered the diagnostic service pipeline") },
+        )
+        .await
+        .unwrap();
+        let response: Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(response["success"], true);
+        assert!(response["data"]["browserRuntime"]["schemaVersion"].is_string());
+        assert!(response["data"].get("runtimeLifecycle").is_none());
     }
 
     #[tokio::test]

@@ -21,6 +21,8 @@ import { StoragePanel } from "@/components/storage-panel";
 import { ExtensionsPanel } from "@/components/extensions-panel";
 import { NetworkPanel } from "@/components/network-panel";
 import { NativeTaskViewport } from "@/components/native-task-viewport";
+import { NativeWindowViewport } from "@/components/native-window-viewport";
+import { useNativeBrowserWindows } from "@/hooks/use-native-browser-windows";
 import { CompactNativeWorkspace } from "@/components/compact-native-workspace";
 import type { DashboardSection } from "@/components/app-shell";
 import {
@@ -687,7 +689,6 @@ function NativeBrowserWorkspace({ user, onLogout }: {
   user: DashboardAuthUser;
   onLogout: () => void;
 }) {
-  useSessionsSync();
   const [runtimeEnvironment, setRuntimeEnvironment] = useState<RuntimeManifest["runtimeEnvironment"]>();
   useEffect(() => {
     const controller = new AbortController();
@@ -700,9 +701,13 @@ function NativeBrowserWorkspace({ user, onLogout }: {
     return () => controller.abort();
   }, []);
   const workspaceViewPreferences = useWorkspaceViewPreferences();
-  const selectedWorkspace = useSelectedWorkspaceContext(true, workspaceViewPreferences.snapshot);
+  const selectedWorkspace = useSelectedWorkspaceContext(true, workspaceViewPreferences.snapshot, true);
   const activePort = useAtomValue(activePortAtom);
   const inventory = selectedWorkspace.managedWorkspace;
+  const native = useNativeBrowserWindows();
+  const managedPids = new Set(Object.values(inventory?.browsers ?? {})
+    .filter(browser => selectedWorkspace.presenceCurrent && browser.presence?.state === "live").map(browser => browser.pid));
+  const nativeWindows = native.windows.filter(window => window.key === native.selectedKey || window.pid === null || !managedPids.has(window.pid));
   const browserId = selectedWorkspace.context.selection.browserId;
   const tabId = selectedWorkspace.context.selection.tabId?.replace(/^target:/, "");
   const viewport = managedWorkspaceViewport(inventory, browserId, tabId ?? null,
@@ -710,10 +715,11 @@ function NativeBrowserWorkspace({ user, onLogout }: {
   useStreamSync(activePort, Boolean(selectedWorkspace.context.node) && !viewport.useNativeViewport && !readWorkspaceViewportRoute());
   return <CompactNativeWorkspace runtimeEnvironment={runtimeEnvironment} nodes={selectedWorkspace.nodes} tabs={selectedWorkspace.tabs}
     handoffs={inventory?.handoffs ? Object.values(inventory.handoffs) : undefined}
-    selection={selectedWorkspace.context.selection} userLabel={user.displayName || user.username}
-    onLogout={onLogout} onRefresh={selectedWorkspace.refresh} loading={selectedWorkspace.loading} error={selectedWorkspace.error}
+    selection={native.selectedKey ? { browserId: null, tabId: null } : selectedWorkspace.context.selection} userLabel={user.displayName || user.username}
+    nativeWindows={nativeWindows} nativeSelection={native.selectedKey} nativeIssue={native.issue} onSelectNativeWindow={native.select}
+    onLogout={onLogout} onRefresh={async () => { await Promise.all([selectedWorkspace.refresh(), native.refresh(true)]); }} loading={selectedWorkspace.loading || native.loading} error={selectedWorkspace.error}
     diagnosticsHref={dashboardSectionUrl("service")}>
-    {viewport.useNativeViewport ? <NativeTaskViewport target={viewport.target} desktopUnavailable={viewport.desktopUnavailable} presenceUnavailable={viewport.presenceUnavailable} hasSelection={Boolean(tabId)} loading={selectedWorkspace.loading} onRefresh={selectedWorkspace.refresh} /> : <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context}
+    {native.selectedKey ? <NativeWindowViewport target={native.windows.find(window => window.key === native.selectedKey) ?? null} loading={native.loading} /> : viewport.useNativeViewport ? <NativeTaskViewport target={viewport.target} desktopUnavailable={viewport.desktopUnavailable} presenceUnavailable={viewport.presenceUnavailable} hasSelection={Boolean(tabId)} loading={selectedWorkspace.loading} onRefresh={selectedWorkspace.refresh} /> : <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context}
       projection={selectedWorkspace.projection} onRefresh={selectedWorkspace.refresh} onSelectStream={workspaceViewPreferences.write} />}
   </CompactNativeWorkspace>;
 }

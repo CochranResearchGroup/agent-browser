@@ -170,6 +170,18 @@ Use `browser_discover` for advanced MCP metadata.
 
 ### Dashboard summary diagnostics
 
+The default native workspace uses `GET /api/service/status?projection=workspace`
+for redacted owner inventory with bounded live browser/window observations. It
+does not run launch-admission scans, storage checks, service reconciliation or
+workstation diagnostics. The document and HTTP caches expire after one second;
+the next poll starts three seconds after the prior read completes. Observation
+age remains independent of these caches and does not renew tab retention.
+
+Embedded native desktops require the existing Remote View gateway at the
+dashboard origin's native paths. Standalone opaque handoffs still use native
+Remote View continuation. A separate native hostname does not satisfy workspace
+framing; preserve native CSP and exact Host/Origin validation.
+
 Dashboard summary status omits detailed runtime resource inventories and reconciliation receipts while retaining health flags and resource totals. Its projection metadata reports omitted counts and points to complete `/api/service/status` diagnostics. Summary delivery failure is not evidence that browsers or tabs have ended.
 
 ### Handoff creator context
@@ -177,3 +189,13 @@ Dashboard summary status omits detailed runtime resource inventories and reconci
 For tasks you create, supply `serviceName`, `agentName` and a concrete `taskName` on `browser_open`. For example, a Codex task can use serviceName `codex`, agentName `Codex`, and taskName `Launch QBO browser`. The CLI equivalents are `--service-name`, `--agent-name` and `--task-name`; for `remote-view open` creation, also supply `--origin-kind agent`. Missing or blank labels are rejected before task creation. MCP records origin `agent` without a caller field. For service requests, pass originKind in params; an authenticated or local principal is not a substitute for the creator labels. Do not fill `humanName` from the person requesting automation. Descriptive labels are not authenticated identities.
 
 Creation context is retained once. Later polling or Share does not replace it. Cards fall back to profile/session context and omit missing identity fields, rather than inventing an owner. A job ID alone does not provide useful creator attribution.
+
+
+The native rail also reads Remote View's authenticated
+`/api/v1/desktops/browser-windows?include_hidden=true` projection. Current browser
+windows from other applications remain native observations, with no managed tab
+or automation custody. Empty desktops and non-browser windows are excluded.
+Native selection uses the existing connected workspace window helper and its
+input/generation checks. Stale, failed or changed-generation observations remove
+the old frame while preserving the requested selection. Default native inventory
+excludes legacy daemon history; diagnostic tools retain that separate surface.

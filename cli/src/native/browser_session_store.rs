@@ -167,6 +167,21 @@ impl BrowserSessionSqliteStore {
         }
     }
 
+    /// Native rail projection reads one owner snapshot, without launch admission,
+    /// integrity scans, backup hashing, migrations or Service State reconciliation.
+    pub(crate) async fn default_observed_workspace_status() -> Result<serde_json::Value, String> {
+        let state = Self::default_session_state_read_only()
+            .map_err(|_| "browser_workspace_inventory_unavailable".to_owned())?
+            .unwrap_or_default();
+        let mut status = serde_json::json!({
+            "schemaVersion": "agent-browser.runtime-operational-status.v1",
+            "state": "available",
+            "workspace": workspace_projection(&state)?,
+        });
+        workspace_observation::enrich(state, &mut status).await;
+        Ok(status)
+    }
+
     /// Service inventory adds bounded live title/URL reads after releasing SQLite.
     /// Install doctor keeps its purely local read-only aggregate.
     pub(crate) async fn default_observed_operational_status() -> serde_json::Value {
@@ -208,61 +223,13 @@ impl BrowserSessionSqliteStore {
             };
             let backup = store.backup_status()?;
             let managed = store.load_session_state()?;
-            let browsers: std::collections::BTreeMap<_, _> = managed.browsers.iter().map(|(id, browser)| {
-                (id.clone(), serde_json::json!({
-                    "id":id,"profileId":browser.profile_id,"pid":browser.pid,
-                    "desktop":browser.desktop,"activeSessionIds":browser.active_session_ids,
-                    "state":if managed.idle_closed_browsers.contains_key(id) { "sleeping" } else { "reported" }
-                }))
-            }).collect();
-            let tabs: std::collections::BTreeMap<_, _> = managed.tabs.iter().map(|(id, tab)| {
-                let destination = managed.navigation_history.iter().filter(|entry| entry.tab_id == *id)
-                    .max_by_key(|entry| entry.visited_at_ms).map(|entry| entry.url.as_str());
-                let metadata = managed.tab_metadata.get(id);
-                (id.clone(), serde_json::json!({
-                    "id":id,"targetId":tab.target_id,"browserId":tab.browser_id,"sessionId":tab.session_id,
-                    "createdAtMs":tab.created_at_ms,"url":destination,"taskMetadata":metadata,
-                    "lifetime":managed.tab_lifetimes.get(id),"pendingHuman":managed.pending_human_tabs.get(id)
-                }))
-            }).collect();
-            let now_ms = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|_| "browser_runtime_clock_readback_required")?
-                .as_millis() as u64;
-            // Deliberately whitelist display fields. A resume capsule, issued
-            // provider view and native correlation are private owner authority.
-            let handoffs: std::collections::BTreeMap<_, _> = managed.remote_view_tab_handoffs.iter().map(|(id, link)| {
-                let session = managed.sessions.get(&link.session_id);
-                let tab = managed.tabs.get(&link.tab_id);
-                let resume = link.resume.as_ref();
-                let metadata = managed.tab_metadata.get(&link.tab_id)
-                    .or_else(|| resume.and_then(|intent| intent.task_metadata.as_ref()));
-                let lifetime = managed.tab_lifetimes.get(&link.tab_id)
-                    .or_else(|| resume.and_then(|intent| intent.tab_lifetime.as_ref()));
-                (id.clone(), serde_json::json!({
-                    "handoffId":id,"handoffUrl":format!("/remote-view/{id}"),
-                    "sessionId":link.session_id,"tabId":link.tab_id,
-                    "sessionName":session.map(|session| session.name.as_str()).or_else(|| resume.map(|intent| intent.session_name.as_str())),
-                    "profileId":session.map(|session| session.profile_id.as_str()).or_else(|| resume.map(|intent| intent.profile_id.as_str())),
-                    "browserId":tab.map(|tab| tab.browser_id.as_str()),
-                    "createdAtMs":link.created_at_ms,"expiresAtMs":link.expires_at_ms,
-                    "linkState":if link.check_link_at(now_ms).is_ok() {"active"} else {"expired"},
-                    "targetState":if tab.is_some() {"reported"} else if link.target_expired {"expired"} else {"ended"},
-                    "taskMetadata":metadata,"tabLifetime":lifetime,
-                    "pendingHuman":managed.pending_human_tabs.get(&link.tab_id)
-                }))
-            }).collect();
             Ok(serde_json::json!({
                 "schemaVersion": "agent-browser.runtime-operational-status.v1",
                 "state": "available",
                 // Owner-published inventory is not provider readiness or an OS
                 // liveness claim. Debugger endpoints and launch environments
                 // remain private to the runtime owner.
-                "workspace": {
-                    "schemaVersion":"agent-browser.managed-workspace.v1",
-                    "source":"managed-owner","browsers":browsers,
-                    "sessions":managed.sessions,"tabs":tabs,"handoffs":handoffs
-                },
+                "workspace": workspace_projection(&managed)?,
                 "launchAdmission": launch_admission,
                 "storage": {
                     "integrityState": "ok",
@@ -794,6 +761,60 @@ impl BrowserSessionSqliteStore {
             .map(PathBuf::from)
             .ok_or_else(|| "browser_runtime_database_path_unavailable".to_string())
     }
+}
+
+/// Display fields only. Private resume capsules, CDP endpoints and provider
+/// correlation tokens never enter the native workspace response.
+fn workspace_projection(managed: &BrowserSessionState) -> Result<serde_json::Value, String> {
+    let browsers: std::collections::BTreeMap<_, _> = managed.browsers.iter().map(|(id, browser)| {
+                (id.clone(), serde_json::json!({
+                    "id":id,"profileId":browser.profile_id,"pid":browser.pid,
+                    "desktop":browser.desktop,"activeSessionIds":browser.active_session_ids,
+                    "state":if managed.idle_closed_browsers.contains_key(id) { "sleeping" } else { "reported" }
+                }))
+            }).collect();
+    let tabs: std::collections::BTreeMap<_, _> = managed.tabs.iter().map(|(id, tab)| {
+                let destination = managed.navigation_history.iter().filter(|entry| entry.tab_id == *id)
+                    .max_by_key(|entry| entry.visited_at_ms).map(|entry| entry.url.as_str());
+                let metadata = managed.tab_metadata.get(id);
+                (id.clone(), serde_json::json!({
+                    "id":id,"targetId":tab.target_id,"browserId":tab.browser_id,"sessionId":tab.session_id,
+                    "createdAtMs":tab.created_at_ms,"url":destination,"taskMetadata":metadata,
+                    "lifetime":managed.tab_lifetimes.get(id),"pendingHuman":managed.pending_human_tabs.get(id)
+                }))
+            }).collect();
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| "browser_runtime_clock_readback_required")?
+        .as_millis() as u64;
+    // Deliberately whitelist display fields. A resume capsule, issued
+    // provider view and native correlation are private owner authority.
+    let handoffs: std::collections::BTreeMap<_, _> = managed.remote_view_tab_handoffs.iter().map(|(id, link)| {
+                let session = managed.sessions.get(&link.session_id);
+                let tab = managed.tabs.get(&link.tab_id);
+                let resume = link.resume.as_ref();
+                let metadata = managed.tab_metadata.get(&link.tab_id)
+                    .or_else(|| resume.and_then(|intent| intent.task_metadata.as_ref()));
+                let lifetime = managed.tab_lifetimes.get(&link.tab_id)
+                    .or_else(|| resume.and_then(|intent| intent.tab_lifetime.as_ref()));
+                (id.clone(), serde_json::json!({
+                    "handoffId":id,"handoffUrl":format!("/remote-view/{id}"),
+                    "sessionId":link.session_id,"tabId":link.tab_id,
+                    "sessionName":session.map(|session| session.name.as_str()).or_else(|| resume.map(|intent| intent.session_name.as_str())),
+                    "profileId":session.map(|session| session.profile_id.as_str()).or_else(|| resume.map(|intent| intent.profile_id.as_str())),
+                    "browserId":tab.map(|tab| tab.browser_id.as_str()),
+                    "createdAtMs":link.created_at_ms,"expiresAtMs":link.expires_at_ms,
+                    "linkState":if link.check_link_at(now_ms).is_ok() {"active"} else {"expired"},
+                    "targetState":if tab.is_some() {"reported"} else if link.target_expired {"expired"} else {"ended"},
+                    "taskMetadata":metadata,"tabLifetime":lifetime,
+                    "pendingHuman":managed.pending_human_tabs.get(&link.tab_id)
+                }))
+            }).collect();
+    Ok(serde_json::json!({
+        "schemaVersion":"agent-browser.managed-workspace.v1",
+        "source":"managed-owner","browsers":browsers,
+        "sessions":managed.sessions,"tabs":tabs,"handoffs":handoffs,
+    }))
 }
 
 fn unavailable_operational_status(admission_path: &Path, error: &str) -> serde_json::Value {

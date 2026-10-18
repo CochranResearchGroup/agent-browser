@@ -224,7 +224,10 @@ pub(super) async fn resolve_public_location(id: &str, workspace: bool) -> Result
             .query_pairs_mut()
             .append_pair("handoff-observation", &correlation);
     }
-    Ok(location.to_string())
+    // Workspace CSP allows only its own origin. The dashboard origin routes
+    // these native paths through the existing Remote View gateway; standalone
+    // handoffs above continue to the configured native public origin.
+    Ok(location[url::Position::BeforePath..].to_owned())
 }
 
 fn presentation_url(origin: &url::Url, route: &str) -> Result<String, String> {

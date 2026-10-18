@@ -33,6 +33,14 @@ export async function fetchSharedServiceStatus(revalidate = false): Promise<Resp
   });
 }
 
+/** Live native inventory bypasses workstation diagnostics and service reconciliation. */
+export function fetchSharedWorkspaceStatus(revalidate = false): Promise<Response> {
+  return fetchCoordinatedDashboardRead(`${SERVICE_API_BASE}/status?projection=workspace`, {
+    freshForMs: 1000,
+    revalidate,
+  });
+}
+
 export function fetchSharedServiceResources(revalidate = false): Promise<Response> {
   return fetchCoordinatedDashboardRead(`${SERVICE_API_BASE}/resources`, {
     freshForMs: SHARED_SERVICE_READ_TTL_MS,
