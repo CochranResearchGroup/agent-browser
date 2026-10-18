@@ -1,7 +1,7 @@
 # Dashboard cold-open diagnosis and repair
 
 Product lane: PL-BUGFIX
-Disposition: active-input
+Disposition: accepted-evidence
 Owning plan or work item: [P248](../plans/0248-2026-10-18-dashboard-cold-open.md), [#312](https://github.com/CochranResearchGroup/agent-browser/issues/312)
 Related lanes: UX301, P240
 
@@ -30,3 +30,16 @@ Temporary probe source and development debug drop-in are removed. Qualified sour
 Stop repeated full-open probes after these three failed installed/probe verdicts. Retain source and functional delivery qualification separately from the unresolved latency gate. The next diagnostic question is where time accrues outside task-local preparation within relay and whether the ready-lane gate is exercised as expected under representative workload. Do not promote CI-profile bytes to production or claim a five-second result.
 
 Source validation includes the deterministic blocked-discovery regression, ten discovery and six dashboard request tests, ready-lane and stale-port recovery tests, six relay-routing tests, 107 browser-session consumer tests (one additional provider-dependent fixture ignored), 14 retirement tests, mounted dashboard selection, dashboard/docs builds, formatting and strict workspace Clippy. A legacy acquisition fixture initially omitted originKind; it is corrected without changing runtime enforcement. Its corrected result is recorded in the plan.
+
+
+## Accepted direct-owner development checkpoint
+
+The earlier unchanged result was not acceptance. A built-in monotonic sample takes 5285 ms HTTP with only 876 ms execution and 316 ms queue accounting. A private boundary trace isolates approximately 2125 ms creating a legacy lane and 1177 ms persisting its scheduler job, versus 608 ms actual handoff and less than 1 ms host lock wait. An early wall-clock discontinuity makes summing that trace invalid; end-to-end HTTP and browser metrics use monotonic clocks.
+
+Source `3fb7afa7a`, clean development CI binary `154434c8234cf139cfa6d4d622e4d51286be8993aa1ffcab9281a355df63f27b`, sends an authenticated existing-tab selection to the shared browser owner directly. It retains signed focus, per-display ordering and revalidation, current target ownership and Native readiness. Acquisition/navigation/dry-run keep their original path; a missing runtime still recovers. The earlier ready-HTTP-lane special case is removed because this cold task has no HTTP lane.
+
+Actual fresh public dashboard navigation reaches connected nonuniform Native pixels in 4762 ms. Its handoff takes 1303 ms and starts from current unknown presence; a new page/context repeat on the retained task reaches pixels in 3722 ms. A follow-up direct handoff takes 1068 ms. Both full opens pass the provisional five-second diagnostic budget, without turning that budget into a user SLA or a latency distribution. The original comparison samples are retained above.
+
+Installed proof shows the same browser PID and process birth, Native-ready response, no new logical HTTP stream file and no launch job for the selected request. The first auxiliary readback looked in the historical JSON mirror and failed before navigation; it was corrected to the current SQLite owner document without replaying browser creation. No browser/task was substituted and no viewer document was replaced.
+
+The real authenticated connection regression fails before the fix for unnecessary job/lane creation and passes after, while invalid signed focus remains refused before either effect. All 13 daemon tests, selected routing exclusions, acquisition recovery, daemon readiness, client helpers, docs build, formatting and strict Clippy pass. Temporary instrumentation is removed. Development install doctor passes; production-shaped build, exact-byte development qualification and production activation remain separate gates.
