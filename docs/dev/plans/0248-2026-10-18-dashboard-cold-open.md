@@ -4,6 +4,7 @@ Status: OPEN
 Lane: P248
 Product lane: PL-BUGFIX
 Work item: CochranResearchGroup/agent-browser#312
+Pull request: https://github.com/CochranResearchGroup/agent-browser/pull/313
 Branch: fix/dashboard-cold-open-248
 Baseline: 90770e535dc4ea13042d259d6ee74b36518efde2
 Owner: ecochran76
