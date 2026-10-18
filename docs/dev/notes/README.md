@@ -22,6 +22,8 @@ integration by itself.
 
 ## PL-BUGFIX | Current Defect Evidence
 
+- [Useful handoff context](2026-10-17-handoff-context-labels.md)
+
 - [Native handoff missing-context continuation](2026-10-17-native-handoff-missing-context.md)
 
 - [Combined dashboard production upgrade](2026-10-17-pr302-production-upgrade.md)

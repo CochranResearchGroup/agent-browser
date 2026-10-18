@@ -7,13 +7,18 @@ import { Fragment, useRef, useState, type CSSProperties } from "react";
 import type { ServiceManagedHandoff } from "@agent-browser/client/service-observability";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-const supplied = (value: unknown) => typeof value === "string" && value.trim() ? value : "Unknown";
+const recorded = (value: unknown): string | null => typeof value === "string" && value.trim() ? value.trim() : null;
+const supplied = (value: unknown) => recorded(value) ?? "Not recorded";
+function handoffTitle(record: ServiceManagedHandoff) {
+  return recorded(record.taskMetadata?.taskName) ?? recorded(record.taskMetadata?.purpose)
+    ?? recorded(record.profileId) ?? recorded(record.sessionName) ?? "Browser handoff";
+}
 const duration = (value: unknown) => value === null ? "Perpetual" : typeof value === "number" && Number.isSafeInteger(value) && value >= 0
-  ? `${value % 1000 === 0 ? `${value / 1000} s` : `${value} ms`} inactivity` : "Unknown";
+  ? `${value % 1000 === 0 ? `${value / 1000} s` : `${value} ms`} inactivity` : "Not recorded";
 function timestamp(value: unknown) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "Unknown";
+  if (typeof value !== "number" || !Number.isFinite(value)) return "Not recorded";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Unknown" : <time dateTime={date.toISOString()}>{date.toLocaleString()}</time>;
+  return Number.isNaN(date.getTime()) ? "Not recorded" : <time dateTime={date.toISOString()}>{date.toLocaleString()}</time>;
 }
 function durableUrl(record: ServiceManagedHandoff) {
   try {
@@ -27,12 +32,13 @@ function durableUrl(record: ServiceManagedHandoff) {
 type SortColumn = "task" | "created" | "lifetime";
 const sortLabels: Record<SortColumn, string> = { task: "Task and origin", created: "Created and use", lifetime: "Lifetimes and target" };
 function sortValue(record: ServiceManagedHandoff, column: SortColumn): string | number {
-  if (column === "task") return supplied(record.taskMetadata?.taskName).toLocaleLowerCase();
+  if (column === "task") return handoffTitle(record).toLocaleLowerCase();
   if (column === "created") return record.createdAtMs ?? -1;
   return record.expiresAtMs ?? Number.POSITIVE_INFINITY;
 }
 
 /** Transient Share output is separate from the owner's retained-record inventory.
+ * Missing creator fields retain useful profile/session context without inventing identity.
  * Opening, copying and inspecting a record never issues a new handoff or selects a task. */
 export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLink, onReturnFocus, records, inventoryLoading, inventoryError, onRefresh, railWidth = 224 }: {
   open: boolean; onOpenChange: (open: boolean) => void; busy: boolean; error: string | null;
@@ -109,9 +115,17 @@ export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLin
           const url = durableUrl(record);
           const detailsOpen = inspected === record.handoffId;
           return <Fragment key={record.handoffId}><tr data-link-state={record.linkState}>
-            <td><strong>{supplied(metadata?.taskName)}</strong><span><small>Service: </small><span>{supplied(metadata?.serviceName)}</span></span><span><small>Agent: </small><span>{supplied(metadata?.agentName)}</span></span><span><small>Human: </small><span>{supplied(metadata?.humanName)}</span></span><small>Origin: {supplied(metadata?.originKind)} · {supplied(metadata?.attribution)}</small></td>
-            <td><span>Created: {timestamp(record.createdAtMs)}</span><span>{record.pendingHuman ? "Awaiting use" : typeof metadata?.firstHumanUseAtMs === "number" ? "Used" : "Use not recorded"}</span></td>
-            <td><span>Link: {record.expiresAtMs === null ? "Perpetual" : timestamp(record.expiresAtMs)}</span><span className={inactive ? "native-handoff-inactive" : undefined}>Link status: {record.linkState}{inactive ? " (inactive)" : ""}</span><span>Tab: {record.tabLifetime ? duration(record.tabLifetime.inactivityMs) : "Unknown"}</span><span>Target: {record.targetState === 'reported' ? 'Reported' : record.targetState === 'expired' ? 'Expired' : 'Ended'}</span><span>Pending use: {record.pendingHuman ? record.pendingHuman.expiresAtMs === null ? 'Until used' : timestamp(record.pendingHuman.expiresAtMs) : 'None reported'}</span></td>
+            <td><strong>{handoffTitle(record)}</strong>
+              {recorded(record.profileId) && <span><small>Profile: </small>{record.profileId}</span>}
+              {recorded(record.sessionName) && <span><small>Session: </small>{record.sessionName}</span>}
+              {recorded(metadata?.serviceName) && <span><small>Service: </small><span>{recorded(metadata?.serviceName)}</span></span>}
+              {recorded(metadata?.agentName) && <span><small>Agent: </small><span>{recorded(metadata?.agentName)}</span></span>}
+              {recorded(metadata?.humanName) && <span><small>Human: </small><span>{recorded(metadata?.humanName)}</span></span>}
+              {!recorded(metadata?.serviceName) && !recorded(metadata?.agentName) && !recorded(metadata?.humanName) && <small>Creator not recorded</small>}
+              {recorded(metadata?.originKind) && <small>Origin: {recorded(metadata?.originKind)}</small>}
+            </td>
+            <td><span>Created: {timestamp(record.createdAtMs)}</span><span>{record.pendingHuman ? "Awaiting confirmed use" : typeof metadata?.firstHumanUseAtMs === "number" ? "Use confirmed" : "No confirmed use"}</span></td>
+            <td><span>Link: {record.expiresAtMs === null ? "Perpetual" : timestamp(record.expiresAtMs)}</span><span className={inactive ? "native-handoff-inactive" : undefined}>Link status: {record.linkState}{inactive ? " (inactive)" : ""}</span><span>Tab retention: {record.tabLifetime ? duration(record.tabLifetime.inactivityMs) : "Default policy"}</span><span title={record.targetState === 'reported' ? 'The owner retains this task record. Availability is checked when the link is opened.' : undefined}>Task: {record.targetState === 'reported' ? 'Retained' : record.targetState === 'expired' ? 'Expired' : 'Ended'}</span><span>Pending use: {record.pendingHuman ? record.pendingHuman.expiresAtMs === null ? 'Kept open until confirmed use' : timestamp(record.pendingHuman.expiresAtMs) : 'None reported'}</span></td>
             <td className="native-handoff-actions">
               {url && !inactive && <a href={url} target="_blank" rel="noopener noreferrer" aria-label="Open" title="Open"><ExternalLink size={14} aria-hidden="true" /></a>}
               <button type="button" aria-label="Copy" title="Copy" disabled={!url} onClick={() => url && void copy(record.handoffId, url)}><Copy size={14} aria-hidden="true" /></button>
@@ -124,7 +138,8 @@ export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLin
           {detailsOpen && <tr className="native-handoff-detail-row"><td colSpan={4}><dl className="native-handoff-details">
                 <div><dt>Link</dt><dd>{url ? new URL(url, window.location.origin).toString() : "Unavailable"}</dd></div><div><dt>Profile</dt><dd>{supplied(record.profileId)}</dd></div>
                 <div><dt>Session</dt><dd>{supplied(record.sessionName)}</dd></div><div><dt>Purpose</dt><dd>{supplied(metadata?.purpose)}</dd></div>
-                <div><dt>First human use</dt><dd>{timestamp(metadata?.firstHumanUseAtMs)}</dd></div>
+                <div><dt>Context source</dt><dd>{supplied(metadata?.attribution)}</dd></div>
+                <div><dt>First confirmed use</dt><dd>{timestamp(metadata?.firstHumanUseAtMs)}</dd></div>
               </dl></td></tr>}
           {policies === record.handoffId && <tr className="native-handoff-detail-row"><td colSpan={4}><NativeHandoffPolicies record={record} onUpdated={refresh} /></td></tr>}
           </Fragment>;

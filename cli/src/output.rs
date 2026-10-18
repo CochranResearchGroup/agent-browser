@@ -6362,6 +6362,9 @@ Unknown creation outcomes require readback rather than blind retries.
 Software callers set handoffOperation=set_tab_lifetime with tabInactivityMs.
 Software inspect exposes original taskMetadata with supplied or unknown attribution.
 firstHumanUseAtMs records qualified first use separately from creation attribution.
+Handoff cards show task and profile/session context, omitting empty identity fields.
+Supply service-name, agent-name and task-name at creation; later sharing does not
+replace original provenance. Human identity is not inferred from the requester.
 Native human handoffs prepare observation before the operator opens the link.
 An exact producer missing-context read refreshes observation under current
 assignment checks without changing the link, task or pending-human hold.
