@@ -1,6 +1,6 @@
 # Runbook
 
-Updated: 2026-10-17
+Updated: 2026-10-18
 
 ## Local validation result collection
 
@@ -11,6 +11,20 @@ P246/#295 completes this bounded tooling repair with seven CLI regressions and
 existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 
 ## Current execution
+
+### 2026-10-18 fast rail and native iframe installed
+
+[PR309](https://github.com/CochranResearchGroup/agent-browser/pull/309) and
+[PR310](https://github.com/CochranResearchGroup/agent-browser/pull/310) qualify
+UX301's bounded repair. The [installed acceptance](docs/dev/notes/2026-10-17-dashboard-polling-native-view.md#installed-acceptance-october-18)
+binds sealed `1b4d1cac8b15`, development qualification and ready production
+transaction `upgrade-29b907f9-1636-4dee-bd81-7d16fa53ab0e`. Actual public Native
+pixels, Alpha/Beta/Alpha physical selection, both install doctors and preservation
+pass. Public rail readiness is 731 ms; five workspace reads take 48–92 ms with
+zero legacy diagnostic polling. First selected desktop readiness remains about
+ten seconds. The pre-run reboot, failed disposable claim, corrected harness,
+scoped task cleanup and withheld human-use acknowledgement remain explicit.
+
 
 ### 2026-10-17 dashboard summary restore
 

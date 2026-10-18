@@ -8,15 +8,15 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#301]
-    plan_state: IN_PROGRESS
-    custody_state: ACTIVE
-    pull_request: null
-    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/306
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/310
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/310
     dependencies: []
     overlaps: [P237, P240]
     reconciled_overlaps: ["P237 integrated; existing dashboard primary reused with installed candidate pins retained; P240 foreign resource checkout preserved. UX301 owns observed workspace presence, bounded Remote View reads, generated display types, rail/viewer consumers and guidance. P240 TTL and cleanup remain unchanged."]
     shared_source_coordination: "User-authorized follow-up owns handoff-observation versus TTL reaper isolation, plus current-active assignment selection in remote_view_session_effects.rs and host pool fixtures. P240 is completed with a clean retained checkout; its archive, quota and resource policies remain authoritative and unchanged. The diagnostic slice had no production effects; the later explicit upgrade is recorded below. Follow-up owns exact producer missing-context continuation, private HTTP classification and native observation fixtures. UX301 also owns the read-only single-flight native observation worker and additive sample-age projection; Lifecycle and TTL policy remain unchanged. Remote View plan0132 owns native origins and read-only window inventory; UX301 owns its consumer and preserved-browser reattachment."
-    validation_status: Fast workspace candidate 037117bd2bc224dc is installed and install doctor passes; provider and native ingress are installed with browser and desktop identities preserved. Public composition exposed missing cold-runtime attachment for operator focus. Restart regression RED then GREEN; host and focus-auth checks pass. Replacement candidate qualification and final public iframe acceptance remain open
+    validation_status: Sealed 1b4d1cac8b156945 installed after development doctor, three launch cycles, real native iframe and Alpha/Beta/Alpha physical focus qualification. Production doctor, actual native pixels, exact managed selection, retained records and 25 Native processes pass. Public rail 731ms and five workspace reads 48–92ms; no legacy diagnostic polling. Cold selected-desktop readiness remains about ten seconds; human-use and account authentication remain separate
     updated_at: 2026-10-18
 
   - id: P247
