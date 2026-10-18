@@ -4,19 +4,19 @@ lanes:
   - id: UX301
     product_lane: PL-BUGFIX
     objective: Improve handoff inventory and reconcile live rail with Remote View and browser observations
-    branch: fix/handoff-context-labels
+    branch: fix/dashboard-summary-closeout
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#301]
     plan_state: IN_PROGRESS
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/306
-    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/304
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/306
     dependencies: []
     overlaps: [P237, P240]
     reconciled_overlaps: ["P237 integrated; existing dashboard primary reused with installed candidate pins retained; P240 foreign resource checkout preserved. UX301 owns observed workspace presence, bounded Remote View reads, generated display types, rail/viewer consumers and guidance. P240 TTL and cleanup remain unchanged."]
     shared_source_coordination: "User-authorized follow-up owns handoff-observation versus TTL reaper isolation, plus current-active assignment selection in remote_view_session_effects.rs and host pool fixtures. P240 is completed with a clean retained checkout; its archive, quota and resource policies remain authoritative and unchanged. The diagnostic slice had no production effects; the later explicit upgrade is recorded below. Follow-up owns exact producer missing-context continuation, private HTTP classification and native observation fixtures. UX301 also owns the read-only single-flight native observation worker and additive sample-age projection; provider APIs and lifecycle policy remain unchanged."
-    validation_status: Dashboard lifecycle overflow reproduces RED then passes all 17 projection tests and help/lint/client/docs gates; sealed candidate qualification and installation pending. Creation-context enforcement passes three focused regressions, 385 parser-related, 34 service-normalizer, 132 MCP and 39 help tests, strict Clippy, formatting, client and docs gates; production installation pending. Handoff-context display repair passes focused and broad browser regressions, TypeScript, help tests, fmt, strict Clippy and documentation gates; installation pending. Prior PR304 integrated; sealed 5ef19e8f3685 passes source gates, native development workflow, both doctors and three launch cycles; production transaction upgrade-25ee059a accepted, exact original handoff continuation returns 200, installed and host checksums match, doctor passes, live browser and six observed task targets plus all profile/handoff records preserved; wider summary latency and fresh public iframe qualification remain open
+    validation_status: PR306 integrated; sealed 4131bd84bdda passes source gates, exact MCP/CLI context checks, dev doctors, three launch cycles and native two-task workflow with cleanup; upgrade-d23ea068 accepted production generation, doctor/hash/preservation checks pass, summary about 809 KB and installed inventory/selection setup plus native callback qualify. Wider summary latency/freshness and fresh public authenticated viewer delivery remain open
     updated_at: 2026-10-17
 
   - id: P247

@@ -12,6 +12,20 @@ existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 
 ## Current execution
 
+### 2026-10-17 dashboard summary restore
+
+[PR306](https://github.com/CochranResearchGroup/agent-browser/pull/306) repairs
+the 2 MiB dashboard summary failure by projecting lifecycle health without detailed
+resource inventories or duplicated reconciliation receipts. The
+[restore checkpoint](docs/dev/notes/2026-10-17-dashboard-summary-overflow.md)
+binds source/native qualification and accepted production generation
+`0.28.0-4131bd84bdda-c06c6149b420` to exact sealed bytes. Summary responses are
+about 809 KB; installed inventory/selection setup and handoff continuation pass,
+with browser/process, managed live targets and profile/handoff records preserved.
+The combined candidate also installs creator-context enforcement and useful
+handoff labels. Whole-summary latency/freshness and fresh public authenticated
+viewer delivery remain separate open boundaries.
+
 ### 2026-10-17 native handoff production repair
 
 [PR304](https://github.com/CochranResearchGroup/agent-browser/pull/304) repairs
