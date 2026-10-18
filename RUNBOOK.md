@@ -14,7 +14,7 @@ existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 
 ### 2026-10-18 selected desktop cold-open repair
 
-[P248](docs/dev/plans/0248-2026-10-18-dashboard-cold-open.md), #312, captures initial unknown presence followed by a three-second wait, redundant focus and foreground state exclusion during retirement observation. Source `ccd296fd2` requests authoritative exact handoff verification immediately, keeps one queued focus, and moves initial Native idle reads before current-state effect exclusion. The new foreground-read and late-controller regressions pass with existing retirement fences. Isolated installed Native latency qualification is pending; production remains unchanged by this repair.
+[P248](docs/dev/plans/0248-2026-10-18-dashboard-cold-open.md), #312, repairs initial unknown-selection poll waiting, redundant focus, unrelated discovery during named routing, ready-owner profile reconfiguration and retirement preflight exclusion. Source and functional Native delivery are qualified. The [cold-open evidence](docs/dev/notes/0248-2026-10-18-dashboard-cold-open.md) retains failed installed timing verdicts; the latest clean development candidate `2464b40d1564` reaches pixels in 9875 ms, with a 4885 ms handoff. Repeatable latency improvement remains open. Production is unchanged; no production promotion or threshold relaxation is selected.
 
 ### 2026-10-18 fast rail and native iframe installed
 

@@ -14,7 +14,7 @@ lanes:
     dependencies: [UX301]
     overlaps: [P240]
     reconciled_overlaps: ["Reuses clean dashboard primary and retains prior sealed candidates. UX301 integrated; P240 completed and foreign checkout preserved. P248 owns observed workspace cold presence, native task selection and bounded retirement adapter contention, preserving existing TTL, quota and ownership policy."]
-    validation_status: Real production diagnosis retained; red-green repair qualification pending
+    validation_status: Source regressions and functional Native delivery pass; development timing still fails provisional budget, remaining relay latency open
     updated_at: 2026-10-18
 
   - id: UX301
