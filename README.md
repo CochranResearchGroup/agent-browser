@@ -2794,6 +2794,9 @@ Ordinary task updates do not consult malformed launch history or unchanged peer 
 
 ## Observability Dashboard
 
+Dashboard summary status omits detailed runtime resource inventories and reconciliation receipts while retaining health flags and resource totals. Its projection metadata reports omitted counts and points to complete `/api/service/status` diagnostics. Summary delivery failure is not evidence that browsers or tabs have ended.
+
+
 Select, inspect, share and continue browser tasks in one native browser workspace. A compact browser/tab rail leaves the owned Remote View desktop central; Handoffs and diagnostics open when needed.
 
 ```bash

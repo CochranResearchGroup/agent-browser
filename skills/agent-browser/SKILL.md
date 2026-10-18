@@ -168,6 +168,10 @@ remains available. Read the advanced reference for host resource settings.
 Use `browser_discover` for advanced MCP metadata.
 
 
+### Dashboard summary diagnostics
+
+Dashboard summary status omits detailed runtime resource inventories and reconciliation receipts while retaining health flags and resource totals. Its projection metadata reports omitted counts and points to complete `/api/service/status` diagnostics. Summary delivery failure is not evidence that browsers or tabs have ended.
+
 ### Handoff creator context
 
 For tasks you create, supply `serviceName`, `agentName` and a concrete `taskName` on `browser_open`. For example, a Codex task can use serviceName `codex`, agentName `Codex`, and taskName `Launch QBO browser`. The CLI equivalents are `--service-name`, `--agent-name` and `--task-name`; for `remote-view open` creation, also supply `--origin-kind agent`. Missing or blank labels are rejected before task creation. MCP records origin `agent` without a caller field. For service requests, pass originKind in params; an authenticated or local principal is not a substitute for the creator labels. Do not fill `humanName` from the person requesting automation. Descriptive labels are not authenticated identities.

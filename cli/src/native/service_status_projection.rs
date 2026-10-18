@@ -557,6 +557,13 @@ impl ServiceStatusProjector {
                         Some(&authority_state),
                     )
                 });
+        let mut runtime_lifecycle = input.runtime_lifecycle;
+        if input.service_state_projection == ServiceStateProjectionMode::DashboardSummary {
+            compact_dashboard_runtime_lifecycle(
+                &mut runtime_lifecycle,
+                &mut service_state_projection,
+            );
+        }
         let current_boot_epoch = crate::process_identity::current_boot_epoch();
         let response = ServiceStatusResponse {
             control_plane: input.control_plane,
@@ -584,7 +591,7 @@ impl ServiceStatusProjector {
                 observations,
             },
             service_state_lock_diagnostics: super::service_store::service_state_lock_diagnostics(),
-            runtime_lifecycle: input.runtime_lifecycle,
+            runtime_lifecycle,
             crash_regeneration_transactions: authority_state.crash_regeneration_statuses(),
         };
         if input.service_state_projection == ServiceStateProjectionMode::DashboardSummary {
@@ -782,6 +789,42 @@ fn project_service_state_for_delivery(
             truncated_record_count,
         },
     )
+}
+
+/// The dashboard needs lifecycle health and totals, not inventories duplicated
+/// inside the monitor receipt. Omit those diagnostics only from delivery, with
+/// explicit counts and a full-status locator; never alter authority or cleanup.
+fn compact_dashboard_runtime_lifecycle(
+    lifecycle: &mut Value,
+    metadata: &mut ServiceStateProjectionMetadata,
+) {
+    if let Some(resources) = lifecycle
+        .get_mut("resources")
+        .and_then(Value::as_object_mut)
+    {
+        for field in ["bootEpochFindings", "lanes", "resources", "runtimeLanes"] {
+            if let Some(value) = resources.remove(field) {
+                metadata.omitted_collection_counts.insert(
+                    format!("runtimeLifecycle.resources.{field}"),
+                    collection_len(Some(&value)),
+                );
+            }
+        }
+    }
+    if let Some(reconciliation) = lifecycle
+        .get_mut("reconciliation")
+        .and_then(Value::as_object_mut)
+    {
+        if reconciliation.remove("receipt").is_some() {
+            metadata
+                .omitted_collection_counts
+                .insert("runtimeLifecycle.reconciliation.receipt".into(), 1);
+        }
+    }
+    *lifecycle = compact_summary_value(lifecycle, &mut metadata.truncated_record_count);
+    metadata
+        .detail_routes
+        .insert("runtimeLifecycle", "/api/service/status");
 }
 
 fn truncate_vec_with_metadata<T>(

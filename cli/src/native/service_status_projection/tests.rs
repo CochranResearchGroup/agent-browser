@@ -147,6 +147,73 @@ async fn project_mode(
     .unwrap()
 }
 
+#[tokio::test]
+async fn dashboard_summary_bounds_runtime_lifecycle_history_without_losing_live_state() {
+    let mut state = ServiceState::default();
+    state.tabs.insert(
+        "live-tab".into(),
+        BrowserTab {
+            id: "live-tab".into(),
+            lifecycle: TabLifecycle::Ready,
+            ..BrowserTab::default()
+        },
+    );
+    let records = (0..512)
+        .map(|index| {
+            json!({"id":format!("resource-{index}"),
+        "detail":"x".repeat(8192)})
+        })
+        .collect::<Vec<_>>();
+    let lifecycle = json!({"schemaVersion":"agent-browser.runtime-lifecycle-status.v1",
+        "ready":false,"state":"degraded",
+        "resources":{"summary":{"protectedRssBytes":1234},"resources":records},
+        "reconciliation":{"ready":false,"state":"stale","receipt":{"resources":records}},
+        "cleanupObligations":{"trackedCount":4,"missingCount":1}});
+    let projector = ServiceStatusProjector::new(
+        Arc::new(InMemoryStatusObservationAdapter::new(
+            unavailable_observation(),
+        )),
+        Arc::new(FixedClock),
+    );
+    let mut authority = input(state.clone(), false);
+    authority.runtime_lifecycle = lifecycle.clone();
+    let full = projector.project(authority).await.unwrap();
+    assert_eq!(full.runtime_lifecycle, lifecycle);
+    let mut authority = input(state, false);
+    authority.runtime_lifecycle = lifecycle;
+    authority.service_state_projection = ServiceStateProjectionMode::DashboardSummary;
+    let summary = projector
+        .project(authority)
+        .await
+        .expect("history must not take down the dashboard");
+    assert!(serde_json::to_vec(&summary).unwrap().len() <= DASHBOARD_SUMMARY_MAX_RESPONSE_BYTES);
+    assert!(summary.service_state["tabs"].get("live-tab").is_some());
+    assert_eq!(summary.runtime_lifecycle["ready"], false);
+    assert_eq!(
+        summary.runtime_lifecycle["resources"]["summary"]["protectedRssBytes"],
+        1234
+    );
+    assert_eq!(
+        summary.runtime_lifecycle["cleanupObligations"]["missingCount"],
+        1
+    );
+    assert!(summary.runtime_lifecycle["resources"]
+        .get("resources")
+        .is_none());
+    assert!(summary.runtime_lifecycle["reconciliation"]
+        .get("receipt")
+        .is_none());
+    assert_eq!(
+        summary.service_state_projection.omitted_collection_counts
+            ["runtimeLifecycle.resources.resources"],
+        512
+    );
+    assert_eq!(
+        summary.service_state_projection.detail_routes["runtimeLifecycle"],
+        "/api/service/status"
+    );
+}
+
 #[test]
 fn dashboard_summary_is_explicit_bounded_and_default_full_is_lossless() {
     let oversized = "x".repeat(64 * 1024);

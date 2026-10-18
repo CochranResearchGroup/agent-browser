@@ -161,6 +161,10 @@ identity and actionability fields, reports omitted counts and focused detail
 routes, and fails closed above its declared 2 MiB response ceiling. The
 ordinary CLI, MCP, client, and HTTP status surfaces remain complete. Do not use
 the dashboard summary as proof that omitted historical records do not exist.
+Runtime lifecycle summaries omit detailed resource inventories and reconciliation
+receipts while preserving health flags and resource totals. Projection metadata
+reports these omissions and points to complete <code>/api/service/status</code>
+diagnostics. A failed summary does not establish browser or tab absence.
 
 HTTP <code>GET /api/service/profiles/&lt;id&gt;/allocation</code> returns one derived <code>profileAllocations</code> row for software clients that do not need the full profile collection. Its response follows <code>docs/dev/contracts/service-profile-allocation-response.v1.schema.json</code>.
 
