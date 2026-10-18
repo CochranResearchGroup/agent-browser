@@ -2488,6 +2488,10 @@ fn apply_dashboard_status_flight_completion(
 #[cfg(test)]
 #[test]
 fn dashboard_summary_cache_expires_before_live_rail_poll() {
+    assert_eq!(
+        dashboard_status_cache_ttl("/api/service/status?projection=workspace"),
+        Duration::from_secs(1)
+    );
     let summary = dashboard_status_cache_ttl("/api/service/status?projection=dashboard-summary");
     assert!(summary < Duration::from_secs(3));
     assert_eq!(
@@ -2520,7 +2524,9 @@ fn dashboard_summary_cache_expires_before_live_rail_poll() {
 }
 
 fn dashboard_status_cache_ttl(path: &str) -> Duration {
-    if path == "/api/service/status?projection=dashboard-summary" {
+    if path == "/api/service/status?projection=workspace" {
+        Duration::from_secs(1)
+    } else if path == "/api/service/status?projection=dashboard-summary" {
         Duration::from_secs(2)
     } else {
         DASHBOARD_SERVICE_STATUS_CACHE_TTL
@@ -4325,8 +4331,7 @@ mod tests {
             "GET /remote-view/{id} HTTP/1.1\r\nHost: synthetic.example\r\nSec-Fetch-Dest: iframe\r\nConnection: close\r\n\r\n"
         )).await;
         assert_eq!(http_response_status(&embedded), Some(303));
-        assert!(String::from_utf8_lossy(&embedded)
-            .contains("Location: https://synthetic-view.example/1?workspace=true"));
+        assert!(String::from_utf8_lossy(&embedded).contains("Location: /1?workspace=true"));
         assert_eq!(commands.lock().unwrap().len(), relays_before);
         assert_eq!(store.load_session_state().unwrap(), live);
         store

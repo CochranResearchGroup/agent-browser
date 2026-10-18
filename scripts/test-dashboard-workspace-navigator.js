@@ -530,7 +530,7 @@ assert.match(
   'Selecting a workspace with an embeddable stream must open the workspace viewport route',
 );
 
-assert.match(page, /function NativeBrowserWorkspace[\s\S]*useSelectedWorkspaceContext\(true, workspaceViewPreferences\.snapshot\)[\s\S]*<WorkspaceRemoteViewport[\s\S]*selectedWorkspaceContext=\{selectedWorkspace\.context\}[\s\S]*function DashboardDiagnostics[\s\S]*useSelectedWorkspaceContext\(true, workspaceViewPreferences\.snapshot\)[\s\S]*<WorkspaceSelectionPanel context=\{selectedWorkspace\.context\}/,
+assert.match(page, /function NativeBrowserWorkspace[\s\S]*useSelectedWorkspaceContext\(true, workspaceViewPreferences\.snapshot, true\)[\s\S]*<WorkspaceRemoteViewport[\s\S]*selectedWorkspaceContext=\{selectedWorkspace\.context\}[\s\S]*function DashboardDiagnostics[\s\S]*useSelectedWorkspaceContext\(true, workspaceViewPreferences\.snapshot\)[\s\S]*<WorkspaceSelectionPanel context=\{selectedWorkspace\.context\}/,
   'The default viewport and diagnostic tools must retain authoritative selection context');
 
 assert.match(

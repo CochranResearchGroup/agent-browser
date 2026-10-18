@@ -11,6 +11,7 @@ import type { ServiceManagedHandoff } from "@agent-browser/client/service-observ
 import { requestServiceRemoteViewHandoff } from "@agent-browser/client/service-request";
 import { NativeHandoffDrawer } from "@/components/native-handoff-drawer";
 import { NativeTabActions } from "@/components/native-tab-actions";
+import type { NativeBrowserWindow } from "@/lib/native-window-inventory";
 
 type Props = {
   runtimeEnvironment?: "production" | "development";
@@ -25,10 +26,14 @@ type Props = {
   children: ReactNode;
   loading?: boolean;
   error?: string | null;
+  nativeWindows?: readonly NativeBrowserWindow[];
+  nativeSelection?: string | null;
+  nativeIssue?: string | null;
+  onSelectNativeWindow?: (target: NativeBrowserWindow) => void;
 };
 
 /** Compact inventory and native viewer share one authoritative source snapshot. */
-export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handoffs, selection, userLabel, diagnosticsHref = "/service", onLogout, onRefresh, children, loading, error }: Props) {
+export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handoffs, selection, userLabel, diagnosticsHref = "/service", onLogout, onRefresh, children, loading, error, nativeWindows = [], nativeSelection, nativeIssue, onSelectNativeWindow }: Props) {
   const [handoffsOpen, setHandoffsOpen] = useState(false);
   const [sharedLink, setSharedLink] = useState<{ url: string; label: string } | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
@@ -102,6 +107,7 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
   const selectTab = (node: WorkspaceNode, tab: WorkspaceServiceTab) => {
     // Clear all prior target identity together; never retain a peer session/job.
     const url = new URL(window.location.href);
+    url.searchParams.delete("native-window");
     url.searchParams.set("view", "workspace:control");
     history.replaceState(history.state, "", `${url.pathname}${url.search}${url.hash}`);
     writeDashboardWorkspaceUrlSelection({
@@ -114,6 +120,15 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
   };
   const search = query.trim().toLowerCase();
   const { groups, browserCount, unverifiedTabs } = useMemo(() => buildNativeRailGroups(nodes, tabs, closedTabs, query), [nodes, tabs, closedTabs, query]);
+  const nativeGroups = useMemo(() => {
+    const result = new Map<string, NativeBrowserWindow[]>();
+    for (const window of nativeWindows) {
+      if (search && !`${window.title} ${window.class} ${window.displayName} Desktop ${window.slot}`.toLowerCase().includes(search)) continue;
+      const key = `${window.desktopId}:${window.generation}`;
+      const group = result.get(key) ?? []; group.push(window); result.set(key, group);
+    }
+    return [...result.entries()];
+  }, [nativeWindows, search]);
   return (
     <main ref={root} className="native-workspace" style={{ gridTemplateColumns: collapsed ? "40px minmax(0, 1fr)" : `${width}px minmax(0, 1fr)` }}>
       <aside className="native-workspace-rail" aria-label="Browsers and tabs">
@@ -136,8 +151,16 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
                 {open && visibleTabs.map(tab => <NativeTabActions key={tab.id} node={node} tab={tab} shareBusy={shareBusy} onShare={opener => void shareTab(tab, opener)} onClosed={() => tabClosed(tab)}><button type="button" className="native-workspace-tab" aria-label={tabDescription(tab)} aria-current={selection.browserId === node.browserId && selection.tabId === tab.id ? "page" : undefined} onClick={() => selectTab(node, tab)} title={tab.url ?? undefined}><span>{tabDescription(tab)}</span></button></NativeTabActions>)}
               </section>;
             })}
-            {search && browserCount > 0 && !groups.length && <p role="status" className="native-workspace-empty">No matching browsers or tabs</p>}
-            {!groups.length && !search && <p className="native-workspace-empty">{loading ? "Loading browsers…" : unverifiedTabs ? "Browser presence could not be verified. Refresh browsers to check again." : "No active browsers"}</p>}
+            {nativeGroups.map(([id, windows]) => {
+              const open = search ? true : !closedGroups.has(`native:${id}`);
+              return <section key={`native:${id}`}>
+                <button type="button" className="native-workspace-browser" aria-expanded={open} onClick={() => setClosedGroups(current => { const next = new Set(current); if (next.has(`native:${id}`)) next.delete(`native:${id}`); else next.add(`native:${id}`); return next; })}><ChevronDown size={12} style={{ transform: open ? undefined : "rotate(-90deg)" }} /><Monitor size={13} /><span>{windows[0].displayName}<small>Desktop {windows[0].slot} · Remote View</small></span><small>{windows.length}</small></button>
+                {open && windows.map(window => <button key={window.key} type="button" className="native-workspace-tab" aria-current={nativeSelection === window.key ? "page" : undefined} title="Observed native browser window; managed task actions are unavailable" onClick={() => onSelectNativeWindow?.(window)}><span>{window.title}</span></button>)}
+              </section>;
+            })}
+            {search && (browserCount > 0 || nativeWindows.length > 0) && !groups.length && !nativeGroups.length && <p role="status" className="native-workspace-empty">No matching browsers or tabs</p>}
+            {!groups.length && !nativeGroups.length && !search && <p className="native-workspace-empty">{loading ? "Loading browsers…" : unverifiedTabs || nativeIssue || error ? "Browser presence could not be verified. Refresh browsers to check again." : "No active browsers"}</p>}
+            {nativeIssue && <p role="status" className="native-workspace-empty">{nativeIssue}</p>}
           </nav>
         </>}
         {!collapsed && <div role="separator" tabIndex={0} aria-label="Browser rail width" aria-orientation="vertical" aria-valuemin={180} aria-valuemax={400} aria-valuenow={width} className="native-workspace-resize" onKeyDown={event => {

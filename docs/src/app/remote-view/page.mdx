@@ -687,7 +687,10 @@ The public locator remains read-only. After native authentication the browser
 owner prepares and selects the addressed tab, even when a live browser currently
 shows another tab. It does not issue or renew an Agent Browser viewer grant,
 select a dashboard workspace, or require another Open desktop click. Prepared
-dashboard iframes retain the existing same-origin native workspace renderer.
+dashboard iframes redirect to relative native workspace routes on the dashboard
+origin. Deploy that origin's native viewer paths, assets and WebSocket routes
+through the existing Remote View gateway and its authentication. A separate
+Remote View hostname alone cannot satisfy the native workspace framing policy.
 
 The native gateway rejects prefetch and non-document continuation requests,
 authenticates the operator, and requests addressed-task preparation or recovery

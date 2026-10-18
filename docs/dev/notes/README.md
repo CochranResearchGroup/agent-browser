@@ -22,6 +22,8 @@ integration by itself.
 
 ## PL-BUGFIX | Current Defect Evidence
 
+- [Dashboard polling and native viewer repair](2026-10-17-dashboard-polling-native-view.md)
+
 - [Useful handoff context](2026-10-17-handoff-context-labels.md)
 
 - [Native handoff missing-context continuation](2026-10-17-native-handoff-missing-context.md)

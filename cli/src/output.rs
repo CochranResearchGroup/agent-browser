@@ -6480,11 +6480,16 @@ Icon controls expose hover help. A task without a native desktop uses its
 available browser stream; otherwise it reports desktop availability separately
 from a missing tab.
 The rail joins Remote View application windows with live browser process and
-exact tab observations. Empty desktops, ended tabs and unverified managed records
+exact tab observations. It also lists current native browser windows from other
+applications, including hidden groups, without inventing managed task ownership.
+These windows use Remote View’s existing connection and window controls; managed
+task actions remain available only for owned tasks. Legacy daemon history is
+confined to diagnostics rather than treated as native browser presence. Empty desktops, ended tabs and unverified managed records
 are excluded. Failed or stale observations preserve selection and retained links;
 a later successful refresh can restore the same tab without recreating it.
-The live rail polls three seconds after each completed read, with a two-second
-summary cache. Slow diagnostics do not delay it. Observation freshness expires
+The native rail reads the dedicated workspace projection and polls three seconds
+after each completed read, with a one-second cache. Service reconciliation and
+workstation diagnostics run only on diagnostic surfaces. Observation freshness expires
 independently after 30 seconds using elapsed time, even if the next read stalls.
 Search matches displayed tab labels and URLs, excluding embedded document payloads.
 Native window reads refresh in one background worker. Initial reads can remain
@@ -7943,7 +7948,7 @@ Configuration:
   Failure records enter private failure-journal.pending custody before asynchronous projection. Unix writes sync the file and directory; daemon startup replays pending occurrences without request resubmission. pendingRecordCount reports pending projection. custody_failed reports persistence failure. Journal reads wait up to 250 ms for a concurrent writer, then report lock contention if it persists.
   Profile ACL admission denials report profile_access_denied / profile_access / no_effect and preserve profileAccessDecision. Follow the policy-inspection action using the same credential; do not change labels or retry to bypass access. Join pre-dispatch request IDs to the failure journal; no job exists.
   Child authority denials report profile_access / child_admission / no_effect with the exact profile_child_* cause. Follow recommendedAction using your own handle or connection; never change identity labels to borrow a peer's tab.
-  The dashboard uses GET /api/service/status?projection=dashboard-summary for a bounded, non-exhaustive view. Lifecycle inventory and reconciliation receipts are omitted with counts and a full-status detail route; health and resource totals remain. Ordinary status remains complete. Failure readback reports delivery pressure and delivery failures; queued writes backpressure instead of silently dropping accepted records.
+  Service diagnostics use GET /api/service/status?projection=dashboard-summary for a bounded, non-exhaustive view. Lifecycle inventory and reconciliation receipts are omitted with counts and a full-status detail route; health and resource totals remain. Ordinary status remains complete. Failure readback reports delivery pressure and delivery failures; queued writes backpressure instead of silently dropping accepted records.
 
   Runtime profiles can also be declared in config:
     {{

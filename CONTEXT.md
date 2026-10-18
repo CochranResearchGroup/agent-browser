@@ -40,6 +40,11 @@ durable history or change live tasks and valid handoffs.
 
 **Durable profile**: Browser data retained across tasks. Separate tasks can share its browser through distinct sessions and tabs. Profile retention is separate from process, desktop, session and handoff lifetimes.
 
+**Workspace inventory projection**: The redacted managed-owner inventory with
+bounded native window and exact CDP observations used by the default dashboard.
+It does not wait for service reconciliation or workstation diagnostic scans and
+does not grant automation or viewing authority.
+
 **Handoff link lifetime**: The configurable period during which a handoff link can be used. The default is perpetual. Link expiry does not end the target tab or delete the link record.
 
 **Tab lifetime**: The independent, configurable retention of a task's tab. An unused human handoff can protect its tab according to the pending-human retention policy. Ending one tab preserves its peers; the browser closes when its last live tab ends.

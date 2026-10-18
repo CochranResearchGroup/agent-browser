@@ -4,19 +4,19 @@ lanes:
   - id: UX301
     product_lane: PL-BUGFIX
     objective: Improve handoff inventory and reconcile live rail with Remote View and browser observations
-    branch: fix/dashboard-summary-closeout
+    branch: fix/dashboard-polling-native-view
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#301]
     plan_state: IN_PROGRESS
-    custody_state: INTEGRATED
-    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/306
+    custody_state: ACTIVE
+    pull_request: null
     integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/306
     dependencies: []
     overlaps: [P237, P240]
     reconciled_overlaps: ["P237 integrated; existing dashboard primary reused with installed candidate pins retained; P240 foreign resource checkout preserved. UX301 owns observed workspace presence, bounded Remote View reads, generated display types, rail/viewer consumers and guidance. P240 TTL and cleanup remain unchanged."]
     shared_source_coordination: "User-authorized follow-up owns handoff-observation versus TTL reaper isolation, plus current-active assignment selection in remote_view_session_effects.rs and host pool fixtures. P240 is completed with a clean retained checkout; its archive, quota and resource policies remain authoritative and unchanged. The diagnostic slice had no production effects; the later explicit upgrade is recorded below. Follow-up owns exact producer missing-context continuation, private HTTP classification and native observation fixtures. UX301 also owns the read-only single-flight native observation worker and additive sample-age projection; provider APIs and lifecycle policy remain unchanged."
-    validation_status: PR306 integrated; sealed 4131bd84bdda passes source gates, exact MCP/CLI context checks, dev doctors, three launch cycles and native two-task workflow with cleanup; upgrade-d23ea068 accepted production generation, doctor/hash/preservation checks pass, summary about 809 KB and installed inventory/selection setup plus native callback qualify. Wider summary latency/freshness and fresh public authenticated viewer delivery remain open
+    validation_status: Follow-up repairs slow polling, native framing and incomplete window inventory. Dedicated read RED then 0.01s GREEN; owner redaction, managed handoff, compact UI, native-window selection and routing checks pass. Provider and ingress prerequisites plus qualified installation remain pending; existing accepted production generation is preserved
     updated_at: 2026-10-17
 
   - id: P247

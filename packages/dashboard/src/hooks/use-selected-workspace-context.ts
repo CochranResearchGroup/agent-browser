@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "jotai/react";
 import { sessionsAtom } from "@/store/sessions";
 import { engineForPortAtom, tabsForPortAtom } from "@/store/tabs";
-import { fetchSharedServiceResources, fetchSharedServiceStatus } from "@/lib/dashboard-api";
+import { fetchSharedServiceResources, fetchSharedServiceStatus, fetchSharedWorkspaceStatus } from "@/lib/dashboard-api";
 import { startCompletionDrivenDashboardPoll } from "@/lib/dashboard-read-coordinator";
 import {
   DASHBOARD_WORKSPACE_SELECTION_EVENT,
@@ -86,6 +86,7 @@ export type UseSelectedWorkspaceContextResult = {
 export function useSelectedWorkspaceContext(
   enabled = true,
   preferences?: WorkspaceViewPreferenceSnapshot,
+  inventoryOnly = false,
 ): UseSelectedWorkspaceContextResult {
   const daemonSessions = useAtomValue(sessionsAtom);
   const getTabsForPort = useAtomValue(tabsForPortAtom);
@@ -117,13 +118,13 @@ export function useSelectedWorkspaceContext(
       try {
         // Diagnostic resources must never hold up live browser inventory.
         const resourceGeneration = ++resourcesGeneration.current;
-        void fetchSharedServiceResources(revalidate).then(async response => {
+        if (!inventoryOnly) void fetchSharedServiceResources(revalidate).then(async response => {
           const result = response.ok ? await response.json() as ApiResponse<ServiceResourcesData> : null;
           if (resourcesGeneration.current === resourceGeneration) setServiceResources(result?.success ? result.data ?? null : null);
         }).catch(() => {
           if (resourcesGeneration.current === resourceGeneration) setServiceResources(null);
         });
-        const statusResponse = await fetchSharedServiceStatus(revalidate);
+        const statusResponse = await (inventoryOnly ? fetchSharedWorkspaceStatus(revalidate) : fetchSharedServiceStatus(revalidate));
         if (!statusResponse.ok) throw new Error(`HTTP ${statusResponse.status}`);
         const json = (await statusResponse.json()) as ApiResponse<ServiceStatusData>;
         if (!json.success) throw new Error(json.error || "Service status unavailable");
@@ -150,7 +151,7 @@ export function useSelectedWorkspaceContext(
     })();
     refreshInFlightRef.current = request;
     return request;
-  }, [enabled]);
+  }, [enabled, inventoryOnly]);
 
   // A manual/post-mutation refresh must run after any earlier poll settles.
   const refresh = useCallback(async () => {
@@ -198,7 +199,7 @@ export function useSelectedWorkspaceContext(
     const serviceBrowsers = mergeById(Object.values(serviceStatus?.service_state?.browsers ?? {}), managed.browsers);
     const serviceTabs = mergeById(Object.values(serviceStatus?.service_state?.tabs ?? {}), managed.tabs);
     const nodeInput = {
-      daemonSessions,
+      daemonSessions: inventoryOnly ? [] : daemonSessions,
       daemonTabsByPort,
       daemonEngineByPort,
       serviceBrowsers,
@@ -227,7 +228,7 @@ export function useSelectedWorkspaceContext(
         serviceBrowsers: serviceBrowsers.map(workspaceProjectionBrowser),
         serviceTabs,
         remoteViewRoutes: serviceStatus?.service_state?.remoteViewRoutes ?? {},
-        daemonSessions,
+        daemonSessions: inventoryOnly ? [] : daemonSessions,
         selectedContext: {
           node: baseContext.node,
           stream: baseContext.stream ? {
@@ -280,6 +281,7 @@ export function useSelectedWorkspaceContext(
     serviceStatus,
     preferences?.revision,
     presenceCurrent,
+    inventoryOnly,
   ]);
 
   return { context, projection, nodes, tabs, presenceCurrent, managedWorkspace: serviceStatus?.browserRuntime?.workspace, sourceSnapshotIdentity: refreshedAt, loading, error, refresh };
