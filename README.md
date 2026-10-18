@@ -859,6 +859,7 @@ RDP or Guacamole:
 
 ```bash
 agent-browser --json remote-view open https://example.com/secure \
+  --service-name codex --agent-name Codex --task-name "Review secure page" --origin-kind agent \
   --runtime-profile operator-review \
   --browser-build stealthcdp_chromium \
   --view-stream-provider rdp_gateway
@@ -2792,6 +2793,9 @@ interrupted publication without replacing it or resetting its authenticated stat
 Ordinary task updates do not consult malformed launch history or unchanged peer desktop release fences. Current profile permission can resolve an ambiguous historical owner binding.
 
 ## Observability Dashboard
+
+Dashboard summary status omits detailed runtime resource inventories and reconciliation receipts while retaining health flags and resource totals. Its projection metadata reports omitted counts and points to complete `/api/service/status` diagnostics. Summary delivery failure is not evidence that browsers or tabs have ended.
+
 
 Select, inspect, share and continue browser tasks in one native browser workspace. A compact browser/tab rail leaves the owned Remote View desktop central; Handoffs and diagnostics open when needed.
 
@@ -4986,7 +4990,7 @@ for the agent-browser daemon session, and use `--session-name` for saved
 browser state. For a Facebook-style operator handoff, the durable one-liner is:
 
 ```bash
-agent-browser --json remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway
+agent-browser --json remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
 ```
 
 ```json
@@ -6826,6 +6830,10 @@ Software callers change an existing valid link through `service_remote_view_hand
 Software callers delete a link through `service_remote_view_handoff_resolve` with `params.handoffOperation="delete"`. The owner removes only that durable link record and returns `status="deleted"`. The URL becomes unusable across restart; the target tab, browser, session, tab lifetime and pending-human hold are preserved. Deletion also accepts an expired link and does not recreate a missing target or prepare presentation.
 
 The owner operation `service_remote_view_handoff_resolve` with `params.handoffOperation="prepare_human"` and `params.pendingHumanRetentionMs` records a pending-human hold on the addressed tab. A positive value sets a maximum duration; 0 holds without an automatic deadline. `inspect` reports `pendingHuman` separately from link expiry and tab inactivity. The hold survives restart and does not navigate or open a viewer. The browser owner reads successful-use evidence through the private native provider transport, joined to the retained handoff, exact tab/target and current lifecycle/viewing generations. Caller-supplied `humanUseEvidence` is rejected. Pending, expired or failed native viewing preserves the hold. Qualified use and exact native focus release the hold and resume tab inactivity. Ordinary agent readiness resolution leaves the hold intact. Native `remote_view_open` automatically prepares this hold after successful browser work. Software managed commands can request it with `humanHandoff=true`. `pendingHumanRetentionMs` overrides `AGENT_BROWSER_PENDING_HUMAN_RETENTION_MS`; the default 0 holds until use with no automatic deadline. Ordinary agent work does not prepare a human hold. Invalid configuration and overflowing pending deadlines are rejected before browser effects. Authenticated document navigation registers a continuation and redirects to the existing native viewer, including dashboard redirects that lose transient user activation. Registration does not require a fresh click on the API URL. The redirect and readiness do not acknowledge use; private owner polling consumes only provider-qualified use. Registration survives owner restart; replay preserves the first-use timestamp. Prefetches, background requests and missing navigation context retain the hold. This uses existing authentication and adds no operator confirmation step.
+
+Handoff cards lead with the recorded task or purpose, then profile/session context when the task label is absent. Empty service, agent and human fields are omitted; missing creator context is shown once as Creator not recorded. Default tab retention and retained task records are labeled separately from live availability. Supply service, agent and task labels when creating a browser task; a job ID alone does not identify its creator. Later inspection or sharing does not rewrite original creation provenance.
+
+Agent task creation requires nonblank `serviceName`, `agentName` and `taskName`. MCP `browser_open` records its known `agent` origin and rejects omissions before profile creation or transport startup. CLI `remote-view open` creation also requires `--origin-kind` alongside `--service-name`, `--agent-name` and `--task-name`; queued `remote_view_open` requests supply `originKind` in `params`. A local or authenticated request principal does not replace these descriptive labels. Dry-run planning and sharing an existing browser/target are exempt because they do not create a task. Reopening a retained handoff preserves its original context.
 
 Native human handoff production prepares private observation context alongside the pending-human hold. A top-level opaque link validates retained intent and enters the existing native Remote View authenticated continuation without a Dashboard login. The public GET remains read-only; after native authentication, the browser owner prepares and selects the addressed tab before the native viewer opens. This also handles a live browser showing another tab, an exited process, or a changed physical observation through the same link. Prepared dashboard iframes retain the existing same-origin native workspace path. The private continuation uses the existing bounded native-handoff response budget at stable ingress; a delivered POST is not replayed to a fallback backend. The owner reaper refreshes short-lived observations while human use is pending; it does not extend the link or hold deadline. Current handoff presentation ignores released desktop-assignment history. It still requires one active assignment for the exact desktop generation and an exact match to published browser custody; multiple active assignments or a mismatch remain unavailable. An exact private producer `native_use_missing` response refreshes only the short native observation after current assignment readback. It preserves the durable link, addressed tab, first-use history and pending-human hold; timeouts, other errors and changed generations remain failures. A failed native handoff observation does not acknowledge human use or renew retention. Eligible TTL cleanup still runs under its existing activity and publication checks before the owner reports the observation error. A failed reaper response can therefore follow committed cleanup; read current owner state before deciding what remains. A stale or expired observation is not successful use. Only provider-qualified native display confirmation and the exact browser-owner join record first use and release retention.
 

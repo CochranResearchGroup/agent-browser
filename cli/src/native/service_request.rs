@@ -816,6 +816,11 @@ pub(crate) fn normalize_service_request(
         }
     }
 
+    if action == "remote_view_open" {
+        require_handoff_creation_context(&command)
+            .map_err(|message| issue(ServiceRequestIssueKind::InvalidRequest, message))?;
+    }
+
     if action == "desktop_interact" && command.get("sessionName").is_none() {
         let effective_session = input
             .effective_session
@@ -921,6 +926,35 @@ pub(crate) fn apply_service_request_attribution(
     command["callerId"] = json!(attribution.principal);
     command["requestId"] = json!(attribution.request_id);
     command["requestPrincipalSource"] = json!(attribution.source.as_str());
+}
+
+/// New handoff tasks need descriptive creation context even when ingress has
+/// an accountable principal. Planning and sharing exact existing targets do
+/// not create provenance and must preserve the original task's context.
+pub(crate) fn require_handoff_creation_context(command: &Value) -> Result<(), String> {
+    let text = |field: &str| {
+        command
+            .get(field)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    };
+    if command.get("dryRun").and_then(Value::as_bool) == Some(true)
+        || (command.get("url").is_none()
+            && text("browserId").is_some()
+            && text("targetId").is_some())
+    {
+        return Ok(());
+    }
+    let missing: Vec<_> = ["serviceName", "agentName", "taskName", "originKind"]
+        .into_iter()
+        .filter(|field| text(field).is_none())
+        .collect();
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("browser_task_context_required: supply nonblank {} before creating a handoff task (CLI: --service-name, --agent-name, --task-name, --origin-kind; service originKind belongs in params)", missing.join(", ")))
+    }
 }
 
 fn derive_service_request_attribution(
@@ -2654,6 +2688,44 @@ mod tests {
     }
 
     #[test]
+    fn handoff_creation_context_is_required_before_service_queueing() {
+        let complete = json!({"action":"remote_view_open",
+            "serviceName":"codex","agentName":"Codex","taskName":"Open accounting",
+            "params":{"url":"https://example.test/","originKind":"agent"}});
+        for field in ["serviceName", "agentName", "taskName", "originKind"] {
+            let mut request = complete.clone();
+            if field == "originKind" {
+                request["params"].as_object_mut().unwrap().remove(field);
+            } else {
+                request.as_object_mut().unwrap().remove(field);
+            }
+            let error =
+                normalize(request.clone()).expect_err("missing creator context must reject");
+            assert!(error.message().contains(field), "{error}");
+            assert!(
+                crate::native::stream::service_request_adapter_fixture(&request.to_string())
+                    .is_err()
+            );
+            assert!(crate::mcp::service_request_adapter_fixture(&request).is_err());
+            if field == "originKind" {
+                request["params"][field] = json!("   ");
+            } else {
+                request[field] = json!("   ");
+            }
+            assert!(normalize(request).is_err(), "blank {field} must reject");
+        }
+        let accepted = normalize(complete).unwrap();
+        assert_eq!(accepted.command["originKind"], "agent");
+        assert!(accepted.command.get("humanName").is_none());
+        assert!(
+            normalize(json!({"action":"remote_view_open", "params":{
+            "browserId":"browser-1","targetId":"target-1"}}))
+            .is_ok(),
+            "sharing an existing task must not rewrite creation provenance"
+        );
+    }
+
+    #[test]
     fn public_service_request_cannot_drive_private_native_use_operations() {
         for operation in ["prepare_native_use", "observe_native_use"] {
             let request = json!({"action":"service_remote_view_handoff_resolve","params":{
@@ -3952,6 +4024,12 @@ mod tests {
                     "challengeTaskId": "challenge-task-fixture",
                     "operationId": "operation-fixture"
                 });
+            }
+            "remote_view_open" => {
+                request["serviceName"] = json!("fixture-service");
+                request["agentName"] = json!("fixture-agent");
+                request["taskName"] = json!("Open fixture browser");
+                request["params"] = json!({"url":"https://example.test/","originKind":"agent"});
             }
             "probe" => {
                 request["serviceTabHandle"] = test_tab_handle(true);

@@ -429,7 +429,7 @@ fn service_operating_guide() -> Value {
         "schemaVersion":"agent-browser.operating-guide.v2",
         "summary":"Open a task, work on its page, hand its desktop to a person, and continue the same task.",
         "workflow":[
-            {"tool":"browser_open","rule":"Supply profile, profileMode, taskKey and URL. Reuse taskKey when retrying."},
+            {"tool":"browser_open","rule":"Supply profile, profileMode, taskKey, URL, serviceName, agentName and taskName. Reuse taskKey when retrying."},
             {"tool":"browser_snapshot","rule":"Use the returned taskId for page actions and task-scoped tabs."},
             {"tool":"browser_handoff","rule":"Share the returned ready HTTPS handoffUrl. Remote View owns the native viewer."},
             {"tool":"browser_continue","rule":"Continue with the same taskId after human input."},
@@ -870,7 +870,7 @@ fn initialize_result(params: Option<&Value>) -> Value {
             "title": "Agent Browser",
             "version": env!("CARGO_PKG_VERSION"),
         },
-        "instructions": "Use browser_open with profile, profileMode, taskKey and URL. Address subsequent page actions with the returned taskId. Use browser_handoff for a ready native viewer link, browser_continue after human input, and browser_close for task-scoped cleanup. Use browser_discover only when advanced metadata is needed.",
+        "instructions": "Use browser_open with profile, profileMode, taskKey, URL, serviceName, agentName and taskName. Address subsequent page actions with the returned taskId. Use browser_handoff for a ready native viewer link, browser_continue after human input, and browser_close for task-scoped cleanup. Use browser_discover only when advanced metadata is needed.",
     })
 }
 

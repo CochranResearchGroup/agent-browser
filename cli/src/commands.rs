@@ -687,7 +687,7 @@ fn parse_service_profile_reset(
     Ok(command)
 }
 
-const REMOTE_VIEW_OPEN_USAGE: &str = "remote-view open [url] [--url <url>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--view-stream-provider <rdp_gateway>] [--provider <rdp_gateway>] [--profile <path>] [--route-pool-entry-id <id>] [--route-pool-entry-json <json>] [--route-id <id>] [--display <name>] [--display-allocation-id <id>] [--browser-id <id>] [--session-name <name>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--job-timeout-ms <ms>] [--manual-login-launch] [--dry-run]";
+const REMOTE_VIEW_OPEN_USAGE: &str = "remote-view open [url] [--url <url>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--view-stream-provider <rdp_gateway>] [--provider <rdp_gateway>] [--profile <path>] [--route-pool-entry-id <id>] [--route-pool-entry-json <json>] [--route-id <id>] [--display <name>] [--display-allocation-id <id>] [--browser-id <id>] [--session-name <name>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--origin-kind <kind>] [--job-timeout-ms <ms>] [--manual-login-launch] [--dry-run]";
 
 fn remote_view_route_pool_from_env_value(raw: Option<String>) -> Result<Option<Value>, ParseError> {
     let Some(raw) = raw else {
@@ -2292,6 +2292,11 @@ fn parse_remote_view_open(id: String, rest: &[&str], flags: &Flags) -> Result<Va
                 cmd["agentName"] = json!(value);
                 i += 1;
             }
+            "--origin-kind" => {
+                let value = required_next(rest, i, "--origin-kind", REMOTE_VIEW_OPEN_USAGE)?;
+                cmd["originKind"] = json!(value);
+                i += 1;
+            }
             "--task-name" => {
                 let value = required_next(rest, i, "--task-name", REMOTE_VIEW_OPEN_USAGE)?;
                 cmd["taskName"] = json!(value);
@@ -2353,6 +2358,12 @@ fn parse_remote_view_open(id: String, rest: &[&str], flags: &Flags) -> Result<Va
             cmd["routePool"] = route_pool;
         }
     }
+    crate::native::service_request::require_handoff_creation_context(&cmd).map_err(|message| {
+        ParseError::InvalidValue {
+            message,
+            usage: REMOTE_VIEW_OPEN_USAGE,
+        }
+    })?;
     Ok(cmd)
 }
 
@@ -9606,8 +9617,36 @@ mod tests {
     }
 
     #[test]
+    fn handoff_creation_context_is_required_for_cli_launch() {
+        let error = parse_command(
+            &args("remote-view open https://example.test/"),
+            &default_flags(),
+        )
+        .expect_err("unlabeled CLI creation must reject");
+        assert!(error.format().contains("browser_task_context_required"));
+        let complete = args("remote-view open https://example.test/ --service-name codex --agent-name Codex --task-name Review --origin-kind agent");
+        let accepted = parse_command(&complete, &default_flags()).unwrap();
+        assert_eq!(accepted["originKind"], "agent");
+        assert!(accepted.get("humanName").is_none());
+        for field in [
+            "--service-name",
+            "--agent-name",
+            "--task-name",
+            "--origin-kind",
+        ] {
+            let mut missing = complete.clone();
+            let index = missing.iter().position(|value| value == field).unwrap();
+            missing.drain(index..index + 2);
+            assert!(parse_command(&missing, &default_flags()).is_err());
+            missing.insert(index, field.to_string());
+            missing.insert(index + 1, "   ".to_string());
+            assert!(parse_command(&missing, &default_flags()).is_err());
+        }
+    }
+
+    #[test]
     fn test_remote_view_open_implicit_default_does_not_select_a_catalog_profile() {
-        let raw = args("remote-view open https://example.com/ --session-name disposable-task");
+        let raw = args("remote-view open https://example.com/ --session-name disposable-task --service-name fixture --agent-name fixture-agent --task-name fixture-task --origin-kind agent");
         let mut flags = crate::flags::parse_flags(&raw);
         flags.runtime_profile = Some("default".into());
         flags.profile = Some("/startup/default/user-data".into());
@@ -9624,7 +9663,7 @@ mod tests {
             "--runtime-profile default",
             "--profile /srv/browser-profile",
         ] {
-            let raw = args(&format!("remote-view open https://example.com/ {argument}"));
+            let raw = args(&format!("remote-view open https://example.com/ {argument} --service-name fixture --agent-name fixture-agent --task-name fixture-task --origin-kind agent"));
             let flags = crate::flags::parse_flags(&raw);
             let cmd = parse_command(&crate::flags::clean_args(&raw), &flags).unwrap();
             assert_eq!(cmd["runtimeProfile"], json!(flags.runtime_profile));
@@ -9690,7 +9729,7 @@ mod tests {
 
     #[test]
     fn handoff_link_retention_cli_parses_creation_inspection_and_extension() {
-        let raw = args("remote-view open https://synthetic.example/ --handoff-ttl-ms 1000");
+        let raw = args("remote-view open https://synthetic.example/ --handoff-ttl-ms 1000 --service-name fixture --agent-name fixture-agent --task-name fixture-task --origin-kind agent");
         let flags = crate::flags::parse_flags(&raw);
         let command = parse_command(&crate::flags::clean_args(&raw), &flags).unwrap();
         assert_eq!(command["handoffTtlMs"], 1000);

@@ -6362,6 +6362,11 @@ Unknown creation outcomes require readback rather than blind retries.
 Software callers set handoffOperation=set_tab_lifetime with tabInactivityMs.
 Software inspect exposes original taskMetadata with supplied or unknown attribution.
 firstHumanUseAtMs records qualified first use separately from creation attribution.
+Handoff cards show task and profile/session context, omitting empty identity fields.
+New remote-view tasks require --service-name, --agent-name, --task-name and --origin-kind.
+MCP browser_open requires serviceName, agentName and taskName; origin is recorded as agent.
+Supply service-name, agent-name and task-name at creation; later sharing does not
+replace original provenance. Human identity is not inferred from the requester.
 Native human handoffs prepare observation before the operator opens the link.
 An exact producer missing-context read refreshes observation under current
 assignment checks without changing the link, task or pending-human hold.
@@ -6646,10 +6651,10 @@ Global placement:
   saved browser state and is also copied into the remote-view open request.
 
 Examples:
-  agent-browser --json remote-view open https://www.facebook.com/ --view-stream-provider rdp_gateway
-  agent-browser remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway --job-timeout-ms 120000
-  agent-browser remote-view open https://messages.google.com/web/conversations --runtime-profile google-messages --browser-build stock_chrome --view-stream-provider rdp_gateway --manual-login-launch
-  agent-browser --session facebook-route remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --session-name last30days-facebook --view-stream-provider rdp_gateway
+  agent-browser --json remote-view open https://www.facebook.com/ --view-stream-provider rdp_gateway --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
+  agent-browser remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway --job-timeout-ms 120000 --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
+  agent-browser remote-view open https://messages.google.com/web/conversations --runtime-profile google-messages --browser-build stock_chrome --view-stream-provider rdp_gateway --manual-login-launch --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
+  agent-browser --session facebook-route remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --session-name last30days-facebook --view-stream-provider rdp_gateway --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
   agent-browser remote-view open linkedin.com --route-pool-entry-id guacamole-rdp-a --display :11 --dry-run
 "##
         }
@@ -6734,7 +6739,7 @@ Examples:
   agent-browser doctor remote-view
   agent-browser doctor remote-view --json
   agent-browser doctor remote-view --session google-messages --route-id guacamole:1 --json
-  agent-browser remote-view open https://www.linkedin.com/ --runtime-profile stealthcdp-default --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway
+  agent-browser remote-view open https://www.linkedin.com/ --runtime-profile stealthcdp-default --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
   agent-browser remote-view open linkedin.com --route-pool-entry-id pool-a --display :11 --dry-run
 "##
         }
@@ -7938,7 +7943,7 @@ Configuration:
   Failure records enter private failure-journal.pending custody before asynchronous projection. Unix writes sync the file and directory; daemon startup replays pending occurrences without request resubmission. pendingRecordCount reports pending projection. custody_failed reports persistence failure. Journal reads wait up to 250 ms for a concurrent writer, then report lock contention if it persists.
   Profile ACL admission denials report profile_access_denied / profile_access / no_effect and preserve profileAccessDecision. Follow the policy-inspection action using the same credential; do not change labels or retry to bypass access. Join pre-dispatch request IDs to the failure journal; no job exists.
   Child authority denials report profile_access / child_admission / no_effect with the exact profile_child_* cause. Follow recommendedAction using your own handle or connection; never change identity labels to borrow a peer's tab.
-  The dashboard uses GET /api/service/status?projection=dashboard-summary for a bounded, non-exhaustive view. Ordinary status remains complete. Failure readback reports delivery pressure and delivery failures; queued writes backpressure instead of silently dropping accepted records.
+  The dashboard uses GET /api/service/status?projection=dashboard-summary for a bounded, non-exhaustive view. Lifecycle inventory and reconciliation receipts are omitted with counts and a full-status detail route; health and resource totals remain. Ordinary status remains complete. Failure readback reports delivery pressure and delivery failures; queued writes backpressure instead of silently dropping accepted records.
 
   Runtime profiles can also be declared in config:
     {{
