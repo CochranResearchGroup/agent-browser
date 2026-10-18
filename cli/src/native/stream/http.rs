@@ -6184,7 +6184,7 @@ mod tests {
             "serviceName":"agent-browser-install",
             "agentName":"codex",
             "taskName":"candidate-presentation",
-            "params":{"url":"about:blank","viewStreamProvider":"rdp_gateway"}
+            "params":{"url":"about:blank","viewStreamProvider":"rdp_gateway","originKind":"agent"}
         }"##;
 
         let command = service_request_command_with_state_and_authority(

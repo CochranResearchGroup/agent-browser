@@ -87,6 +87,7 @@
     "test:native-window-inventory": "node --no-warnings --experimental-strip-types scripts/test-native-window-inventory.ts",
     "test:native-browser-windows": "node scripts/test-native-browser-windows.cjs",
     "test:native-handoff-policy-refresh": "node scripts/test-native-handoff-policy-refresh.cjs",
+    "test:native-task-selection": "node scripts/test-native-task-selection.cjs",
     "test:native-handoff-context": "node scripts/test-native-handoff-context.cjs",
     "test:dashboard-trace": "node --no-warnings --experimental-strip-types scripts/test-dashboard-service-trace.js",
     "test:cross-seam-interlocks": "node --no-warnings --experimental-strip-types scripts/test-cross-seam-interlocks.js",

@@ -27,6 +27,24 @@ fn append_external_sessions(
     }
 }
 
+/// Resolve one owned session without probing unrelated browsers or extensions.
+/// The published port is usable only while its existing runtime owner is alive.
+pub(super) fn owned_session_port(session: &str) -> Option<u16> {
+    if session.is_empty() || session == "." || session == ".." || session.contains(['/', '\\']) {
+        return None;
+    }
+    let dir = get_socket_dir();
+    if !session_runtime_process_is_alive(&dir, session) {
+        return None;
+    }
+    std::fs::read_to_string(dir.join(format!("{session}.stream")))
+        .ok()?
+        .trim()
+        .parse::<u16>()
+        .ok()
+        .filter(|port| *port > 0)
+}
+
 pub(super) fn discover_sessions() -> String {
     let dir = get_socket_dir();
     let mut sessions = Vec::new();

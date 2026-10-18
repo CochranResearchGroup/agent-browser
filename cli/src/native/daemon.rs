@@ -684,6 +684,34 @@ impl RuntimeHostRouter {
     }
     async fn try_handle_browser_session_handoff(&self, command: Value) -> Option<Value> {
         let id = command.get("id").cloned().unwrap_or(Value::Null);
+        if super::browser_session_host::existing_native_task_handoff(&command) {
+            let mut focus = command.clone();
+            focus["action"] = serde_json::json!("view_focus");
+            let result = async {
+                // Use the existing operator display queue and recheck its proof
+                // after waiting, before taking shared browser ownership.
+                let _selection =
+                    super::desktop_control_coordinator::begin_service_operator_selection(&focus)
+                        .await?;
+                let name = command["sessionName"]
+                    .as_str()
+                    .ok_or("browser_session_field_missing:sessionName")?
+                    .to_owned();
+                let response = super::browser_session_host::execute_shared_remote_view_open(
+                    self.browser_sessions.clone(),
+                    name,
+                    command,
+                )
+                .await?
+                .ok_or("browser_session_managed_open_not_selected")?;
+                super::remote_view::open::managed_remote_view_open_result(response)
+            }
+            .await;
+            return Some(match result {
+                Ok(data) => serde_json::json!({"id":id,"success":true,"data":data}),
+                Err(error) => serde_json::json!({"id":id,"success":false,"error":error}),
+            });
+        }
         match super::browser_session_host::resolve_shared_handoff_command(
             self.browser_sessions.clone(),
             command,
@@ -1200,7 +1228,12 @@ async fn handle_connection<S>(
                         &lane_session,
                     );
                 }
-                if action.as_deref() == Some("service_remote_view_handoff_resolve") {
+                if action.as_deref() == Some("service_remote_view_handoff_resolve")
+                    || super::browser_session_host::existing_native_task_handoff(&cmd)
+                {
+                    if let Some(ref tx) = idle_reset_tx {
+                        let _ = tx.try_send(());
+                    }
                     if let Some(response) =
                         router.try_handle_browser_session_handoff(cmd.clone()).await
                     {
@@ -1521,6 +1554,110 @@ mod tests {
         cleanup_owned_auth_token(&root, "runtime-host", "retiring-token", true);
         assert_eq!(fs::read(&token_path).unwrap(), [0xff]);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn existing_native_task_selection_does_not_create_a_legacy_lane_or_job() {
+        let guard = crate::test_utils::EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_RUNTIME_HOST",
+            "AGENT_BROWSER_SOCKET_DIR",
+            "AGENT_BROWSER_SESSION_SUPERVISOR_ROOT",
+        ]);
+        let home =
+            std::env::temp_dir().join(format!("ab-native-selection-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set(
+            "AGENT_BROWSER_HOME",
+            home.join("agent-home").to_str().unwrap(),
+        );
+        guard.set("AGENT_BROWSER_SOCKET_DIR", home.to_str().unwrap());
+        guard.set("AGENT_BROWSER_RUNTIME_HOST", "1");
+        guard.set(
+            "AGENT_BROWSER_SESSION_SUPERVISOR_ROOT",
+            home.join("supervisor").to_str().unwrap(),
+        );
+        let router = RuntimeHostRouter::new(
+            home.clone(),
+            "dashboard",
+            None,
+            None,
+            None,
+            RuntimeHostWorkerOptions {
+                service_reconcile_interval_ms: None,
+                service_job_timeout_ms: None,
+                service_monitor_interval_ms: None,
+            },
+        )
+        .unwrap();
+        // Warm immutable executable identity outside the request, as installed
+        // processes do. The diagnostic executable can be much larger.
+        let _ = super::super::service_failure_journal::ServiceFailureRecord::new(
+            super::super::service_failure_journal::ServiceFailureCategory::ServiceAction,
+            "p248_fixture",
+            "setup",
+            "identity_preparation",
+            "synthetic fixture identity",
+        );
+        let (mut client, server) = tokio::io::duplex(8192);
+        let server_router = router.clone();
+        let task = tokio::spawn(async move {
+            handle_connection(
+                server,
+                server_router,
+                "dashboard",
+                None,
+                None,
+                Arc::new(Notify::new()),
+                Arc::new("fixture-auth".into()),
+            )
+            .await;
+        });
+        let command = serde_json::json!({"id":"existing-task-selection", "action":"remote_view_open",
+            "browserId":"browser:owned", "sessionName":"selected-owner", "targetId":"owned-tab",
+            "runtimeProfile":"profile-owned", "operatorFocus":true,
+            "serviceName":"agent-browser-dashboard", "agentName":"operator", "taskName":"Select native browser task",
+            "operatorFocusProofToken":"invalid-proof", "_agentBrowserAuthToken":"fixture-auth"});
+        let command = crate::runtime_host::attach_lane(command, "selected-owner");
+        client
+            .write_all(format!("{command}\n").as_bytes())
+            .await
+            .unwrap();
+        let mut response = String::new();
+        let mut reader = BufReader::new(client);
+        let read =
+            tokio::time::timeout(Duration::from_secs(10), reader.read_line(&mut response)).await;
+        drop(reader);
+        task.await.unwrap();
+        let created_lane = router.lanes.get("selected-owner").is_some();
+        let created_stream = home.join("selected-owner.stream").exists();
+        let jobs = LockedServiceStateRepository::default_json()
+            .unwrap()
+            .load_snapshot()
+            .unwrap()
+            .jobs;
+        router.shutdown().await;
+        fs::remove_dir_all(&home).unwrap();
+        read.expect("existing task request must return").unwrap();
+        assert!(
+            !created_lane && !created_stream,
+            "selecting an owned tab must not prepare a legacy launch/HTTP lane"
+        );
+        assert!(
+            !jobs.contains_key("existing-task-selection"),
+            "an operator selection must not enqueue an unrelated launch job"
+        );
+        let response: Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(response["success"], false);
+        assert!(
+            response["error"]
+                .as_str()
+                .unwrap()
+                .starts_with("operator_focus_"),
+            "the direct owner must still refuse an invalid signed focus: {response}"
+        );
     }
 
     #[tokio::test]

@@ -36,7 +36,7 @@ use super::app_intelligence::{
 };
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
 use super::dashboard_auth;
-use super::discovery::discover_sessions;
+use super::discovery::{discover_sessions, owned_session_port};
 use super::foreign_cdp_control;
 use super::http::{
     ensure_service_daemon_session, load_service_state, relay_command_to_daemon,
@@ -1069,8 +1069,17 @@ async fn handle_service_api_request(
             let session_name =
                 service_request_relay_session(DASHBOARD_SERVICE_BACKEND_SESSION, body, &command);
             if service_request_requires_daemon_relay(&command) {
-                if let Err(err) = ensure_service_daemon_session(&session_name, Some(&command)).await
-                {
+                // The shared runtime already owns an existing tab. A missing
+                // legacy HTTP lane is not evidence that its owner needs launch.
+                let preparation =
+                    if crate::native::browser_session_host::existing_native_task_handoff(&command)
+                        && crate::connection::daemon_ready(&session_name)
+                    {
+                        Ok(())
+                    } else {
+                        ensure_service_daemon_session(&session_name, Some(&command)).await
+                    };
+                if let Err(err) = preparation {
                     record_durable_handoff_gateway_failure(
                         &command,
                         &session_name,
@@ -1297,6 +1306,7 @@ async fn handle_service_api_request(
 
 fn service_request_requires_daemon_relay(command: &Value) -> bool {
     command.get("action").and_then(Value::as_str) == Some("service_remote_view_handoff_resolve")
+        || crate::native::browser_session_host::existing_native_task_handoff(command)
 }
 
 fn record_durable_handoff_gateway_failure(
@@ -1317,7 +1327,12 @@ fn record_durable_handoff_gateway_failure(
             code,
             summary,
         )
-        .with_action("service_remote_view_handoff_resolve")
+        .with_action(
+            command
+                .get("action")
+                .and_then(Value::as_str)
+                .unwrap_or("service_remote_view_handoff_resolve"),
+        )
         .with_references(ServiceFailureReferences {
             runtime_lane_id: Some(DASHBOARD_SERVICE_BACKEND_SESSION.to_string()),
             session_id: Some(session_name.to_string()),
@@ -1400,8 +1415,7 @@ fn configured_dashboard_service_backend_port(value: Option<&str>) -> Option<u16>
 }
 
 fn session_port_for_name(session_name: &str) -> Option<u16> {
-    let sessions: Value = serde_json::from_str(&discover_sessions()).ok()?;
-    session_port_from_sessions(sessions.as_array()?, session_name)
+    owned_session_port(session_name)
 }
 
 fn dashboard_service_backend_port_from_sessions(sessions: &[Value]) -> Option<u16> {
@@ -1416,15 +1430,6 @@ fn dashboard_service_backend_port_from_sessions(sessions: &[Value]) -> Option<u1
                 .iter()
                 .find(|session| session.get("session").and_then(Value::as_str) == Some("default"))
         })
-        .and_then(|session| session.get("port"))
-        .and_then(Value::as_u64)
-        .and_then(|port| u16::try_from(port).ok())
-}
-
-fn session_port_from_sessions(sessions: &[Value], session_name: &str) -> Option<u16> {
-    sessions
-        .iter()
-        .find(|session| session.get("session").and_then(Value::as_str) == Some(session_name))
         .and_then(|session| session.get("port"))
         .and_then(Value::as_u64)
         .and_then(|port| u16::try_from(port).ok())
@@ -5926,17 +5931,87 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
-    fn dashboard_service_request_target_session_finds_session_port() {
-        let sessions = vec![
-            json!({ "session": "default", "port": 1111 }),
-            json!({ "session": "odollo-carrier-ups", "port": 2222 }),
-        ];
-
-        assert_eq!(
-            session_port_from_sessions(&sessions, "odollo-carrier-ups"),
-            Some(2222)
+    fn selected_owner_port_lookup_does_not_wait_for_unrelated_discovery() {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        struct Scratch(std::path::PathBuf);
+        impl Scratch {
+            fn path(&self) -> &std::path::Path {
+                &self.0
+            }
+        }
+        impl Drop for Scratch {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let root = Scratch(
+            std::env::temp_dir().join(format!("p248-owner-route-{}", uuid::Uuid::new_v4())),
         );
+        std::fs::create_dir_all(root.path()).unwrap();
+        let _environment = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            "AGENT_BROWSER_RUNTIME_HOST",
+            "AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY",
+        ]);
+        std::env::set_var("AGENT_BROWSER_SOCKET_DIR", root.path());
+        std::env::set_var("AGENT_BROWSER_RUNTIME_HOST", "0");
+        std::env::set_var("AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY", "disabled");
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        for (name, value) in [
+            ("selected.stream", port.to_string()),
+            ("selected.pid", std::process::id().to_string()),
+            ("unrelated.stream", "12345".into()),
+            ("unrelated.pid", std::process::id().to_string()),
+        ] {
+            std::fs::write(root.path().join(name), value).unwrap();
+        }
+        let extension = root.path().join("unrelated-extension");
+        std::fs::create_dir(&extension).unwrap();
+        let fifo_path = extension.join("manifest.json");
+        let fifo_name = std::ffi::CString::new(fifo_path.to_str().unwrap()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(fifo_name.as_ptr(), 0o600) }, 0);
+        // Keep a writer present: broad discovery blocks reading this unrelated
+        // extension until the test releases it. The selected route needs none
+        // of its content, regardless of how slow or unavailable it is.
+        let mut release = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(&fifo_path)
+            .unwrap();
+        std::fs::write(
+            root.path().join("unrelated.extensions"),
+            extension.to_str().unwrap(),
+        )
+        .unwrap();
+        let (send, receive) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            send.send(session_port_for_name("selected")).unwrap();
+        });
+        let result = receive.recv_timeout(Duration::from_secs(1));
+        release.write_all(b"{}").unwrap();
+        drop(release);
+        worker.join().unwrap();
+        assert_eq!(
+            result.unwrap_or(None),
+            Some(port),
+            "selected owner lookup waited for unrelated session discovery"
+        );
+        assert_eq!(session_port_for_name("missing"), None);
+        for invalid in ["", ".", "..", "../selected", "x/selected", "x\\selected"] {
+            assert_eq!(session_port_for_name(invalid), None);
+        }
+        for invalid_port in ["0", "65536", "invalid"] {
+            std::fs::write(root.path().join("selected.stream"), invalid_port).unwrap();
+            assert_eq!(session_port_for_name("selected"), None);
+        }
+        std::fs::write(root.path().join("selected.stream"), port.to_string()).unwrap();
+        std::fs::remove_file(root.path().join("selected.pid")).unwrap();
+        assert_eq!(session_port_for_name("selected"), None);
     }
 
     #[test]
@@ -6506,6 +6581,23 @@ mod tests {
         assert_eq!(value["success"], false);
         assert_eq!(value["code"], "invalid_backend_payload");
         assert_eq!(value["details"]["stage"], "response");
+    }
+
+    #[test]
+    fn selected_task_owner_relay_excludes_navigation_and_unsigned_requests() {
+        let selection = json!({"action":"remote_view_open", "operatorFocus":true,
+            "browserId":"browser:owned", "sessionName":"owned-session", "targetId":"target-owned"});
+        assert!(service_request_requires_daemon_relay(&selection));
+        for (field, value) in [
+            ("url", json!("about:blank")),
+            ("dryRun", json!(true)),
+            ("operatorFocus", json!(false)),
+            ("targetId", json!("")),
+        ] {
+            let mut acquisition = selection.clone();
+            acquisition[field] = value;
+            assert!(!service_request_requires_daemon_relay(&acquisition));
+        }
     }
 
     #[test]

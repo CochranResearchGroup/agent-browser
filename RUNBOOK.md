@@ -12,6 +12,10 @@ existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 
 ## Current execution
 
+### 2026-10-18 selected desktop cold-open repair
+
+[P248](docs/dev/plans/0248-2026-10-18-dashboard-cold-open.md), #312, now has a measured direct-owner repair: clean development source `3fb7afa7a`, binary `154434c8234c`, reaches actual Native pixels in 4762 ms and 3722 ms on a retained-task page repeat. First handoff is 1303 ms; direct follow-up 1068 ms. The earlier 9875 ms result remains failed evidence. The [acceptance note](docs/dev/notes/0248-2026-10-18-dashboard-cold-open.md) binds same-process and no-extra-lane/job proof. Production-shaped qualification and activation remain pending; no production change is claimed from CI bytes.
+
 ### 2026-10-18 fast rail and native iframe installed
 
 [PR309](https://github.com/CochranResearchGroup/agent-browser/pull/309) and

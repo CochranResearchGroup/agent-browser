@@ -375,6 +375,42 @@ pub(crate) fn rolled_back_outcome(
         compatibility_error: failure.compatibility_error,
     })
 }
+/// Project the same managed-owner result for direct existing-tab selection and
+/// queued acquisition. An owner refusal never becomes an embeddable success.
+pub(crate) fn managed_remote_view_open_result(response: Value) -> Result<Value, String> {
+    if response.get("success").and_then(Value::as_bool) != Some(true) {
+        return Err(response
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("browser_session_navigation_failed")
+            .to_string());
+    }
+    let identity = response
+        .get("browserSession")
+        .ok_or("browser_session_open_identity_missing")?;
+    let mut result = identity.clone();
+    result["status"] = json!("converging");
+    result["operatorVisible"] = json!({
+        "state": "pending",
+        "reason": "operator_route_join_pending",
+    });
+    if response["operatorVisible"]["state"] == "ready" {
+        result["status"] = json!("opened");
+        result["operatorVisible"] = response["operatorVisible"].clone();
+    }
+    result["navigation"] = response.get("data").cloned().unwrap_or(Value::Null);
+    if let Some(proof) = response.get("browserBuildProof") {
+        result["browserBuildProof"] = proof.clone();
+    }
+    if let Some(presentation) = response.get("presentationState") {
+        result["presentationState"] = presentation.clone();
+    }
+    if let Some(error) = response.get("presentationError") {
+        result["operatorVisible"]["reason"] = error.clone();
+    }
+    Ok(result)
+}
+
 pub(crate) async fn handle_remote_view_open(
     cmd: &Value,
     state: &mut DaemonState,
@@ -400,37 +436,7 @@ pub(crate) async fn handle_remote_view_open(
         )
         .await?
         .ok_or("browser_session_managed_open_not_selected")?;
-        if response.get("success").and_then(Value::as_bool) != Some(true) {
-            return Err(response
-                .get("error")
-                .and_then(Value::as_str)
-                .unwrap_or("browser_session_navigation_failed")
-                .to_string());
-        }
-        let identity = response
-            .get("browserSession")
-            .ok_or("browser_session_open_identity_missing")?;
-        let mut result = identity.clone();
-        result["status"] = json!("converging");
-        result["operatorVisible"] = json!({
-            "state": "pending",
-            "reason": "operator_route_join_pending",
-        });
-        if response["operatorVisible"]["state"] == "ready" {
-            result["status"] = json!("opened");
-            result["operatorVisible"] = response["operatorVisible"].clone();
-        }
-        result["navigation"] = response.get("data").cloned().unwrap_or(Value::Null);
-        if let Some(proof) = response.get("browserBuildProof") {
-            result["browserBuildProof"] = proof.clone();
-        }
-        if let Some(presentation) = response.get("presentationState") {
-            result["presentationState"] = presentation.clone();
-        }
-        if let Some(error) = response.get("presentationError") {
-            result["operatorVisible"]["reason"] = error.clone();
-        }
-        return Ok(result);
+        return managed_remote_view_open_result(response);
     }
     let invocation =
         RouteBoundOpenInvocation::direct(RouteBoundDirectOpenRequest::from_compatibility_command(

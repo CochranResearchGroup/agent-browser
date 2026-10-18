@@ -161,10 +161,13 @@ impl<
     fn qualify_idle_viewers(
         &mut self,
         browsers: &[ManagedBrowserInstance],
-        guard: Box<dyn BrowserIdleRetirementGuard>,
+        acquire_guard: impl FnOnce(
+            &mut E,
+        )
+            -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String>,
     ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
         if self.pool.is_none() || browsers.is_empty() {
-            return Ok(Some(guard));
+            return acquire_guard(&mut self.effects);
         }
         let expected = self
             .expected
@@ -215,6 +218,33 @@ impl<
                 original_identities.insert(browser.id.clone(), identity);
             }
         }
+        // Provider reads can wait on network or its own desktop census. They
+        // grant no effect authority and must not exclude foreground Service
+        // State requests. Recheck current local authority after those reads;
+        // native prepare still CAS-checks the captured viewer/revision fence.
+        let mut observations = BTreeMap::new();
+        for assignment in groups.values() {
+            if self.retirements.values().any(|record| {
+                !record.is_terminal() && record.intent.provider.assignment == *assignment
+            }) {
+                continue;
+            }
+            let idle = self
+                .adapter
+                .observe_idle(assignment)
+                .map_err(|_| "browser_session_idle_viewer_observation_unavailable")?;
+            if idle.viewer_active {
+                return Ok(None);
+            }
+            let admission = self
+                .adapter
+                .read_idle_retirement(assignment)
+                .map_err(|_| "browser_session_idle_readback_required")?;
+            observations.insert(assignment.assignment_id.clone(), (idle, admission));
+        }
+        let Some(guard) = acquire_guard(&mut self.effects)? else {
+            return Ok(None);
+        };
         for assignment in groups.into_values() {
             let existing = self
                 .retirements
@@ -229,17 +259,9 @@ impl<
                 }
                 record
             } else {
-                let idle = self
-                    .adapter
-                    .observe_idle(&assignment)
-                    .map_err(|_| "browser_session_idle_viewer_observation_unavailable")?;
-                if idle.viewer_active {
-                    return Ok(None);
-                }
-                let admission = self
-                    .adapter
-                    .read_idle_retirement(&assignment)
-                    .map_err(|_| "browser_session_idle_readback_required")?;
+                let (idle, admission) = observations
+                    .remove(&assignment.assignment_id)
+                    .ok_or("browser_session_idle_readback_required")?;
                 let id = (self.next_intent_id)();
                 let provider =
                     RemoteViewIdleRetirementIntent::new(&assignment, &idle, &admission, &id)
@@ -1154,10 +1176,9 @@ impl<
         browsers: &[ManagedBrowserInstance],
     ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
         self.require_operation()?;
-        let Some(guard) = self.effects.acquire_idle_retirement_guard(browsers)? else {
-            return Ok(None);
-        };
-        self.qualify_idle_viewers(browsers, guard)
+        self.qualify_idle_viewers(browsers, |effects| {
+            effects.acquire_idle_retirement_guard(browsers)
+        })
     }
     fn acquire_disposable_retirement_guard(
         &mut self,
@@ -1165,13 +1186,9 @@ impl<
         browsers: &[ManagedBrowserInstance],
     ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
         self.require_operation()?;
-        let Some(guard) = self
-            .effects
-            .acquire_disposable_retirement_guard(allocations, browsers)?
-        else {
-            return Ok(None);
-        };
-        self.qualify_idle_viewers(browsers, guard)
+        self.qualify_idle_viewers(browsers, |effects| {
+            effects.acquire_disposable_retirement_guard(allocations, browsers)
+        })
     }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         self.require_operation()?;

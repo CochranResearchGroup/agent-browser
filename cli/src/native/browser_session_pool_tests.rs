@@ -297,6 +297,36 @@ impl RemoteViewApplicationTransport for PoolTransport {
                 Ok(receipt)
             }
             RemoteViewApplicationRequest::ObserveIdle { assignment_id, .. } => {
+                if self.root.join("check-retirement-read-exclusion").exists() {
+                    use super::super::service_store::{
+                        LockedServiceStateRepository, ServiceStateRepository,
+                    };
+                    let repository = LockedServiceStateRepository::default_json()
+                        .unwrap()
+                        .with_lock_timeout(std::time::Duration::from_millis(30));
+                    repository.load_snapshot().expect(
+                        "native observation must not hold foreground Service State exclusion",
+                    );
+                    if let Ok(browser_id) = std::fs::read_to_string(
+                        self.root.join("publish-controller-during-idle-read"),
+                    ) {
+                        repository
+                            .mutate(|state| {
+                                state.viewer_leases.insert(
+                                    "late-current-controller".into(),
+                                    agent_browser_service_model::ViewerLease {
+                                        id: "late-current-controller".into(),
+                                        browser_id: Some(browser_id.clone()),
+                                        viewer_role: "controller".into(),
+                                        state: "active".into(),
+                                        ..Default::default()
+                                    },
+                                );
+                                Ok(())
+                            })
+                            .unwrap();
+                    }
+                }
                 provider.operations.push("observe_idle");
                 let assignment = provider
                     .assignments
@@ -6010,6 +6040,11 @@ fn automatic_retirement_publishes_custody_before_native_completion() {
         "action":"navigate","url":"https://synthetic.example/","profileId":"profile-a","activityAtMs":100
     })).unwrap().unwrap();
     let browser_id = opened["browserSession"]["browserId"].as_str().unwrap();
+    std::fs::write(
+        fixture.root.join("check-retirement-read-exclusion"),
+        "check",
+    )
+    .unwrap();
     assert_eq!(
         consumer.reap(300_100).unwrap().closed_browser_ids,
         vec![browser_id]
@@ -6047,6 +6082,70 @@ fn automatic_retirement_publishes_custody_before_native_completion() {
         1
     );
     assert_eq!(calls.get(), 1, "retirement must not launch a browser");
+}
+
+#[test]
+fn automatic_retirement_rechecks_current_authority_after_unlocked_provider_read() {
+    use super::super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+    let repository = LockedServiceStateRepository::default_json().unwrap();
+    let prior = repository.load_snapshot().unwrap();
+    struct Restore(agent_browser_service_model::ServiceState);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            use super::super::service_store::{
+                LockedServiceStateRepository, ServiceStateRepository,
+            };
+            let prior = self.0.clone();
+            LockedServiceStateRepository::default_json()
+                .unwrap()
+                .mutate(|state| {
+                    let revision = state.state_revision;
+                    *state = prior.clone();
+                    state.state_revision = revision;
+                    Ok(())
+                })
+                .unwrap();
+        }
+    }
+    let _restore = Restore(prior);
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host_mode(&fixture, provider.clone(), calls, Mode::IdleRecovery);
+    let opened = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    std::fs::write(
+        fixture.root.join("check-retirement-read-exclusion"),
+        "check",
+    )
+    .unwrap();
+    std::fs::write(
+        fixture.root.join("publish-controller-during-idle-read"),
+        &opened.browser_id,
+    )
+    .unwrap();
+    assert!(
+        consumer
+            .reap(300_100)
+            .unwrap()
+            .closed_browser_ids
+            .is_empty(),
+        "newly published controller must veto retirement"
+    );
+    assert!(provider.borrow().operations.contains(&"observe_idle"));
+    assert!(
+        !provider
+            .borrow()
+            .operations
+            .contains(&"prepare_idle_retirement"),
+        "no native mutation may precede current authority admission"
+    );
+    assert!(fixture
+        .store(false)
+        .idle_retirement_records()
+        .unwrap()
+        .is_empty());
 }
 
 #[test]

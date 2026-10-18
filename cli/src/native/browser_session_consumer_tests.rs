@@ -314,7 +314,30 @@ impl Process {
         Ok(())
     }
 }
+struct TestRetirementGuard;
+impl BrowserIdleRetirementGuard for TestRetirementGuard {}
+
 impl BrowserSessionEffects for Process {
+    fn acquire_idle_retirement_guard(
+        &mut self,
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        if !self.root.join("check-retirement-read-exclusion").exists() {
+            return Ok(Some(Box::new(TestRetirementGuard)));
+        }
+        let repository = super::service_store::LockedServiceStateRepository::default_json()?;
+        let guard = repository.hold_snapshot_for_effect()?;
+        for browser in browsers {
+            if !super::service_resources::permits_managed_browser_idle_retirement(
+                &guard.state,
+                browser,
+                &chrono::Utc::now().to_rfc3339(),
+            )? {
+                return Ok(None);
+            }
+        }
+        Ok(Some(Box::new(guard)))
+    }
     fn reconcile_profile_browser(
         &mut self,
         _profile: &BrowserProfileCatalogEntry,
