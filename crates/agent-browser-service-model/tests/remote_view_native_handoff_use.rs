@@ -325,3 +325,40 @@ fn native_registration_lost_reply_is_not_reposted_or_upgraded_to_use() {
         .is_err());
     assert_eq!(requests.borrow().len(), 2);
 }
+
+#[test]
+fn missing_native_context_refreshes_only_after_exact_assignment_readback() {
+    use agent_browser_service_model::RemoteViewNativeHandoffUseState;
+    let fixture = fixture();
+    let assignment = serde_json::from_value(fixture["assignment"].clone()).unwrap();
+    let registered = serde_json::from_value(registration()).unwrap();
+    for stale in [false, true] {
+        let mut after = fixture["assignmentObservation"].clone();
+        if stale {
+            after["target"]["viewingGeneration"] = json!(999);
+        }
+        let requests = Rc::new(RefCell::new(Vec::new()));
+        let mut adapter = RemoteViewApplicationAdapter::new(
+            "agent-browser".into(),
+            Transport {
+                replies: VecDeque::from([
+                    Ok(fixture["assignmentObservation"].clone()),
+                    Err(RemoteViewApplicationTransportError::NativeObservationMissing),
+                    Ok(after),
+                ]),
+                requests: requests.clone(),
+            },
+        )
+        .unwrap();
+        let read = adapter.observe_native_handoff_use_state(&assignment, &registered);
+        if stale {
+            assert!(read.is_err());
+        } else {
+            let read = read.expect("explicitly missing context must allow fresh preparation");
+            assert_eq!(read.state, RemoteViewNativeHandoffUseState::Expired);
+            assert_eq!(read.observation, registered);
+            assert!(read.observation.used.is_none());
+        }
+        assert_eq!(requests.borrow().len(), 3);
+    }
+}
