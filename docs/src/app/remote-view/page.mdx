@@ -692,6 +692,8 @@ origin. Deploy that origin's native viewer paths, assets and WebSocket routes
 through the existing Remote View gateway and its authentication. A separate
 Remote View hostname alone cannot satisfy the native workspace framing policy.
 
+After a service restart, selecting an existing live task reconnects its recorded browser without changing its process, tab, profile or document. A browser that cannot be verified remains unavailable; selection does not launch a replacement.
+
 The native gateway rejects prefetch and non-document continuation requests,
 authenticates the operator, and requests addressed-task preparation or recovery
 from the browser owner before redirecting to the current native viewer. This

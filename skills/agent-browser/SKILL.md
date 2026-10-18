@@ -170,6 +170,8 @@ Use `browser_discover` for advanced MCP metadata.
 
 ### Dashboard summary diagnostics
 
+After a service restart, selecting an existing live task reconnects its recorded browser without changing its process, tab, profile or document. A browser that cannot be verified remains unavailable; selection does not launch a replacement.
+
 The default native workspace uses `GET /api/service/status?projection=workspace`
 for redacted owner inventory with bounded live browser/window observations. It
 does not run launch-admission scans, storage checks, service reconciliation or
