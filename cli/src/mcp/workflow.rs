@@ -15,7 +15,7 @@ pub(super) fn tools() -> Vec<Value> {
     vec![
         json!({
             "name": "browser_open", "title": "Open a browser task",
-            "description": "Create or reuse a persistent, existing or disposable profile and open one task tab. Reuse taskKey to replay without another tab. Use the returned taskId for subsequent page actions and scoped close.",
+            "description": "Create or reuse a persistent, existing or disposable profile and open one task tab. Reuse taskKey to replay without another tab. Supply serviceName, agentName and a concrete taskName; origin is recorded as agent. Use the returned taskId for subsequent page actions and scoped close.",
             "inputSchema": {"type":"object", "additionalProperties":false,
                 "properties": {
                     "profile":{"type":"string","description":"Named profile for persistent or existing mode."},
@@ -23,7 +23,7 @@ pub(super) fn tools() -> Vec<Value> {
                     "taskKey":{"type":"string","description":"Stable task key. Distinct keys receive independent tabs; reuse the key to continue this task."},
                 "url":{"type":"string","description":"Initial URL for a new task. Replaying a task returns its current page without navigating again."},
                     "serviceName":{"type":"string"},"agentName":{"type":"string"},"taskName":{"type":"string"}
-                }, "required":["taskKey","url"]}
+                }, "required":["taskKey","url","serviceName","agentName","taskName"]}
         }),
         json!({
             "name":"browser_close", "title":"Close a browser task",
@@ -146,9 +146,9 @@ pub(super) fn open(
     if mode != "disposable" && profile.is_none() {
         return Err(issue("browser_profile_name_required"));
     }
-    let service = optional_string_argument(arguments, "serviceName")?.unwrap_or("mcp");
-    let agent = optional_string_argument(arguments, "agentName")?.unwrap_or("local-agent");
-    let task = optional_string_argument(arguments, "taskName")?.unwrap_or(task_key);
+    let service = required_string_argument(arguments, "serviceName")?;
+    let agent = required_string_argument(arguments, "agentName")?;
+    let task = required_string_argument(arguments, "taskName")?;
     let session_name = format!(
         "workflow-{}",
         hex::encode(Sha256::digest(
@@ -161,7 +161,7 @@ pub(super) fn open(
     }
     let mut command = json!({"id":uuid::Uuid::new_v4().to_string(),
         "action":"browser_session_open","sessionName":session_name,
-        "url":url,"serviceName":service,"agentName":agent,"taskName":task});
+        "url":url,"serviceName":service,"agentName":agent,"taskName":task,"originKind":"agent"});
     if let Some(profile_id) = profile {
         let mut state = load_default_service_state_snapshot().map_err(issue)?;
         state.overlay_configured_entities(configured.clone());
@@ -426,4 +426,32 @@ pub(super) fn tab(arguments: &Value, transport_session: &str) -> Result<Value, J
         payload,
         false,
     ))
+}
+
+#[cfg(test)]
+mod context_tests {
+    use super::*;
+
+    #[test]
+    fn handoff_creation_context_mcp_rejects_before_profile_or_transport_effects() {
+        let complete = json!({"taskKey":"example","url":"https://example.test/",
+            "profile":"nonexistent-test-profile","serviceName":"codex",
+            "agentName":"Codex","taskName":"Open accounting"});
+        for field in ["serviceName", "agentName", "taskName"] {
+            let mut missing = complete.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            let error = open(&missing, "unused", &ServiceState::default()).unwrap_err();
+            assert!(error.data.as_ref().unwrap()["message"]
+                .as_str()
+                .unwrap()
+                .contains(field));
+            missing[field] = json!("   ");
+            assert!(open(&missing, "unused", &ServiceState::default()).is_err());
+            let schema = tools().remove(0);
+            assert!(schema["inputSchema"]["required"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(field)));
+        }
+    }
 }

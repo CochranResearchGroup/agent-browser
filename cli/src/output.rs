@@ -6363,6 +6363,8 @@ Software callers set handoffOperation=set_tab_lifetime with tabInactivityMs.
 Software inspect exposes original taskMetadata with supplied or unknown attribution.
 firstHumanUseAtMs records qualified first use separately from creation attribution.
 Handoff cards show task and profile/session context, omitting empty identity fields.
+New remote-view tasks require --service-name, --agent-name, --task-name and --origin-kind.
+MCP browser_open requires serviceName, agentName and taskName; origin is recorded as agent.
 Supply service-name, agent-name and task-name at creation; later sharing does not
 replace original provenance. Human identity is not inferred from the requester.
 Native human handoffs prepare observation before the operator opens the link.
@@ -6649,10 +6651,10 @@ Global placement:
   saved browser state and is also copied into the remote-view open request.
 
 Examples:
-  agent-browser --json remote-view open https://www.facebook.com/ --view-stream-provider rdp_gateway
-  agent-browser remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway --job-timeout-ms 120000
-  agent-browser remote-view open https://messages.google.com/web/conversations --runtime-profile google-messages --browser-build stock_chrome --view-stream-provider rdp_gateway --manual-login-launch
-  agent-browser --session facebook-route remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --session-name last30days-facebook --view-stream-provider rdp_gateway
+  agent-browser --json remote-view open https://www.facebook.com/ --view-stream-provider rdp_gateway --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
+  agent-browser remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway --job-timeout-ms 120000 --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
+  agent-browser remote-view open https://messages.google.com/web/conversations --runtime-profile google-messages --browser-build stock_chrome --view-stream-provider rdp_gateway --manual-login-launch --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
+  agent-browser --session facebook-route remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --session-name last30days-facebook --view-stream-provider rdp_gateway --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
   agent-browser remote-view open linkedin.com --route-pool-entry-id guacamole-rdp-a --display :11 --dry-run
 "##
         }
@@ -6737,7 +6739,7 @@ Examples:
   agent-browser doctor remote-view
   agent-browser doctor remote-view --json
   agent-browser doctor remote-view --session google-messages --route-id guacamole:1 --json
-  agent-browser remote-view open https://www.linkedin.com/ --runtime-profile stealthcdp-default --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway
+  agent-browser remote-view open https://www.linkedin.com/ --runtime-profile stealthcdp-default --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
   agent-browser remote-view open linkedin.com --route-pool-entry-id pool-a --display :11 --dry-run
 "##
         }
