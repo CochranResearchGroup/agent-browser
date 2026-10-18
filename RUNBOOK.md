@@ -12,6 +12,18 @@ existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 
 ## Current execution
 
+### 2026-10-17 native handoff production repair
+
+[PR304](https://github.com/CochranResearchGroup/agent-browser/pull/304) repairs
+retained native handoff continuation after producer context reclamation. The
+[repair receipt](docs/dev/notes/2026-10-17-native-handoff-missing-context.md)
+records the exact red/green, callback configuration correction, sealed native
+qualification and accepted production generation
+`0.28.0-5ef19e8f3685-6ede46034fd7`. Install doctor and executable readbacks pass;
+the original failing owner continuation returns 200. The live browser and six
+observed task targets are preserved. Public authenticated frame/iframe acceptance
+is not claimed; wider summary latency remains open.
+
 ### 2026-10-17 UX301 combined dashboard upgrade
 
 [PR302](https://github.com/CochranResearchGroup/agent-browser/pull/302) is canonical.
