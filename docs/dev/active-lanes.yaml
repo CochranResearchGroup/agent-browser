@@ -10,7 +10,7 @@ lanes:
     work_items: [CochranResearchGroup/agent-browser#301]
     plan_state: IN_PROGRESS
     custody_state: ACTIVE_WORKTREE
-    pull_request: null
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/306
     integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/304
     dependencies: []
     overlaps: [P237, P240]
