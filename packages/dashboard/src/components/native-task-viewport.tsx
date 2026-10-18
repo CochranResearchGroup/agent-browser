@@ -18,32 +18,47 @@ type ViewState = { identity: string; status: "opening" | "opened" | "failed"; ur
 
 /** Native Remote View supplies the viewer and its authentication. This component
  * selects the exact owned task and embeds only its ready durable handoff.
- * A missing selected target preserves the requested identity and offers inventory refresh.
+ * Census expiry preserves only an already requested exact binding; stale metadata
+ * cannot authorize a new selection. Missing or absent bindings clear the viewer.
  * Known access recourse selects bounded guidance without exposing producer diagnostics. */
-export function NativeTaskViewport({ target, hasSelection, desktopUnavailable = false, presenceUnavailable = null, loading = false, onRefresh }: {
+export function NativeTaskViewport({ target, unverifiedTarget = null, hasSelection, desktopUnavailable = false, presenceUnavailable = null, loading = false, onRefresh }: {
   target: NativeTaskViewportTarget | null;
+  unverifiedTarget?: NativeTaskViewportTarget | null;
   hasSelection?: boolean;
   desktopUnavailable?: boolean;
   presenceUnavailable?: "absent" | "unknown" | null;
   loading?: boolean;
   onRefresh?: () => Promise<void>;
 }) {
-  const selectionMissing = !target && hasSelection === true;
-  const browserId = target?.browserId;
-  const sessionName = target?.sessionName;
-  const targetId = target?.targetId;
-  const displayAllocationId = target?.displayAllocationId;
+  const binding = target ?? unverifiedTarget;
+  const canRequest = target !== null;
+  const browserId = binding?.browserId;
+  const sessionName = binding?.sessionName;
+  const targetId = binding?.targetId;
+  const displayAllocationId = binding?.displayAllocationId;
   const identity = JSON.stringify([browserId, sessionName, targetId, displayAllocationId]);
   const [attempt, setAttempt] = useState(0);
   const [view, setView] = useState<ViewState | null>(null);
   const generation = useRef(0);
+  const requested = useRef<{ identity: string; attempt: number } | null>(null);
+  useEffect(() => () => {
+    generation.current += 1;
+    requested.current = null;
+  }, []);
 
   useEffect(() => {
-    const current = ++generation.current;
-    if (!browserId || !sessionName || !targetId || !displayAllocationId) {
+    if (!canRequest || !browserId || !sessionName || !targetId || !displayAllocationId) {
+      // The rail becoming unverified does not revoke Native authority or cancel
+      // a handoff already being verified. Its exact binding must still match.
+      if (unverifiedTarget && requested.current?.identity === identity) return;
+      generation.current += 1;
+      requested.current = null;
       setView(null);
       return;
     }
+    if (requested.current?.identity === identity && requested.current.attempt === attempt) return;
+    const current = ++generation.current;
+    requested.current = { identity, attempt };
     setView({ identity, status: "opening" });
     void queueWorkspaceFocusRequest(JSON.stringify(["native-desktop", displayAllocationId]), async () => {
       if (generation.current !== current) return;
@@ -73,12 +88,13 @@ export function NativeTaskViewport({ target, hasSelection, desktopUnavailable = 
         if (generation.current === current) setView({ identity, status: "failed", accessCheckRequired });
       }
     });
-    return () => { generation.current += 1; };
-  }, [browserId, sessionName, targetId, displayAllocationId, identity, attempt]);
+  }, [canRequest, browserId, sessionName, targetId, displayAllocationId, identity, attempt, unverifiedTarget]);
 
   const current = view?.identity === identity ? view : null;
+  const hasBinding = Boolean(target || (unverifiedTarget && current));
+  const selectionMissing = !hasBinding && hasSelection === true;
   return <section className="native-task-viewport" aria-label="Native desktop" data-native-task-state={selectionMissing ? loading ? "refreshing" : desktopUnavailable || presenceUnavailable ? "unavailable" : "missing" : current?.status ?? "unselected"}>
-    {!target ? selectionMissing ? <div role={loading ? "status" : "alert"} className="native-task-message">
+    {!hasBinding ? selectionMissing ? <div role={loading ? "status" : "alert"} className="native-task-message">
       <p>{loading ? "Refreshing selected tab…" : presenceUnavailable === "absent"
         ? "This task is not currently available. Its retained record does not represent a live browser tab."
         : presenceUnavailable === "unknown"
@@ -96,7 +112,7 @@ export function NativeTaskViewport({ target, hasSelection, desktopUnavailable = 
           <p>Open Remote View to sign in or check the desktop, then retry.</p>
           <a href={current.url} target="_blank" rel="noopener noreferrer">Open Remote View</a>
         </>}
-        <button type="button" aria-label="Retry native desktop" onClick={() => setAttempt(value => value + 1)}>Retry</button>
+        <button type="button" disabled={!canRequest} aria-label="Retry native desktop" onClick={() => setAttempt(value => value + 1)}>Retry</button>
       </div>
         : current?.status === "opened" && current.url ? <iframe
           title="Native Remote View desktop" src={current.url} allow="clipboard-read; clipboard-write; fullscreen"

@@ -14,7 +14,7 @@ existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 
 ### 2026-10-18 selected desktop cold-open repair
 
-[P248](docs/dev/plans/0248-2026-10-18-dashboard-cold-open.md), #312, now has a measured direct-owner repair: clean development source `3fb7afa7a`, binary `154434c8234c`, reaches actual Native pixels in 4762 ms and 3722 ms on a retained-task page repeat. First handoff is 1303 ms; direct follow-up 1068 ms. The earlier 9875 ms result remains failed evidence. The [acceptance note](docs/dev/notes/0248-2026-10-18-dashboard-cold-open.md) binds same-process and no-extra-lane/job proof. Production-shaped qualification and activation remain pending; no production change is claimed from CI bytes.
+[P248](docs/dev/plans/0248-2026-10-18-dashboard-cold-open.md), #312, has the PR313 direct-owner backend repair installed as production-shaped binary `d7e98494e92a`. Production first open is 4323 ms, but repeat is 8665 ms: an aging census tears down the viewer and repeats the handoff. The [evidence note](docs/dev/notes/0248-2026-10-18-dashboard-cold-open.md) retains both verdicts and unchanged Native/process custody. The mounted frontend regression and repair now preserve an exact already-requested connection through census expiry; installed qualification of that continuation remains pending. P248 stays open.
 
 ### 2026-10-18 fast rail and native iframe installed
 

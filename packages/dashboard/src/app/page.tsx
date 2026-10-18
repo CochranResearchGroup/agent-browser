@@ -719,7 +719,7 @@ function NativeBrowserWorkspace({ user, onLogout }: {
     nativeWindows={nativeWindows} nativeSelection={native.selectedKey} nativeIssue={native.issue} onSelectNativeWindow={native.select}
     onLogout={onLogout} onRefresh={async () => { await Promise.all([selectedWorkspace.refresh(), native.refresh(true)]); }} loading={selectedWorkspace.loading || native.loading} error={selectedWorkspace.error}
     diagnosticsHref={dashboardSectionUrl("service")}>
-    {native.selectedKey ? <NativeWindowViewport target={native.windows.find(window => window.key === native.selectedKey) ?? null} loading={native.loading} /> : viewport.useNativeViewport ? <NativeTaskViewport target={viewport.target} desktopUnavailable={viewport.desktopUnavailable} presenceUnavailable={viewport.presenceUnavailable} hasSelection={Boolean(tabId)} loading={selectedWorkspace.loading} onRefresh={selectedWorkspace.refresh} /> : <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context}
+    {native.selectedKey ? <NativeWindowViewport target={native.windows.find(window => window.key === native.selectedKey) ?? null} loading={native.loading} /> : viewport.useNativeViewport ? <NativeTaskViewport target={viewport.target} unverifiedTarget={viewport.unverifiedTarget} desktopUnavailable={viewport.desktopUnavailable} presenceUnavailable={viewport.presenceUnavailable} hasSelection={Boolean(tabId)} loading={selectedWorkspace.loading} onRefresh={selectedWorkspace.refresh} /> : <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context}
       projection={selectedWorkspace.projection} onRefresh={selectedWorkspace.refresh} onSelectStream={workspaceViewPreferences.write} />}
   </CompactNativeWorkspace>;
 }
