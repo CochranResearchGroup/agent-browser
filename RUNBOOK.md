@@ -12,6 +12,10 @@ existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 
 ## Current execution
 
+### 2026-10-18 selected desktop cold-open repair
+
+[P248](docs/dev/plans/0248-2026-10-18-dashboard-cold-open.md), #312, captures initial unknown presence followed by a three-second wait, redundant focus and foreground state exclusion during retirement observation. Source `ccd296fd2` requests authoritative exact handoff verification immediately, keeps one queued focus, and moves initial Native idle reads before current-state effect exclusion. The new foreground-read and late-controller regressions pass with existing retirement fences. Isolated installed Native latency qualification is pending; production remains unchanged by this repair.
+
 ### 2026-10-18 fast rail and native iframe installed
 
 [PR309](https://github.com/CochranResearchGroup/agent-browser/pull/309) and

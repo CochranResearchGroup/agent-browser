@@ -12,6 +12,8 @@ Prioritize less plumbing, useful continuity, seamless human assistance, predicta
 
 ## Current work and boundaries
 
+[P248](docs/dev/plans/0248-2026-10-18-dashboard-cold-open.md) reduces selected desktop cold-open waiting and retirement read exclusion under #312. RUNBOOK owns qualification and installed status.
+
 [P245](docs/dev/plans/0245-2026-10-16-hosted-auth-consumer.md) qualifies the bounded existing-host QBO then BILL account/company journeys for #290. [RUNBOOK](RUNBOOK.md) and the [nine-item evidence map](docs/dev/receipts/p245/issue-290-acceptance.json) preserve source/install/native boundaries and accepted canonical delivery through PR297. This does not complete every authentication, password-manager, MFA or API workflow.
 
 [P237](docs/dev/plans/0237-2026-10-11-native-dashboard-handoffs.md) completed the approved 30-story native desktop dashboard and independent handoff lifetime outcome for #261. The [installed acceptance map](docs/dev/notes/0237-2026-10-16-installed-acceptance.md) binds dedicated development/public-native workflows to exact source and retained checks. PR293 owns the final repairs; Remote View PR441/442 and Cooper PR13 supply canonical prerequisites. Production, formal release and wider #260/#105/#68 work remain separate.

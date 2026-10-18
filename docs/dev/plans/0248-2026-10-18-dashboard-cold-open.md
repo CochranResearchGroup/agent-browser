@@ -1,11 +1,12 @@
 # P248: Selected desktop cold-open latency
 
-State: OPEN
+Status: OPEN
+Lane: P248
 Product lane: PL-BUGFIX
 Work item: CochranResearchGroup/agent-browser#312
 Branch: fix/dashboard-cold-open-248
 Baseline: 90770e535dc4ea13042d259d6ee74b36518efde2
-Owner: primary session in agent-browser-dashboard
+Owner: ecochran76
 
 ## Current State
 
@@ -43,3 +44,20 @@ The lock repair moves initial idle/readback observations before global effect ex
 Standards: primary review checks the complete patch against AGENTS.md, domain CONTEXT.md, testing discipline and existing ownership boundaries. Existing Native viewer and authority paths are reused. No new polling, cache confidence, viewer, authentication ceremony or cleanup policy is introduced. No blocking standards findings remain.
 
 Spec: the current owned unknown selection requests the existing authoritative handoff operation without claiming rail liveness; absent, stale, inactive and mismatched owners remain blocked. Maximize stays on the queued handoff operation. The mounted HTTP fixture covers the held earlier selection and denied live verification. Retirement preflight reads occur outside exclusion and the new controller-race test proves revalidation precedes Native mutation. Existing fences and operation replay tests pass. Installed latency and physical Native behavior remain acceptance gates, not inferred from these source results.
+
+## Installed checkpoint and changed diagnostic tactic
+
+Outcome progress: CI-profile source `ccd296fd2`, binary `ae8805d80ebb2ccd2706d4b095c7c8d9a350b12b131d7457981a182e7659d74e`, passed development publication and install doctor with production preserved. Actual authenticated first unknown presence now begins the single handoff at 895 ms. Its real Native iframe connects with pixels. First/warm navigation-to-pixels are 7593/6630 ms, exceeding the provisional five-second diagnostic threshold. That threshold is not a user SLA. The source mechanisms are qualified; latency acceptance remains incomplete.
+
+Do not replay the whole acceptance suite to learn the remaining stage. One temporary timing build (`a0e6e55bdef2`, development only) measured task preparation plus exact focus at 544 ms against a 4262 ms HTTP request. Native assignment/registration reads were 1-4 ms, windows 27-109 ms. Gateway backend round trips were 1279-1670 ms. Initial stderr capture missed daemon logs because the existing shared runtime discards stderr without its debug setting; a temporary development-only debug drop-in enabled one targeted API measurement. A temporary logging-format check failed, was corrected, and strict Clippy/format passed. All tagged source instrumentation and the drop-in are removed; restore the qualified development binary before further acceptance. These probe results are diagnostic and must not be promoted.
+
+The named task HTTP port lookup calls full `discover_sessions`, including every managed extension manifest and foreign Chrome/CDP probes. P248 now repairs this routing cost using an exact named-owner metadata lookup with the same current runtime-process predicate. A provider-free test blocks an unrelated extension manifest and requires the selected route to stay available. This is a bounded change of tactic addressing the measured HTTP overhead; Native rendering and authorization checks are unchanged. Prior cumulative evidence and failed timing verdicts remain retained.
+
+
+## Named-owner routing regression
+
+The actual `session_port_for_name` seam failed with an unrelated extension manifest held open: the selected route did not return within one second. Two earlier fixture compile errors were corrected before this behavioral red; they are not regression evidence. The repair reads only the named owned session port and preserves the existing runtime-process predicate. Empty names, path traversal, zero/malformed ports and absent ownership return unavailable. Full inventory discovery remains available for inventory callers. The obsolete array-filter helper and its implementation-only test are removed.
+
+Standards follow-up: the internal performance repair adds no user-facing command or contract. It retains routing, focus and Native readiness authority. Spec follow-up: the deterministic blocked-unrelated-manifest fixture covers the measured dependency directly; real installed timing remains pending. Temporary probe logging and its development drop-in are removed, and the previously qualified development binary was restored with production unchanged.
+
+Green: the selected-owner regression completes in 0.01 s; all ten discovery tests and six dashboard request routing tests pass. Strict workspace Clippy and Rust format checks pass for the routing repair. The prior 107-test browser-session consumer run and 14 automatic-retirement tests remain qualified for unchanged source.
