@@ -1069,8 +1069,17 @@ async fn handle_service_api_request(
             let session_name =
                 service_request_relay_session(DASHBOARD_SERVICE_BACKEND_SESSION, body, &command);
             if service_request_requires_daemon_relay(&command) {
-                if let Err(err) = ensure_service_daemon_session(&session_name, Some(&command)).await
-                {
+                // The shared runtime already owns an existing tab. A missing
+                // legacy HTTP lane is not evidence that its owner needs launch.
+                let preparation =
+                    if crate::native::browser_session_host::existing_native_task_handoff(&command)
+                        && crate::connection::daemon_ready(&session_name)
+                    {
+                        Ok(())
+                    } else {
+                        ensure_service_daemon_session(&session_name, Some(&command)).await
+                    };
+                if let Err(err) = preparation {
                     record_durable_handoff_gateway_failure(
                         &command,
                         &session_name,
@@ -1297,6 +1306,7 @@ async fn handle_service_api_request(
 
 fn service_request_requires_daemon_relay(command: &Value) -> bool {
     command.get("action").and_then(Value::as_str) == Some("service_remote_view_handoff_resolve")
+        || crate::native::browser_session_host::existing_native_task_handoff(command)
 }
 
 fn record_durable_handoff_gateway_failure(
@@ -1317,7 +1327,12 @@ fn record_durable_handoff_gateway_failure(
             code,
             summary,
         )
-        .with_action("service_remote_view_handoff_resolve")
+        .with_action(
+            command
+                .get("action")
+                .and_then(Value::as_str)
+                .unwrap_or("service_remote_view_handoff_resolve"),
+        )
         .with_references(ServiceFailureReferences {
             runtime_lane_id: Some(DASHBOARD_SERVICE_BACKEND_SESSION.to_string()),
             session_id: Some(session_name.to_string()),
@@ -6566,6 +6581,23 @@ mod tests {
         assert_eq!(value["success"], false);
         assert_eq!(value["code"], "invalid_backend_payload");
         assert_eq!(value["details"]["stage"], "response");
+    }
+
+    #[test]
+    fn selected_task_owner_relay_excludes_navigation_and_unsigned_requests() {
+        let selection = json!({"action":"remote_view_open", "operatorFocus":true,
+            "browserId":"browser:owned", "sessionName":"owned-session", "targetId":"target-owned"});
+        assert!(service_request_requires_daemon_relay(&selection));
+        for (field, value) in [
+            ("url", json!("about:blank")),
+            ("dryRun", json!(true)),
+            ("operatorFocus", json!(false)),
+            ("targetId", json!("")),
+        ] {
+            let mut acquisition = selection.clone();
+            acquisition[field] = value;
+            assert!(!service_request_requires_daemon_relay(&acquisition));
+        }
     }
 
     #[test]

@@ -50,6 +50,9 @@ Selecting a current owned task can verify its native handoff immediately while
 background presence is still unknown. The rail does not label it live until the
 census confirms it. Handoff preparation focuses and maximizes the exact task
 once, then embeds only the ready Native viewer; it never launches a replacement.
+Existing-tab operator selection talks directly to its browser owner without
+creating an HTTP launch lane or scheduler job. Signed focus, display ordering
+and current Native readiness are still checked.
 
 Open the dashboard root `/` or `/browsers` for the native browser workspace.
 Select the owned tab, inspect Properties or Share its durable link, and use

@@ -139,6 +139,25 @@ fn shared_browser_executable(pid: u32) -> Result<Option<PathBuf>, String> {
     }
 }
 
+/// Select the existing-tab operator workflow, never profile acquisition or
+/// navigation. This is dispatch shape only; the owner still verifies the signed
+/// focus, current target binding and Native readiness before any effect.
+pub(crate) fn existing_native_task_handoff(command: &serde_json::Value) -> bool {
+    command["action"] == "remote_view_open"
+        && command["operatorFocus"] == true
+        && command["dryRun"] != true
+        && command.get("url").is_none()
+        && command["browserId"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("browser:"))
+        && ["sessionName", "targetId"].iter().all(|field| {
+            command
+                .get(field)
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|value| !value.trim().is_empty())
+        })
+}
+
 /// Open a client-selected persistent profile through the application pool.
 /// Explicit paths are registered once; a changed ID/path binding fails closed.
 pub(crate) async fn execute_shared_remote_view_open(

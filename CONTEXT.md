@@ -46,6 +46,9 @@ It does not wait for service reconciliation or workstation diagnostic scans and
 does not grant automation or viewing authority. An explicitly selected current
 task may request authoritative handoff verification while descriptive presence
 is unknown; only the successful exact live focus makes its viewer ready.
+Existing-tab operator handoff uses the shared browser owner directly without a
+legacy HTTP launch lane or scheduler job; signed focus and desktop ordering
+still gate the effect.
 
 **Handoff link lifetime**: The configurable period during which a handoff link can be used. The default is perpetual. Link expiry does not end the target tab or delete the link record.
 

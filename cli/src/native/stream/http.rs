@@ -2441,21 +2441,6 @@ fn service_daemon_session_recovery_args(
 
 fn service_daemon_session_requires_lane_refresh(service_command: Option<&Value>) -> bool {
     service_command.is_some_and(|command| {
-        // Existing-tab handoff only retains and focuses its bound owner. Profile
-        // fields in the normalized command do not request reconfiguration.
-        // Readiness still requires the named lane and its live HTTP listener;
-        // the handler separately verifies signed focus and current Native state.
-        if command["action"] == "remote_view_open"
-            && command.get("url").is_none()
-            && ["browserId", "targetId"].iter().all(|field| {
-                command
-                    .get(field)
-                    .and_then(Value::as_str)
-                    .is_some_and(|value| !value.trim().is_empty())
-            })
-        {
-            return false;
-        }
         ["runtimeProfile", "profile"].iter().any(|field| {
             command
                 .get(field)
@@ -4591,35 +4576,6 @@ mod tests {
         ));
         assert!(!service_daemon_session_ready_for_request(true, true, true));
         assert!(service_daemon_session_ready_for_request(true, true, false));
-    }
-
-    #[test]
-    fn ready_existing_tab_handoff_reuses_its_lane_without_profile_reconfiguration() {
-        let existing = json!({"action":"remote_view_open", "browserId":"browser-owned",
-            "targetId":"tab-owned", "runtimeProfile":"profile-owned"});
-        assert!(service_daemon_session_ready_for_request(
-            true,
-            true,
-            service_daemon_session_requires_lane_refresh(Some(&existing))
-        ));
-        // A ready existing tab must still recover a missing listener. Requests
-        // that acquire/navigate a profile retain the profile refresh behavior.
-        assert!(!service_daemon_session_ready_for_request(
-            true,
-            false,
-            service_daemon_session_requires_lane_refresh(Some(&existing))
-        ));
-        for command in [
-            {
-                let mut navigate = existing.clone();
-                navigate["url"] = json!("about:blank");
-                navigate
-            },
-            json!({"action":"tab_new", "runtimeProfile":"profile-owned"}),
-            json!({"action":"remote_view_open", "runtimeProfile":"profile-owned"}),
-        ] {
-            assert!(service_daemon_session_requires_lane_refresh(Some(&command)));
-        }
     }
 
     #[test]
