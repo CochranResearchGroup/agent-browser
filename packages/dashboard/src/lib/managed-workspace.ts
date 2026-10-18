@@ -30,11 +30,15 @@ export function managedWorkspaceViewport(workspace: ServiceManagedWorkspace | un
     && session.profileId === browser.profileId && browser.activeSessionIds.includes(session.id));
   const presence = workspace && tab ? tabPresence(workspace, tab, current) : 'unknown';
   const presenceUnavailable = Boolean(browser && knownTab && presence !== 'live');
-  const target = current && presence !== 'absent' && knownTab && browser?.desktop && tab && session
+  const binding = knownTab && browser?.desktop && tab && session
     ? { browserId: browser.id, sessionName: session.name, targetId: tab.targetId, displayAllocationId: browser.desktop.desktop_id }
     : null;
+  const target = current && presence !== 'absent' ? binding : null;
+  // Identity-only continuity for an already-requested Native view. A stale
+  // binding cannot request focus or acquire a viewer on first selection.
+  const unverifiedTarget = !current ? binding : null;
   const desktopUnavailable = Boolean(!presenceUnavailable && browser && !browser.desktop && tab?.browserId === browser.id && session?.browserId === browser.id && !selectedStreamAvailable);
-  return { target, desktopUnavailable, presenceUnavailable: presenceUnavailable && presence !== 'live' ? presence : null, useNativeViewport: Boolean((browser && (browser.desktop || presenceUnavailable || !selectedStreamAvailable)) || (!browserId && !tabId)) };
+  return { target, unverifiedTarget, desktopUnavailable, presenceUnavailable: presenceUnavailable && presence !== 'live' ? presence : null, useNativeViewport: Boolean((browser && (browser.desktop || presenceUnavailable || !selectedStreamAvailable)) || (!browserId && !tabId)) };
 }
 
 /** Adapt the public owner snapshot without inventing viewer or child authority. */

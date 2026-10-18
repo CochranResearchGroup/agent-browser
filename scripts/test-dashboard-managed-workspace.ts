@@ -46,9 +46,9 @@ const retained = {
   sessions: { s: { id: 's', name: 'alice', profileId: 'p', browserId: 'b' } },
   tabs: { t: { id: 't', targetId: 'exact-target', presence: { state: 'live' }, browserId: 'b', sessionId: 's' } },
 } as any;
-assert.deepEqual(managedWorkspaceViewport(retained, 'b', 't', false), { target: null, desktopUnavailable: true, presenceUnavailable: null, useNativeViewport: true }, 'present retained tab without a desktop needs availability guidance, not missing-tab feedback');
-assert.deepEqual(managedWorkspaceViewport(retained, 'b', 't', true), { target: null, desktopUnavailable: false, presenceUnavailable: null, useNativeViewport: false }, 'an available stream remains usable for a browser without a desktop');
-assert.deepEqual(managedWorkspaceViewport(retained, 'b', 'missing', false), { target: null, desktopUnavailable: false, presenceUnavailable: null, useNativeViewport: true }, 'a missing tab without a desktop still needs missing-target guidance');
+assert.deepEqual(managedWorkspaceViewport(retained, 'b', 't', false), { target: null, unverifiedTarget: null, desktopUnavailable: true, presenceUnavailable: null, useNativeViewport: true }, 'present retained tab without a desktop needs availability guidance, not missing-tab feedback');
+assert.deepEqual(managedWorkspaceViewport(retained, 'b', 't', true), { target: null, unverifiedTarget: null, desktopUnavailable: false, presenceUnavailable: null, useNativeViewport: false }, 'an available stream remains usable for a browser without a desktop');
+assert.deepEqual(managedWorkspaceViewport(retained, 'b', 'missing', false), { target: null, unverifiedTarget: null, desktopUnavailable: false, presenceUnavailable: null, useNativeViewport: true }, 'a missing tab without a desktop still needs missing-target guidance');
 retained.browsers.b.desktop = { desktop_id: 'owned-desktop', generation: 1 };
 assert.deepEqual(managedWorkspaceViewport(retained, 'b', 'target:t', true).target, { browserId: 'b', sessionName: 'alice', targetId: 'exact-target', displayAllocationId: 'owned-desktop' });
 assert.equal(managedWorkspaceViewport(retained, 'b', 't', true).useNativeViewport, true, 'native desktop takes precedence over compatibility stream');
@@ -82,3 +82,8 @@ retained.browsers.b.activeSessionIds = ['s'];
 retained.sessions.s.profileId = 'peer-profile';
 assert.equal(managedWorkspaceViewport(retained, 'b', 't', true, true).target, null, 'a profile mismatch must not open an apparently live target');
 console.log('Managed owner inventory dashboard adapter checks passed');
+
+retained.sessions.s.profileId = 'p';
+const staleBinding = managedWorkspaceViewport(retained, 'b', 't', false, false);
+assert.equal(staleBinding.target, null, 'expired metadata cannot authorize a new selection');
+assert.deepEqual(staleBinding.unverifiedTarget, { browserId: 'b', sessionName: 'alice', targetId: 'exact-target', displayAllocationId: 'owned-desktop' }, 'known stale binding permits only continuity of an existing verified view');

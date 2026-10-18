@@ -53,6 +53,9 @@ once, then embeds only the ready Native viewer; it never launches a replacement.
 Existing-tab operator selection talks directly to its browser owner without
 creating an HTTP launch lane or scheduler job. Signed focus, display ordering
 and current Native readiness are still checked.
+An already verified desktop stays connected when census metadata expires.
+Stale metadata cannot open a new selection; a changed binding or confirmed
+absence clears the viewer. Remote View continues to own connection authority.
 
 Open the dashboard root `/` or `/browsers` for the native browser workspace.
 Select the owned tab, inspect Properties or Share its durable link, and use

@@ -826,6 +826,9 @@ once, then embeds only the ready Native viewer; it never launches a replacement.
 Existing-tab operator selection talks directly to its browser owner without
 creating an HTTP launch lane or scheduler job. Signed focus, display ordering
 and current Native readiness are still checked.
+An already verified desktop stays connected when census metadata expires.
+Stale metadata cannot open a new selection; a changed binding or confirmed
+absence clears the viewer. Remote View continues to own connection authority.
 
 Icon controls expose hover help. A task without a native desktop uses its
 available browser stream; otherwise it reports desktop availability separately
