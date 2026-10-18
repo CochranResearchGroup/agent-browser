@@ -6464,6 +6464,9 @@ If close cannot be confirmed, refresh inventory and inspect permission before
 trying again.
 
 Selection and Share run in order on each native desktop.
+After a service restart, task selection reconnects its verified recorded browser.
+It preserves the process, tab and profile; unavailable browsers are not relaunched
+by selection.
 Share prepares the exact existing task through the public handoff helper and
 shows its opaque native link in Handoffs. It preserves the selected peer and
 does not navigate the task. Use the small Handoffs rail control to reopen the

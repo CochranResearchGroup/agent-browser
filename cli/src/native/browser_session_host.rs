@@ -2168,6 +2168,11 @@ where
             return Err("operator_focus_binding_changed".into());
         }
         self.effects.begin_operation(&self.persisted_state)?;
+        // Restart keeps the owned process but drops its in-memory CDP manager.
+        // Reattach by exact recorded identity without launching a replacement.
+        if !self.effects.browser_is_live(&browser)? {
+            return Err("operator_focus_browser_unavailable".into());
+        }
         let response =
             self.effects
                 .execute_command(&browser, &tab, &session.id, &session.name, command)?;
@@ -3258,7 +3263,7 @@ mod tests {
                 ..FixtureRuntime::default()
             }),
             &legacy_path,
-            config,
+            config.clone(),
         )
         .unwrap();
         let result = restarted
@@ -3275,6 +3280,50 @@ mod tests {
         assert_eq!(result["data"]["tabId"], tab_id);
         assert_eq!(restarted.state().browsers.len(), 1);
         assert_eq!(restarted.state().tabs.len(), 1);
+        let mut focused = BrowserSessionHost::load(
+            BrowserSessionJsonStore::new(&directory.0),
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                live: true,
+                attachment_required: true,
+                ..FixtureRuntime::default()
+            }),
+            &legacy_path,
+            config.clone(),
+        )
+        .unwrap();
+        let target = focused.state().tabs[&tab_id].target_id.clone();
+        let before_focus = focused.state().clone();
+        let selected = focused
+            .execute_operator_focus(&serde_json::json!({
+                "action":"view_focus", "operatorFocus":true,
+                "browserId":first.browser_id, "targetId":target, "sessionName":"alice"
+            }))
+            .expect("operator focus must attach the exact live browser after restart");
+        assert_eq!(selected["success"], true);
+        assert_eq!(selected["data"]["browserId"], first.browser_id);
+        assert_eq!(focused.state(), &before_focus);
+
+        let mut unavailable = BrowserSessionHost::load(
+            BrowserSessionJsonStore::new(&directory.0),
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                live: false,
+                attachment_required: true,
+                ..FixtureRuntime::default()
+            }),
+            &legacy_path,
+            config,
+        )
+        .unwrap();
+        assert_eq!(
+            unavailable
+                .execute_operator_focus(&serde_json::json!({
+                    "action":"view_focus", "operatorFocus":true,
+                    "browserId":first.browser_id, "targetId":target, "sessionName":"alice"
+                }))
+                .unwrap_err(),
+            "operator_focus_browser_unavailable"
+        );
+        assert_eq!(unavailable.state(), &before_focus);
     }
 
     #[test]

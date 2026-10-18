@@ -65,3 +65,14 @@ Only current browser-class non-dialog windows enter the rail. A failed peer does
 not hide a verified browser. Legacy daemon history stays in diagnostics. Native
 selection calls Remote View's existing connected helper, preserving its input
 lock and generation checks; no managed session or tab is invented.
+
+## Restart continuity
+
+After production upgrade, the original browser processes, CDP targets, profiles
+and handoffs remain intact, but a cold runtime has no in-memory browser manager.
+Ordinary task commands already reconnect that exact recorded browser; operator
+focus omitted the check and returned `browser_session_runtime_browser_missing`.
+The restart regression reproduces that failure. Operator focus now uses the same
+recorded-process/CDP identity check and background reattachment before applying
+the existing signed focus proof and native effect fence. An unavailable recorded
+browser returns an error without launching a replacement or changing owner state.

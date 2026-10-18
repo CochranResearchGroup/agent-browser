@@ -6760,6 +6760,8 @@ shown explicitly. The requested selection and peer tabs remain unchanged;
 refresh does not automatically choose another tab.
 Dashboard/profile permission rejections offer access-check guidance before retrying.
 
+After a service restart, selecting an existing live task reconnects its recorded browser without changing its process, tab, profile or document. A browser that cannot be verified remains unavailable; selection does not launch a replacement.
+
 Native workspace embedding requires the dashboard and Remote View to share a
 public origin. When an iframe opens the durable link, its read-only redirect
 selects Remote View's existing workspace mode; native authentication and its
