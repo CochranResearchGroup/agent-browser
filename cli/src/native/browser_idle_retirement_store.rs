@@ -100,6 +100,25 @@ fn current(connection: &Connection) -> Result<BrowserSessionState> {
     Ok(state)
 }
 
+/// Profile retention cannot change while an admitted cleanup can still delete it.
+pub(super) fn reject_profile_metadata_mutation(
+    connection: &Connection,
+    profile_id: &str,
+) -> Result<()> {
+    let ledger = ledger(connection)?;
+    if ledger.records.values().any(|record| {
+        !record.is_terminal()
+            && record
+                .intent
+                .scopes
+                .iter()
+                .any(|scope| scope.browser.profile_id == profile_id)
+    }) {
+        return Err(Error::Conflict);
+    }
+    Ok(())
+}
+
 /// Check under the caller's immediate transaction, before admitting a launch
 /// or release. Pending native completion still protects its original profile.
 pub(super) fn reject_retirement_admission(
@@ -644,6 +663,7 @@ impl BrowserSessionSqliteStore {
 #[cfg(test)]
 mod tests {
     use super::super::browser_session_store::BrowserSessionSqliteStore;
+    use super::{reject_profile_metadata_mutation, Error};
     use agent_browser_service_model::*;
     use rusqlite::Connection;
     use serde_json::{json, Value};
@@ -998,6 +1018,15 @@ mod tests {
         );
         assert!(store.idle_retirement_records().unwrap().is_empty());
         store.claim_idle_retirement(&intent, &state).unwrap();
+        assert_eq!(
+            reject_profile_metadata_mutation(store.remote_view_mutation_connection(), "profile-a"),
+            Err(Error::Conflict)
+        );
+        assert!(reject_profile_metadata_mutation(
+            store.remote_view_mutation_connection(),
+            "unrelated-profile"
+        )
+        .is_ok());
         drop(store);
         let mut restarted = fixture.open(false);
         let retained = restarted.idle_retirement_records().unwrap();

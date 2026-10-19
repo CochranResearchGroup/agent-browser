@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -9,6 +9,9 @@ import { tabDescription } from "@/lib/tab-description";
 import type { WorkspaceNode, WorkspaceServiceTab } from "@/lib/service-workspaces";
 import { postServiceRequest, requireServiceRequestSuccess, ServiceOperationError, ServiceRequestHttpError, type ServiceTabCloseData } from "@agent-browser/client/service-request";
 
+// Shared Dialog animation utilities must not animate viewport resizing or
+// override the native Properties panel's border-box dimensions.
+const propertiesStyle = { boxSizing: "border-box", width: "min(480px, calc(100vw - 32px))", animation: "none", transition: "none", transform: "none" } as const;
 const supplied = (value: unknown): string => typeof value === "string" && value.trim() ? value : "Unknown";
 const createdTime = (value: unknown): string => {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) return "Unknown";
@@ -21,7 +24,7 @@ const createdTime = (value: unknown): string => {
  * or handoff effect. Clipboard failure offers manual copying through Properties.
  * Close captures an exact identity and requires an owner-confirmed close receipt
  * before releasing the row or its selected native frame. */
-export function NativeTabActions({ node, tab, children, onClosed, onShare, shareBusy }: { node: WorkspaceNode; tab: WorkspaceServiceTab; children: ReactNode; onClosed?: () => Promise<void>; onShare?: (opener: HTMLElement | null) => void; shareBusy?: boolean }) {
+export function NativeTabActions({ node, tab, children, onClosed, onProfileChanged, onShare, shareBusy }: { node: WorkspaceNode; tab: WorkspaceServiceTab; children: ReactNode; onClosed?: () => Promise<void>; onProfileChanged?: () => Promise<void>; onShare?: (opener: HTMLElement | null) => void; shareBusy?: boolean }) {
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [closeTarget, setCloseTarget] = useState<WorkspaceServiceTab | null>(null);
   const [closeBusy, setCloseBusy] = useState(false);
@@ -32,6 +35,48 @@ export function NativeTabActions({ node, tab, children, onClosed, onShare, share
   const returnFocus = useRef<HTMLElement | null>(null);
   const label = tabDescription(tab);
   const metadata = tab.taskMetadata;
+  const [profile, setProfile] = useState(tab.profileProperties ?? null);
+  const [profileName, setProfileName] = useState(tab.profileProperties?.name ?? "");
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [profileUnconfirmed, setProfileUnconfirmed] = useState(false);
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const profilePending = useRef(false);
+  const lastProfileSource = useRef(JSON.stringify(tab.profileProperties ?? null));
+  useEffect(() => {
+    if (!propertiesOpen && !profilePending.current) {
+      const source = JSON.stringify(tab.profileProperties ?? null);
+      if (source !== lastProfileSource.current) {
+        setProfile(tab.profileProperties ?? null);
+        setProfileName(tab.profileProperties?.name ?? "");
+        lastProfileSource.current = source;
+      } else {
+        setProfileName(profile?.name ?? "");
+      }
+      setProfileMessage(null); setProfileUnconfirmed(false);
+    }
+  }, [propertiesOpen, tab.profileProperties]);
+  const saveProfile = async (promote: boolean) => {
+    if (!profile || profilePending.current || profileUnconfirmed || !profileName.trim()) return;
+    profilePending.current = true; setProfileBusy(true); setProfileMessage(null);
+    const expected = profile;
+    try {
+      const response = await fetch("/api/dashboard/profile-properties", {
+        method: "PATCH", credentials: "same-origin", redirect: "error", signal: AbortSignal.timeout(15000),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profileId: expected.id, expectedName: expected.name, expectedKind: expected.kind, name: profileName.trim(), promote }),
+      });
+      const body = await response.json();
+      const saved = body?.data?.profile;
+      if (!response.ok || body?.success !== true || saved?.id !== expected.id || saved?.name !== profileName.trim()
+        || saved?.kind !== (promote ? "named" : expected.kind)) throw new Error("profile_save_unconfirmed");
+      setProfile(saved); setProfileName(saved.name);
+      void onProfileChanged?.().catch(() => undefined);
+      setProfileMessage(promote ? "Profile is now durable. Browser data and open tabs are preserved." : "Profile name saved.");
+    } catch {
+      setProfileUnconfirmed(true);
+      setProfileMessage("Profile change could not be confirmed. Refresh browsers to read its current name and retention before retrying.");
+    } finally { profilePending.current = false; setProfileBusy(false); }
+  };
   const canClose = tab.managedTask === true && Boolean(tab.browserId && tab.targetId && (tab.ownerSessionId || tab.sessionId));
   const identity = (value: WorkspaceServiceTab) => JSON.stringify([value.id, value.browserId, value.targetId, value.ownerSessionId || value.sessionId]);
   const closeStillCurrent = closeTarget !== null && identity(closeTarget) === identity(tab);
@@ -68,12 +113,16 @@ export function NativeTabActions({ node, tab, children, onClosed, onShare, share
       setCopyFeedback("copied");
     } catch { setCopyFeedback("failed"); }
   };
-  const fields: [string, unknown][] = [
+  const provenanceFields: [string, unknown][] = [
     ["Service", metadata?.serviceName], ["Agent", metadata?.agentName],
     ["Human", metadata?.humanName], ["Origin", metadata?.originKind],
     ["Task", metadata?.taskName], ["Purpose", metadata?.purpose],
-    ["Job", metadata?.jobId], ["Request", metadata?.requestId], ["Created", createdTime(metadata?.createdAtMs)],
-    ["Attribution", metadata?.attribution], ["Browser", tab.browserId],
+    ["Job", metadata?.jobId], ["Request", metadata?.requestId], ["Attribution", metadata?.attribution],
+  ];
+  const recordedProvenance = provenanceFields.filter(([, value]) => typeof value === "string" && value.trim() && value !== "unknown");
+  const fields: [string, unknown][] = [
+    ...recordedProvenance,
+    ["Created", createdTime(metadata?.createdAtMs ?? tab.createdAtMs)], ["Browser", tab.browserId],
     ["Profile", tab.profileId ?? node.profileId], ["Desktop", tab.desktopId],
     ["URL", tab.url], ["Title", tab.title], ["Inventory status", tab.inventoryState ?? tab.lifecycle],
   ];
@@ -86,7 +135,7 @@ export function NativeTabActions({ node, tab, children, onClosed, onShare, share
           {children}
           <DropdownMenu onOpenChange={open => { if (open) returnFocus.current = trigger.current; }}>
             <DropdownMenuTrigger asChild>
-              <button ref={trigger} type="button" className="native-tab-actions" aria-label={`Tab actions for ${label}`}>
+              <button ref={trigger} type="button" className="native-tab-actions" title="Tab actions" aria-label={`Tab actions for ${label}`}>
                 <MoreHorizontal size={14} aria-hidden="true" />
               </button>
             </DropdownMenuTrigger>
@@ -113,18 +162,35 @@ export function NativeTabActions({ node, tab, children, onClosed, onShare, share
     {copyFeedback && <p className="native-tab-feedback" role={copyFeedback === "failed" ? "alert" : "status"}>
       {copyFeedback === "copied" ? "URL copied" : "Could not copy this URL. Open Properties to copy it manually."}
     </p>}
-    <Dialog open={propertiesOpen} onOpenChange={setPropertiesOpen}>
-      <DialogContent className="native-tab-properties" onCloseAutoFocus={event => {
+    <Dialog open={propertiesOpen} onOpenChange={open => { if (!profilePending.current) setPropertiesOpen(open); }}>
+      <DialogContent className="native-tab-properties" style={propertiesStyle} showCloseButton={!profileBusy} onCloseAutoFocus={event => {
         event.preventDefault(); (returnFocus.current ?? trigger.current)?.focus();
       }}>
         <DialogHeader><DialogTitle>Tab properties</DialogTitle>
           <DialogDescription>Supplied task context and current inventory. Names are descriptive, not verified identity.</DialogDescription>
         </DialogHeader>
+        {recordedProvenance.length === 0 && <p role="status">Original task attribution was not recorded for this tab. Known inventory facts are shown below.</p>}
+        <section className="native-profile-properties" aria-label="Profile properties">
+          <p><strong>Profile retention:</strong> {profile ? profile.kind === "disposable" ? "Throwaway" : "Durable" : "Not reported"}</p>
+          {profile && <>
+            <p>{profile.kind === "disposable" ? "Eligible for automatic cleanup after its work ends. Make durable to retain browser data across tasks." : "Browser data is retained across tasks."}</p>
+            <label htmlFor={`profile-name-${tab.id}`}>Profile name</label>
+            <input id={`profile-name-${tab.id}`} value={profileName} maxLength={120} disabled={profileBusy}
+              onChange={event => { setProfileName(event.target.value); if (!profileUnconfirmed) setProfileMessage(null); }} />
+            <div className="native-tab-dialog-actions">
+              <button type="button" disabled={profileBusy || profileUnconfirmed || !profileName.trim() || profileName.trim() === profile.name} onClick={() => void saveProfile(false)}>Save name</button>
+              {profile.kind === "disposable" && <button type="button" disabled={profileBusy || profileUnconfirmed || !profileName.trim()} onClick={() => void saveProfile(true)}>Make durable</button>}
+            </div>
+            <p>Renaming changes the display name. The profile ID and browser data stay the same.</p>
+          </>}
+          {profileBusy && <p role="status">Saving profile…</p>}
+          {profileMessage && <p role="status">{profileMessage}</p>}
+        </section>
         <dl>{fields.map(([name, value]) => <div key={name}><dt>{name}</dt><dd>{supplied(value)}</dd></div>)}</dl>
       </DialogContent>
     </Dialog>
     <Dialog open={closeTarget !== null} onOpenChange={open => { if (!open && !closePending.current) setCloseTarget(null); }}>
-      <DialogContent className="native-tab-properties" showCloseButton={!closeBusy} onCloseAutoFocus={event => {
+      <DialogContent className="native-tab-properties" style={propertiesStyle} showCloseButton={!closeBusy} onCloseAutoFocus={event => {
         event.preventDefault(); (returnFocus.current ?? trigger.current)?.focus();
       }}>
         <DialogHeader><DialogTitle>Close tab?</DialogTitle>

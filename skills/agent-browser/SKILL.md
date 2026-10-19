@@ -95,8 +95,7 @@ Disposable quota retirement remains under development. Its admission includes ve
 
 Stale selections remove the viewer and offer Refresh browsers without choosing a peer.
 Use the tab SVG menu or Shift+F10 for Properties, Copy URL and permitted Close Tab.
-Properties includes supplied origin, purpose, task/job/request and creation context;
-missing values are Unknown, and names do not prove identity. Copy URL preserves selection.
+Properties shows recorded creation time and supplied context; absent historical attribution is explained once. Names are not identity proof. Profile retention is Throwaway or Durable. Save name edits its display label; Make durable removes disposable cleanup eligibility while preserving ID, directory and open tabs. Normal browser/tab idle policies remain. Refresh after an unconfirmed save. Copy URL preserves selection.
 Close confirms the exact managed target and preserves peers; the final tab closes its browser.
 If completion is uncertain, refresh and inspect permission before retrying.
 Share prepares the existing task without navigation. The Handoffs rail control opens

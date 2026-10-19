@@ -334,6 +334,8 @@ export type WorkspaceServiceTab = {
   presence?: { state: "live" | "absent" | "unknown" };
   /** Owner-supplied provenance; absent values must remain unknown. */
   taskMetadata?: Record<string, unknown> | null;
+  createdAtMs?: number;
+  profileProperties?: { id: string; name: string; kind: "named" | "disposable" } | null;
   profileId?: string | null;
   desktopId?: string | null;
   /** Owner-reported inventory state, separate from native viewer readiness. */

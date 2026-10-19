@@ -769,6 +769,10 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
     {
         let repository = super::service_store::LockedServiceStateRepository::default_json()?;
         let guarded = repository.hold_snapshot_for_effect()?;
+        if !super::browser_session_store::BrowserSessionSqliteStore::default_session_state_read_only()?
+            .is_some_and(|state| state.disposable_profiles.get(&allocation.profile.id) == Some(allocation)) {
+            return Ok(None);
+        }
         if !super::service_resources::permits_disposable_profile_cleanup(
             &guarded.state,
             allocation,
@@ -806,6 +810,10 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
     {
         let repository = super::service_store::LockedServiceStateRepository::default_json()?;
         let guarded = repository.hold_snapshot_for_effect()?;
+        if !super::browser_session_store::BrowserSessionSqliteStore::default_session_state_read_only()?
+            .is_some_and(|state| allocations.iter().all(|allocation| state.disposable_profiles.get(&allocation.profile.id) == Some(allocation))) {
+            return Ok(None);
+        }
         if !super::service_resources::permits_disposable_retirement_group(
             &guarded.state,
             allocations,

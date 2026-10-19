@@ -1,5 +1,7 @@
 # Active plan index
 
+[P251: Properties and profile durability](0251-2026-10-19-dashboard-profile-properties.md), #323; implementing original metadata display and in-place profile naming and promotion.
+
 [P250: dashboard subsystem health](0250-2026-10-19-dashboard-subsystem-health.md), #317; toolbar health indicator and detail drawer integrated through PR318 and installed as sealed `81eea74b6d6d`; live checks and preserved identities pass, with Native warnings explicit.
 
 [P249: stale session host recovery](0249-2026-10-19-stale-session-host.md), #320; source repair qualified through PR321 and included in P250 installation; receiving-account acceptance remains separate.

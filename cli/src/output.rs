@@ -6459,7 +6459,11 @@ Dashboard/profile permission rejections offer access-check guidance before retry
 In the default browser workspace, open a tab’s SVG overflow menu or use its
 context menu (Shift+F10) for Properties and Copy URL. Properties shows supplied
 origin and purpose alongside current browser, profile, desktop, URL, title and
-status. Missing values remain Unknown; descriptive names are not identity proof.
+status. Unrecorded historical attribution is explained; descriptive names are not
+identity proof. Recorded creation time remains available independently. Properties
+shows Throwaway or Durable profile retention, Save name edits the display label,
+and Make durable retains a throwaway profile across tasks. IDs, directories and
+open tabs are preserved; normal browser and tab idle policies still apply.
 Copy URL copies the task URL without creating a handoff or changing selection.
 Close Tab confirms one managed task before requesting its exact target through the
 existing browser owner. It requires authenticated dashboard access and current

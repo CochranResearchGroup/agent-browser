@@ -567,9 +567,36 @@ pub(crate) trait BrowserSessionPersistence {
         legacy_service_state_path: &Path,
     ) -> Result<BrowserProfileCatalogLoad, String>;
     fn save_profile_catalog(&self, catalog: &BrowserProfileCatalog) -> Result<(), String>;
+    fn load_owner_snapshot(&self) -> Result<(BrowserSessionState, BrowserProfileCatalog), String> {
+        Ok((
+            self.load_session_state()?,
+            self.load_or_import_profile_catalog(Path::new(""))?.catalog,
+        ))
+    }
+    fn publish_profile_catalog(
+        &self,
+        expected: &BrowserProfileCatalog,
+        next: &BrowserProfileCatalog,
+    ) -> Result<(), String> {
+        if self.load_or_import_profile_catalog(Path::new(""))?.catalog != *expected {
+            return Err("browser_profile_catalog_publication_conflict".into());
+        }
+        self.save_profile_catalog(next)
+    }
 }
 
 impl BrowserSessionPersistence for BrowserSessionSqliteStore {
+    fn load_owner_snapshot(&self) -> Result<(BrowserSessionState, BrowserProfileCatalog), String> {
+        self.load_workspace_snapshot()
+    }
+    fn publish_profile_catalog(
+        &self,
+        expected: &BrowserProfileCatalog,
+        next: &BrowserProfileCatalog,
+    ) -> Result<(), String> {
+        self.compare_and_save_profile_catalog(expected, next)
+    }
+
     fn publish_session_effects(
         &mut self,
         expected: &BrowserSessionState,
@@ -690,6 +717,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         }
         let mut catalog_load =
             persistence.load_or_import_profile_catalog(legacy_service_state_path)?;
+        let original_catalog = catalog_load.catalog.clone();
         let mut catalog_changed = false;
         if let Some(policy) = config.default_disposable_policy {
             if !catalog_load
@@ -705,7 +733,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             }
         }
         if catalog_changed {
-            persistence.save_profile_catalog(&catalog_load.catalog)?;
+            persistence.publish_profile_catalog(&original_catalog, &catalog_load.catalog)?;
         }
         Ok(Self {
             persistence,
@@ -1797,8 +1825,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     /// effect retry: keep the adapter and all of its original-operation journals.
     /// Unpublished local state or launch/retirement work cannot be discarded.
     fn refresh_before_ordinary_command(&mut self) -> Result<(), String> {
-        let current = self.persistence.load_session_state()?;
+        let (current, catalog) = self.persistence.load_owner_snapshot()?;
         if current == self.persisted_state {
+            self.catalog = catalog;
             return Ok(());
         }
         if self.state != self.persisted_state
@@ -1808,6 +1837,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             return Err("browser_session_publication_conflict".into());
         }
         current.retention_policy.validate()?;
+        self.catalog = catalog;
         self.state = current.clone();
         self.persisted_state = current;
         Ok(())
@@ -1916,6 +1946,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 {
                     return Err("browser_session_profile_selector_conflict".into());
                 }
+                let original_catalog = self.catalog.clone();
                 self.catalog.profiles.insert(
                     id.into(),
                     agent_browser_service_model::BrowserProfileCatalogEntry {
@@ -1925,7 +1956,8 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         kind: agent_browser_service_model::BrowserProfileKind::Named,
                     },
                 );
-                self.persistence.save_profile_catalog(&self.catalog)?;
+                self.persistence
+                    .publish_profile_catalog(&original_catalog, &self.catalog)?;
             }
         }
         Ok(())

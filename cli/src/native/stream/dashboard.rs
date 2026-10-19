@@ -636,7 +636,10 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
         return;
     }
 
-    if path == "/api/service" || path.starts_with("/api/service/") {
+    if path == "/api/service"
+        || path.starts_with("/api/service/")
+        || path == "/api/dashboard/profile-properties"
+    {
         let body_str = if matches!(method, "POST" | "PUT" | "PATCH" | "DELETE") {
             read_post_body(&mut stream, &buf, n).await
         } else {
@@ -806,6 +809,78 @@ async fn handle_service_api_request(
     authenticated_dashboard_user: &str,
     revalidate: bool,
 ) {
+    // Dashboard authentication has already succeeded. This bounded operator
+    // endpoint never dispatches a browser command or accepts profile paths.
+    if method == "PATCH" && path == "/api/dashboard/profile-properties" {
+        let request = serde_json::from_str::<Value>(body);
+        let request = match request {
+            Ok(value)
+                if value.as_object().is_some_and(|object| {
+                    object.keys().all(|key| {
+                        matches!(
+                            key.as_str(),
+                            "profileId" | "expectedName" | "expectedKind" | "name" | "promote"
+                        )
+                    })
+                }) =>
+            {
+                value
+            }
+            _ => {
+                write_json_error(
+                    stream,
+                    "400 Bad Request",
+                    "profile_properties_request_invalid",
+                )
+                .await;
+                return;
+            }
+        };
+        let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+            use crate::native::service_store::LockedServiceStateRepository;
+            let repository = LockedServiceStateRepository::default_json()?;
+            let _guard = repository.hold_snapshot_for_effect()?;
+            let field = |key: &str| {
+                request
+                    .get(key)
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "profile_properties_request_invalid".to_owned())
+            };
+            let kind = serde_json::from_value(
+                request
+                    .get("expectedKind")
+                    .cloned()
+                    .ok_or("profile_properties_request_invalid")?,
+            )
+            .map_err(|_| "profile_properties_request_invalid")?;
+            let promote = request
+                .get("promote")
+                .and_then(Value::as_bool)
+                .ok_or("profile_properties_request_invalid")?;
+            crate::native::browser_session_store::BrowserSessionSqliteStore::default_sqlite()?
+                .update_profile_properties(
+                    field("profileId")?,
+                    field("expectedName")?,
+                    kind,
+                    field("name")?,
+                    promote,
+                )
+        })
+        .await
+        .unwrap_or_else(|_| Err("profile_properties_task_failed".into()));
+        match result {
+            Ok(profile) => {
+                write_json_value(
+                    stream,
+                    "200 OK",
+                    json!({"success":true,"data":{"profile":profile}}),
+                )
+                .await
+            }
+            Err(error) => write_json_error(stream, "409 Conflict", &error).await,
+        }
+        return;
+    }
     if method == "GET" && split_path_query(path).0 == "/api/service/failures" {
         let limit = split_path_query(path)
             .1
