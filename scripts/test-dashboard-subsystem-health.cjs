@@ -1,0 +1,61 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const http = require('node:http');
+const { chromium } = require('playwright');
+const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-browser-fixture.cjs');
+(async () => {
+  const root = path.resolve(__dirname, '..');
+  const artifacts = fs.mkdtempSync(path.join(os.tmpdir(), 'dashboard-subsystem-health-'));
+  await buildWorkspaceViewportFixture(root, path.join(root, 'scripts/fixtures/subsystem-health.tsx'), artifacts);
+  const server = http.createServer((req, res) => {
+    res.setHeader('Content-Type', req.url === '/bundle.js' ? 'application/javascript' : req.url === '/style.css' ? 'text/css' : 'text/html');
+    res.end(req.url === '/bundle.js' ? fs.readFileSync(path.join(artifacts, 'bundle.js')) : req.url === '/style.css' ? fs.readdirSync(path.join(root, 'packages/dashboard/.next/static/chunks')).filter(name => name.endsWith('.css')).map(name => fs.readFileSync(path.join(root, 'packages/dashboard/.next/static/chunks', name))).join('\n') : '<link rel="stylesheet" href="/style.css"><div id="root"></div><script src="/bundle.js"></script>');
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  let browser;
+  try {
+    browser = await chromium.launch({ executablePath: process.env.AGENT_BROWSER_TEST_CHROME || '/opt/google/chrome/chrome', headless: true });
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    const requests = []; let failNative = true; let hang = false;
+    await page.route('**/api/**', route => {
+      const url = new URL(route.request().url()); requests.push(url.pathname);
+      assert.equal(route.request().method(), 'GET'); if (hang) return;
+      if (url.pathname === '/api/runtime/health') return route.fulfill({ json: { ready: true, state: 'ready', observedAtEpochMs: Date.now() } });
+      if (url.pathname === '/api/v1/slots') return route.fulfill({ json: [{ slot: 1, state: failNative ? 'unavailable' : 'ready' }] });
+      return route.abort();
+    });
+    await page.goto(`http://127.0.0.1:${server.address().port}`);
+    const trigger = page.locator('button[aria-label^="Subsystem health:"]');
+    await trigger.waitFor(); await page.waitForTimeout(1100);
+    assert.equal(requests.length, 0, 'no cold-open health requests');
+    await trigger.focus(); await page.keyboard.press('Enter');
+    const drawer = page.getByRole('dialog', { name: 'Subsystem health' });
+    await drawer.waitFor(); await page.getByText('0 of 1 desktops pass Native readiness.', { exact: false }).waitFor();
+    assert.equal(await trigger.getAttribute('aria-label'), 'Subsystem health: Unavailable');
+    assert.deepEqual(requests.sort(), ['/api/runtime/health', '/api/v1/slots']);
+    if (process.env.HEALTH_SCREENSHOT) await page.screenshot({ path: process.env.HEALTH_SCREENSHOT });
+    const box = await drawer.boundingBox(); assert(box.x > 800 && box.x + box.width <= 1440, 'drawer docks at right edge');
+    await page.keyboard.press('Escape'); await drawer.waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label')?.startsWith('Subsystem health:'));
+    assert(await trigger.evaluate(el => el === document.activeElement), 'focus returns to SVG control');
+    failNative = false; await trigger.click();
+    await page.getByText('1 of 1 desktops pass Native readiness.', { exact: false }).waitFor();
+    assert.equal(await trigger.getAttribute('aria-label'), 'Subsystem health: Healthy');
+    await page.evaluate(() => document.querySelector('.native-task-viewport').setAttribute('data-native-task-state', 'failed'));
+    await page.getByText('The selected Native desktop failed to open.', { exact: false }).waitFor();
+    assert.equal(await trigger.getAttribute('aria-label'), 'Subsystem health: Unavailable');
+    await page.keyboard.press('Escape'); await drawer.waitFor({ state: 'hidden' });
+    const count = requests.length; await page.waitForTimeout(1200); assert.equal(requests.length, count, 'no recurring network checks');
+    await page.setViewportSize({ width: 390, height: 760 }); await trigger.click(); await drawer.waitFor();
+    const mobile = await drawer.boundingBox(); assert(mobile.x >= 0 && mobile.x + mobile.width <= 390, 'drawer fits mobile');
+    await page.evaluate(() => document.querySelector('.native-task-viewport').setAttribute('data-native-task-state', 'opened'));
+    await page.clock.install(); hang = true;
+    await page.getByRole('button', { name: 'Refresh health', exact: true }).click();
+    await page.clock.fastForward(8100);
+    await page.getByText('Health check could not complete.', { exact: false }).first().waitFor();
+    assert.equal(await trigger.getAttribute('aria-label'), 'Subsystem health: Not verified', 'timeout clears previous good evidence');
+    console.log('Mounted subsystem health: Native failure, recovery, selected-view failure, keyboard/focus, responsive drawer and no polling passed');
+  } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); fs.rmSync(artifacts, { recursive: true, force: true }); }
+})().catch(error => { console.error(error); process.exitCode = 1; });

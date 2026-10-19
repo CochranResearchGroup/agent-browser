@@ -5693,3 +5693,23 @@ button {
   .native-handoff-table th { padding: 0; }
   .native-handoff-table th:last-child { display: none; }
 }
+
+/* Subsystem evidence remains separate from browser selection and Native delivery. */
+.subsystem-health-trigger { display: inline-flex; align-items: center; gap: 2px; }
+.health-healthy, .subsystem-health-trigger.health-healthy { color: #15803d; }
+.health-attention, .subsystem-health-trigger.health-attention { color: #a16207; }
+.health-failed, .subsystem-health-trigger.health-failed { color: #b91c1c; }
+.health-unknown { color: var(--muted-foreground); }
+.dark .health-healthy, .dark .subsystem-health-trigger.health-healthy { color: #86efac; }
+.dark .health-attention, .dark .subsystem-health-trigger.health-attention { color: #fde047; }
+.dark .health-failed, .dark .subsystem-health-trigger.health-failed { color: #fca5a5; }
+.subsystem-health-drawer { position: fixed; display: grid; gap: 16px; z-index: 60; box-sizing: border-box; padding: 22px; border: 1px solid var(--border, #45454d); background: #242427; color: #e6e6e8; font: 13px system-ui, sans-serif; translate: 0; inset: 12px 12px 12px auto; transform: none; width: min(540px, calc(100vw - 24px)); max-width: none; max-height: calc(100dvh - 24px); grid-template-rows: auto auto auto minmax(0, 1fr) auto; }
+.subsystem-health-row { border-bottom: 1px solid var(--border); padding: 16px 0; }
+.subsystem-health-row p { margin-top: 7px; color: #aaaab4; line-height: 1.55; }
+
+.native-workspace-toolbar .subsystem-health-trigger.health-healthy, .subsystem-health-drawer .health-healthy { color: #86efac; }
+.native-workspace-toolbar .subsystem-health-trigger.health-attention, .subsystem-health-drawer .health-attention { color: #fde047; }
+.native-workspace-toolbar .subsystem-health-trigger.health-failed, .subsystem-health-drawer .health-failed { color: #fca5a5; }
+.subsystem-health-drawer :focus-visible { outline: 2px solid #bdbdc9; outline-offset: 2px; }
+
+.subsystem-health-drawer > p { color: #aaaab4; }

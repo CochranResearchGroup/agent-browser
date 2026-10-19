@@ -1,5 +1,8 @@
 # Roadmap
 
+P249 adds [dashboard subsystem health](docs/dev/plans/0249-2026-10-19-dashboard-subsystem-health.md) under #317: an SVG toolbar indicator and accessible side drawer with separately scoped inventory, runtime, Native readiness and viewer evidence. Detailed checks are on demand; no automatic repair or recurring diagnostic polling. Source qualification passes; the known legacy compact fixture failure is reproduced on untouched main. Production publication is separate.
+
+
 Updated: 2026-10-17
 
 ## Current direction
