@@ -4,6 +4,8 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Subsystem health evidence**: Separately scoped inventory availability, runtime diagnostic readiness, Native slot readiness and observed selected-view connection state. Unchecked, stale, timed-out or malformed evidence is unverified. Service reachability and handoff preparation do not prove display delivery.
+
 **SiteGuide**: Versioned knowledge for recognizing a website's states, locating
 controls, interpreting results and verifying an intended outcome. Site knowledge
 is separate from the selected account and its credentials.

@@ -183,6 +183,8 @@ Use `browser_discover` for advanced MCP metadata.
 
 ### Dashboard summary diagnostics
 
+The toolbar Subsystem health SVG opens a side drawer with separate inventory, browser runtime, Native desktop readiness and selected viewer evidence. Gray means unverified or stale, amber means attention, red means unavailable and green means the reported checks pass. Detailed read-only checks run only when opening or refreshing the drawer, expire after 30 seconds and time out after eight seconds. They add no recurring diagnostic polling or automatic repair. A reachable service or prepared handoff does not prove a connected Native display.
+
 After a service restart, selecting an existing live task reconnects its recorded browser without changing its process, tab, profile or document. A browser that cannot be verified remains unavailable; selection does not launch a replacement.
 
 The default native workspace uses `GET /api/service/status?projection=workspace`

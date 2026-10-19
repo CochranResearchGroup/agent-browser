@@ -1,5 +1,7 @@
 # Active plan index
 
+[P250: dashboard subsystem health](0250-2026-10-19-dashboard-subsystem-health.md), #317; toolbar indicator and accessible health detail drawer source-qualified; production publication remains separate.
+
 [P249: stale session host recovery](0249-2026-10-19-stale-session-host.md), #320; source repair qualified through PR321, installed runtime unchanged.
 
 [P248: selected desktop cold open](0248-2026-10-18-dashboard-cold-open.md), #312; selected-desktop repair integrated and installed, with real production pixels in 4503/3083 ms and a singular connected viewer through census polling.
