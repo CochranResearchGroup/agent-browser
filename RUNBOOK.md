@@ -1,9 +1,9 @@
 # Runbook
 
-P250 adds [dashboard subsystem health](docs/dev/plans/0250-2026-10-19-dashboard-subsystem-health.md) under #317: an SVG toolbar indicator and accessible side drawer with separately scoped inventory, runtime, Native readiness and viewer evidence. Detailed checks are on demand; no automatic repair or recurring diagnostic polling. Source qualification passes; the known legacy compact fixture failure is reproduced on untouched main. Production publication is separate.
+P250 [dashboard subsystem health](docs/dev/plans/0250-2026-10-19-dashboard-subsystem-health.md), #317, is integrated through PR318 and installed as sealed `81eea74b6d6d` after development qualification. The [installed receipt](docs/dev/notes/0250-2026-10-19-dashboard-subsystem-health-installed.md) binds actual public drawer checks, both doctors, three browser cycles and preserved identities. The drawer exposes remaining Native warnings; a pre-existing Docker/WSL regression is mitigated by a verifier-only bridge.
 
 
-Updated: 2026-10-18
+Updated: 2026-10-19
 
 ## Local validation result collection
 
@@ -20,7 +20,7 @@ existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 [P249](docs/dev/plans/0249-2026-10-19-stale-session-host.md), #320, repairs valid
 ordinary task acquisition after a peer session update. The stale-write CAS guard
 remains; only clean pre-command snapshots may refresh. Provider-free qualification passes 128 Rust tests with 1 explicit real-viewer
-fixture ignored. PR321 owns source integration. Production installation remains separate.
+fixture ignored. PR321 is integrated and included in the P250 installed candidate. Receiving-account acceptance remains separate.
 
 ### 2026-10-18 selected desktop cold-open repair
 

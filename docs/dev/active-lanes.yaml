@@ -10,12 +10,12 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#317]
     pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/318
-    plan_state: OPEN
-    custody_state: ACTIVE
+    plan_state: CLOSED
+    custody_state: INTEGRATED
     dependencies: []
     overlaps: [P248, UX301]
     reconciled_overlaps: ["Prior dashboard lanes integrated; reuse clean primary and retain their pinned candidates. Own only health drawer, projection and compact toolbar consumer. Preserve foreign checkouts and existing polling."]
-    validation_status: Source-qualified with mounted toolbar/drawer, evidence regressions, builds, format and strict Clippy; legacy compact fixture also fails untouched baseline; production unchanged
+    validation_status: PR318 merged; sealed 81eea74b6d6d qualified in development and installed in ready production transaction. Both doctors, three browser cycles, real drawer, no diagnostic polling and protected identities pass. Native Docker/WSL regression predates upgrade; verifier-only mitigation restored 16 slots. Legacy compact fixture and remaining Native warnings stay explicit.
     updated_at: 2026-10-19
 
   - id: P249

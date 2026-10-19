@@ -1,12 +1,16 @@
 # P250: Dashboard subsystem health
 
-Status: OPEN
+Status: CLOSED
 Lane: P250
 Product lane: PL-BUGFIX
 Work item: CochranResearchGroup/agent-browser#317
 Pull request: https://github.com/CochranResearchGroup/agent-browser/pull/318
 Branch: fix/dashboard-subsystem-health
 Owner: ecochran76
+
+## Current state
+
+PR318 is merged and the exact sealed `81eea74b6d6d` candidate is installed after development qualification. Both install doctors, three disposable browser cycles and real public health-drawer workflow checks pass. [Installed acceptance](../notes/0250-2026-10-19-dashboard-subsystem-health-installed.md) records preserved identities, the exposed pre-existing Docker/WSL regression and the verifier-only mitigation. Remaining Native warnings are visible; no global health or receiving-account acceptance is claimed.
 
 ## Outcome and scope
 
