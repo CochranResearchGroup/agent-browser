@@ -1,5 +1,7 @@
 # Active plan index
 
+[P249: stale session host recovery](0249-2026-10-19-stale-session-host.md), #320; bounded ordinary task lifecycle repair in progress.
+
 [P248: selected desktop cold open](0248-2026-10-18-dashboard-cold-open.md), #312; selected-desktop repair integrated and installed, with real production pixels in 4503/3083 ms and a singular connected viewer through census polling.
 
 [P245: existing-host QBO and BILL authentication](0245-2026-10-16-hosted-auth-consumer.md),

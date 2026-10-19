@@ -12,6 +12,8 @@ Prioritize less plumbing, useful continuity, seamless human assistance, predicta
 
 ## Current work and boundaries
 
+[P249](docs/dev/plans/0249-2026-10-19-stale-session-host.md), #320, owns the bounded stale session host recovery defect; source qualification is in progress and production remains unchanged.
+
 [P248](docs/dev/plans/0248-2026-10-18-dashboard-cold-open.md) completes the bounded selected-desktop cold-open repair under #312, including the Native-owned lazy audio dependency. Production first/repeat Native pixels take 4503/3083 ms without duplicate handoffs. RUNBOOK and the acceptance note preserve exact installed identities and remaining runtime limits.
 
 [P245](docs/dev/plans/0245-2026-10-16-hosted-auth-consumer.md) qualifies the bounded existing-host QBO then BILL account/company journeys for #290. [RUNBOOK](RUNBOOK.md) and the [nine-item evidence map](docs/dev/receipts/p245/issue-290-acceptance.json) preserve source/install/native boundaries and accepted canonical delivery through PR297. This does not complete every authentication, password-manager, MFA or API workflow.

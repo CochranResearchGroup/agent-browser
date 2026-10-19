@@ -22,6 +22,8 @@ integration by itself.
 
 ## PL-BUGFIX | Current Defect Evidence
 
+- [Ordinary task recovery after a peer session update](0249-2026-10-19-stale-session-host.md)
+
 - [Dashboard cold-open diagnosis and repair](0248-2026-10-18-dashboard-cold-open.md)
 
 - [Dashboard polling and native viewer repair](2026-10-17-dashboard-polling-native-view.md)
