@@ -1,9 +1,12 @@
 # P251: useful Properties and profile durability
 
+Status: OPEN
+Lane: P251
 Product lane: PL-PLATFORM
-
-Owner: ecochran76. Work item: #323. Branch: `platform/dashboard-profile-properties`.
-Status: OPEN.
+Work item: CochranResearchGroup/agent-browser#323
+Pull request: https://github.com/CochranResearchGroup/agent-browser/pull/324
+Branch: platform/dashboard-profile-properties
+Owner: ecochran76
 
 ## Current state
 
