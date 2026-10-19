@@ -59,7 +59,7 @@ export function managedWorkspaceSources(workspace?: ServiceManagedWorkspace, cur
     browsers: Object.values(workspace.browsers).map(browser => ({
       id: browser.id, profileId: browser.profileId, pid: browser.pid,
       displayAllocationId: browser.desktop?.desktop_id ?? null,
-      displayName: browser.profileId,
+      displayName: workspace.profiles?.[browser.profileId]?.name ?? browser.profileId,
       activeSessionIds: browser.activeSessionIds,
       health: browser.state === 'sleeping' || browser.presence?.state === 'absent' ? 'not_started' : current && browser.presence?.state === 'live' ? 'reported' : 'unknown',
       // No operatorVisibleProof or controllable stream follows from inventory.
@@ -82,6 +82,8 @@ export function managedWorkspaceSources(workspace?: ServiceManagedWorkspace, cur
         presence: { state: presence },
         lifecycle: presence === 'live' ? 'ready' : presence === 'absent' ? 'expired' : 'unknown', url: tab.url, title: text(tab.title), taskLabel: text(tab.taskMetadata?.taskName),
         taskMetadata: tab.taskMetadata,
+        createdAtMs: tab.createdAtMs,
+        profileProperties: workspace.profiles?.[workspace.browsers[tab.browserId]?.profileId] ?? null,
         profileId: workspace.browsers[tab.browserId]?.profileId ?? null,
         desktopId: workspace.browsers[tab.browserId]?.desktop?.desktop_id ?? null,
         inventoryState: workspace.browsers[tab.browserId]?.state ?? null,

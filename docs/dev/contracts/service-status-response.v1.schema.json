@@ -36,6 +36,20 @@
             },
             "observedAtMs": { "type": "integer", "minimum": 0 },
             "observationAgeMs": { "type": "integer", "minimum": 0 },
+            "profiles": {
+              "type": "object",
+              "description": "Browser-referenced profile display identity and retention; directories remain private.",
+              "additionalProperties": {
+                "type": "object",
+                "required": ["id", "name", "kind"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "kind": { "enum": ["named", "disposable"] }
+                },
+                "additionalProperties": false
+              }
+            },
             "handoffs": {
               "type": "object",
               "description": "Retained logical links include ended targets. Display-only fields exclude issued views, provider routes, private resume capsules and native correlations.",

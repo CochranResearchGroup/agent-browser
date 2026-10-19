@@ -769,6 +769,10 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
     {
         let repository = super::service_store::LockedServiceStateRepository::default_json()?;
         let guarded = repository.hold_snapshot_for_effect()?;
+        if !super::browser_session_store::BrowserSessionSqliteStore::default_session_state_read_only()?
+            .is_some_and(|state| state.disposable_profiles.get(&allocation.profile.id) == Some(allocation)) {
+            return Ok(None);
+        }
         if !super::service_resources::permits_disposable_profile_cleanup(
             &guarded.state,
             allocation,
@@ -806,6 +810,10 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
     {
         let repository = super::service_store::LockedServiceStateRepository::default_json()?;
         let guarded = repository.hold_snapshot_for_effect()?;
+        if !super::browser_session_store::BrowserSessionSqliteStore::default_session_state_read_only()?
+            .is_some_and(|state| allocations.iter().all(|allocation| state.disposable_profiles.get(&allocation.profile.id) == Some(allocation))) {
+            return Ok(None);
+        }
         if !super::service_resources::permits_disposable_retirement_group(
             &guarded.state,
             allocations,
@@ -2482,6 +2490,31 @@ mod tests {
             cleanup_delay_ms: 0,
             cleanup_eligible_at_ms: Some(2),
         };
+        struct RestoreRuntime(agent_browser_service_model::BrowserSessionState);
+        impl Drop for RestoreRuntime {
+            fn drop(&mut self) {
+                let result = (|| {
+                    let mut store = super::super::browser_session_store::BrowserSessionSqliteStore::default_sqlite()?;
+                    let current = store.load_session_state()?;
+                    store.compare_and_save_session_state(&current, &self.0)
+                })();
+                if !std::thread::panicking() {
+                    assert!(result.is_ok());
+                }
+            }
+        }
+        let mut runtime =
+            super::super::browser_session_store::BrowserSessionSqliteStore::default_sqlite()
+                .unwrap();
+        let prior = runtime.load_session_state().unwrap();
+        let _restore_runtime = RestoreRuntime(prior.clone());
+        let mut current = prior.clone();
+        current
+            .disposable_profiles
+            .insert(allocation.profile.id.clone(), allocation.clone());
+        runtime
+            .compare_and_save_session_state(&prior, &current)
+            .unwrap();
         let store = JsonServiceStateStore::new(&path);
         let mut state = ServiceState::default();
         state.jobs.insert(
@@ -2578,6 +2611,21 @@ mod tests {
             .acquire_disposable_retirement_guard(&allocations, &[])
             .unwrap()
             .is_some());
+        let before = runtime.load_session_state().unwrap();
+        let mut promoted = before.clone();
+        promoted
+            .disposable_profiles
+            .remove(&allocations[0].profile.id);
+        runtime
+            .compare_and_save_session_state(&before, &promoted)
+            .unwrap();
+        assert!(
+            effects
+                .acquire_disposable_retirement_guard(&allocations, &[])
+                .unwrap()
+                .is_none(),
+            "a stale allocation cannot authorize cleanup after promotion"
+        );
     }
 
     #[test]

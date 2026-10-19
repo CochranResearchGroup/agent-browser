@@ -219,6 +219,22 @@ fn current(connection: &Connection) -> Result<BrowserSessionState, LaunchCustody
 
 /// Retirement admission must see process claims that won the same SQLite
 /// writer lock first, including claims whose physical outcome is still unknown.
+/// Do not change retention while a launch still owns an unpublished profile effect.
+pub(super) fn reject_profile_metadata_mutation(
+    connection: &Connection,
+    profile_id: &str,
+) -> Result<(), LaunchCustodyStoreError> {
+    let ledger = ledger(connection)?;
+    if ledger.records.values().any(|record| {
+        record.intent.profile_id == profile_id
+            && !record.published
+            && !ledger.reconciled_absent.contains(&record.intent.intent_id)
+    }) {
+        return Err(LaunchCustodyStoreError::Conflict);
+    }
+    Ok(())
+}
+
 pub(super) fn reject_pending_launch_for_retirement(
     connection: &Connection,
     intent: &agent_browser_service_model::BrowserIdleRetirementIntent,
@@ -755,6 +771,24 @@ mod tests {
             },
         )
     }
+    #[test]
+    fn profile_properties_refuse_unpublished_launch_and_allow_unrelated_profiles() {
+        let fixture = Fixture::new();
+        let mut store = fixture.open(true);
+        let expected = store.load_session_state().unwrap();
+        let launch = intent();
+        store.admit_launch_intent(&launch, &expected).unwrap();
+        assert_eq!(
+            reject_profile_metadata_mutation(store.remote_view_mutation_connection(), "profile-a"),
+            Err(LaunchCustodyStoreError::Conflict)
+        );
+        assert!(reject_profile_metadata_mutation(
+            store.remote_view_mutation_connection(),
+            "unrelated-profile"
+        )
+        .is_ok());
+    }
+
     #[test]
     fn ordinary_remote_startup_ignores_malformed_history() {
         struct NoProcessEffects;

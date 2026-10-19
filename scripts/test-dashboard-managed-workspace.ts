@@ -4,6 +4,7 @@ import { managedWorkspaceSources, managedWorkspaceViewport } from '../packages/d
 
 const sources = managedWorkspaceSources({
   schemaVersion: 'agent-browser.managed-workspace.v1', source: 'managed-owner', observedAtMs: Date.now(),
+  profiles: { p: { id: 'p', name: 'My retained browser', kind: 'named' } },
   browsers: { b: { id: 'b', profileId: 'p', pid: 42, presence: { state: 'live' }, desktop: { desktop_id: 'desktop-a', generation: 7, friendly_route_label: 'Research desktop' }, activeSessionIds: ['s'], state: 'reported' } },
   sessions: { s: { id: 's', name: 'alice', profileId: 'p', browserId: 'b', createdAtMs: 100, lastActivityAtMs: 100, expiresAtMs: 0, currentTabId: 't' } },
   tabs: { t: { id: 't', targetId: 'native-target', presence: { state: 'live' }, browserId: 'b', sessionId: 's', createdAtMs: 100, url: 'https://example.test/task', taskMetadata: { taskName: 'Research task', agentName: 'Supplied label' }, lifetime: null, pendingHuman: null } },
@@ -18,6 +19,9 @@ assert.equal(sources.tabs[0].sessionId, 's');
 assert.equal(sources.tabs[0].ownerSessionId, 'alice', 'native focus routes by the exact owning lane name');
 assert.equal(sources.tabs[0].title, null, 'a supplied task label is not the current page title');
 assert.deepEqual(sources.tabs[0].taskMetadata, { taskName: 'Research task', agentName: 'Supplied label' });
+assert.equal(sources.tabs[0].createdAtMs, 100, 'Properties preserves owner creation time independently of descriptive metadata');
+assert.deepEqual(sources.tabs[0].profileProperties, { id: 'p', name: 'My retained browser', kind: 'named' });
+assert.equal(sources.browsers[0].displayName, 'My retained browser');
 assert.equal(sources.tabs[0].profileId, 'p');
 assert.equal(sources.tabs[0].desktopId, 'desktop-a');
 assert.equal(sources.tabs[0].inventoryState, 'reported', 'owner inventory must not imply native viewer readiness');

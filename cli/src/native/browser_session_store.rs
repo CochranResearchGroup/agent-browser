@@ -170,13 +170,20 @@ impl BrowserSessionSqliteStore {
     /// Native rail projection reads one owner snapshot, without launch admission,
     /// integrity scans, backup hashing, migrations or Service State reconciliation.
     pub(crate) async fn default_observed_workspace_status() -> Result<serde_json::Value, String> {
-        let state = Self::default_session_state_read_only()
-            .map_err(|_| "browser_workspace_inventory_unavailable".to_owned())?
-            .unwrap_or_default();
+        let (state, catalog) = match fs::symlink_metadata(Self::default_sqlite_path()?) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (
+                BrowserSessionState::default(),
+                BrowserProfileCatalog::default(),
+            ),
+            Err(_) => return Err("browser_workspace_inventory_unavailable".into()),
+            Ok(_) => {
+                Self::open_read_only(&Self::default_sqlite_path()?)?.load_workspace_snapshot()?
+            }
+        };
         let mut status = serde_json::json!({
             "schemaVersion": "agent-browser.runtime-operational-status.v1",
             "state": "available",
-            "workspace": workspace_projection(&state)?,
+            "workspace": workspace_projection(&state, &catalog)?,
         });
         workspace_observation::enrich(state, &mut status).await;
         Ok(status)
@@ -222,14 +229,14 @@ impl BrowserSessionSqliteStore {
                 Err(_) => "unavailable",
             };
             let backup = store.backup_status()?;
-            let managed = store.load_session_state()?;
+            let (managed, catalog) = store.load_workspace_snapshot()?;
             Ok(serde_json::json!({
                 "schemaVersion": "agent-browser.runtime-operational-status.v1",
                 "state": "available",
                 // Owner-published inventory is not provider readiness or an OS
                 // liveness claim. Debugger endpoints and launch environments
                 // remain private to the runtime owner.
-                "workspace": workspace_projection(&managed)?,
+                "workspace": workspace_projection(&managed, &catalog)?,
                 "launchAdmission": launch_admission,
                 "storage": {
                     "integrityState": "ok",
@@ -529,6 +536,142 @@ impl BrowserSessionSqliteStore {
         Ok(result)
     }
 
+    /// One read transaction prevents profile promotion from splitting display state.
+    pub(crate) fn load_workspace_snapshot(
+        &self,
+    ) -> Result<(BrowserSessionState, BrowserProfileCatalog), String> {
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(|_| "browser_workspace_snapshot_failed")?;
+        let state = load_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+        )?;
+        let catalog = load_document(
+            &transaction,
+            PROFILE_CATALOG_DOCUMENT,
+            BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+        )?;
+        transaction
+            .commit()
+            .map_err(|_| "browser_workspace_snapshot_failed")?;
+        Ok((state, catalog))
+    }
+
+    /// Edit display metadata and one-way retention in one owner transaction.
+    /// Caller retains the Service State effect guard shared by profile cleanup.
+    /// Directory, stable ID, tabs, sessions and browser identities never change.
+    pub(crate) fn update_profile_properties(
+        &mut self,
+        profile_id: &str,
+        expected_name: &str,
+        expected_kind: agent_browser_service_model::BrowserProfileKind,
+        name: &str,
+        promote: bool,
+    ) -> Result<serde_json::Value, String> {
+        use agent_browser_service_model::BrowserProfileKind;
+        let name = name.trim();
+        if name.is_empty() || name.chars().count() > 120 || name.chars().any(char::is_control) {
+            return Err("profile_properties_name_invalid".into());
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| "profile_properties_begin_failed")?;
+        let mut state: BrowserSessionState = load_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+        )?;
+        let mut catalog: BrowserProfileCatalog = load_document(
+            &transaction,
+            PROFILE_CATALOG_DOCUMENT,
+            BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+        )?;
+        let mut profile = state
+            .disposable_profiles
+            .get(profile_id)
+            .map(|entry| entry.profile.clone())
+            .or_else(|| catalog.profiles.get(profile_id).cloned())
+            .ok_or("profile_properties_missing")?;
+        if profile.name != expected_name || profile.kind != expected_kind {
+            return Err("profile_properties_changed".into());
+        }
+        if !std::path::Path::new(&profile.user_data_dir).is_dir() {
+            return Err("profile_properties_directory_unavailable".into());
+        }
+        super::browser_idle_retirement_store::reject_profile_metadata_mutation(
+            &transaction,
+            profile_id,
+        )
+        .map_err(|_| "profile_properties_retirement_pending")?;
+        super::browser_launch_custody_store::reject_profile_metadata_mutation(
+            &transaction,
+            profile_id,
+        )
+        .map_err(|_| "profile_properties_launch_pending")?;
+        let previous = state.clone();
+        profile.name = name.to_owned();
+        if promote {
+            profile.kind = BrowserProfileKind::Named;
+        }
+        if profile.kind == BrowserProfileKind::Named {
+            state.disposable_profiles.remove(profile_id);
+            catalog
+                .profiles
+                .insert(profile_id.to_owned(), profile.clone());
+            // Recreated handoffs must select this same now-durable profile.
+            for link in state.remote_view_tab_handoffs.values_mut() {
+                if let Some(resume) = link
+                    .resume
+                    .as_mut()
+                    .filter(|resume| resume.profile_id == profile_id)
+                {
+                    resume.disposable_policy_id = None;
+                }
+            }
+        } else if let Some(allocation) = state.disposable_profiles.get_mut(profile_id) {
+            allocation.profile = profile.clone();
+        } else {
+            // One-time legacy profiles can live only in the imported catalog.
+            catalog
+                .profiles
+                .insert(profile_id.to_owned(), profile.clone());
+        }
+        super::browser_idle_retirement_store::reject_retirement_publication(
+            &transaction,
+            &previous,
+            &state,
+            &[],
+            &[],
+        )
+        .map_err(|_| "profile_properties_retirement_pending")?;
+        super::browser_launch_custody_store::reject_fenced_browser_publication(
+            &transaction,
+            &previous,
+            &state,
+        )
+        .map_err(|_| "profile_properties_launch_pending")?;
+        save_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+            &state,
+        )?;
+        save_document(
+            &transaction,
+            PROFILE_CATALOG_DOCUMENT,
+            BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+            &catalog,
+        )?;
+        transaction
+            .commit()
+            .map_err(|_| "profile_properties_commit_failed")?;
+        Ok(serde_json::json!({"id":profile.id,"name":profile.name,"kind":profile.kind}))
+    }
+
     pub(crate) fn load_profile_catalog(&self) -> Result<BrowserProfileCatalogLoad, String> {
         let catalog = load_document(
             &self.connection,
@@ -540,6 +683,35 @@ impl BrowserSessionSqliteStore {
             diagnostics: Vec::new(),
             imported_legacy_profiles: false,
         })
+    }
+
+    /// Registering a profile cannot overwrite concurrent display-name or retention edits.
+    pub(crate) fn compare_and_save_profile_catalog(
+        &self,
+        expected: &BrowserProfileCatalog,
+        catalog: &BrowserProfileCatalog,
+    ) -> Result<(), String> {
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(|_| "browser_profile_catalog_begin_failed")?;
+        let current: BrowserProfileCatalog = load_document(
+            &transaction,
+            PROFILE_CATALOG_DOCUMENT,
+            BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+        )?;
+        if current != *expected {
+            return Err("browser_profile_catalog_publication_conflict".into());
+        }
+        save_document(
+            &transaction,
+            PROFILE_CATALOG_DOCUMENT,
+            BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+            catalog,
+        )?;
+        transaction
+            .commit()
+            .map_err(|_| "browser_profile_catalog_commit_failed".into())
     }
 
     pub(crate) fn save_profile_catalog(
@@ -765,7 +937,15 @@ impl BrowserSessionSqliteStore {
 
 /// Display fields only. Private resume capsules, CDP endpoints and provider
 /// correlation tokens never enter the native workspace response.
-fn workspace_projection(managed: &BrowserSessionState) -> Result<serde_json::Value, String> {
+fn workspace_projection(
+    managed: &BrowserSessionState,
+    catalog: &BrowserProfileCatalog,
+) -> Result<serde_json::Value, String> {
+    let referenced_profiles = managed
+        .browsers
+        .values()
+        .map(|browser| browser.profile_id.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
     let browsers: std::collections::BTreeMap<_, _> = managed.browsers.iter().map(|(id, browser)| {
                 (id.clone(), serde_json::json!({
                     "id":id,"profileId":browser.profile_id,"pid":browser.pid,
@@ -776,7 +956,13 @@ fn workspace_projection(managed: &BrowserSessionState) -> Result<serde_json::Val
     let tabs: std::collections::BTreeMap<_, _> = managed.tabs.iter().map(|(id, tab)| {
                 let destination = managed.navigation_history.iter().filter(|entry| entry.tab_id == *id)
                     .max_by_key(|entry| entry.visited_at_ms).map(|entry| entry.url.as_str());
-                let metadata = managed.tab_metadata.get(id);
+                let metadata = managed.tab_metadata.get(id).or_else(|| {
+                    managed.remote_view_tab_handoffs.values()
+                        .filter(|link| link.tab_id == *id && link.session_id == tab.session_id)
+                        .filter_map(|link| link.resume.as_ref())
+                        .filter(|resume| managed.sessions.get(&tab.session_id).is_some_and(|session| session.profile_id == resume.profile_id))
+                        .find_map(|resume| resume.task_metadata.as_ref())
+                });
                 (id.clone(), serde_json::json!({
                     "id":id,"targetId":tab.target_id,"browserId":tab.browser_id,"sessionId":tab.session_id,
                     "createdAtMs":tab.created_at_ms,"url":destination,"taskMetadata":metadata,
@@ -814,6 +1000,10 @@ fn workspace_projection(managed: &BrowserSessionState) -> Result<serde_json::Val
         "schemaVersion":"agent-browser.managed-workspace.v1",
         "source":"managed-owner","browsers":browsers,
         "sessions":managed.sessions,"tabs":tabs,"handoffs":handoffs,
+        "profiles": catalog.profiles.values().chain(managed.disposable_profiles.values().map(|entry| &entry.profile))
+            .filter(|profile| referenced_profiles.contains(profile.id.as_str()))
+            .map(|profile| (profile.id.clone(), serde_json::json!({"id":profile.id,"name":profile.name,"kind":profile.kind})))
+            .collect::<std::collections::BTreeMap<_, _>>(),
     }))
 }
 
@@ -1391,6 +1581,304 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    fn assert_workspace_projection_declared(value: &serde_json::Value) {
+        fn check(value: &serde_json::Value, schema: &serde_json::Value) {
+            if let Some(object) = value.as_object() {
+                for (key, child) in object {
+                    let declared = schema["properties"].get(key);
+                    if schema["additionalProperties"] == false {
+                        assert!(
+                            declared.is_some(),
+                            "public workspace field must be declared: {key}"
+                        );
+                    }
+                    if let Some(declared) = declared {
+                        check(child, declared);
+                    } else if schema["additionalProperties"].is_object() {
+                        check(child, &schema["additionalProperties"]);
+                    }
+                }
+            }
+        }
+        let schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-status-response.v1.schema.json"
+        ))
+        .unwrap();
+        check(
+            value,
+            &schema["properties"]["browserRuntime"]["properties"]["workspace"],
+        );
+    }
+
+    #[test]
+    fn profile_properties_catalog_only_disposable_rename_persists() {
+        use agent_browser_service_model::BrowserProfileCatalogEntry;
+        let directory = TempDirectory::new("catalog-only-profile");
+        let connection = Connection::open(directory.0.join("runtime.sqlite3")).unwrap();
+        initialize_runtime_schema(&connection).unwrap();
+        let mut store = BrowserSessionSqliteStore { connection };
+        store
+            .save_session_state(&BrowserSessionState::default())
+            .unwrap();
+        let profile = BrowserProfileCatalogEntry {
+            id: "legacy-profile".into(),
+            name: "Old label".into(),
+            user_data_dir: directory.0.to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Disposable,
+        };
+        store
+            .save_profile_catalog(&BrowserProfileCatalog {
+                profiles: BTreeMap::from([(profile.id.clone(), profile)]),
+                ..Default::default()
+            })
+            .unwrap();
+        store
+            .update_profile_properties(
+                "legacy-profile",
+                "Old label",
+                BrowserProfileKind::Disposable,
+                "New label",
+                false,
+            )
+            .unwrap();
+        assert_eq!(
+            store.load_profile_catalog().unwrap().catalog.profiles["legacy-profile"].name,
+            "New label"
+        );
+    }
+
+    #[test]
+    fn profile_properties_projection_recovers_only_the_original_logical_tab_context() {
+        let mut state = BrowserSessionState::default();
+        state.sessions.insert(
+            "session-a".into(),
+            ManagedBrowserSession {
+                id: "session-a".into(),
+                name: "Research".into(),
+                profile_id: "profile-a".into(),
+                browser_id: "browser-a".into(),
+                created_at_ms: 1,
+                last_activity_at_ms: 2,
+                expires_at_ms: 99999,
+                current_tab_id: Some("tab-a".into()),
+            },
+        );
+        state.tabs.insert(
+            "tab-a".into(),
+            ManagedBrowserTab {
+                id: "tab-a".into(),
+                browser_id: "browser-a".into(),
+                session_id: "session-a".into(),
+                target_id: "target-a".into(),
+                created_at_ms: 123,
+                last_activity_at_ms: 2,
+            },
+        );
+        let capsule = serde_json::json!({"id":"link-a","sessionId":"session-a","tabId":"tab-a","resume":{
+            "sessionName":"Research","profileId":"profile-a","disposablePolicyId":null,"url":null,
+            "taskMetadata":{"serviceName":"Original producer","agentName":"Original worker","taskName":"Research task","attribution":"supplied"}}});
+        state
+            .remote_view_tab_handoffs
+            .insert("link-a".into(), serde_json::from_value(capsule).unwrap());
+        let mut catalog = BrowserProfileCatalog::default();
+        catalog.profiles.insert(
+            "unrelated-history".into(),
+            agent_browser_service_model::BrowserProfileCatalogEntry {
+                id: "unrelated-history".into(),
+                name: "Unused historical profile".into(),
+                user_data_dir: "/synthetic/private".into(),
+                kind: BrowserProfileKind::Named,
+            },
+        );
+        let projected = workspace_projection(&state, &catalog).unwrap();
+        assert_workspace_projection_declared(&projected);
+        assert!(
+            projected["profiles"].get("unrelated-history").is_none(),
+            "rail projection must not include the entire historical catalog"
+        );
+        assert_eq!(
+            projected["tabs"]["tab-a"]["taskMetadata"]["serviceName"],
+            "Original producer"
+        );
+        assert_eq!(projected["tabs"]["tab-a"]["createdAtMs"], 123);
+        state
+            .remote_view_tab_handoffs
+            .get_mut("link-a")
+            .unwrap()
+            .session_id = "peer-session".into();
+        assert!(
+            workspace_projection(&state, &catalog).unwrap()["tabs"]["tab-a"]["taskMetadata"]
+                .is_null()
+        );
+    }
+
+    #[test]
+    fn profile_properties_promotes_atomically_and_rejects_stale_reaper_publication() {
+        use agent_browser_service_model::{BrowserProfileCatalogEntry, ManagedDisposableProfile};
+        let directory = TempDirectory::new("profile-properties");
+        let data = directory.0.join("browser-data");
+        fs::create_dir(&data).unwrap();
+        fs::write(data.join("retained-marker"), b"retained").unwrap();
+        let connection = Connection::open(directory.0.join("runtime.sqlite3")).unwrap();
+        initialize_runtime_schema(&connection).unwrap();
+        let mut store = BrowserSessionSqliteStore { connection };
+        let profile = BrowserProfileCatalogEntry {
+            id: "stable-id".into(),
+            name: "Temporary research".into(),
+            user_data_dir: data.to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Disposable,
+        };
+        let mut state = BrowserSessionState::default();
+        state.disposable_profiles.insert(
+            profile.id.clone(),
+            ManagedDisposableProfile {
+                profile: profile.clone(),
+                policy_id: "default".into(),
+                session_name: "task".into(),
+                user_data_root: directory.0.to_string_lossy().into_owned(),
+                created_at_ms: 1,
+                cleanup_delay_ms: 1,
+                cleanup_eligible_at_ms: Some(2),
+            },
+        );
+        state.browsers.insert(
+            "browser-a".into(),
+            ManagedBrowserInstance {
+                id: "browser-a".into(),
+                profile_id: "stable-id".into(),
+                pid: 42,
+                cdp_endpoint: "ws://synthetic.invalid".into(),
+                desktop: None,
+                active_session_ids: vec!["session-a".into()],
+            },
+        );
+        state.sessions.insert(
+            "session-a".into(),
+            ManagedBrowserSession {
+                id: "session-a".into(),
+                name: "Research".into(),
+                profile_id: "stable-id".into(),
+                browser_id: "browser-a".into(),
+                created_at_ms: 1,
+                last_activity_at_ms: 2,
+                expires_at_ms: 99999,
+                current_tab_id: Some("tab-a".into()),
+            },
+        );
+        state.tabs.insert(
+            "tab-a".into(),
+            ManagedBrowserTab {
+                id: "tab-a".into(),
+                browser_id: "browser-a".into(),
+                session_id: "session-a".into(),
+                target_id: "target-a".into(),
+                created_at_ms: 1,
+                last_activity_at_ms: 2,
+            },
+        );
+        store.save_session_state(&state).unwrap();
+        store
+            .save_profile_catalog(&BrowserProfileCatalog::default())
+            .unwrap();
+        let renamed = store
+            .update_profile_properties(
+                "stable-id",
+                "Temporary research",
+                BrowserProfileKind::Disposable,
+                "Research",
+                false,
+            )
+            .unwrap();
+        assert_eq!(renamed["kind"], "disposable");
+        assert_eq!(
+            store.load_session_state().unwrap().disposable_profiles["stable-id"]
+                .profile
+                .name,
+            "Research"
+        );
+        assert_eq!(
+            store
+                .update_profile_properties(
+                    "stable-id",
+                    "Temporary research",
+                    BrowserProfileKind::Disposable,
+                    "Wrong",
+                    true
+                )
+                .unwrap_err(),
+            "profile_properties_changed"
+        );
+        let stale = store.load_session_state().unwrap();
+        let promoted = store
+            .update_profile_properties(
+                "stable-id",
+                "Research",
+                BrowserProfileKind::Disposable,
+                "Kept research",
+                true,
+            )
+            .unwrap();
+        assert_eq!(promoted["kind"], "named");
+        let after = store.load_session_state().unwrap();
+        assert!(after.disposable_profiles.is_empty());
+        assert_eq!(after.browsers, state.browsers);
+        assert_eq!(after.sessions, state.sessions);
+        assert_eq!(after.tabs, state.tabs);
+        assert_eq!(
+            store
+                .compare_and_save_profile_catalog(
+                    &BrowserProfileCatalog::default(),
+                    &BrowserProfileCatalog::default()
+                )
+                .unwrap_err(),
+            "browser_profile_catalog_publication_conflict"
+        );
+        let catalog = store.load_profile_catalog().unwrap().catalog;
+        assert_eq!(
+            catalog.profiles["stable-id"].user_data_dir,
+            profile.user_data_dir
+        );
+        assert_eq!(
+            catalog.profiles["stable-id"].kind,
+            BrowserProfileKind::Named
+        );
+        assert_eq!(fs::read(data.join("retained-marker")).unwrap(), b"retained");
+        assert_eq!(
+            store
+                .compare_and_save_session_state(&stale, &stale)
+                .unwrap_err(),
+            "browser_session_publication_conflict"
+        );
+        assert_eq!(
+            store
+                .update_profile_properties(
+                    "stable-id",
+                    "Kept research",
+                    BrowserProfileKind::Named,
+                    "  ",
+                    false
+                )
+                .unwrap_err(),
+            "profile_properties_name_invalid"
+        );
+        assert_workspace_projection_declared(&workspace_projection(&after, &catalog).unwrap());
+        assert_eq!(
+            workspace_projection(&after, &catalog).unwrap()["profiles"]["stable-id"]["name"],
+            "Kept research"
+        );
+        drop(store);
+        let reopened = BrowserSessionSqliteStore::open(&directory.0).unwrap();
+        assert!(reopened
+            .load_session_state()
+            .unwrap()
+            .disposable_profiles
+            .is_empty());
+        assert_eq!(
+            reopened.load_profile_catalog().unwrap().catalog.profiles["stable-id"].name,
+            "Kept research"
+        );
     }
 
     #[test]

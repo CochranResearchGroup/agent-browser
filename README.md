@@ -800,8 +800,11 @@ agent-browser find role button click --name "Submit"
 In the default browser workspace, open a tab’s SVG overflow menu or use its
 context menu (Shift+F10) for Properties and Copy URL. Properties shows supplied
 origin and purpose alongside current browser, profile, desktop, URL, title and
-status. Missing values remain Unknown; descriptive names are not identity proof.
+status. Descriptive names are not identity proof.
 Copy URL copies the task URL without creating a handoff or changing selection.
+
+The tab Properties dialog shows authoritative profile retention as **Throwaway** or **Durable**, and displays a recorded tab creation time even when original attribution is missing. Historical attribution that was never recorded remains unrecorded. Edit **Profile name** and choose **Save name** to change its display label, or choose **Make durable** to retain a throwaway profile across tasks. Both operations preserve the profile ID, browser data directory and open tabs. Promotion removes eligibility for disposable-profile cleanup; normal tab and browser idle policies still apply. If a save cannot be confirmed, refresh the inventory before retrying.
+
 Close Tab confirms one managed task before requesting its exact target through the
 existing browser owner. It requires authenticated dashboard access and current
 profile permission to close any tab. Cancelling sends no request. A confirmed

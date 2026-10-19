@@ -5713,3 +5713,9 @@ button {
 .subsystem-health-drawer :focus-visible { outline: 2px solid #bdbdc9; outline-offset: 2px; }
 
 .subsystem-health-drawer > p { color: #aaaab4; }
+
+.native-profile-properties { display: grid; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid #45454d; border-radius: 6px; }
+.native-profile-properties p { margin: 0; line-height: 1.5; }
+.native-profile-properties input { box-sizing: border-box; width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid #666670; border-radius: 4px; background: #18181b; color: #f4f4f5; }
+.native-profile-properties input:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
+.native-profile-properties input:disabled { opacity: .6; }

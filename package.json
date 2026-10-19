@@ -108,6 +108,7 @@
     "test:workspace-focus-feedback": "node scripts/test-workspace-focus-feedback.cjs",
     "test:workspace-viewport-controller": "node --no-warnings --experimental-strip-types scripts/test-workspace-viewport-controller.js",
     "test:dashboard-incident-summary": "node --no-warnings --experimental-strip-types scripts/test-dashboard-incident-summary.js",
+    "test:dashboard-profile-properties": "node scripts/test-dashboard-profile-properties.cjs",
     "test:dashboard-subsystem-health": "node --no-warnings --experimental-strip-types scripts/test-dashboard-subsystem-health.ts && node scripts/test-dashboard-subsystem-health.cjs",
     "test:dashboard-runtime-health-summary": "node --no-warnings --experimental-strip-types scripts/test-dashboard-runtime-health-summary.ts",
     "test:dashboard-inspector-actions": "node scripts/test-dashboard-inspector-actions.js",

@@ -1013,6 +1013,8 @@ export interface ServiceManagedPresence {
 export interface ServiceManagedWorkspace {
   schemaVersion: 'agent-browser.managed-workspace.v1';
   source: 'managed-owner';
+  /** Authoritative display metadata; profile directories stay private. */
+  profiles?: Record<string, { id: string; name: string; kind: 'named' | 'disposable' }>;
   /** Time of bounded live observations; absent or stale means unverified. */
   observedAtMs?: number;
   observationAgeMs?: number;

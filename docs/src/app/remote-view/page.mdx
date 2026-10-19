@@ -905,3 +905,8 @@ Use one named session and tab per task. When tasks deliberately need the same lo
 Tab-targeted automation can run without either tab being physically visible. Serialize foreground desktop clicks, keyboard input and human control. Separate tabs share cookies, login/logout state and persistent site storage: coordinate account switches, logout and conflicting application changes. Choose separate profiles when independent state is required.
 
 Close only the task's session. Closing one session must preserve its peers; the final session releases the browser. Do not delete the shared profile to clean up a task. If a site requires foreground execution, serialize that part of the workflow.
+
+
+## Inspect and retain a profile
+
+The tab Properties dialog shows authoritative profile retention as **Throwaway** or **Durable**, and displays a recorded tab creation time even when original attribution is missing. Historical attribution that was never recorded remains unrecorded. Edit **Profile name** and choose **Save name** to change its display label, or choose **Make durable** to retain a throwaway profile across tasks. Both operations preserve the profile ID, browser data directory and open tabs. Promotion removes eligibility for disposable-profile cleanup; normal tab and browser idle policies still apply. If a save cannot be confirmed, refresh the inventory before retrying.
