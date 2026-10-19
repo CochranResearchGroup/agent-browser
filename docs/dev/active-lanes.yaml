@@ -1,10 +1,10 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
-  - id: P249
+  - id: P250
     product_lane: PL-BUGFIX
     objective: Surface subsystem readiness and failures in the dashboard toolbar and detail drawer
-    plan: docs/dev/plans/0249-2026-10-19-dashboard-subsystem-health.md
+    plan: docs/dev/plans/0250-2026-10-19-dashboard-subsystem-health.md
     branch: fix/dashboard-subsystem-health
     target: main
     accountable_owner: ecochran76
@@ -16,6 +16,23 @@ lanes:
     overlaps: [P248, UX301]
     reconciled_overlaps: ["Prior dashboard lanes integrated; reuse clean primary and retain their pinned candidates. Own only health drawer, projection and compact toolbar consumer. Preserve foreign checkouts and existing polling."]
     validation_status: Source-qualified with mounted toolbar/drawer, evidence regressions, builds, format and strict Clippy; legacy compact fixture also fails untouched baseline; production unchanged
+    updated_at: 2026-10-19
+
+  - id: P249
+    product_lane: PL-BUGFIX
+    objective: Recover valid ordinary tasks from stale host snapshots
+    plan: docs/dev/plans/0249-2026-10-19-stale-session-host.md
+    branch: fix/stale-session-host
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#320]
+    plan_state: COMPLETED
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/321
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [P248, P240]
+    reconciled_overlaps: ["Own only stale-host pre-effect refresh and its regressions; preserve integrated focus/reaper changes and foreign dashboard/resource work"]
+    validation_status: Exact conflict red; 128 selected Rust tests pass, 1 real native-viewer fixture ignored; policy wiring, formatting, whitespace and secrets checks pass; production unchanged
     updated_at: 2026-10-19
 
   - id: P248

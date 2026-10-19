@@ -1,6 +1,6 @@
 # Roadmap
 
-P249 adds [dashboard subsystem health](docs/dev/plans/0249-2026-10-19-dashboard-subsystem-health.md) under #317: an SVG toolbar indicator and accessible side drawer with separately scoped inventory, runtime, Native readiness and viewer evidence. Detailed checks are on demand; no automatic repair or recurring diagnostic polling. Source qualification passes; the known legacy compact fixture failure is reproduced on untouched main. Production publication is separate.
+P250 adds [dashboard subsystem health](docs/dev/plans/0250-2026-10-19-dashboard-subsystem-health.md) under #317: an SVG toolbar indicator and accessible side drawer with separately scoped inventory, runtime, Native readiness and viewer evidence. Detailed checks are on demand; no automatic repair or recurring diagnostic polling. Source qualification passes; the known legacy compact fixture failure is reproduced on untouched main. Production publication is separate.
 
 
 Updated: 2026-10-17
@@ -14,6 +14,8 @@ Use an existing client profile, a managed persistent profile, or a disposable pr
 Prioritize less plumbing, useful continuity, seamless human assistance, predictable operation and clear results. Each substantial change names its concrete workflow improvement and validates it. Current implementation gaps belong in RUNBOOK rather than becoming permanent product rituals.
 
 ## Current work and boundaries
+
+[P249](docs/dev/plans/0249-2026-10-19-stale-session-host.md), #320, owns the bounded stale session host recovery defect; source qualification passes 128 Rust tests with 1 explicit real-viewer fixture ignored; PR321 owns integration and production remains unchanged.
 
 [P248](docs/dev/plans/0248-2026-10-18-dashboard-cold-open.md) completes the bounded selected-desktop cold-open repair under #312, including the Native-owned lazy audio dependency. Production first/repeat Native pixels take 4503/3083 ms without duplicate handoffs. RUNBOOK and the acceptance note preserve exact installed identities and remaining runtime limits.
 

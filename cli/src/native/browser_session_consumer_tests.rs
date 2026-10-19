@@ -909,21 +909,33 @@ fn consumer_leave_open_launch_preference_survives_repeat_close_and_preserves_pee
 }
 
 #[test]
-fn consumer_leave_open_close_rejects_stale_publication_without_retention() {
+fn consumer_leave_open_close_refreshes_peer_state_without_losing_retention() {
     let fixture = Fixture::new();
     let mut host = fixture.host(Mode::Success, Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
     let opened = host
         .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
         .unwrap();
     competing_write(&fixture.root);
+    let peer_sequence = fixture
+        .store(false)
+        .load_session_state()
+        .unwrap()
+        .next_session_sequence;
     let response = host.handle_command(&serde_json::json!({
         "action":"browser_session_close", "sessionId":opened.session_id,
         "leaveOpen":true, "activityAtMs":101
     }));
-    assert_eq!(response["success"], false);
-    assert_eq!(response["error"], "browser_session_publication_conflict");
-    assert!(host.state().leave_open_session_ids.is_empty());
+    assert_eq!(response["success"], true, "{response}");
+    assert!(host
+        .state()
+        .leave_open_session_ids
+        .contains(&opened.session_id));
     assert!(host.state().browsers.contains_key(&opened.browser_id));
+    let persisted = fixture.store(false).load_session_state().unwrap();
+    assert_eq!(persisted.next_session_sequence, peer_sequence);
+    assert!(persisted
+        .leave_open_session_ids
+        .contains(&opened.session_id));
 }
 
 fn seed_upgrade_admission_drain(root: &std::path::Path, malformed: bool) {

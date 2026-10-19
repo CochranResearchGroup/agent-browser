@@ -35,6 +35,8 @@ path in `params`. Existing-profile tasks use the current browser; clients do not
 establish ownership or repair stale internal records before downloading.
 Ordinary continuation reconciles interrupted publication using the current live
 profile browser, preserving the task and authenticated state.
+A new ordinary task command refreshes stale clean session state before acting;
+unpublished effects remain held for reconciliation without command replay.
 
 Selection and Share wait their turn on the same native desktop.
 

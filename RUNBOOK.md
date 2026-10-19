@@ -1,6 +1,6 @@
 # Runbook
 
-P249 adds [dashboard subsystem health](docs/dev/plans/0249-2026-10-19-dashboard-subsystem-health.md) under #317: an SVG toolbar indicator and accessible side drawer with separately scoped inventory, runtime, Native readiness and viewer evidence. Detailed checks are on demand; no automatic repair or recurring diagnostic polling. Source qualification passes; the known legacy compact fixture failure is reproduced on untouched main. Production publication is separate.
+P250 adds [dashboard subsystem health](docs/dev/plans/0250-2026-10-19-dashboard-subsystem-health.md) under #317: an SVG toolbar indicator and accessible side drawer with separately scoped inventory, runtime, Native readiness and viewer evidence. Detailed checks are on demand; no automatic repair or recurring diagnostic polling. Source qualification passes; the known legacy compact fixture failure is reproduced on untouched main. Production publication is separate.
 
 
 Updated: 2026-10-18
@@ -14,6 +14,13 @@ P246/#295 completes this bounded tooling repair with seven CLI regressions and
 existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 
 ## Current execution
+
+### 2026-10-19 stale session host repair
+
+[P249](docs/dev/plans/0249-2026-10-19-stale-session-host.md), #320, repairs valid
+ordinary task acquisition after a peer session update. The stale-write CAS guard
+remains; only clean pre-command snapshots may refresh. Provider-free qualification passes 128 Rust tests with 1 explicit real-viewer
+fixture ignored. PR321 owns source integration. Production installation remains separate.
 
 ### 2026-10-18 selected desktop cold-open repair
 
