@@ -1,6 +1,8 @@
 # Agent Browser Notes Index
 
-Updated: 2026-10-17
+[P250 installed health drawer](0250-2026-10-19-dashboard-subsystem-health-installed.md): sealed production identity, development/public UI checks, preserved processes and the exposed Native Docker/WSL dependency regression.
+
+Updated: 2026-10-19
 
 This index consolidates reusable and actionable note families without moving,
 renaming, rewriting, or deleting historical evidence. There are more than 250

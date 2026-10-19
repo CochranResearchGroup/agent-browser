@@ -1,9 +1,9 @@
 # Roadmap
 
-P250 adds [dashboard subsystem health](docs/dev/plans/0250-2026-10-19-dashboard-subsystem-health.md) under #317: an SVG toolbar indicator and accessible side drawer with separately scoped inventory, runtime, Native readiness and viewer evidence. Detailed checks are on demand; no automatic repair or recurring diagnostic polling. Source qualification passes; the known legacy compact fixture failure is reproduced on untouched main. Production publication is separate.
+P250 [dashboard subsystem health](docs/dev/plans/0250-2026-10-19-dashboard-subsystem-health.md), #317, is integrated through PR318 and installed as sealed `81eea74b6d6d` after development qualification. The [installed receipt](docs/dev/notes/0250-2026-10-19-dashboard-subsystem-health-installed.md) binds actual public drawer checks, both doctors, three browser cycles and preserved identities. The drawer exposes remaining Native warnings; a pre-existing Docker/WSL regression is mitigated by a verifier-only bridge.
 
 
-Updated: 2026-10-17
+Updated: 2026-10-19
 
 ## Current direction
 
@@ -15,7 +15,7 @@ Prioritize less plumbing, useful continuity, seamless human assistance, predicta
 
 ## Current work and boundaries
 
-[P249](docs/dev/plans/0249-2026-10-19-stale-session-host.md), #320, owns the bounded stale session host recovery defect; source qualification passes 128 Rust tests with 1 explicit real-viewer fixture ignored; PR321 owns integration and production remains unchanged.
+[P249](docs/dev/plans/0249-2026-10-19-stale-session-host.md), #320, owns the bounded stale session host recovery defect; source qualification passes 128 Rust tests with 1 explicit real-viewer fixture ignored; PR321 is integrated and included in the P250 installed candidate; receiving-account acceptance remains separate.
 
 [P248](docs/dev/plans/0248-2026-10-18-dashboard-cold-open.md) completes the bounded selected-desktop cold-open repair under #312, including the Native-owned lazy audio dependency. Production first/repeat Native pixels take 4503/3083 ms without duplicate handoffs. RUNBOOK and the acceptance note preserve exact installed identities and remaining runtime limits.
 
