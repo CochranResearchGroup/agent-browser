@@ -5642,6 +5642,8 @@ display descendants. Browser and route cleanup still require ownership checks.
 Supervisor startup recreates a missing socket directory with private
 permissions before writing its authentication token, including after reboot.
 Retained-task recovery rechecks interrupted launch custody without a host restart.
+New ordinary task commands refresh stale clean session state before acting;
+unpublished effects require reconciliation without automatic command replay.
 Only proven process and profile absence settles occupancy; history is preserved.
 
 Operations:

@@ -175,6 +175,7 @@ pub(crate) async fn execute_shared_remote_view_open(
             *shared = Some(load_default_browser_session_host()?);
         }
         let host = shared.as_mut().ok_or("browser_session_host_missing")?;
+        host.refresh_before_ordinary_command()?;
         if command.get("url").is_none() && command.get("browserId").is_some() && command.get("targetId").is_some() {
             return host.prepare_existing_task_handoff(&name, &command).map(Some);
         }
@@ -1375,6 +1376,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     }
 
     pub(crate) fn reap_current(&mut self) -> Result<ReapBrowserSessionsResult, String> {
+        self.refresh_before_ordinary_command()?;
         self.reap(current_unix_ms())
     }
 
@@ -1404,6 +1406,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .get("action")
             .and_then(serde_json::Value::as_str)
             .ok_or_else(|| "browser_session_action_missing".to_string())?;
+        if action.starts_with("browser_session_") && action != "browser_session_status" {
+            self.refresh_before_ordinary_command()?;
+        }
         if command
             .get("leaveOpen")
             .is_some_and(|value| !value.is_boolean())
@@ -1786,6 +1791,26 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 .map_err(|error| format!("browser_session_status_serialize_failed:{error}")),
             _ => Err(format!("browser_session_action_unsupported:{action}")),
         }
+    }
+
+    /// Start a new ordinary command from current durable state. This is not an
+    /// effect retry: keep the adapter and all of its original-operation journals.
+    /// Unpublished local state or launch/retirement work cannot be discarded.
+    fn refresh_before_ordinary_command(&mut self) -> Result<(), String> {
+        let current = self.persistence.load_session_state()?;
+        if current == self.persisted_state {
+            return Ok(());
+        }
+        if self.state != self.persisted_state
+            || self.effects.pending_launch_intent().is_some()
+            || !self.effects.pending_idle_retirement_ids().is_empty()
+        {
+            return Err("browser_session_publication_conflict".into());
+        }
+        current.retention_policy.validate()?;
+        self.state = current.clone();
+        self.persisted_state = current;
+        Ok(())
     }
 
     fn manager(&mut self) -> Result<BrowserSessionManager<'_, E>, String> {
@@ -2206,6 +2231,7 @@ where
         session_name: &str,
         command: &serde_json::Value,
     ) -> Result<Option<serde_json::Value>, String> {
+        self.refresh_before_ordinary_command()?;
         let pending_human_ttl = pending_human_retention(command)?;
         if command
             .get("leaveOpen")
@@ -2918,6 +2944,9 @@ mod tests {
         attached: bool,
         next_tab: usize,
         pending_intent: Option<BrowserLaunchIntent>,
+        initial_tabs: bool,
+        navigation_failure: bool,
+        navigation_attempts: std::rc::Rc<std::cell::Cell<u32>>,
         acknowledgements: std::rc::Rc<std::cell::Cell<u32>>,
     }
 
@@ -2956,9 +2985,14 @@ mod tests {
 
         fn acquire_initial_tab(
             &mut self,
-            _browser: &ManagedBrowserInstance,
+            browser: &ManagedBrowserInstance,
             _attributed_target_ids: &[String],
         ) -> Result<BrowserTabAcquisition, String> {
+            if self.initial_tabs {
+                let mut tab = self.create_tab(browser)?;
+                tab.source = agent_browser_service_model::BrowserTabSource::SessionInitial;
+                return Ok(tab);
+            }
             Err("unused".to_string())
         }
 
@@ -2988,6 +3022,11 @@ mod tests {
             _tab: &ManagedBrowserTab,
             _url: &str,
         ) -> Result<(), String> {
+            self.navigation_attempts
+                .set(self.navigation_attempts.get() + 1);
+            if self.navigation_failure {
+                return Err("synthetic_navigation_outcome_unknown".into());
+            }
             Ok(())
         }
 
@@ -3455,6 +3494,159 @@ mod tests {
             "browser_session_tab_request_target_closed"
         );
         assert!(host.state.tabs.is_empty());
+    }
+
+    #[test]
+    fn ordinary_task_open_refreshes_peer_changes_without_losing_or_replaying_tasks() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({"profiles":{"work":{
+                "id":"work", "name":"Work", "userDataDir":directory.0.join("work"),
+                "profileClass":"durable_named"
+            }}})
+            .to_string(),
+        )
+        .unwrap();
+        let config = BrowserSessionHostConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_view_desktops: Vec::new(),
+            default_disposable_policy: None,
+            exact_url_history_maximum_bytes: 64 * 1024 * 1024,
+        };
+        let mut stale = BrowserSessionHost::load(
+            BrowserSessionSqliteStore::open_or_migrate(&directory.0, &legacy_path)
+                .unwrap()
+                .0,
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                live: true,
+                initial_tabs: true,
+                next_tab: 10,
+                ..Default::default()
+            }),
+            &legacy_path,
+            config.clone(),
+        )
+        .unwrap();
+        let mut peer = BrowserSessionHost::load(
+            BrowserSessionSqliteStore::open(&directory.0).unwrap(),
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                live: true,
+                initial_tabs: true,
+                ..Default::default()
+            }),
+            &legacy_path,
+            config,
+        )
+        .unwrap();
+        let bob = peer
+            .open(OpenBrowserSession::exact_profile("bob", "work", 1_000))
+            .unwrap();
+        let bob_acquired = peer.tab_for_navigation(&bob.session_id, 1_100).unwrap();
+        let bob_session = peer.state().sessions[&bob.session_id].clone();
+        let bob_tab = peer.state().tabs[&bob_acquired.tab_id].clone();
+        let command = serde_json::json!({"action":"browser_session_open",
+            "sessionName":"alice", "profileId":"work", "activityAtMs":2_000});
+        let opened = stale.handle_command(&command);
+        assert_eq!(opened["success"], true, "{opened}");
+        let alice_id = opened["data"]["sessionId"].as_str().unwrap();
+        assert_eq!(stale.state().sessions[&bob.session_id], bob_session);
+        assert_eq!(stale.state().tabs[&bob_acquired.tab_id], bob_tab);
+        let replay = stale.handle_command(&command);
+        assert_eq!(replay["data"]["sessionId"], alice_id);
+        let navigated = stale
+            .handle_command(&serde_json::json!({"action":"browser_session_navigate",
+            "sessionId":alice_id, "url":"https://synthetic.example/alice", "activityAtMs":2_100}));
+        assert_eq!(navigated["success"], true, "{navigated}");
+        assert_eq!(stale.state().browsers.len(), 1);
+        assert_eq!(stale.state().tabs.len(), 2);
+        let closed = stale.handle_command(&serde_json::json!({"action":"browser_session_close",
+            "sessionName":"alice", "profileId":"work", "activityAtMs":3_000}));
+        assert_eq!(closed["success"], true, "{closed}");
+        assert_eq!(stale.state().sessions[&bob.session_id], bob_session);
+        assert_eq!(stale.state().tabs[&bob_acquired.tab_id], bob_tab);
+        assert_eq!(stale.state().tabs.len(), 1);
+    }
+
+    #[test]
+    fn ordinary_refresh_preserves_unpublished_navigation_after_peer_advances() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({"profiles":{"work":{
+                "id":"work", "name":"Work", "userDataDir":directory.0.join("work"),
+                "profileClass":"durable_named"
+            }}})
+            .to_string(),
+        )
+        .unwrap();
+        let config = BrowserSessionHostConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_view_desktops: Vec::new(),
+            default_disposable_policy: None,
+            exact_url_history_maximum_bytes: 64 * 1024 * 1024,
+        };
+        let attempts = std::rc::Rc::new(std::cell::Cell::new(0));
+        let mut uncertain = BrowserSessionHost::load(
+            BrowserSessionSqliteStore::open_or_migrate(&directory.0, &legacy_path)
+                .unwrap()
+                .0,
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                live: true,
+                initial_tabs: true,
+                navigation_failure: true,
+                navigation_attempts: attempts.clone(),
+                ..Default::default()
+            }),
+            &legacy_path,
+            config.clone(),
+        )
+        .unwrap();
+        let failed =
+            uncertain.handle_command(&serde_json::json!({"action":"browser_session_navigate",
+            "sessionName":"alice", "profileId":"work", "url":"https://synthetic.example/unknown",
+            "activityAtMs":1_000}));
+        assert_eq!(failed["error"], "synthetic_navigation_outcome_unknown");
+        let held = uncertain.state().clone();
+        let mut peer = BrowserSessionHost::load(
+            BrowserSessionSqliteStore::open(&directory.0).unwrap(),
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                live: true,
+                initial_tabs: true,
+                ..Default::default()
+            }),
+            &legacy_path,
+            config,
+        )
+        .unwrap();
+        peer.open(OpenBrowserSession::exact_profile("bob", "work", 2_000))
+            .unwrap();
+        let durable = peer.state().clone();
+        let rejected = uncertain
+            .handle_command(&serde_json::json!({"action":"browser_session_open",
+            "sessionName":"charlie", "profileId":"work", "activityAtMs":3_000}));
+        assert_eq!(rejected["error"], "browser_session_publication_conflict");
+        assert_eq!(uncertain.state(), &held);
+        let status =
+            uncertain.handle_command(&serde_json::json!({"action":"browser_session_status"}));
+        assert_eq!(
+            status["success"], true,
+            "diagnostics must remain available: {status}"
+        );
+        assert_eq!(
+            attempts.get(),
+            1,
+            "uncertain navigation must not be replayed"
+        );
+        assert_eq!(
+            BrowserSessionSqliteStore::open(&directory.0)
+                .unwrap()
+                .load_session_state()
+                .unwrap(),
+            durable
+        );
     }
 
     #[test]

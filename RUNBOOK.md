@@ -12,6 +12,13 @@ existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 
 ## Current execution
 
+### 2026-10-19 stale session host repair
+
+[P249](docs/dev/plans/0249-2026-10-19-stale-session-host.md), #320, repairs valid
+ordinary task acquisition after a peer session update. The stale-write CAS guard
+remains; only clean pre-command snapshots may refresh. Provider-free qualification passes 128 Rust tests with 1 explicit real-viewer
+fixture ignored. PR321 owns source integration. Production installation remains separate.
+
 ### 2026-10-18 selected desktop cold-open repair
 
 [P248](docs/dev/plans/0248-2026-10-18-dashboard-cold-open.md), #312, completes selected-existing-desktop cold open. PR313/314 are installed as sealed Agent Browser binary `046384df95ad`; Native PR469 audio startup repair executes `e417e2d5a4f9`. Actual production first/repeat pixels take 4503/3083 ms, with zero startup audio contexts and one connected viewer through 45 seconds. Sound enable/volume/mute/resume and protected Native/browser/configuration custody pass. The [accepted evidence](docs/dev/notes/0248-2026-10-18-dashboard-cold-open.md) retains prior timing failures and the separate pre-existing Desktop 8 health/new-desktop readback limits.

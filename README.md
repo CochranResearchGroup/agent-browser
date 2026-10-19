@@ -49,6 +49,8 @@ Unknown command help fails with a concise typed error. Use `agent-browser runtim
 
 Call `browser_open` with `profile`, `profileMode: "persistent"`, `taskKey`, and `url` to create or reuse a named profile and open one independent task tab. Replay the same task key to return its current page and preserve edits without navigating again. Use the returned `data.taskId` on page actions such as `browser_snapshot`, `browser_click`, and `browser_fill`, then call `browser_close` with that task ID. Closing a task preserves peers, borrowed browsers, and persistent profile data.
 
+Ordinary task commands refresh a stale, clean session snapshot before acting, preserving peer updates. Unpublished effects still require reconciliation; the command is never automatically replayed.
+
 Choose `profileMode: "existing"` to require an already registered profile. Choose `profileMode: "disposable"` and omit `profile` for temporary work. Distinct task keys on the same profile receive distinct tabs in one healthy browser. Workflow results use the MCP text payload's `success`, `data`, and `error` envelope.
 
 Call `browser_handoff` with `taskId` to focus the current page and obtain its durable authenticated HTTPS Remote View link. The MCP server completes the link using its configured `AGENT_BROWSER_PUBLIC_ORIGIN`, the public origin of this Agent Browser service. This differs from `AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN`, which locates the native desktop viewer. A missing service origin reports `remote_view_public_origin_missing` with configuration guidance. Handoff preserves the task and current page.

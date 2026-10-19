@@ -45,6 +45,10 @@ lane-scoped close behavior. Workstation installation selects this shared host
 for ordinary CLI sessions. Without a selected host, install the workstation
 before launching a lane. New legacy per-session daemons are no longer created.
 
+A new ordinary task command refreshes stale clean session state before acting,
+preserving peer tasks. Unpublished effects remain held for reconciliation; commands
+are not automatically replayed.
+
 ## Runtime lane supervision
 
 On Linux, named sessions run as lanes under one bounded user-scoped runtime
