@@ -12,7 +12,7 @@ Prioritize less plumbing, useful continuity, seamless human assistance, predicta
 
 ## Current work and boundaries
 
-[P249](docs/dev/plans/0249-2026-10-19-stale-session-host.md), #320, owns the bounded stale session host recovery defect; source qualification is in progress and production remains unchanged.
+[P249](docs/dev/plans/0249-2026-10-19-stale-session-host.md), #320, owns the bounded stale session host recovery defect; source qualification passes 128 Rust tests with 1 explicit real-viewer fixture ignored; PR321 owns integration and production remains unchanged.
 
 [P248](docs/dev/plans/0248-2026-10-18-dashboard-cold-open.md) completes the bounded selected-desktop cold-open repair under #312, including the Native-owned lazy audio dependency. Production first/repeat Native pixels take 4503/3083 ms without duplicate handoffs. RUNBOOK and the acceptance note preserve exact installed identities and remaining runtime limits.
 

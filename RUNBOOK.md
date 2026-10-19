@@ -16,8 +16,8 @@ existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 
 [P249](docs/dev/plans/0249-2026-10-19-stale-session-host.md), #320, repairs valid
 ordinary task acquisition after a peer session update. The stale-write CAS guard
-remains; only clean pre-command snapshots may refresh. Provider-free regression
-qualification is in progress. Production installation remains separate.
+remains; only clean pre-command snapshots may refresh. Provider-free qualification passes 128 Rust tests with 1 explicit real-viewer
+fixture ignored. PR321 owns source integration. Production installation remains separate.
 
 ### 2026-10-18 selected desktop cold-open repair
 

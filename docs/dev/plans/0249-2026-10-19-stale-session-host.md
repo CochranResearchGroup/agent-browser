@@ -1,7 +1,7 @@
 # P249: recover ordinary tasks from a stale session host
 
 Product lane: PL-BUGFIX. Owner: ecochran76. Issue: #320.
-Branch: fix/stale-session-host. Status: IN_PROGRESS.
+Branch: fix/stale-session-host. Status: COMPLETED (source repair); integration tracked by PR #321.
 
 A peer persistence writer can advance the durable session state while the shared
 host retains an older snapshot. Preserve the stale-write fence while allowing a
@@ -23,3 +23,10 @@ Run red/green through scripts/ci/cargo-safe.sh, then relevant host, consumer,
 pool and persistence regressions. Hosted CI skipped at operator direction.
 Source implementation does not authorize production installation or global
 runtime repair. Preserve live credential and peer state boundaries.
+
+Qualification: exact conflict red, then 9 host tests, 12 persistence tests and
+107 consumer/pool tests pass; 1 real native-viewer fixture remains explicitly
+ignored. Policy wiring (11 tests plus assertions), formatting, whitespace and
+changed-file secrets checks pass. The first broader batch's obsolete assertion
+and omitted harness stack setting are retained in the evidence note. PR #321
+publishes this source repair; no installed runtime adoption is claimed.

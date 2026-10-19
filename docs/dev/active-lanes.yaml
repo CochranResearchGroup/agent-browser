@@ -9,12 +9,13 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#320]
-    plan_state: IN_PROGRESS
+    plan_state: COMPLETED
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/321
     custody_state: ACTIVE_WORKTREE
     dependencies: []
     overlaps: [P248, P240]
     reconciled_overlaps: ["Own only stale-host pre-effect refresh and its regressions; preserve integrated focus/reaper changes and foreign dashboard/resource work"]
-    validation_status: Exact publication-conflict red reproduced; 9 host tests pass; final consumer and persistence qualification pending
+    validation_status: Exact conflict red; 128 selected Rust tests pass, 1 real native-viewer fixture ignored; policy wiring, formatting, whitespace and secrets checks pass; production unchanged
     updated_at: 2026-10-19
 
   - id: P248
