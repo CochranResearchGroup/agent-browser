@@ -9,12 +9,12 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#323]
-    plan_state: IMPLEMENTING
+    plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
     dependencies: []
     overlaps: [P250, P249, P240]
     reconciled_overlaps: ["Reuse integrated dashboard primary and retain candidates; own Properties and profile metadata projection/mutation; preserve foreign stale-session and resource checkouts"]
-    validation_status: Creation timestamp adapter regression reproduced; qualification pending
+    validation_status: Source qualified: four profile regressions, corrected stale-cleanup guard and retirement fence pass; prior 167 unaffected owner passes retained with nine opt-in exclusions. Mounted UI, builds, clients and strict Clippy pass; skill budget baseline tracked in 325; installed qualification pending
     updated_at: 2026-10-19
 
   - id: P250

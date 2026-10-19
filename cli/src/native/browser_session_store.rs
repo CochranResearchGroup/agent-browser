@@ -634,6 +634,11 @@ impl BrowserSessionSqliteStore {
             }
         } else if let Some(allocation) = state.disposable_profiles.get_mut(profile_id) {
             allocation.profile = profile.clone();
+        } else {
+            // One-time legacy profiles can live only in the imported catalog.
+            catalog
+                .profiles
+                .insert(profile_id.to_owned(), profile.clone());
         }
         super::browser_idle_retirement_store::reject_retirement_publication(
             &transaction,
@@ -936,6 +941,11 @@ fn workspace_projection(
     managed: &BrowserSessionState,
     catalog: &BrowserProfileCatalog,
 ) -> Result<serde_json::Value, String> {
+    let referenced_profiles = managed
+        .browsers
+        .values()
+        .map(|browser| browser.profile_id.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
     let browsers: std::collections::BTreeMap<_, _> = managed.browsers.iter().map(|(id, browser)| {
                 (id.clone(), serde_json::json!({
                     "id":id,"profileId":browser.profile_id,"pid":browser.pid,
@@ -991,6 +1001,7 @@ fn workspace_projection(
         "source":"managed-owner","browsers":browsers,
         "sessions":managed.sessions,"tabs":tabs,"handoffs":handoffs,
         "profiles": catalog.profiles.values().chain(managed.disposable_profiles.values().map(|entry| &entry.profile))
+            .filter(|profile| referenced_profiles.contains(profile.id.as_str()))
             .map(|profile| (profile.id.clone(), serde_json::json!({"id":profile.id,"name":profile.name,"kind":profile.kind})))
             .collect::<std::collections::BTreeMap<_, _>>(),
     }))
@@ -1573,6 +1584,43 @@ mod tests {
     }
 
     #[test]
+    fn profile_properties_catalog_only_disposable_rename_persists() {
+        use agent_browser_service_model::BrowserProfileCatalogEntry;
+        let directory = TempDirectory::new("catalog-only-profile");
+        let connection = Connection::open(directory.0.join("runtime.sqlite3")).unwrap();
+        initialize_runtime_schema(&connection).unwrap();
+        let mut store = BrowserSessionSqliteStore { connection };
+        store
+            .save_session_state(&BrowserSessionState::default())
+            .unwrap();
+        let profile = BrowserProfileCatalogEntry {
+            id: "legacy-profile".into(),
+            name: "Old label".into(),
+            user_data_dir: directory.0.to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Disposable,
+        };
+        store
+            .save_profile_catalog(&BrowserProfileCatalog {
+                profiles: BTreeMap::from([(profile.id.clone(), profile)]),
+                ..Default::default()
+            })
+            .unwrap();
+        store
+            .update_profile_properties(
+                "legacy-profile",
+                "Old label",
+                BrowserProfileKind::Disposable,
+                "New label",
+                false,
+            )
+            .unwrap();
+        assert_eq!(
+            store.load_profile_catalog().unwrap().catalog.profiles["legacy-profile"].name,
+            "New label"
+        );
+    }
+
+    #[test]
     fn profile_properties_projection_recovers_only_the_original_logical_tab_context() {
         let mut state = BrowserSessionState::default();
         state.sessions.insert(
@@ -1605,8 +1653,21 @@ mod tests {
         state
             .remote_view_tab_handoffs
             .insert("link-a".into(), serde_json::from_value(capsule).unwrap());
-        let catalog = BrowserProfileCatalog::default();
+        let mut catalog = BrowserProfileCatalog::default();
+        catalog.profiles.insert(
+            "unrelated-history".into(),
+            agent_browser_service_model::BrowserProfileCatalogEntry {
+                id: "unrelated-history".into(),
+                name: "Unused historical profile".into(),
+                user_data_dir: "/synthetic/private".into(),
+                kind: BrowserProfileKind::Named,
+            },
+        );
         let projected = workspace_projection(&state, &catalog).unwrap();
+        assert!(
+            projected["profiles"].get("unrelated-history").is_none(),
+            "rail projection must not include the entire historical catalog"
+        );
         assert_eq!(
             projected["tabs"]["tab-a"]["taskMetadata"]["serviceName"],
             "Original producer"
