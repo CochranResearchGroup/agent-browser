@@ -10,7 +10,7 @@ Owner: ecochran76
 
 ## Current state
 
-Draft PR324 has qualified source for Properties context, profile naming and one-way promotion. Four focused profile tests, the corrected cleanup guard and the pending-retirement fence pass. Strict workspace Clippy and mounted UI checks pass. A new sealed build and development/production installed qualification remain. The first build was stopped before sealing after finding the imported-profile edge; its failure receipt is retained.
+Draft PR324 has qualified source for Properties context, profile naming and one-way promotion. Four focused profile tests, the corrected cleanup guard and the pending-retirement fence pass. Strict workspace Clippy and mounted UI checks pass. The final strict-schema projection and service contract metadata checks pass. A new sealed build and development/production installed qualification remain. Two uninstalled builds were deliberately stopped before sealing for the imported-profile and strict-schema findings; both receipts are retained.
 
 ## Outcome
 
@@ -40,3 +40,7 @@ Review qualification additionally bounds profile projection to browser-reference
 ## Final source qualification
 
 The catalog-only rename and bounded-projection regressions first failed (stored Old label versus New label; unused historical profile included), then passed after the correction. All four focused profile tests pass. The corrected actual cleanup-guard fixture passes and now explicitly rejects a stale allocation after eligibility removal. The original pending-retirement claim test passes with same-profile refusal and unrelated-profile admission assertions. The 167 passed owner tests from the earlier broad run are retained within their unchanged host/lifecycle scope; nine real browser/viewer tests remain explicit exclusions. The original broad run is not relabeled as clean. Strict workspace Clippy, Rust formatting, the original adapter repro, mounted Properties and health controls, client checks, docs build and changed links pass. The existing workflow-skill parity-size failure remains tracked in #325. No CI was enabled or dispatched.
+
+A final schema check caught the additive profile map missing from the strict workspace schema (`additionalProperties: false`). The second uninstalled build was deliberately stopped, the optional display-only map was declared, and actual Rust projection keys are now checked recursively against that schema. No deployment used either stopped build. The selected-lane planning audit also requires exact header fields and a ROADMAP link; those documentation bindings are reconciled before final sealing.
+
+The corrected strict-schema projection test, four profile tests, service contract metadata, full client bundle, current documentation build, selected P251 planning audit and final strict Clippy pass. API/MCP parity reports only the known #325 skill-size failure. Source is qualified for integration; actual installed behavior is still a separate gate.

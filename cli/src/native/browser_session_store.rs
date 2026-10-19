@@ -1583,6 +1583,35 @@ mod tests {
         }
     }
 
+    fn assert_workspace_projection_declared(value: &serde_json::Value) {
+        fn check(value: &serde_json::Value, schema: &serde_json::Value) {
+            if let Some(object) = value.as_object() {
+                for (key, child) in object {
+                    let declared = schema["properties"].get(key);
+                    if schema["additionalProperties"] == false {
+                        assert!(
+                            declared.is_some(),
+                            "public workspace field must be declared: {key}"
+                        );
+                    }
+                    if let Some(declared) = declared {
+                        check(child, declared);
+                    } else if schema["additionalProperties"].is_object() {
+                        check(child, &schema["additionalProperties"]);
+                    }
+                }
+            }
+        }
+        let schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-status-response.v1.schema.json"
+        ))
+        .unwrap();
+        check(
+            value,
+            &schema["properties"]["browserRuntime"]["properties"]["workspace"],
+        );
+    }
+
     #[test]
     fn profile_properties_catalog_only_disposable_rename_persists() {
         use agent_browser_service_model::BrowserProfileCatalogEntry;
@@ -1664,6 +1693,7 @@ mod tests {
             },
         );
         let projected = workspace_projection(&state, &catalog).unwrap();
+        assert_workspace_projection_declared(&projected);
         assert!(
             projected["profiles"].get("unrelated-history").is_none(),
             "rail projection must not include the entire historical catalog"
@@ -1833,6 +1863,7 @@ mod tests {
                 .unwrap_err(),
             "profile_properties_name_invalid"
         );
+        assert_workspace_projection_declared(&workspace_projection(&after, &catalog).unwrap());
         assert_eq!(
             workspace_projection(&after, &catalog).unwrap()["profiles"]["stable-id"]["name"],
             "Kept research"

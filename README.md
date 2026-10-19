@@ -800,8 +800,11 @@ agent-browser find role button click --name "Submit"
 In the default browser workspace, open a tab’s SVG overflow menu or use its
 context menu (Shift+F10) for Properties and Copy URL. Properties shows supplied
 origin and purpose alongside current browser, profile, desktop, URL, title and
-status. Missing values remain Unknown; descriptive names are not identity proof.
+status. Descriptive names are not identity proof.
 Copy URL copies the task URL without creating a handoff or changing selection.
+
+The tab Properties dialog shows authoritative profile retention as **Throwaway** or **Durable**, and displays a recorded tab creation time even when original attribution is missing. Historical attribution that was never recorded remains unrecorded. Edit **Profile name** and choose **Save name** to change its display label, or choose **Make durable** to retain a throwaway profile across tasks. Both operations preserve the profile ID, browser data directory and open tabs. Promotion removes eligibility for disposable-profile cleanup; normal tab and browser idle policies still apply. If a save cannot be confirmed, refresh the inventory before retrying.
+
 Close Tab confirms one managed task before requesting its exact target through the
 existing browser owner. It requires authenticated dashboard access and current
 profile permission to close any tab. Cancelling sends no request. A confirmed
@@ -6910,6 +6913,3 @@ upgrade does not guess a missing historical choice from profile contents.
 Retained browser recovery reconciles an unobserved launch claim after proving the exact profile has no live process. The original claim remains in history. Provider environment checks run before process admission, so unavailable desktops do not create new launch claims.
 
 Configure the native Remote View origin, pool, application and public origin in `~/.agent-browser/.env` or the process environment. When native Remote View settings are present, workstation installation and reconciliation verify the native application inventory, admitted pool, and existing protected lease authority. They do not provision RDP users, the RDP privileged helper, XRDP, Docker, or Guacamole. Partial native settings fail validation. Missing authority readiness requires a separate authority repair; a native upgrade does not install or replace that service. Live-browser upgrades prepare retained source owners before verifying that source writers are quiet. Candidate startup remains blocked until that stability check passes.
-
-
-The tab Properties dialog shows authoritative profile retention as **Throwaway** or **Durable**, and displays a recorded tab creation time even when original attribution is missing. Historical attribution that was never recorded remains unrecorded. Edit **Profile name** and choose **Save name** to change its display label, or choose **Make durable** to retain a throwaway profile across tasks. Both operations preserve the profile ID, browser data directory and open tabs. Promotion removes eligibility for disposable-profile cleanup; normal tab and browser idle policies still apply. If a save cannot be confirmed, refresh the inventory before retrying.
