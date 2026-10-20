@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P252
+    product_lane: PL-PLATFORM
+    objective: Restore compact workflow entry point without losing guidance
+    plan: docs/dev/plans/0252-2026-10-20-workflow-skill-budget.md
+    branch: platform/workflow-skill-budget
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#325]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: []
+    overlaps: [P251, UX301]
+    reconciled_overlaps: ["P251 integrated; own workflow guidance only; preserve foreign stale-session and resource worktrees and retained candidates"]
+    validation_status: Qualified 9163-byte entry point; unchanged parity gate, full clients, links, preservation review and development publication pass; no product runtime change
+    updated_at: 2026-10-20
+
   - id: P251
     product_lane: PL-PLATFORM
     objective: Useful Properties attribution and in-place profile naming and promotion

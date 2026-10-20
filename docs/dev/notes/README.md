@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P252 compact workflow entry point](0252-2026-10-20-workflow-skill-budget.md): unchanged parity gate restored, guidance preservation and complete-directory development publication.
+
 [P251 installed Properties](0251-2026-10-19-dashboard-profile-properties-installed.md): profile naming, retention and promotion, exact sealed identity and installed acceptance limits.
 
 [P250 installed health drawer](0250-2026-10-19-dashboard-subsystem-health-installed.md): sealed production identity, development/public UI checks, preserved processes and the exposed Native Docker/WSL dependency regression.
