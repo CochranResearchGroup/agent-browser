@@ -1,5 +1,7 @@
 # Roadmap
 
+[P254 compact workspace fixture](docs/dev/plans/0254-2026-10-20-compact-workspace-fixture.md), #330, restores the full mounted gate to current Properties and combined Native selection. [Acceptance](docs/dev/notes/0254-2026-10-20-compact-workspace-fixture.md) retains all four late-response cases, privacy/mobile/peer checks and zero fixture residue. Test maintenance only; production is unchanged.
+
 P253 [Native viewer failures](docs/dev/plans/0253-2026-10-20-native-viewer-errors.md), #329, qualifies distinct preparation, access and page failure guidance plus typed client refusal preservation. [Source acceptance](docs/dev/notes/0253-2026-10-20-native-viewer-errors.md) separates passing mounted/client/build gates, the old #330 fixture failure and pending production publication.
 
 P252 [compact workflow skill](docs/dev/plans/0252-2026-10-20-workflow-skill-budget.md), #325, restores the unchanged parity gate with a 9,163-byte entry point, preserved references and verified development guidance publication. [Acceptance](docs/dev/notes/0252-2026-10-20-workflow-skill-budget.md) records the documentation-only boundary.

@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P254 compact workspace fixture acceptance](0254-2026-10-20-compact-workspace-fixture.md): current Properties and combined selection contracts, full mounted race/privacy/mobile/peer coverage, zero fixture residue and explicit production boundary.
+
 [P253 Native viewer failure qualification](0253-2026-10-20-native-viewer-errors.md): distinct page/access/preparation failures, real mounted HTTP cases, typed refusal preservation and separate deployment boundary.
 
 [P252 compact workflow entry point](0252-2026-10-20-workflow-skill-budget.md): unchanged parity gate restored, guidance preservation and complete-directory development publication.
