@@ -1,6 +1,23 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P256
+    product_lane: PL-BUGFIX
+    objective: Recover stale workflows with proven absent browsers without a handoff dead end
+    plan: docs/dev/plans/0256-2026-10-20-absent-browser-workflow.md
+    branch: fix/absent-browser-workflow
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/334
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#327]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: [P249]
+    overlaps: [P249]
+    reconciled_overlaps: ["P249 integrated; own connection refresh and absent-browser handoff seam; preserve foreign root and resource worktrees; #307 lock work separate"]
+    validation_status: Native-handler red/green, final regressions3, connection47, preparation10, broad handoff190 with one ignored, strict Clippy, fmt, docs, policy and parity pass; installer fixture interrupted and incomplete; source only
+    updated_at: 2026-10-20
+
   - id: P255
     product_lane: PL-BUGFIX
     objective: Reconcile exact Native acquisition custody before new desktop work

@@ -1,5 +1,7 @@
 # Runbook
 
+[P256 absent-browser workflow recovery](docs/dev/plans/0256-2026-10-20-absent-browser-workflow.md), #327, qualifies an executable preserve-mode recovery path for browserless handoff preparation and retains uncertain handoff evidence. [Source acceptance](docs/dev/notes/0256-2026-10-20-absent-browser-workflow.md) records focused and broad checks plus the interrupted installer fixture. Production publication remains separate.
+
 [P254 compact workspace fixture](docs/dev/plans/0254-2026-10-20-compact-workspace-fixture.md), #330, restores the full mounted gate to current Properties and combined Native selection. [Acceptance](docs/dev/notes/0254-2026-10-20-compact-workspace-fixture.md) retains all four late-response cases, privacy/mobile/peer checks and zero fixture residue. Test maintenance only; production is unchanged.
 
 P253 [Native viewer failures](docs/dev/plans/0253-2026-10-20-native-viewer-errors.md), #329, qualifies distinct preparation, access and page failure guidance plus typed client refusal preservation. [Source acceptance](docs/dev/notes/0253-2026-10-20-native-viewer-errors.md) separates passing mounted/client/build gates, the old #330 fixture failure and pending production publication.

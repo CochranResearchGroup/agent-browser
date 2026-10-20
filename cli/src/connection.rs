@@ -21,6 +21,14 @@ const DAEMON_AUTH_TOKEN_ENV: &str = "AGENT_BROWSER_DAEMON_AUTH_TOKEN";
 const DAEMON_AUTH_FIELD: &str = "_agentBrowserAuthToken";
 const DAEMON_START_TIMEOUT: Duration = Duration::from_secs(60);
 const DAEMON_START_POLL_INTERVAL: Duration = Duration::from_millis(100);
+/// Read-only recovery entry when a stale runtime has no browser to transfer.
+/// The preserve transaction, not local browser absence, decides later effects.
+pub(crate) const RUNTIME_HANDOFF_RECOVERY_COMMAND: &str =
+    "agent-browser install workstation --dry-run --runtime-replacement-policy preserve --json";
+
+pub(crate) fn runtime_handoff_recovery_command() -> Option<&'static str> {
+    cfg!(target_os = "linux").then_some(RUNTIME_HANDOFF_RECOVERY_COMMAND)
+}
 
 #[derive(Serialize)]
 #[allow(dead_code)]
@@ -1044,8 +1052,11 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
                 ));
             }
             if !version_matches || !sha_matches {
+                let browserless_recovery = runtime_handoff_recovery_command()
+                    .map(|command| format!("run `{command}` and follow the returned transaction plan before retrying"))
+                    .unwrap_or_else(|| "automatic runtime replacement is unavailable on this platform; retain the runtime for operator-directed replacement".to_string());
                 return Err(format!(
-                    "Cannot refresh stale daemon session '{session}' implicitly. Run `agent-browser --session {session} handoff prepare`, attach the candidate session reported by that command, then finalize the old owner only after candidate commit."
+                    "Cannot refresh stale daemon session '{session}' implicitly. Run `agent-browser --session {session} handoff prepare`. If prepared=true, attach its candidate session and finalize the old owner only after candidate commit. If prepared=false and browserPresent=false, no browser transfer candidate exists: {browserless_recovery}. Retain profile data and unresolved effect custody."
                 ));
             } else {
                 return Ok(reachable_daemon_result(session));
@@ -1342,6 +1353,48 @@ fn send_command_once(cmd: &Value, session: &str) -> Result<Response, String> {
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn browserless_handoff_stale_transport_keeps_refusal_and_exposes_recovery() {
+        let root = std::env::temp_dir().join(format!("ab-stale-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+            crate::native::service_lease_mode::PROFILE_LEASE_MODE_ENV,
+        ]);
+        guard.set("AGENT_BROWSER_SOCKET_DIR", root.to_str().unwrap());
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "0");
+        guard.remove(crate::native::service_lease_mode::PROFILE_LEASE_MODE_ENV);
+        let session = "stale-workflow";
+        let _listener = std::os::unix::net::UnixListener::bind(get_socket_path(session)).unwrap();
+        fs::write(get_version_path(session), "0.0.0-old").unwrap();
+        // Pin the same executable inode so this version-mismatch fixture does
+        // not hash the large debug test executable on every readiness check.
+        fs::write(get_pid_path(session), std::process::id().to_string()).unwrap();
+        write_daemon_auth_token(session, "fixture-token").unwrap();
+        let flags = crate::flags::parse_flags(&[]);
+        let mut options = DaemonOptions::from_flags(&flags);
+
+        // Ordinary workflow startup still refuses an incompatible executable;
+        // it now explains the no-candidate branch even for an older daemon.
+        let error = ensure_daemon(session, &options).err().unwrap();
+        assert!(error.contains("Cannot refresh stale daemon session"));
+        assert!(error.contains("prepared=false and browserPresent=false"));
+        assert!(error.contains(RUNTIME_HANDOFF_RECOVERY_COMMAND));
+        assert!(get_socket_path(session).exists());
+        assert_eq!(
+            fs::read_to_string(get_version_path(session)).unwrap(),
+            "0.0.0-old"
+        );
+
+        // Explicit preparation remains the only stale-executable exception.
+        options.allow_stale_daemon_handoff = true;
+        assert!(ensure_daemon(session, &options).is_ok());
+        assert!(get_socket_path(session).exists());
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn test_get_socket_dir_explicit_override() {

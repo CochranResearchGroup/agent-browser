@@ -74,6 +74,26 @@ fn print_with_boundaries(content: &str, origin: Option<&str>, opts: &OutputOptio
     }
 }
 
+/// Render browserless preparation explicitly, including replies from old daemons
+/// that predate structured recovery metadata. Never invent a handoff candidate.
+fn format_runtime_handoff_prepare_text(
+    action: Option<&str>,
+    data: &serde_json::Value,
+) -> Option<String> {
+    if action != Some("runtime_handoff_prepare")
+        || data.get("prepared").and_then(|value| value.as_bool()) != Some(false)
+        || data.get("browserPresent").and_then(|value| value.as_bool()) != Some(false)
+    {
+        return None;
+    }
+    let next_step = crate::connection::runtime_handoff_recovery_command()
+        .map(|command| format!("Inspect the preserve-mode recovery plan before retrying:\n{command}"))
+        .unwrap_or_else(|| "Automatic runtime replacement is unavailable on this platform; retain the runtime for operator-directed replacement.".to_string());
+    Some(format!(
+        "No browser is attached to this daemon; no handoff candidate was prepared.\n{next_step}\nRetained profiles and unresolved effect custody are preserved."
+    ))
+}
+
 fn format_storage_value(value: &serde_json::Value) -> String {
     value
         .as_str()
@@ -3157,6 +3177,10 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
                 return;
             }
         }
+        if let Some(output) = format_runtime_handoff_prepare_text(action, data) {
+            println!("{}", output);
+            return;
+        }
         if let Some(output) = format_stream_status_text(action, data) {
             println!("{}", output);
             return;
@@ -4870,6 +4894,11 @@ Subcommands:
 This command is used by the canonical workstation transaction and runtime interlock.
 The browser process, DevTools port, profile, and open tabs remain live during
 the changeover. A later normal `close` still shuts down an owned browser.
+If prepare returns prepared=false and browserPresent=false, no browser transfer
+candidate exists. Retained handoff evidence and profile data stay preserved.
+On Linux, inspect the existing preserve-mode recovery plan before retrying:
+  agent-browser install workstation --dry-run --runtime-replacement-policy preserve --json
+Local browser absence does not prove peer browsers or unresolved effects absent.
 
 Global Options:
   --json               Output as JSON
@@ -8361,6 +8390,26 @@ pub fn print_version() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn browserless_handoff_renders_actionable_legacy_noop_without_inventing_candidate() {
+        let legacy = serde_json::json!({"prepared":false,"browserPresent":false});
+        let text =
+            super::format_runtime_handoff_prepare_text(Some("runtime_handoff_prepare"), &legacy)
+                .unwrap();
+        assert!(text.contains("no handoff candidate was prepared"));
+        if cfg!(target_os = "linux") {
+            assert!(text.contains(crate::connection::RUNTIME_HANDOFF_RECOVERY_COMMAND));
+        } else {
+            assert!(text.contains("unavailable on this platform"));
+        }
+        assert!(!text.contains("Done"));
+        assert!(super::format_runtime_handoff_prepare_text(
+            Some("runtime_handoff_prepare"),
+            &serde_json::json!({"prepared":true,"browserPresent":true}),
+        )
+        .is_none());
+        assert!(super::format_runtime_handoff_prepare_text(Some("close"), &legacy).is_none());
+    }
     use super::{
         format_desktop_capture_text, format_desktop_evidence_observe_text,
         format_desktop_interact_text, format_desktop_locate_text,

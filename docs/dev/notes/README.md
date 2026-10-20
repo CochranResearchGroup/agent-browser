@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P256 absent-browser workflow recovery](0256-2026-10-20-absent-browser-workflow.md): actionable browserless handoff/no-candidate responses, preserved evidence, provider-free regressions and explicit installation boundary.
+
 [P254 compact workspace fixture acceptance](0254-2026-10-20-compact-workspace-fixture.md): current Properties and combined selection contracts, full mounted race/privacy/mobile/peer coverage, zero fixture residue and explicit production boundary.
 
 [P253 Native viewer failure qualification](0253-2026-10-20-native-viewer-errors.md): distinct page/access/preparation failures, real mounted HTTP cases, typed refusal preservation and separate deployment boundary.

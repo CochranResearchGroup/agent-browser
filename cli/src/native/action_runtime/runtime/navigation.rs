@@ -300,11 +300,19 @@ pub(crate) async fn handle_runtime_handoff_prepare(
     state: &mut DaemonState,
 ) -> Result<Value, String> {
     let Some(manager) = state.browser.as_mut() else {
-        let path = runtime_handoff_path(&state.session_id);
-        let _ = fs::remove_file(path);
+        // A missing local manager is not proof that retained ownership,
+        // pending effects or peer browsers are absent. Keep handoff evidence
+        // and route recovery through the existing preserve transaction.
+        let recovery_command = crate::connection::runtime_handoff_recovery_command();
         return Ok(json!(
             { "prepared" : false, "browserPresent" : false, "sessionName" : state
-            .session_id, }
+            .session_id, "reason": "no_browser_to_transfer",
+            "browserObservation": "not_attached",
+            "recovery": {
+                "action": if recovery_command.is_some() { "inspect_workstation_replacement" } else { "operator_runtime_replacement_required" },
+                "command": recovery_command,
+                "automaticRetry": false
+            } }
         ));
     };
     if !manager.is_connection_alive().await {
@@ -2611,6 +2619,35 @@ pub(crate) fn write_runtime_handoff(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn browserless_handoff_exposes_executable_recovery_without_erasing_custody() {
+        let root = std::env::temp_dir().join(format!("ab-handoff-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let guard = crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR"]);
+        guard.set("AGENT_BROWSER_SOCKET_DIR", root.to_str().unwrap());
+        let mut state = DaemonState::new_for_session_with_stream("stale-workflow", None, None);
+        let retained = runtime_handoff_path(&state.session_id);
+        fs::write(&retained, b"retained uncertain handoff evidence").unwrap();
+
+        let result = handle_runtime_handoff_prepare(&mut state).await.unwrap();
+
+        assert_eq!(result["prepared"], false);
+        assert_eq!(result["browserPresent"], false);
+        assert_eq!(result["reason"], "no_browser_to_transfer");
+        if cfg!(target_os = "linux") {
+            assert_eq!(result["recovery"]["command"],
+                "agent-browser install workstation --dry-run --runtime-replacement-policy preserve --json");
+        } else {
+            assert!(result["recovery"]["command"].is_null());
+        }
+        assert_eq!(
+            fs::read(&retained).unwrap(),
+            b"retained uncertain handoff evidence"
+        );
+        assert!(state.browser.is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
 
     fn challenge_navigation_state() -> ServiceState {
         use crate::native::service_model::{
