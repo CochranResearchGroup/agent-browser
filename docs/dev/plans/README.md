@@ -1,5 +1,7 @@
 # Active plan index
 
+[P256: absent-browser stale workflow](0256-2026-10-20-absent-browser-workflow.md), #327; supported recovery-path repair with retained custody; provider-free qualification and installation boundary recorded in its acceptance note.
+
 [P255: Native acquisition readback](0255-2026-10-20-native-acquisition-readback.md), #316; original and newly retained acquisitions reconciled with exact Native lineage, synthetic task cleanup and preserved occupied peers. Supported runtime recovery only; no deployment or latency claim.
 
 [P254: current compact workspace fixture](0254-2026-10-20-compact-workspace-fixture.md), #330; closed with full mounted and focused gates passing; test maintenance only, no runtime publication.

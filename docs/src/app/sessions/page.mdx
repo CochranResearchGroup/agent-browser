@@ -147,12 +147,25 @@ route, automation availability, and next safe action. The dashboard renders
 the same rows as detected manual workspaces and only enables controls the live
 browser can support.
 
-When a command finds an older daemon executable during development,
-agent-browser prepares an authenticated handoff, starts the current
-executable, and resumes the same browser PID and DevTools endpoint. Missing
-handoff authority fails closed. Reconciliation also expires active session
-leases whose recorded browser ownership no longer exists, preventing stale
-session rows from holding a profile indefinitely.
+When a command finds an older daemon executable, it refuses implicit refresh
+and directs the caller to authenticated <code>handoff prepare</code>. Only a
+<code>prepared=true</code> reply supplies a candidate for browser transfer.
+A reply with <code>prepared=false</code> and <code>browserPresent=false</code>
+means this daemon has no attached browser to transfer. It does not establish
+that peer browsers or unresolved browser effects are absent. Retained handoff
+evidence, profile data and history stay preserved.
+
+On Linux/WSL, inspect the existing preserve-mode transaction for that no-candidate result:
+
+```bash
+agent-browser install workstation --dry-run --runtime-replacement-policy preserve --json
+```
+
+Follow the returned plan before retrying the workflow. This command is read-only;
+it does not restart a shared host or close peer tasks. JSON preparation reports
+<code>reason=no_browser_to_transfer</code> and the recovery command. Text output
+also explains replies from older daemons that lack these fields. An unavailable
+browser observation is not permission to reset a profile or bypass unknown effects.
 
 The built-in Google and Gmail policies use headed stealth Chromium, so the initial sign-in may remain attachable. Use detached <code>runtime login</code> only when an effective site policy sets <code>requiresCdpFree</code>, then close Chrome and relaunch the same runtime profile with <code>--attachable</code> for automation:
 

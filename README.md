@@ -374,6 +374,16 @@ preserved without effect authority, so rollback readers can retain newer
 terminal bookkeeping. An already advertised recovery action does not require
 an upgrade merely to apply it.
 
+If stale workflow startup recommends `handoff prepare` and it returns
+`prepared=false` with `browserPresent=false`, no browser transfer candidate
+exists. Do not attempt candidate attachment or repeat the same handoff. On Linux, inspect
+`agent-browser install workstation --dry-run --runtime-replacement-policy preserve --json`
+and follow its returned transaction plan. This read-only entry point checks
+shared runtime custody before proposing effects. The missing local browser
+manager does not prove peer browsers or unresolved effects absent; retained
+handoff evidence, profiles and history stay preserved. Text output explains
+this no-op even when the responding daemon predates structured recovery fields.
+
 Cooperative continuity remains the default replacement policy. If an old
 managed runtime cannot complete handoff, first run a dry-run with
 `--runtime-replacement-policy full-shutdown`. Review the returned

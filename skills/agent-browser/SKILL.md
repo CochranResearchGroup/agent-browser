@@ -44,6 +44,12 @@ profile browser, preserving the task and authenticated state.
 A new ordinary task command refreshes stale clean session state before acting;
 unpublished effects remain held for reconciliation without command replay.
 
+If stale transport recommends `handoff prepare` but returns `prepared=false`
+and `browserPresent=false`, there is no candidate to attach. On Linux, inspect
+`agent-browser install workstation --dry-run --runtime-replacement-policy preserve --json`
+and follow its plan before retrying. Keep profiles, peers and unresolved effect
+custody intact; this read-only plan does not authorize a reset or host restart.
+
 Selection and Share wait their turn on the same native desktop.
 
 Diagnostic and administrative discovery points to supported CLI/API operations.
