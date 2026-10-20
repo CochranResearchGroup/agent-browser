@@ -1,5 +1,7 @@
 # Runbook
 
+P252 [compact workflow skill](docs/dev/plans/0252-2026-10-20-workflow-skill-budget.md), #325, restores the unchanged parity gate with a 9,163-byte entry point, preserved references and verified development guidance publication. [Acceptance](docs/dev/notes/0252-2026-10-20-workflow-skill-budget.md) records the documentation-only boundary.
+
 P251 [Properties and profile durability](docs/dev/plans/0251-2026-10-19-dashboard-profile-properties.md), #323, is installed as sealed binary `4e5a65f7463e` in accepted production transaction `upgrade-3f7347ec-6f0b-46f1-8855-e4e6e0f27a8c`. Both doctors, three development browser cycles, public Properties and the Native viewer pass. See [installed acceptance](docs/dev/notes/0251-2026-10-19-dashboard-profile-properties-installed.md) for preservation limits.
 
 P250 [dashboard subsystem health](docs/dev/plans/0250-2026-10-19-dashboard-subsystem-health.md), #317, is integrated through PR318 and installed as sealed `81eea74b6d6d` after development qualification. The [installed receipt](docs/dev/notes/0250-2026-10-19-dashboard-subsystem-health-installed.md) binds actual public drawer checks, both doctors, three browser cycles and preserved identities. The drawer exposes remaining Native warnings; a pre-existing Docker/WSL regression is mitigated by a verifier-only bridge.

@@ -4032,3 +4032,114 @@ failed or mismatched acknowledgement keeps the record visible, exposes no
 producer diagnostics and offers inspection before a new explicit attempt.
 Only transient acknowledged display state is kept in the UI; refreshed owner
 records and durable revocation remain server authority.
+
+## Operator workspace
+
+Selecting a current owned task can verify its native handoff immediately while
+background presence is still unknown. The rail does not label it live until the
+census confirms it. Handoff preparation focuses and maximizes the exact task
+once, then embeds only the ready Native viewer; it never launches a replacement.
+Existing-tab operator selection talks directly to its browser owner without
+creating an HTTP launch lane or scheduler job. Signed focus, display ordering
+and current Native readiness are still checked.
+An already verified desktop stays connected when census metadata expires.
+Stale metadata cannot open a new selection; a changed binding or confirmed
+absence clears the viewer. Remote View continues to own connection authority.
+
+Open the dashboard root `/` or `/browsers` for the native browser workspace.
+Select the owned tab, inspect Properties or Share its durable link, and use
+Handoffs for retained records and independent policies. Sort the drawer by task,
+creation or link expiry. Inactive links are amber and hidden by default behind
+Show inactive; target expiry does not imply link expiry. Icon controls have hover
+help. Managed ownership alone does not prove a native desktop is available.
+The rail requires fresh matching native-window, browser-process and tab evidence
+for managed desktop tasks. Empty desktops and unverified/ended tabs stay out of
+live navigation; retained handoffs remain available. The rail polls every three
+seconds after completion; diagnostics do not block it and stale evidence expires
+independently after 30 seconds. Native window reads refresh in one background
+worker; initial reads can remain unverified until completion. Cached results retain
+their elapsed age, and a failed refresh cannot establish presence or renew tab
+lifetime. Search uses displayed labels and navigable URLs,
+not embedded document payloads. Refresh retains the requested identity. Diagnostics at `/service` keeps Service inspection,
+Selection, Activity, Chat, Console, Network, Storage and Extensions optional.
+`?view=service:<name>` and the selected workspace/browser/session/tab/profile/job
+query fields remain supported for diagnostic links. Native Remote View uses its
+existing authentication; dashboard logout remains separate.
+Same-link native auth selects the addressed tab and waits for owner preparation without replay.
+Current handoff presentation ignores released desktop-assignment history. It still requires one active assignment for the exact desktop generation and an exact match to published browser custody; multiple active assignments or a mismatch remain unavailable.
+
+## Sharing a profile between tasks
+
+Use one named session and tab per task. When tasks deliberately need the same login and stored browser data, select the same durable profile so they reuse one browser. Give each task its own session name; address commands through that session rather than a global active tab.
+
+Tab-targeted automation can run without either tab being physically visible. Serialize foreground desktop clicks, keyboard input and human control. Separate tabs share cookies, login/logout state and persistent site storage: coordinate account switches, logout and conflicting application changes. Choose separate profiles when independent state is required.
+
+Close only the task's session. Closing one session must preserve its peers; the final session releases the browser. Do not delete the shared profile to clean up a task. If a site requires foreground execution, serialize that part of the workflow.
+
+An exact private producer `native_use_missing` response refreshes only the short native observation after current assignment readback. It preserves the durable link, addressed tab, first-use history and pending-human hold; timeouts, other errors and changed generations remain failures. A failed native handoff observation does not acknowledge human use or renew retention. Eligible TTL cleanup still runs under its existing activity and publication checks before the owner reports the observation error. A failed reaper response can therefore follow committed cleanup; read current owner state before deciding what remains.
+
+Disposable quota retirement remains under development. Its admission includes verified child processes of the selected browser; unrelated or unverified processes using the profile still defer retirement. Retain pending-human, viewer, controller, operation and peer protections.
+
+Stale selections remove the viewer and offer Refresh browsers without choosing a peer.
+Use the tab SVG menu or Shift+F10 for Properties, Copy URL and permitted Close Tab.
+Properties shows recorded creation time and supplied context; absent historical attribution is explained once. Names are not identity proof. Profile retention is Throwaway or Durable. Save name edits its display label; Make durable removes disposable cleanup eligibility while preserving ID, directory and open tabs. Normal browser/tab idle policies remain. Refresh after an unconfirmed save. Copy URL preserves selection.
+Close confirms the exact managed target and preserves peers; the final tab closes its browser.
+If completion is uncertain, refresh and inspect permission before retrying.
+Share prepares the existing task without navigation. The Handoffs rail control opens
+retained records, context, independent link/tab policies and explicit link deletion.
+Copy and Open reuse the opaque link; failed refresh retains the prior records.
+
+## SiteGuide routines
+
+Discover `category:"playbooks"` and run reviewed routines through `browser_command`
+in the existing task. Read [the routine guide](playbooks.md) before
+login or guide development. `verify_login` requires intended account/company evidence;
+QBO browser login and OAuth/API readiness are separate. The login client
+`@agent-browser/client/login-playbook` requires preparation and validation, masked
+password input and checkpoint persistence. Use `reviewedPlan` for reviewed changes;
+use `connectHostedAuthHelper()` for installed private SDK discovery and pass its
+attested `callerTaskId` separately from the browser `taskId`. Select configured
+account/source metadata through the existing owner, never from a profile name.
+After independent human/browser completion, `advance({...originalOptions,
+reconcile:true})` reads back the same checkpoint without credential retrieval or
+input replay. Current principal/native safety must release capture before company
+verification; missing evidence stays held. `helper_attempt_released` is terminal
+failed login after trusted untouched-input proof or independently empty protected
+fields, plus clean-login/native safety. Preserve attempted/unknown effects;
+readback cannot clear controls or retrieve another factor. Keep its checkpoint;
+the playbook cannot replay it. A trusted native receiving port preserves an
+exact current identifier match without clearing or retyping. Unknown prior input
+cannot become equality success; password and factor checks remain unchanged.
+Read the routine guide for exact setup.
+Task tab listing discovers attributable popups after the capture barrier is ready.
+For `collect_posts`, supply reviewed guide and item/page/scroll budgets. Empty output
+is unproven unless `noResultsVerified`; preserve partial results and their reason.
+
+### Dashboard summary diagnostics
+
+The toolbar Subsystem health SVG opens a side drawer with separate inventory, browser runtime, Native desktop readiness and selected viewer evidence. Gray means unverified or stale, amber means attention, red means unavailable and green means the reported checks pass. Detailed read-only checks run only when opening or refreshing the drawer, expire after 30 seconds and time out after eight seconds. They add no recurring diagnostic polling or automatic repair. A reachable service or prepared handoff does not prove a connected Native display.
+
+After a service restart, selecting an existing live task reconnects its recorded browser without changing its process, tab, profile or document. A browser that cannot be verified remains unavailable; selection does not launch a replacement.
+
+The default native workspace uses `GET /api/service/status?projection=workspace`
+for redacted owner inventory with bounded live browser/window observations. It
+does not run launch-admission scans, storage checks, service reconciliation or
+workstation diagnostics. The document and HTTP caches expire after one second;
+the next poll starts three seconds after the prior read completes. Observation
+age remains independent of these caches and does not renew tab retention.
+
+Embedded native desktops require the existing Remote View gateway at the
+dashboard origin's native paths. Standalone opaque handoffs still use native
+Remote View continuation. A separate native hostname does not satisfy workspace
+framing; preserve native CSP and exact Host/Origin validation.
+
+Dashboard summary status omits detailed runtime resource inventories and reconciliation receipts while retaining health flags and resource totals. Its projection metadata reports omitted counts and points to complete `/api/service/status` diagnostics. Summary delivery failure is not evidence that browsers or tabs have ended.
+
+The native rail also reads Remote View's authenticated
+`/api/v1/desktops/browser-windows?include_hidden=true` projection. Current browser
+windows from other applications remain native observations, with no managed tab
+or automation custody. Empty desktops and non-browser windows are excluded.
+Native selection uses the existing connected workspace window helper and its
+input/generation checks. Stale, failed or changed-generation observations remove
+the old frame while preserving the requested selection. Default native inventory
+excludes legacy daemon history; diagnostic tools retain that separate surface.
