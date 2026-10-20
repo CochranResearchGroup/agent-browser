@@ -6,6 +6,7 @@ lanes:
     objective: Reconcile exact Native acquisition custody before new desktop work
     plan: docs/dev/plans/0255-2026-10-20-native-acquisition-readback.md
     branch: fix/native-acquisition-readback
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/333
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#316]
