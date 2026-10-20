@@ -9,6 +9,7 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#329]
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/331
     plan_state: CLOSED
     custody_state: INTEGRATED
     dependencies: []
