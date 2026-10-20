@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P254
+    product_lane: PL-BUGFIX
+    objective: Restore compact workspace fixture to current Properties and single-focus contracts
+    plan: docs/dev/plans/0254-2026-10-20-compact-workspace-fixture.md
+    branch: fix/compact-workspace-fixture
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#330]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [P251, P248, P253]
+    overlaps: [P253, UX301]
+    reconciled_overlaps: ["Integrated predecessors; own compact mounted fixture only, preserve production behavior, foreign primary worktrees and pinned candidates"]
+    validation_status: Reproduce unchanged fixture before repair; provider-free fixture maintenance, no runtime publication
+    updated_at: 2026-10-20
+
   - id: P253
     product_lane: PL-BUGFIX
     objective: Distinguish Native viewer failures and actionable recovery

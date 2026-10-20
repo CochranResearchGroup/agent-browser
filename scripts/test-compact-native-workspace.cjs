@@ -18,7 +18,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   let browser;
-  let releaseHeldFocus = null;
+  let releaseHeldSelection = null;
   let releaseHeldClose = null;
   let releaseHeldShare = null;
   let releaseHeldDelete = null;
@@ -35,11 +35,13 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     let shareHold = null;
     let closeHold = null;
     let ready = true;
-    let focusRejection = null;
-    let focusHold = null;
+    let selectionRejection = null;
+    let selectionHold = null;
     let specificHandoffs = false;
     let frameAllowed = true;
     const requests = [];
+    const selections = () => requests.filter(request => request.action === 'remote_view_open'
+      && request.taskName === 'Select native browser task');
     const lateSelections = [];
     await page.route("**/api/service/request", async route => {
       const body = route.request().postDataJSON(); requests.push(body);
@@ -77,11 +79,11 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
           targetId: body.params.targetId, closedTabId: tabId, currentTabId: 'bob', physicalTabClosed: true,
           unrelatedTargetsPreserved: true, browserClosed: false } } });
       }
-      if (body.action === "view_focus") {
-        let rejection = focusRejection;
-        if (focusHold?.targetId === body.params.targetId) {
-          const held = focusHold;
-          focusHold = null;
+      if (body.action === "remote_view_open" && body.taskName === "Select native browser task") {
+        let rejection = selectionRejection;
+        if (selectionHold?.targetId === body.params.targetId) {
+          const held = selectionHold;
+          selectionHold = null;
           held.started();
           rejection = await held.reply;
         }
@@ -95,7 +97,6 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
             recommendedAction: 'inspect_operator_focus_authority', reuseAllowed: false,
           },
         } });
-        return route.fulfill({ json: { success: true, data: { focused: true } } });
       }
       const handoffId = specificHandoffs ? `task-link-${body.params.targetId}` : 'task-link';
       return route.fulfill({ json: { success: true, data: { handoffId, handoffUrl: `http://127.0.0.1:${server.address().port}/remote-view/${handoffId}`, operatorVisible: { state: ready ? "ready" : "pending" } } } });
@@ -391,8 +392,17 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.getByRole('menuitem', { name: 'Properties', exact: true }).waitFor({ timeout: 1500 });
     await page.getByRole('menuitem', { name: 'Properties', exact: true }).press('Enter');
     await properties.waitFor();
-    for (const field of ['Service', 'Agent', 'Human', 'Origin', 'Task', 'Purpose', 'Attribution', 'Desktop']) {
+    assert.equal(await properties.getByRole('status').filter({ hasText: 'Original task attribution was not recorded' }).count(), 1,
+      'missing provenance is explained once without inventing an owner');
+    for (const field of ['Service', 'Agent', 'Human', 'Origin', 'Task', 'Purpose', 'Job', 'Request', 'Attribution']) {
+      assert.equal(await properties.locator('dt').filter({ hasText: new RegExp(`^${field}$`) }).count(), 0,
+        `absent ${field} provenance must not create an Unknown row`);
+    }
+    for (const field of ['Desktop', 'Created']) {
       assert.equal(await properties.locator('dt').filter({ hasText: new RegExp(`^${field}$`) }).locator('..').locator('dd').innerText(), 'Unknown');
+    }
+    for (const value of ['alice-browser', 'shared-profile', 'https://example.test/bob', 'Bob invoice']) {
+      await properties.getByText(value, { exact: true }).waitFor();
     }
     assert.equal((await properties.innerText()).includes('Ada worker'), false, 'peer provenance must not fill missing task values');
     assert.equal(requests.length, 0);
@@ -450,13 +460,14 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await aliceFrame;
     frameAllowed = false;
     await page.getByRole('button', { name: 'Bob invoice', exact: true }).click();
-    await page.getByRole('alert').filter({ hasText: 'native desktop' }).waitFor({ timeout: 2000 });
+    await page.getByRole('alert').filter({ hasText: 'Check Remote View sign-in or access' }).waitFor({ timeout: 2000 });
+    assert.equal(await page.getByRole('region', { name: 'Native desktop', exact: true }).getAttribute('data-native-task-failure'), 'viewer-access');
     assert.equal(await page.getByRole('link', { name: 'Open Remote View' }).getAttribute('href'), `http://127.0.0.1:${server.address().port}/remote-view/task-link`);
     frameAllowed = true;
     await page.getByRole('button', { name: 'Retry native desktop' }).click();
     await page.getByTitle('Native Remote View desktop', { exact: true }).waitFor();
-    assert.ok(requests.some(request => request.action === 'view_focus' && request.params.operatorFocus === true));
-    assert.ok(requests.some(request => request.action === 'remote_view_open'));
+    assert.equal(requests.filter(request => request.action === 'view_focus').length, 0, 'selection must not pre-focus a combined Native handoff');
+    assert.ok(selections().some(request => request.params.maximize === true), 'combined handoff preserves Native maximize');
     await page.reload();
     await page.getByRole('button', { name: 'Bob invoice', exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Bob invoice', exact: true }).getAttribute('aria-current'), 'page');
@@ -467,7 +478,8 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.getByRole('button', { name: 'Alice invoice', exact: true }).waitFor();
     ready = false;
     await page.getByRole('button', { name: 'Alice invoice', exact: true }).click();
-    await page.getByRole('alert').filter({ hasText: 'native desktop' }).waitFor();
+    await page.getByRole('alert').filter({ hasText: "Could not prepare this task's Remote View handoff" }).waitFor();
+    assert.equal(await page.getByRole('region', { name: 'Native desktop', exact: true }).getAttribute('data-native-task-failure'), 'handoff');
     assert.equal(await page.getByTitle('Native Remote View desktop', { exact: true }).count(), 0, 'unready handoff must not become a viewer iframe');
     ready = true;
     await page.getByRole('button', { name: 'Retry native desktop' }).click();
@@ -479,20 +491,22 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
       { status: 200, code: 'future_focus_policy_error', target: 'Bob invoice', access: false },
       { status: 400, legacyOnly: true, target: 'Alice invoice', access: false },
     ]) {
-      focusRejection = rejection;
+      selectionRejection = rejection;
       const beforeDeniedHandoffs = requests.filter(request => request.action === 'remote_view_open').length;
-      const beforeDeniedFocus = requests.filter(request => request.action === 'view_focus').length;
+      const beforeDeniedSelections = selections().length;
       await page.getByRole('button', { name: rejection.target, exact: true }).click();
       const alert = page.getByRole('region', { name: 'Native desktop', exact: true }).getByRole('alert');
       await alert.filter({ hasText: rejection.access ? 'Check dashboard and profile access' : 'Refresh the task' }).waitFor({ timeout: 1500 });
       assert.equal((await alert.innerText()).includes('Check dashboard and profile access'), rejection.access);
       assert.equal(await page.getByTitle('Native Remote View desktop', { exact: true }).count(), 0);
-      assert.equal(requests.filter(request => request.action === 'view_focus').length, beforeDeniedFocus + 1,
-        'access rejection must not automatically repeat focus');
-      assert.equal(requests.filter(request => request.action === 'remote_view_open').length, beforeDeniedHandoffs,
-        'rejected focus must not request a handoff');
+      assert.equal(selections().length, beforeDeniedSelections + 1,
+        'denied combined selection must not automatically retry');
+      assert.equal(requests.filter(request => request.action === 'remote_view_open').length, beforeDeniedHandoffs + 1,
+        'selection denial belongs to the single handoff request');
+      assert.equal(requests.filter(request => request.action === 'view_focus').length, 0,
+        'denied selection must not fall back to standalone focus');
       assert.equal((await page.locator('body').innerText()).includes('SYNTHETIC-PRIVATE-DETAIL'), false);
-      focusRejection = null;
+      selectionRejection = null;
       await page.getByRole('button', { name: 'Retry native desktop' }).click();
       await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
     }
@@ -505,36 +519,38 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
         assert.equal(new URL(page.url()).searchParams.get('tab'), 'alice');
         let announce;
         const started = new Promise(resolve => { announce = resolve; });
-        const reply = new Promise(resolve => { releaseHeldFocus = resolve; });
-        focusHold = { targetId: older.targetId, started: announce, reply };
-        const beforeFocus = requests.filter(request => request.action === 'view_focus').length;
+        const reply = new Promise(resolve => { releaseHeldSelection = resolve; });
+        selectionHold = { targetId: older.targetId, started: announce, reply };
+        const beforeSelections = selections().length;
         const beforeHandoffs = requests.filter(request => request.action === 'remote_view_open').length;
         await page.getByRole('button', { name: older.title, exact: true }).click();
         await started;
         await page.getByRole('button', { name: 'Alice invoice', exact: true }).click();
         if (older.sameDesktop) {
-          assert.equal(requests.filter(request => request.action === 'view_focus').length, beforeFocus + 1,
-            'one desktop must serialize older and newer focus');
+          assert.equal(selections().length, beforeSelections + 1,
+            'one desktop must serialize older and newer combined selections');
           assert.equal(await page.getByTitle('Native Remote View desktop', { exact: true }).count(), 0);
         } else {
           await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
           await page.frameLocator('iframe[title="Native Remote View desktop"]').locator('body').evaluate(body => { body.dataset.continuity = 'keep-current-frame'; });
         }
         const oldResponse = page.waitForResponse(response => response.url().endsWith('/api/service/request')
-          && response.request().postDataJSON().action === 'view_focus'
+          && response.request().postDataJSON().action === 'remote_view_open'
+          && response.request().postDataJSON().taskName === 'Select native browser task'
           && response.request().postDataJSON().params.targetId === older.targetId);
-        releaseHeldFocus(rejects ? { status: 400, code: 'operator_focus_profile_policy_denied' } : null);
-        releaseHeldFocus = null;
+        releaseHeldSelection(rejects ? { status: 400, code: 'operator_focus_profile_policy_denied' } : null);
+        releaseHeldSelection = null;
         await (await oldResponse).finished();
         await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         assert.ok((await page.getByTitle('Native Remote View desktop', { exact: true }).getAttribute('src')).endsWith('/remote-view/task-link-target-alice'));
         assert.equal(new URL(page.url()).searchParams.get('tab'), 'alice');
         assert.equal(await page.getByRole('region', { name: 'Native desktop', exact: true }).getByRole('alert').count(), 0);
-        assert.deepEqual(requests.filter(request => request.action === 'view_focus').slice(beforeFocus).map(request => request.params.targetId),
-          [older.targetId, 'target-alice']);
+        assert.deepEqual(selections().slice(beforeSelections).map(request => request.params.targetId),
+          [older.targetId, 'target-alice'], 'latest selection must win after the older combined request');
         assert.deepEqual(requests.filter(request => request.action === 'remote_view_open').slice(beforeHandoffs).map(request => request.params.targetId),
-          ['target-alice'], 'obsolete focus must not prepare a handoff');
+          [older.targetId, 'target-alice'], 'each selection must use one combined handoff');
+        assert.equal(requests.filter(request => request.action === 'view_focus').length, 0);
         if (!older.sameDesktop) {
           assert.equal(await page.frameLocator('iframe[title="Native Remote View desktop"]').locator('body').getAttribute('data-continuity'),
             'keep-current-frame', 'late work from another desktop must not remount the current viewer');
@@ -543,7 +559,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
           olderTarget: older.targetId,
           syntheticScope: older.sameDesktop ? 'same-desktop' : 'independent-desktop',
           olderReply: rejects ? 'access-rejection' : 'success',
-          focusRequestTargets: requests.filter(request => request.action === 'view_focus').slice(beforeFocus).map(request => request.params.targetId),
+          selectionRequestTargets: selections().slice(beforeSelections).map(request => request.params.targetId),
           handoffRequestTargets: requests.filter(request => request.action === 'remote_view_open').slice(beforeHandoffs).map(request => request.params.targetId),
           selectedTab: new URL(page.url()).searchParams.get('tab'),
           viewerDocumentPreserved: older.sameDesktop ? null : await page.frameLocator('iframe[title="Native Remote View desktop"]').locator('body').getAttribute('data-continuity') === 'keep-current-frame',
@@ -606,8 +622,8 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
     let announceShareSelection;
     const selecting = new Promise(resolve => { announceShareSelection = resolve; });
-    const selectionReply = new Promise(resolve => { releaseHeldFocus = resolve; });
-    focusHold = { targetId: 'target-bob', started: announceShareSelection, reply: selectionReply };
+    const selectionReply = new Promise(resolve => { releaseHeldSelection = resolve; });
+    selectionHold = { targetId: 'target-bob', started: announceShareSelection, reply: selectionReply };
     const sharesBeforeSelection = requests.filter(request => request.taskName === 'Share browser task').length;
     shareHold = new Promise(resolve => { releaseHeldShare = resolve; });
     await page.getByRole('button', { name: 'Bob invoice', exact: true }).click();
@@ -621,7 +637,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
       'Share must wait for the unfinished selection on the same native desktop');
     const nextShare = page.waitForRequest(request => request.url().endsWith('/api/service/request')
       && request.postDataJSON().taskName === 'Share browser task');
-    releaseHeldFocus(null); releaseHeldFocus = null;
+    releaseHeldSelection(null); releaseHeldSelection = null;
     await nextShare;
     releaseHeldShare(); releaseHeldShare = null; shareHold = null;
     await queuedShare.getByLabel('Shared handoff URL', { exact: true }).waitFor();
@@ -631,8 +647,8 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     // An unrelated desktop's held selection must not delay this Share.
     let announceForeignSelection;
     const foreignSelecting = new Promise(resolve => { announceForeignSelection = resolve; });
-    const foreignReply = new Promise(resolve => { releaseHeldFocus = resolve; });
-    focusHold = { targetId: 'target-carol', started: announceForeignSelection, reply: foreignReply };
+    const foreignReply = new Promise(resolve => { releaseHeldSelection = resolve; });
+    selectionHold = { targetId: 'target-carol', started: announceForeignSelection, reply: foreignReply };
     await page.getByRole('button', { name: 'Carol report', exact: true }).click();
     await foreignSelecting;
     await actions.click();
@@ -642,7 +658,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     assert.equal(new URL(page.url()).searchParams.get('tab'), 'carol');
     await page.keyboard.press('Escape');
     await independentShare.waitFor({ state: 'hidden' });
-    releaseHeldFocus(null); releaseHeldFocus = null;
+    releaseHeldSelection(null); releaseHeldSelection = null;
     await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
     await page.getByRole('button', { name: 'Bob invoice', exact: true }).click();
     await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
@@ -661,7 +677,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     shareFailure = false;
     shareHold = new Promise(resolve => { releaseHeldShare = resolve; });
     const selectionBeforeShare = page.url();
-    const focusBeforeShare = requests.filter(request => request.action === 'view_focus').length;
+    const selectionsBeforeShare = selections().length;
     await actions.click();
     await page.getByRole('menuitem', { name: 'Share', exact: true }).click();
     const handoffs = page.getByRole('dialog', { name: 'Handoffs', exact: true });
@@ -671,7 +687,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await handoffs.getByLabel('Shared handoff URL', { exact: true }).waitFor();
     assert.match(await handoffs.getByLabel('Shared handoff URL', { exact: true }).inputValue(), /\/remote-view\/task-link/);
     assert.equal(page.url(), selectionBeforeShare, 'sharing must not replace selected Bob');
-    assert.equal(requests.filter(request => request.action === 'view_focus').length, focusBeforeShare);
+    assert.equal(selections().length, selectionsBeforeShare, 'Share must not issue a separate task selection');
     const sharedRequest = requests.filter(request => request.action === 'remote_view_open').at(-1);
     assert.equal(sharedRequest.browserId, 'alice-browser');
     assert.equal(sharedRequest.sessionName, 'alice-session');
@@ -814,7 +830,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     assert.equal(await page.getByRole('button', { name: 'Alice invoice', exact: true }).getAttribute('aria-current'), 'page');
     assert.equal(page.url(), selectedBeforePresence, 'presence changes must preserve the exact requested identity');
     await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
-    assert.deepEqual(requests.slice(beforePresence).map(request => [request.action, request.params.targetId]), [['view_focus', 'target-alice'], ['remote_view_open', 'target-alice']], 'restored presentation may prepare only the exact selected existing task');
+    assert.deepEqual(requests.slice(beforePresence).map(request => [request.action, request.params.targetId]), [['remote_view_open', 'target-alice']], 'restored presentation may prepare only the exact selected existing task');
     await page.screenshot({ path: path.join(artifacts, 'rail-browser-restored.png') });
     const beforeUnavailable = requests.length;
     await page.evaluate(() => window.dispatchEvent(new Event('fixture-desktop-unavailable')));
@@ -838,9 +854,21 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
       searches.push(performance.now() - started);
     }
     fs.writeFileSync(path.join(artifacts,'rail-render-timing.json'),JSON.stringify({tabs:200,mount200Ms,searchRoundTripMs:searches,note:'actual Chromium component; timing includes automation transport'},null,2));
+    assert.equal(requests.filter(request => request.action === 'view_focus').length, 0, 'no scenario may introduce duplicate focus');
+    for (const request of selections()) {
+      const [browserId, sessionName, displayAllocationId] = {
+        'target-alice': ['alice-browser', 'alice-session', 'desktop-a'],
+        'target-bob': ['alice-browser', 'bob-session', 'desktop-a'],
+        'target-carol': ['carol-browser', 'carol-session', 'desktop-b'],
+      }[request.params.targetId];
+      assert.deepEqual([request.browserId, request.sessionName, request.params.displayAllocationId],
+        [browserId, sessionName, displayAllocationId], 'combined selection must bind the exact task and desktop');
+      assert.equal(request.params.maximize, true);
+      assert.equal(request.params.url, undefined, 'selecting an existing task must not navigate it');
+    }
     console.log(JSON.stringify({ success: true, artifacts, seam: 'actual compact component in Chromium; synthetic inventory and viewer boundary' }));
   } finally {
-    releaseHeldFocus?.(null);
+    releaseHeldSelection?.(null);
     releaseHeldClose?.();
     releaseHeldShare?.();
     releaseHeldDelete?.();
