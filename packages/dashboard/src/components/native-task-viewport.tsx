@@ -14,13 +14,16 @@ export type NativeTaskViewportTarget = {
   displayAllocationId: string;
 };
 
-type ViewState = { identity: string; status: "opening" | "opened" | "failed"; url?: string; accessCheckRequired?: boolean };
+type ViewFailure = "handoff" | "operator-access" | "viewer-page" | "viewer-access";
+type ViewState = { identity: string; status: "opening" | "opened" | "failed"; url?: string; failure?: ViewFailure };
 
 /** Native Remote View supplies the viewer and its authentication. This component
  * selects the exact owned task and embeds only its ready durable handoff.
  * Census expiry preserves only an already requested exact binding; stale metadata
  * cannot authorize a new selection. Missing or absent bindings clear the viewer.
- * Known access recourse selects bounded guidance without exposing producer diagnostics. */
+ * Failure guidance distinguishes preparation, explicit operator policy and the
+ * observable iframe boundary. An unreadable page is not proof of an expired
+ * login; Remote View alone owns authentication and connection diagnostics. */
 export function NativeTaskViewport({ target, unverifiedTarget = null, hasSelection, desktopUnavailable = false, presenceUnavailable = null, loading = false, onRefresh }: {
   target: NativeTaskViewportTarget | null;
   unverifiedTarget?: NativeTaskViewportTarget | null;
@@ -85,7 +88,7 @@ export function NativeTaskViewport({ target, unverifiedTarget = null, hasSelecti
           ? error.failure : null;
         const accessCheckRequired = failure?.code === "operator_focus_profile_policy_denied"
           || failure?.code === "operator_focus_authority_required";
-        if (generation.current === current) setView({ identity, status: "failed", accessCheckRequired });
+        if (generation.current === current) setView({ identity, status: "failed", failure: accessCheckRequired ? "operator-access" : "handoff" });
       }
     });
   }, [canRequest, browserId, sessionName, targetId, displayAllocationId, identity, attempt, unverifiedTarget]);
@@ -93,7 +96,7 @@ export function NativeTaskViewport({ target, unverifiedTarget = null, hasSelecti
   const current = view?.identity === identity ? view : null;
   const hasBinding = Boolean(target || (unverifiedTarget && current));
   const selectionMissing = !hasBinding && hasSelection === true;
-  return <section className="native-task-viewport" aria-label="Native desktop" data-native-task-state={selectionMissing ? loading ? "refreshing" : desktopUnavailable || presenceUnavailable ? "unavailable" : "missing" : current?.status ?? "unselected"}>
+  return <section className="native-task-viewport" aria-label="Native desktop" data-native-task-failure={current?.status === "failed" ? current.failure : undefined} data-native-task-state={selectionMissing ? loading ? "refreshing" : desktopUnavailable || presenceUnavailable ? "unavailable" : "missing" : current?.status ?? "unselected"}>
     {!hasBinding ? selectionMissing ? <div role={loading ? "status" : "alert"} className="native-task-message">
       <p>{loading ? "Refreshing selected tab…" : presenceUnavailable === "absent"
         ? "This task is not currently available. Its retained record does not represent a live browser tab."
@@ -105,13 +108,20 @@ export function NativeTaskViewport({ target, unverifiedTarget = null, hasSelecti
       {onRefresh && <button type="button" disabled={loading} onClick={() => void onRefresh()}>{loading ? "Refreshing browsers" : "Refresh browsers"}</button>}
     </div> : <p className="native-task-message">Select a tab to open its native desktop.</p>
       : current?.status === "failed" ? <div role="alert" className="native-task-message">
-        <p>{current.accessCheckRequired
+        <p>{current.failure === "operator-access"
           ? "Check dashboard and profile access before retrying this selection, or choose another tab."
-          : "The native desktop could not be opened. Refresh the task, then retry this selection."}</p>
+          : current.failure === "viewer-access"
+            ? "Check Remote View sign-in or access. The embedded page could not be inspected."
+            : current.failure === "viewer-page"
+              ? "The Remote View desktop page is unavailable. Its handoff was prepared, but a Native viewer page did not load."
+              : "Could not prepare this task's Remote View handoff. Refresh the task, then retry this selection."}</p>
         {current.url && <>
-          <p>Open Remote View to sign in or check the desktop, then retry.</p>
+          <p>{current.failure === "viewer-access"
+            ? "Open Remote View to check access, then retry this selection."
+            : "Check Subsystem health or open Remote View, then retry this selection."}</p>
           <a href={current.url} target="_blank" rel="noopener noreferrer">Open Remote View</a>
         </>}
+        {onRefresh && <button type="button" disabled={loading} onClick={() => void onRefresh()}>{loading ? "Refreshing browsers" : "Refresh browsers"}</button>}
         <button type="button" disabled={!canRequest} aria-label="Retry native desktop" onClick={() => setAttempt(value => value + 1)}>Retry</button>
       </div>
         : current?.status === "opened" && current.url ? <iframe
@@ -120,17 +130,21 @@ export function NativeTaskViewport({ target, unverifiedTarget = null, hasSelecti
           onLoad={event => {
             const frame = event.currentTarget;
             if (!frame.isConnected) return;
+            let failure: ViewFailure = "viewer-page";
             try {
               if (frame.contentWindow?.location.href === "about:blank") return;
               // Native workspace embedding is same-origin. Check only its page
               // boundary; Remote View owns connection status and frame delivery.
               const body = frame.contentDocument?.body;
+              if (!body) failure = "viewer-access";
               if (body?.id === "viewer" && body.dataset.workspace === "true") return;
             } catch {
-              // Authentication redirects and blocked frames cannot be inspected.
+              // Cross-origin redirects and blocked frames are unverified access,
+              // not evidence that authentication expired or the desktop ended.
+              failure = "viewer-access";
             }
             setView(previous => previous?.identity === identity && previous.url === frame.src
-              ? { ...previous, status: "failed" } : previous);
+              ? { ...previous, status: "failed", failure } : previous);
           }}
         /> : <p role="status" className="native-task-message">Opening native desktop…</p>}
   </section>;

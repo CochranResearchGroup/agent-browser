@@ -118,4 +118,4 @@ Use `browser_discover` for advanced MCP metadata.
 
 ### Dashboard summary diagnostics
 
-For subsystem health, workspace inventory or embedded-viewer failures, read [Dashboard summary diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics). A prepared handoff or reachable service alone does not prove a connected Native display.
+For subsystem health, workspace inventory or embedded-viewer failures, read [Dashboard summary diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics). A prepared handoff or reachable service alone does not prove a connected Native display. For a failed embedded page, read [failure guidance](references/cli-and-service.md#embedded-native-desktop-failure-guidance) before retrying.

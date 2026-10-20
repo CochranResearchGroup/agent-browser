@@ -4143,3 +4143,8 @@ Native selection uses the existing connected workspace window helper and its
 input/generation checks. Stale, failed or changed-generation observations remove
 the old frame while preserving the requested selection. Default native inventory
 excludes legacy daemon history; diagnostic tools retain that separate surface.
+
+
+### Embedded Native desktop failure guidance
+
+The selected desktop error distinguishes handoff preparation from a prepared link whose Native page did not load. An unreadable embedded page offers a Remote View access check without claiming that login expired. Open Remote View reuses the opaque handoff. Refresh browsers reads inventory; Retry explicitly prepares the selected task again. Neither failure starts automatic repair or focus replay.
