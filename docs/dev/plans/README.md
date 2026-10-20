@@ -1,5 +1,7 @@
 # Active plan index
 
+[P254: current compact workspace fixture](0254-2026-10-20-compact-workspace-fixture.md), #330; closed with full mounted and focused gates passing; test maintenance only, no runtime publication.
+
 [P253: Native viewer failures](0253-2026-10-20-native-viewer-errors.md), #329; source qualified with mounted failure/recovery checks; production publication separate.
 
 [P252: compact workflow skill](0252-2026-10-20-workflow-skill-budget.md), #325; closed with compact entry point, passing parity and development guidance publication.

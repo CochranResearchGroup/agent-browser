@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "workItem": "CochranResearchGroup/agent-browser#330",
+  "productLane": "PL-BUGFIX",
+  "qualifiedCodeCommit": "b889407efc1f590d817607018f6c38387009c77d",
+  "baseline": "2218fe5a6cb3e507b19c5d5df6451a4fceb1e1c2",
+  "fixtureScriptSha256": "b75f4a0e890172d374ca9bc7d7994f77ceff8262e38d0222c49fb6707993a47d",
+  "bundleSha256": "dfd995d8cf3ecb060f881027c99a9ee12ddfe6d667286c5096e0d52fa7d654c0",
+  "scope": "production React components in disposable Chromium; synthetic service, inventory and viewer transport",
+  "lateSelectionCases": [
+    {
+      "olderTarget": "target-bob",
+      "syntheticScope": "same-desktop",
+      "olderReply": "success",
+      "selectionRequestTargets": [
+        "target-bob",
+        "target-alice"
+      ],
+      "handoffRequestTargets": [
+        "target-bob",
+        "target-alice"
+      ],
+      "selectedTab": "alice",
+      "viewerDocumentPreserved": null
+    },
+    {
+      "olderTarget": "target-bob",
+      "syntheticScope": "same-desktop",
+      "olderReply": "access-rejection",
+      "selectionRequestTargets": [
+        "target-bob",
+        "target-alice"
+      ],
+      "handoffRequestTargets": [
+        "target-bob",
+        "target-alice"
+      ],
+      "selectedTab": "alice",
+      "viewerDocumentPreserved": null
+    },
+    {
+      "olderTarget": "target-carol",
+      "syntheticScope": "independent-desktop",
+      "olderReply": "success",
+      "selectionRequestTargets": [
+        "target-carol",
+        "target-alice"
+      ],
+      "handoffRequestTargets": [
+        "target-carol",
+        "target-alice"
+      ],
+      "selectedTab": "alice",
+      "viewerDocumentPreserved": true
+    },
+    {
+      "olderTarget": "target-carol",
+      "syntheticScope": "independent-desktop",
+      "olderReply": "access-rejection",
+      "selectionRequestTargets": [
+        "target-carol",
+        "target-alice"
+      ],
+      "handoffRequestTargets": [
+        "target-carol",
+        "target-alice"
+      ],
+      "selectedTab": "alice",
+      "viewerDocumentPreserved": true
+    }
+  ],
+  "freshProcessReadback": {
+    "captured": 7,
+    "remaining": []
+  },
+  "gates": {
+    "test:compact-native-workspace": "passed",
+    "test:native-task-selection": "passed (13 scenario groups)",
+    "test:dashboard-profile-properties": "passed",
+    "test:dashboard-inspector-actions": "passed",
+    "test:policy-wiring": "passed (11 tests)",
+    "fixtureSyntax": "passed",
+    "validationSelection": "passed"
+  },
+  "retainedFailures": [
+    "Original unchanged fixture timed out at absent Bob Service row",
+    "Properties-aligned fixture reached obsolete generic viewer message",
+    "New exact-binding assertion incorrectly expected desktop-c; existing fixture uses desktop-b; corrected before passing final run"
+  ],
+  "productionSourceChanged": false,
+  "runtimePublication": false
+}
