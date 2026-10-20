@@ -6,6 +6,7 @@ lanes:
     objective: Recover stale workflows with proven absent browsers without a handoff dead end
     plan: docs/dev/plans/0256-2026-10-20-absent-browser-workflow.md
     branch: fix/absent-browser-workflow
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/334
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#327]

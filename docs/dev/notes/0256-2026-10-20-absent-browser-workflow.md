@@ -29,4 +29,6 @@ An additional existing workstation-install fixture was interrupted by the agent 
 
 ## Boundary
 
+Implementation commit: `e500dd7b3d5d9a5dd40070f81020425777c84346`; [PR334](https://github.com/CochranResearchGroup/agent-browser/pull/334) owns integration. Subsequent receipt/catalog links do not change executable inputs.
+
 Source base is canonical `3ca65ae38` in the existing dashboard primary. No production executable, runtime, account, cookie, profile or shared skill was changed. The repaired source skill and docs describe the new response; installed guidance remains bound to its installed generation. No GitHub CI was enabled or dispatched. Production installation and receiving-account continuation are not claimed by these provider-free checks. Foreign worktrees and pinned candidates remain preserved.
