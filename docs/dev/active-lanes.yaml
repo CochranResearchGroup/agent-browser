@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P255
+    product_lane: PL-BUGFIX
+    objective: Reconcile exact Native acquisition custody before new desktop work
+    plan: docs/dev/plans/0255-2026-10-20-native-acquisition-readback.md
+    branch: fix/native-acquisition-readback
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#316]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: [P248]
+    overlaps: [UX301]
+    reconciled_overlaps: ["Native283 closed; read authoritative retained recovery before shared changes; own bounded acquisition reconciliation only; preserve foreign primaries and candidates"]
+    validation_status: Exact original and new acquisition lineage qualified; two regressions and synthetic cleanup pass; occupied peers and Desktop8 preserved; one idle capacity slot reactivated; no deployment or latency claim
+    updated_at: 2026-10-20
+
   - id: P254
     product_lane: PL-BUGFIX
     objective: Restore compact workspace fixture to current Properties and single-focus contracts
