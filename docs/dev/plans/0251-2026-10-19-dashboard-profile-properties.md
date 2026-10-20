@@ -1,6 +1,6 @@
 # P251: useful Properties and profile durability
 
-Status: OPEN
+Status: CLOSED
 Lane: P251
 Product lane: PL-PLATFORM
 Work item: CochranResearchGroup/agent-browser#323
@@ -10,7 +10,7 @@ Owner: ecochran76
 
 ## Current state
 
-Draft PR324 has qualified source for Properties context, profile naming and one-way promotion. Four focused profile tests, the corrected cleanup guard and the pending-retirement fence pass. Strict workspace Clippy and mounted UI checks pass. The final strict-schema projection and service contract metadata checks pass. A new sealed build and development/production installed qualification remain. Two uninstalled builds were deliberately stopped before sealing for the imported-profile and strict-schema findings; both receipts are retained.
+PR324 is merged. The sealed production-shaped candidate passed isolated development qualification and is installed in an accepted production transaction. Actual public Properties, both doctors and the Native embedded viewer pass. See the [installed acceptance](../notes/0251-2026-10-19-dashboard-profile-properties-installed.md) for exact identity, preservation evidence and explicit process-continuity limits.
 
 ## Outcome
 
@@ -44,3 +44,8 @@ The catalog-only rename and bounded-projection regressions first failed (stored 
 A final schema check caught the additive profile map missing from the strict workspace schema (`additionalProperties: false`). The second uninstalled build was deliberately stopped, the optional display-only map was declared, and actual Rust projection keys are now checked recursively against that schema. No deployment used either stopped build. The selected-lane planning audit also requires exact header fields and a ROADMAP link; those documentation bindings are reconciled before final sealing.
 
 The corrected strict-schema projection test, four profile tests, service contract metadata, full client bundle, current documentation build, selected P251 planning audit and final strict Clippy pass. API/MCP parity reports only the known #325 skill-size failure. Source is qualified for integration; actual installed behavior is still a separate gate.
+
+
+## Installed closeout
+
+The [installed acceptance](../notes/0251-2026-10-19-dashboard-profile-properties-installed.md) closes this bounded delivery. Existing business-profile mutations were not exercised live; qualified synthetic Rust and mounted UI checks cover those writes. The prior broad-run fixture failure, stopped builds, nine opt-in exclusions and unrelated #325 budget failure remain recorded above.

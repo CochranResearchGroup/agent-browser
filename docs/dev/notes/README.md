@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P251 installed Properties](0251-2026-10-19-dashboard-profile-properties-installed.md): profile naming, retention and promotion, exact sealed identity and installed acceptance limits.
+
 [P250 installed health drawer](0250-2026-10-19-dashboard-subsystem-health-installed.md): sealed production identity, development/public UI checks, preserved processes and the exposed Native Docker/WSL dependency regression.
 
 Updated: 2026-10-19

@@ -1,6 +1,6 @@
 # Active plan index
 
-[P251: Properties and profile durability](0251-2026-10-19-dashboard-profile-properties.md), #323; implementing original metadata display and in-place profile naming and promotion.
+[P251: Properties and profile durability](0251-2026-10-19-dashboard-profile-properties.md), #323; installed and closed after public Properties and Native viewer qualification.
 
 [P250: dashboard subsystem health](0250-2026-10-19-dashboard-subsystem-health.md), #317; toolbar health indicator and detail drawer integrated through PR318 and installed as sealed `81eea74b6d6d`; live checks and preserved identities pass, with Native warnings explicit.
 
