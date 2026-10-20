@@ -5,17 +5,17 @@ lanes:
     product_lane: PL-PLATFORM
     objective: Useful Properties attribution and in-place profile naming and promotion
     plan: docs/dev/plans/0251-2026-10-19-dashboard-profile-properties.md
-    branch: platform/dashboard-profile-properties
+    branch: platform/profile-properties-installed
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#323]
     pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/324
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    plan_state: CLOSED
+    custody_state: INTEGRATED
     dependencies: []
     overlaps: [P250, P249, P240]
     reconciled_overlaps: ["Reuse integrated dashboard primary and retain candidates; own Properties and profile metadata projection/mutation; preserve foreign stale-session and resource checkouts"]
-    validation_status: Source qualified: four profile regressions, corrected stale-cleanup guard and retirement fence pass; prior 167 unaffected owner passes retained with nine opt-in exclusions. Mounted UI, builds, clients and strict Clippy pass; skill budget baseline tracked in 325; installed qualification pending
+    validation_status: PR324 merged; sealed 4e5a65f7463e installed after development qualification. Both doctors, three browser cycles, public Properties and Native embedded viewer pass. Native identities and protected state retained; numeric browser PID continuity limit is explicit in installed note; 325 remains separate.
     updated_at: 2026-10-19
 
   - id: P250

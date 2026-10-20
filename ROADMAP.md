@@ -1,6 +1,6 @@
 # Roadmap
 
-P251 [Properties and profile durability](docs/dev/plans/0251-2026-10-19-dashboard-profile-properties.md), #323, adds original-context display and in-place profile naming and promotion through PR324. Source qualification passes, including the strict profile-map schema and pending-cleanup guards; installed qualification remains pending.
+P251 [Properties and profile durability](docs/dev/plans/0251-2026-10-19-dashboard-profile-properties.md), #323, is installed after PR324. Operators can inspect profile retention, rename profiles and promote throwaway profiles in Properties. [Installed acceptance](docs/dev/notes/0251-2026-10-19-dashboard-profile-properties-installed.md) records qualification and limits.
 
 P250 [dashboard subsystem health](docs/dev/plans/0250-2026-10-19-dashboard-subsystem-health.md), #317, is integrated through PR318 and installed as sealed `81eea74b6d6d` after development qualification. The [installed receipt](docs/dev/notes/0250-2026-10-19-dashboard-subsystem-health-installed.md) binds actual public drawer checks, both doctors, three browser cycles and preserved identities. The drawer exposes remaining Native warnings; a pre-existing Docker/WSL regression is mitigated by a verifier-only bridge.
 
