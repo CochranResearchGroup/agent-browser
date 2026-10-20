@@ -5974,7 +5974,9 @@ and unowned RSS, cleanup obligations, retention, monitor freshness, and blocking
 incidents from these same receipts. Its Subsystem health SVG opens a detail
 drawer separating inventory, runtime diagnostics, Native readiness and viewer
 evidence. Checks run only on open or refresh, expire after 30 seconds and never
-repair services automatically.
+repair services automatically. Embedded desktop failures distinguish handoff
+preparation, unreadable access and a non-viewer page. Refresh reads inventory;
+Retry explicitly prepares the selected task again without automatic focus replay.
 Workstation installation selects one runtime host for ordinary named sessions.
 The current binary can reach an existing legacy per-session daemon only for an
 explicit handoff and rejects every new legacy daemon launch. If no runtime host

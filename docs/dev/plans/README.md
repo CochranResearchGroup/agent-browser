@@ -1,5 +1,7 @@
 # Active plan index
 
+[P253: Native viewer failures](0253-2026-10-20-native-viewer-errors.md), #329; source qualified with mounted failure/recovery checks; production publication separate.
+
 [P252: compact workflow skill](0252-2026-10-20-workflow-skill-budget.md), #325; closed with compact entry point, passing parity and development guidance publication.
 
 [P251: Properties and profile durability](0251-2026-10-19-dashboard-profile-properties.md), #323; installed and closed after public Properties and Native viewer qualification.

@@ -1,5 +1,7 @@
 # Runbook
 
+P253 [Native viewer failures](docs/dev/plans/0253-2026-10-20-native-viewer-errors.md), #329, qualifies distinct preparation, access and page failure guidance plus typed client refusal preservation. [Source acceptance](docs/dev/notes/0253-2026-10-20-native-viewer-errors.md) separates passing mounted/client/build gates, the old #330 fixture failure and pending production publication.
+
 P252 [compact workflow skill](docs/dev/plans/0252-2026-10-20-workflow-skill-budget.md), #325, restores the unchanged parity gate with a 9,163-byte entry point, preserved references and verified development guidance publication. [Acceptance](docs/dev/notes/0252-2026-10-20-workflow-skill-budget.md) records the documentation-only boundary.
 
 P251 [Properties and profile durability](docs/dev/plans/0251-2026-10-19-dashboard-profile-properties.md), #323, is installed as sealed binary `4e5a65f7463e` in accepted production transaction `upgrade-3f7347ec-6f0b-46f1-8855-e4e6e0f27a8c`. Both doctors, three development browser cycles, public Properties and the Native viewer pass. See [installed acceptance](docs/dev/notes/0251-2026-10-19-dashboard-profile-properties-installed.md) for preservation limits.

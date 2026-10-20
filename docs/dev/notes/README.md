@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P253 Native viewer failure qualification](0253-2026-10-20-native-viewer-errors.md): distinct page/access/preparation failures, real mounted HTTP cases, typed refusal preservation and separate deployment boundary.
+
 [P252 compact workflow entry point](0252-2026-10-20-workflow-skill-budget.md): unchanged parity gate restored, guidance preservation and complete-directory development publication.
 
 [P251 installed Properties](0251-2026-10-19-dashboard-profile-properties-installed.md): profile naming, retention and promotion, exact sealed identity and installed acceptance limits.

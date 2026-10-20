@@ -2175,6 +2175,8 @@ export async function requestServiceRemoteViewOpen({ baseUrl, fetch = globalThis
     signal,
     request: createServiceRemoteViewOpenRequest(requestFields),
   });
+  // Preserve structured operation refusal before validating viewer readiness.
+  requireServiceRequestSuccess(response);
   requireServiceRemoteViewOpenOperatorVisible(response, {
     allowInfrastructureOnlyReadiness,
   });

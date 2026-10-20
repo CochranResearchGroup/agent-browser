@@ -2930,6 +2930,8 @@ resize; Handoffs opens retained records and their independent policies on demand
 
 The toolbar Subsystem health SVG opens a side drawer with separate inventory, browser runtime, Native desktop readiness and selected viewer evidence. Gray means unverified or stale, amber means attention, red means unavailable and green means the reported checks pass. Detailed read-only checks run only when opening or refreshing the drawer, expire after 30 seconds and time out after eight seconds. They add no recurring diagnostic polling or automatic repair. A reachable service or prepared handoff does not prove a connected Native display.
 
+The selected desktop error distinguishes handoff preparation from a prepared link whose Native page did not load. An unreadable embedded page offers a Remote View access check without claiming that login expired. Open Remote View reuses the opaque handoff. Refresh browsers reads inventory; Retry explicitly prepares the selected task again. Neither failure starts automatic repair or focus replay.
+
 Use **Diagnostics** at `/service` for Service inspection, Selection, Activity,
 Chat, Console, Network, Storage, Extensions and runtime health. `/activity` opens
 the Activity tool. Diagnostic viewing controls return to the same browser
