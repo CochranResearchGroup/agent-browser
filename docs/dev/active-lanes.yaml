@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P264
+    product_lane: PL-BUGFIX
+    objective: Keep absent explicitly selected browser evidence missing
+    plan: docs/dev/plans/0264-2026-10-21-missing-browser-selection.md
+    branch: fix/missing-browser-selection
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#344]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: [P260, P261]
+    overlaps: [P260, P261]
+    reconciled_overlaps: ["Own selected context projection and fixture only; integrated prerequisites; foreign worktrees and candidates preserved"]
+    validation_status: Wrong-peer red-green; ten hint combinations, context/chat/projection/inspector, TypeScript, dashboard build, policy and links pass; source only
+    updated_at: 2026-10-21
+
   - id: P263
     product_lane: PL-BUGFIX
     objective: Requalify installed existing-profile original-file retrieval through public MCP

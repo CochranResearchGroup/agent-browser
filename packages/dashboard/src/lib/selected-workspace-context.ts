@@ -118,7 +118,7 @@ export function buildSelectedWorkspaceContext(input: SelectedWorkspaceContextInp
   const browser = node?.browserId
     ? serviceBrowsers.find((candidate) => candidate.id === node.browserId) ?? null
     : null;
-  const daemonSession = findDaemonSession({ selection, node, daemonSessions });
+  const daemonSession = node ? findDaemonSession({ selection, node, daemonSessions }) : null;
   const relatedSessionIds = new Set(node?.relatedIds.serviceSessionIds ?? []);
   if (node?.serviceSessionId) relatedSessionIds.add(node.serviceSessionId);
   const relatedTabIds = new Set(node?.relatedIds.tabIds ?? []);
@@ -208,8 +208,8 @@ export function selectWorkspaceNode(
   const workspaceBrowserId = prefixedId(selection.workspaceId, "browser");
   const browserId = directBrowserId || workspaceBrowserId;
   if (browserId) {
-    const node = nodes.find((candidate) => candidate.browserId === browserId || candidate.relatedIds.browserIds.includes(browserId));
-    if (node) return node;
+    // Explicit browser identity outranks weaker hints, even after it disappears.
+    return nodes.find((candidate) => candidate.browserId === browserId || candidate.relatedIds.browserIds.includes(browserId)) ?? null;
   }
 
   const workspaceDaemonSessionId = prefixedId(selection.workspaceId, "daemon-session");
@@ -273,8 +273,9 @@ function selectedPage(
   tabs: WorkspaceServiceTab[],
   node: WorkspaceNode | null,
 ): WorkspaceNodePrimaryTab | null {
+  if (!node) return null;
   const id = selectedTabId(selection);
-  if (!id) return node?.primaryTab ?? null;
+  if (!id) return node.primaryTab ?? null;
   const tab = tabs.find((candidate) => candidate.id === id || candidate.targetId === id);
   if (tab && (!node?.browserId || tab.browserId === node.browserId)) {
     return { id: tab.id, targetId: tab.targetId, title: tab.title, url: tab.url, lifecycle: tab.lifecycle };

@@ -1,5 +1,7 @@
 # Active plan index
 
+[P264 missing browser selection](0264-2026-10-21-missing-browser-selection.md), #344; bounded context projection repair under #68.
+
 [P263 installed download acceptance](0263-2026-10-21-installed-download-acceptance.md), #284; closed with installed-artifact public MCP qualification and explicit account/provider limits.
 
 [P261 workspace export URLs](0261-2026-10-21-workspace-export-urls.md), #341; bounded diagnostic/chat export repair.

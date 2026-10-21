@@ -1,5 +1,7 @@
 # Roadmap
 
+[P264 missing browser selection](docs/dev/plans/0264-2026-10-21-missing-browser-selection.md), #344 under #68, keeps missing explicit browser evidence separate from peer workspaces.
+
 [P263 installed download acceptance](docs/dev/plans/0263-2026-10-21-installed-download-acceptance.md), #284, qualifies original-file retrieval on installed 9c8edd62a16f. [Acceptance](docs/dev/notes/0263-2026-10-21-installed-download-acceptance.md) records three public MCP fixture passes with exact process continuity and zero residue; no new deployment or private-account run.
 
 [P261 workspace export URLs](docs/dev/plans/0261-2026-10-21-workspace-export-urls.md), #341 under #68, qualifies URL redaction for diagnostic/chat exports. [Source acceptance](docs/dev/notes/0261-2026-10-21-workspace-export-urls.md) records real red-green and unchanged runtime values; production is unchanged.

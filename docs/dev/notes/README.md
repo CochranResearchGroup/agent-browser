@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P264 missing browser selection](0264-2026-10-21-missing-browser-selection.md), #344 under #68; exact missing-workspace evidence.
+
 [P263 installed download acceptance](0263-2026-10-21-installed-download-acceptance.md): ordinary, stale and malformed-custody public MCP retrieval on the installed artifact, executable/process continuity and zero isolated residue.
 
 [P261 workspace export URLs](0261-2026-10-21-workspace-export-urls.md): reproduced diagnostic/chat URL leakage, pure export redaction, opaque payload omission and unchanged source values.
