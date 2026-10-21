@@ -1,5 +1,7 @@
 # Roadmap
 
+[P257 retirement lock diagnostics](docs/dev/plans/0257-2026-10-20-retirement-lock.md), #307, repairs recovery diagnostics while retaining retirement custody. Source qualification and production publication remain separate.
+
 [P256 absent-browser workflow recovery](docs/dev/plans/0256-2026-10-20-absent-browser-workflow.md), #327, qualifies an executable preserve-mode recovery path for browserless handoff preparation and retains uncertain handoff evidence. [Source acceptance](docs/dev/notes/0256-2026-10-20-absent-browser-workflow.md) records focused and broad checks plus the interrupted installer fixture. Production publication remains separate.
 
 [P254 compact workspace fixture](docs/dev/plans/0254-2026-10-20-compact-workspace-fixture.md), #330, restores the full mounted gate to current Properties and combined Native selection. [Acceptance](docs/dev/notes/0254-2026-10-20-compact-workspace-fixture.md) retains all four late-response cases, privacy/mobile/peer checks and zero fixture residue. Test maintenance only; production is unchanged.

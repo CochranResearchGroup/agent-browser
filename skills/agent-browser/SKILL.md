@@ -50,6 +50,10 @@ and `browserPresent=false`, there is no candidate to attach. On Linux, inspect
 and follow its plan before retrying. Keep profiles, peers and unresolved effect
 custody intact; this read-only plan does not authorize a reset or host restart.
 
+Retirement permits diagnostic reads but fences handoff writes. On lock timeout,
+run `agent-browser service jobs --json`, then refresh the access plan. Reconcile
+uncertain effects before retrying; never terminate the holder or reset a profile.
+
 Selection and Share wait their turn on the same native desktop.
 
 Diagnostic and administrative discovery points to supported CLI/API operations.

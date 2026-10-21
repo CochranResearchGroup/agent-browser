@@ -115,6 +115,8 @@ struct DurableServiceStateLockHolder {
     mode: String,
     phase: String,
     acquired_at_unix_ms: u128,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    acquired_at_monotonic_ms: Option<u64>,
     wait_ms: u64,
     hold_elapsed_ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -709,26 +711,54 @@ where
 {
     /// Hold the current snapshot against repository commits through a bounded
     /// external effect. The effect runs once, outside optimistic CAS mutators.
-    /// Callers must not re-enter this repository while the returned guard lives.
+    /// Diagnostic snapshots remain available; commits stay fenced. A separate
+    /// exclusive fence preserves serialization between retirement effects.
     pub(crate) fn hold_snapshot_for_effect(&self) -> Result<ServiceStateEffectSnapshot, String> {
         let path = self
             .store
             .state_path()
             .ok_or("service_state_effect_guard_requires_durable_path")?;
         let deadline = Instant::now() + self.lock_timeout.max(Duration::from_millis(1));
-        let mut guard = acquire_service_state_file_lock_until(
-            path,
+        let mut effect_fence = acquire_service_state_file_lock_until(
+            &service_state_retirement_fence_path(path),
             ServiceStateFileLockMode::Exclusive,
             deadline,
             "retirement_effect",
         )?;
-        let state = self.store.load()?;
-        guard.set_state_summary(&state, None);
-        guard.set_phase("retirement_effect");
-        Ok(ServiceStateEffectSnapshot {
-            state,
-            _guard: guard,
-        })
+        loop {
+            if Instant::now() >= deadline {
+                return Err("service_state_lock_timeout: retirement snapshot recovery; recovery_command=agent-browser service jobs --json; recovery_action=inspect_before_retry".into());
+            }
+            let guard = acquire_service_state_file_lock_until(
+                path,
+                ServiceStateFileLockMode::Shared,
+                deadline,
+                "retirement_effect_snapshot",
+            )?;
+            if !self.store.recovery_required() {
+                let state = self.store.load_without_recovery()?;
+                effect_fence.set_state_summary(&state, None);
+                effect_fence.set_phase("retirement_effect");
+                return Ok(ServiceStateEffectSnapshot {
+                    state,
+                    _guard: guard,
+                    _effect_fence: effect_fence,
+                });
+            }
+            // Recovery can write several registries. Never perform it under
+            // shared admission, and reload after reacquiring the shared fence.
+            drop(guard);
+            let _file_guard = acquire_service_state_file_lock_until(
+                path,
+                ServiceStateFileLockMode::Exclusive,
+                deadline,
+                "transaction_recovery",
+            )?;
+            let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
+            let _guard =
+                acquire_service_state_process_lock(lock, deadline, "transaction_recovery")?;
+            self.store.load()?;
+        }
     }
 
     pub(crate) fn load_snapshot_with_lock_timeout(
@@ -1903,10 +1933,11 @@ impl ServiceStateFileLockMode {
     }
 }
 
-/// Snapshot and exclusive repository admission guard for a bounded effect.
+/// Snapshot with shared repository admission and serialized effect custody.
 pub(crate) struct ServiceStateEffectSnapshot {
     pub(crate) state: ServiceState,
     _guard: ServiceStateFileGuard,
+    _effect_fence: ServiceStateFileGuard,
 }
 impl agent_browser_service_model::BrowserIdleRetirementGuard for ServiceStateEffectSnapshot {}
 
@@ -1990,6 +2021,34 @@ fn service_state_lock_holder_path(path: &Path) -> PathBuf {
     path.with_file_name(format!("{file_name}.lock-holder.json"))
 }
 
+fn service_state_retirement_fence_path(path: &Path) -> PathBuf {
+    let file_name = path.file_name().unwrap_or_default().to_string_lossy();
+    path.with_file_name(format!("{file_name}.retirement"))
+}
+
+/// Cross-process elapsed time within one boot. Attribution verifies the exact
+/// process start identity before comparing timestamps. Legacy or unsupported
+/// clocks remain unknown rather than reusing a frozen sidecar sample.
+fn service_state_monotonic_millis() -> Option<u64> {
+    #[cfg(unix)]
+    {
+        let mut time = libc::timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
+        // SAFETY: clock_gettime writes only to the initialized timespec.
+        if unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut time) } != 0 {
+            return None;
+        }
+        u64::try_from(time.tv_sec)
+            .ok()?
+            .checked_mul(1000)?
+            .checked_add(u64::try_from(time.tv_nsec).ok()? / 1_000_000)
+    }
+    #[cfg(not(unix))]
+    None
+}
+
 fn current_service_state_lock_holder(
     operation: &'static str,
     mode: ServiceStateFileLockMode,
@@ -2022,6 +2081,7 @@ fn current_service_state_lock_holder(
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis(),
+        acquired_at_monotonic_ms: service_state_monotonic_millis(),
         wait_ms: elapsed_millis(wait),
         hold_elapsed_ms: 0,
         state_bytes: None,
@@ -2094,6 +2154,12 @@ fn durable_service_state_lock_holder_attribution(state_path: &Path) -> String {
         ProcessObservation::Observed(identity)
             if holder.start_token.is_some() && holder.start_token == identity.start_token =>
         {
+            let hold_elapsed_ms = holder
+                .acquired_at_monotonic_ms
+                .zip(service_state_monotonic_millis())
+                .and_then(|(acquired, now)| now.checked_sub(acquired))
+                .map(|elapsed| elapsed.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
             let state_bytes = holder
                 .state_bytes
                 .map(|value| value.to_string())
@@ -2125,7 +2191,7 @@ fn durable_service_state_lock_holder_attribution(state_path: &Path) -> String {
                 holder.holder_token,
                 holder.acquired_at_unix_ms,
                 holder.wait_ms,
-                holder.hold_elapsed_ms,
+                hold_elapsed_ms,
                 state_bytes,
                 state_revision,
                 job_count,
@@ -2263,7 +2329,18 @@ fn acquire_service_state_file_lock_until(
                     }
                     Ok(()) => {
                         let _ = file.unlock();
-                        "holder_status=unknown_released_race".to_string()
+                        let fence_path = service_state_retirement_fence_path(state_path);
+                        let retirement = OpenOptions::new()
+                            .read(true)
+                            .write(true)
+                            .open(service_state_lock_path(&fence_path));
+                        match retirement.map(|file| file.try_lock_shared()) {
+                            Ok(Err(std::fs::TryLockError::WouldBlock)) => format!(
+                                "{}; holder_lock_scope=retirement_fence; state_lock_mode=shared; recovery_command=agent-browser service jobs --json; recovery_action=inspect_before_retry",
+                                durable_service_state_lock_holder_attribution(&fence_path)
+                            ),
+                            _ => "holder_status=unknown_shared_readers_or_released_race; recovery_command=agent-browser service jobs --json; recovery_action=inspect_before_retry".to_string(),
+                        }
                     }
                     Err(_) => "holder_status=unknown_lock_probe".to_string(),
                 };
@@ -4158,6 +4235,9 @@ mod tests {
         let repository =
             LockedServiceStateRepository::new(JsonServiceStateStore::new(PathBuf::from(path)))
                 .with_lock_timeout(Duration::from_millis(50));
+        repository
+            .load_snapshot()
+            .expect("independent diagnostic reads remain available");
         let result = repository.mutate(|state| {
             state.viewer_leases.insert(
                 "controller-after-retirement".into(),
@@ -4178,6 +4258,163 @@ mod tests {
         } else {
             result.unwrap();
         }
+    }
+
+    #[test]
+    fn retirement_effect_allows_recovery_snapshot_without_releasing_custody() {
+        let path = unique_state_path("retirement-recovery-snapshot");
+        let store = JsonServiceStateStore::new(&path);
+        store.save(&ServiceState::default()).unwrap();
+        let repository = LockedServiceStateRepository::new(store);
+        let guarded = repository.hold_snapshot_for_effect().unwrap();
+        let observed = repository.load_snapshot_with_lock_timeout(Duration::from_millis(20));
+        drop(guarded);
+        fs::remove_dir_all(path.parent().unwrap()).unwrap();
+        observed.expect("recovery diagnostics must read while retirement is paused");
+    }
+
+    #[tokio::test]
+    async fn retirement_handoff_recovery_remains_bounded_and_preserves_identity() {
+        let path = unique_state_path("retirement-handoff-recovery");
+        let store = JsonServiceStateStore::new(&path);
+        let state = ServiceState {
+            runtime_owner_registry: runtime_registry("a"),
+            jobs: BTreeMap::from([(
+                "retained-job".into(),
+                crate::native::service_model::ServiceJob {
+                    id: "retained-job".into(),
+                    ..Default::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        store.save(&state).unwrap();
+        let repository =
+            LockedServiceStateRepository::new(store).with_lock_timeout(Duration::from_millis(20));
+        let guarded = repository.hold_snapshot_for_effect().unwrap();
+        let owner = runtime_owner("a");
+        let request = crate::runtime_owner_transfer::OwnerTransferRequest {
+            mode: crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer,
+            logical_browser_id: owner.browser_id.clone(),
+            profile_identity_digest: owner.profile_identity_digest.clone(),
+            expected_owner_id: Some(owner.owner_id.clone()),
+            expected_owner_generation: owner.owner_generation,
+            candidate_owner_id: "candidate-owner".into(),
+            candidate_daemon_session_route: "candidate-session".into(),
+            process_instance_digest: owner.process_instance_digest.clone(),
+            browser_family: owner.browser_family.clone(),
+            cdp_endpoint_identity_digest: owner.cdp_endpoint_identity_digest.clone(),
+            target_set_digest: owner.target_set_digest.clone(),
+            selected_target_identity_digest: "4".repeat(64),
+            transfer_nonce_digest: "5".repeat(64),
+        };
+        let authority =
+            crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository);
+        let error = authority.begin_transfer(request.clone()).unwrap_err();
+        assert!(error.starts_with("service_state_lock_timeout:"), "{error}");
+        assert!(
+            error.contains("holder_lock_scope=retirement_fence"),
+            "{error}"
+        );
+        assert!(
+            error.contains("recovery_command=agent-browser service jobs --json"),
+            "{error}"
+        );
+        let snapshot = repository.load_snapshot().unwrap();
+        assert_eq!(snapshot, guarded.state);
+        let jobs = crate::native::service_jobs::service_commands::handle_service_jobs(
+            &serde_json::json!({"serviceState": snapshot, "jobId": "retained-job"}),
+        )
+        .await
+        .expect("the recommended job inspection must remain executable");
+        assert_eq!(jobs["job"]["id"], "retained-job");
+        assert!(
+            repository.hold_snapshot_for_effect().is_err(),
+            "retirements stay serialized"
+        );
+        drop(guarded);
+        let proposal = authority
+            .begin_transfer(request)
+            .expect("handoff can proceed after retirement releases");
+        assert_eq!(
+            proposal.request.candidate_daemon_session_route,
+            "candidate-session"
+        );
+        let after = repository.load_snapshot().unwrap();
+        let retained = after
+            .runtime_owner_registry
+            .owner(&owner.profile_identity_digest)
+            .unwrap();
+        assert_eq!(retained.browser_id, owner.browser_id);
+        assert_eq!(
+            retained.process_instance_digest,
+            owner.process_instance_digest
+        );
+        assert_eq!(retained.target_set_digest, owner.target_set_digest);
+        assert!(retained.pending_transfer.is_some());
+        fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn retirement_snapshot_recovers_interrupted_transaction_before_shared_admission() {
+        let path = unique_state_path("retirement-transaction-recovery");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let state = ServiceState {
+            runtime_owner_registry: runtime_registry("b"),
+            ..Default::default()
+        };
+        let transaction = prepare_service_state_transaction(&state).unwrap();
+        fs::write(
+            service_state_transaction_path(&path),
+            serde_json::to_vec(&transaction).unwrap(),
+        )
+        .unwrap();
+        let repository = LockedServiceStateRepository::new(JsonServiceStateStore::new(&path));
+        let guarded = repository.hold_snapshot_for_effect().unwrap();
+        assert!(!service_state_transaction_path(&path).exists());
+        assert_eq!(guarded.state, repository.load_snapshot().unwrap());
+        assert_eq!(
+            guarded.state.runtime_owner_registry,
+            state.runtime_owner_registry
+        );
+        drop(guarded);
+        fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn durable_holder_reports_current_elapsed_time_and_unknown_legacy_clock() {
+        let path = unique_state_path("holder-current-duration");
+        let guard =
+            acquire_service_state_file_lock(&path, ServiceStateFileLockMode::Exclusive).unwrap();
+        let holder_path = service_state_lock_holder_path(&path);
+        let mut holder: DurableServiceStateLockHolder =
+            serde_json::from_slice(&fs::read(&holder_path).unwrap()).unwrap();
+        holder.acquired_at_monotonic_ms = Some(service_state_monotonic_millis().unwrap() - 5_000);
+        holder.acquired_at_unix_ms = u128::MAX;
+        holder.hold_elapsed_ms = 1;
+        persist_durable_service_state_lock_holder(&holder_path, &holder).unwrap();
+        let observed = durable_service_state_lock_holder_attribution(&path);
+        let elapsed: u64 = observed
+            .split("holder_hold_elapsed_ms=")
+            .nth(1)
+            .unwrap()
+            .split(';')
+            .next()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!(elapsed >= 5_000, "{observed}");
+        holder.acquired_at_monotonic_ms = None;
+        persist_durable_service_state_lock_holder(&holder_path, &holder).unwrap();
+        let legacy = durable_service_state_lock_holder_attribution(&path);
+        assert!(legacy.contains("holder_status=active;"), "{legacy}");
+        assert!(
+            legacy.contains("holder_hold_elapsed_ms=unknown;"),
+            "{legacy}"
+        );
+        drop(guard);
+        fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 
     #[test]
@@ -4230,6 +4467,9 @@ mod tests {
             .viewer_leases
             .contains_key("controller-after-retirement"));
         assert!(!service_state_lock_holder_path(&path).exists());
+        assert!(
+            !service_state_lock_holder_path(&service_state_retirement_fence_path(&path)).exists()
+        );
         fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 
@@ -4411,6 +4651,7 @@ mod tests {
             mode: "exclusive".to_string(),
             phase: "holding".to_string(),
             acquired_at_unix_ms: 0,
+            acquired_at_monotonic_ms: None,
             wait_ms: 0,
             hold_elapsed_ms: 0,
             state_bytes: None,

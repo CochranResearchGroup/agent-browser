@@ -4059,6 +4059,18 @@ The sidecar contains no URLs, profile paths, page data, credentials, or request
 payloads and is removed by the exact holder before normal lock release. This
 diagnostic never grants retry, cleanup, takeover, or force-unlock authority.
 
+Retirement keeps an exclusive retirement fence and shared Service State
+admission during external effects. Diagnostic snapshots remain readable;
+controller publication and handoff writes remain fenced. A blocked writer
+returns within its lock budget with `agent-browser service jobs --json` as a
+read-only inspection command. Inspect the job and current access plan before
+retrying; an uncertain effect must be reconciled rather than replayed. The
+holder identifies `holder_lock_scope=retirement_fence` separately from the
+shared state lock. Current elapsed hold uses a fresh same-boot monotonic clock
+on Unix; legacy holders and unsupported clocks report `unknown`, never their
+last frozen sample. Build generation is reported as recorded, independently
+of an installed executable's path.
+
 JSON-backed mutations prepare their candidate and serialized transaction
 outside exclusive ownership, then revision-fence the short commit interval. A
 single stale candidate may be replayed by the repository against a fresh
