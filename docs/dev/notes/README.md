@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P260 exact selected-tab evidence](0260-2026-10-21-selected-tab-evidence.md): reproduced secondary-tab substitution, exact owned page projection, missing-target behavior and bounded #68 follow-up.
+
 [P259 handoff retention reconciliation](0259-2026-10-20-handoff-retention-reconciliation.md): two configured holds beyond five minutes, exact owner deadlines and criterion-level reconciliation of existing lifecycle behavior.
 
 [P258 bounded interlock logging](0258-2026-10-20-interlock-logging.md): bounded scheduled output, preserved detailed diagnostics and failure exits, synthetic byte counts and source-only acceptance.

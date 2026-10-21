@@ -1,5 +1,7 @@
 # Active plan index
 
+[P260 selected-tab evidence](0260-2026-10-21-selected-tab-evidence.md), #339; exact owned page context under #68.
+
 [P259 handoff retention reconciliation](0259-2026-10-20-handoff-retention-reconciliation.md), #260; closed with two-duration owner qualification and criterion-level acceptance reconciliation.
 
 [P258: bounded interlock logging](0258-2026-10-20-interlock-logging.md), #294; closed with provider-free output qualification; installation remains separate.

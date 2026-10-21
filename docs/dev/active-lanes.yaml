@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P260
+    product_lane: PL-BUGFIX
+    objective: Keep selected-workspace page evidence bound to the exact owned tab
+    plan: docs/dev/plans/0260-2026-10-21-selected-tab-evidence.md
+    branch: fix/selected-tab-evidence
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#339]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: [P259]
+    overlaps: [P237, P248]
+    reconciled_overlaps: ["Own pure selected-context projection and fixture only; native selection unchanged; preserve foreign root/resource worktrees and candidate pins"]
+    validation_status: Real red-green projection; context, chat, projection and inspector gates, typecheck, dashboard/docs builds, fmt, strict Clippy, policy/parity and links pass; source only
+    updated_at: 2026-10-21
+
   - id: P259
     product_lane: PL-PLATFORM
     objective: Reconcile independent handoff retention acceptance with two long-duration owner clocks

@@ -6164,6 +6164,8 @@ Inventory reads do not select tabs.
 Diagnostics at /service retains Service inspection, Selection, Activity, Chat,
 Console, Network, Storage, Extensions and runtime health. /activity opens its
 Activity tool. Viewing controls return to the same browser workspace.
+Selected-workspace page evidence follows the exact selected tab; missing targets
+do not substitute the browser default. Browser-wide activity keeps its owner scope.
 Service record tabs retain ?view=service:<name>; selected workspace, browser,
 session, tab, profile and job IDs remain in query parameters across refreshes.
 Service clients opening remote views pass the access plan's browserId and

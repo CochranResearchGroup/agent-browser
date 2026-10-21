@@ -6535,6 +6535,8 @@ Optional configuration via environment variables:
 
 When enabled, agent-browser connects to an AgentCore cloud browser session instead of launching a local browser. All commands work identically.
 
+Selected-workspace diagnostics and contextual chat use the explicitly selected owned tab. A missing target does not substitute another page in the same browser. Browser-wide activity remains scoped to its owner.
+
 ## Retained process identity diagnostics
 
 Linux runtime services preserve PrivateTmp isolation when inspecting browsers

@@ -1,5 +1,7 @@
 # Roadmap
 
+[P260 selected-tab evidence](docs/dev/plans/0260-2026-10-21-selected-tab-evidence.md), #339 under #68, qualifies exact selected-tab page evidence. [Source acceptance](docs/dev/notes/0260-2026-10-21-selected-tab-evidence.md) records the reproduced wrong-page projection and passing repair gates; production is unchanged.
+
 [P259 handoff retention reconciliation](docs/dev/plans/0259-2026-10-20-handoff-retention-reconciliation.md), #260, qualifies existing independent link/tab lifecycle behavior. [Acceptance map](docs/dev/notes/0259-2026-10-20-handoff-retention-reconciliation.md) records long-duration owner clocks and current regressions; source only.
 
 [P258 bounded interlock logging](docs/dev/plans/0258-2026-10-20-interlock-logging.md), #294, qualifies bounded routine logs and preserved explicit diagnostics. [Source acceptance](docs/dev/notes/0258-2026-10-20-interlock-logging.md) records red/green and byte counts; the installed interlock is unchanged.
