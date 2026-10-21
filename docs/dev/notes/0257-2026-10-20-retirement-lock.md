@@ -97,3 +97,7 @@ unchanged. No GitHub CI was enabled or dispatched. The clean dashboard primary
 was reused; foreign root and resource-bounds worktrees and pinned candidates
 remain preserved. Production publication and real-account continuation are
 separate from these provider-free checks.
+
+[PR335](https://github.com/CochranResearchGroup/agent-browser/pull/335) owns
+canonical integration. Its later documentation commits do not change the
+qualified executable inputs.

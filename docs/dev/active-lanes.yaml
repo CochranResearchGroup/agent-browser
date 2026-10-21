@@ -6,11 +6,12 @@ lanes:
     objective: Keep recovery diagnostics available during fenced retirement effects
     plan: docs/dev/plans/0257-2026-10-20-retirement-lock.md
     branch: fix/retirement-lock-diagnostics
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/335
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#307]
     plan_state: CLOSED
-    custody_state: INTEGRATION_READY
+    custody_state: INTEGRATED
     dependencies: [P249, P256]
     overlaps: [P249, P256]
     reconciled_overlaps: ["P249 and P256 integrated; own retirement admission and lock diagnostics; preserve foreign root and resource worktrees"]
