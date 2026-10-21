@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P257 installed checkpoint](0257-2026-10-20-retirement-lock-installed.md): sealed retirement/dashboard deployment, both doctors, browser cycles, real public dashboard checks and exact preservation limits.
+
 [P257 retirement lock diagnostics](0257-2026-10-20-retirement-lock.md): readable diagnostics during fenced retirement effects, bounded handoff recourse, fresh holder timing and explicit source qualification limits.
 
 [P256 absent-browser workflow recovery](0256-2026-10-20-absent-browser-workflow.md): actionable browserless handoff/no-candidate responses, preserved evidence, provider-free regressions and explicit installation boundary.

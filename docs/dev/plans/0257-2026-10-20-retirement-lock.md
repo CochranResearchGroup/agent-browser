@@ -36,4 +36,7 @@ strict Clippy and documentation gates. Separate retirement serialization keeps
 diagnostic reads available while controller and handoff writes remain fenced.
 Bounded refusal supplies executable read-only recourse; current Unix hold
 duration advances without sidecar updates. Standards and Spec have no blocking
-findings. Production publication remains separate.
+findings. Following explicit operator deployment direction, the
+[installed checkpoint](../notes/0257-2026-10-20-retirement-lock-installed.md)
+records accepted production generation `9c8edd62a16f`, development and public
+qualification, and exact preservation limits.
