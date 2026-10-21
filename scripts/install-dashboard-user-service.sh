@@ -58,7 +58,7 @@ Wants=agent-browser-dashboard.service network-online.target
 [Service]
 Type=oneshot
 Environment=PATH=$PATH
-ExecStart=$AGENT_BROWSER_BIN install workstation reconcile --json
+ExecStart=$AGENT_BROWSER_BIN install workstation reconcile
 TimeoutStartSec=5min
 
 [Install]

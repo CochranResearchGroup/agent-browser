@@ -2980,6 +2980,14 @@ generations. It records current state and bounded backoff in
 `~/.agent-browser/convergence/runtime-monitor.json`. Set
 `AGENT_BROWSER_RUNTIME_INTERLOCK_INTERVAL` before installation to another
 systemd duration such as `5min` when a different cadence is needed.
+Scheduled runs use bounded single-line status output rather than dumping the
+process census into the journal. Routine status and error messages stay below
+1 KiB per line and point to `agent-browser install doctor --json` for read-only
+inspection. Reconciliation failures still exit nonzero. The private monitor
+receipt contains the latest detailed pass and is overwritten, not appended;
+this change does not add a diagnostic archive. Explicit
+`agent-browser install workstation reconcile --json` retains detailed JSON
+output and performs maintenance, so do not use it merely to read diagnostics.
 Run `pnpm status:rdp-guac-postgres` to verify cluster identity and mount
 continuity, `pnpm backup:rdp-guac-postgres` for an immediate backup, and
 `pnpm drill:rdp-guac-postgres-restore` for an isolated temporary-database

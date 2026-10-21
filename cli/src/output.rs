@@ -5994,7 +5994,12 @@ removes unreferenced sealed generations. It does not install Chrome, recreate
 Guacamole, quiesce user units, or restart the dashboard. Failures enter bounded
 backoff, write runtime-monitor.json, and become a typed incident after three
 consecutive effect failures. Reviewable and ambiguous resources remain visible
-and untouched. A terminal rollback keeps its full candidate evidence in a
+and untouched. Scheduled runs emit bounded single-line status, not a full JSON
+census. Routine status and error lines stay below 1 KiB and retain nonzero
+failure exits. Inspect details without effects with install doctor --json or
+the private latest-pass runtime-monitor.json receipt, which is overwritten
+rather than archived. Explicit workstation reconcile --json still emits full
+detail and performs maintenance. A terminal rollback keeps its full candidate evidence in a
 private terminal-detail artifact and projects only old-reader-compatible fields
 into the active ledger. Reconciliation repairs older terminal records that
 predate this projection without rewriting active or operator-recovery records.
