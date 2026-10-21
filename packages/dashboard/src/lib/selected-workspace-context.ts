@@ -1,3 +1,4 @@
+import { redactWorkspaceExportUrls } from "./workspace-export-urls.ts";
 import type { SessionInfo, TabInfo } from "../types.ts";
 import type { DashboardWorkspaceUrlSelection } from "./workspace-url-selection.ts";
 import type { ProjectedWorkspaceView } from "./workspace-view-projection.ts";
@@ -283,7 +284,7 @@ function selectedPage(
 }
 
 export function selectedWorkspaceDiagnosticBundle(context: SelectedWorkspaceContext): Record<string, unknown> {
-  return {
+  return redactWorkspaceExportUrls({
     selection: context.selection,
     workspace: {
       id: context.node?.id ?? null,
@@ -329,7 +330,7 @@ export function selectedWorkspaceDiagnosticBundle(context: SelectedWorkspaceCont
     diagnostics: context.diagnostics,
     evidence: context.evidence.rows,
     refreshedAt: context.refreshedAt,
-  };
+  });
 }
 
 export function selectedWorkspaceChatSummary(context: SelectedWorkspaceContext): string {
@@ -341,7 +342,7 @@ export function selectedWorkspaceChatSummary(context: SelectedWorkspaceContext):
     context.stream?.provider ? `stream ${context.stream.provider}` : null,
     context.runtime.pid ? `pid ${context.runtime.pid}` : null,
   ].filter(Boolean);
-  return facts.join(" | ");
+  return redactWorkspaceExportUrls(facts.join(" | "));
 }
 
 export function formatSelectedWorkspaceRuntimeValue(value: number | boolean | null | undefined, unit?: "bytes" | "seconds"): string {

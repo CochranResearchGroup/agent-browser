@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P261
+    product_lane: PL-BUGFIX
+    objective: Remove credential-bearing URL components from workspace evidence exports
+    plan: docs/dev/plans/0261-2026-10-21-workspace-export-urls.md
+    branch: fix/workspace-export-url-redaction
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#341]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: [P260]
+    overlaps: [P260, P237]
+    reconciled_overlaps: ["Own pure export redactor and context/chat adapters; P260 exact tab and native selection unchanged; preserve foreign worktrees and candidates"]
+    validation_status: Real diagnostic/chat red-green; affected evidence and inspector tests, typecheck, dashboard/docs builds, fmt, strict Clippy, policy/parity and links pass; export-only source repair
+    updated_at: 2026-10-21
+
   - id: P260
     product_lane: PL-BUGFIX
     objective: Keep selected-workspace page evidence bound to the exact owned tab

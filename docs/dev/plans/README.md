@@ -1,5 +1,7 @@
 # Active plan index
 
+[P261 workspace export URLs](0261-2026-10-21-workspace-export-urls.md), #341; bounded diagnostic/chat export repair.
+
 [P260 selected-tab evidence](0260-2026-10-21-selected-tab-evidence.md), #339; exact owned page context under #68.
 
 [P259 handoff retention reconciliation](0259-2026-10-20-handoff-retention-reconciliation.md), #260; closed with two-duration owner qualification and criterion-level acceptance reconciliation.

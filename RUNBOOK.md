@@ -1,5 +1,7 @@
 # Runbook
 
+[P261 workspace export URLs](docs/dev/plans/0261-2026-10-21-workspace-export-urls.md), #341 under #68, qualifies URL redaction for diagnostic/chat exports. [Source acceptance](docs/dev/notes/0261-2026-10-21-workspace-export-urls.md) records real red-green and unchanged runtime values; production is unchanged.
+
 [P260 selected-tab evidence](docs/dev/plans/0260-2026-10-21-selected-tab-evidence.md), #339 under #68, qualifies exact selected-tab page evidence. [Source acceptance](docs/dev/notes/0260-2026-10-21-selected-tab-evidence.md) records the reproduced wrong-page projection and passing repair gates; production is unchanged.
 
 [P259 handoff retention reconciliation](docs/dev/plans/0259-2026-10-20-handoff-retention-reconciliation.md), #260, qualifies existing independent link/tab lifecycle behavior. [Acceptance map](docs/dev/notes/0259-2026-10-20-handoff-retention-reconciliation.md) records long-duration owner clocks and current regressions; source only.

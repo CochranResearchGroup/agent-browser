@@ -6535,7 +6535,7 @@ Optional configuration via environment variables:
 
 When enabled, agent-browser connects to an AgentCore cloud browser session instead of launching a local browser. All commands work identically.
 
-Selected-workspace diagnostics and contextual chat use the explicitly selected owned tab. A missing target does not substitute another page in the same browser. Browser-wide activity remains scoped to its owner.
+Selected-workspace diagnostics and contextual chat use the explicitly selected owned tab. A missing target does not substitute another page in the same browser. Browser-wide activity remains scoped to its owner. Diagnostic copies and contextual chat exports omit URL userinfo, query strings and fragments; opaque URL payloads are omitted. Live URLs and explicit Copy URL remain unchanged. This does not remove arbitrary secrets from prose or path segments.
 
 ## Retained process identity diagnostics
 
