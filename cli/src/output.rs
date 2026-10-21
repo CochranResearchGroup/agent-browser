@@ -7092,6 +7092,8 @@ Commands:
 
 Notes:
   - It does not launch a browser.
+  - Retirement permits diagnostic snapshots while fencing controller and handoff writes. A blocked writer returns within its lock budget; inspect with agent-browser service jobs --json and refresh the access plan before retrying. Uncertain effects require reconciliation, not replay.
+  - Lock-holder elapsed time is freshly observed on Unix; legacy or unsupported clocks report unknown. Retirement fence ownership is separate from shared Service State admission.
   - service state validate reads only the supplied absolute path and the running executable. It returns the exact state SHA-256, the parser executable SHA-256, and an accepted or error classification. It never consults, locks, recovers, or writes the default Service State store.
   - service prune-retained defaults to dry-run and removes nothing unless --apply is present.
   - service prune-retained removes closed tabs and inert not_started browser records by default; process_exited and unreachable browser records require --process-exited-browsers because they may carry failure evidence. With --abandoned-sessions, that explicit flag can also remove old failed retained session lanes that have no retained tabs.

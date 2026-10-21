@@ -201,6 +201,10 @@ _Avoid_: Action handler, request handler
 
 **Service State**:
 The durable authority for managed profiles, browsers, tabs, routes, leases, jobs, and their lifecycle evidence.
+Retirement retains shared Service State admission for a coherent snapshot and
+an independent exclusive retirement fence for effect serialization. Diagnostic
+reads remain available; controller and handoff commits remain fenced. The
+retirement fence's owner attribution is distinct from the shared state lock.
 _Avoid_: Dashboard state, runtime cache
 
 **Remote-view intent**:

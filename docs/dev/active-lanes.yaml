@@ -1,6 +1,23 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P257
+    product_lane: PL-BUGFIX
+    objective: Keep recovery diagnostics available during fenced retirement effects
+    plan: docs/dev/plans/0257-2026-10-20-retirement-lock.md
+    branch: fix/retirement-lock-diagnostics
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/335
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#307]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: [P249, P256]
+    overlaps: [P249, P256]
+    reconciled_overlaps: ["P249 and P256 integrated; own retirement admission and lock diagnostics; preserve foreign root and resource worktrees"]
+    validation_status: Repository49, retirement58 with one ignored, browserless3, strict Clippy, fmt, docs, parity, policy and planning pass; source only
+    updated_at: 2026-10-20
+
   - id: P256
     product_lane: PL-BUGFIX
     objective: Recover stale workflows with proven absent browsers without a handoff dead end

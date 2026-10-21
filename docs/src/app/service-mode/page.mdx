@@ -935,6 +935,18 @@ contains no URLs, profile paths, page data, credentials, or request payloads,
 and the exact holder removes it before normal release. It is diagnostic only:
 never force-unlock, terminate, take over, or retry from this evidence.
 
+Retirement serializes through a separate exclusive retirement fence while
+holding shared Service State admission. Job and access-plan snapshots remain
+readable during external effects. Controller publication and handoff writes
+remain fenced and return within their lock budget with the read-only command
+<code>agent-browser service jobs --json</code>. Inspect the job and current
+access plan before retrying; reconcile uncertain effects without replaying
+them. The timeout distinguishes <code>holder_lock_scope=retirement_fence</code>
+from <code>state_lock_mode=shared</code>. Unix holders report fresh same-boot
+monotonic elapsed time; legacy holders and unsupported clocks report unknown
+rather than a frozen sample. Recorded build generation remains separate from
+the installed executable path.
+
 The JSON repository prepares and serializes pure candidate state outside the
 exclusive file lock, then revision-fences the short durable commit. It may
 replay one stale in-memory mutation against a fresh snapshot. Browser, tab,
