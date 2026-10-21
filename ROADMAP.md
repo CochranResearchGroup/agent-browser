@@ -1,6 +1,6 @@
 # Roadmap
 
-[P257 retirement lock diagnostics](docs/dev/plans/0257-2026-10-20-retirement-lock.md), #307, qualifies recovery diagnostics while retaining retirement custody. [Source acceptance](docs/dev/notes/0257-2026-10-20-retirement-lock.md) separates the completed source repair from production publication.
+[P257 retirement lock diagnostics](docs/dev/plans/0257-2026-10-20-retirement-lock.md), #307, is deployed as sealed `9c8edd62a16f`. [Installed acceptance](docs/dev/notes/0257-2026-10-20-retirement-lock-installed.md) records the qualified dashboard checkpoint, retained browser/profile identities and continuity limits.
 
 [P256 absent-browser workflow recovery](docs/dev/plans/0256-2026-10-20-absent-browser-workflow.md), #327, qualifies an executable preserve-mode recovery path for browserless handoff preparation and retains uncertain handoff evidence. [Source acceptance](docs/dev/notes/0256-2026-10-20-absent-browser-workflow.md) records focused and broad checks plus the interrupted installer fixture. Production publication remains separate.
 
