@@ -3827,24 +3827,46 @@ struct WorkstationReconcileReport {
 
 fn run_workstation_reconcile(json: bool) {
     match reconcile_runtime_maintenance() {
-        Ok(report) if json => println!(
-            "{}",
-            serde_json::to_string_pretty(&report)
-                .unwrap_or_else(|_| r#"{"success":false,"error":"serialization failed"}"#.into())
+        Ok(report) => println!("{}", runtime_reconcile_output(&report, json)),
+        Err(error) if json => fail(&error, true),
+        Err(error) => fail(
+            &format!(
+                "Runtime reconciliation failed: {}. Inspect: agent-browser install doctor --json.",
+                runtime_reconcile_log_field(Some(&error), "unknown error")
+            ),
+            false,
         ),
-        Ok(report) => println!(
-            "Runtime reconciliation {}: {}.",
-            report
-                .get("state")
-                .and_then(Value::as_str)
-                .unwrap_or("unknown"),
-            report
-                .get("summary")
-                .and_then(Value::as_str)
-                .unwrap_or("no summary")
-        ),
-        Err(error) => fail(&error, json),
     }
+}
+
+/// Routine output projects only bounded summary fields. Full diagnostics remain
+/// opt-in JSON and in the single overwritten private runtime-monitor receipt.
+fn runtime_reconcile_output(report: &Value, json: bool) -> String {
+    if json {
+        return serde_json::to_string_pretty(report)
+            .unwrap_or_else(|_| r#"{"success":false,"error":"serialization failed"}"#.into());
+    }
+    format!(
+        "Runtime reconciliation {}: {}. Inspect: agent-browser install doctor --json.",
+        runtime_reconcile_log_field(report.get("state").and_then(Value::as_str), "unknown"),
+        runtime_reconcile_log_field(report.get("summary").and_then(Value::as_str), "no summary"),
+    )
+}
+
+fn runtime_reconcile_log_field(value: Option<&str>, fallback: &str) -> String {
+    let mut bounded = String::new();
+    for character in value.unwrap_or(fallback).chars() {
+        let character = if character.is_control() {
+            ' '
+        } else {
+            character
+        };
+        if bounded.len() + character.len_utf8() > 256 {
+            break;
+        }
+        bounded.push(character);
+    }
+    bounded
 }
 
 fn reconcile_runtime_maintenance() -> Result<Value, String> {
@@ -13891,7 +13913,7 @@ fn render_units(
         (
             "agent-browser-runtime-interlock.service",
             format!(
-                "[Unit]\nDescription=agent-browser runtime health interlock\nAfter=agent-browser-dashboard.service network-online.target\nWants=agent-browser-dashboard.service network-online.target\n\n[Service]\nType=oneshot\n{runtime_environment}ExecStart={binary} install workstation reconcile --json\nTimeoutStartSec=15min\n"
+                "[Unit]\nDescription=agent-browser runtime health interlock\nAfter=agent-browser-dashboard.service network-online.target\nWants=agent-browser-dashboard.service network-online.target\n\n[Service]\nType=oneshot\n{runtime_environment}ExecStart={binary} install workstation reconcile\nTimeoutStartSec=15min\n"
             ),
         ),
         (
@@ -15852,6 +15874,108 @@ mod tests {
         assert!(parse_workstation_install_args(&shadow_collision)
             .unwrap_err()
             .contains("must be distinct"));
+    }
+
+    #[test]
+    fn runtime_interlock_large_census_output_is_bounded_and_json_remains_complete() {
+        let report = serde_json::json!({
+            "state": "healthy",
+            "summary": "unattended reconciliation and retention completed",
+            "effects": {"processes": (0..10_000).map(|pid| serde_json::json!({"pid":pid,"decision":"private-census-marker"})).collect::<Vec<_>>()}
+        });
+        let routine = runtime_reconcile_output(&report, false);
+        assert_eq!(routine.lines().count(), 1);
+        assert!(routine.len() < 1024);
+        assert!(!routine.contains("private-census-marker"));
+        assert!(routine.contains("agent-browser install doctor --json"));
+        let detailed = runtime_reconcile_output(&report, true);
+        assert_eq!(serde_json::from_str::<Value>(&detailed).unwrap(), report);
+        assert!(detailed.lines().count() > 10_000);
+        eprintln!("interlock_output_receipt routine_bytes={} routine_lines={} detailed_bytes={} detailed_lines={}", routine.len(), routine.lines().count(), detailed.len(), detailed.lines().count());
+        let hostile =
+            serde_json::json!({"state":"é\n\u{1b}".repeat(2000),"summary":"x\n".repeat(2000)});
+        let bounded = runtime_reconcile_output(&hostile, false);
+        assert!(bounded.len() < 1024);
+        assert_eq!(bounded.lines().count(), 1);
+        assert!(!bounded.chars().any(char::is_control));
+        let shell_template = include_str!("../../scripts/install-dashboard-user-service.sh");
+        assert!(shell_template.contains("install workstation reconcile\n"));
+        assert!(!shell_template.contains("install workstation reconcile --json"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn runtime_interlock_failure_helper() {
+        let Some(root) = env::var_os("AGENT_BROWSER_TEST_INTERLOCK_FAILURE_ROOT") else {
+            return;
+        };
+        env::set_var("AGENT_BROWSER_WORKSTATION_ROOT", root);
+        let mut args = vec!["install".into(), "workstation".into(), "reconcile".into()];
+        if env::var_os("AGENT_BROWSER_TEST_INTERLOCK_JSON").is_some() {
+            args.push("--json".into());
+        }
+        run_workstation_command(&args);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn runtime_interlock_failure_remains_nonzero_and_actionable() {
+        let root = env::temp_dir().join(format!("interlock-failure-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let missing = (0..8).fold(root.clone(), |path, _| {
+            path.join("long-missing-path".repeat(12))
+        });
+        for json in [false, true] {
+            let mut command = std::process::Command::new(env::current_exe().unwrap());
+            command
+                .args([
+                    "--exact",
+                    "workstation_install::tests::runtime_interlock_failure_helper",
+                    "--nocapture",
+                ])
+                .env("AGENT_BROWSER_JSON", "1")
+                .env("AGENT_BROWSER_TEST_INTERLOCK_FAILURE_ROOT", &missing)
+                .env_remove("AGENT_BROWSER_TEST_INTERLOCK_JSON");
+            if json {
+                command.env("AGENT_BROWSER_TEST_INTERLOCK_JSON", "1");
+            }
+            let output = command.output().unwrap();
+            assert_eq!(output.status.code(), Some(1));
+            if json {
+                let stdout = String::from_utf8(output.stdout).unwrap();
+                let start = stdout.find('{').unwrap();
+                let report: Value = serde_json::from_str(&stdout[start..]).unwrap();
+                assert_eq!(report["success"], false);
+                assert!(report["error"]
+                    .as_str()
+                    .unwrap()
+                    .contains(missing.to_str().unwrap()));
+            } else {
+                let stderr = String::from_utf8(output.stderr).unwrap();
+                assert!(stderr.len() < 1024, "{}", stderr.len());
+                assert_eq!(stderr.lines().count(), 1);
+                assert!(stderr.contains("agent-browser install doctor --json"));
+            }
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn runtime_interlock_unit_uses_bounded_routine_output() {
+        let units = render_units(
+            "/home/test/.local/bin/agent-browser",
+            Path::new("/home/test/.local/lib/agent-browser/0.28.0"),
+            Path::new("/home/test/.agent-browser/guacamole/secrets/guacamole.env"),
+            4848,
+        );
+        let (_, unit) = units
+            .iter()
+            .find(|(name, _)| *name == "agent-browser-runtime-interlock.service")
+            .unwrap();
+        assert!(
+            unit.contains(" install workstation reconcile\n"),
+            "scheduled maintenance must use bounded routine output: {unit}"
+        );
     }
 
     #[test]

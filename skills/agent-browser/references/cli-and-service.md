@@ -233,6 +233,14 @@ freshness, and blocking reconciliation incidents. Use
 selected generation, latest transaction, runtime dispositions, blocker, and
 seven readiness axes.
 
+Scheduled interlock runs use bounded single-line output, below 1 KiB per
+routine status or error line. Failure exits remain nonzero. Read detailed
+diagnostics with `agent-browser install doctor --json` or the private
+`~/.agent-browser/convergence/runtime-monitor.json` receipt. The receipt holds
+the latest pass by replacement, without a history archive. Explicit reconcile
+with `--json` still emits full detail and performs maintenance; it is not a
+read-only diagnostic command.
+
 For incremental observations, run
 `agent-browser install workstation --apply --json --progress-json 2>install-progress.jsonl`.
 The same option is available on `candidate install --apply --json`; its observer

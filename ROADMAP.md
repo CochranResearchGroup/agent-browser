@@ -1,5 +1,7 @@
 # Roadmap
 
+[P258 bounded interlock logging](docs/dev/plans/0258-2026-10-20-interlock-logging.md), #294, qualifies bounded routine logs and preserved explicit diagnostics. [Source acceptance](docs/dev/notes/0258-2026-10-20-interlock-logging.md) records red/green and byte counts; the installed interlock is unchanged.
+
 [P257 retirement lock diagnostics](docs/dev/plans/0257-2026-10-20-retirement-lock.md), #307, is deployed as sealed `9c8edd62a16f`. [Installed acceptance](docs/dev/notes/0257-2026-10-20-retirement-lock-installed.md) records the qualified dashboard checkpoint, retained browser/profile identities and continuity limits.
 
 [P256 absent-browser workflow recovery](docs/dev/plans/0256-2026-10-20-absent-browser-workflow.md), #327, qualifies an executable preserve-mode recovery path for browserless handoff preparation and retains uncertain handoff evidence. [Source acceptance](docs/dev/notes/0256-2026-10-20-absent-browser-workflow.md) records focused and broad checks plus the interrupted installer fixture. Production publication remains separate.

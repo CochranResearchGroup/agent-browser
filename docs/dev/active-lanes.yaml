@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P258
+    product_lane: PL-BUGFIX
+    objective: Bound routine interlock log output without weakening maintenance or diagnostics
+    plan: docs/dev/plans/0258-2026-10-20-interlock-logging.md
+    branch: fix/interlock-log-summary
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#294]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: [P257]
+    overlaps: [P240, P257]
+    reconciled_overlaps: ["Own scheduled unit templates and reconcile output only; P257 integrated; lifecycle/resource authority stays unchanged; preserve foreign worktrees and sealed candidates"]
+    validation_status: Red-green regression and eight focused tests pass; routine sample 128 bytes versus 819024 explicit JSON bytes; fmt, strict Clippy, docs and contract checks pass; source only
+    updated_at: 2026-10-20
+
   - id: P257
     product_lane: PL-BUGFIX
     objective: Keep recovery diagnostics available during fenced retirement effects

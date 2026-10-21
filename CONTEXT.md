@@ -4,6 +4,11 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Routine interlock output**: Bounded status/error projection for scheduled
+maintenance. It is distinct from the private latest-pass monitor receipt and
+explicit detailed JSON. Logging mode does not change maintenance authority,
+failure exits, or cleanup qualification.
+
 **Browserless handoff preparation**: A daemon with no attached browser returns
 `prepared=false`, `browserPresent=false` and no candidate. This is a local
 observation, not proof that shared-host browsers or uncertain effects are
