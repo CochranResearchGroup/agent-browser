@@ -103,7 +103,7 @@ const EMPTY_RUNTIME: SelectedWorkspaceRuntime = {
 export function buildSelectedWorkspaceContext(input: SelectedWorkspaceContextInput): SelectedWorkspaceContext {
   const selection = input.selection;
   const nodes = input.nodes ?? deriveWorkspaceNodes({ ...input, includeRetained: true, includeHidden: true });
-  const node = selectWorkspaceNode(selection, nodes);
+  const node = selectWorkspaceNode(selection, nodes, input.serviceTabs ?? []);
   const serviceBrowsers = input.serviceBrowsers ?? [];
   const serviceSessions = input.serviceSessions ?? [];
   const serviceTabs = input.serviceTabs ?? [];
@@ -181,7 +181,7 @@ export function buildSelectedWorkspaceContext(input: SelectedWorkspaceContextInp
     daemonSession,
     serviceSessions: contextSessions,
     tabs: contextTabs,
-    primaryTab: node?.primaryTab ?? null,
+    primaryTab: selectedPage(selection, contextTabs, node),
     profileAllocation,
     jobs: contextJobs,
     incidents: contextIncidents,
@@ -201,6 +201,7 @@ export function buildSelectedWorkspaceContext(input: SelectedWorkspaceContextInp
 export function selectWorkspaceNode(
   selection: DashboardWorkspaceUrlSelection,
   nodes: WorkspaceNode[],
+  tabs: WorkspaceServiceTab[] = [],
 ): WorkspaceNode | null {
   const directBrowserId = bareId(selection.browserId, "browser");
   const workspaceBrowserId = prefixedId(selection.workspaceId, "browser");
@@ -238,9 +239,10 @@ export function selectWorkspaceNode(
     if (node) return node;
   }
 
-  const tabId = bareId(selection.tabId, "target") || bareId(selection.tabId, "tab") || prefixedId(selection.workspaceId, "target") || prefixedId(selection.workspaceId, "tab");
+  const tabId = selectedTabId(selection);
   if (tabId) {
-    const node = nodes.find((candidate) => candidate.relatedIds.tabIds.includes(tabId) || candidate.primaryTab?.id === tabId || candidate.primaryTab?.targetId === tabId);
+    const tab = tabs.find((candidate) => candidate.id === tabId || candidate.targetId === tabId);
+    const node = nodes.find((candidate) => candidate.relatedIds.tabIds.includes(tabId) || candidate.primaryTab?.id === tabId || candidate.primaryTab?.targetId === tabId || Boolean(tab && candidate.browserId === tab.browserId));
     if (node) return node;
   }
 
@@ -256,6 +258,28 @@ export function selectWorkspaceNode(
   }
 
   return null;
+}
+
+function selectedTabId(selection: DashboardWorkspaceUrlSelection): string | null {
+  return selection.tabId?.replace(/^(?:target|tab):/, "")
+    || prefixedId(selection.workspaceId, "target") || prefixedId(selection.workspaceId, "tab");
+}
+
+/** Explicit page evidence never falls back to another tab in the browser.
+ * Browser-wide jobs and resources remain scoped to the selected owner. */
+function selectedPage(
+  selection: DashboardWorkspaceUrlSelection,
+  tabs: WorkspaceServiceTab[],
+  node: WorkspaceNode | null,
+): WorkspaceNodePrimaryTab | null {
+  const id = selectedTabId(selection);
+  if (!id) return node?.primaryTab ?? null;
+  const tab = tabs.find((candidate) => candidate.id === id || candidate.targetId === id);
+  if (tab && (!node?.browserId || tab.browserId === node.browserId)) {
+    return { id: tab.id, targetId: tab.targetId, title: tab.title, url: tab.url, lifecycle: tab.lifecycle };
+  }
+  const primary = node?.primaryTab;
+  return primary && (primary.id === id || primary.targetId === id) ? primary : null;
 }
 
 export function selectedWorkspaceDiagnosticBundle(context: SelectedWorkspaceContext): Record<string, unknown> {

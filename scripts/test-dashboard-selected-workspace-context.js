@@ -218,6 +218,33 @@ assert.equal(byServiceBrowserWithDaemonFallbackStream.runtime.running, true);
 const byTab = context({ tabId: 'target-live' });
 assert.equal(byTab.node.id, 'browser:browser-live');
 
+// Explicit tab selection must not substitute the browser's default tab.
+const secondTab = { id: 'tab-second', targetId: 'target-second', browserId: 'browser-live', sessionId: 'session-live', lifecycle: 'active', title: 'Second task', url: 'https://second.example.test/', taskMetadata: { purpose: 'not a page projection field' } };
+for (const tabId of ['tab-second', 'tab:tab-second', 'target-second', 'target:target-second']) {
+  const selected = buildSelectedWorkspaceContext({ ...fixture,
+    serviceTabs: [...fixture.serviceTabs, secondTab],
+    selection: { ...emptySelection, browserId: 'browser-live', tabId },
+  });
+  assert.equal(selected.primaryTab?.id, 'tab-second', tabId);
+  assert.equal('taskMetadata' in selected.primaryTab, false);
+  assert.equal(selected.jobs.length, 1, 'browser-wide jobs retain owner scope');
+  assert.equal(selectedWorkspaceDiagnosticBundle(selected).primaryTab?.title, 'Second task');
+  assert.match(selectedWorkspaceChatSummary(selected), /second\.example\.test/);
+}
+for (const tabId of ['missing-target', 'target-other-browser']) {
+  const selected = buildSelectedWorkspaceContext({ ...fixture,
+    serviceTabs: [...fixture.serviceTabs, secondTab, { ...secondTab, id: 'other-tab', targetId: 'target-other-browser', browserId: 'other-browser' }],
+    selection: { ...emptySelection, browserId: 'browser-live', tabId },
+  });
+  assert.equal(selected.primaryTab, null, 'missing/foreign tab must not silently become the default page');
+}
+const secondByTarget = buildSelectedWorkspaceContext({ ...fixture,
+  serviceTabs: [...fixture.serviceTabs, secondTab],
+  selection: { ...emptySelection, tabId: 'target:target-second' },
+});
+assert.equal(secondByTarget.node?.browserId, 'browser-live');
+assert.equal(secondByTarget.primaryTab?.id, 'tab-second');
+
 const byJob = context({ jobId: 'job-live' });
 assert.equal(byJob.node.id, 'browser:browser-live');
 

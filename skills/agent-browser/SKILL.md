@@ -83,7 +83,7 @@ Command help, including `service --help` and `service -h`, runs locally without 
 Inspect `agent-browser.runtime-health.v1` for proactive runtime drift and
 bounded recourse. Read the advanced reference's runtime custody diagnostics
 before maintenance, retirement reconciliation or interpreting unknown effects.
-Routine interlock logs stay compact.
+Logs stay compact. Inspect exact tabs.
 
 
 Use the installed `agent-browser` executable when MCP is unavailable. Read
