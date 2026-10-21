@@ -1,6 +1,6 @@
 # Runbook
 
-[P257 retirement lock diagnostics](docs/dev/plans/0257-2026-10-20-retirement-lock.md), #307, is qualifying shared diagnostic reads with separate retirement serialization, bounded handoff refusal and fresh owner timing. Provider-free source repair only; production remains unchanged.
+[P257 retirement lock diagnostics](docs/dev/plans/0257-2026-10-20-retirement-lock.md), #307, qualifies readable diagnostics, bounded handoff recourse, preserved fencing and current holder duration. [Source acceptance](docs/dev/notes/0257-2026-10-20-retirement-lock.md) records repository49, retirement58 with one ignored, browserless3 and required local gates. Production remains unchanged.
 
 [P256 absent-browser workflow recovery](docs/dev/plans/0256-2026-10-20-absent-browser-workflow.md), #327, qualifies an executable preserve-mode recovery path for browserless handoff preparation and retains uncertain handoff evidence. [Source acceptance](docs/dev/notes/0256-2026-10-20-absent-browser-workflow.md) records focused and broad checks plus the interrupted installer fixture. Production publication remains separate.
 

@@ -1,6 +1,6 @@
 # P257: retirement lock and recovery diagnostics
 
-Status: OPEN
+Status: CLOSED
 Product lane: PL-BUGFIX
 Work item: CochranResearchGroup/agent-browser#307
 Branch: fix/retirement-lock-diagnostics
@@ -26,3 +26,14 @@ independent controller writes remain fenced. Qualify transaction recovery,
 duration reporting and existing handoff preservation through focused
 provider-free tests, formatting and strict workspace Clippy. Review Standards
 and issue acceptance separately. Source integration does not prove deployment.
+
+## Result
+
+The [source acceptance](../notes/0257-2026-10-20-retirement-lock.md) records the
+red/green regression, 49 passing repository tests, 58 passing retirement tests
+with one real-Chrome case ignored, three retained browserless recovery checks,
+strict Clippy and documentation gates. Separate retirement serialization keeps
+diagnostic reads available while controller and handoff writes remain fenced.
+Bounded refusal supplies executable read-only recourse; current Unix hold
+duration advances without sidecar updates. Standards and Spec have no blocking
+findings. Production publication remains separate.

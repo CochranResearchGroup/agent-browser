@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P257 retirement lock diagnostics](0257-2026-10-20-retirement-lock.md): readable diagnostics during fenced retirement effects, bounded handoff recourse, fresh holder timing and explicit source qualification limits.
+
 [P256 absent-browser workflow recovery](0256-2026-10-20-absent-browser-workflow.md): actionable browserless handoff/no-candidate responses, preserved evidence, provider-free regressions and explicit installation boundary.
 
 [P254 compact workspace fixture acceptance](0254-2026-10-20-compact-workspace-fixture.md): current Properties and combined selection contracts, full mounted race/privacy/mobile/peer coverage, zero fixture residue and explicit production boundary.

@@ -1,6 +1,6 @@
 # Active plan index
 
-[P257: retirement lock diagnostics](0257-2026-10-20-retirement-lock.md), #307; bounded provider-free retirement fencing and recovery diagnostic repair in progress.
+[P257: retirement lock diagnostics](0257-2026-10-20-retirement-lock.md), #307; provider-free diagnostic availability, preserved fencing and bounded handoff recourse qualified; production publication remains separate.
 
 [P256: absent-browser stale workflow](0256-2026-10-20-absent-browser-workflow.md), #327; supported recovery-path repair with retained custody; provider-free qualification and installation boundary recorded in its acceptance note.
 
