@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Existing-profile file retrieval uses current process evidence, not owner records. */
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createMcpStdioClient, createSmokeContext, runCli } from './smoke-utils.js';
@@ -71,10 +71,26 @@ try {
     profile: 'issue284-fixture',
     profileMode: 'existing',
     taskKey: 'download',
+    serviceName: 'agent-browser-fixture',
+    agentName: 'download-acceptance',
+    taskName: 'Retrieve synthetic original file through existing profile',
     url: 'data:text/html,<title>Download fixture</title><a id="download" download="fixture.txt" href="data:text/plain,issue284-synthetic">Download</a>',
   });
   tasks.push(task);
   const identity = [task.taskId, task.browserId, task.tabId];
+  const browserPid = Number(execFileSync('python3', ['-c', `
+import json, sqlite3, sys
+connection = sqlite3.connect(sys.argv[1])
+state = json.loads(connection.execute("SELECT json FROM state_documents WHERE kind='browser_session_state'").fetchone()[0])
+print(state['browsers'][sys.argv[2]]['pid'])
+`, join(context.agentHome, 'service', 'runtime.sqlite3'), task.browserId]).toString().trim());
+  const processStart = () => {
+    const stat = readFileSync(`/proc/${browserPid}/stat`, 'utf8');
+    return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19];
+  };
+  const originalStart = processStart();
+  assert.equal(realpathSync(`/proc/${browserPid}/exe`), realpathSync(executable), 'configured browser executable is preserved');
+
   const snapshot = await call('browser_snapshot', { taskId: task.taskId });
   assert(JSON.stringify(snapshot).includes('Download'));
   if (process.env.AGENT_BROWSER_SMOKE_STALE_CUSTODY === '1' ||
@@ -124,7 +140,9 @@ print(browser['pid'])
   assert.equal(readFileSync(destination, 'utf8'), 'issue284-synthetic');
   const continued = await call('browser_continue', { taskId: task.taskId });
   assert.deepEqual([continued.taskId, continued.browserId, continued.tabId], identity);
+  assert.equal(processStart(), originalStart, 'download and continuation retain the live browser process');
   console.log('Existing-profile download bytes and task continuity passed');
+  console.log('Configured executable and exact browser process/start continuity passed');
 } finally {
   for (const task of tasks.reverse()) {
     try {

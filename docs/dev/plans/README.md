@@ -1,5 +1,7 @@
 # Active plan index
 
+[P263 installed download acceptance](0263-2026-10-21-installed-download-acceptance.md), #284; closed with installed-artifact public MCP qualification and explicit account/provider limits.
+
 [P261 workspace export URLs](0261-2026-10-21-workspace-export-urls.md), #341; bounded diagnostic/chat export repair.
 
 [P260 selected-tab evidence](0260-2026-10-21-selected-tab-evidence.md), #339; exact owned page context under #68.
