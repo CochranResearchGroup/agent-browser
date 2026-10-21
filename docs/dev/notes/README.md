@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P259 handoff retention reconciliation](0259-2026-10-20-handoff-retention-reconciliation.md): two configured holds beyond five minutes, exact owner deadlines and criterion-level reconciliation of existing lifecycle behavior.
+
 [P258 bounded interlock logging](0258-2026-10-20-interlock-logging.md): bounded scheduled output, preserved detailed diagnostics and failure exits, synthetic byte counts and source-only acceptance.
 
 [P257 installed checkpoint](0257-2026-10-20-retirement-lock-installed.md): sealed retirement/dashboard deployment, both doctors, browser cycles, real public dashboard checks and exact preservation limits.

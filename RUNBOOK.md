@@ -1,5 +1,7 @@
 # Runbook
 
+[P259 handoff retention reconciliation](docs/dev/plans/0259-2026-10-20-handoff-retention-reconciliation.md), #260, qualifies existing independent link/tab lifecycle behavior. [Acceptance map](docs/dev/notes/0259-2026-10-20-handoff-retention-reconciliation.md) records long-duration owner clocks and current regressions; source only.
+
 [P258 bounded interlock logging](docs/dev/plans/0258-2026-10-20-interlock-logging.md), #294, qualifies bounded routine logs and preserved explicit diagnostics. [Source acceptance](docs/dev/notes/0258-2026-10-20-interlock-logging.md) records red/green and byte counts; the installed interlock is unchanged.
 
 [P257 retirement lock diagnostics](docs/dev/plans/0257-2026-10-20-retirement-lock.md), #307, is deployed as sealed `9c8edd62a16f` in accepted transaction `upgrade-47952d96-97d8-4373-be16-026ef494010c`. [Installed acceptance](docs/dev/notes/0257-2026-10-20-retirement-lock-installed.md) records both doctors, three browser cycles, authenticated public dashboard checks and exact process/identity preservation limits.

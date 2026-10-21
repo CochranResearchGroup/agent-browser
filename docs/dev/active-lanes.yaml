@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P259
+    product_lane: PL-PLATFORM
+    objective: Reconcile independent handoff retention acceptance with two long-duration owner clocks
+    plan: docs/dev/plans/0259-2026-10-20-handoff-retention-reconciliation.md
+    branch: platform/handoff-retention-260
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#260]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: [P237, P258]
+    overlaps: [P237, P240]
+    reconciled_overlaps: ["Test and acceptance reconciliation only; integrated P237 lifecycle remains authoritative; foreign resource checkout and candidates preserved"]
+    validation_status: Two-duration owner clock passes; owner94 with one real-provider test ignored, model357, fmt, strict Clippy, docs and planning checks pass; source-only acceptance reconciliation
+    updated_at: 2026-10-20
+
   - id: P258
     product_lane: PL-BUGFIX
     objective: Bound routine interlock log output without weakening maintenance or diagnostics
