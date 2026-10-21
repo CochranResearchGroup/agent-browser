@@ -198,4 +198,12 @@ assert.match(serializedSensitive, /"label":"Cookie","value":"\[redacted\]"/);
 const badProvider = { ...live, provider: 'openai' };
 assert.ok(validateSelectedWorkspaceChatPacket(badProvider).some((error) => error.includes('codex-app-server')));
 
+const urlContext = buildSelectedWorkspaceContext({ ...fixture, selection: { ...emptySelection, browserId: 'browser-live' } });
+urlContext.primaryTab = { ...urlContext.primaryTab, url: 'https://synthetic-user:synthetic-pass@example.test/task?opaque=synthetic-query#synthetic-fragment' };
+urlContext.evidence.rows.push({ label: 'Page', value: urlContext.primaryTab.url });
+const urlPacket = buildSelectedWorkspaceChatPacket(urlContext);
+assert.equal(urlPacket.page.url, 'https://example.test/task');
+assert.doesNotMatch(JSON.stringify(urlPacket), /synthetic-user|synthetic-pass|synthetic-query|synthetic-fragment/);
+assert.match(urlContext.primaryTab.url, /synthetic-query/, 'live source URL remains unchanged');
+
 console.log('dashboard selected workspace chat packet tests passed');

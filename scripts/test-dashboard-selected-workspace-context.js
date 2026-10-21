@@ -283,4 +283,28 @@ const none = context({});
 assert.equal(none.node, null);
 assert.equal(none.state, 'none');
 
+const credentialUrl = 'https://synthetic-user:synthetic-pass@example.test/task?opaque=synthetic-query#synthetic-fragment';
+const credentialContext = { ...byBrowser, primaryTab: { ...byBrowser.primaryTab, url: credentialUrl },
+  stream: { ...byBrowser.stream, url: 'wss://viewer.test/socket?grant=synthetic-grant#synthetic-view-fragment' },
+  evidence: { ...byBrowser.evidence, rows: [{ label: 'Page', value: credentialUrl }] },
+};
+credentialContext.diagnostics = [{ kind: 'synthetic', severity: 'warning', message: 'Inspect data:text/plain,synthetic-opaque-payload', relatedIds: [] }];
+const exported = JSON.stringify(selectedWorkspaceDiagnosticBundle(credentialContext));
+assert.doesNotMatch(exported, /synthetic-user|synthetic-pass|synthetic-query|synthetic-fragment|synthetic-grant|synthetic-view-fragment|synthetic-opaque-payload/);
+assert.match(exported, /https:\/\/example\.test\/task/);
+assert.doesNotMatch(selectedWorkspaceChatSummary(credentialContext), /synthetic-user|synthetic-pass|synthetic-query|synthetic-fragment/);
+assert.equal(credentialContext.primaryTab.url, credentialUrl, 'export redaction must not mutate the live source URL');
+for (const opaque of ['data:text/html,<h1>synthetic-payload with spaces</h1>', 'blob:https://example.test/private-id', 'javascript:syntheticPayload()']) {
+  const copy = selectedWorkspaceDiagnosticBundle({ ...credentialContext, primaryTab: { ...credentialContext.primaryTab, url: opaque } });
+  assert.equal(copy.primaryTab.url, '[omitted-url]');
+}
+const relativeCopy = selectedWorkspaceDiagnosticBundle({ ...credentialContext,
+  stream: { ...credentialContext.stream, url: '/api/view?opaque=synthetic-query#synthetic-fragment' } });
+assert.equal(relativeCopy.stream.url, '/api/view');
+const pathCopy = selectedWorkspaceDiagnosticBundle({ ...credentialContext,
+  resources: [{ path: '/tmp/synthetic?literal', pid: 1234 }],
+});
+assert.equal(pathCopy.resources[0].path, '/tmp/synthetic?literal', 'filesystem paths are not relative URL fields');
+
+
 console.log('dashboard selected workspace context tests passed');

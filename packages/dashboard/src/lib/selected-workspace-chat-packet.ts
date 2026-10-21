@@ -1,3 +1,4 @@
+import { redactWorkspaceExportUrls } from "./workspace-export-urls.ts";
 import type { SelectedWorkspaceContext } from "./selected-workspace-context.ts";
 import {
   consoleEvidenceForChat,
@@ -140,7 +141,7 @@ export function buildSelectedWorkspaceChatPacket(
   const activityEvidence = buildActivityEvidence(context, include.activity !== false);
   const streamEvidence = buildStreamEvidence(context, include.stream !== false);
   const consoleEvidence = buildConsoleEvidence(options.consoleEvidence ?? null, include.console === true);
-  return {
+  return redactWorkspaceExportUrls({
     version: SELECTED_WORKSPACE_CHAT_PACKET_VERSION,
     createdAt,
     provider: CONTEXTUAL_CHAT_PROVIDER_ID,
@@ -200,7 +201,7 @@ export function buildSelectedWorkspaceChatPacket(
       rawStorageIncluded: false,
       rawHeadersIncluded: false,
     },
-  };
+  });
 }
 
 export function selectedWorkspaceChatPacketSummary(packet: SelectedWorkspaceChatPacket): string {
@@ -211,7 +212,7 @@ export function selectedWorkspaceChatPacketSummary(packet: SelectedWorkspaceChat
     packet.stream.provider ? `stream ${packet.stream.provider}` : null,
     packet.runtime.pid ? `pid ${packet.runtime.pid}` : null,
   ].filter(Boolean);
-  return parts.join(" | ");
+  return redactWorkspaceExportUrls(parts.join(" | "));
 }
 
 export function validateSelectedWorkspaceChatPacket(packet: SelectedWorkspaceChatPacket): string[] {
