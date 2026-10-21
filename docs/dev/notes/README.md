@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P263 installed download acceptance](0263-2026-10-21-installed-download-acceptance.md): ordinary, stale and malformed-custody public MCP retrieval on the installed artifact, executable/process continuity and zero isolated residue.
+
 [P261 workspace export URLs](0261-2026-10-21-workspace-export-urls.md): reproduced diagnostic/chat URL leakage, pure export redaction, opaque payload omission and unchanged source values.
 
 [P260 exact selected-tab evidence](0260-2026-10-21-selected-tab-evidence.md): reproduced secondary-tab substitution, exact owned page projection, missing-target behavior and bounded #68 follow-up.
