@@ -307,4 +307,28 @@ const pathCopy = selectedWorkspaceDiagnosticBundle({ ...credentialContext,
 assert.equal(pathCopy.resources[0].path, '/tmp/synthetic?literal', 'filesystem paths are not relative URL fields');
 
 
+
+
+// An explicit absent browser cannot borrow a peer through weaker URL hints.
+for (const selected of [
+  { browserId: 'browser-gone' },
+  { workspaceId: 'browser:browser-gone' },
+]) {
+  for (const weaker of [
+    { profileId: 'default' }, { sessionId: 'session-live' },
+    { sessionId: 'daemon-a' }, { tabId: 'tab-live' }, { jobId: 'job-live' },
+  ]) {
+    const missing = context({ ...weaker, ...selected });
+    assert.equal(missing.node, null, 'explicit missing browser must not select peer');
+    assert.equal(missing.state, 'missing');
+    assert.equal(missing.primaryTab, null);
+    assert.equal(missing.browser, null);
+    assert.equal(missing.daemonSession, null);
+    assert.equal(missing.stream, null);
+    assert.deepEqual(missing.actions, []);
+    assert.deepEqual(missing.resources, []);
+  }
+}
+assert.equal(context({ profileId: 'default' }).node.browserId, 'browser-live');
+
 console.log('dashboard selected workspace context tests passed');
