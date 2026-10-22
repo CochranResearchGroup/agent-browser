@@ -1708,6 +1708,15 @@ fn run_browser_worker(
                 command,
                 reply,
             } => {
+                let mut command = command;
+                if let Err(error) = super::browser_host_policy::bind_command_task(
+                    &mut command,
+                    &session_id,
+                    &session_name,
+                ) {
+                    let _ = reply.send(Err(error));
+                    continue;
+                }
                 let result = super::browser_host_control::guarded(&browser.id, &command, || {
                     match browsers.get_mut(&browser.id) {
                     Some(state) => runtime.block_on(async {

@@ -51,3 +51,11 @@ The full repaired Service Model suite passed382 tests across23 binaries; hosted/
 ## Contracts resource parity
 
 The7b38f66dc candidate built successfully; public guidance and no-launch MCP resource reads passed. Its complete catalog smoke passed help/schema budgets (16tools,14,394schema bytes) then exposed the contracts resource retaining the old12-name list. The resource list now includes control, reconnect, policy and artifacts, and the Rust catalog test compares actual tool names with published contracts metadata. This is a real discovery-contract repair, not a relaxed assertion. Native acceptance remains unstarted until the rebuilt source and relevant gates pass.
+
+## First actual Native run
+
+Native01 used clean9e7b710124 source, CI binary6b4f982f4a49c79c87f80c349c62e6731fbcf911aa579b04277e7e588c4b4fb1 and exact merged consumerdd6ef3d099. QA access, native canvas, attach/share, public actions, cookie/draft continuity, control takeover/return and explicit reconnect passed. Twelve warm reconnect-status samples yielded4.68ms p95. Actual browser loss and desktop restart were not exercised. The policy stage reproduced a confirmed refusal on an unrestricted peer after another task denied fill; this is a real shared-browser policy-selection defect and the whole run failed. No unknown delivery or replay occurred.
+
+Exact cleanup completed with no errors and released the fresh assignment. Independent root readback found all17observed kernel instances absent, zero fixture profile/namespace references, zero unreadable current-user processes and zero active fixture Native assignments. Baseline peers were preserved. The failed private receipt remains outside Git; a changed source and fresh run identity are required for policy qualification.
+
+The causal repair binds the durable Execute task ID/name before outer browser-wide admission. Previously that guard added only browserId and evaluated both shared tasks before the selected task reached DaemonState. The regression reproduces unbound peer refusal, proves the bound unrestricted peer dispatches while the original remains denied, preserves request/override IDs, and rejects conflicting selectors. No ambient MCP dispatch context or new viewer is introduced.

@@ -5,6 +5,30 @@ use agent_browser_service_model::*;
 use serde_json::{json, Value};
 use std::path::{Component, Path, PathBuf};
 
+/// Bind a command to the task selected by durable dispatch before browser-wide
+/// custody checks. Caller selectors must agree; request and override IDs survive.
+pub(crate) fn bind_command_task(
+    command: &mut Value,
+    task_id: &str,
+    task_name: &str,
+) -> Result<(), String> {
+    for (key, expected) in [
+        ("taskId", task_id),
+        ("sessionId", task_id),
+        ("sessionName", task_name),
+    ] {
+        if command
+            .get(key)
+            .is_some_and(|value| value.as_str() != Some(expected))
+        {
+            return Err(format!("browser_task_dispatch_identity_conflict:{key}"));
+        }
+    }
+    command["sessionId"] = json!(task_id);
+    command["sessionName"] = json!(task_name);
+    Ok(())
+}
+
 fn task_ids(
     state: &BrowserSessionState,
     name: &str,
@@ -509,6 +533,95 @@ mod tests {
             },
         );
         state
+    }
+    #[test]
+    fn shared_browser_guard_keeps_selected_task_policy_and_request_identity() {
+        use crate::test_utils::EnvGuard;
+        let guard = EnvGuard::new(&["AGENT_BROWSER_HOME"]);
+        let directory =
+            std::env::temp_dir().join(format!("policy-dispatch-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).unwrap();
+        guard.set("AGENT_BROWSER_HOME", directory.to_str().unwrap());
+        let mut state = fixture();
+        let mut peer = state.sessions["alpha"].clone();
+        peer.id = "peer".into();
+        peer.name = "peer-lane".into();
+        state.sessions.insert(peer.id.clone(), peer);
+        state
+            .host_bindings
+            .insert("peer".into(), state.host_bindings["alpha"].clone());
+        state
+            .browsers
+            .get_mut("browser")
+            .unwrap()
+            .active_session_ids
+            .push("peer".into());
+        state.host_policies.task_overrides.insert(
+            "alpha".into(),
+            BrowserTaskPolicy {
+                denied_actions: BTreeSet::from(["fill".into()]),
+                ..Default::default()
+            },
+        );
+        let path = BrowserSessionSqliteStore::default_sqlite_path().unwrap();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let store = BrowserSessionSqliteStore::launch_custody_fixture(
+            rusqlite::Connection::open(&path).unwrap(),
+            true,
+        )
+        .unwrap();
+        store.save_session_state(&state).unwrap();
+        // Typed MCP fill builders send this page-only shape. The outer runtime
+        // guard runs before attaching a target or updating shared DaemonState.
+        let original =
+            json!({"id":"peer-fill","action":"fill","selector":"#field","value":"synthetic"});
+        let mut called = false;
+        assert!(
+            super::super::browser_host_control::guarded("browser", &original, || {
+                called = true;
+                Ok(json!({"success":true}))
+            })
+            .unwrap_err()
+            .starts_with("browser_policy_action_denied")
+        );
+        assert!(!called);
+        let mut addressed = original.clone();
+        bind_command_task(&mut addressed, "peer", "peer-lane").unwrap();
+        super::super::browser_host_control::guarded("browser", &addressed, || {
+            called = true;
+            Ok(json!({"success":true}))
+        })
+        .unwrap();
+        assert!(called);
+        assert_eq!(addressed["id"], original["id"]);
+        let mut denied = original.clone();
+        denied["id"] = json!("alpha-fill");
+        bind_command_task(&mut denied, "alpha", "task-alpha").unwrap();
+        assert!(
+            super::super::browser_host_control::guarded("browser", &denied, || panic!(
+                "denied effect"
+            ))
+            .is_err()
+        );
+        let mut token = json!({"id":"operator-request","policyOverrideId":"exact-token"});
+        bind_command_task(&mut token, "peer", "peer-lane").unwrap();
+        assert_eq!(token["id"], "operator-request");
+        assert_eq!(token["policyOverrideId"], "exact-token");
+        for (key, value) in [
+            ("taskId", "alpha"),
+            ("sessionId", "alpha"),
+            ("sessionName", "task-alpha"),
+        ] {
+            let mut conflict = original.clone();
+            conflict[key] = json!(value);
+            assert_eq!(
+                bind_command_task(&mut conflict, "peer", "peer-lane").unwrap_err(),
+                format!("browser_task_dispatch_identity_conflict:{key}")
+            );
+            assert!(conflict.get("sessionId").is_none() || key == "sessionId");
+        }
+        drop(store);
+        std::fs::remove_dir_all(directory).unwrap();
     }
     #[test]
     fn initial_app_defaults_gate_before_launch_and_explicit_clear_is_retained() {
