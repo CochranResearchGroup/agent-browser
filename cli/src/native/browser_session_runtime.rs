@@ -1475,47 +1475,49 @@ fn run_browser_worker(
                 reply,
                 ..
             } if command["action"] == "tab_close" && command["operatorClose"] == true => {
-                let result = runtime.block_on(async {
-                    use super::service_store::{
-                        LockedServiceStateRepository, ServiceStateRepository,
-                    };
-                    let repository = LockedServiceStateRepository::default_json()?;
-                    super::stream::verify_operator_tab_close(
-                        &repository.load_snapshot()?,
-                        &command,
-                    )?;
-                    if command["targetId"] != tab.target_id
-                        || command["browserId"] != browser.id
-                        || !recorded_browser_is_live(&mut browsers, &browser).await?
-                    {
-                        return Err("operator_tab_close_process_changed".to_string());
-                    }
-                    let state = browsers
-                        .get_mut(&browser.id)
-                        .ok_or("operator_tab_close_process_changed")?;
-                    let manager = state
-                        .browser
-                        .as_mut()
-                        .ok_or("operator_tab_close_process_changed")?;
-                    if manager.browser_pid() != Some(browser.pid)
-                        || manager.get_cdp_url() != browser.cdp_endpoint
-                    {
-                        return Err("operator_tab_close_process_changed".into());
-                    }
-                    super::stream::verify_operator_tab_close(
-                        &repository.load_snapshot()?,
-                        &command,
-                    )?;
-                    let data = manager
-                        .tab_close_target_id_for_release(&tab.target_id)
-                        .await?;
-                    if let Some(targets) = shared_browser_tabs.get_mut(&browser.id) {
-                        targets.remove(&tab.target_id);
-                    }
-                    state.ref_map.clear();
-                    state.iframe_sessions.clear();
-                    state.active_frame_id = None;
-                    Ok(serde_json::json!({"id":command["id"],"success":true,"data":data}))
+                let result = super::browser_host_control::guarded(&browser.id, &command, || {
+                    runtime.block_on(async {
+                        use super::service_store::{
+                            LockedServiceStateRepository, ServiceStateRepository,
+                        };
+                        let repository = LockedServiceStateRepository::default_json()?;
+                        super::stream::verify_operator_tab_close(
+                            &repository.load_snapshot()?,
+                            &command,
+                        )?;
+                        if command["targetId"] != tab.target_id
+                            || command["browserId"] != browser.id
+                            || !recorded_browser_is_live(&mut browsers, &browser).await?
+                        {
+                            return Err("operator_tab_close_process_changed".to_string());
+                        }
+                        let state = browsers
+                            .get_mut(&browser.id)
+                            .ok_or("operator_tab_close_process_changed")?;
+                        let manager = state
+                            .browser
+                            .as_mut()
+                            .ok_or("operator_tab_close_process_changed")?;
+                        if manager.browser_pid() != Some(browser.pid)
+                            || manager.get_cdp_url() != browser.cdp_endpoint
+                        {
+                            return Err("operator_tab_close_process_changed".into());
+                        }
+                        super::stream::verify_operator_tab_close(
+                            &repository.load_snapshot()?,
+                            &command,
+                        )?;
+                        let data = manager
+                            .tab_close_target_id_for_release(&tab.target_id)
+                            .await?;
+                        if let Some(targets) = shared_browser_tabs.get_mut(&browser.id) {
+                            targets.remove(&tab.target_id);
+                        }
+                        state.ref_map.clear();
+                        state.iframe_sessions.clear();
+                        state.active_frame_id = None;
+                        Ok(serde_json::json!({"id":command["id"],"success":true,"data":data}))
+                    })
                 });
                 let _ = reply.send(result);
             }
@@ -1527,7 +1529,8 @@ fn run_browser_worker(
                 command,
                 reply,
             } => {
-                let result = match browsers.get_mut(&browser.id) {
+                let result = super::browser_host_control::guarded(&browser.id, &command, || {
+                    match browsers.get_mut(&browser.id) {
                     Some(state) => runtime.block_on(async {
                         if command["action"] == "view_focus" && command["operatorFocus"] == true {
                             // No marker clearing or target activation may precede
@@ -1559,10 +1562,7 @@ fn run_browser_worker(
                         // Read the addressed task or popup inventory without
                         // replacing the person's physical selection. Other
                         // actions retain exact-target activation semantics.
-                        if matches!(
-                            command["action"].as_str(),
-                            Some("title" | "url" | "__observe_owned_popup_targets")
-                        ) {
+                        if super::browser_host_control::observation(command["action"].as_str().unwrap_or_default()) {
                             manager.bind_observation_target(&tab.target_id).await?;
                         } else {
                             manager.tab_switch_target_id(&tab.target_id).await?;
@@ -1596,7 +1596,8 @@ fn run_browser_worker(
                         .await)
                     }),
                     None => Err("browser_session_runtime_browser_missing".to_string()),
-                };
+                }
+                });
                 let _ = reply.send(result);
             }
             BrowserRuntimeCommand::IdleRetirement {

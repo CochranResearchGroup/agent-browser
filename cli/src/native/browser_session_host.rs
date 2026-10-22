@@ -175,6 +175,7 @@ pub(crate) async fn execute_shared_remote_view_open(
             *shared = Some(load_default_browser_session_host()?);
         }
         let host = shared.as_mut().ok_or("browser_session_host_missing")?;
+        super::browser_host_control::check_state(&host.state, &name, &command)?;
         host.refresh_before_ordinary_command()?;
         if command.get("url").is_none() && command.get("browserId").is_some() && command.get("targetId").is_some() {
             return host.prepare_existing_task_handoff(&name, &command).map(Some);
@@ -1441,7 +1442,24 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .get("id")
             .cloned()
             .unwrap_or(serde_json::Value::Null);
-        let result = self.handle_command_result(command);
+        let admission = if command["action"]
+            .as_str()
+            .is_some_and(|action| action.starts_with("browser_session_"))
+        {
+            super::browser_host_control::admit_command(None, None, command, false)
+        } else {
+            Ok(None)
+        };
+        let admission = match admission {
+            Ok(value) => value,
+            Err(error) => return serde_json::json!({"id":id,"success":false,"error":error}),
+        };
+        let mut result = self.handle_command_result(command);
+        if let Some(admission) = admission {
+            if let Err(error) = admission.finish(result.is_ok()) {
+                result = Err(error);
+            }
+        }
         match result {
             Ok(data) => serde_json::json!({ "id": id, "success": true, "data": data }),
             Err(error) => serde_json::json!({ "id": id, "success": false, "error": error }),
@@ -1459,6 +1477,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .get("action")
             .and_then(serde_json::Value::as_str)
             .ok_or_else(|| "browser_session_action_missing".to_string())?;
+        super::browser_host_control::check_state(&self.state, "", command)?;
         if action.starts_with("browser_session_") && action != "browser_session_status" {
             self.refresh_before_ordinary_command()?;
         }
@@ -1899,6 +1918,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         if self.effects.browser_is_live(&browser)? {
             return Ok(());
         }
+        if super::browser_host_control::read(browser_id)?.awaiting_observation {
+            return Err("browser_control_fresh_observation_cannot_recover_browser".into());
+        }
         require_managed_runtime_admission("launch", command)?;
         self.manager()?.recover_retained_browser(browser_id)?;
         self.commit_state()
@@ -2319,6 +2341,7 @@ where
         session_name: &str,
         command: &serde_json::Value,
     ) -> Result<Option<serde_json::Value>, String> {
+        super::browser_host_control::check_state(&self.state, session_name, command)?;
         self.refresh_before_ordinary_command()?;
         let pending_human_ttl = pending_human_retention(command)?;
         if command

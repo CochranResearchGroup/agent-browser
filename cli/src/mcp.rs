@@ -3,6 +3,7 @@ use std::io::{self, BufRead, Write};
 use serde_json::{json, Map, Value};
 
 mod catalog;
+mod host_control;
 mod hosted;
 mod playbooks;
 mod workflow;
@@ -213,6 +214,7 @@ fn mcp_command_response_with_config(
     configured_service_state: &ServiceState,
 ) -> Result<Value, String> {
     match args.get(1).map(|value| value.as_str()) {
+        Some("host-control") => host_control::cli(args),
         Some("host-task") => {
             let task_id = hosted::task_argument(args)?;
             Ok(json!({"success": true, "data": hosted::read_snapshot(task_id)?}))
@@ -5398,6 +5400,9 @@ fn call_service_mcp_tool(
     }
     if name.starts_with("browser_") && !matches!(name, "browser_open" | "browser_discover") {
         required_string_argument(arguments, "taskId")?;
+    }
+    if name == "browser_control" {
+        return host_control::call(arguments, session);
     }
     if name == "browser_tab" {
         return workflow::tab(arguments, session);
@@ -11708,6 +11713,7 @@ mod tests {
                 "browser_close",
                 "browser_command",
                 "browser_continue",
+                "browser_control",
                 "browser_discover",
                 "browser_fill",
                 "browser_handoff",

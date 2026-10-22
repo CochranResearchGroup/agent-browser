@@ -568,6 +568,26 @@ async fn execute_command_with_target_custody(
     state: &mut DaemonState,
     managed_target: bool,
 ) -> Value {
+    let admission = match super::browser_host_control::admit_command(
+        state
+            .session_name
+            .as_deref()
+            .or(Some(state.session_id.as_str())),
+        state
+            .browser
+            .as_ref()
+            .and_then(|browser| browser.browser_pid()),
+        cmd,
+        state.browser_session_manager_owned
+            || state.managed_session_host.is_some()
+                && !cmd["action"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .starts_with("desktop_"),
+    ) {
+        Ok(admission) => admission,
+        Err(error) => return error_response(cmd["id"].as_str().unwrap_or_default(), &error),
+    };
     let _service_state_lock_timeout_override =
         crate::native::service_store::service_state_lock_timeout_override(
             cmd.get("serviceStateLockTimeoutMs").and_then(Value::as_u64),
@@ -589,6 +609,15 @@ async fn execute_command_with_target_custody(
         managed_target,
     )
     .await;
+    if let Some(admission) = admission {
+        if let Err(error) = if response["data"]["confirmation_required"] == true {
+            admission.undispatched()
+        } else {
+            admission.finish(response["success"] == true)
+        } {
+            return error_response(id, &error);
+        }
+    }
     attach_navigation_challenge_admission(&mut response, navigation_admission.as_ref());
     response
 }
