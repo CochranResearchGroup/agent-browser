@@ -49,12 +49,11 @@ existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 
 ### 2026-10-22 manual non-CDP MCP login
 
-[P269](docs/dev/plans/0269-2026-10-22-manual-login.md), #357, owns the bounded
-manual_login workflow through public MCP and managed Native placement. PR362
-preserves a qualified full cookie/lifecycle candidate at `116601257`. Main then
-advanced through PR361 in the same owner/runtime; PR362 is draft for the combined
-attachment/control integration and refreshed gates. The plan holds the matrix.
-No production publication or Google account run.
+[P269](docs/dev/plans/0269-2026-10-22-manual-login.md), #357, source-qualifies
+one-call manual login after integrating PR361 attachment/control. Final executable
+`f7c982787` passes the complete real-Chrome synthetic-provider lifecycle, persistent
+cookie preservation and thirteen-tool catalog consistency. The plan holds the
+acceptance matrix. PR362 awaits review; no production or Google account run.
 
 ### 2026-10-19 stale session host repair
 

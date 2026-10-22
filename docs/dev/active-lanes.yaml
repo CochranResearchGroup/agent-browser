@@ -9,12 +9,12 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#357]
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    plan_state: CLOSED
+    custody_state: BRANCH_OWNED
     dependencies: [P268, P267]
     overlaps: [CochranResearchGroup/agent-browser#349, P240]
     reconciled_overlaps: ["Additive manual launch posture in canonical owner/runtime and MCP; preserve app placement, hosted attach and resource policies; no foreign worktree edits"]
-    validation_status: Candidate 116601257 cookie/lifecycle qualified; PR362 draft for late current-main attachment/control integration and refreshed gates; not installed
+    validation_status: Source-qualified PR362 at f7c982787 on main 2f7135b77; real Chrome cookie/lifecycle, full model, MCP140/control8/session172, Clippy/fmt/docs and catalog consistency pass; no deploy
     updated_at: 2026-10-22
 
   - id: P268

@@ -1,6 +1,6 @@
 # Active plan index
 
-[P269 manual non-CDP login](0269-2026-10-22-manual-login.md), #357; candidate cookie/lifecycle qualified; PR362 draft for current-main attachment/control integration; no deployment.
+[P269 manual non-CDP login](0269-2026-10-22-manual-login.md), #357; source-qualified in PR362 on the attachment/control frontier, with persistent-cookie and catalog proof; no deployment.
 
 [P268 attachment](0268-2026-10-22-hosted-attachment.md), #349, and [P267/#350 takeover](0267-2026-10-22-hosted-takeover.md) are closed integrated source outcomes with actual Native04 acceptance and corrected cleanup. Native05 cookie continuity and independent cleanup also pass; no deployment; wider #347 remains open.
 
