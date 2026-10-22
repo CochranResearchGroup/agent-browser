@@ -16,6 +16,58 @@ Validate responsive viewing and controls, continued automation and predictable
 cleanup. This describes the governing direction; the repository RUNBOOK records
 current implementation and acceptance gaps.
 
+## Hosted reconnect, rules and artifacts
+
+The connected MCP catalog has 16 workflow tools. Discover actual schemas before
+use; the source guide does not prove installed support.
+
+`browser_reconnect` accepts taskId and operation status, disconnect, reconnect,
+rebind, configure or reopen. All changes require requestId and expectedRevision
+from current status. configure requires lossPolicy report_only or reopen; rebind
+requires desktop with desktopId/generation. Status is metadata-only; reconnect
+freshly verifies the retained process and Native assignment without launch.
+BrowserUnreachable, positively absent BrowserLost and RebindRequired are distinct.
+Default loss policy reports loss. Explicit reopen requires opt-in and no pending
+uncertain effects: managed browsers reopen empty/blank without replaying history;
+borrowed browsers require the app's fresh attachment and desktop proof and never
+launch an app browser. Human control remains held. Results include reconnect
+revision/state/lossPolicy/lastRequestId/observedDesktop/pending/automaticReplay:false.
+
+```bash
+agent-browser --json mcp host-reconnect TASK status
+agent-browser --json mcp host-reconnect TASK configure '{"requestId":"loss-policy-1","expectedRevision":0,"lossPolicy":"report_only"}'
+```
+
+`browser_policy` takes taskId and operation status, set_app, set_task, clear_app,
+clear_task or override. Mutations require expectedRevision, actor and reason.
+Policy version 1 contains deniedActions and artifactDestinations mapping a handle
+to an absolute canonical existing directory. A task policy completely replaces
+app defaults; clear_task restores them. Optional browser_open taskPolicy
+uses that same v1 shape to bind an explicit task override before launch. Unrestricted tasks require no extra grant.
+Scoped overrideAction/requestId returns overrideId for policyOverrideId on that
+exact task/action/request/current policy, never to bypass human control or peers.
+Pass policyOverrideId and requestId at the top level of the supported page tool
+or browser_command; for example action fill with params selector/value.
+
+`browser_artifact` takes taskId, kind screenshot/download, handle and relative
+name; download requires selector. Optional fullPage, requestId and policyOverrideId
+follow discovery. It writes only to the authorized local handle, refusing path
+traversal, symlinked destinations and existing files. Results contain local
+artifactId/path/handle/name/result and publication not_requested. Publication and
+private-content review remain separate from capture. Rules cover supported
+routes, not unmanaged CDP or semantic website restrictions.
+
+browser_close defaults to scope task. Explicit scope browser requires actor and
+reason and refuses app-borrowed browsers or any peer task. Its supported managed
+close reports fresh OS absence of the original process; full child-process residue
+requires independent census. Refused or uncertain close never authorizes replay.
+
+These contracts preserve the original app session, durable handoff and Native
+viewer. Physical same-process relocation remains a provider gap tracked by
+Remote View #578; metadata rebind is not a physical move. Keep the original browser
+rather than substituting another profile or reopening it to simulate relocation.
+
+
 ## App-directed browser placement and handoff
 
 An app can pass `hostBinding` to `browser_open` while retaining Agent Browser's

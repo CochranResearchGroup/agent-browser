@@ -568,6 +568,21 @@ async fn execute_command_with_target_custody(
     state: &mut DaemonState,
     managed_target: bool,
 ) -> Value {
+    let mut prepared_command = cmd.clone();
+    if let Err(error) = super::browser_host_policy::prepare_dispatch(
+        state
+            .session_name
+            .as_deref()
+            .or(Some(state.session_id.as_str())),
+        state
+            .browser
+            .as_ref()
+            .and_then(|browser| browser.browser_pid()),
+        &mut prepared_command,
+    ) {
+        return error_response(cmd["id"].as_str().unwrap_or_default(), &error);
+    }
+    let cmd = &prepared_command;
     let _service_state_lock_timeout_override =
         crate::native::service_store::service_state_lock_timeout_override(
             cmd.get("serviceStateLockTimeoutMs").and_then(Value::as_u64),

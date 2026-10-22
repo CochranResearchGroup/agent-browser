@@ -22,6 +22,8 @@ import {createRequire} from 'node:module';
 import {createMcpStdioClient,runCli,httpJsonResult} from './smoke-utils.js';
 import {appProcessOwned,privateProfileReferenced} from './hosted-process-ownership.mjs';
 import {qualifyHostedBrowserControl} from './smoke-hosted-browser-control.mjs';
+import {qualifyHostedBrowserReconnect} from './smoke-hosted-browser-reconnect.mjs';
+import {qualifyHostedBrowserPolicy} from './smoke-hosted-browser-policy.mjs';
 
 const required=name=>{const value=process.env[name];assert(value,`Missing ${name}`);return value;};
 async function absolute(name){const value=required(name);assert(isAbsolute(value),`${name} must be absolute`);return realpath(value);}
@@ -434,6 +436,19 @@ try{
  assert.equal((await readTask(opened.taskId)).controllerState.owner,'agent');await continuity('after-native-toolbar-control');
  await save('bots-native-control.json',{before:controlReceipt(beforeUi),human:controlReceipt(human),returned:controlReceipt(returned),passed:true});
  // Start after all control transitions so the remaining event is scoped detach.
+ if(process.env.HOSTED_SMOKE_CONTINUITY_REQUIRED==='1'){
+  const publicWorkflow=async(name,args)=>{
+   const reply=await send('tools/call',{name,arguments:args});
+   const value=reply.structuredContent??JSON.parse(reply.content.find(c=>c.type==='text').text);
+   if(reply.isError||value.success===false)throw Object.assign(Error(value.error?.message??JSON.stringify(value.error??value)),{code:value.error?.code??'workflow_rejected'});
+   return value.data??value;
+  };
+  step='explicit-host-reconnect';await qualifyHostedBrowserReconnect({workflow:publicWorkflow,task:opened,save,syntheticOnly:true});
+  await continuity('after-host-reconnect');
+  const artifactRoot=join(root,'authorized-artifacts');await mkdir(artifactRoot,{mode:0o700});
+  step='task-policy-and-artifacts';await qualifyHostedBrowserPolicy({workflow:publicWorkflow,task:opened,peerTask:shared,artifactRoot,save});
+  await continuity('after-host-policy');
+ }
  step='metadata-initial';const watchReader=startWatch(task.taskId);
  const snapshot=await readTask(task.taskId),event=await watchReader.next();assert.equal(event.event,'snapshot');assert.deepEqual(event.data,snapshot);assert.equal(snapshot.taskId,task.taskId);await save('metadata.json',{snapshot,event});
 

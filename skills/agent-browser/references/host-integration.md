@@ -1,3 +1,8 @@
+# Host integration guidance v1
+
+Guidance contract: `agent-browser.host-guidance.v1`, revision 2026-10-22.
+Read the [workflow decision guide](https://github.com/CochranResearchGroup/agent-browser/blob/main/docs/dev/host-browser-guidance.md) for tool choice, compatibility, login and cleanup.
+
 ## App-directed browser placement and handoff
 
 An app can pass `hostBinding` to `browser_open` while retaining Agent Browser's
@@ -96,3 +101,78 @@ Use `browser_control` for status/view, explicit takeover, return or scoped overr
 Viewing never pauses. Takeover blocks supported automation; optional pauseReads
 also stops page reads/capture. Return freshly observes the original page without
 recovery; uncertain work is retained without replay. See the [control contract](https://github.com/CochranResearchGroup/agent-browser/blob/main/docs/dev/hosted-browser-control.md).
+
+## Discover before dispatch
+
+Read the connected MCP `tools/list` schemas and `agent-browser://contracts` plus
+`agent-browser://operating-guide`. Use `browser_discover` for the exact advanced
+operation schema. Tool names, schema presence and host snapshot capabilities are
+compatibility evidence, not current browser/viewer/account readiness. A runtime
+missing attachment or control must keep the current app-native workflow; do not
+silently launch or switch profiles. Reconnect MCP after an approved runtime update.
+Do not infer physical relocation support from reconnect or policy schemas.
+
+## Account and secrets
+
+A named profile and a ready viewer do not establish the logged-in account or
+company. Verify the intended identity in the current page before consequential
+work. Use the existing approved host login helper for protected input or ask the
+person to sign in through the same durable handoff. Never paste credentials into
+ordinary page arguments, prompts, CLI history, screenshots or exported logs.
+Keep browser-site login, Native access and OAuth/API authorization separate.
+Unknown login delivery is held for same-request observation, never resubmitted.
+
+## Outcome and artifact custody
+
+Record the task, browser, tab, profile and exact host session; keep raw process/CDP
+addresses and secrets private. After uncertain mutation, inspect control status
+and the original request outcome; reconcile only through the advertised operation.
+Do not repeat click/fill/submit because the response was lost. Restrict screenshots
+and downloads to task-owned private paths and permitted page content; export only
+reviewed artifacts. Close only the task you own. Attached task close detaches;
+the app owns borrowed browser/process/profile cleanup. Prove exact process start
+generations absent before releasing an owned assignment, and preserve peers.
+Environment-marker census alone is insufficient when provider launch environment
+can overwrite markers. Preserve unresolved effects and private evidence.
+
+Skill publication is separate from source guidance: do not overwrite shared or
+installed skill copies, or distribute app-private configuration, without explicit
+approval. Guidance revisions do not grant runtime, account or publication authority.
+
+## Optional task rules and local artifacts
+
+Discover browser_policy and browser_artifact before use. browser_policy status
+reads the current revision; set_app/set_task/clear_app/clear_task/override changes
+require expectedRevision, actor and reason. Policy v1 accepts deniedActions and
+artifactDestinations mapping handles to canonical existing local directories.
+Task rules fully replace app defaults; clear_task restores them. Optional
+browser_open taskPolicy binds the same v1 task override before launch. No rules means
+no extra permission ceremony. An overrideId is limited to its exact task, action,
+requestId and effective policy and never bypasses human control or peer custody.
+
+browser_artifact accepts taskId, kind screenshot/download, handle and relative
+name; download needs selector. Optional requestId, fullPage and policyOverrideId
+follow discovery. It refuses traversal, symlinked destinations and existing files.
+Results are local metadata, publication not_requested; sharing is a separate act.
+Restrictions cover supported dispatch routes, not unmanaged CDP or semantic site
+policy. Physical same-process relocation remains unavailable pending Remote View
+#578; metadata rebind must not be described as a move.
+
+## Explicit reconnect and loss policy
+
+browser_reconnect operations are status/disconnect/reconnect/rebind/configure/reopen.
+All changes require requestId and current expectedRevision; status is metadata-only.
+configure sets lossPolicy report_only (default) or reopen. reconnect freshly verifies
+the retained process/Native without launch; rebind requires desktopId/generation.
+Explicit opted-in reopen never replays history: managed browsers use blank targets;
+borrowed browsers require fresh attachment plus desktop proof and no app launch.
+Unknown lifecycle effects remain pending without replay; human holds persist.
+Disconnect adds only its own retention hold when needed; successful reconnect,
+rebind or reopen releases that hold, never another owner's leave-open intent.
+Compact reconnect metadata reports disconnectHold.
+Use `agent-browser --json mcp host-reconnect TASK status` for CLI metadata readback.
+
+browser_close defaults to scope task. Explicit scope browser requires actor/reason,
+refuses borrowed browsers and peer tasks, and uses fresh OS original-process
+absence readback. It does not prove every child gone; independent census remains
+necessary. Unknown close outcomes never authorize replay.

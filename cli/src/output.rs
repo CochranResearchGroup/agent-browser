@@ -7310,10 +7310,14 @@ Commands:
   host-control TASK OP  Status/view/takeover/return/override/reconcile hosted control
                         Effects require current epoch, actor and reason; return
                         freshly observes the same page and never replays effects.
+  host-reconnect TASK OP [JSON]
+                        Status/disconnect/reconnect/rebind/configure/reopen;
+                        changes require requestId and expectedRevision.
+  host-policy JSON      Optional task/app rules and scoped attributable override
   host-task             Read compact hosted-task metadata without browser effects
   watch-host-task       Emit initial/changed NDJSON; terminate process to disconnect
 
-Default workflow tools:
+Default workflow tools (16):
   browser_open          Open or reuse a task with profile, profileMode, taskKey and url
   browser_navigate      Navigate the task's current page
   browser_snapshot      Read the page and element references
@@ -7324,6 +7328,10 @@ Default workflow tools:
   browser_handoff       Get a ready HTTPS link to the native Remote View viewer
   browser_continue      Continue the same task after human input
   browser_close         End this task while preserving peers and profile data
+  browser_control       Explicit epoch-fenced human takeover/return; view never pauses
+  browser_reconnect     Explicit retained-target reconnect or opted-in loss reopen
+  browser_policy        Optional app defaults/task rules and scoped override
+  browser_artifact      Capture/download to an authorized local artifact handle
   browser_command       Run an advanced page action with action and params
   browser_discover      Load browser, playbook or diagnostic metadata
 
@@ -7335,6 +7343,26 @@ Workflow:
   Native Remote View owns the viewer and its authentication.
   Configure AGENT_BROWSER_PUBLIC_ORIGIN in the process environment or ~/.agent-browser/.env for HTTPS handoffs.
   Reconnect existing MCP clients after changing startup configuration.
+  browser_reconnect status is metadata-only. Changes require requestId and
+  expectedRevision; configure selects report_only (default) or reopen lossPolicy.
+  reconnect verifies retained process/Native without launch; rebind needs exact
+  desktopId/generation. Explicit reopen never replays history; borrowed reopen
+  needs fresh app attachment/desktop and never launches the app browser.
+  Unknown effects stay pending; human takeover remains held across reconnect.
+  browser_policy status/set_app/set_task/clear_app/clear_task/override uses taskId;
+  changes require expectedRevision, actor, reason. Policy v1 deniedActions and
+  artifactDestinations are optional. Task rules replace app defaults; clear_task
+  restores them. Scoped override never bypasses human-control or peer custody.
+  browser_artifact takes taskId, kind screenshot/download, handle and relative
+  name; downloads need selector. Destinations must be canonical existing dirs.
+  Existing files, symlinks and traversal are refused. Results are local metadata,
+  publication=not_requested. Unrestricted tasks require no extra grant.
+  browser_open taskPolicy sets an explicit v1 task override before launch.
+  browser_close scope=task is default. Explicit scope=browser needs actor/reason,
+  refuses borrowed/peer browsers, and freshly observes the original process absent;
+  independently census child residue. Never retry an uncertain close effect.
+  Physical same-process relocation is unavailable pending Remote View #578;
+  metadata rebind does not move a browser. Keep the original profile/process.
   Hosted browser_open attachment borrows an exact app process/profile/page.
   Use profileMode=existing, profile and hostBinding; omit url. Attachment requires
   version=1, process pid/startToken/executablePath, canonical profilePath,

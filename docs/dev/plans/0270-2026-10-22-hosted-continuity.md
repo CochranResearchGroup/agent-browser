@@ -23,3 +23,9 @@ Meaningful provider-free tests, cargo-safe format and strict workspace Clippy, p
 ## Completion
 
 Canonical PR source integration, exact remote readback, explicit remaining limitations, clean auxiliary removal if any admitted, and one consolidated memory disposition. Source evidence and runtime deployment remain separate.
+
+## Source checkpoint
+
+#351 investigation establishes a missing Native same-process display-transfer capability, tracked in Remote View #578 and the linked [provider-gap note](../notes/0270-2026-10-22-hosted-relocation-provider-gap.md). Neither #351 nor #355 is complete. Parallel #352–354 source is integrated for qualification: explicit continuity journal and borrowed reconnect, optional policy/artifact handles with atomic task publication, and versioned guidance. Actual managed generation-changing rebind remains unsupported rather than rewriting physical custody. No production effects.
+
+Workspace checks passed during implementation. Focused hosted tests passed 23 cases and policy model tests passed three cases before final atomic-publication regression/owner wiring; final affected-surface tests, strict Rust gates, public catalog and actual synthetic Native acceptance remain pending. First cache-enabled check stalled in sccache rustc-version discovery and only its exact owned scope was terminated; cache-disabled check completed. This is an intermediate custody checkpoint, not merge readiness.

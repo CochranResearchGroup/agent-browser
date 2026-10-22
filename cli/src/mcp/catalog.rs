@@ -4,6 +4,9 @@ use serde_json::{json, Value};
 pub(super) fn tools() -> Vec<Value> {
     let mut tools = super::workflow::tools();
     tools.push(super::host_control::tool());
+    tools.push(super::host_reconnect::tool());
+    tools.push(super::host_policy::tool());
+    tools.push(super::host_policy::artifact_tool());
     for mut tool in super::service_mcp_tools() {
         let description = match tool["name"].as_str() {
             Some("browser_navigate") => "Navigate this task's current tab.",
@@ -59,13 +62,30 @@ pub(super) fn tools() -> Vec<Value> {
             "description":"Run a supported advanced operation in this task. Use browser_discover for operation names and arguments. Retired authority operations are unavailable.",
             "inputSchema":{"type":"object","additionalProperties":false,
                 "properties":{"taskId":{"type":"string"},"action":{"type":"string"},
-                    "params":{"type":"object"}},"required":["taskId","action"]}}),
+                    "params":{"type":"object"},"policyOverrideId":{"type":"string"},"requestId":{"type":"string"}},"required":["taskId","action"]}}),
         json!({"name":"browser_discover","title":"Discover advanced operations",
             "description":"Read supported browser, diagnostic or administrative operation metadata on demand. Select an operation for its argument schema and CLI/API guidance.",
             "inputSchema":{"type":"object","additionalProperties":false,
                 "properties":{"category":{"enum":["browser","diagnostics","administration","playbooks"]},
                     "operation":{"type":"string"}},"required":["category"]}}),
     ]);
+    for tool in &mut tools {
+        if matches!(
+            tool["name"].as_str(),
+            Some(
+                "browser_navigate"
+                    | "browser_click"
+                    | "browser_fill"
+                    | "browser_snapshot"
+                    | "browser_screenshot"
+                    | "browser_close"
+                    | "browser_tab"
+            )
+        ) {
+            tool["inputSchema"]["properties"]["policyOverrideId"] = json!({"type":"string"});
+            tool["inputSchema"]["properties"]["requestId"] = json!({"type":"string"});
+        }
+    }
     tools
 }
 

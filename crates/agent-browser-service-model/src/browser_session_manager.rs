@@ -760,6 +760,11 @@ pub struct PendingHumanTabRetention {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserSessionState {
+    /// App continuity is separate from browser control and account readiness.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub hosted_continuity: BTreeMap<String, crate::BrowserHostedContinuity>,
+    #[serde(default)]
+    pub host_policies: crate::BrowserHostPolicies,
     /// App-provided processes and initial targets never transfer lifecycle custody.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub app_browser_attachments: BTreeMap<String, crate::BrowserAppAttachment>,
@@ -812,6 +817,8 @@ pub struct BrowserSessionState {
 impl Default for BrowserSessionState {
     fn default() -> Self {
         Self {
+            hosted_continuity: BTreeMap::new(),
+            host_policies: crate::BrowserHostPolicies::default(),
             schema_version: BROWSER_SESSION_STATE_SCHEMA_V1.to_string(),
             retention_policy: crate::BrowserRetentionPolicy::default(),
             last_remote_view_desktop_id: None,

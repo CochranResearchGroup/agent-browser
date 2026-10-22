@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P270 relocation provider gap](0270-2026-10-22-hosted-relocation-provider-gap.md), #351: current Native display-transfer capability is absent; Remote View #578 is the prerequisite. #355 remains blocked; parallel #352–354 qualification continues.
+
 [P268/P267 attachment and control evidence](0268-2026-10-22-hosted-attachment-control.md): accepted source checks, healthy Native04 chat/viewer and corrected cleanup; Native05 cookie continuity and independent cleanup pass; no deployment.
 
 [P266 MCP origin diagnosis](0266-2026-10-22-public-origin-env.md): same-task environment differential, standard dotenv omission and live native input/reconnect.

@@ -147,7 +147,14 @@ pub(crate) fn observation(action: &str) -> bool {
 fn status(action: &str) -> bool {
     matches!(
         action,
-        "browser_session_status" | "service_status" | "ping" | "status" | "browser_control"
+        "browser_session_status"
+            | "service_status"
+            | "ping"
+            | "status"
+            | "browser_control"
+            | "browser_session_reconnect"
+            | "browser_session_policy"
+            | "browser_policy"
     )
 }
 fn permits(control: &Control, action: &str) -> Result<(), String> {
@@ -418,6 +425,8 @@ pub(crate) fn admit_command(
     let Some(state) = BrowserSessionSqliteStore::default_session_state_read_only()? else {
         return Ok(None);
     };
+    super::browser_host_reconnect::check_state(&state, name.unwrap_or_default(), command)?;
+    super::browser_host_policy::check_state(&state, name.unwrap_or_default(), command)?;
     let browser = state.sessions.values().find(|task| {
         name == Some(task.name.as_str())
             || name == Some(task.id.as_str())
