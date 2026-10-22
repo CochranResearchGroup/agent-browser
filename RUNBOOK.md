@@ -1,5 +1,8 @@
 # Runbook
 
+[P268/#349](docs/dev/plans/0268-2026-10-22-hosted-attachment.md) and [P267/#350](docs/dev/plans/0267-2026-10-22-hosted-takeover.md) close as integrated source through provider PR361 before consumer PR175. [Acceptance](docs/dev/notes/0268-2026-10-22-hosted-attachment-control.md) records healthy Native04 chat/viewer, control and corrected process cleanup. Native05 cookie continuity and independent cleanup also pass. Root owns merge and auxiliary closeout; no deployment.
+
+
 ### 2026-10-22 MCP origin diagnosis
 
 [P266](docs/dev/plans/0266-2026-10-22-public-origin-env.md), #358, owns the standard dotenv bootstrap omission. Installed identical-task differential fails without the service origin and succeeds with the configured reviewed origin. Authenticated native keyboard input and identical opaque-link reconnect pass; Remote View316 is closed. Loader red/green, four dotenv tests, strict workspace Clippy and formatting pass. Isolated real MCP startup proves dotenv-only origin resolution. Candidate live workflow refused a stale daemon lane; no fence bypass or production replacement. PR360 is integrated and generation `0.28.0-76cec5b73183-79b66b79b467` is installed/ready. Fresh dotenv-only MCP handoff and authenticated native input/reconnect pass; all68native identities and prior runtime IDs are preserved. The cached conversation needs MCP reconnect; shared reload lacked host scope approval.

@@ -1,6 +1,10 @@
 # Active plan index
 
+[P268 attachment](0268-2026-10-22-hosted-attachment.md), #349, and [P267/#350 takeover](0267-2026-10-22-hosted-takeover.md) are closed integrated source outcomes with actual Native04 acceptance and corrected cleanup. Native05 cookie continuity and independent cleanup also pass; no deployment; wider #347 remains open.
+
+
 [P266 MCP public origin](0266-2026-10-22-public-origin-env.md), #358; standard dotenv bootstrap repair and exact installed handoff diagnosis.
+
 [P265 hosted launch](0265-2026-10-22-hosted-launch.md), #348; closed with source-qualified hosted launch and real Native viewer acceptance. #347 remains open.
 
 [P264 missing browser selection](0264-2026-10-21-missing-browser-selection.md), #344; bounded context projection repair under #68.

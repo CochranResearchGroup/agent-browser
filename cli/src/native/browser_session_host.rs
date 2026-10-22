@@ -175,6 +175,7 @@ pub(crate) async fn execute_shared_remote_view_open(
             *shared = Some(load_default_browser_session_host()?);
         }
         let host = shared.as_mut().ok_or("browser_session_host_missing")?;
+        super::browser_host_control::check_state(&host.state, &name, &command)?;
         host.refresh_before_ordinary_command()?;
         if command.get("url").is_none() && command.get("browserId").is_some() && command.get("targetId").is_some() {
             return host.prepare_existing_task_handoff(&name, &command).map(Some);
@@ -528,6 +529,17 @@ fn configured_u64(name: &str, default: u64) -> Result<u64, String> {
 }
 
 pub(crate) trait BrowserSessionPersistence {
+    /// A new borrowed profile and its lifecycle fence must become visible in
+    /// the same transaction. Legacy stores refuse rather than leak admission.
+    fn publish_app_attachment(
+        &mut self,
+        _expected: &BrowserSessionState,
+        _next: &BrowserSessionState,
+        _expected_catalog: &BrowserProfileCatalog,
+        _next_catalog: &BrowserProfileCatalog,
+    ) -> Result<(), String> {
+        Err("browser_attachment_atomic_publication_unsupported".into())
+    }
     /// Publish observed launch custody and the aggregate in one transaction.
     /// Persistence implementations without that facility fail closed.
     fn publish_session_state(
@@ -586,6 +598,15 @@ pub(crate) trait BrowserSessionPersistence {
 }
 
 impl BrowserSessionPersistence for BrowserSessionSqliteStore {
+    fn publish_app_attachment(
+        &mut self,
+        expected: &BrowserSessionState,
+        next: &BrowserSessionState,
+        expected_catalog: &BrowserProfileCatalog,
+        next_catalog: &BrowserProfileCatalog,
+    ) -> Result<(), String> {
+        self.compare_and_save_app_attachment(expected, next, expected_catalog, next_catalog)
+    }
     fn load_owner_snapshot(&self) -> Result<(BrowserSessionState, BrowserProfileCatalog), String> {
         self.load_workspace_snapshot()
     }
@@ -1441,7 +1462,24 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .get("id")
             .cloned()
             .unwrap_or(serde_json::Value::Null);
-        let result = self.handle_command_result(command);
+        let admission = if command["action"]
+            .as_str()
+            .is_some_and(|action| action.starts_with("browser_session_"))
+        {
+            super::browser_host_control::admit_command(None, None, command, false)
+        } else {
+            Ok(None)
+        };
+        let admission = match admission {
+            Ok(value) => value,
+            Err(error) => return serde_json::json!({"id":id,"success":false,"error":error}),
+        };
+        let mut result = self.handle_command_result(command);
+        if let Some(admission) = admission {
+            if let Err(error) = admission.finish(result.is_ok()) {
+                result = Err(error);
+            }
+        }
         match result {
             Ok(data) => serde_json::json!({ "id": id, "success": true, "data": data }),
             Err(error) => serde_json::json!({ "id": id, "success": false, "error": error }),
@@ -1459,6 +1497,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .get("action")
             .and_then(serde_json::Value::as_str)
             .ok_or_else(|| "browser_session_action_missing".to_string())?;
+        super::browser_host_control::check_state(&self.state, "", command)?;
         if action.starts_with("browser_session_") && action != "browser_session_status" {
             self.refresh_before_ordinary_command()?;
         }
@@ -1899,6 +1938,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         if self.effects.browser_is_live(&browser)? {
             return Ok(());
         }
+        if super::browser_host_control::read(browser_id)?.awaiting_observation {
+            return Err("browser_control_fresh_observation_cannot_recover_browser".into());
+        }
         require_managed_runtime_admission("launch", command)?;
         self.manager()?.recover_retained_browser(browser_id)?;
         self.commit_state()
@@ -2004,6 +2046,94 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .transpose()?;
         if let Some(binding) = &hosted {
             super::browser_host_context::validate_provider(binding)?;
+        }
+        if let Some(attachment) = command.get("attachment") {
+            let binding = hosted
+                .as_ref()
+                .ok_or("browser_attachment_host_binding_required")?;
+            let request: agent_browser_service_model::BrowserAttachmentRequest =
+                serde_json::from_value(attachment.clone())
+                    .map_err(|_| "browser_attachment_invalid")?;
+            request.validate()?;
+            let profile_id = required_string(command, "profileId")?;
+            let canonical = Path::new(&request.profile_path)
+                .canonicalize()
+                .map_err(|_| "browser_attachment_profile_unavailable")?;
+            if canonical.to_str() != Some(request.profile_path.as_str()) {
+                return Err("browser_attachment_profile_path_not_canonical".into());
+            }
+            if self
+                .catalog
+                .profiles
+                .values()
+                .any(|row| row.user_data_dir == request.profile_path && row.id != profile_id)
+            {
+                return Err(
+                    "browser_attachment_profile_conflict: reuse the registered profile name".into(),
+                );
+            }
+            let profile = self
+                .catalog
+                .profiles
+                .get(profile_id)
+                .cloned()
+                .unwrap_or_else(|| agent_browser_service_model::BrowserProfileCatalogEntry {
+                    id: profile_id.into(),
+                    name: profile_id.into(),
+                    user_data_dir: request.profile_path.clone(),
+                    kind: agent_browser_service_model::BrowserProfileKind::Named,
+                });
+            if profile.user_data_dir != request.profile_path {
+                return Err(
+                    "browser_attachment_profile_conflict: retain the existing profile path".into(),
+                );
+            }
+            self.effects.begin_operation(&self.persisted_state)?;
+            let result = agent_browser_service_model::attach_app_browser_task(
+                &mut self.state,
+                &mut self.effects,
+                &profile,
+                required_string(command, "sessionName")?,
+                binding,
+                &request,
+                activity_at_ms,
+                self.manager_config.session_idle_timeout_ms,
+            )?;
+            if let Some(tab) = self
+                .state
+                .sessions
+                .get(&result.session_id)
+                .and_then(|task| task.current_tab_id.as_ref())
+                .and_then(|id| self.state.tabs.get(id))
+                .cloned()
+            {
+                if !self.state.tab_metadata.contains_key(&tab.id) {
+                    self.state
+                        .tab_metadata
+                        .insert(tab.id.clone(), capture_browser_task_metadata(command, &tab));
+                }
+            }
+            let mut next_catalog = self.catalog.clone();
+            next_catalog
+                .profiles
+                .entry(profile.id.clone())
+                .or_insert(profile);
+            // Publication must not expose an app profile before its borrowed
+            // lifecycle fence. A failed transaction leaves both unchanged.
+            if let Err(error) = self.persistence.publish_app_attachment(
+                &self.persisted_state,
+                &self.state,
+                &self.catalog,
+                &next_catalog,
+            ) {
+                self.state = self.persisted_state.clone();
+                return Err(error);
+            }
+            let (published, catalog) = self.persistence.load_owner_snapshot()?;
+            self.state = published.clone();
+            self.persisted_state = published;
+            self.catalog = catalog;
+            return Ok(result);
         }
         self.register_explicit_profile(command)?;
         let session_name = required_string(command, "sessionName")?;
@@ -2319,6 +2449,7 @@ where
         session_name: &str,
         command: &serde_json::Value,
     ) -> Result<Option<serde_json::Value>, String> {
+        super::browser_host_control::check_state(&self.state, session_name, command)?;
         self.refresh_before_ordinary_command()?;
         let pending_human_ttl = pending_human_retention(command)?;
         if command

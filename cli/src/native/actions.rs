@@ -582,6 +582,26 @@ async fn execute_command_with_target_custody(
     } else {
         None
     };
+    let admission = match super::browser_host_control::admit_command(
+        state
+            .session_name
+            .as_deref()
+            .or(Some(state.session_id.as_str())),
+        state
+            .browser
+            .as_ref()
+            .and_then(|browser| browser.browser_pid()),
+        cmd,
+        state.browser_session_manager_owned
+            || state.managed_session_host.is_some()
+                && !cmd["action"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .starts_with("desktop_"),
+    ) {
+        Ok(admission) => admission,
+        Err(error) => return error_response(cmd["id"].as_str().unwrap_or_default(), &error),
+    };
     let mut response = execute_command_after_navigation_admission(
         cmd,
         state,
@@ -589,6 +609,15 @@ async fn execute_command_with_target_custody(
         managed_target,
     )
     .await;
+    if let Some(admission) = admission {
+        if let Err(error) = if response["data"]["confirmation_required"] == true {
+            admission.undispatched()
+        } else {
+            admission.finish(response["success"] == true)
+        } {
+            return error_response(id, &error);
+        }
+    }
     attach_navigation_challenge_admission(&mut response, navigation_admission.as_ref());
     response
 }
@@ -1007,7 +1036,13 @@ async fn execute_command_after_navigation_admission(
             "network_capture" => handle_service_network_capture(cmd, state).await,
             "file_transfer" => handle_service_file_transfer(cmd, state).await,
             "navigate" => handle_navigate(cmd, state, navigation_admission.clone()).await,
-            "url" => handle_url(state).await,
+            "url" => {
+                if cmd["hostControlFreshObservation"] == true {
+                    super::browser_inspection::handle_url_without_recovery(state).await
+                } else {
+                    handle_url(state).await
+                }
+            }
             "browser_pid" => handle_browser_pid(state),
             "cdp_url" => handle_cdp_url(state),
             "inspect" => handle_inspect(state).await,

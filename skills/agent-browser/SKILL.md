@@ -10,9 +10,9 @@ Token-protected native control uses `AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FIL
 
 ## Handoff creator context
 
-Supply `serviceName`, `agentName` and a concrete `taskName` on `browser_open`. Example: use serviceName `codex`, agentName `Codex`, and taskName `Launch QBO browser`. The CLI equivalents are `--service-name`, `--agent-name` and `--task-name`; for `remote-view open` creation, also supply `--origin-kind agent`. Missing or blank labels are rejected before task creation. MCP records origin `agent` without a caller field. For service requests, pass originKind in params; an authenticated or local principal is not a substitute for the creator labels. Do not fill `humanName` from the person requesting automation. Descriptive labels are not authenticated identities.
+Supply `serviceName`, `agentName` and a concrete `taskName` on `browser_open`. The CLI equivalents are `--service-name`, `--agent-name` and `--task-name`; for `remote-view open` creation, also supply `--origin-kind agent`. Missing or blank labels are rejected before task creation. MCP records origin `agent` without a caller field. For service requests, pass originKind in params; an authenticated or local principal is not a substitute for the creator labels. Do not fill `humanName` from the person requesting automation. Descriptive labels are not authenticated identities.
 
-Creation context is retained once. Later polling or Share does not replace it. Cards fall back to profile/session context and omit missing identity fields, rather than inventing an owner. Job IDs do not replace creator labels.
+Creation context is retained once; polling and Share do not replace it. Cards omit missing identity fields and use profile/session context. Job IDs never replace creator labels.
 
 ## MCP task workflow
 
@@ -20,17 +20,17 @@ Use `browser_open` with `{ "profile": "editorial", "profileMode": "persistent", 
 
 Use `profileMode: "existing"` to require an existing profile. Use `profileMode: "disposable"` without `profile` for temporary work. Profile creation, session selection, replay, and scoped closure happen inside the workflow operation.
 
-For human assistance, call `browser_handoff({ "taskId": "<returned-task-id>" })` and give the person its complete `data.handoffUrl`. Require `operatorVisible.state=ready`. Continue page actions with the same task ID afterward. If `remote_view_public_origin_missing` is returned, inspect the service’s reviewed `AGENT_BROWSER_PUBLIC_ORIGIN` configuration and whether the MCP connection predates it. Distinguish missing configuration from a stale process; use a correctly configured fresh connection for the same task when available. The service origin can be set in `~/.agent-browser/.env` or `AGENT_BROWSER_ENV_FILE`; explicit process settings take precedence. Existing MCP connections retain startup configuration and need reconnection after a change. Task callers do not assemble provider URLs.
+For human assistance, call `browser_handoff({ "taskId": "<returned-task-id>" })`. Give the person its complete `data.handoffUrl` only when `operatorVisible.state=ready`; continue with the same task ID. For `remote_view_public_origin_missing`, check reviewed `AGENT_BROWSER_PUBLIC_ORIGIN` configuration and stale MCP startup. Set it in `~/.agent-browser/.env` or `AGENT_BROWSER_ENV_FILE`; explicit process settings win. MCP connections pin startup configuration: reconnect after changes, preserving the task. Never assemble provider URLs.
 
 The handoff URL resolves the current owned desktop and redirects to native Remote View authentication without a Dashboard login. The public locator remains read-only. A valid link whose target expired continues through native authentication to browser-owner recovery when the private gateway callback is configured. Keep the same opaque URL; missing callback configuration reports unavailability. Human use requires native display confirmation. Reuse the opaque URL.
 
 When the person finishes, call `browser_continue({ "taskId": "<same-task-id>" })` to read the current task identity and URL, then continue page actions. This preserves the current page and edits; it is separate from CLI executable-transfer handoff.
 
-[Host placement, routing and metadata](references/host-integration.md).
+[Hosted app workflows](references/host-integration.md).
 
-The default MCP catalog contains 12 workflow tools: `browser_open`, `browser_navigate`,
+The default MCP catalog contains 13 workflow tools: `browser_open`, `browser_navigate`,
 `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
-`browser_handoff`, `browser_continue`, `browser_close`, `browser_command` and `browser_discover`.
+`browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_command` and `browser_discover`.
 Page actions require `taskId`. Use `browser_tab` to list, create, select or close this
 task's tabs; repeat a stable `tabKey` when retrying creation. Creating a tab after
 an owner restart reconnects to the verified live browser and preserves existing

@@ -7307,6 +7307,9 @@ Commands:
   serve                 Run the MCP stdio server
   resources             List explicit read-only diagnostic resources
   read                  Read one diagnostic resource as JSON
+  host-control TASK OP  Status/view/takeover/return/override/reconcile hosted control
+                        Effects require current epoch, actor and reason; return
+                        freshly observes the same page and never replays effects.
   host-task             Read compact hosted-task metadata without browser effects
   watch-host-task       Emit initial/changed NDJSON; terminate process to disconnect
 
@@ -7332,6 +7335,14 @@ Workflow:
   Native Remote View owns the viewer and its authentication.
   Configure AGENT_BROWSER_PUBLIC_ORIGIN in the process environment or ~/.agent-browser/.env for HTTPS handoffs.
   Reconnect existing MCP clients after changing startup configuration.
+  Hosted browser_open attachment borrows an exact app process/profile/page.
+  Use profileMode=existing, profile and hostBinding; omit url. Attachment requires
+  version=1, process pid/startToken/executablePath, canonical profilePath,
+  full loopback cdpEndpoint, targetId and optional exact sharedWith recipients.
+  Native desktop/window and CDP process identity are verified before publication.
+  Missing capability never launches. Close detaches borrowed pages/processes;
+  task-created tabs remain scoped. Only the owning app changes sharing.
+
   Hosted browser_open accepts hostBinding version=1, hostId, participantId,
   sessionId and required/preferred placement with desktopId/generation.
   AGENT_BROWSER_HOSTS_FILE supplies reviewed app origin/providerApplication;

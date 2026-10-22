@@ -3,6 +3,8 @@
 //! This module owns record compatibility and deterministic lifecycle decisions.
 //! Adapters own persistence, browser observation, process control, and transport.
 
+mod browser_attachment;
+pub use browser_attachment::*;
 mod browser_host_binding;
 pub use browser_host_binding::*;
 

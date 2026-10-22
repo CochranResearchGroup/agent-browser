@@ -685,6 +685,67 @@ impl BrowserSessionSqliteStore {
         })
     }
 
+    /// Publish new app profile visibility and borrowed browser/task custody in
+    /// one SQLite transaction; either CAS/fence failure leaves both unchanged.
+    pub(crate) fn compare_and_save_app_attachment(
+        &mut self,
+        expected: &BrowserSessionState,
+        next: &BrowserSessionState,
+        expected_catalog: &BrowserProfileCatalog,
+        next_catalog: &BrowserProfileCatalog,
+    ) -> Result<(), String> {
+        validate_catalog_schema(next_catalog)?;
+        if next.schema_version != BROWSER_SESSION_STATE_SCHEMA_V1 {
+            return Err("browser_session_state_schema_unsupported".into());
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| "browser_attachment_publication_begin_failed")?;
+        let current: BrowserSessionState = load_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+        )?;
+        let catalog: BrowserProfileCatalog = load_document(
+            &transaction,
+            PROFILE_CATALOG_DOCUMENT,
+            BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+        )?;
+        if current != *expected || catalog != *expected_catalog {
+            return Err("browser_attachment_publication_conflict".into());
+        }
+        super::browser_idle_retirement_store::reject_retirement_publication(
+            &transaction,
+            &current,
+            next,
+            &[],
+            &[],
+        )
+        .map_err(|_| "browser_attachment_publication_retirement_fenced")?;
+        super::browser_launch_custody_store::reject_fenced_browser_publication(
+            &transaction,
+            expected,
+            next,
+        )
+        .map_err(|_| "browser_attachment_publication_release_fenced")?;
+        save_document(
+            &transaction,
+            PROFILE_CATALOG_DOCUMENT,
+            BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+            next_catalog,
+        )?;
+        save_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+            next,
+        )?;
+        transaction
+            .commit()
+            .map_err(|_| "browser_attachment_publication_commit_failed".into())
+    }
+
     /// Registering a profile cannot overwrite concurrent display-name or retention edits.
     pub(crate) fn compare_and_save_profile_catalog(
         &self,
@@ -1581,6 +1642,57 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn app_attachment_publication_failure_never_exposes_an_unfenced_profile_after_restart() {
+        let directory = TempDirectory::new("attachment-atomic");
+        let mut store = BrowserSessionSqliteStore::open_or_migrate(
+            &directory.0,
+            &directory.0.join("legacy.json"),
+        )
+        .unwrap()
+        .0;
+        let before = BrowserSessionState::default();
+        let before_catalog = BrowserProfileCatalog::default();
+        store.save_session_state(&before).unwrap();
+        store.save_profile_catalog(&before_catalog).unwrap();
+        let mut next = before.clone();
+        next.next_session_sequence = 1;
+        let mut catalog = before_catalog.clone();
+        catalog.profiles.insert(
+            "app".into(),
+            agent_browser_service_model::BrowserProfileCatalogEntry {
+                id: "app".into(),
+                name: "App".into(),
+                user_data_dir: "/synthetic/app".into(),
+                kind: BrowserProfileKind::Named,
+            },
+        );
+        store.connection.execute_batch("CREATE TRIGGER refuse_attachment_state BEFORE UPDATE ON state_documents WHEN NEW.kind='browser_session_state' BEGIN SELECT RAISE(ABORT,'synthetic publication failure'); END;").unwrap();
+        assert!(store
+            .compare_and_save_app_attachment(&before, &next, &before_catalog, &catalog)
+            .is_err());
+        drop(store);
+        let mut store = BrowserSessionSqliteStore::open(&directory.0).unwrap();
+        assert_eq!(
+            store.load_workspace_snapshot().unwrap(),
+            (before.clone(), before_catalog.clone())
+        );
+        store
+            .connection
+            .execute_batch("DROP TRIGGER refuse_attachment_state")
+            .unwrap();
+        store
+            .compare_and_save_app_attachment(&before, &next, &before_catalog, &catalog)
+            .unwrap();
+        assert_eq!(
+            store.load_workspace_snapshot().unwrap(),
+            (next.clone(), catalog.clone())
+        );
+        assert!(store
+            .compare_and_save_app_attachment(&before, &next, &before_catalog, &catalog)
+            .is_err());
     }
 
     fn assert_workspace_projection_declared(value: &serde_json::Value) {

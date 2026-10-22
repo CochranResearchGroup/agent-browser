@@ -45,3 +45,54 @@ replay cursor. Terminate the watcher process for immediate disconnect; a broken
 output pipe otherwise exits on the next emitted event. Recorded browser state,
 viewer delivery, controller state and account authentication are separate;
 metadata-only reads leave unobserved readiness explicitly unverified.
+
+
+### Attach and explicitly share an app browser
+
+`browser_open` can borrow a currently running app browser instead of launching.
+Supply `profile` (the existing profile name), `profileMode: "existing"`, the normal
+attribution/task key and configured `hostBinding`. Omit `url`; attachment never
+navigates, opens an initial tab, duplicates a profile process or resets work.
+Add this `attachment` object:
+
+```json
+{
+  "version": 1,
+  "process": {
+    "pid": 1234,
+    "startToken": "<current-kernel-process-start-token>",
+    "executablePath": "/opt/chromium/chrome",
+    "browserFamily": "chromium"
+  },
+  "profilePath": "/absolute/canonical/app-profile",
+  "cdpEndpoint": "ws://127.0.0.1:9222/devtools/browser/<browser-id>",
+  "targetId": "<existing-page-target>",
+  "sharedWith": []
+}
+```
+
+The supported local adapter verifies the current process/start/executable,
+canonical profile directory, CDP browser PID, existing page and current Native
+assignment/window PID before publishing a task. Unsupported platforms or missing
+CDP return a concrete capability error without launching. Use the app's native
+browser tools when attachment is unavailable. A profile already on another
+desktop stays there; supported alternatives are retaining it, selecting another
+profile, or an explicit relocation operation when that capability is available.
+
+The original app owns lifecycle. Closing/detaching an attached task preserves
+its borrowed initial page and browser process; task-created tabs retain scoped
+cleanup. Direct close of a borrowed page is refused. A missing borrowed browser
+is reported rather than automatically reopened. The owner may explicitly set
+`sharedWith` to exact `{hostId, participantId, sessionId}` recipients by replaying
+its original attachment task. The list controls new attachment admission; removing a recipient does not close
+its existing tasks. Each recipient attaches explicitly with its own
+task key and app binding; it cannot change the owner's sharing list. Sharing does
+not transfer termination or relocation authority. Metadata reports
+`custody: "app_borrowed"`; capability presence is not readiness or account proof.
+
+## Explicit human control
+
+Use `browser_control` for status/view, explicit takeover, return or scoped override.
+Viewing never pauses. Takeover blocks supported automation; optional pauseReads
+also stops page reads/capture. Return freshly observes the original page without
+recovery; uncertain work is retained without replay. See the [control contract](https://github.com/CochranResearchGroup/agent-browser/blob/main/docs/dev/hosted-browser-control.md).

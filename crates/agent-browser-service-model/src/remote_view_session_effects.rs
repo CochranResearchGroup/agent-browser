@@ -453,6 +453,53 @@ impl<
         S: BrowserLaunchCustodyStore + RemoteViewPoolRequestStore + BrowserIdleRetirementCustodyStore,
     > BrowserSessionEffects for RemoteViewSessionEffects<E, T, S>
 {
+    fn attach_app_browser(
+        &mut self,
+        request: &BrowserAttachmentRequest,
+        profile: &BrowserProfileCatalogEntry,
+        desktop: &RemoteViewFixedDesktop,
+    ) -> Result<BrowserAttachmentObservation, String> {
+        self.require_operation()?;
+        let assignment = self
+            .assignments
+            .get(&desktop.desktop_id)
+            .filter(|row| row.generation == desktop.generation)
+            .cloned()
+            .ok_or("browser_attachment_desktop_observation_unavailable")?;
+        self.adapter
+            .observe_assignment(&assignment)
+            .map_err(|_| "browser_attachment_desktop_stale")?;
+        let matches = self
+            .adapter
+            .windows(&assignment)
+            .map_err(|_| "browser_attachment_window_observation_unavailable")?
+            .windows
+            .iter()
+            .any(|window| {
+                window.pid == Some(request.process.pid) && window.width > 0 && window.height > 0
+            });
+        if !matches {
+            return Err("browser_attachment_desktop_process_mismatch".into());
+        }
+        let mut observed = self.effects.attach_app_browser(request, profile, desktop)?;
+        self.adapter
+            .observe_assignment(&assignment)
+            .map_err(|_| "browser_attachment_desktop_changed")?;
+        if !self
+            .adapter
+            .windows(&assignment)
+            .map_err(|_| "browser_attachment_window_observation_unavailable")?
+            .windows
+            .iter()
+            .any(|window| {
+                window.pid == Some(request.process.pid) && window.width > 0 && window.height > 0
+            })
+        {
+            return Err("browser_attachment_desktop_process_changed".into());
+        }
+        observed.assignment = Some(assignment);
+        Ok(observed)
+    }
     fn native_handoff_assignment_target(
         &mut self,
         target: &RemoteViewTabHandoffTarget,
@@ -1356,7 +1403,7 @@ impl<
             .ok_or("remote_view_focus_desktop_missing")?;
         let assignment = self
             .store
-            .published_launch_assignment(browser)
+            .published_presentation_assignment(browser)
             .map_err(|_| "remote_view_focus_launch_custody_unavailable")?;
         if assignment.desktop_id != desktop.desktop_id
             || assignment.generation != desktop.generation
@@ -1462,7 +1509,7 @@ fn remote_view_tab_assignment<T: RemoteViewApplicationTransport>(
         _ => return Err("remote_view_tab_view_assignment_unavailable".into()),
     };
     let published = store
-        .published_launch_assignment(&target.browser)
+        .published_presentation_assignment(&target.browser)
         .map_err(|_| "remote_view_tab_view_launch_custody_unavailable")?;
     if assignment != published {
         return Err("remote_view_tab_view_assignment_conflict".into());

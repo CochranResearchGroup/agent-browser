@@ -18,6 +18,7 @@ pub mod browser_emulation;
 #[allow(dead_code)]
 pub mod browser_frame;
 pub(crate) mod browser_host_context;
+pub(crate) mod browser_host_control;
 mod browser_idle_retirement_store;
 #[allow(dead_code)]
 pub mod browser_input;

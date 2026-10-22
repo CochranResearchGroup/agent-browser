@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 
 pub(super) fn tools() -> Vec<Value> {
     let mut tools = super::workflow::tools();
+    tools.push(super::host_control::tool());
     for mut tool in super::service_mcp_tools() {
         let description = match tool["name"].as_str() {
             Some("browser_navigate") => "Navigate this task's current tab.",
