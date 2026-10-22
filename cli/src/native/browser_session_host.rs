@@ -175,8 +175,11 @@ pub(crate) async fn execute_shared_remote_view_open(
             *shared = Some(load_default_browser_session_host()?);
         }
         let host = shared.as_mut().ok_or("browser_session_host_missing")?;
-        super::browser_host_control::check_state(&host.state, &name, &command)?;
         host.refresh_before_ordinary_command()?;
+        super::browser_host_control::check_state(&host.state, &name, &command)?;
+        super::browser_host_reconnect::check_state(&host.state, &name, &command)?;
+        super::browser_host_policy::prepare_command(&host.state, &name, &mut command)?;
+        super::browser_host_policy::check_state(&host.state, &name, &command)?;
         if command.get("url").is_none() && command.get("browserId").is_some() && command.get("targetId").is_some() {
             return host.prepare_existing_task_handoff(&name, &command).map(Some);
         }
@@ -253,6 +256,7 @@ pub(crate) async fn execute_shared_remote_view_open(
                 .map(|browser| browser.id.clone())
                 .collect();
             for browser_id in retained {
+                host.require_explicit_hosted_recovery(&browser_id)?;
                 host.manager()?.recover_retained_browser(&browser_id)?;
                 host.commit_state()?;
             }
@@ -783,6 +787,15 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         request: OpenBrowserSession,
         hosted: Option<agent_browser_service_model::BrowserHostBinding>,
     ) -> Result<OpenBrowserSessionResult, String> {
+        self.open_with_host_binding_policy(request, hosted, None)
+    }
+
+    fn open_with_host_binding_policy(
+        &mut self,
+        request: OpenBrowserSession,
+        hosted: Option<agent_browser_service_model::BrowserHostBinding>,
+        task_policy: Option<&serde_json::Value>,
+    ) -> Result<OpenBrowserSessionResult, String> {
         let existing_task = self
             .state
             .sessions
@@ -844,6 +857,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             result => result?,
         };
         if let Some(binding) = hosted {
+            capture_host_policy_defaults(&mut self.state, &binding, &result.session_id)?;
             let desktop = self
                 .state
                 .browsers
@@ -857,6 +871,13 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     desktop,
                 },
             );
+        }
+        if let Some(policy) = task_policy {
+            capture_task_policy(
+                &mut self.state,
+                &result.session_id,
+                &serde_json::json!({"taskPolicy":policy}),
+            )?;
         }
         self.commit_state()?;
         Ok(result)
@@ -1333,6 +1354,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         }
         let retained =
             agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, handoff_id)?;
+        self.require_explicit_hosted_recovery(&retained.browser.id)?;
         self.manager()?
             .recover_retained_browser(&retained.browser.id)?;
         self.commit_state()?;
@@ -1465,6 +1487,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         let admission = if command["action"]
             .as_str()
             .is_some_and(|action| action.starts_with("browser_session_"))
+            && !(command["action"] == "browser_session_close" && command["scope"] == "browser")
         {
             super::browser_host_control::admit_command(None, None, command, false)
         } else {
@@ -1501,6 +1524,43 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         if action.starts_with("browser_session_") && action != "browser_session_status" {
             self.refresh_before_ordinary_command()?;
         }
+        if action == "browser_session_policy" {
+            let result = super::browser_host_policy::apply(&mut self.state, command)?;
+            self.commit_state()?;
+            return Ok(result);
+        }
+        if action == "browser_session_reconnect" {
+            let persistence = &mut self.persistence;
+            let persisted = &mut self.persisted_state;
+            let result = super::browser_host_reconnect::execute(
+                &mut self.state,
+                &self.catalog,
+                &mut self.effects,
+                command,
+                &mut |expected, next, effects| {
+                    let intent = effects.pending_launch_intent();
+                    let retirement = effects.pending_idle_retirement_ids();
+                    persistence.publish_session_effects(
+                        expected,
+                        next,
+                        intent.as_ref(),
+                        &retirement,
+                        &effects.pending_browser_activity_ids(),
+                    )?;
+                    *persisted = persistence.load_session_state()?;
+                    effects.acknowledge_launch_publication();
+                    effects.finish_idle_retirement_publication(&retirement)?;
+                    Ok(())
+                },
+            );
+            // Failed effects may already have published a pending intent. Adopt it
+            // without clearing or replaying the retained uncertainty.
+            self.state = self.persistence.load_session_state()?;
+            self.persisted_state = self.state.clone();
+            return result;
+        }
+        super::browser_host_reconnect::check_state(&self.state, "", command)?;
+        super::browser_host_policy::check_state(&self.state, "", command)?;
         if command
             .get("leaveOpen")
             .is_some_and(|value| !value.is_boolean())
@@ -1777,6 +1837,39 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             }
             "browser_session_close" => {
                 let session_id = self.session_id_from_command(command)?;
+                let scope = command["scope"].as_str().unwrap_or("task");
+                if scope == "browser" {
+                    let before = self.state.clone();
+                    let mut admission = None;
+                    let result = super::browser_host_policy::close_browser_scope(
+                        &before,
+                        &session_id,
+                        command,
+                        || {
+                            // Only admitted effects enter the flight journal. Known
+                            // scope/attribution refusals remain undispatched.
+                            admission = super::browser_host_control::admit_command(
+                                None, None, command, false,
+                            )?;
+                            let closed = self.close_session(
+                                &session_id,
+                                SessionEndReason::ExplicitClose,
+                                now_ms,
+                            )?;
+                            Ok(
+                                serde_json::json!({"closed":true,"sessionId":closed.session_id,"browserId":closed.browser_id,
+                            "disposition":session_close_disposition_name(closed.disposition)}),
+                            )
+                        },
+                    );
+                    if let Some(admission) = admission {
+                        admission.finish(result.is_ok())?;
+                    }
+                    return result;
+                }
+                if scope != "task" {
+                    return Err("browser_lifecycle_scope_invalid".into());
+                }
                 let preserve = match command.get("leaveOpen") {
                     Some(value) => value
                         .as_bool()
@@ -1920,6 +2013,28 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         ))
     }
 
+    /// Host-selected loss policy never permits ordinary dispatch to relaunch.
+    /// Explicit reconnect owns recovery and retains uncertain effects separately.
+    fn require_explicit_hosted_recovery(&mut self, browser_id: &str) -> Result<(), String> {
+        let hosted = self.state.host_bindings.keys().any(|id| {
+            self.state
+                .sessions
+                .get(id)
+                .is_some_and(|task| task.browser_id == browser_id)
+        });
+        if hosted {
+            let browser = self
+                .state
+                .browsers
+                .get(browser_id)
+                .ok_or("browser_session_browser_missing")?;
+            if !self.effects.browser_is_live(browser)? {
+                return Err("browser_reconnect_explicit_required: observe loss and follow the app's report-only or explicit reopen policy".into());
+            }
+        }
+        Ok(())
+    }
+
     /// Attach a live recorded browser during drain, but admit any physical
     /// recovery through the same upgrade authority as an explicit launch.
     fn recover_browser_for_command(
@@ -1941,6 +2056,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         if super::browser_host_control::read(browser_id)?.awaiting_observation {
             return Err("browser_control_fresh_observation_cannot_recover_browser".into());
         }
+        self.require_explicit_hosted_recovery(browser_id)?;
         require_managed_runtime_admission("launch", command)?;
         self.manager()?.recover_retained_browser(browser_id)?;
         self.commit_state()
@@ -1953,6 +2069,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     }
 
     fn commit_state(&mut self) -> Result<(), String> {
+        self.state
+            .host_policies
+            .retain_active_tasks(&self.state.sessions.keys().cloned().collect());
         let intent = self.effects.pending_launch_intent();
         let retirement_ids = self.effects.pending_idle_retirement_ids();
         self.persistence.publish_session_effects(
@@ -2046,6 +2165,15 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .transpose()?;
         if let Some(binding) = &hosted {
             super::browser_host_context::validate_provider(binding)?;
+            let host = super::browser_host_context::configured_host(binding)?;
+            super::browser_host_policy::check_open(
+                &self.state,
+                binding,
+                host.policy_defaults.as_ref(),
+                command,
+            )?;
+        } else if command.get("taskPolicy").is_some() {
+            return Err("browser_policy_hosted_task_required".into());
         }
         if let Some(attachment) = command.get("attachment") {
             let binding = hosted
@@ -2113,6 +2241,16 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         .insert(tab.id.clone(), capture_browser_task_metadata(command, &tab));
                 }
             }
+            if let Some(attached_binding) =
+                self.state.host_bindings.get(&result.session_id).cloned()
+            {
+                capture_host_policy_defaults(
+                    &mut self.state,
+                    &attached_binding.request,
+                    &result.session_id,
+                )?;
+            }
+            capture_task_policy(&mut self.state, &result.session_id, command)?;
             let mut next_catalog = self.catalog.clone();
             next_catalog
                 .profiles
@@ -2166,7 +2304,8 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         } else {
             request
         };
-        let opened = self.open_with_host_binding(request, hosted)?;
+        let opened =
+            self.open_with_host_binding_policy(request, hosted, command.get("taskPolicy"))?;
         self.apply_leave_open_choice(&opened.session_id, command)?;
         Ok(opened)
     }
@@ -2449,8 +2588,13 @@ where
         session_name: &str,
         command: &serde_json::Value,
     ) -> Result<Option<serde_json::Value>, String> {
-        super::browser_host_control::check_state(&self.state, session_name, command)?;
         self.refresh_before_ordinary_command()?;
+        let mut prepared = command.clone();
+        super::browser_host_policy::prepare_command(&self.state, session_name, &mut prepared)?;
+        let command = &prepared;
+        super::browser_host_control::check_state(&self.state, session_name, command)?;
+        super::browser_host_reconnect::check_state(&self.state, session_name, command)?;
+        super::browser_host_policy::check_state(&self.state, session_name, command)?;
         let pending_human_ttl = pending_human_retention(command)?;
         if command
             .get("leaveOpen")
@@ -3070,6 +3214,61 @@ fn require_managed_runtime_admission(
     crate::runtime_adoption::require_runtime_admission(&path, action, command)
 }
 
+fn capture_task_policy(
+    state: &mut BrowserSessionState,
+    task_id: &str,
+    command: &serde_json::Value,
+) -> Result<(), String> {
+    if let Some(value) = command.get("taskPolicy") {
+        let policy = serde_json::from_value(value.clone()).map_err(|_| "browser_policy_invalid")?;
+        let binding = state
+            .host_bindings
+            .get(task_id)
+            .ok_or("browser_policy_hosted_task_required")?;
+        state.host_policies.update(
+            state.host_policies.revision,
+            &binding.request.host_id,
+            task_id,
+            "set_task",
+            Some(policy),
+            "configured_app",
+            "Explicit task policy",
+        )?;
+    }
+    Ok(())
+}
+
+/// Persist reviewed application defaults once; later explicit policy changes win.
+fn capture_host_policy_defaults(
+    state: &mut BrowserSessionState,
+    binding: &agent_browser_service_model::BrowserHostBinding,
+    task_id: &str,
+) -> Result<(), String> {
+    if state
+        .host_policies
+        .initialized_hosts
+        .contains(&binding.host_id)
+    {
+        return Ok(());
+    }
+    state
+        .host_policies
+        .initialized_hosts
+        .insert(binding.host_id.clone());
+    if let Some(policy) = super::browser_host_context::configured_host(binding)?.policy_defaults {
+        state.host_policies.update(
+            state.host_policies.revision,
+            &binding.host_id,
+            task_id,
+            "set_app",
+            Some(policy),
+            "configured_app",
+            "Reviewed host policy defaults",
+        )?;
+    }
+    Ok(())
+}
+
 fn session_close_disposition_name(
     disposition: agent_browser_service_model::SessionCloseDisposition,
 ) -> &'static str {
@@ -3411,6 +3610,21 @@ mod tests {
 
     #[test]
     fn hosted_context_publishes_with_task_or_not_at_all() {
+        let guard = crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_HOSTS_FILE"]);
+        let directory = TempDirectory::new();
+        let registry = directory.0.join("hosts.json");
+        fs::write(
+            &registry,
+            serde_json::json!({"version":1,"hosts":{"app":{
+                "origin":"https://app.example.test","providerApplication":"agent-browser",
+                "policyDefaults":{"version":1,"deniedActions":["evaluate"],"artifactDestinations":{}}
+            }}})
+            .to_string(),
+        )
+        .unwrap();
+        guard.set("AGENT_BROWSER_HOSTS_FILE", registry.to_str().unwrap());
+        let task_policy =
+            serde_json::json!({"version":1,"deniedActions":["click"],"artifactDestinations":{}});
         struct Store {
             state: BrowserSessionState,
             catalog: BrowserProfileCatalog,
@@ -3432,6 +3646,24 @@ mod tests {
                     assert!(
                         next.host_bindings.contains_key(&session.id),
                         "task publication omitted hosted context"
+                    );
+                    assert!(
+                        next.host_policies.app_defaults["app"]
+                            .denied_actions
+                            .contains("evaluate"),
+                        "task publication omitted configured app defaults"
+                    );
+                    assert!(
+                        next.host_policies.task_overrides[&session.id]
+                            .denied_actions
+                            .contains("click"),
+                        "task publication omitted explicit task policy"
+                    );
+                    let effective = next.host_policies.effective("app", &session.id).unwrap();
+                    assert!(effective.denied_actions.contains("click"));
+                    assert!(
+                        !effective.denied_actions.contains("evaluate"),
+                        "task policy must replace the default"
                     );
                 }
                 self.attempts.push(next.clone());
@@ -3525,10 +3757,11 @@ mod tests {
                     },
                 },
             };
-            let result = host.open_with_host_binding(
+            let result = host.open_with_host_binding_policy(
                 OpenBrowserSession::exact_profile("task", "work", 1)
                     .with_placement(binding.placement.clone()),
                 Some(binding.clone()),
+                Some(&task_policy),
             );
             assert_eq!(host.persistence.attempts.len(), 1);
             if fail {
@@ -3545,6 +3778,17 @@ mod tests {
                     .state
                     .sessions
                     .contains_key(&opened.session_id));
+                assert!(host
+                    .persistence
+                    .state
+                    .host_policies
+                    .initialized_hosts
+                    .contains("app"));
+                assert!(
+                    host.persistence.state.host_policies.task_overrides[&opened.session_id]
+                        .denied_actions
+                        .contains("click")
+                );
             }
         }
     }

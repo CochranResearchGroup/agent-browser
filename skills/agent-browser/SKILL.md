@@ -6,7 +6,7 @@ allowed-tools: Bash(agent-browser:*)
 
 # Browser Automation with agent-browser
 
-Token-protected native control uses `AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE`, an absolute private owner-only regular file. Read [Remote View setup](references/cli-and-service.md) before configuring native control.
+Read [Remote View setup](references/cli-and-service.md) before configuring native control credentials.
 
 ## Handoff creator context
 
@@ -16,21 +16,29 @@ Creation context is retained once; polling and Share do not replace it. Cards om
 
 ## MCP task workflow
 
-Use `browser_open` with `{ "profile": "editorial", "profileMode": "persistent", "taskKey": "editing", "url": "https://example.com" }`. It creates or reuses the profile and returns `data.taskId`, `profileId`, `browserId`, `tabId`, and `url` in the MCP text payload. Pass `taskId` to subsequent page actions. Replay the same `taskKey` to return its current page and preserve edits without navigating again; use distinct keys for independent tasks. End only your task with `browser_close({ "taskId": "<returned-task-id>" })`.
+Use `browser_open` with `{ "serviceName": "my-app", "agentName": "editor", "taskName": "Edit draft", "profile": "editorial", "profileMode": "persistent", "taskKey": "editing", "url": "https://example.com" }`. It creates or reuses the profile and returns `data.taskId`, `profileId`, `browserId`, `tabId`, and `url` in the MCP text payload. Pass `taskId` to subsequent page actions. Replay the same `taskKey` to return its current page and preserve edits without navigating again; use distinct keys for independent tasks. End only your task with `browser_close({ "taskId": "<returned-task-id>" })`.
 
 Use `profileMode: "existing"` to require an existing profile. Use `profileMode: "disposable"` without `profile` for temporary work. Profile creation, session selection, replay, and scoped closure happen inside the workflow operation.
 
-For human assistance, call `browser_handoff({ "taskId": "<returned-task-id>" })`. Give the person its complete `data.handoffUrl` only when `operatorVisible.state=ready`; continue with the same task ID. For `remote_view_public_origin_missing`, check reviewed `AGENT_BROWSER_PUBLIC_ORIGIN` configuration and stale MCP startup. Set it in `~/.agent-browser/.env` or `AGENT_BROWSER_ENV_FILE`; explicit process settings win. MCP connections pin startup configuration: reconnect after changes, preserving the task. Never assemble provider URLs.
+For human assistance, call `browser_handoff({ "taskId": "<returned-task-id>" })`. Require `operatorVisible.state=ready` before giving the person its complete `data.handoffUrl`; continue with the same task ID. For `remote_view_public_origin_missing`, check reviewed `AGENT_BROWSER_PUBLIC_ORIGIN` configuration and stale MCP startup. Set it in `~/.agent-browser/.env` or `AGENT_BROWSER_ENV_FILE`; explicit process settings win. MCP connections pin startup configuration: reconnect after changes, preserving the task. Never assemble provider URLs.
 
-The handoff URL resolves the current owned desktop and redirects to native Remote View authentication without a Dashboard login. The public locator remains read-only. A valid link whose target expired continues through native authentication to browser-owner recovery when the private gateway callback is configured. Keep the same opaque URL; missing callback configuration reports unavailability. Human use requires native display confirmation. Reuse the opaque URL.
+A standalone handoff resolves its current owned desktop and redirects to Native authentication without a Dashboard login. The public locator remains read-only. Native authentication precedes configured browser-owner recovery. Missing recovery configuration reports unavailability. Reuse the opaque URL; require native display confirmation.
 
 When the person finishes, call `browser_continue({ "taskId": "<same-task-id>" })` to read the current task identity and URL, then continue page actions. This preserves the current page and edits; it is separate from CLI executable-transfer handoff.
 
-[Hosted app workflows](references/host-integration.md).
+## Hosted workflow guidance v1
 
-The default MCP catalog contains 13 workflow tools: `browser_open`, `browser_navigate`,
+Use Bots-native browsing when it already owns the right browser and task. Choose
+Agent Browser for its reusable task, page and continuity controls; do not create a
+second browser just to switch tools. Read [host integration v1](references/host-integration.md)
+before app placement, attachment, sharing or human takeover. Discover the connected
+runtime's schemas first; documentation and a visible browser do not prove support,
+account identity or control ownership. Shared skill publication needs explicit approval.
+
+The default MCP catalog contains 16 workflow tools: `browser_open`, `browser_navigate`,
 `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
-`browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_command` and `browser_discover`.
+`browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_reconnect`, `browser_policy`,
+`browser_artifact`, `browser_command` and `browser_discover`.
 Page actions require `taskId`. Use `browser_tab` to list, create, select or close this
 task's tabs; repeat a stable `tabKey` when retrying creation. Creating a tab after
 an owner restart reconnects to the verified live browser and preserves existing
@@ -56,13 +64,11 @@ Retirement permits diagnostic reads but fences handoff writes. On lock timeout,
 run `agent-browser service jobs --json`, then refresh the access plan. Reconcile
 uncertain effects before retrying; never terminate the holder or reset a profile.
 
-Selection and Share wait their turn on the same native desktop.
-
 Diagnostic and administrative discovery points to supported CLI/API operations.
 Retired lease, recovery, repair and reset MCP tools are unavailable, including
 through advanced dispatch. There is no legacy catalog mode.
 
-Return, store, and reopen only `handoffUrl` at `/remote-view/<handoff-id>`. Never send providerExternalUrl.
+Return, store, and reopen only `handoffUrl`: standalone `/remote-view/<handoff-id>` or hosted app `/agent-browser/handoff/<id>`. Never send providerExternalUrl.
 
 ## Operator workspace
 
@@ -80,7 +86,7 @@ stdio command in that client and reconnect to refresh its cached catalog. Use
 the installed CLI to continue the task while integration is corrected; server
 `tools/list` alone does not prove client exposure.
 
-Command help, including `service --help` and `service -h`, runs locally without browser launch or Service State writes. Unknown command help returns a typed error. `runtime create --help` describes profiles; creation returns `created` and `userDataDir`. MCP payloads use `success`, `data`, `error`; CLI failures add `type`.
+Command help runs without browser launch. MCP payloads use `success`, `data`, `error`; CLI failures add `type`. Inspect local help before CLI fallback.
 
 Inspect `agent-browser.runtime-health.v1` for proactive runtime drift and
 bounded recourse. Read the advanced reference's runtime custody diagnostics
@@ -108,16 +114,9 @@ Discover `category:"playbooks"` and use `browser_command` in the existing task. 
 
 ## Read more only when needed
 
-Retained-task recovery rechecks interrupted launch custody in the running host.
-It requires proven process and profile absence, preserves launch history, and
-leaves other profiles' claims unchanged. Continue through the original taskId.
+Retained-task recovery requires proven process/profile absence and preserves peer claims. Continue through the original taskId.
 
-New-process memory pressure uses eligible owner cleanup and a bounded wait;
-continue existing tasks through their taskId. Completed session/tab history is
-bounded in active memory and retained durably. Use `agent-browser runtime history
-sessions 100 --json` or `runtime history tabs 100 --json` for bounded archive pages;
-pass `data.nextCursor` as the next positional cursor. Handoff target evidence
-remains available. Read the advanced reference for host resource settings.
+Read the advanced reference for bounded host resource waits and retained session/tab history; continue existing tasks through taskId.
 
 - [Commands](references/commands.md): detailed CLI syntax.
 - [Snapshot references](references/snapshot-refs.md): find and use element refs.

@@ -28,6 +28,7 @@ let mcp;
 
 const MCP_TOOL_ALLOWLIST = [
   'browser_open', 'browser_close', 'browser_handoff', 'browser_continue',
+  'browser_control', 'browser_reconnect', 'browser_policy', 'browser_artifact',
   'browser_snapshot', 'browser_screenshot', 'browser_click', 'browser_fill',
   'browser_navigate', 'browser_tab', 'browser_command', 'browser_discover',
 ];

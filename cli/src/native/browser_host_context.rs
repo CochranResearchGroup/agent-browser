@@ -17,6 +17,8 @@ struct HostRegistry {
 pub(crate) struct HostConfiguration {
     pub(crate) origin: String,
     pub(crate) provider_application: String,
+    #[serde(default)]
+    pub(crate) policy_defaults: Option<agent_browser_service_model::BrowserTaskPolicy>,
 }
 
 /// The app supplies opaque identities, not a viewer URL or a private launch environment.
@@ -42,6 +44,9 @@ pub(crate) fn configured_host(binding: &BrowserHostBinding) -> Result<HostConfig
 }
 
 fn validate_host(host: &HostConfiguration) -> Result<(), String> {
+    if let Some(policy) = &host.policy_defaults {
+        policy.validate()?;
+    }
     let url = super::browser_session_remote_view::public_origin(&host.origin)?;
     if url.path() != "/"
         || url.query().is_some()
@@ -100,8 +105,10 @@ pub(crate) fn snapshot(state: &BrowserSessionState, task_id: &str) -> Result<Val
         "taskState":if task.is_some() {"recorded"} else {"ended"},
         "browserState":if browser.is_some() {"unverified"} else {"absent_from_state"},
         "viewerState":"unverified","controllerState":task.map(|task|super::browser_host_control::metadata(&task.browser_id)).transpose()?,"accountState":"unverified",
+        "continuity":super::browser_host_reconnect::metadata(state,task_id),
+        "policy":state.host_policies.effective(&binding.request.host_id,task_id),
         "custody":if task.is_some_and(|task|state.app_browser_attachments.contains_key(&task.browser_id)) {"app_borrowed"} else {"agent_browser"},
-        "capabilities":{"placement":true,"hostedHandoff":true,"metadataRead":true,"statusEvents":true,"attachment":cfg!(target_os="linux"),"relocation":false}
+        "capabilities":{"placement":true,"hostedHandoff":true,"metadataRead":true,"statusEvents":true,"attachment":cfg!(target_os="linux"),"relocation":false,"reconnect":true,"taskPolicy":true,"artifactHandles":true}
     }))
 }
 
@@ -121,7 +128,8 @@ mod tests {
             assert!(
                 validate_host(&HostConfiguration {
                     origin: origin.into(),
-                    provider_application: "bots".into()
+                    provider_application: "bots".into(),
+                    policy_defaults: None
                 })
                 .is_err(),
                 "{origin}"
@@ -129,7 +137,8 @@ mod tests {
         }
         assert!(validate_host(&HostConfiguration {
             origin: "https://bots.example.test".into(),
-            provider_application: "codex-bots".into()
+            provider_application: "codex-bots".into(),
+            policy_defaults: None
         })
         .is_ok());
     }

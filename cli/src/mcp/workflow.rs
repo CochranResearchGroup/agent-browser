@@ -34,6 +34,7 @@ pub(super) fn tools() -> Vec<Value> {
                     "taskKey":{"type":"string","description":"Stable task key. Distinct keys receive independent tabs; reuse the key to continue this task."},
                 "url":{"type":"string","description":"Initial URL for a new task. Replaying a task returns its current page without navigating again."},
                     "serviceName":{"type":"string"},"agentName":{"type":"string"},"taskName":{"type":"string"},
+                    "taskPolicy":{"type":"object","additionalProperties":false,"properties":{"version":{"const":1},"deniedActions":{"type":"array","items":{"type":"string"}},"artifactDestinations":{"type":"object","additionalProperties":{"type":"string"}}},"required":["version"]},
                     "attachment":{"type":"object","additionalProperties":false,"description":"Borrow an exact existing app browser, with no launch or initial navigation. Requires hostBinding and existing profile; omit url.","properties":{
                         "version":{"const":1},"process":{"type":"object","properties":{"pid":{"type":"integer","minimum":1},"startToken":{"type":"string"},"executablePath":{"type":"string"},"browserFamily":{"type":"string"}},"required":["pid","startToken","executablePath"]},
                         "profilePath":{"type":"string"},"cdpEndpoint":{"type":"string"},"targetId":{"type":"string"},
@@ -45,7 +46,7 @@ pub(super) fn tools() -> Vec<Value> {
             "name":"browser_close", "title":"Close a browser task",
             "description":"End only the addressed task and its tabs. Preserve peers, borrowed browsers and persistent profile data.",
             "inputSchema":{"type":"object","additionalProperties":false,
-                "properties":{"taskId":{"type":"string"}},"required":["taskId"]}
+                "properties":{"taskId":{"type":"string"},"scope":{"enum":["task","browser"],"default":"task"},"actor":{"type":"string"},"reason":{"type":"string"}},"required":["taskId"]}
         }),
         json!({
             "name":"browser_handoff", "title":"Hand a browser task to a person",
@@ -203,6 +204,9 @@ pub(super) fn open(
     if let Some(binding) = &hosted {
         command["hostBinding"] = json!(binding);
     }
+    if let Some(policy) = arguments.get("taskPolicy") {
+        command["taskPolicy"] = policy.clone();
+    }
     if let Some(profile_id) = profile {
         let mut state = load_default_service_state_snapshot().map_err(issue)?;
         state.overlay_configured_entities(configured.clone());
@@ -319,9 +323,12 @@ fn open_attachment(arguments: &Value, transport_session: &str) -> Result<Value, 
     ))
     .expect("string tuple");
     let session_name = format!("workflow-{}", hex::encode(Sha256::digest(identity)));
-    let command = json!({"id":uuid::Uuid::new_v4().to_string(),"action":"browser_session_open","sessionName":session_name,
+    let mut command = json!({"id":uuid::Uuid::new_v4().to_string(),"action":"browser_session_open","sessionName":session_name,
         "profileId":profile,"attachment":attachment,"hostBinding":binding,
         "serviceName":service,"agentName":agent,"taskName":task,"originKind":"agent"});
+    if let Some(policy) = arguments.get("taskPolicy") {
+        command["taskPolicy"] = policy.clone();
+    }
     let opened = execute(command, transport_session)?;
     let task_id = opened["sessionId"]
         .as_str()
@@ -347,14 +354,26 @@ fn open_attachment(arguments: &Value, transport_session: &str) -> Result<Value, 
     ))
 }
 
+fn forward_policy_override(arguments: &Value, command: &mut Value) -> Result<(), JsonRpcError> {
+    if let Some(token) = optional_string_argument(arguments, "policyOverrideId")? {
+        command["policyOverrideId"] = json!(token);
+        command["id"] = json!(required_string_argument(arguments, "requestId")?);
+    }
+    Ok(())
+}
+
 pub(super) fn close(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
     let task_id = required_string_argument(arguments, "taskId")?;
     task_session(task_id)?;
-    let data = execute(
-        json!({"id":uuid::Uuid::new_v4().to_string(),
-        "action":"browser_session_close","sessionId":task_id,"leaveOpen":false}),
-        session,
-    )?;
+    let mut command = json!({"id":uuid::Uuid::new_v4().to_string(),
+        "action":"browser_session_close","sessionId":task_id,"leaveOpen":false});
+    for field in ["scope", "actor", "reason"] {
+        if let Some(value) = arguments.get(field) {
+            command[field] = value.clone();
+        }
+    }
+    forward_policy_override(arguments, &mut command)?;
+    let data = execute(command, session)?;
     Ok(super::tool_response_from_payload(
         "browser_close",
         session,
@@ -494,6 +513,18 @@ pub(super) fn tab(arguments: &Value, transport_session: &str) -> Result<Value, J
     let operation = required_string_argument(arguments, "operation")?;
     let session_name = task_session(task_id)?;
     if operation == "list" {
+        let initial = BrowserSessionSqliteStore::open_read_only(
+            &BrowserSessionSqliteStore::default_sqlite_path().map_err(issue)?,
+        )
+        .map_err(issue)?
+        .load_session_state()
+        .map_err(issue)?;
+        crate::native::browser_host_policy::check_state(
+            &initial,
+            &session_name,
+            &json!({"taskId":task_id,"action":"tab_list"}),
+        )
+        .map_err(issue)?;
         execute(
             json!({"id":uuid::Uuid::new_v4().to_string(),
             "action":"url","sessionName":session_name,"observeChildTabs":true}),
@@ -519,6 +550,8 @@ pub(super) fn tab(arguments: &Value, transport_session: &str) -> Result<Value, J
             if let Some(url) = optional_string_argument(arguments, "url")? {
                 command["url"] = json!(url);
             }
+            command["sessionId"] = json!(task_id);
+            forward_policy_override(arguments, &mut command)?;
             let result = execute(command, transport_session)?;
             json!({"taskId":task_id,"tabId":result["tabId"],"url":result["url"]})
         }
@@ -538,12 +571,11 @@ pub(super) fn tab(arguments: &Value, transport_session: &str) -> Result<Value, J
                 transport_session,
             )?;
             if operation == "close" {
-                let result = execute(
-                    json!({"id":uuid::Uuid::new_v4().to_string(),
+                let mut command = json!({"id":uuid::Uuid::new_v4().to_string(),
                     "action":"browser_session_tab_close","sessionName":session_name,
-                    "sessionId":task_id,"expectedTabId":tab_id}),
-                    transport_session,
-                )?;
+                    "sessionId":task_id,"expectedTabId":tab_id});
+                forward_policy_override(arguments, &mut command)?;
+                let result = execute(command, transport_session)?;
                 json!({"taskId":task_id,"closedTabId":result["closedTabId"],
                     "currentTabId":result["currentTabId"]})
             } else {

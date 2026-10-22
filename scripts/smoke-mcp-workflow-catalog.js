@@ -22,6 +22,10 @@ try {
   assert.deepEqual(
     tools.map((tool) => tool.name).sort(),
     [
+      'browser_control',
+      'browser_reconnect',
+      'browser_policy',
+      'browser_artifact',
       'browser_open',
       'browser_navigate',
       'browser_snapshot',

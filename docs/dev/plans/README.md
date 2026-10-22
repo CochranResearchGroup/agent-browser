@@ -1,5 +1,7 @@
 # Active plan index
 
+[P270 hosted continuity](0270-2026-10-22-hosted-continuity.md) integrates #352–354 source through PR364. Native feature checks and exact cleanup reconciliation are recorded; #351 and #355 remain blocked by the provider transfer capability and remaining actual-host/performance acceptance. Parent #347 is open; no production effects.
+
 [P268 attachment](0268-2026-10-22-hosted-attachment.md), #349, and [P267/#350 takeover](0267-2026-10-22-hosted-takeover.md) are closed integrated source outcomes with actual Native04 acceptance and corrected cleanup. Native05 cookie continuity and independent cleanup also pass; no deployment; wider #347 remains open.
 
 

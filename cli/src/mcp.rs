@@ -4,6 +4,8 @@ use serde_json::{json, Map, Value};
 
 mod catalog;
 mod host_control;
+mod host_policy;
+mod host_reconnect;
 mod hosted;
 mod playbooks;
 mod workflow;
@@ -215,6 +217,8 @@ fn mcp_command_response_with_config(
 ) -> Result<Value, String> {
     match args.get(1).map(|value| value.as_str()) {
         Some("host-control") => host_control::cli(args),
+        Some("host-reconnect") => host_reconnect::cli(args),
+        Some("host-policy") => host_policy::cli(args),
         Some("host-task") => {
             let task_id = hosted::task_argument(args)?;
             Ok(json!({"success": true, "data": hosted::read_snapshot(task_id)?}))
@@ -449,6 +453,9 @@ fn service_operating_guide() -> Value {
             {"tool":"browser_snapshot","rule":"Use the returned taskId for page actions and task-scoped tabs."},
             {"tool":"browser_handoff","rule":"Share the returned ready HTTPS handoffUrl. Remote View owns the native viewer."},
             {"tool":"browser_continue","rule":"Continue with the same taskId after human input."},
+            {"tool":"browser_reconnect","rule":"Explicit app disconnect/reconnect/rebind/loss policy; preserve control and never replay uncertain website effects."},
+            {"tool":"browser_policy","rule":"Optional app defaults and task rules; unrestricted operations need no grant. Overrides name one task/action/request."},
+            {"tool":"browser_artifact","rule":"Write only to an authorized local handle; publication remains explicit."},
             {"tool":"browser_close","rule":"Close only this task; peer tasks remain open."}
         ],
         "advanced":{"tool":"browser_discover","rule":"Request browser, diagnostics or administration metadata only when needed."},
@@ -5401,8 +5408,45 @@ fn call_service_mcp_tool(
     if name.starts_with("browser_") && !matches!(name, "browser_open" | "browser_discover") {
         required_string_argument(arguments, "taskId")?;
     }
+    if name == "browser_reconnect" {
+        return host_reconnect::call(arguments, session);
+    }
+    if name == "browser_policy" {
+        return host_policy::call(arguments, session);
+    }
+    if name == "browser_artifact" {
+        return host_policy::artifact(arguments, session);
+    }
     if name == "browser_control" {
         return host_control::call(arguments, session);
+    }
+    if matches!(
+        name,
+        "browser_navigate"
+            | "browser_click"
+            | "browser_fill"
+            | "browser_snapshot"
+            | "browser_screenshot"
+    ) {
+        if let Some(token) = optional_string_argument(arguments, "policyOverrideId")? {
+            let task_id = required_string_argument(arguments, "taskId")?;
+            let request_id = required_string_argument(arguments, "requestId")?;
+            let action = agent_browser_service_model::canonical_browser_policy_action(name);
+            let mut command = arguments.clone();
+            command["id"] = json!(request_id);
+            command["action"] = json!(action);
+            command["policyOverrideId"] = json!(token);
+            command["sessionId"] = json!(task_id);
+            command["sessionName"] = json!(workflow::task_session(task_id)?);
+            let data = workflow::execute(command, session)?;
+            return Ok(tool_response_from_payload(
+                name,
+                session,
+                json!({}),
+                data,
+                false,
+            ));
+        }
     }
     if name == "browser_tab" {
         return workflow::tab(arguments, session);
@@ -6234,6 +6278,29 @@ fn call_browser_command(
 ) -> Result<Value, JsonRpcError> {
     let action = validate_browser_command_action(arguments)?;
     let params = optional_object_argument(arguments, "params")?;
+    if let Some(token) = optional_string_argument(arguments, "policyOverrideId")? {
+        let request_id = required_string_argument(arguments, "requestId")?;
+        let mut command = browser_command_command(BrowserCommandArgs {
+            action,
+            params,
+            job_timeout_ms: None,
+            service_name: None,
+            agent_name: None,
+            task_name: None,
+        });
+        command["id"] = json!(request_id);
+        command["policyOverrideId"] = json!(token);
+        command["sessionName"] = json!(session);
+        command["sessionId"] = json!(required_string_argument(arguments, "taskId")?);
+        let result = workflow::execute(command, session)?;
+        return Ok(tool_response_from_payload(
+            "browser_command",
+            session,
+            json!({}),
+            result,
+            false,
+        ));
+    }
     if action != "evaluate" {
         let page_arguments = Value::Object(params.cloned().unwrap_or_default());
         let mut result = dispatch_mcp_adapter(
@@ -11709,6 +11776,7 @@ mod tests {
         assert_eq!(
             names,
             vec![
+                "browser_artifact",
                 "browser_click",
                 "browser_close",
                 "browser_command",
@@ -11719,12 +11787,30 @@ mod tests {
                 "browser_handoff",
                 "browser_navigate",
                 "browser_open",
+                "browser_policy",
+                "browser_reconnect",
                 "browser_screenshot",
                 "browser_snapshot",
                 "browser_tab"
             ]
         );
-        assert!(serde_json::to_vec(tools).unwrap().len() <= 15000);
+        let contracts = crate::native::service_contracts::service_contracts_metadata();
+        let mut contract_names = contracts["mcpCatalog"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|name| name.as_str().unwrap())
+            .collect::<Vec<_>>();
+        contract_names.sort_unstable();
+        assert_eq!(
+            names, contract_names,
+            "Contracts must describe the actual public catalog"
+        );
+        let schema_bytes = serde_json::to_vec(tools).unwrap().len();
+        assert!(
+            schema_bytes <= 15000,
+            "Workflow schemas exceed the 15000-byte selection budget: {schema_bytes}"
+        );
         for tool in tools {
             if !matches!(
                 tool["name"].as_str(),

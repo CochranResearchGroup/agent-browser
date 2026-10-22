@@ -1581,6 +1581,213 @@ mod tests {
         assert!(record.published);
         assert_eq!(record.observed_pid, Some(42));
     }
+    #[test]
+    fn hosted_reconnect_sqlite_exact_recovery_target_preserves_original_custody_and_peer_fences() {
+        use agent_browser_service_model::*;
+        let fixture = Fixture::new();
+        let mut store = fixture.open(true);
+        let old = intent();
+        let initial = store.load_session_state().unwrap();
+        store.admit_launch_intent(&old, &initial).unwrap();
+        let identity = RecordedProcessIdentity {
+            pid: u32::MAX,
+            start_token: "linux:synthetic:original".into(),
+            executable_path: Some("/synthetic/chrome".into()),
+            browser_family: None,
+        };
+        let desktop = RemoteViewFixedDesktop {
+            desktop_id: old.assignment.desktop_id.clone(),
+            generation: old.assignment.generation,
+            friendly_route_label: "original".into(),
+        };
+        let launch = BrowserLaunch {
+            process_identity: Some(identity.clone()),
+            browser_id: "hosted-original".into(),
+            pid: u32::MAX,
+            cdp_endpoint: "ws://127.0.0.1:9222/devtools/browser/original".into(),
+            desktop: Some(desktop.clone()),
+        };
+        store.observe_launch_intent(&old, &launch).unwrap();
+        let browser = ManagedBrowserInstance {
+            id: launch.browser_id.clone(),
+            profile_id: old.profile_id.clone(),
+            pid: launch.pid,
+            cdp_endpoint: launch.cdp_endpoint.clone(),
+            desktop: Some(desktop.clone()),
+            active_session_ids: vec!["task".into()],
+        };
+        let mut retained = initial.clone();
+        retained
+            .browsers
+            .insert(browser.id.clone(), browser.clone());
+        retained.sessions.insert(
+            "task".into(),
+            ManagedBrowserSession {
+                id: "task".into(),
+                name: "hosted".into(),
+                profile_id: old.profile_id.clone(),
+                browser_id: browser.id.clone(),
+                created_at_ms: 0,
+                last_activity_at_ms: 0,
+                expires_at_ms: u64::MAX,
+                current_tab_id: None,
+            },
+        );
+        retained.host_bindings.insert(
+            "task".into(),
+            BrowserHostTaskBinding {
+                request: BrowserHostBinding {
+                    version: 1,
+                    host_id: "app".into(),
+                    participant_id: "participant".into(),
+                    session_id: "session".into(),
+                    placement: BrowserPlacement::Required {
+                        desktop: BrowserDesktopBinding {
+                            desktop_id: desktop.desktop_id.clone(),
+                            generation: desktop.generation,
+                        },
+                    },
+                },
+                desktop: desktop.clone(),
+            },
+        );
+        store
+            .publish_launch_intent(&old, &initial, &retained)
+            .unwrap();
+        let mut proposed = old.clone();
+        proposed.intent_id = uuid::Uuid::new_v4().to_string();
+        proposed.assignment.generation += 1;
+        assert_eq!(
+            store
+                .admit_recovery_launch_intent(&proposed, &retained, &browser)
+                .unwrap_err(),
+            LaunchCustodyStoreError::Conflict
+        );
+        let mut target = retained.clone();
+        let continuity = target.hosted_continuity.entry("task".into()).or_default();
+        continuity.recovery_desktop = Some(RemoteViewFixedDesktop {
+            generation: proposed.assignment.generation,
+            ..desktop.clone()
+        });
+        continuity.state = BrowserHostedConnectionState::BrowserLost;
+        store
+            .compare_and_save_session_state(&retained, &target)
+            .unwrap();
+        assert_eq!(
+            store
+                .admit_recovery_launch_intent(&proposed, &target, &browser)
+                .unwrap_err(),
+            LaunchCustodyStoreError::Conflict
+        );
+        let mut pending = target.clone();
+        let continuity = pending.hosted_continuity.get_mut("task").unwrap();
+        continuity.state = BrowserHostedConnectionState::Pending;
+        continuity.record("reopen", "fingerprint", "reopen", true);
+        store
+            .compare_and_save_session_state(&target, &pending)
+            .unwrap();
+        assert!(explicit_hosted_recovery_target(
+            &pending,
+            &browser,
+            &proposed.assignment
+        ));
+        let mut foreign = browser.clone();
+        foreign.pid = std::process::id();
+        assert!(!explicit_hosted_recovery_target(
+            &pending,
+            &foreign,
+            &proposed.assignment
+        ));
+        let mut peer_state = pending.clone();
+        let mut peer = browser.clone();
+        peer.id = "unrelated-peer".into();
+        peer.profile_id = "other-profile".into();
+        peer.pid = u32::MAX - 1;
+        peer_state.browsers.insert(peer.id.clone(), peer);
+        store
+            .compare_and_save_session_state(&pending, &peer_state)
+            .unwrap();
+        assert_eq!(
+            store
+                .admit_recovery_launch_intent(&proposed, &peer_state, &browser)
+                .unwrap_err(),
+            LaunchCustodyStoreError::Conflict
+        );
+        store
+            .compare_and_save_session_state(&peer_state, &pending)
+            .unwrap();
+        assert!(matches!(
+            store
+                .admit_recovery_launch_intent(&proposed, &pending, &browser)
+                .unwrap(),
+            LaunchCustodyAdmission::New
+        ));
+        assert_eq!(
+            store.load_session_state().unwrap().browsers[&browser.id],
+            browser
+        );
+        assert_eq!(
+            store.published_launch_process_identity(&browser).unwrap(),
+            Some(identity)
+        );
+        let records = store.unpublished_launch_records().unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].intent.assignment, proposed.assignment);
+    }
+}
+
+/// A new Native generation is recovery intent, never a rewrite of the original
+/// browser/launch proof. Only a current hosted task's published pending reopen
+/// may select it, and the exact original PID must be absent at admission.
+fn explicit_hosted_recovery_target(
+    state: &BrowserSessionState,
+    browser: &agent_browser_service_model::ManagedBrowserInstance,
+    assignment: &agent_browser_service_model::RemoteViewAssignmentRecord,
+) -> bool {
+    if !matches!(
+        crate::process_identity::observe_process(browser.pid),
+        crate::process_identity::ProcessObservation::Missing
+    ) {
+        return false;
+    }
+    state
+        .sessions
+        .values()
+        .filter(|task| task.browser_id == browser.id)
+        .any(|task| {
+            let Some(binding) = state.host_bindings.get(&task.id) else {
+                return false;
+            };
+            if binding.request.validate().is_err() {
+                return false;
+            }
+            let Some(continuity) = state.hosted_continuity.get(&task.id) else {
+                return false;
+            };
+            if continuity.state
+                != agent_browser_service_model::BrowserHostedConnectionState::Pending
+            {
+                return false;
+            }
+            let Some(desktop) = continuity.recovery_desktop.as_ref() else {
+                return false;
+            };
+            if desktop.desktop_id != assignment.desktop_id
+                || desktop.generation != assignment.generation
+            {
+                return false;
+            }
+            continuity
+                .last_request_id
+                .as_ref()
+                .and_then(|id| continuity.requests.get(id))
+                .is_some_and(|request| {
+                    request.pending
+                        && request.operation == "reopen"
+                        && request.revision == continuity.revision
+                        && !request.fingerprint.is_empty()
+                })
+        })
 }
 
 impl BrowserSessionSqliteStore {
@@ -1622,8 +1829,11 @@ impl BrowserSessionSqliteStore {
                         && record.observed_pid == Some(browser.pid)
                 })
                 .collect::<Vec<_>>();
+            let explicit_target =
+                explicit_hosted_recovery_target(&state, browser, &intent.assignment);
             let prior_conflict = if let [prior] = prior.as_slice() {
                 (prior.intent.assignment != intent.assignment
+                    && !explicit_target
                     && (!state.idle_closed_browsers.contains_key(&browser.id)
                         || !assignment_release_completed(&transaction, &prior.intent.assignment)?))
                     || (*prior).clone().confirm_publication(&state).is_err()
@@ -1652,7 +1862,10 @@ impl BrowserSessionSqliteStore {
                     || record.intent.assignment.desktop_id == intent.assignment.desktop_id)
                 && record.intent.assignment != intent.assignment
         }) || state.browsers.values().any(|browser| {
-            if state.idle_closed_browsers.contains_key(&browser.id) {
+            if state.idle_closed_browsers.contains_key(&browser.id)
+                || (recovery == Some(browser)
+                    && explicit_hosted_recovery_target(&state, browser, &intent.assignment))
+            {
                 return false;
             }
             browser.desktop.as_ref().is_some_and(|desktop| {

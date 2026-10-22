@@ -1,5 +1,7 @@
 # Runbook
 
+[P270 hosted continuity](docs/dev/plans/0270-2026-10-22-hosted-continuity.md) integrates #352–354 source through PR364. Native feature checks and exact cleanup reconciliation are recorded; #351 and #355 remain blocked by the provider transfer capability and remaining actual-host/performance acceptance. Parent #347 is open; no production effects.
+
 [P268/#349](docs/dev/plans/0268-2026-10-22-hosted-attachment.md) and [P267/#350](docs/dev/plans/0267-2026-10-22-hosted-takeover.md) close as integrated source through provider PR361 before consumer PR175. [Acceptance](docs/dev/notes/0268-2026-10-22-hosted-attachment-control.md) records healthy Native04 chat/viewer, control and corrected process cleanup. Native05 cookie continuity and independent cleanup also pass. Root owns merge and auxiliary closeout; no deployment.
 
 

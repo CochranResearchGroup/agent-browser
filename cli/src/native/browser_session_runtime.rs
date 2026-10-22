@@ -503,6 +503,38 @@ struct BorrowedAppBrowser {
     targets: BTreeSet<String>,
 }
 
+/// Forget a stale CDP connection only after proving it owns no launched process.
+/// DaemonState Drop only aborts local handlers; connected BrowserManager has no
+/// BrowserProcess, so this operation sends no browser close or kernel signal.
+fn invalidate_changed_borrowed_connections(
+    browsers: &mut HashMap<String, DaemonState>,
+    previous: &HashMap<String, BorrowedAppBrowser>,
+    next: &HashMap<String, BorrowedAppBrowser>,
+) -> Result<(), String> {
+    let changed = next
+        .iter()
+        .filter(|(id, new)| {
+            previous
+                .get(*id)
+                .is_some_and(|old| old.process != new.process || old.endpoint != new.endpoint)
+        })
+        .map(|(id, _)| id.clone())
+        .collect::<Vec<_>>();
+    for id in &changed {
+        if browsers
+            .get(id)
+            .and_then(|s| s.browser.as_ref())
+            .is_some_and(BrowserManager::owns_launched_browser_process)
+        {
+            return Err("browser_attachment_rebind_cached_process_custody_conflict".into());
+        }
+    }
+    for id in changed {
+        browsers.remove(&id);
+    }
+    Ok(())
+}
+
 enum BrowserRuntimeCommand {
     AttachAppBrowser {
         request: BrowserAttachmentRequest,
@@ -1124,6 +1156,14 @@ fn run_browser_worker(
                 for id in shared_browser_ids {
                     shared_browser_tabs.entry(id).or_default();
                 }
+                if let Err(error) = invalidate_changed_borrowed_connections(
+                    &mut browsers,
+                    &borrowed_app_browsers,
+                    &retained_attachments,
+                ) {
+                    let _ = reply.send(Err(error));
+                    continue;
+                }
                 borrowed_app_browsers.extend(retained_attachments);
                 let _ = reply.send(Ok(()));
             }
@@ -1668,6 +1708,15 @@ fn run_browser_worker(
                 command,
                 reply,
             } => {
+                let mut command = command;
+                if let Err(error) = super::browser_host_policy::bind_command_task(
+                    &mut command,
+                    &session_id,
+                    &session_name,
+                ) {
+                    let _ = reply.send(Err(error));
+                    continue;
+                }
                 let result = super::browser_host_control::guarded(&browser.id, &command, || {
                     match browsers.get_mut(&browser.id) {
                     Some(state) => runtime.block_on(async {
@@ -4618,5 +4667,39 @@ mod tests {
         symlink(&outside.0, profile.join("directory-link")).unwrap();
 
         assert_eq!(directory_regular_file_bytes(&profile).unwrap(), 8);
+    }
+}
+
+#[cfg(test)]
+mod hosted_reconnect_connection_tests {
+    use super::*;
+    #[test]
+    fn hosted_reconnect_replaces_only_changed_borrowed_connection_without_close() {
+        let row = BorrowedAppBrowser {
+            profile_id: "profile".into(),
+            process: agent_browser_service_model::RecordedProcessIdentity {
+                pid: 10,
+                start_token: "old".into(),
+                executable_path: Some("/synthetic/chrome".into()),
+                browser_family: None,
+            },
+            endpoint: "ws://127.0.0.1:1/devtools/browser/old".into(),
+            targets: BTreeSet::new(),
+        };
+        let previous = HashMap::from([
+            ("logical".into(), row.clone()),
+            ("peer".into(), row.clone()),
+        ]);
+        let mut next = previous.clone();
+        next.get_mut("logical").unwrap().process.start_token = "new".into();
+        let mut browsers = HashMap::from([
+            ("logical".into(), DaemonState::new()),
+            ("peer".into(), DaemonState::new()),
+        ]);
+        invalidate_changed_borrowed_connections(&mut browsers, &previous, &next).unwrap();
+        assert!(!browsers.contains_key("logical"));
+        assert!(browsers.contains_key("peer"));
+        invalidate_changed_borrowed_connections(&mut browsers, &next, &next).unwrap();
+        assert!(browsers.contains_key("peer"));
     }
 }

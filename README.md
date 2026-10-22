@@ -61,6 +61,69 @@ After human assistance, call `browser_continue` with the same `taskId`. It retur
 
 Retained-task recovery rechecks interrupted launch custody when the host is already running. Only proven process and profile absence settles that launch's occupancy; its history remains intact, and unproven absence still blocks replacement.
 
+## Hosted reconnect, rules and artifacts
+
+The connected MCP catalog has 16 workflow tools. Discover actual schemas before
+use; the source guide does not prove installed support.
+
+`browser_reconnect` accepts taskId and operation status, disconnect, reconnect,
+rebind, configure or reopen. All changes require requestId and expectedRevision
+from current status. configure requires lossPolicy report_only or reopen; rebind
+requires desktop with desktopId/generation. Status is metadata-only; reconnect
+freshly verifies the retained process and Native assignment without launch.
+BrowserUnreachable, positively absent BrowserLost and RebindRequired are distinct.
+recoveryDesktop is nullable approved recovery intent. Default loss policy reports loss. Explicit reopen requires opt-in and no pending
+uncertain effects: managed browsers reopen empty/blank without replaying history;
+borrowed browsers require the app's fresh attachment and desktop proof and never
+launch an app browser. Human control remains held. Results include reconnect
+revision/state/lossPolicy/lastRequestId/observedDesktop/pending/automaticReplay:false.
+
+
+When the original managed process is positively absent, explicit rebind may retain
+an exact current ready desktop as approved recoveryDesktop. State stays
+browser_lost: this records a future recovery destination, not a physical move,
+connection or rewrite of the old browser binding. A subsequent explicit reopen
+under lossPolicy reopen requires agent ownership and no pending effects. Only a
+verified replacement on that approved target publishes its new physical binding
+and clears recoveryDesktop. Live managed generation-changing rebind remains
+capability-refused. PID-reuse absence is conservatively blocked. Borrowed reopen
+still requires fresh app attachment/desktop proof and preserves any human hold.
+This source contract's new recovery path still needs native custody qualification.
+
+```bash
+agent-browser --json mcp host-reconnect TASK status
+agent-browser --json mcp host-reconnect TASK configure '{"requestId":"loss-policy-1","expectedRevision":0,"lossPolicy":"report_only"}'
+```
+
+`browser_policy` takes taskId and operation status, set_app, set_task, clear_app,
+clear_task or override. Mutations require expectedRevision, actor and reason.
+Policy version 1 contains deniedActions and artifactDestinations mapping a handle
+to an absolute canonical existing directory. A task policy completely replaces
+app defaults; clear_task restores them. Optional browser_open taskPolicy
+uses that same v1 shape to bind an explicit task override before launch. Unrestricted tasks require no extra grant.
+Scoped overrideAction/requestId returns overrideId for policyOverrideId on that
+exact task/action/request/current policy, never to bypass human control or peers.
+Pass policyOverrideId and requestId at the top level of the supported page tool
+or browser_command; for example action fill with params selector/value.
+
+`browser_artifact` takes taskId, kind screenshot/download, handle and relative
+name; download requires selector. Optional fullPage, requestId and policyOverrideId
+follow discovery. It writes only to the authorized local handle, refusing path
+traversal, symlinked destinations and existing files. Results contain local
+artifactId/path/handle/name/result and publication not_requested. Publication and
+private-content review remain separate from capture. Rules cover supported
+routes, not unmanaged CDP or semantic website restrictions.
+
+browser_close defaults to scope task. Explicit scope browser requires actor and
+reason and refuses app-borrowed browsers or any peer task. Its supported managed
+close reports fresh OS absence of the original process; full child-process residue
+requires independent census. Refused or uncertain close never authorizes replay.
+
+These contracts preserve the original app session, durable handoff and Native
+viewer. Physical same-process relocation remains a provider gap tracked by
+Remote View #578; metadata rebind is not a physical move. Keep the original browser
+rather than substituting another profile or reopening it to simulate relocation.
+
 ## App-directed browser placement and handoff
 
 An app can pass `hostBinding` to `browser_open` while retaining Agent Browser's
@@ -109,9 +172,10 @@ output pipe otherwise exits on the next emitted event. Recorded browser state,
 viewer delivery, controller state and account authentication are separate;
 metadata-only reads leave unobserved readiness explicitly unverified.
 
-The default MCP catalog contains 13 workflow tools: `browser_open`, `browser_navigate`,
+The default MCP catalog contains 16 workflow tools: `browser_open`, `browser_navigate`,
 `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
-`browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_command` and `browser_discover`.
+`browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_reconnect`, `browser_policy`,
+`browser_artifact`, `browser_command` and `browser_discover`.
 Page actions require `taskId`. Use `browser_tab` to list, create, select or close this
 task's tabs; repeat a stable `tabKey` when retrying creation. Peer tabs stay outside
 this scope. Use `browser_discover` for one advanced operation's argument schema,
