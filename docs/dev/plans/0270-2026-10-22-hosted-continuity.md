@@ -1,6 +1,6 @@
 # P270: complete app-directed browser continuity
 
-Status: OPEN
+Status: BLOCKED
 Product lane: PL-PLATFORM
 Work items: CochranResearchGroup/agent-browser#351, #352, #353, #354, #355
 Branch: platform/hosted-continuity-351-355
@@ -59,3 +59,7 @@ Native01 used clean9e7b710124 source, CI binary6b4f982f4a49c79c87f80c349c62e6731
 Exact cleanup completed with no errors and released the fresh assignment. Independent root readback found all17observed kernel instances absent, zero fixture profile/namespace references, zero unreadable current-user processes and zero active fixture Native assignments. Baseline peers were preserved. The failed private receipt remains outside Git; a changed source and fresh run identity are required for policy qualification.
 
 The causal repair binds the durable Execute task ID/name before outer browser-wide admission. Previously that guard added only browserId and evaluated both shared tasks before the selected task reached DaemonState. The regression reproduces unbound peer refusal, proves the bound unrestricted peer dispatches while the original remains denied, preserves request/override IDs, and rejects conflicting selectors. No ambient MCP dispatch context or new viewer is introduced.
+
+## Integrated partial outcome and remaining gate
+
+PR364 integrates #352–354 source qualification and [accepted source evidence](../notes/0270-2026-10-22-hosted-continuity-source.md). Native02 passed the feature checks with warm status p95 5.03 ms over 12 samples; automatic cleanup needed exact independent reconciliation, which passed without changing peers. Original failed receipts are retained. The whole P270 outcome remains BLOCKED: #351 needs Remote View #578, and #355 still needs relocation, actual browser-loss/restart recovery, automatic cleanup under process churn and the complete control/cold-performance matrix. No production or shared-skill publication. Root primary remains retained with its pinned candidates; the read-only consumer auxiliary is removed after clean integration.

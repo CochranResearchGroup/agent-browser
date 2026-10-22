@@ -1,6 +1,6 @@
 # Roadmap
 
-[P270 hosted continuity](docs/dev/plans/0270-2026-10-22-hosted-continuity.md) owns #351–355 under #347. Root implements relocation; parallel subagents implement reconnect/loss, policy/lifecycle and guidance. Joined acceptance follows those dependencies; no production effects.
+[P270 hosted continuity](docs/dev/plans/0270-2026-10-22-hosted-continuity.md) integrates #352–354 source through PR364. Native feature checks and exact cleanup reconciliation are recorded; #351 and #355 remain blocked by the provider transfer capability and remaining actual-host/performance acceptance. Parent #347 is open; no production effects.
 
 [P268 attachment](docs/dev/plans/0268-2026-10-22-hosted-attachment.md) and [P267/#350 takeover](docs/dev/plans/0267-2026-10-22-hosted-takeover.md) close as integrated source outcomes. [Acceptance](docs/dev/notes/0268-2026-10-22-hosted-attachment-control.md) records actual Native04 workflow and corrected cleanup; Native05 cookie continuity and independent cleanup also pass. No deployment; wider #347 remains open.
 
