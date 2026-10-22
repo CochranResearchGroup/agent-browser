@@ -2124,6 +2124,13 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         command: &serde_json::Value,
         activity_at_ms: u64,
     ) -> Result<OpenBrowserSessionResult, String> {
+        if command.get("attachment").is_some()
+            && command
+                .get("manualLogin")
+                .is_some_and(|value| value != false)
+        {
+            return Err("manual_login_requires_owned_browser".into());
+        }
         let hosted = command
             .get("hostBinding")
             .map(|value| {

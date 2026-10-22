@@ -40,7 +40,7 @@ pub(super) fn tools() -> Vec<Value> {
                         "profilePath":{"type":"string"},"cdpEndpoint":{"type":"string"},"targetId":{"type":"string"},
                         "sharedWith":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"hostId":{"type":"string"},"participantId":{"type":"string"},"sessionId":{"type":"string"}},"required":["hostId","participantId","sessionId"]}}},"required":["version","process","profilePath","cdpEndpoint","targetId"]},
                     "hostBinding":{"type":"object","additionalProperties":false,"description":"Configured app context and exact required/preferred placement; never a viewer URL.","properties":{"version":{"const":1},"hostId":{"type":"string"},"participantId":{"type":"string"},"sessionId":{"type":"string"},"placement":placement},"required":["version","hostId","participantId","sessionId","placement"]}
-                }, "required":["taskKey","serviceName","agentName","taskName"],"oneOf":[{"required":["url"],"not":{"required":["attachment"]}},{"required":["attachment","hostBinding","profile"],"not":{"required":["url"]}}]}
+                }, "required":["taskKey","serviceName","agentName","taskName"],"oneOf":[{"required":["url"],"not":{"required":["attachment"]}},{"required":["attachment","hostBinding","profile"],"properties":{"mode":{"enum":["automation"]}},"not":{"required":["url"]}}]}
         }),
         json!({
             "name":"browser_close", "title":"Close a browser task",
