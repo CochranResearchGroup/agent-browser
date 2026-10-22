@@ -9,6 +9,8 @@ const KNOWN_VARS: &[&str] = &[
     "AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE",
     "AGENT_BROWSER_KEYCHAIN_PASSWORD",
     "AGENT_BROWSER_PROFILE_LEASE_MODE",
+    // MCP handoff links use the service origin, separate from the native viewer.
+    "AGENT_BROWSER_PUBLIC_ORIGIN",
     "AGENT_BROWSER_PRESENTATION_HARD_MAXIMUM",
     "AGENT_BROWSER_PRESENTATION_HUMAN_RESERVE",
     "AGENT_BROWSER_PRESENTATION_MAX_QUEUE_DEPTH",
@@ -169,6 +171,35 @@ pub fn load_env_file() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn public_handoff_origin_loads_from_standard_env_file() {
+        let guard = crate::test_utils::EnvGuard::new(&[
+            "AGENT_BROWSER_ENV_FILE",
+            "AGENT_BROWSER_PUBLIC_ORIGIN",
+        ]);
+        let dir = std::env::temp_dir().join(format!("public-origin-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&dir).unwrap();
+        let path = dir.join("browser.env");
+        std::fs::write(
+            &path,
+            "AGENT_BROWSER_PUBLIC_ORIGIN=https://browser.example.org\n",
+        )
+        .unwrap();
+        guard.set("AGENT_BROWSER_ENV_FILE", path.to_str().unwrap());
+        guard.remove("AGENT_BROWSER_PUBLIC_ORIGIN");
+        load_env_file().unwrap();
+        let loaded = std::env::var("AGENT_BROWSER_PUBLIC_ORIGIN");
+        guard.set(
+            "AGENT_BROWSER_PUBLIC_ORIGIN",
+            "https://override.example.org",
+        );
+        load_env_file().unwrap();
+        let observed = std::env::var("AGENT_BROWSER_PUBLIC_ORIGIN");
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(loaded.as_deref(), Ok("https://browser.example.org"));
+        assert_eq!(observed.as_deref(), Ok("https://override.example.org"));
+    }
 
     #[test]
     fn native_remote_view_binding_is_loaded_from_dotenv() {

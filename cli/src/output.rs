@@ -7326,7 +7326,8 @@ Workflow:
   Reuse taskKey when retrying open; reuse tabKey when retrying tab creation.
   Send the returned handoffUrl to a person, then continue with the same taskId.
   Native Remote View owns the viewer and its authentication.
-  Configure AGENT_BROWSER_PUBLIC_ORIGIN on the MCP server for HTTPS handoffs.
+  Configure AGENT_BROWSER_PUBLIC_ORIGIN in the process environment or ~/.agent-browser/.env for HTTPS handoffs.
+  Reconnect existing MCP clients after changing startup configuration.
   Use browser_discover only when advanced metadata is needed.
   category=playbooks exposes SiteGuide inspection and verify_login in browser_command.
   Software login-playbook composes these routines with trusted shared auth-helper custody.

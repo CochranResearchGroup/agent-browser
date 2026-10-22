@@ -1,5 +1,7 @@
 # Active plan index
 
+[P266 MCP public origin](0266-2026-10-22-public-origin-env.md), #358; standard dotenv bootstrap repair and exact installed handoff diagnosis.
+
 [P264 missing browser selection](0264-2026-10-21-missing-browser-selection.md), #344; bounded context projection repair under #68.
 
 [P263 installed download acceptance](0263-2026-10-21-installed-download-acceptance.md), #284; closed with installed-artifact public MCP qualification and explicit account/provider limits.
