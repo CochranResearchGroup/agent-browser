@@ -388,6 +388,18 @@ pub(super) fn reconcile_pending_recoveries<E: RemoteViewBrowserProcessEffects>(
 }
 
 impl BrowserSessionEffects for RuntimeSessionEffects {
+    fn attach_app_browser(
+        &mut self,
+        request: &BrowserAttachmentRequest,
+        profile: &BrowserProfileCatalogEntry,
+        desktop: &RemoteViewFixedDesktop,
+    ) -> Result<BrowserAttachmentObservation, String> {
+        match self {
+            Self::Local(effects) => effects.attach_app_browser(request, profile, desktop),
+            Self::Remote(effects) => effects.attach_app_browser(request, profile, desktop),
+        }
+    }
+
     fn native_handoff_assignment_target(
         &mut self,
         target: &RemoteViewTabHandoffTarget,
@@ -736,6 +748,90 @@ impl ManagedBrowserCommandEffects for RuntimeSessionEffects {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn configured_runtime_wrapper_dispatches_app_attachment_without_provider_io() {
+        let directory = std::env::temp_dir().join(format!(
+            "agent-browser-attachment-dispatch-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        let local = BrowserSessionEffectAdapter::new(
+            BrowserManagerRuntime::start(Default::default()).unwrap(),
+        );
+        let adapter = RemoteViewApplicationAdapter::new(
+            "agent-browser".into(),
+            RemoteViewApplicationHttp::new(&endpoint, Duration::from_secs(1)).unwrap(),
+        )
+        .unwrap();
+        let store = BrowserSessionSqliteStore::open(&directory).unwrap();
+        let mut effects = RuntimeSessionEffects::Remote(Box::new(
+            RemoteViewSessionEffects::new(local, adapter, store, vec![], || {
+                uuid::Uuid::new_v4().to_string()
+            })
+            .unwrap(),
+        ));
+        let request = BrowserAttachmentRequest {
+            version: 1,
+            process: RecordedProcessIdentity {
+                pid: 0,
+                start_token: "synthetic".into(),
+                executable_path: Some("/synthetic/chrome".into()),
+                browser_family: None,
+            },
+            profile_path: "/synthetic/profile".into(),
+            cdp_endpoint: "ws://127.0.0.1:1/devtools/browser/synthetic".into(),
+            target_id: "target".into(),
+            shared_with: vec![],
+        };
+        let profile = BrowserProfileCatalogEntry {
+            id: "profile".into(),
+            name: "Profile".into(),
+            user_data_dir: request.profile_path.clone(),
+            kind: BrowserProfileKind::Named,
+        };
+        let desktop = RemoteViewFixedDesktop {
+            desktop_id: "desktop".into(),
+            generation: 1,
+            friendly_route_label: "App".into(),
+        };
+        // These are the concrete Remote View adapter's admission failures. The
+        // BrowserSessionEffects default instead reports capability unavailable.
+        assert_eq!(
+            effects
+                .attach_app_browser(&request, &profile, &desktop)
+                .unwrap_err(),
+            "remote_view_session_operation_baseline_missing"
+        );
+        effects
+            .begin_operation(&BrowserSessionState::default())
+            .unwrap();
+        assert_eq!(
+            effects
+                .attach_app_browser(&request, &profile, &desktop)
+                .unwrap_err(),
+            "browser_attachment_desktop_observation_unavailable"
+        );
+        assert!(
+            matches!(listener.accept(),Err(error) if error.kind()==std::io::ErrorKind::WouldBlock)
+        );
+        drop(effects);
+        let local = BrowserSessionEffectAdapter::new(
+            BrowserManagerRuntime::start(Default::default()).unwrap(),
+        );
+        let mut effects = RuntimeSessionEffects::Local(local);
+        assert_eq!(
+            effects
+                .attach_app_browser(&request, &profile, &desktop)
+                .unwrap_err(),
+            "browser_attachment_identity_invalid"
+        );
+        drop(effects);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
     #[test]
     fn hosted_pool_maintenance_never_enters_provider_effects_even_after_task_end() {
         let mut state = BrowserSessionState::default();
