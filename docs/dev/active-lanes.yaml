@@ -17,6 +17,22 @@ lanes:
     validation_status: Installed isolated red confirmed; implementation in progress
     updated_at: 2026-10-22
 
+  - id: P266
+    product_lane: PL-BUGFIX
+    objective: Load the MCP handoff origin from standard dotenv configuration
+    plan: docs/dev/plans/0266-2026-10-22-public-origin-env.md
+    branch: fix/public-origin-env
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#358]
+    plan_state: CLOSED
+    custody_state: BRANCH_OWNED
+    dependencies: []
+    overlaps: [P265]
+    reconciled_overlaps: ["Own agent_env allowlist and additive setup guidance; preserve foreign hosted workflow/model edits; no shared runtime restart"]
+    validation_status: Real loader red/green, four dotenv tests, workspace Clippy, fmt, policy/links/handoff guidance pass; isolated MCP dotenv startup passes; installed configured-origin native input/reconnect pass; source publication pending
+    updated_at: 2026-10-22
+
   - id: P265
     product_lane: PL-PLATFORM
     objective: Hosted browser launch and app-routed native handoff

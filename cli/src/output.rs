@@ -7307,8 +7307,8 @@ Commands:
   serve                 Run the MCP stdio server
   resources             List explicit read-only diagnostic resources
   read                  Read one diagnostic resource as JSON
-  host-task             Read compact hosted-task metadata without browser effects
-  watch-host-task       Emit initial/changed NDJSON; terminate process to disconnect
+  host-task             Read hosted-task metadata without browser effects
+  watch-host-task       Watch metadata as NDJSON; terminate to disconnect
 
 Default workflow tools:
   browser_open          Open or reuse a task with profile, profileMode, taskKey and url
@@ -7330,11 +7330,12 @@ Workflow:
   Reuse taskKey when retrying open; reuse tabKey when retrying tab creation.
   Send the returned handoffUrl to a person, then continue with the same taskId.
   Native Remote View owns viewing and authentication.
-  browser_open mode=manual_login opens a named persistent profile on the Native desktop
-  without CDP and returns its ready handoffUrl. Reuse taskKey for the same human login.
-  Close that task before reopening the preserved profile in default automation mode.
-  Manual mode rejects DOM actions and reports the requested URL with urlObserved=false.
-  Configure AGENT_BROWSER_PUBLIC_ORIGIN for standalone HTTPS handoffs.
+  browser_open mode=manual_login opens a named persistent profile without CDP.
+  It returns ready handoffUrl on the Native desktop; reuse taskKey for the same login.
+  Close before reopening that profile in default automation mode.
+  Manual mode rejects DOM actions; the requested URL has urlObserved=false.
+  Configure AGENT_BROWSER_PUBLIC_ORIGIN in environment or ~/.agent-browser/.env.
+  Reconnect MCP clients after startup configuration changes.
   Hosted browser_open accepts hostBinding version=1, hostId, participantId,
   sessionId and required/preferred placement with desktopId/generation.
   AGENT_BROWSER_HOSTS_FILE supplies reviewed app origin/providerApplication;

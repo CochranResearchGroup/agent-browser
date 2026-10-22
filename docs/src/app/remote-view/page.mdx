@@ -964,3 +964,13 @@ The tab Properties dialog shows authoritative profile retention as **Throwaway**
 ## When the embedded desktop cannot open
 
 The selected desktop error distinguishes handoff preparation from a prepared link whose Native page did not load. An unreadable embedded page offers a Remote View access check without claiming that login expired. Open Remote View reuses the opaque handoff. Refresh browsers reads inventory; Retry explicitly prepares the selected task again. Neither failure starts automatic repair or focus replay.
+
+### MCP handoff service origin
+
+Configure `AGENT_BROWSER_PUBLIC_ORIGIN` with Agent Browser's authenticated HTTPS
+origin in its process environment or standard `~/.agent-browser/.env` file
+(`AGENT_BROWSER_ENV_FILE` selects another file). Explicit process values take
+precedence. Reconnect existing MCP clients after changing startup configuration.
+This origin serves opaque `/remote-view/` links; the separate
+`AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN` locates the native viewer. Origins
+retain HTTPS validation; callers do not construct provider URLs.
