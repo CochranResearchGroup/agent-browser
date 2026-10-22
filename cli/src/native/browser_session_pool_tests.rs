@@ -7512,6 +7512,15 @@ fn manual_login_preserves_posture_through_managed_owner_replay_and_conflict() {
     let id = first["data"]["sessionId"].as_str().unwrap().to_owned();
     assert_eq!(host.handle_command(&command)["data"]["sessionId"], id);
     assert_eq!(calls.get(), 1, "same login task must not launch again");
+    let before_refusal = host.state().clone();
+    let refused = host
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({"action":"snapshot", "profileId":"profile-a", "activityAtMs":100}),
+        )
+        .unwrap_err();
+    assert!(refused.starts_with("manual_login_automation_unavailable"));
+    assert_eq!(host.state(), &before_refusal);
     for patch in [
         serde_json::json!({"manualLogin":false}),
         serde_json::json!({"sessionName":"Bob"}),

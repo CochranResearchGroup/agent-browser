@@ -2520,6 +2520,29 @@ where
             .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?
             .browser_id
             .clone();
+        if self
+            .state
+            .browsers
+            .get(&browser_id)
+            .is_some_and(|browser| browser.cdp_endpoint.is_empty())
+        {
+            let allowed = command["observeChildTabs"] != true
+                && match command["action"].as_str() {
+                    Some("url") => true,
+                    Some("navigate") => self
+                        .catalog
+                        .profiles
+                        .get(&self.state.sessions[&session_id].profile_id)
+                        .and_then(|profile| profile.manual_login_url.as_deref())
+                        .is_some_and(|url| command["url"] == url),
+                    _ => false,
+                };
+            if !allowed {
+                // This is a known preflight refusal, not an attempted physical
+                // command. Do not leave unknown activity that fences close.
+                return Err("manual_login_automation_unavailable: finish login, close this task, then reopen the preserved profile for automation".into());
+            }
+        }
         self.recover_browser_for_command(&browser_id, command)?;
         if self.state.sessions[&session_id].current_tab_id.is_none() {
             require_managed_runtime_admission("tab_new", command)?;
