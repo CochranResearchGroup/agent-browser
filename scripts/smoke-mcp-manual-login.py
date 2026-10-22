@@ -72,6 +72,10 @@ def main():
         env['AGENT_BROWSER_HOSTS_FILE'] = str(root / 'hosts.json')
         (root / 'hosts.json').write_text(json.dumps(dict(version=1, hosts={})))
         children, registered, operations = [], {}, []
+        cookie_seeded = threading.Event()
+        cookie_after_close = threading.Event()
+        cookie_restored = threading.Event()
+        get_requests = []
         def spawn(command, **kwargs):
             child = subprocess.Popen(command, env=env, start_new_session=True, **kwargs)
             children.append(child)
@@ -98,7 +102,7 @@ def main():
                     geometry = run(['xdotool', 'getwindowgeometry', '--shell', window])
                     values = dict(re.findall(r'^(X|Y|WIDTH|HEIGHT)=(-?\d+)$', geometry.stdout, re.M))
                     if len(values) == 4:
-                        result.append(dict(id=int(window), title='Synthetic manual login', **{'class': 'chrome'},
+                        result.append(dict(id=int(window), title=run(['xdotool', 'getwindowname', window]).stdout.strip(), **{'class': 'chrome'},
                                            pid=pid, x=int(values['X']), y=int(values['Y']),
                                            width=int(values['WIDTH']), height=int(values['HEIGHT']),
                                            active=window == active, maximized=False))
@@ -106,6 +110,25 @@ def main():
         class Provider(BaseHTTPRequestHandler):
             def log_message(self, *_):
                 pass
+            def do_GET(self):
+                if self.path not in ['/login-fixture', '/cookie-check']:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                cookie_present = 'ab357_session=synthetic' in self.headers.get('Cookie', '').split('; ')
+                get_requests.append(dict(path=self.path, cookiePresent=cookie_present, afterClose=cookie_after_close.is_set()))
+                if cookie_present:
+                    if cookie_after_close.is_set():
+                        if self.path == '/login-fixture':
+                            cookie_restored.set()
+                    elif self.path == '/cookie-check':
+                        cookie_seeded.set()
+                self.send_response(200)
+                if self.path == '/login-fixture' and not cookie_after_close.is_set():
+                    self.send_header('Set-Cookie', 'ab357_session=synthetic; Max-Age=3600; Path=/; HttpOnly; SameSite=Lax')
+                self.send_header('Content-Type', 'text/html')
+                self.end_headers()
+                self.wfile.write(b"<!doctype html><title>Manual login fixture</title><script>fetch('/cookie-check')</script>")
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 request = body['request']
@@ -177,11 +200,14 @@ def main():
         try:
             read_fd, write_fd = os.pipe()
             try:
-                spawn(['Xvfb', '-displayfd', str(write_fd), '-screen', '0', '1280x800x24', '-nolisten', 'tcp'],
-                      pass_fds=(write_fd,), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                with (root / 'xvfb.log').open('w') as diagnostics:
+                    xvfb = spawn(['Xvfb', '-displayfd', str(write_fd), '-screen', '0', '1280x800x24', '-nolisten', 'tcp'],
+                                 pass_fds=(write_fd,), stdout=subprocess.DEVNULL, stderr=diagnostics)
                 os.close(write_fd)
                 assert select.select([read_fd], [], [], 10)[0], 'Xvfb readiness deadline'
-                env['DISPLAY'] = ':' + os.read(read_fd, 64).decode().strip()
+                display_number = os.read(read_fd, 64).decode().strip()
+                assert display_number.isdecimal() and xvfb.poll() is None, 'Xvfb exited before publishing a display'
+                env['DISPLAY'] = ':' + display_number
             finally:
                 os.close(read_fd)
             spawn(['openbox', '--sm-disable'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -189,6 +215,13 @@ def main():
             while 'window id #' not in run(['xprop', '-root', '_NET_SUPPORTING_WM_CHECK']).stdout:
                 assert time.monotonic() < deadline, 'window manager readiness deadline'
                 time.sleep(.02)
+            created = run([str(Path(args.binary).resolve()), 'runtime', 'create', 'manual-fixture', '--json'])
+            assert created.returncode == 0, created.stderr
+            profile = Path(json.loads(created.stdout)['userDataDir'])
+            profile.mkdir(parents=True, exist_ok=True)
+            # Model a human's completed browser first-run setup, not a login.
+            # The real cookie is then seeded over HTTP without CDP or DB edits.
+            (profile / 'First Run').touch()
             mcp_log = root / 'mcp.log'
             with mcp_log.open('w') as diagnostics:
                 mcp = spawn([str(Path(args.binary).resolve()), 'mcp', 'serve'], stdin=subprocess.PIPE,
@@ -197,7 +230,8 @@ def main():
             mcp.stdin.write(json.dumps(dict(jsonrpc='2.0', method='notifications/initialized')) + '\n')
             mcp.stdin.flush()
             request = dict(profile='manual-fixture', profileMode='persistent', mode='manual_login', taskKey='google-login',
-                           url='about:blank', serviceName='fixture', agentName='fixture', taskName='Manual login')
+                           url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN'] + '/login-fixture',
+                           serviceName='fixture', agentName='fixture', taskName='Manual login')
             task = call('browser_open', request)
             assert task['mode'] == 'manual_login' and task['urlObserved'] is False
             assert task['operatorVisible']['state'] == 'ready'
@@ -215,9 +249,11 @@ def main():
                 raise AssertionError('manual login accepted DOM automation')
             except AssertionError as error:
                 assert 'manual_login_automation_unavailable' in str(error), str(error)
+            assert cookie_seeded.wait(10), 'manual browser must accept the synthetic persistent cookie'
             call('browser_close', dict(taskId=task['taskId']))
             task = None
             assert not browsers(), 'explicit close must remove the exact browser'
+            cookie_after_close.set()
             profiles = list(root.rglob('manual-fixture/user-data'))
             assert len(profiles) == 1, 'persistent profile survives close'
             marker = profiles[0] / 'ab357-preservation-marker'
@@ -226,6 +262,7 @@ def main():
             task = call('browser_open', automation)
             assert len(browsers()) == 1 and '--remote-debugging-port=' in browsers()[0][1]
             assert marker.read_text() == 'synthetic profile continuity'
+            assert cookie_restored.wait(10), 'persistent cookie must survive manual close and automation reopen'
             call('browser_close', dict(taskId=task['taskId']))
             task = None
             assert not browsers(), 'automation close must remove the exact browser'
@@ -234,8 +271,10 @@ def main():
             # This namespace contains synthetic data only. Keep bounded failure
             # evidence before its disposable filesystem is removed.
             logs = {str(path.relative_to(root)): path.read_text(errors='replace')[-6000:]
-                    for path in root.rglob('*.log') if path.is_file()}
-            print(json.dumps(dict(fixtureFailure=True, operations=operations, logs=logs)), flush=True)
+                    for path in [root / 'mcp.log', root / 'xvfb.log', root / 's/runtime-host.log',
+                                 root / 'xdg_cache_home/openbox/openbox.log'] if path.is_file()}
+            print(json.dumps(dict(fixtureFailure=True, operations=operations, getRequests=get_requests,
+                                  windows=windows(), logs=logs)), flush=True)
             raise
         finally:
             # Only children and processes carrying this exact disposable namespace.
@@ -277,7 +316,8 @@ def main():
                 time.sleep(.02)
         print(json.dumps(dict(passed=True, scope='public MCP, real Chrome/X11, synthetic r3 provider; no live Google or viewer',
                               noCdp=True, headed=True, readyHandoff=True, replayPreserved=True, domRefused=True,
-                              closed=True, profilePreserved=True, automationTransition=True, cleanupVerified=True)))
+                              closed=True, profilePreserved=True, persistentCookiePreserved=True,
+                              automationTransition=True, cleanupVerified=True)))
 
 
 if __name__ == '__main__':

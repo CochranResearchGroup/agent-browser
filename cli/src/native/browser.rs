@@ -2807,6 +2807,11 @@ pub(crate) fn focus_viewable_x11_browser_window(
 }
 
 #[cfg(target_os = "linux")]
+pub(crate) fn close_x11_browser_windows(pid: u32, display_name: &str) -> Result<(), String> {
+    x11_focus::close_windows_for_pid(pid, display_name)
+}
+
+#[cfg(target_os = "linux")]
 mod x11_focus {
     use libc::{c_char, c_int, c_long, c_uchar, c_uint, c_ulong, c_void};
     use serde_json::{json, Value};
@@ -2816,6 +2821,25 @@ mod x11_focus {
     type Display = c_void;
     type Window = c_ulong;
     type Atom = c_ulong;
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct ClientMessageEvent {
+        event_type: c_int,
+        serial: c_ulong,
+        send_event: c_int,
+        display: *mut Display,
+        window: Window,
+        message_type: Atom,
+        format: c_int,
+        data: [c_long; 5],
+    }
+
+    #[repr(C)]
+    union Event {
+        client_message: ClientMessageEvent,
+        pad: [c_long; 24],
+    }
 
     // Xlib.h XWindowAttributes, including its platform-sized XIDs and pointers.
     #[repr(C)]
@@ -2879,6 +2903,8 @@ mod x11_focus {
         *mut c_uint,
     ) -> c_int;
     type XFreeFn = unsafe extern "C" fn(*mut c_void) -> c_int;
+    type XSendEventFn =
+        unsafe extern "C" fn(*mut Display, Window, c_int, c_long, *mut Event) -> c_int;
     type XGetWindowAttributesFn =
         unsafe extern "C" fn(*mut Display, Window, *mut WindowAttributes) -> c_int;
     type XMapRaisedFn = unsafe extern "C" fn(*mut Display, Window) -> c_int;
@@ -2905,6 +2931,7 @@ mod x11_focus {
         get_window_property: XGetWindowPropertyFn,
         query_tree: XQueryTreeFn,
         free: XFreeFn,
+        send_event: XSendEventFn,
         get_window_attributes: XGetWindowAttributesFn,
         map_raised: XMapRaisedFn,
         raise_window: XRaiseWindowFn,
@@ -2936,6 +2963,7 @@ mod x11_focus {
                         get_window_property: symbol(handle, "XGetWindowProperty")?,
                         query_tree: symbol(handle, "XQueryTree")?,
                         free: symbol(handle, "XFree")?,
+                        send_event: symbol(handle, "XSendEvent")?,
                         get_window_attributes: symbol(handle, "XGetWindowAttributes")?,
                         map_raised: symbol(handle, "XMapRaised")?,
                         raise_window: symbol(handle, "XRaiseWindow")?,
@@ -2980,6 +3008,57 @@ mod x11_focus {
         unsafe { std::ffi::CStr::from_ptr(error) }
             .to_string_lossy()
             .to_string()
+    }
+
+    /// Request normal application closure, allowing Chrome's cookie store to
+    /// flush. Only this process's WM-managed top-level windows receive it.
+    pub(super) fn close_windows_for_pid(pid: u32, display_name: &str) -> Result<(), String> {
+        let name = CString::new(display_name).map_err(|_| "Invalid X11 display")?;
+        let x11 = X11::load()?;
+        unsafe {
+            let display = (x11.open_display)(name.as_ptr());
+            if display.is_null() {
+                return Err("Failed to open X11 display for browser close".into());
+            }
+            let result = (|| {
+                let root = (x11.default_root_window)(display);
+                let pid_atom = intern_atom(&x11, display, "_NET_WM_PID")?;
+                let stacking = intern_atom(&x11, display, "_NET_CLIENT_LIST_STACKING")?;
+                let clients = intern_atom(&x11, display, "_NET_CLIENT_LIST")?;
+                let protocols = intern_atom(&x11, display, "WM_PROTOCOLS")?;
+                let delete = intern_atom(&x11, display, "WM_DELETE_WINDOW")?;
+                let windows = window_list_property(&x11, display, root, stacking)
+                    .filter(|windows| !windows.is_empty())
+                    .or_else(|| window_list_property(&x11, display, root, clients))
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|window| window_pid(&x11, display, *window, pid_atom) == Some(pid))
+                    .collect::<Vec<_>>();
+                if windows.is_empty() {
+                    return Err("No managed X11 window found for browser close".into());
+                }
+                for window in windows {
+                    let mut event = Event { pad: [0; 24] };
+                    event.client_message = ClientMessageEvent {
+                        event_type: 33, // ClientMessage
+                        serial: 0,
+                        send_event: 1,
+                        display,
+                        window,
+                        message_type: protocols,
+                        format: 32,
+                        data: [delete as c_long, CURRENT_TIME as c_long, 0, 0, 0],
+                    };
+                    if (x11.send_event)(display, window, FALSE, 0, &mut event) == 0 {
+                        return Err("X11 browser close request failed".into());
+                    }
+                }
+                (x11.flush)(display);
+                Ok(())
+            })();
+            (x11.close_display)(display);
+            result
+        }
     }
 
     pub(super) fn focus_window_for_pid(

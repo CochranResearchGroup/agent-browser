@@ -98,20 +98,16 @@ impl ManualBrowsers {
         {
             // Read only this verified process's launch display. Remote View then
             // independently verifies the assignment and foreground window.
-            let env = fs::read(format!("/proc/{}/environ", browser.pid))
-                .map_err(|_| "manual_login_display_unavailable")?;
-            let display = env
-                .split(|byte| *byte == 0)
-                .find_map(|entry| entry.strip_prefix(b"DISPLAY="))
-                .and_then(|value| std::str::from_utf8(value).ok())
-                .ok_or("manual_login_display_unavailable")?;
+            let display = process_display(browser)?;
             if !self.verify(browser)? {
                 return Err("manual_login_process_exited".into());
             }
             let until = Instant::now() + Duration::from_secs(5);
             loop {
-                match super::super::browser::focus_viewable_x11_browser_window(browser.pid, display)
-                {
+                match super::super::browser::focus_viewable_x11_browser_window(
+                    browser.pid,
+                    &display,
+                ) {
                     Ok(_) => return Ok(()),
                     Err(reason)
                         if reason.starts_with("No X11 window found") && Instant::now() < until =>
@@ -134,35 +130,35 @@ impl ManualBrowsers {
             self.owned.remove(&browser.id);
             return Ok(());
         }
-        // Request a normal Chrome shutdown before the bounded owned-process
-        // wait, so sign-in cookies and profile storage can be flushed.
-        #[cfg(unix)]
-        if self.owned.contains_key(&browser.id)
-            && unsafe { libc::kill(browser.pid as i32, libc::SIGTERM) } != 0
+        #[cfg(target_os = "linux")]
         {
-            return Err("manual_login_close_failed".into());
-        }
-        if let Some((mut process, identity)) = self.owned.remove(&browser.id) {
-            process.approve_lifecycle_close();
-            let outcome = process.wait_or_kill(Duration::from_secs(5));
-            if !outcome.exact_process_exited {
-                process.mark_lifecycle_managed(None);
-                self.owned.insert(browser.id.clone(), (process, identity));
-                return Err("manual_login_close_readback_required".into());
+            let display = process_display(browser)?;
+            if !self.verify(browser)? {
+                self.owned.remove(&browser.id);
+                return Ok(());
             }
-            // The exact child was reaped. Do not repeat a group signal from
-            // Drop after its numeric PID has become available for reuse.
-            process.relinquish_for_handoff();
-            return Ok(());
-        }
-        #[cfg(unix)]
-        {
-            // The exact original kernel identity was checked above. Never signal
-            // a PID taken only from a stale runtime/profile-lock record.
-            if unsafe { libc::kill(browser.pid as i32, libc::SIGTERM) } != 0 {
-                return Err("manual_login_close_failed".into());
-            }
+            // SIGTERM can discard buffered cookies. WM_DELETE_WINDOW follows
+            // normal Chrome shutdown, without CDP or a forced-close fallback.
+            super::super::browser::close_x11_browser_windows(browser.pid, &display)
+                .map_err(|_| "manual_login_native_close_unavailable")?;
             let until = Instant::now() + Duration::from_secs(5);
+            if let Some((mut process, identity)) = self.owned.remove(&browser.id) {
+                loop {
+                    if let Some(exit) = process.poll_exit() {
+                        if exit.poll_error.is_none() {
+                            process.relinquish_for_handoff();
+                            return Ok(());
+                        }
+                        self.owned.insert(browser.id.clone(), (process, identity));
+                        return Err("manual_login_close_readback_required".into());
+                    }
+                    if Instant::now() >= until {
+                        self.owned.insert(browser.id.clone(), (process, identity));
+                        return Err("manual_login_close_readback_required: finish any browser close prompt, then close this task again".into());
+                    }
+                    thread::sleep(Duration::from_millis(20));
+                }
+            }
             loop {
                 if !self.verify(browser)? {
                     return Ok(());
@@ -173,7 +169,7 @@ impl ManualBrowsers {
                 thread::sleep(Duration::from_millis(20));
             }
         }
-        #[cfg(not(unix))]
+        #[cfg(not(target_os = "linux"))]
         Err("manual_login_close_unsupported".into())
     }
 
@@ -205,6 +201,17 @@ impl ManualBrowsers {
         };
         Ok(json!({"id":command["id"],"success":true,"data":data}))
     }
+}
+
+#[cfg(target_os = "linux")]
+fn process_display(browser: &ManagedBrowserInstance) -> Result<String, String> {
+    let env = fs::read(format!("/proc/{}/environ", browser.pid))
+        .map_err(|_| "manual_login_display_unavailable")?;
+    env.split(|byte| *byte == 0)
+        .find_map(|entry| entry.strip_prefix(b"DISPLAY="))
+        .and_then(|value| std::str::from_utf8(value).ok())
+        .map(str::to_owned)
+        .ok_or_else(|| "manual_login_display_unavailable".into())
 }
 
 pub(super) fn is_manual(browser: &ManagedBrowserInstance) -> bool {
