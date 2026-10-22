@@ -114,7 +114,19 @@ sets lossPolicy report_only (default) or reopen; rebind supplies exact
 retained process/Native assignment without launch. Unreachable, positively absent
 lost, rebind-required and pending states are distinct. Returned reconnect metadata
 includes revision, state, lossPolicy, lastRequestId, observedDesktop, pending and
-automaticReplay:false.
+automaticReplay:false and nullable recoveryDesktop.
+
+
+When the original managed process is positively absent, explicit rebind may retain
+an exact current ready desktop as approved recoveryDesktop. State stays
+browser_lost: this records a future recovery destination, not a physical move,
+connection or rewrite of the old browser binding. A subsequent explicit reopen
+under lossPolicy reopen requires agent ownership and no pending effects. Only a
+verified replacement on that approved target publishes its new physical binding
+and clears recoveryDesktop. Live managed generation-changing rebind remains
+capability-refused. PID-reuse absence is conservatively blocked. Borrowed reopen
+still requires fresh app attachment/desktop proof and preserves any human hold.
+This source contract's new recovery path still needs native custody qualification.
 
 Disconnect never returns human control. Explicit opted-in reopen refuses uncertain
 pending effects. Managed reopen uses empty history/blank targets under agent

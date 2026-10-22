@@ -6,6 +6,7 @@
  * Optional HOSTED_SMOKE_AUTH_STATE is a private read-only Playwright storage state;
  * HOSTED_SMOKE_BROWSER_MANIFEST optionally pins the reviewed browser manifest.
  * HOSTED_SMOKE_NATIVE_SOCKET pins the already installed provider MCP socket.
+ * HOSTED_SMOKE_CONTINUITY_REQUIRED=1 qualifies reconnect, scoped rules and local artifacts.
  * This script creates two borrowed tasks, one app-owned browser and one disposable assignment. It never installs, signs in,
  * retries effects, borrows a baseline assignment or removes retained evidence.
  */
@@ -447,6 +448,7 @@ try{
   await continuity('after-host-reconnect');
   const artifactRoot=join(root,'authorized-artifacts');await mkdir(artifactRoot,{mode:0o700});
   step='task-policy-and-artifacts';await qualifyHostedBrowserPolicy({workflow:publicWorkflow,task:opened,peerTask:shared,artifactRoot,save});
+  assert.equal((await publicWorkflow('browser_control',{taskId:opened.taskId,operation:'status'})).control.pendingOutcomeCount,0,'Known refusals must not manufacture uncertain website effects');
   await continuity('after-host-policy');
  }
  step='metadata-initial';const watchReader=startWatch(task.taskId);

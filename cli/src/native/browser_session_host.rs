@@ -1484,23 +1484,10 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .get("id")
             .cloned()
             .unwrap_or(serde_json::Value::Null);
-        // A known scope refusal is not a dispatched website effect. Check exact
-        // current custody before recording an in-flight close in the control journal.
-        if command["action"] == "browser_session_close" && command["scope"] == "browser" {
-            let admitted = self.persistence.load_session_state().and_then(|state| {
-                super::browser_host_policy::broader_close_plan(
-                    &state,
-                    command["sessionId"].as_str().unwrap_or_default(),
-                )
-                .map(|_| ())
-            });
-            if let Err(error) = admitted {
-                return serde_json::json!({"id":id,"success":false,"error":error});
-            }
-        }
         let admission = if command["action"]
             .as_str()
             .is_some_and(|action| action.starts_with("browser_session_"))
+            && !(command["action"] == "browser_session_close" && command["scope"] == "browser")
         {
             super::browser_host_control::admit_command(None, None, command, false)
         } else {
@@ -1853,11 +1840,17 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 let scope = command["scope"].as_str().unwrap_or("task");
                 if scope == "browser" {
                     let before = self.state.clone();
-                    return super::browser_host_policy::close_browser_scope(
+                    let mut admission = None;
+                    let result = super::browser_host_policy::close_browser_scope(
                         &before,
                         &session_id,
                         command,
                         || {
+                            // Only admitted effects enter the flight journal. Known
+                            // scope/attribution refusals remain undispatched.
+                            admission = super::browser_host_control::admit_command(
+                                None, None, command, false,
+                            )?;
                             let closed = self.close_session(
                                 &session_id,
                                 SessionEndReason::ExplicitClose,
@@ -1869,6 +1862,10 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                             )
                         },
                     );
+                    if let Some(admission) = admission {
+                        admission.finish(result.is_ok())?;
+                    }
+                    return result;
                 }
                 if scope != "task" {
                     return Err("browser_lifecycle_scope_invalid".into());
@@ -2072,6 +2069,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     }
 
     fn commit_state(&mut self) -> Result<(), String> {
+        self.state
+            .host_policies
+            .retain_active_tasks(&self.state.sessions.keys().cloned().collect());
         let intent = self.effects.pending_launch_intent();
         let retirement_ids = self.effects.pending_idle_retirement_ids();
         self.persistence.publish_session_effects(

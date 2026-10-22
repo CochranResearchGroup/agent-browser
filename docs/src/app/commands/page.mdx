@@ -15,11 +15,23 @@ from current status. configure requires lossPolicy report_only or reopen; rebind
 requires desktop with desktopId/generation. Status is metadata-only; reconnect
 freshly verifies the retained process and Native assignment without launch.
 BrowserUnreachable, positively absent BrowserLost and RebindRequired are distinct.
-Default loss policy reports loss. Explicit reopen requires opt-in and no pending
+recoveryDesktop is nullable approved recovery intent. Default loss policy reports loss. Explicit reopen requires opt-in and no pending
 uncertain effects: managed browsers reopen empty/blank without replaying history;
 borrowed browsers require the app's fresh attachment and desktop proof and never
 launch an app browser. Human control remains held. Results include reconnect
 revision/state/lossPolicy/lastRequestId/observedDesktop/pending/automaticReplay:false.
+
+
+When the original managed process is positively absent, explicit rebind may retain
+an exact current ready desktop as approved recoveryDesktop. State stays
+browser_lost: this records a future recovery destination, not a physical move,
+connection or rewrite of the old browser binding. A subsequent explicit reopen
+under lossPolicy reopen requires agent ownership and no pending effects. Only a
+verified replacement on that approved target publishes its new physical binding
+and clears recoveryDesktop. Live managed generation-changing rebind remains
+capability-refused. PID-reuse absence is conservatively blocked. Borrowed reopen
+still requires fresh app attachment/desktop proof and preserves any human hold.
+This source contract's new recovery path still needs native custody qualification.
 
 ```bash
 agent-browser --json mcp host-reconnect TASK status

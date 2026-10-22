@@ -203,6 +203,7 @@ impl RemoteViewApplicationTransport for Transport {
             "read-only recovery preflight must precede process custody"
         );
         Ok(match envelope.request {
+            RemoteViewApplicationRequest::Inventory {} => self.fixture["inventory"].clone(),
             RemoteViewApplicationRequest::ObserveAssignment { .. } => {
                 self.fixture["assignmentObservation"].clone()
             }
@@ -648,5 +649,111 @@ fn pooled_idle_retirement_preserves_runtime_controller_and_operation_veto() {
         evidence.borrow().published_browser_requests.len(),
         reads_before,
         "changed physical custody must fail before assignment lookup"
+    );
+}
+
+#[test]
+fn hosted_reconnect_explicit_generation_recovery_uses_fresh_target_without_acquisition_or_baseline_rewrite(
+) {
+    let mut f: Value = serde_json::from_str(include_str!(
+        "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
+    ))
+    .unwrap();
+    let old: RemoteViewAssignmentRecord = serde_json::from_value(f["assignment"].clone()).unwrap();
+    let generation = old.generation + 1;
+    f["assignment"]["generation"] = generation.into();
+    f["inventory"]["assignments"] = serde_json::json!([f["assignment"]]);
+    f["assignmentObservation"]["target"]["lifecycleGeneration"] = generation.into();
+    f["launchEnvironment"]["target"]["lifecycleGeneration"] = generation.into();
+    // Lifecycle generation changes while the independent viewer epoch can stay fixed.
+    f["inventory"]["desktops"][0]["lifecycle"]["generation"] = generation.into();
+    let target = RemoteViewFixedDesktop {
+        desktop_id: old.desktop_id.clone(),
+        generation,
+        friendly_route_label: "explicit recovery".into(),
+    };
+    let profile = BrowserProfileCatalogEntry {
+        id: "profile-a".into(),
+        name: "Synthetic".into(),
+        user_data_dir: "/synthetic/profile-a".into(),
+        kind: BrowserProfileKind::Named,
+    };
+    let browser = ManagedBrowserInstance {
+        id: "browser-a".into(),
+        profile_id: profile.id.clone(),
+        pid: 42,
+        cdp_endpoint: "http://127.0.0.1:9222".into(),
+        desktop: Some(RemoteViewFixedDesktop {
+            generation: old.generation,
+            ..target.clone()
+        }),
+        active_session_ids: vec!["task".into()],
+    };
+    let tabs = [ManagedBrowserTab {
+        id: "tab-task".into(),
+        target_id: "old-target".into(),
+        browser_id: browser.id.clone(),
+        session_id: "task".into(),
+        created_at_ms: 1,
+        last_activity_at_ms: 1,
+    }];
+    let state = BrowserSessionState {
+        browsers: BTreeMap::from([(browser.id.clone(), browser.clone())]),
+        ..Default::default()
+    };
+    let evidence = Rc::new(RefCell::new(Evidence {
+        prior: Some(old),
+        ..Default::default()
+    }));
+    let mut effects = RemoteViewSessionEffects::new(
+        Runtime {
+            evidence: evidence.clone(),
+            absent: true,
+            fail_restoration: false,
+            next_target: 0,
+        },
+        RemoteViewApplicationAdapter::new(
+            "agent-browser".into(),
+            Transport {
+                evidence: evidence.clone(),
+                fixture: f,
+            },
+        )
+        .unwrap(),
+        Store(evidence.clone()),
+        vec![],
+        || "55555555-5555-4555-8555-555555555555".into(),
+    )
+    .unwrap()
+    .with_pool(RemoteViewSessionPool {
+        name: "main".into(),
+        desired_desktops: 1,
+    })
+    .unwrap();
+    effects.begin_operation(&state).unwrap();
+    let recovered = effects
+        .recover_browser_at(&browser, &profile, &tabs, &[], &target)
+        .unwrap();
+    assert_eq!(recovered.launch.desktop, Some(target));
+    assert_eq!(recovered.launch.browser_id, browser.id);
+    assert_eq!(state.browsers[&browser.id], browser);
+    let e = evidence.borrow();
+    assert!(
+        e.published_browser_requests.is_empty(),
+        "new recovery target must not use substituted old custody proof"
+    );
+    assert_eq!(
+        e.pending.as_ref().unwrap().intent.assignment.generation,
+        generation
+    );
+    assert_eq!(
+        e.effects,
+        [
+            "absence",
+            "claim",
+            "launch",
+            "record",
+            "restore:tab-task:about:blank"
+        ]
     );
 }

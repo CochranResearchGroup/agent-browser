@@ -7349,6 +7349,11 @@ Workflow:
   desktopId/generation. Explicit reopen never replays history; borrowed reopen
   needs fresh app attachment/desktop and never launches the app browser.
   Unknown effects stay pending; human takeover remains held across reconnect.
+  If the original managed process is positively absent, rebind may save a ready
+  recoveryDesktop while state stays browser_lost and old binding stays unchanged.
+  Explicit agent-owned reopen must verify that target before new binding publish.
+  Live managed generation-changing rebind is unavailable; PID-reuse absence blocks.
+  Recovery intent is not physical relocation or proof of an active connection.
   browser_policy status/set_app/set_task/clear_app/clear_task/override uses taskId;
   changes require expectedRevision, actor, reason. Policy v1 deniedActions and
   artifactDestinations are optional. Task rules replace app defaults; clear_task

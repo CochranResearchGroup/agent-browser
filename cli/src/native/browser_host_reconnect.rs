@@ -27,7 +27,7 @@ pub(crate) fn metadata(state: &BrowserSessionState, id: &str) -> Value {
     let value = state.hosted_continuity.get(id).cloned().unwrap_or_default();
     json!({"revision":value.revision,"state":value.state,"disconnectHold":value.disconnect_hold,"retained":state.leave_open_session_ids.contains(id),"lossPolicy":value.loss_policy,
         "lastRequestId":value.last_request_id,"observedDesktop":value.observed_desktop.as_ref().map(|d|json!({"desktopId":d.desktop_id,"generation":d.generation})),
-        "pending":value.requests.values().any(|r|r.pending),"automaticReplay":false})
+        "recoveryDesktop":value.recovery_desktop.as_ref().map(|d|json!({"desktopId":d.desktop_id,"generation":d.generation})),"pending":value.requests.values().any(|r|r.pending),"automaticReplay":false})
 }
 /// Only current live hosted tasks participate. Historical/ended tasks cannot veto peers.
 pub(crate) fn check_state(
@@ -168,6 +168,26 @@ fn refresh_assignment<E: BrowserSessionEffects>(
         }
     }
     Ok(())
+}
+
+fn recovery_candidate<E: BrowserSessionEffects>(
+    effects: &mut E,
+    requested: BrowserDesktopBinding,
+) -> Result<RemoteViewFixedDesktop, String> {
+    let candidates = effects
+        .remote_view_placement_candidates(&BrowserPlacement::Required {
+            desktop: requested.clone(),
+        })?
+        .ok_or("browser_reconnect_recovery_placement_unsupported")?;
+    candidates
+        .into_iter()
+        .find(|c| {
+            c.ready
+                && c.desktop.desktop_id == requested.desktop_id
+                && c.desktop.generation == requested.generation
+        })
+        .map(|c| c.desktop)
+        .ok_or_else(|| "browser_reconnect_recovery_target_unavailable".into())
 }
 
 fn publish_next<E, F>(
@@ -316,6 +336,28 @@ where
             .filter(|t| t.browser_id == browser.id)
             .cloned()
             .collect::<Vec<_>>();
+        let recovery_desktop = row
+            .recovery_desktop
+            .clone()
+            .unwrap_or_else(|| binding.desktop.clone());
+        if !state.app_browser_attachments.contains_key(&browser.id) {
+            for peer in state
+                .sessions
+                .values()
+                .filter(|peer| peer.browser_id == browser.id && peer.id != id)
+            {
+                if let Some(peer_binding) = state.host_bindings.get(&peer.id) {
+                    let peer_target = state
+                        .hosted_continuity
+                        .get(&peer.id)
+                        .and_then(|r| r.recovery_desktop.as_ref())
+                        .unwrap_or(&peer_binding.desktop);
+                    if !same_desktop(peer_target, &recovery_desktop) {
+                        return Err("browser_reconnect_shared_recovery_target_conflict".into());
+                    }
+                }
+            }
+        }
         let prepared_attachment =
             if let Some(previous) = state.app_browser_attachments.get(&browser.id) {
                 if previous.owner != BrowserHostIdentity::from(&binding.request) {
@@ -345,6 +387,19 @@ where
             } else {
                 if state.shared_browser_ids.contains(&browser.id) {
                     return Err("browser_reconnect_borrowed_reopen_requires_app_attachment".into());
+                }
+                effects.begin_operation(state)?;
+                if row.recovery_desktop.is_some() {
+                    recovery_candidate(
+                        effects,
+                        BrowserDesktopBinding {
+                            desktop_id: recovery_desktop.desktop_id.clone(),
+                            generation: recovery_desktop.generation,
+                        },
+                    )?;
+                }
+                if let Some(path) = state.profile_executables.get(&browser.profile_id) {
+                    effects.select_browser_executable(path.clone())?;
                 }
                 None
             };
@@ -414,11 +469,12 @@ where
             if state.shared_browser_ids.contains(&browser.id) {
                 return Err("browser_reconnect_borrowed_reopen_requires_app_attachment".into());
             }
-            if let Some(path) = state.profile_executables.get(&browser.profile_id) {
-                effects.select_browser_executable(path.clone())?;
-            }
             // Empty history restores blank targets only. Never replay prior URLs or actions.
-            let recovered = effects.recover_browser(&browser, &profile, &tabs, &[])?;
+            let recovered = if row.recovery_desktop.is_some() {
+                effects.recover_browser_at(&browser, &profile, &tabs, &[], &recovery_desktop)?
+            } else {
+                effects.recover_browser(&browser, &profile, &tabs, &[])?
+            };
             if recovered.launch.browser_id != browser.id
                 || recovered.launch.pid == 0
                 || recovered.target_ids.len() != tabs.len()
@@ -433,7 +489,7 @@ where
                 .desktop
                 .clone()
                 .ok_or("browser_reconnect_native_target_unverified")?;
-            if !same_desktop(&desktop, &binding.desktop) {
+            if !same_desktop(&desktop, &recovery_desktop) {
                 return Err("browser_reconnect_rebind_required_after_reopen".into());
             }
             let current = completed
@@ -451,6 +507,29 @@ where
                     .target_id = target;
             }
             completed.idle_closed_browsers.remove(&browser.id);
+            // Every active peer was required to approve this exact recovery target above.
+            for peer in state
+                .sessions
+                .values()
+                .filter(|peer| peer.browser_id == browser.id)
+            {
+                if completed.host_bindings.contains_key(&peer.id) {
+                    update_binding(&mut completed, &peer.id, &desktop)?;
+                }
+                if peer.id != id {
+                    let current = completed
+                        .hosted_continuity
+                        .entry(peer.id.clone())
+                        .or_default();
+                    current.state = BrowserHostedConnectionState::Connected;
+                    current.observed_desktop = Some(desktop.clone());
+                    current.recovery_desktop = None;
+                    current.revision = current
+                        .revision
+                        .checked_add(1)
+                        .ok_or("browser_reconnect_revision_exhausted")?;
+                }
+            }
             row.observed_desktop = Some(desktop);
         }
         for handoff in completed
@@ -461,6 +540,7 @@ where
             handoff.view = None;
         }
         row.state = BrowserHostedConnectionState::Connected;
+        row.recovery_desktop = None;
         if row.disconnect_hold {
             completed.leave_open_session_ids.remove(id);
             row.disconnect_hold = false;
@@ -481,6 +561,13 @@ where
             } else {
                 BrowserHostedConnectionState::BrowserUnreachable
             };
+            if operation == "rebind" && row.state == BrowserHostedConnectionState::BrowserLost {
+                let requested: BrowserDesktopBinding =
+                    serde_json::from_value(command["desktop"].clone())
+                        .map_err(|_| "browser_reconnect_explicit_desktop_required")?;
+                row.recovery_desktop = Some(recovery_candidate(effects, requested)?);
+                // BrowserLost remains honest: this is future recovery intent, not a physical move.
+            }
         } else {
             let desktop = observe(browser.pid)?;
             if let Some(attachment) = state.app_browser_attachments.get(&browser.id) {
@@ -614,6 +701,35 @@ mod tests {
     impl BrowserSessionEffects for Effects {
         fn browser_is_live(&mut self, _: &ManagedBrowserInstance) -> Result<bool, String> {
             Ok(self.live)
+        }
+        fn remote_view_placement_candidates(
+            &mut self,
+            placement: &BrowserPlacement,
+        ) -> Result<Option<Vec<RemoteViewDesktopCandidate>>, String> {
+            let desktop = match placement {
+                BrowserPlacement::Required { desktop }
+                | BrowserPlacement::Preferred { desktop, .. } => desktop,
+            };
+            Ok(Some(vec![RemoteViewDesktopCandidate {
+                desktop: RemoteViewFixedDesktop {
+                    desktop_id: desktop.desktop_id.clone(),
+                    generation: desktop.generation,
+                    friendly_route_label: "ready fixture".into(),
+                },
+                ready: true,
+            }]))
+        }
+        fn recover_browser_at(
+            &mut self,
+            browser: &ManagedBrowserInstance,
+            profile: &BrowserProfileCatalogEntry,
+            tabs: &[ManagedBrowserTab],
+            history: &[BrowserNavigationRecord],
+            desktop: &RemoteViewFixedDesktop,
+        ) -> Result<BrowserRecovery, String> {
+            let mut recovered = self.recover_browser(browser, profile, tabs, history)?;
+            recovered.launch.desktop = Some(desktop.clone());
+            Ok(recovered)
         }
         fn recover_browser(
             &mut self,
@@ -1197,6 +1313,69 @@ mod tests {
             )
             .unwrap();
             assert!(state.leave_open_session_ids.contains("task"));
+        });
+    }
+    #[test]
+    fn hosted_reconnect_absent_managed_browser_records_future_target_then_reopens_exact_generation()
+    {
+        fixture(|mut state, catalog, browser_id| {
+            let original = state.browsers[browser_id].clone();
+            let original_task = state.sessions["task"].clone();
+            let mut e = effects(false);
+            let mut publish =
+                |_: &BrowserSessionState, _: &BrowserSessionState, _: &mut Effects| Ok(());
+            let mut rebind = command("rebind", 0);
+            rebind["desktop"] = json!({"desktopId":"desktop","generation":2});
+            execute_with_observer(
+                &mut state,
+                &catalog,
+                &mut e,
+                &rebind,
+                &mut publish,
+                &mut observe,
+            )
+            .unwrap();
+            assert_eq!(metadata(&state, "task")["state"], "browser_lost");
+            assert_eq!(metadata(&state, "task")["recoveryDesktop"]["generation"], 2);
+            assert_eq!(state.browsers[browser_id], original);
+            assert_eq!(state.host_bindings["task"].desktop.generation, 1);
+            assert_eq!(e.recoveries, 0);
+            let restored: BrowserSessionState =
+                serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();
+            assert_eq!(restored, state);
+            let mut configure = command("configure", 1);
+            configure["lossPolicy"] = json!("reopen");
+            execute_with_observer(
+                &mut state,
+                &catalog,
+                &mut e,
+                &configure,
+                &mut publish,
+                &mut observe,
+            )
+            .unwrap();
+            execute_with_observer(
+                &mut state,
+                &catalog,
+                &mut e,
+                &command("reopen", 2),
+                &mut publish,
+                &mut observe,
+            )
+            .unwrap();
+            assert_eq!(
+                state.browsers[browser_id]
+                    .desktop
+                    .as_ref()
+                    .unwrap()
+                    .generation,
+                2
+            );
+            assert_eq!(state.host_bindings["task"].desktop.generation, 2);
+            assert_eq!(state.sessions["task"], original_task);
+            assert_eq!(metadata(&state, "task")["state"], "connected");
+            assert!(state.hosted_continuity["task"].recovery_desktop.is_none());
+            assert_eq!(e.recoveries, 1);
         });
     }
 }

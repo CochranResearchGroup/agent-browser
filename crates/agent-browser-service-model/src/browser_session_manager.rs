@@ -118,6 +118,20 @@ pub trait BrowserSessionEffects {
     ) -> Result<BrowserRecovery, String> {
         Err("browser_session_recovery_unsupported".into())
     }
+    /// Explicit recovery onto an app-selected current Native assignment. The
+    /// original absent browser remains the custody baseline until publication.
+    /// This is process replacement, not relocation, and must never fall back.
+    fn recover_browser_at(
+        &mut self,
+        _browser: &ManagedBrowserInstance,
+        _profile: &BrowserProfileCatalogEntry,
+        _tabs: &[ManagedBrowserTab],
+        _navigation: &[BrowserNavigationRecord],
+        _desktop: &RemoteViewFixedDesktop,
+    ) -> Result<BrowserRecovery, String> {
+        Err("browser_reconnect_explicit_recovery_placement_unsupported".into())
+    }
+
     /// Select an executable for subsequent launches; existing browsers retain identity.
     fn select_browser_executable(&mut self, _path: String) -> Result<(), String> {
         Err("browser_build_selection_unsupported".into())

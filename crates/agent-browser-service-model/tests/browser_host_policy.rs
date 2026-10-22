@@ -127,6 +127,14 @@ fn explicit_override_is_exactly_scoped_and_unrelated_task_changes_do_not_revoke_
     policies
         .check("app", "alpha", "click", "request-a", Some("override"))
         .unwrap();
+    let mut closed = policies.clone();
+    let prior_audit = closed.audit.clone();
+    closed.retain_active_tasks(&["beta".to_string()].into_iter().collect());
+    assert!(!closed.operator_overrides.contains_key("override"));
+    assert!(closed.task_overrides.contains_key("beta"));
+    assert_eq!(closed.app_defaults, policies.app_defaults);
+    assert_eq!(closed.audit, prior_audit);
+
     policies
         .update(
             2,

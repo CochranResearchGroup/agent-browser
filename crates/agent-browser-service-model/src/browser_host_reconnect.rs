@@ -41,6 +41,9 @@ pub struct BrowserHostedContinuity {
     pub loss_policy: BrowserHostedLossPolicy,
     pub last_request_id: Option<String>,
     pub observed_desktop: Option<crate::RemoteViewFixedDesktop>,
+    /// Explicit future recovery placement, never proof a browser moved or connected.
+    #[serde(default)]
+    pub recovery_desktop: Option<crate::RemoteViewFixedDesktop>,
     /// Exact request receipts deliberately fail full rather than evict uncertain work.
     #[serde(default)]
     pub requests: BTreeMap<String, BrowserHostedReconnectRequest>,

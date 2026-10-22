@@ -135,6 +135,14 @@ impl BrowserHostPolicies {
     pub fn has_rules(&self) -> bool {
         !self.app_defaults.is_empty() || !self.task_overrides.is_empty()
     }
+    /// Task-scoped rules and grants expire with their task. Retain compact audit
+    /// history and app defaults without accumulating closed-task dispatch state.
+    pub fn retain_active_tasks(&mut self, active: &BTreeSet<String>) {
+        self.task_overrides.retain(|id, _| active.contains(id));
+        self.operator_overrides
+            .retain(|_, grant| active.contains(&grant.task_id));
+    }
+
     pub fn effective(&self, host: &str, task: &str) -> Option<&BrowserTaskPolicy> {
         self.task_overrides
             .get(task)

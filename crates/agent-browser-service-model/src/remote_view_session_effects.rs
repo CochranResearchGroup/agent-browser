@@ -655,175 +655,17 @@ impl<
         tabs: &[ManagedBrowserTab],
         navigation: &[BrowserNavigationRecord],
     ) -> Result<BrowserRecovery, String> {
-        self.require_operation()?;
-        self.effects
-            .prove_recovery_absence(browser, profile)
-            .map_err(|_| "browser_session_recovery_absence_unproven")?;
-        // Startup may have observed this profile live. Recheck its interrupted
-        // launches when absence becomes provable in a long-lived host, before
-        // reserving a replacement. No other profile's custody is changed.
-        let expected = self.expected.as_ref().expect("qualified baseline");
-        for claim in self
-            .store
-            .unpublished_launch_records()
-            .map_err(|_| "browser_session_recovery_readback_required")?
-            .into_iter()
-            .filter(|claim| claim.intent.profile_id == profile.id)
-        {
-            let mut observed = browser.clone();
-            if let Some(pid) = claim.observed_pid {
-                observed.pid = pid;
-            }
-            self.effects
-                .prove_recovery_absence(&observed, profile)
-                .map_err(|_| "browser_session_recovery_absence_unproven")?;
-            self.store
-                .reconcile_absent_recovery(&claim, expected, browser)
-                .map_err(|_| "browser_session_recovery_readback_required")?;
-        }
-        let borrowed = self
-            .expected
-            .as_ref()
-            .expect("qualified baseline")
-            .shared_browser_ids
-            .contains(&browser.id);
-        let (mut assignment, mut desktop) =
-            if let Some(desktop) = browser.desktop.as_ref().filter(|_| !borrowed) {
-                let assignment = self
-                    .store
-                    .published_launch_assignment(browser)
-                    .map_err(|_| "browser_session_recovery_prior_custody_unavailable")?;
-                (assignment, desktop.clone())
-            } else {
-                // Local and borrowed browsers have no native launch custody to
-                // inherit. Current profile absence qualifies a fresh placement.
-                let pool = self
-                    .pool
-                    .as_ref()
-                    .ok_or("browser_session_recovery_pool_missing")?;
-                let prepared =
-                    prepare_remote_view_session_pool(&mut self.adapter, &mut self.store, pool)?;
-                let desktop = prepared
-                    .desktops
-                    .first()
-                    .ok_or("browser_session_recovery_desktop_unavailable")?
-                    .desktop
-                    .clone();
-                let assignment = prepared
-                    .assignments
-                    .into_iter()
-                    .find(|assignment| {
-                        assignment.desktop_id == desktop.desktop_id
-                            && assignment.generation == desktop.generation
-                    })
-                    .ok_or("browser_session_recovery_assignment_unavailable")?;
-                (assignment, desktop)
-            };
-        if assignment.desktop_id != desktop.desktop_id
-            || assignment.generation != desktop.generation
-        {
-            return Err("browser_session_recovery_assignment_conflict".into());
-        }
-        if self
-            .store
-            .assignment_release_confirmed(&assignment)
-            .map_err(|_| "browser_session_recovery_prior_custody_unavailable")?
-        {
-            let pool = self
-                .pool
-                .as_ref()
-                .ok_or("browser_session_recovery_pool_missing")?;
-            let prepared =
-                prepare_remote_view_session_pool(&mut self.adapter, &mut self.store, pool)?;
-            desktop = prepared
-                .desktops
-                .first()
-                .ok_or("browser_session_recovery_desktop_unavailable")?
-                .desktop
-                .clone();
-            assignment = prepared
-                .assignments
-                .into_iter()
-                .find(|assignment| {
-                    assignment.desktop_id == desktop.desktop_id
-                        && assignment.generation == desktop.generation
-                })
-                .ok_or("browser_session_recovery_assignment_unavailable")?;
-        }
-        let intent = BrowserLaunchIntent {
-            intent_id: (self.next_intent_id)(),
-            profile_id: profile.id.clone(),
-            assignment,
-        };
-        // Provider read failures precede process admission. No launch intent
-        // should survive when recovery never reached a process effect.
-        let environment = self
-            .adapter
-            .launch_environment(&intent.assignment)
-            .map_err(|_| "browser_session_recovery_environment_unavailable")?;
-        let observation = self
-            .adapter
-            .observe_assignment(&intent.assignment)
-            .map_err(|_| "browser_session_recovery_assignment_unavailable")?;
-        environment
-            .validate_observation(&observation, &intent.assignment)
-            .map_err(|_| "browser_session_recovery_assignment_conflict")?;
-        match self
-            .store
-            .admit_recovery_launch_intent(
-                &intent,
-                self.expected.as_ref().expect("qualified baseline"),
-                browser,
-            )
-            .map_err(|_| "browser_session_recovery_custody_conflict")?
-        {
-            LaunchCustodyAdmission::New => (),
-            LaunchCustodyAdmission::Existing(_) => {
-                return Err("browser_session_recovery_readback_required".into())
-            }
-        }
-        self.pending = Some((intent.clone(), false));
-        let mut launch = self
-            .effects
-            .recover_launch(browser, profile, &intent, environment, &observation)
-            .map_err(|_| "browser_session_recovery_launch_readback_required")?;
-        if launch.browser_id != browser.id {
-            return Err("browser_session_recovery_identity_conflict".into());
-        }
-        launch.desktop = Some(desktop.clone());
-        self.store
-            .observe_launch_intent(&intent, &launch)
-            .map_err(|_| "browser_session_recovery_observation_readback_required")?;
-        let mut restored_browser = browser.clone();
-        restored_browser.pid = launch.pid;
-        restored_browser.cdp_endpoint = launch.cdp_endpoint.clone();
-        restored_browser.desktop = launch.desktop.clone();
-        let mut target_ids = BTreeMap::new();
-        // Custody remains unpublished throughout restoration. A crash or failed
-        // restoration cannot authorize another process or duplicate tab replay.
-        for (index, tab) in tabs.iter().enumerate() {
-            let acquired = if index == 0 {
-                self.effects.acquire_initial_tab(&restored_browser, &[])?
-            } else {
-                self.effects.create_tab(&restored_browser)?
-            };
-            let mut restored_tab = tab.clone();
-            restored_tab.target_id = acquired.target_id.clone();
-            let url = navigation
-                .iter()
-                .filter(|row| {
-                    row.tab_id == tab.id
-                        && row.session_id == tab.session_id
-                        && row.browser_id == browser.id
-                })
-                .max_by_key(|row| row.visited_at_ms)
-                .map_or("about:blank", |row| row.url.as_str());
-            self.effects
-                .navigate(&restored_browser, &restored_tab, url)?;
-            target_ids.insert(tab.id.clone(), acquired.target_id);
-        }
-        self.pending = Some((intent, true));
-        Ok(BrowserRecovery { launch, target_ids })
+        self.recover_browser_with_target(browser, profile, tabs, navigation, None)
+    }
+    fn recover_browser_at(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        profile: &BrowserProfileCatalogEntry,
+        tabs: &[ManagedBrowserTab],
+        navigation: &[BrowserNavigationRecord],
+        desktop: &RemoteViewFixedDesktop,
+    ) -> Result<BrowserRecovery, String> {
+        self.recover_browser_with_target(browser, profile, tabs, navigation, Some(desktop))
     }
     fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
         self.effects.select_browser_executable(path)
@@ -1550,4 +1392,216 @@ pub fn resolve_published_remote_view_tab_view<T: RemoteViewApplicationTransport>
         return Ok(issuance.clone());
     }
     Err("remote_view_tab_view_unpublished".into())
+}
+
+impl<
+        E: BrowserSessionEffects + RemoteViewBrowserProcessEffects,
+        T: RemoteViewApplicationTransport,
+        S: BrowserLaunchCustodyStore + RemoteViewPoolRequestStore + BrowserIdleRetirementCustodyStore,
+    > RemoteViewSessionEffects<E, T, S>
+{
+    fn recover_browser_with_target(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        profile: &BrowserProfileCatalogEntry,
+        tabs: &[ManagedBrowserTab],
+        navigation: &[BrowserNavigationRecord],
+        target: Option<&RemoteViewFixedDesktop>,
+    ) -> Result<BrowserRecovery, String> {
+        self.require_operation()?;
+        self.effects
+            .prove_recovery_absence(browser, profile)
+            .map_err(|_| "browser_session_recovery_absence_unproven")?;
+        // Startup may have observed this profile live. Recheck its interrupted
+        // launches when absence becomes provable in a long-lived host, before
+        // reserving a replacement. No other profile's custody is changed.
+        let expected = self.expected.as_ref().expect("qualified baseline");
+        for claim in self
+            .store
+            .unpublished_launch_records()
+            .map_err(|_| "browser_session_recovery_readback_required")?
+            .into_iter()
+            .filter(|claim| claim.intent.profile_id == profile.id)
+        {
+            let mut observed = browser.clone();
+            if let Some(pid) = claim.observed_pid {
+                observed.pid = pid;
+            }
+            self.effects
+                .prove_recovery_absence(&observed, profile)
+                .map_err(|_| "browser_session_recovery_absence_unproven")?;
+            self.store
+                .reconcile_absent_recovery(&claim, expected, browser)
+                .map_err(|_| "browser_session_recovery_readback_required")?;
+        }
+        let borrowed = self
+            .expected
+            .as_ref()
+            .expect("qualified baseline")
+            .shared_browser_ids
+            .contains(&browser.id);
+        let (mut assignment, mut desktop) = if let Some(desktop) = target {
+            let placement = BrowserPlacement::Required {
+                desktop: BrowserDesktopBinding {
+                    desktop_id: desktop.desktop_id.clone(),
+                    generation: desktop.generation,
+                },
+            };
+            let candidates = self
+                .remote_view_placement_candidates(&placement)?
+                .ok_or("browser_reconnect_recovery_target_unavailable")?;
+            if !candidates.iter().any(|c| {
+                c.ready
+                    && c.desktop.desktop_id == desktop.desktop_id
+                    && c.desktop.generation == desktop.generation
+            }) {
+                return Err("browser_reconnect_recovery_target_unavailable".into());
+            }
+            let assignment = self
+                .assignments
+                .get(&desktop.desktop_id)
+                .filter(|a| a.generation == desktop.generation)
+                .cloned()
+                .ok_or("browser_reconnect_recovery_target_unavailable")?;
+            (assignment, desktop.clone())
+        } else if let Some(desktop) = browser.desktop.as_ref().filter(|_| !borrowed) {
+            let assignment = self
+                .store
+                .published_launch_assignment(browser)
+                .map_err(|_| "browser_session_recovery_prior_custody_unavailable")?;
+            (assignment, desktop.clone())
+        } else {
+            // Local and borrowed browsers have no native launch custody to
+            // inherit. Current profile absence qualifies a fresh placement.
+            let pool = self
+                .pool
+                .as_ref()
+                .ok_or("browser_session_recovery_pool_missing")?;
+            let prepared =
+                prepare_remote_view_session_pool(&mut self.adapter, &mut self.store, pool)?;
+            let desktop = prepared
+                .desktops
+                .first()
+                .ok_or("browser_session_recovery_desktop_unavailable")?
+                .desktop
+                .clone();
+            let assignment = prepared
+                .assignments
+                .into_iter()
+                .find(|assignment| {
+                    assignment.desktop_id == desktop.desktop_id
+                        && assignment.generation == desktop.generation
+                })
+                .ok_or("browser_session_recovery_assignment_unavailable")?;
+            (assignment, desktop)
+        };
+        if assignment.desktop_id != desktop.desktop_id
+            || assignment.generation != desktop.generation
+        {
+            return Err("browser_session_recovery_assignment_conflict".into());
+        }
+        if self
+            .store
+            .assignment_release_confirmed(&assignment)
+            .map_err(|_| "browser_session_recovery_prior_custody_unavailable")?
+        {
+            if target.is_some() {
+                return Err("browser_reconnect_recovery_target_released".into());
+            }
+            let pool = self
+                .pool
+                .as_ref()
+                .ok_or("browser_session_recovery_pool_missing")?;
+            let prepared =
+                prepare_remote_view_session_pool(&mut self.adapter, &mut self.store, pool)?;
+            desktop = prepared
+                .desktops
+                .first()
+                .ok_or("browser_session_recovery_desktop_unavailable")?
+                .desktop
+                .clone();
+            assignment = prepared
+                .assignments
+                .into_iter()
+                .find(|assignment| {
+                    assignment.desktop_id == desktop.desktop_id
+                        && assignment.generation == desktop.generation
+                })
+                .ok_or("browser_session_recovery_assignment_unavailable")?;
+        }
+        let intent = BrowserLaunchIntent {
+            intent_id: (self.next_intent_id)(),
+            profile_id: profile.id.clone(),
+            assignment,
+        };
+        // Provider read failures precede process admission. No launch intent
+        // should survive when recovery never reached a process effect.
+        let environment = self
+            .adapter
+            .launch_environment(&intent.assignment)
+            .map_err(|_| "browser_session_recovery_environment_unavailable")?;
+        let observation = self
+            .adapter
+            .observe_assignment(&intent.assignment)
+            .map_err(|_| "browser_session_recovery_assignment_unavailable")?;
+        environment
+            .validate_observation(&observation, &intent.assignment)
+            .map_err(|_| "browser_session_recovery_assignment_conflict")?;
+        match self
+            .store
+            .admit_recovery_launch_intent(
+                &intent,
+                self.expected.as_ref().expect("qualified baseline"),
+                browser,
+            )
+            .map_err(|_| "browser_session_recovery_custody_conflict")?
+        {
+            LaunchCustodyAdmission::New => (),
+            LaunchCustodyAdmission::Existing(_) => {
+                return Err("browser_session_recovery_readback_required".into())
+            }
+        }
+        self.pending = Some((intent.clone(), false));
+        let mut launch = self
+            .effects
+            .recover_launch(browser, profile, &intent, environment, &observation)
+            .map_err(|_| "browser_session_recovery_launch_readback_required")?;
+        if launch.browser_id != browser.id {
+            return Err("browser_session_recovery_identity_conflict".into());
+        }
+        launch.desktop = Some(desktop.clone());
+        self.store
+            .observe_launch_intent(&intent, &launch)
+            .map_err(|_| "browser_session_recovery_observation_readback_required")?;
+        let mut restored_browser = browser.clone();
+        restored_browser.pid = launch.pid;
+        restored_browser.cdp_endpoint = launch.cdp_endpoint.clone();
+        restored_browser.desktop = launch.desktop.clone();
+        let mut target_ids = BTreeMap::new();
+        // Custody remains unpublished throughout restoration. A crash or failed
+        // restoration cannot authorize another process or duplicate tab replay.
+        for (index, tab) in tabs.iter().enumerate() {
+            let acquired = if index == 0 {
+                self.effects.acquire_initial_tab(&restored_browser, &[])?
+            } else {
+                self.effects.create_tab(&restored_browser)?
+            };
+            let mut restored_tab = tab.clone();
+            restored_tab.target_id = acquired.target_id.clone();
+            let url = navigation
+                .iter()
+                .filter(|row| {
+                    row.tab_id == tab.id
+                        && row.session_id == tab.session_id
+                        && row.browser_id == browser.id
+                })
+                .max_by_key(|row| row.visited_at_ms)
+                .map_or("about:blank", |row| row.url.as_str());
+            self.effects
+                .navigate(&restored_browser, &restored_tab, url)?;
+            target_ids.insert(tab.id.clone(), acquired.target_id);
+        }
+        self.pending = Some((intent, true));
+        Ok(BrowserRecovery { launch, target_ids })
+    }
 }

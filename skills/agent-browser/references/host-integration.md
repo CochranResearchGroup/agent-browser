@@ -176,3 +176,12 @@ browser_close defaults to scope task. Explicit scope browser requires actor/reas
 refuses borrowed browsers and peer tasks, and uses fresh OS original-process
 absence readback. It does not prove every child gone; independent census remains
 necessary. Unknown close outcomes never authorize replay.
+
+Compact reconnect metadata includes nullable recoveryDesktop. If the original
+managed process is positively absent, rebind may save an exact ready destination
+as recovery intent while state remains browser_lost; old binding is unchanged.
+Explicit opted-in agent-owned reopen with no pending effects must verify its
+replacement on that approved target before publishing the new binding and
+clearing recoveryDesktop. Live managed generation-changing rebind remains refused;
+PID-reuse absence stays conservatively blocked. This is recovery, not relocation,
+and new native custody qualification is pending.

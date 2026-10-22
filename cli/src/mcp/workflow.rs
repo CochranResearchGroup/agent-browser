@@ -513,6 +513,18 @@ pub(super) fn tab(arguments: &Value, transport_session: &str) -> Result<Value, J
     let operation = required_string_argument(arguments, "operation")?;
     let session_name = task_session(task_id)?;
     if operation == "list" {
+        let initial = BrowserSessionSqliteStore::open_read_only(
+            &BrowserSessionSqliteStore::default_sqlite_path().map_err(issue)?,
+        )
+        .map_err(issue)?
+        .load_session_state()
+        .map_err(issue)?;
+        crate::native::browser_host_policy::check_state(
+            &initial,
+            &session_name,
+            &json!({"taskId":task_id,"action":"tab_list"}),
+        )
+        .map_err(issue)?;
         execute(
             json!({"id":uuid::Uuid::new_v4().to_string(),
             "action":"url","sessionName":session_name,"observeChildTabs":true}),
