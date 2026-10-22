@@ -3,7 +3,9 @@
 //! uncertainty through takeover rather than being replayed. Unmanaged CDP/OS
 //! controllers must cooperate; this is not an OS input interception mechanism.
 use std::collections::BTreeMap;
-use std::fs::{File, OpenOptions};
+#[cfg(unix)]
+use std::fs::File;
+use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -74,6 +76,7 @@ fn transaction<T>(
         .sync_all()
         .map_err(|_| "browser_control_sync_failed")?;
     std::fs::rename(&temporary, path).map_err(|_| "browser_control_write_failed")?;
+    #[cfg(unix)]
     File::open(path.parent().ok_or("browser_control_directory_missing")?)
         .and_then(|directory| directory.sync_all())
         .map_err(|_| "browser_control_sync_failed")?;
@@ -647,6 +650,51 @@ mod integration_tests {
                 .filter(Result::is_ok)
                 .count();
             assert_eq!(wins, 1);
+        });
+    }
+    #[test]
+    fn host_control_in_flight_effect_and_takeover_run_concurrently() {
+        fixture(|| {
+            let (started_tx, started_rx) = std::sync::mpsc::channel();
+            let (finish_tx, finish_rx) = std::sync::mpsc::channel();
+            let worker = std::thread::spawn(move || {
+                let admission = admit("browser", "click", "live-effect").unwrap().unwrap();
+                started_tx.send(()).unwrap();
+                finish_rx.recv().unwrap();
+                admission.finish(true).unwrap();
+            });
+            started_rx.recv().unwrap();
+            let epoch = change(
+                "browser",
+                "takeover",
+                0,
+                "human",
+                "Concurrent assistance",
+                false,
+            )
+            .unwrap();
+            assert!(admit("browser", "fill", "blocked-followup").is_err());
+            assert_eq!(
+                read("browser").unwrap().flights["live-effect"],
+                "uncertain_in_flight"
+            );
+            let epoch = change(
+                "browser",
+                "return",
+                epoch,
+                "human",
+                "Explicit return",
+                false,
+            )
+            .unwrap();
+            assert!(observed("browser", epoch).is_err());
+            finish_tx.send(()).unwrap();
+            worker.join().unwrap();
+            observed("browser", epoch).unwrap();
+            assert_eq!(
+                read("browser").unwrap().flights["live-effect"],
+                "observed_completed"
+            );
         });
     }
     #[test]
