@@ -2794,8 +2794,16 @@ pub(crate) async fn resolve_cdp_url(input: &str) -> Result<String, String> {
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) fn focus_x11_browser_window(pid: u32, display_name: &str) -> Result<Value, String> {
-    x11_focus::focus_window_for_pid(pid, display_name)
+fn focus_x11_browser_window(pid: u32, display_name: &str) -> Result<Value, String> {
+    x11_focus::focus_window_for_pid(pid, display_name, false)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn focus_viewable_x11_browser_window(
+    pid: u32,
+    display_name: &str,
+) -> Result<Value, String> {
+    x11_focus::focus_window_for_pid(pid, display_name, true)
 }
 
 #[cfg(target_os = "linux")]
@@ -2974,7 +2982,11 @@ mod x11_focus {
             .to_string()
     }
 
-    pub(super) fn focus_window_for_pid(pid: u32, display_name: &str) -> Result<Value, String> {
+    pub(super) fn focus_window_for_pid(
+        pid: u32,
+        display_name: &str,
+        viewable_only: bool,
+    ) -> Result<Value, String> {
         let display_c = CString::new(display_name)
             .map_err(|_| "X11 display contains an interior NUL byte".to_string())?;
         let x11 = X11::load()?;
@@ -2985,7 +2997,8 @@ mod x11_focus {
                 return Err(format!("Failed to open X11 display {}", display_name));
             }
 
-            let outcome = focus_window_for_pid_on_display(&x11, display, pid, display_name);
+            let outcome =
+                focus_window_for_pid_on_display(&x11, display, pid, display_name, viewable_only);
             (x11.close_display)(display);
             outcome
         }
@@ -2996,6 +3009,7 @@ mod x11_focus {
         display: *mut Display,
         pid: u32,
         display_name: &str,
+        viewable_only: bool,
     ) -> Result<Value, String> {
         let root = (x11.default_root_window)(display);
         let pid_atom = intern_atom(x11, display, "_NET_WM_PID")?;
@@ -3013,6 +3027,9 @@ mod x11_focus {
         let Some(target_window) = candidates.iter().rev().copied().find(|window| {
             if window_pid(x11, display, *window, pid_atom) != Some(pid) {
                 return false;
+            }
+            if !viewable_only {
+                return true;
             }
             let mut attributes = std::mem::MaybeUninit::<WindowAttributes>::uninit();
             if (x11.get_window_attributes)(display, *window, attributes.as_mut_ptr()) == 0 {

@@ -110,7 +110,8 @@ impl ManualBrowsers {
             }
             let until = Instant::now() + Duration::from_secs(5);
             loop {
-                match super::super::browser::focus_x11_browser_window(browser.pid, display) {
+                match super::super::browser::focus_viewable_x11_browser_window(browser.pid, display)
+                {
                     Ok(_) => return Ok(()),
                     Err(reason)
                         if reason.starts_with("No X11 window found") && Instant::now() < until =>
