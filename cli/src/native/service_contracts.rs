@@ -296,6 +296,10 @@ pub const WORKFLOW_MCP_TOOL_NAMES: &[&str] = &[
     "browser_handoff",
     "browser_continue",
     "browser_close",
+    "browser_control",
+    "browser_reconnect",
+    "browser_policy",
+    "browser_artifact",
     "browser_command",
     "browser_discover",
 ];

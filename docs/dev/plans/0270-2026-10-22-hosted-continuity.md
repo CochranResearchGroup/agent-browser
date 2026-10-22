@@ -47,3 +47,7 @@ The first b10884b99 candidate passed public guidance discovery and invalid-inten
 ## Final review repair
 
 The full repaired Service Model suite passed382 tests across23 binaries; hosted/native recovery, owner, MCP, action and strict Rust gates passed within their logged scope. Before Native qualification, independent source review found two direct-route policy aliases missing and an incomplete post-close process token treated as proof of PID replacement. Both require focused regressions before rebuilding. The second CI candidate build was stopped by exact owned-scope SIGTERM (exit143) before qualification; neither stopped build caused runtime effects. The route-confusion wrapper separately overflowed the default test stack; rerun uses the repository-standard16MiB test stack and isolated runtime state rather than changing product behavior.
+
+## Contracts resource parity
+
+The7b38f66dc candidate built successfully; public guidance and no-launch MCP resource reads passed. Its complete catalog smoke passed help/schema budgets (16tools,14,394schema bytes) then exposed the contracts resource retaining the old12-name list. The resource list now includes control, reconnect, policy and artifacts, and the Rust catalog test compares actual tool names with published contracts metadata. This is a real discovery-contract repair, not a relaxed assertion. Native acceptance remains unstarted until the rebuilt source and relevant gates pass.

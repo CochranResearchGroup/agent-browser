@@ -11794,6 +11794,18 @@ mod tests {
                 "browser_tab"
             ]
         );
+        let contracts = crate::native::service_contracts::service_contracts_metadata();
+        let mut contract_names = contracts["mcpCatalog"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|name| name.as_str().unwrap())
+            .collect::<Vec<_>>();
+        contract_names.sort_unstable();
+        assert_eq!(
+            names, contract_names,
+            "Contracts must describe the actual public catalog"
+        );
         let schema_bytes = serde_json::to_vec(tools).unwrap().len();
         assert!(
             schema_bytes <= 15000,
