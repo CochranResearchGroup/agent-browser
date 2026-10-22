@@ -16,7 +16,10 @@ also blocks page reads and capture. Status and explicit return remain usable.
 It first enters an awaiting-observation state. A fresh URL read of the same
 retained target must succeed before automation resumes. Return never recovers,
 reopens or silently replaces a lost browser. Override records attribution using
-the caller's existing local authority; it creates no viewer grant or permission.
+the caller's existing trusted runtime/operator admission; actor and reason are
+descriptive attribution, not proof of authority. The adapter grants no additional
+access and creates no viewer grant or permission. Applications must expose override
+only through their existing authorized operator surface.
 
 Each admitted mutating command records its request identity before dispatch.
 An intervening takeover marks pending work uncertain. The effect may finish;

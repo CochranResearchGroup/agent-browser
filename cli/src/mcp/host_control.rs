@@ -105,10 +105,16 @@ pub(super) fn cli(args: &[String]) -> Result<Value, String> {
     if args.len() > 7 {
         arguments["requestId"] = json!(args[7]);
     }
-    call(&arguments, "default").map_err(|error| {
+    let response = call(&arguments, "default").map_err(|error| {
         error
             .data
             .and_then(|data| data["message"].as_str().map(str::to_owned))
             .unwrap_or_else(|| error.message.to_owned())
-    })
+    })?;
+    serde_json::from_str(
+        response["content"][0]["text"]
+            .as_str()
+            .ok_or("browser_control_response_invalid")?,
+    )
+    .map_err(|_| "browser_control_response_invalid".into())
 }

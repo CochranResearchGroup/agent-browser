@@ -568,6 +568,20 @@ async fn execute_command_with_target_custody(
     state: &mut DaemonState,
     managed_target: bool,
 ) -> Value {
+    let _service_state_lock_timeout_override =
+        crate::native::service_store::service_state_lock_timeout_override(
+            cmd.get("serviceStateLockTimeoutMs").and_then(Value::as_u64),
+        );
+    let action = cmd.get("action").and_then(|v| v.as_str()).unwrap_or("");
+    let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
+    let navigation_admission = if action == "navigate" {
+        match navigation_challenge_admission(cmd) {
+            Ok(admission) => admission,
+            Err(error) => return error_response(id, &error),
+        }
+    } else {
+        None
+    };
     let admission = match super::browser_host_control::admit_command(
         state
             .session_name
@@ -587,20 +601,6 @@ async fn execute_command_with_target_custody(
     ) {
         Ok(admission) => admission,
         Err(error) => return error_response(cmd["id"].as_str().unwrap_or_default(), &error),
-    };
-    let _service_state_lock_timeout_override =
-        crate::native::service_store::service_state_lock_timeout_override(
-            cmd.get("serviceStateLockTimeoutMs").and_then(Value::as_u64),
-        );
-    let action = cmd.get("action").and_then(|v| v.as_str()).unwrap_or("");
-    let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
-    let navigation_admission = if action == "navigate" {
-        match navigation_challenge_admission(cmd) {
-            Ok(admission) => admission,
-            Err(error) => return error_response(id, &error),
-        }
-    } else {
-        None
     };
     let mut response = execute_command_after_navigation_admission(
         cmd,
