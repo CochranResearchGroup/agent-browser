@@ -1,5 +1,7 @@
 # Runbook
 
+[P265](docs/dev/plans/0265-2026-10-22-hosted-launch.md), #348, is source-qualified on platform/hosted-launch-348. Provider PR359 precedes Bots PR172; actual Native fixture cleanup passed. No production publication.
+
 [P264](docs/dev/plans/0264-2026-10-21-missing-browser-selection.md), #344, owns the bounded missing-browser evidence repair. No runtime publication.
 
 [P263 installed download acceptance](docs/dev/plans/0263-2026-10-21-installed-download-acceptance.md), #284, qualifies original-file retrieval on installed 9c8edd62a16f. [Acceptance](docs/dev/notes/0263-2026-10-21-installed-download-acceptance.md) records three public MCP fixture passes with exact process continuity and zero residue; no new deployment or private-account run.

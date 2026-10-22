@@ -19,6 +19,20 @@ pub struct RemoteViewApplicationPoolPolicy {
     pub maximum_reserved: u32,
     pub idle_retention_seconds: u32,
     pub allow_scale_in: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lifecycle_manager: Option<RemoteViewApplicationPoolLifecycleManager>,
+}
+
+/// Provider policy chooses who manages pool lifecycle; absence preserves legacy policy.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RemoteViewApplicationPoolLifecycleManager {
+    Application,
+    RemoteView,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -26,6 +40,8 @@ pub struct RemoteViewApplicationPoolPolicy {
 pub struct RemoteViewApplicationPolicy {
     pub display_name: String,
     pub enabled: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub selective_input: bool,
     pub pools: BTreeMap<String, RemoteViewApplicationPoolPolicy>,
     pub root_visibility: String,
     pub capabilities: Vec<String>,

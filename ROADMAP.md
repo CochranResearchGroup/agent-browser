@@ -1,5 +1,7 @@
 # Roadmap
 
+[P265 hosted launch](docs/dev/plans/0265-2026-10-22-hosted-launch.md), #348 under #347, is source-qualified with actual Native viewer pixels and standalone continuity. #349/#350 are the next parallel frontier; no production publication.
+
 [P264 missing browser selection](docs/dev/plans/0264-2026-10-21-missing-browser-selection.md), #344 under #68, keeps missing explicit browser evidence separate from peer workspaces.
 
 [P263 installed download acceptance](docs/dev/plans/0263-2026-10-21-installed-download-acceptance.md), #284, qualifies original-file retrieval on installed 9c8edd62a16f. [Acceptance](docs/dev/notes/0263-2026-10-21-installed-download-acceptance.md) records three public MCP fixture passes with exact process continuity and zero residue; no new deployment or private-account run.

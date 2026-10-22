@@ -17,6 +17,7 @@ pub mod browser_download;
 pub mod browser_emulation;
 #[allow(dead_code)]
 pub mod browser_frame;
+pub(crate) mod browser_host_context;
 mod browser_idle_retirement_store;
 #[allow(dead_code)]
 pub mod browser_input;

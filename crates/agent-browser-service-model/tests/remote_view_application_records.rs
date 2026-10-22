@@ -223,3 +223,49 @@ fn view_grants_reject_expiry_revocation_target_drift_and_raw_route_urls() {
         assert!(validate(&changed).is_err(), "{path}");
     }
 }
+
+#[test]
+fn current_provider_host_inventory_preserves_optional_policy_and_display_fields() {
+    // Synthetic identities with the current provider's configured-consumer shape.
+    let mut inventory = fixture()["inventory"].clone();
+    inventory["registration"]["applicationShape"] = json!("configured_consumer");
+    inventory["policy"]["selective_input"] = json!(true);
+    inventory["policy"]["pools"]["main"]["lifecycle_manager"] = json!("application");
+    inventory["assignments"][0]["presentation"] =
+        json!({"userLabel":"Synthetic app", "sessionLabel":"Synthetic session"});
+    let typed: RemoteViewApplicationInventory = serde_json::from_value(inventory.clone()).unwrap();
+    typed.validate_external("agent-browser").unwrap();
+    assert!(typed.policy.selective_input);
+    assert_eq!(
+        typed.assignments[0]
+            .presentation
+            .as_ref()
+            .unwrap()
+            .session_label
+            .as_deref(),
+        Some("Synthetic session")
+    );
+    assert_eq!(serde_json::to_value(typed).unwrap(), inventory);
+    let mut invalid = inventory.clone();
+    invalid["policy"]["pools"]["main"]["lifecycle_manager"] = json!("unknown_manager");
+    assert!(serde_json::from_value::<RemoteViewApplicationInventory>(invalid).is_err());
+    inventory["assignments"][0]["presentation"]["authenticatedIdentity"] = json!(true);
+    assert!(serde_json::from_value::<RemoteViewApplicationInventory>(inventory).is_err());
+}
+
+#[test]
+fn legacy_provider_inventory_defaults_optional_fields_without_wire_drift() {
+    let inventory = fixture()["inventory"].clone();
+    let typed: RemoteViewApplicationInventory = serde_json::from_value(inventory.clone()).unwrap();
+    assert!(!typed.policy.selective_input);
+    assert!(typed
+        .policy
+        .pools
+        .values()
+        .all(|pool| pool.lifecycle_manager.is_none()));
+    assert!(typed
+        .assignments
+        .iter()
+        .all(|assignment| assignment.presentation.is_none()));
+    assert_eq!(serde_json::to_value(typed).unwrap(), inventory);
+}

@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P265 hosted launch](0265-2026-10-22-hosted-launch.md): exact app placement, durable app handoff, actual Native pixels/status, standalone continuity and qualified fixture cleanup; source only.
+
 [P264 missing browser selection](0264-2026-10-21-missing-browser-selection.md), #344 under #68; exact missing-workspace evidence.
 
 [P263 installed download acceptance](0263-2026-10-21-installed-download-acceptance.md): ordinary, stale and malformed-custody public MCP retrieval on the installed artifact, executable/process continuity and zero isolated residue.
