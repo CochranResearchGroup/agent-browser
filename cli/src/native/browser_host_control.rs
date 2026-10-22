@@ -528,6 +528,46 @@ mod integration_tests {
             directory.join(".agent-browser").to_str().unwrap(),
         );
         run();
+        // default_sqlite intentionally seals its one-time migration archive.
+        // Restore deletion permission only for this disposable fixture's exact
+        // archive directories, never a runtime path or a sibling /tmp fixture.
+        let service_directory = directory.join(".agent-browser/service");
+        for entry in std::fs::read_dir(&service_directory).unwrap() {
+            let entry = entry.unwrap();
+            let name = entry.file_name();
+            let name = name.to_str().unwrap();
+            let Some(digest) = name.strip_prefix("migration-archive-") else {
+                continue;
+            };
+            if digest.len() != 16 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                continue;
+            }
+            let metadata = std::fs::symlink_metadata(entry.path()).unwrap();
+            assert!(metadata.is_dir() && !metadata.file_type().is_symlink());
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::{MetadataExt, PermissionsExt};
+                assert_eq!(metadata.uid(), unsafe { libc::geteuid() });
+                let mode = metadata.permissions().mode() & 0o777;
+                assert!(
+                    matches!(mode, 0o500 | 0o700),
+                    "Unexpected fixture archive mode"
+                );
+                if mode == 0o500 {
+                    std::fs::set_permissions(entry.path(), std::fs::Permissions::from_mode(0o700))
+                        .unwrap();
+                }
+            }
+            #[cfg(windows)]
+            for archived in std::fs::read_dir(entry.path()).unwrap() {
+                let archived = archived.unwrap();
+                let metadata = std::fs::symlink_metadata(archived.path()).unwrap();
+                assert!(metadata.is_file() && !metadata.file_type().is_symlink());
+                let mut permissions = metadata.permissions();
+                permissions.set_readonly(false);
+                std::fs::set_permissions(archived.path(), permissions).unwrap();
+            }
+        }
         std::fs::remove_dir_all(directory).unwrap();
     }
     #[test]
