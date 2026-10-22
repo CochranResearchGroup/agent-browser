@@ -1,5 +1,6 @@
 # Roadmap
 
+[P266](docs/dev/plans/0266-2026-10-22-public-origin-env.md), #358, repairs standard MCP service-origin bootstrap under PL-BUGFIX; [RUNBOOK](RUNBOOK.md) owns current validation and integration evidence.
 [P265 hosted launch](docs/dev/plans/0265-2026-10-22-hosted-launch.md), #348 under #347, is source-qualified with actual Native viewer pixels and standalone continuity. #349/#350 are the next parallel frontier; no production publication.
 
 [P264 missing browser selection](docs/dev/plans/0264-2026-10-21-missing-browser-selection.md), #344 under #68, keeps missing explicit browser evidence separate from peer workspaces.

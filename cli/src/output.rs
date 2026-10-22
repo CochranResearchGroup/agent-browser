@@ -7330,7 +7330,8 @@ Workflow:
   Reuse taskKey when retrying open; reuse tabKey when retrying tab creation.
   Send the returned handoffUrl to a person, then continue with the same taskId.
   Native Remote View owns the viewer and its authentication.
-  Configure AGENT_BROWSER_PUBLIC_ORIGIN for standalone HTTPS handoffs.
+  Configure AGENT_BROWSER_PUBLIC_ORIGIN in the process environment or ~/.agent-browser/.env for HTTPS handoffs.
+  Reconnect existing MCP clients after changing startup configuration.
   Hosted browser_open accepts hostBinding version=1, hostId, participantId,
   sessionId and required/preferred placement with desktopId/generation.
   AGENT_BROWSER_HOSTS_FILE supplies reviewed app origin/providerApplication;
