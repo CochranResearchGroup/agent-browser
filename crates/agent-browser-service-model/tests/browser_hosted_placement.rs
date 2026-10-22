@@ -33,7 +33,13 @@ impl BrowserSessionEffects for Effects {
         desktop: &RemoteViewFixedDesktop,
     ) -> Result<BrowserAttachmentObservation, String> {
         self.attachments += 1;
-        if self.app_desktop.as_ref().is_some_and(|id|id!=&desktop.desktop_id) {return Err("browser_attachment_desktop_process_mismatch".into());}
+        if self
+            .app_desktop
+            .as_ref()
+            .is_some_and(|id| id != &desktop.desktop_id)
+        {
+            return Err("browser_attachment_desktop_process_mismatch".into());
+        }
         Ok(BrowserAttachmentObservation {
             launch: BrowserLaunch {
                 process_identity: Some(request.process.clone()),
@@ -48,6 +54,10 @@ impl BrowserSessionEffects for Effects {
             },
             target_id: request.target_id.clone(),
             assignment: None,
+            borrowed_target_ids: std::collections::BTreeSet::from([
+                request.target_id.clone(),
+                "preexisting-popup".into(),
+            ]),
         })
     }
 
@@ -639,11 +649,49 @@ fn app_attachment_cannot_be_implicitly_shared_or_recovered_by_ordinary_open() {
 
 #[test]
 fn app_attachment_preferred_fallback_observes_existing_location_without_moving() {
-    let mut state=BrowserSessionState::default();let mut effects=effects(&[("one",1,true),("two",2,true)]);effects.app_desktop=Some("two".into());
-    let mut owner=app_binding("owner");owner.placement=BrowserPlacement::Preferred{desktop:binding("one",1),alternatives:vec![binding("two",2)]};
-    let opened=attach(&mut state,&mut effects,"task",&owner,&app_request()).unwrap();
-    assert_eq!(state.browsers[&opened.browser_id].desktop.as_ref().unwrap().desktop_id,"two");
-    assert!(effects.launched.is_empty());assert_eq!(effects.mutations,0);
+    let mut state = BrowserSessionState::default();
+    let mut effects = effects(&[("one", 1, true), ("two", 2, true)]);
+    effects.app_desktop = Some("two".into());
+    let mut owner = app_binding("owner");
+    owner.placement = BrowserPlacement::Preferred {
+        desktop: binding("one", 1),
+        alternatives: vec![binding("two", 2)],
+    };
+    let opened = attach(&mut state, &mut effects, "task", &owner, &app_request()).unwrap();
+    assert_eq!(
+        state.browsers[&opened.browser_id]
+            .desktop
+            .as_ref()
+            .unwrap()
+            .desktop_id,
+        "two"
+    );
+    assert!(effects.launched.is_empty());
+    assert_eq!(effects.mutations, 0);
     // A required desktop cannot silently substitute even though a peer is ready.
-    let mut state=BrowserSessionState::default();assert!(attach(&mut state,&mut effects,"required",&app_binding("owner"),&app_request()).is_err());assert!(state.sessions.is_empty());
+    let mut state = BrowserSessionState::default();
+    assert!(attach(
+        &mut state,
+        &mut effects,
+        "required",
+        &app_binding("owner"),
+        &app_request()
+    )
+    .is_err());
+    assert!(state.sessions.is_empty());
+}
+
+#[test]
+fn app_attachment_preexisting_popup_is_preserved_while_new_task_popup_closes() {
+    let mut state=BrowserSessionState::default();let mut effects=effects(&[("one",1,true)]);
+    let owner=app_binding("owner");let request=app_request();let task=attach(&mut state,&mut effects,"task",&owner,&request).unwrap();
+    let cat=catalog();let cfg=BrowserSessionManagerConfig{session_idle_timeout_ms:100,remote_view_desktops:vec![]};
+    let admitted=BrowserSessionManager::new(&mut state,&cat,&mut effects,cfg.clone()).observe_child_tabs(&task.session_id,
+        &[("preexisting-popup".into(),"original-page".into()),("new-popup".into(),"original-page".into())],11).unwrap();
+    assert_eq!(admitted,vec!["new-popup"]);
+    attach(&mut state,&mut effects,"task",&owner,&request).unwrap();
+    let mut steal=request.clone();steal.target_id="new-popup".into();
+    assert!(attach(&mut state,&mut effects,"steal",&owner,&steal).unwrap_err().starts_with("browser_attachment_target_owned_by_task"));
+    BrowserSessionManager::new(&mut state,&cat,&mut effects,cfg).close_session(&task.session_id,SessionEndReason::ExplicitClose,12).unwrap();
+    assert_eq!(effects.mutations,1);assert!(effects.launched.is_empty());
 }

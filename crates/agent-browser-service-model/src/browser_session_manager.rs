@@ -1999,6 +1999,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 {
                     continue;
                 }
+                if self.state.app_browser_attachments.get(&session.browser_id).is_some_and(|row|row.borrowed_tab_ids.contains(target)) {
+                    continue;
+                }
                 if self.state.tabs.contains_key(target)
                     || self.state.tabs.values().any(|tab| tab.target_id == *target)
                 {

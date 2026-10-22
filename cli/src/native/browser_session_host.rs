@@ -528,6 +528,17 @@ fn configured_u64(name: &str, default: u64) -> Result<u64, String> {
 }
 
 pub(crate) trait BrowserSessionPersistence {
+    /// A new borrowed profile and its lifecycle fence must become visible in
+    /// the same transaction. Legacy stores refuse rather than leak admission.
+    fn publish_app_attachment(
+        &mut self,
+        _expected: &BrowserSessionState,
+        _next: &BrowserSessionState,
+        _expected_catalog: &BrowserProfileCatalog,
+        _next_catalog: &BrowserProfileCatalog,
+    ) -> Result<(), String> {
+        Err("browser_attachment_atomic_publication_unsupported".into())
+    }
     /// Publish observed launch custody and the aggregate in one transaction.
     /// Persistence implementations without that facility fail closed.
     fn publish_session_state(
@@ -586,6 +597,15 @@ pub(crate) trait BrowserSessionPersistence {
 }
 
 impl BrowserSessionPersistence for BrowserSessionSqliteStore {
+    fn publish_app_attachment(
+        &mut self,
+        expected: &BrowserSessionState,
+        next: &BrowserSessionState,
+        expected_catalog: &BrowserProfileCatalog,
+        next_catalog: &BrowserProfileCatalog,
+    ) -> Result<(), String> {
+        self.compare_and_save_app_attachment(expected, next, expected_catalog, next_catalog)
+    }
     fn load_owner_snapshot(&self) -> Result<(BrowserSessionState, BrowserProfileCatalog), String> {
         self.load_workspace_snapshot()
     }
@@ -2057,20 +2077,40 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 activity_at_ms,
                 self.manager_config.session_idle_timeout_ms,
             )?;
-            if let Some(tab)=self.state.sessions.get(&result.session_id).and_then(|task|task.current_tab_id.as_ref()).and_then(|id|self.state.tabs.get(id)).cloned() {
+            if let Some(tab) = self
+                .state
+                .sessions
+                .get(&result.session_id)
+                .and_then(|task| task.current_tab_id.as_ref())
+                .and_then(|id| self.state.tabs.get(id))
+                .cloned()
+            {
                 if !self.state.tab_metadata.contains_key(&tab.id) {
-                    self.state.tab_metadata.insert(tab.id.clone(),capture_browser_task_metadata(command,&tab));
+                    self.state
+                        .tab_metadata
+                        .insert(tab.id.clone(), capture_browser_task_metadata(command, &tab));
                 }
             }
-            // Only read-only attachment has happened. Catalog publication grants no
-            // process ownership; task and borrowed custody publish together below.
-            if !self.catalog.profiles.contains_key(profile_id) {
-                let previous = self.catalog.clone();
-                self.catalog.profiles.insert(profile.id.clone(), profile);
-                self.persistence
-                    .publish_profile_catalog(&previous, &self.catalog)?;
+            let mut next_catalog = self.catalog.clone();
+            next_catalog
+                .profiles
+                .entry(profile.id.clone())
+                .or_insert(profile);
+            // Publication must not expose an app profile before its borrowed
+            // lifecycle fence. A failed transaction leaves both unchanged.
+            if let Err(error) = self.persistence.publish_app_attachment(
+                &self.persisted_state,
+                &self.state,
+                &self.catalog,
+                &next_catalog,
+            ) {
+                self.state = self.persisted_state.clone();
+                return Err(error);
             }
-            self.commit_state()?;
+            let (published, catalog) = self.persistence.load_owner_snapshot()?;
+            self.state = published.clone();
+            self.persisted_state = published;
+            self.catalog = catalog;
             return Ok(result);
         }
         self.register_explicit_profile(command)?;

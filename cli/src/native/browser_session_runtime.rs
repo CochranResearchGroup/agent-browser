@@ -1146,7 +1146,7 @@ fn run_browser_worker(
                             profile_id: profile.id.clone(),
                             process: request.process,
                             endpoint: observation.launch.cdp_endpoint.clone(),
-                            targets: BTreeSet::from([observation.target_id.clone()]),
+                            targets: observation.borrowed_target_ids.clone(),
                         },
                     );
                     shared_browser_tabs.entry(id.clone()).or_default();
@@ -1961,6 +1961,31 @@ fn app_attachment_browser_id(
     Ok(format!("browser:app:{:x}", sha2::Sha256::digest(bytes)))
 }
 
+/// Every page already present belongs to the app, including pre-existing
+/// popups whose opener is the requested tab. Later targets are not backfilled.
+fn attachment_borrowed_target_census(
+    snapshot: &Value,
+    selected: &str,
+) -> Result<BTreeSet<String>, String> {
+    let targets = snapshot["targetInfos"]
+        .as_array()
+        .ok_or("browser_attachment_target_census_unavailable")?;
+    let mut borrowed = BTreeSet::new();
+    for target in targets.iter().filter(|target| target["type"] == "page") {
+        let id = target["targetId"]
+            .as_str()
+            .filter(|id| !id.is_empty())
+            .ok_or("browser_attachment_target_census_invalid")?;
+        if !borrowed.insert(id.to_owned()) {
+            return Err("browser_attachment_target_census_invalid".into());
+        }
+    }
+    if !borrowed.contains(selected) {
+        return Err("browser_attachment_target_missing".into());
+    }
+    Ok(borrowed)
+}
+
 async fn attach_requested_app_browser(
     request: &BrowserAttachmentRequest,
     profile: &BrowserProfileCatalogEntry,
@@ -1975,19 +2000,19 @@ async fn attach_requested_app_browser(
     let manager =
         attach_verified_browser_endpoint(&request.cdp_endpoint, request.process.pid, before)
             .await?;
-    if !manager
-        .tab_list(true)
-        .iter()
-        .any(|target| target["targetId"] == request.target_id)
-    {
-        return Err("browser_attachment_target_missing".into());
-    }
+    let target_snapshot = manager
+        .client
+        .send_command_no_params("Target.getTargets", None)
+        .await?;
+    let borrowed_target_ids =
+        attachment_borrowed_target_census(&target_snapshot, &request.target_id)?;
     let after = match crate::process_identity::observe_process(request.process.pid) {
         crate::process_identity::ProcessObservation::Observed(after) => after,
         _ => return Err("browser_attachment_process_unavailable".into()),
     };
     validate_app_attachment_process(request, profile, &after)?;
     let observation = BrowserAttachmentObservation {
+        borrowed_target_ids,
         assignment: None,
         launch: BrowserLaunch {
             process_identity: Some(request.process.clone()),
@@ -2585,6 +2610,24 @@ mod tests {
         let mut missing_executable = request.clone();
         missing_executable.process.executable_path = None;
         assert!(validate_app_attachment_process(&missing_executable, &profile, &observed).is_err());
+    }
+
+    #[test]
+    fn app_attachment_census_preserves_preexisting_child_pages_without_claiming_later_popups() {
+        let snapshot = serde_json::json!({"targetInfos":[
+            {"type":"page","targetId":"selected"},
+            {"type":"page","targetId":"preexisting-popup","openerId":"selected"},
+            {"type":"page","targetId":"peer"},
+            {"type":"service_worker","targetId":"worker"}
+        ]});
+        let borrowed = attachment_borrowed_target_census(&snapshot, "selected").unwrap();
+        assert_eq!(
+            borrowed,
+            BTreeSet::from(["selected".into(), "preexisting-popup".into(), "peer".into()])
+        );
+        assert!(!borrowed.contains("later-popup"));
+        assert!(attachment_borrowed_target_census(&snapshot, "worker").is_err());
+        assert!(attachment_borrowed_target_census(&serde_json::json!({}), "selected").is_err());
     }
 
     #[test]

@@ -36,6 +36,7 @@ pub struct BrowserAttachmentRequest {
 pub struct BrowserAttachmentObservation {
     pub launch: BrowserLaunch,
     pub assignment: Option<RemoteViewAssignmentRecord>,
+    pub borrowed_target_ids: BTreeSet<String>,
     pub target_id: String,
 }
 /// Durable borrowed custody; target IDs here are physical CDP identities.
@@ -136,6 +137,9 @@ pub fn attach_app_browser_task<E: BrowserSessionEffects>(
         if row.owner != identity && !row.request.shared_with.contains(&identity) {
             return Err("browser_attachment_sharing_required: the owning app must explicitly share this browser with the exact recipient".into());
         }
+        if !row.borrowed_tab_ids.contains(&request.target_id) && state.tabs.values().any(|tab|tab.browser_id==state.app_browser_attachments.iter().find(|(_,candidate)|*candidate==row).map(|(id,_)|id.as_str()).unwrap_or("") && tab.target_id==request.target_id) {
+            return Err("browser_attachment_target_owned_by_task: retain the existing task's tab custody".into());
+        }
         if row.owner != identity && row.request.shared_with != request.shared_with {
             return Err("browser_attachment_sharing_owner_required".into());
         }
@@ -174,17 +178,33 @@ pub fn attach_app_browser_task<E: BrowserSessionEffects>(
     // read. An ambiguous provider/CDP read never authorizes another attempt.
     binding.placement.select(&candidates)?;
     let allowed = match &binding.placement {
-        BrowserPlacement::Required {desktop} => vec![desktop],
-        BrowserPlacement::Preferred {desktop, alternatives} => std::iter::once(desktop).chain(alternatives).collect(),
+        BrowserPlacement::Required { desktop } => vec![desktop],
+        BrowserPlacement::Preferred {
+            desktop,
+            alternatives,
+        } => std::iter::once(desktop).chain(alternatives).collect(),
     };
     let mut selected = None;
     for requested in allowed {
-        let Some(candidate) = candidates.iter().find(|candidate| candidate.ready
-            && candidate.desktop.desktop_id==requested.desktop_id && candidate.desktop.generation==requested.generation) else {continue};
-        if previous.as_ref().is_some_and(|row| row.desktop.desktop_id!=candidate.desktop.desktop_id || row.desktop.generation!=candidate.desktop.generation) {continue;}
-        match effects.attach_app_browser(request,profile,&candidate.desktop) {
-            Ok(observed) => {selected=Some((candidate.desktop.clone(),observed));break;},
-            Err(error) if error=="browser_attachment_desktop_process_mismatch" => continue,
+        let Some(candidate) = candidates.iter().find(|candidate| {
+            candidate.ready
+                && candidate.desktop.desktop_id == requested.desktop_id
+                && candidate.desktop.generation == requested.generation
+        }) else {
+            continue;
+        };
+        if previous.as_ref().is_some_and(|row| {
+            row.desktop.desktop_id != candidate.desktop.desktop_id
+                || row.desktop.generation != candidate.desktop.generation
+        }) {
+            continue;
+        }
+        match effects.attach_app_browser(request, profile, &candidate.desktop) {
+            Ok(observed) => {
+                selected = Some((candidate.desktop.clone(), observed));
+                break;
+            }
+            Err(error) if error == "browser_attachment_desktop_process_mismatch" => continue,
             Err(error) => return Err(error),
         }
     }
@@ -193,6 +213,7 @@ pub fn attach_app_browser_task<E: BrowserSessionEffects>(
         || observed.launch.pid != request.process.pid
         || observed.launch.cdp_endpoint != request.cdp_endpoint
         || observed.target_id != request.target_id
+        || !observed.borrowed_target_ids.contains(&request.target_id)
         || observed.launch.desktop.as_ref() != Some(&desktop)
     {
         return Err("browser_attachment_observation_mismatch".into());
@@ -259,7 +280,8 @@ pub fn attach_app_browser_task<E: BrowserSessionEffects>(
             assignment: observed.assignment.clone(),
         });
     record.request.shared_with = request.shared_with.clone();
-    record.borrowed_tab_ids.insert(request.target_id.clone());
+    if previous.is_none() {record.borrowed_tab_ids.extend(observed.borrowed_target_ids);}
+    else {record.borrowed_tab_ids.insert(request.target_id.clone());}
     state.shared_browser_ids.insert(browser_id.clone());
     state
         .attached_task_targets
