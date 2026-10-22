@@ -21,8 +21,36 @@ struct Effects {
     mutations: usize,
     live: Option<bool>,
     reconciled: Option<BrowserRecovery>,
+    attachments: usize,
+    wrong_process: bool,
+    app_desktop: Option<String>,
 }
 impl BrowserSessionEffects for Effects {
+    fn attach_app_browser(
+        &mut self,
+        request: &BrowserAttachmentRequest,
+        _: &BrowserProfileCatalogEntry,
+        desktop: &RemoteViewFixedDesktop,
+    ) -> Result<BrowserAttachmentObservation, String> {
+        self.attachments += 1;
+        if self.app_desktop.as_ref().is_some_and(|id|id!=&desktop.desktop_id) {return Err("browser_attachment_desktop_process_mismatch".into());}
+        Ok(BrowserAttachmentObservation {
+            launch: BrowserLaunch {
+                process_identity: Some(request.process.clone()),
+                browser_id: "app-browser".into(),
+                pid: if self.wrong_process {
+                    999
+                } else {
+                    request.process.pid
+                },
+                cdp_endpoint: request.cdp_endpoint.clone(),
+                desktop: Some(desktop.clone()),
+            },
+            target_id: request.target_id.clone(),
+            assignment: None,
+        })
+    }
+
     fn remote_view_desktop_candidates(
         &mut self,
     ) -> Result<Option<Vec<RemoteViewDesktopCandidate>>, String> {
@@ -406,4 +434,216 @@ fn authorized_preferred_recovery_updates_actual_desktop_without_erasing_intent()
         state.browsers[&opened.browser_id].desktop,
         Some(desktop("other", 1))
     );
+}
+
+fn app_request() -> BrowserAttachmentRequest {
+    BrowserAttachmentRequest {
+        version: 1,
+        process: RecordedProcessIdentity {
+            pid: 4100,
+            start_token: "linux:boot:100".into(),
+            executable_path: Some("/fixture/chromium".into()),
+            browser_family: Some("chromium".into()),
+        },
+        profile_path: "/fixture/profile".into(),
+        cdp_endpoint: "ws://127.0.0.1:9222/devtools/browser/exact".into(),
+        target_id: "original-page".into(),
+        shared_with: Vec::new(),
+    }
+}
+fn app_binding(participant: &str) -> BrowserHostBinding {
+    BrowserHostBinding {
+        version: 1,
+        host_id: "app".into(),
+        participant_id: participant.into(),
+        session_id: "app-session".into(),
+        placement: BrowserPlacement::Required {
+            desktop: binding("one", 1),
+        },
+    }
+}
+fn attach(
+    state: &mut BrowserSessionState,
+    effects: &mut Effects,
+    name: &str,
+    binding: &BrowserHostBinding,
+    request: &BrowserAttachmentRequest,
+) -> Result<OpenBrowserSessionResult, String> {
+    attach_app_browser_task(
+        state,
+        effects,
+        &catalog().profiles["profile"],
+        name,
+        binding,
+        request,
+        10,
+        100,
+    )
+}
+#[test]
+fn app_attachment_borrows_original_page_and_close_detaches_without_process_or_tab_effects() {
+    let mut state = BrowserSessionState::default();
+    let mut effects = effects(&[("one", 1, true)]);
+    let owner = app_binding("owner");
+    let request = app_request();
+    let task = attach(&mut state, &mut effects, "task", &owner, &request).unwrap();
+    assert_eq!(
+        state.tabs.values().next().unwrap().target_id,
+        "original-page"
+    );
+    assert_eq!(effects.mutations, 0);
+    assert!(effects.launched.is_empty());
+    let bytes = serde_json::to_vec(&state).unwrap();
+    let mut restored: BrowserSessionState = serde_json::from_slice(&bytes).unwrap();
+    let cfg = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 100,
+        remote_view_desktops: vec![],
+    };
+    let cat = catalog();
+    let mut manager = BrowserSessionManager::new(&mut restored, &cat, &mut effects, cfg);
+    assert!(manager
+        .close_current_tab(&task.session_id, 11)
+        .unwrap_err()
+        .starts_with("browser_attachment_borrowed_tab_close_forbidden"));
+    manager
+        .close_session(&task.session_id, SessionEndReason::ExplicitClose, 12)
+        .unwrap();
+    assert_eq!(effects.mutations, 0);
+    assert!(restored.sessions.is_empty());
+    assert!(restored.app_browser_attachments[&task.browser_id]
+        .borrowed_tab_ids
+        .contains("original-page"));
+}
+#[test]
+fn app_attachment_sharing_requires_owner_permission_and_distinct_task_identities() {
+    let mut state = BrowserSessionState::default();
+    let mut effects = effects(&[("one", 1, true)]);
+    let owner = app_binding("owner");
+    let peer = app_binding("peer");
+    let mut request = app_request();
+    let first = attach(&mut state, &mut effects, "first", &owner, &request).unwrap();
+    let before = state.clone();
+    assert!(attach(&mut state, &mut effects, "second", &peer, &request)
+        .unwrap_err()
+        .starts_with("browser_attachment_sharing_required"));
+    assert_eq!(state, before);
+    request.shared_with.push(BrowserHostIdentity::from(&peer));
+    attach(&mut state, &mut effects, "first", &owner, &request).unwrap();
+    let second = attach(&mut state, &mut effects, "second", &peer, &request).unwrap();
+    assert_ne!(first.session_id, second.session_id);
+    assert_eq!(first.browser_id, second.browser_id);
+    assert_ne!(
+        state.sessions[&first.session_id].current_tab_id,
+        state.sessions[&second.session_id].current_tab_id
+    );
+    let cat = catalog();
+    BrowserSessionManager::new(
+        &mut state,
+        &cat,
+        &mut effects,
+        BrowserSessionManagerConfig::default(),
+    )
+    .close_session(&second.session_id, SessionEndReason::ExplicitClose, 13)
+    .unwrap();
+    assert!(state.sessions.contains_key(&first.session_id));
+    assert_eq!(effects.mutations, 0);
+}
+#[test]
+fn app_attachment_conflicts_and_unsupported_endpoints_have_zero_browser_effects() {
+    let mut state = BrowserSessionState::default();
+    let mut effects = effects(&[("one", 1, true)]);
+    let owner = app_binding("owner");
+    let request = app_request();
+    attach(&mut state, &mut effects, "first", &owner, &request).unwrap();
+    let before = state.clone();
+    let calls = effects.attachments;
+    let mut wrong = request.clone();
+    wrong.process.start_token = "linux:boot:other".into();
+    assert!(attach(&mut state, &mut effects, "wrong", &owner, &wrong)
+        .unwrap_err()
+        .starts_with("browser_attachment_profile_conflict"));
+    let mut placement = owner.clone();
+    placement.placement = BrowserPlacement::Required {
+        desktop: binding("two", 1),
+    };
+    assert!(
+        attach(&mut state, &mut effects, "wrong", &placement, &request)
+            .unwrap_err()
+            .starts_with("browser_attachment_placement_conflict")
+    );
+    for endpoint in [
+        "http://127.0.0.1:9222",
+        "ws://127.0.0.1:9222@other/devtools/browser/x",
+        "ws://remote:9222/devtools/browser/x",
+        "ws://127.0.0.1:9222/devtools/browser/x?secret=1",
+    ] {
+        let mut wrong = request.clone();
+        wrong.cdp_endpoint = endpoint.into();
+        assert!(wrong.validate().is_err());
+    }
+    assert_eq!(effects.attachments, calls);
+    assert_eq!(state, before);
+    assert_eq!(effects.mutations, 0);
+}
+#[test]
+fn app_attachment_rejects_mismatched_observation_without_publishing_task() {
+    let mut state = BrowserSessionState::default();
+    let mut effects = effects(&[("one", 1, true)]);
+    effects.wrong_process = true;
+    assert!(attach(
+        &mut state,
+        &mut effects,
+        "task",
+        &app_binding("owner"),
+        &app_request()
+    )
+    .unwrap_err()
+    .starts_with("browser_attachment_observation_mismatch"));
+    assert!(state.sessions.is_empty());
+    assert!(state.browsers.is_empty());
+    assert_eq!(effects.mutations, 0);
+}
+#[test]
+fn app_attachment_cannot_be_implicitly_shared_or_recovered_by_ordinary_open() {
+    let mut state = BrowserSessionState::default();
+    let mut effects = effects(&[("one", 1, true)]);
+    attach(
+        &mut state,
+        &mut effects,
+        "task",
+        &app_binding("owner"),
+        &app_request(),
+    )
+    .unwrap();
+    let cat = catalog();
+    let cfg = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 100,
+        remote_view_desktops: vec![],
+    };
+    assert!(
+        BrowserSessionManager::new(&mut state, &cat, &mut effects, cfg.clone())
+            .open(OpenBrowserSession::exact_profile("unshared", "profile", 12))
+            .unwrap_err()
+            .starts_with("browser_attachment_sharing_required")
+    );
+    effects.live = Some(false);
+    assert!(
+        BrowserSessionManager::new(&mut state, &cat, &mut effects, cfg)
+            .open(OpenBrowserSession::exact_profile("task", "profile", 13))
+            .unwrap_err()
+            .starts_with("browser_attachment_lost")
+    );
+    assert!(effects.launched.is_empty());
+    assert_eq!(effects.mutations, 0);
+}
+
+#[test]
+fn app_attachment_preferred_fallback_observes_existing_location_without_moving() {
+    let mut state=BrowserSessionState::default();let mut effects=effects(&[("one",1,true),("two",2,true)]);effects.app_desktop=Some("two".into());
+    let mut owner=app_binding("owner");owner.placement=BrowserPlacement::Preferred{desktop:binding("one",1),alternatives:vec![binding("two",2)]};
+    let opened=attach(&mut state,&mut effects,"task",&owner,&app_request()).unwrap();
+    assert_eq!(state.browsers[&opened.browser_id].desktop.as_ref().unwrap().desktop_id,"two");
+    assert!(effects.launched.is_empty());assert_eq!(effects.mutations,0);
+    // A required desktop cannot silently substitute even though a peer is ready.
+    let mut state=BrowserSessionState::default();assert!(attach(&mut state,&mut effects,"required",&app_binding("owner"),&app_request()).is_err());assert!(state.sessions.is_empty());
 }

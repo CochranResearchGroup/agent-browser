@@ -12,7 +12,7 @@ Token-protected native control uses `AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FIL
 
 Supply `serviceName`, `agentName` and a concrete `taskName` on `browser_open`. Example: use serviceName `codex`, agentName `Codex`, and taskName `Launch QBO browser`. The CLI equivalents are `--service-name`, `--agent-name` and `--task-name`; for `remote-view open` creation, also supply `--origin-kind agent`. Missing or blank labels are rejected before task creation. MCP records origin `agent` without a caller field. For service requests, pass originKind in params; an authenticated or local principal is not a substitute for the creator labels. Do not fill `humanName` from the person requesting automation. Descriptive labels are not authenticated identities.
 
-Creation context is retained once. Later polling or Share does not replace it. Cards fall back to profile/session context and omit missing identity fields, rather than inventing an owner. Job IDs do not replace creator labels.
+Creation context is retained once; polling and Share do not replace it. Cards omit missing identity fields and use profile/session context. Job IDs never replace creator labels.
 
 ## MCP task workflow
 
@@ -26,7 +26,7 @@ The handoff URL resolves the current owned desktop and redirects to native Remot
 
 When the person finishes, call `browser_continue({ "taskId": "<same-task-id>" })` to read the current task identity and URL, then continue page actions. This preserves the current page and edits; it is separate from CLI executable-transfer handoff.
 
-[Host placement, routing and metadata](references/host-integration.md).
+[Hosted app workflows](references/host-integration.md).
 
 The default MCP catalog contains 12 workflow tools: `browser_open`, `browser_navigate`,
 `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,

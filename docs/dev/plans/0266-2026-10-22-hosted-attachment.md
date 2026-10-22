@@ -34,3 +34,12 @@ independent shared tasks and peer preservation. Validate scoped task closure/det
 without app process termination. Rust via cargo-safe, meaningful focused/broad
 model/CLI tests, strict format/Clippy and all feature docs/parity. No production
 installation, private accounts, held browser use, skill sharing or uncertain replay.
+
+## Integration checkpoint
+
+Fifteen placement/attachment model regressions pass. Native runtime tests and
+public workflow acceptance remain pending. The root integrates P267's separate
+reviewed commits into this branch for one combined CLI candidate and PR closing
+both independent tickets. This avoids replacing a running shared test executable
+or rebuilding identical provider inputs in parallel; subagent source custody
+remains explicit. No additional product scope or deployment authority.

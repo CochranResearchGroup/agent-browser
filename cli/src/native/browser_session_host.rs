@@ -2005,6 +2005,74 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         if let Some(binding) = &hosted {
             super::browser_host_context::validate_provider(binding)?;
         }
+        if let Some(attachment) = command.get("attachment") {
+            let binding = hosted
+                .as_ref()
+                .ok_or("browser_attachment_host_binding_required")?;
+            let request: agent_browser_service_model::BrowserAttachmentRequest =
+                serde_json::from_value(attachment.clone())
+                    .map_err(|_| "browser_attachment_invalid")?;
+            request.validate()?;
+            let profile_id = required_string(command, "profileId")?;
+            let canonical = Path::new(&request.profile_path)
+                .canonicalize()
+                .map_err(|_| "browser_attachment_profile_unavailable")?;
+            if canonical.to_str() != Some(request.profile_path.as_str()) {
+                return Err("browser_attachment_profile_path_not_canonical".into());
+            }
+            if self
+                .catalog
+                .profiles
+                .values()
+                .any(|row| row.user_data_dir == request.profile_path && row.id != profile_id)
+            {
+                return Err(
+                    "browser_attachment_profile_conflict: reuse the registered profile name".into(),
+                );
+            }
+            let profile = self
+                .catalog
+                .profiles
+                .get(profile_id)
+                .cloned()
+                .unwrap_or_else(|| agent_browser_service_model::BrowserProfileCatalogEntry {
+                    id: profile_id.into(),
+                    name: profile_id.into(),
+                    user_data_dir: request.profile_path.clone(),
+                    kind: agent_browser_service_model::BrowserProfileKind::Named,
+                });
+            if profile.user_data_dir != request.profile_path {
+                return Err(
+                    "browser_attachment_profile_conflict: retain the existing profile path".into(),
+                );
+            }
+            self.effects.begin_operation(&self.persisted_state)?;
+            let result = agent_browser_service_model::attach_app_browser_task(
+                &mut self.state,
+                &mut self.effects,
+                &profile,
+                required_string(command, "sessionName")?,
+                binding,
+                &request,
+                activity_at_ms,
+                self.manager_config.session_idle_timeout_ms,
+            )?;
+            if let Some(tab)=self.state.sessions.get(&result.session_id).and_then(|task|task.current_tab_id.as_ref()).and_then(|id|self.state.tabs.get(id)).cloned() {
+                if !self.state.tab_metadata.contains_key(&tab.id) {
+                    self.state.tab_metadata.insert(tab.id.clone(),capture_browser_task_metadata(command,&tab));
+                }
+            }
+            // Only read-only attachment has happened. Catalog publication grants no
+            // process ownership; task and borrowed custody publish together below.
+            if !self.catalog.profiles.contains_key(profile_id) {
+                let previous = self.catalog.clone();
+                self.catalog.profiles.insert(profile.id.clone(), profile);
+                self.persistence
+                    .publish_profile_catalog(&previous, &self.catalog)?;
+            }
+            self.commit_state()?;
+            return Ok(result);
+        }
         self.register_explicit_profile(command)?;
         let session_name = required_string(command, "sessionName")?;
         if let Some(binding) = &hosted {

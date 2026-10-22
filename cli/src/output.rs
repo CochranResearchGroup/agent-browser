@@ -7331,6 +7331,13 @@ Workflow:
   Send the returned handoffUrl to a person, then continue with the same taskId.
   Native Remote View owns the viewer and its authentication.
   Configure AGENT_BROWSER_PUBLIC_ORIGIN for standalone HTTPS handoffs.
+  Hosted browser_open attachment borrows an exact app process/profile/page.
+  Use profileMode=existing, profile and hostBinding; omit url. Attachment requires
+  version=1, process pid/startToken/executablePath, canonical profilePath,
+  full loopback cdpEndpoint, targetId and optional exact sharedWith recipients.
+  Native desktop/window and CDP process identity are verified before publication.
+  Missing capability never launches. Close detaches borrowed pages/processes;
+  task-created tabs remain scoped. Only the owning app changes sharing.
   Hosted browser_open accepts hostBinding version=1, hostId, participantId,
   sessionId and required/preferred placement with desktopId/generation.
   AGENT_BROWSER_HOSTS_FILE supplies reviewed app origin/providerApplication;

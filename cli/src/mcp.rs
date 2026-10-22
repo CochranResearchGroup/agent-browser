@@ -443,7 +443,7 @@ fn service_operating_guide() -> Value {
         "schemaVersion":"agent-browser.operating-guide.v2",
         "summary":"Open a task, work on its page, hand its desktop to a person, and continue the same task.",
         "workflow":[
-            {"tool":"browser_open","rule":"Supply profile, profileMode, taskKey, URL, serviceName, agentName and taskName. Reuse taskKey when retrying."},
+            {"tool":"browser_open","rule":"Supply profile, profileMode, taskKey, URL, serviceName, agentName and taskName. For app attachment supply hostBinding and attachment instead of URL; preserve app lifecycle. Reuse taskKey when retrying."},
             {"tool":"browser_snapshot","rule":"Use the returned taskId for page actions and task-scoped tabs."},
             {"tool":"browser_handoff","rule":"Share the returned ready HTTPS handoffUrl. Remote View owns the native viewer."},
             {"tool":"browser_continue","rule":"Continue with the same taskId after human input."},
