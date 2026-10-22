@@ -9,12 +9,12 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#357]
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    plan_state: CLOSED
+    custody_state: BRANCH_OWNED
     dependencies: []
     overlaps: [CochranResearchGroup/agent-browser#349, P240]
     reconciled_overlaps: ["Additive manual launch posture in canonical owner/runtime and MCP; preserve app placement, hosted attach and resource policies; no foreign worktree edits"]
-    validation_status: Installed isolated red confirmed; implementation in progress
+    validation_status: Source-qualified PR362; real Chrome/X11 synthetic r3 full lifecycle and zero residue; final focused Rust, Clippy, fmt, catalog and docs pass; not installed
     updated_at: 2026-10-22
 
   - id: P266

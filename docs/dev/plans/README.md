@@ -1,6 +1,6 @@
 # Active plan index
 
-[P269 manual non-CDP login](0269-2026-10-22-manual-login.md), #357; public MCP and managed Native login lifecycle repair in progress.
+[P269 manual non-CDP login](0269-2026-10-22-manual-login.md), #357; source-qualified in PR362; installed publication and live Google acceptance remain separate.
 
 
 [P266 MCP public origin](0266-2026-10-22-public-origin-env.md), #358; standard dotenv bootstrap repair and exact installed handoff diagnosis.

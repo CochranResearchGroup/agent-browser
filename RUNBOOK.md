@@ -47,10 +47,10 @@ existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 ### 2026-10-22 manual non-CDP MCP login
 
 [P269](docs/dev/plans/0269-2026-10-22-manual-login.md), #357, owns the bounded
-manual_login workflow through public MCP, managed Native placement, exact
-non-CDP process custody, replay and profile-preserving closure. Source repair
-and isolated checks are in progress. Production runtime and Google account
-state remain unchanged by this implementation slice.
+manual_login workflow through public MCP and managed Native placement. PR362
+source-qualifies non-CDP launch, replay, refusal, close and preserved-profile
+automation at `8712b9dfb`; the plan holds the acceptance matrix. No production
+publication or Google account run was performed by this slice.
 
 ### 2026-10-19 stale session host repair
 
