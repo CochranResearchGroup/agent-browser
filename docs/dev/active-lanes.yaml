@@ -10,11 +10,11 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#358]
     plan_state: CLOSED
-    custody_state: BRANCH_OWNED
+    custody_state: INTEGRATED
     dependencies: []
     overlaps: [P265]
     reconciled_overlaps: ["Own agent_env allowlist and additive setup guidance; preserve foreign hosted workflow/model edits; no shared runtime restart"]
-    validation_status: Real loader red/green, four dotenv tests, workspace Clippy, fmt, policy/links/handoff guidance pass; isolated MCP dotenv startup passes; installed configured-origin native input/reconnect pass; source publication pending
+    validation_status: Real loader red/green, four dotenv tests, workspace Clippy, fmt, policy/links/handoff guidance pass; isolated MCP dotenv startup passes; installed configured-origin native input/reconnect pass; PR360 integrated; production generation 0.28.0-76cec5b73183-79b66b79b467 accepted; fresh dotenv MCP/native input/reconnect and preserved68native roots pass
     updated_at: 2026-10-22
 
   - id: P265
