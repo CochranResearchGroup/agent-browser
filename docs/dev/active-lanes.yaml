@@ -1,6 +1,38 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P266
+    product_lane: PL-PLATFORM
+    objective: Attach and explicitly share an app-provided browser
+    plan: docs/dev/plans/0266-2026-10-22-hosted-attachment.md
+    branch: platform/hosted-attach-349
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#349]
+    plan_state: OPEN
+    custody_state: BRANCH_OWNED
+    dependencies: [P265]
+    overlaps: [P267]
+    reconciled_overlaps: ["Root owns attachment; necessary P267 auxiliary owns takeover; shared contracts/docs root-arbitrated; user explicitly requests parallel tickets"]
+    validation_status: Contract discovery
+    updated_at: 2026-10-22
+
+  - id: P267
+    product_lane: PL-PLATFORM
+    objective: Explicit human takeover and return across supported routes
+    plan: docs/dev/plans/0267-2026-10-22-hosted-takeover.md
+    branch: platform/hosted-takeover-350
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#350]
+    plan_state: OPEN
+    custody_state: BRANCH_OWNED
+    dependencies: [P265]
+    overlaps: [P266]
+    reconciled_overlaps: ["Subagent auxiliary /tmp/agent-browser-takeover350 bound to root P266; owns control modules/gates; root arbitrates shared integration and removes clean auxiliary"]
+    validation_status: Contract discovery
+    updated_at: 2026-10-22
+
   - id: P265
     product_lane: PL-PLATFORM
     objective: Hosted browser launch and app-routed native handoff
