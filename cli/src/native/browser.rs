@@ -2809,6 +2809,34 @@ mod x11_focus {
     type Window = c_ulong;
     type Atom = c_ulong;
 
+    // Xlib.h XWindowAttributes, including its platform-sized XIDs and pointers.
+    #[repr(C)]
+    struct WindowAttributes {
+        x: c_int,
+        y: c_int,
+        width: c_int,
+        height: c_int,
+        border_width: c_int,
+        depth: c_int,
+        visual: *mut c_void,
+        root: Window,
+        class: c_int,
+        bit_gravity: c_int,
+        win_gravity: c_int,
+        backing_store: c_int,
+        backing_planes: c_ulong,
+        backing_pixel: c_ulong,
+        save_under: c_int,
+        colormap: c_ulong,
+        map_installed: c_int,
+        map_state: c_int,
+        all_event_masks: c_long,
+        your_event_mask: c_long,
+        do_not_propagate_mask: c_long,
+        override_redirect: c_int,
+        screen: *mut c_void,
+    }
+
     const FALSE: c_int = 0;
     const ANY_PROPERTY_TYPE: Atom = 0;
     const XA_WINDOW: Atom = 33;
@@ -2843,6 +2871,8 @@ mod x11_focus {
         *mut c_uint,
     ) -> c_int;
     type XFreeFn = unsafe extern "C" fn(*mut c_void) -> c_int;
+    type XGetWindowAttributesFn =
+        unsafe extern "C" fn(*mut Display, Window, *mut WindowAttributes) -> c_int;
     type XMapRaisedFn = unsafe extern "C" fn(*mut Display, Window) -> c_int;
     type XRaiseWindowFn = unsafe extern "C" fn(*mut Display, Window) -> c_int;
     type XSetInputFocusFn = unsafe extern "C" fn(*mut Display, Window, c_int, c_ulong) -> c_int;
@@ -2867,6 +2897,7 @@ mod x11_focus {
         get_window_property: XGetWindowPropertyFn,
         query_tree: XQueryTreeFn,
         free: XFreeFn,
+        get_window_attributes: XGetWindowAttributesFn,
         map_raised: XMapRaisedFn,
         raise_window: XRaiseWindowFn,
         set_input_focus: XSetInputFocusFn,
@@ -2897,6 +2928,7 @@ mod x11_focus {
                         get_window_property: symbol(handle, "XGetWindowProperty")?,
                         query_tree: symbol(handle, "XQueryTree")?,
                         free: symbol(handle, "XFree")?,
+                        get_window_attributes: symbol(handle, "XGetWindowAttributes")?,
                         map_raised: symbol(handle, "XMapRaised")?,
                         raise_window: symbol(handle, "XRaiseWindow")?,
                         set_input_focus: symbol(handle, "XSetInputFocus")?,
@@ -2978,12 +3010,21 @@ mod x11_focus {
             candidates = collect_window_tree(x11, display, root);
         }
 
-        let Some(target_window) = candidates
-            .iter()
-            .rev()
-            .copied()
-            .find(|window| window_pid(x11, display, *window, pid_atom) == Some(pid))
-        else {
+        let Some(target_window) = candidates.iter().rev().copied().find(|window| {
+            if window_pid(x11, display, *window, pid_atom) != Some(pid) {
+                return false;
+            }
+            let mut attributes = std::mem::MaybeUninit::<WindowAttributes>::uninit();
+            if (x11.get_window_attributes)(display, *window, attributes.as_mut_ptr()) == 0 {
+                return false;
+            }
+            let attributes = attributes.assume_init();
+            // Chrome publishes helper/startup windows before its real
+            // window is mapped. Focusing those raises fatal X BadMatch.
+            attributes.map_state == 2 // IsViewable (all ancestors mapped)
+                    && attributes.class == 1 // InputOutput
+                    && attributes.override_redirect == 0
+        }) else {
             return Err(format!("No X11 window found for browser PID {}", pid));
         };
 

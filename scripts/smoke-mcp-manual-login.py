@@ -57,6 +57,7 @@ def main():
             env.pop(k, None)
         env.update(HOME=temporary, AGENT_BROWSER_HOME=str(root / '.agent-browser'),
                    AGENT_BROWSER_SOCKET_DIR=str(root / 's'), AGENT_BROWSER_RUNTIME_HOST='1',
+                   AGENT_BROWSER_DEBUG='1',
                    AGENT_BROWSER_EXECUTABLE_PATH=str(Path(args.chrome).resolve()),
                    AGENT_BROWSER_PUBLIC_ORIGIN='https://browser.fixture.invalid',
                    AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN='https://native.fixture.invalid',
@@ -188,8 +189,10 @@ def main():
             while 'window id #' not in run(['xprop', '-root', '_NET_SUPPORTING_WM_CHECK']).stdout:
                 assert time.monotonic() < deadline, 'window manager readiness deadline'
                 time.sleep(.02)
-            mcp = spawn([str(Path(args.binary).resolve()), 'mcp', 'serve'], stdin=subprocess.PIPE,
-                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+            mcp_log = root / 'mcp.log'
+            with mcp_log.open('w') as diagnostics:
+                mcp = spawn([str(Path(args.binary).resolve()), 'mcp', 'serve'], stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE, stderr=diagnostics, text=True)
             rpc('initialize', dict(protocolVersion='2024-11-05', capabilities={}, clientInfo=dict(name='ab357-fixture', version='1')))
             mcp.stdin.write(json.dumps(dict(jsonrpc='2.0', method='notifications/initialized')) + '\n')
             mcp.stdin.flush()
@@ -227,6 +230,13 @@ def main():
             task = None
             assert not browsers(), 'automation close must remove the exact browser'
 
+        except BaseException:
+            # This namespace contains synthetic data only. Keep bounded failure
+            # evidence before its disposable filesystem is removed.
+            logs = {str(path.relative_to(root)): path.read_text(errors='replace')[-6000:]
+                    for path in root.rglob('*.log') if path.is_file()}
+            print(json.dumps(dict(fixtureFailure=True, operations=operations, logs=logs)), flush=True)
+            raise
         finally:
             # Only children and processes carrying this exact disposable namespace.
             if mcp and mcp.poll() is None:

@@ -7329,7 +7329,7 @@ Workflow:
   profileMode is persistent, existing or disposable; persistent is the default.
   Reuse taskKey when retrying open; reuse tabKey when retrying tab creation.
   Send the returned handoffUrl to a person, then continue with the same taskId.
-  Native Remote View owns the viewer and its authentication.
+  Native Remote View owns viewing and authentication.
   browser_open mode=manual_login opens a named persistent profile on the Native desktop
   without CDP and returns its ready handoffUrl. Reuse taskKey for the same human login.
   Close that task before reopening the preserved profile in default automation mode.
@@ -7344,22 +7344,14 @@ Workflow:
   Required placement never falls back; preferred uses only listed alternatives.
   Metadata watching uses local DB/WAL stamps every 250 ms, not provider polling.
   Events have watchId/sequence; reconnect reads a new full snapshot.
-  Use browser_discover only when advanced metadata is needed.
-  category=playbooks exposes SiteGuide inspection and verify_login in browser_command.
-  Software login-playbook composes these routines with trusted shared auth-helper custody.
-  Installed hosted-auth-helper discovery keeps bearer material private; callerTaskId identifies Codex work.
-  The receiving browser task/profile/browser/tab is frozen separately; select configured account/source refs.
-  Login playbook reconcile:true reads back the same checkpoint without new credentials or input replay.
-  Independent principal/native safety releases capture; SiteGuide company verification still follows.
-  Verified clean failed login may retire as helper_attempt_released; attempted/unknown history stays.
-  Trusted untouched-input or independently empty protected-field proof needs native safety; no replay.
-  Exact current identifiers need no clear/retype; unknown prior delivery still requires readback.
-  browser_tab list observes owned popup children; login continuation verifies new destinations.
-  BILL and QBO starter SiteGuides share routines; reviewed controls configure private receiving.
-  prepare_login freezes controls; validate_plan rejects changed or stale evidence before input.
-  Login requires both checks; reviewedPlan resumes a reviewed change on the same helper action.
-  collect_posts bounds item/page/scroll reads and distinguishes verified no-results from failed extraction.
-  AGENT_BROWSER_SITEGUIDE_DIRECTORY selects reviewed guide JSON files for the MCP server.
+  browser_discover exposes SiteGuide verify_login, software login-playbook,
+  hosted auth-helper, prepare_login, validate_plan and collect_posts metadata.
+  Login helpers freeze receiving custody; select configured account/source refs.
+  Reconcile with reconcile:true; never replay uncertain credential delivery.
+  Independent native safety releases protected input; site verification follows.
+  prepare_login and validate_plan must pass; reviewedPlan resumes reviewed changes.
+  browser_tab list observes owned popups; verify new destinations before login input.
+  AGENT_BROWSER_SITEGUIDE_DIRECTORY selects reviewed guide JSON files.
   Diagnostic and administrative effects use supported CLI/API operations.
   Contract metadata reports the public mcpCatalog and per-adapter mcp.available.
   Retired authority MCP operations and the legacy catalog are unavailable.
