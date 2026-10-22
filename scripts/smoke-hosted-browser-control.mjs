@@ -52,7 +52,7 @@ export async function qualifyHostedBrowserControl({send,runCli,task,sessionName,
   assert.equal(other.success,true);assert.equal(other.data.control.owner,'human');assert.equal(other.data.control.epoch,current.epoch);
   await record('fresh-cli-process-preserves-takeover');
   if(serviceRequest){
-   await denied('http-service-mutation-blocked',()=>serviceRequest({action:'evaluate',sessionName,browserId:task.browserId,serviceName:'agent-browser-fixture',agentName:'hosted-control-acceptance',taskName:'Verify takeover rejects new service effects',params:{script:`globalThis.${marker}=9003`}}),'browser_control_human');
+   await denied('http-service-mutation-blocked',()=>serviceRequest({action:'click',sessionName,browserId:task.browserId,serviceName:'agent-browser-fixture',agentName:'hosted-control-acceptance',taskName:'Verify takeover rejects new service effects',params:{selector:'#control'}}),'browser_control_human');
    receipt.standaloneHttp='passed';
   }
   returnDispatched=true;current=await control('return',{expectedEpoch:current.epoch,actor:'synthetic-operator',reason:'Fresh observation before continuing'});human=false;returnDispatched=false;
