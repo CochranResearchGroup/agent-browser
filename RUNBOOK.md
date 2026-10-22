@@ -1,8 +1,11 @@
 # Runbook
 
+[P268/#349](docs/dev/plans/0268-2026-10-22-hosted-attachment.md) and [P267/#350](docs/dev/plans/0267-2026-10-22-hosted-takeover.md) close as integrated source through provider PR361 before consumer PR175. [Acceptance](docs/dev/notes/0268-2026-10-22-hosted-attachment-control.md) records healthy Native04 chat/viewer, control and corrected process cleanup. Native05 cookie continuity and independent cleanup also pass. Root owns merge and auxiliary closeout; no deployment.
+
+
 ### 2026-10-22 MCP origin diagnosis
 
-[P266](docs/dev/plans/0266-2026-10-22-public-origin-env.md), #358, owns the standard dotenv bootstrap omission. Installed identical-task differential fails without the service origin and succeeds with the configured reviewed origin. Authenticated native keyboard input and identical opaque-link reconnect pass; Remote View316 is closed. Loader red/green, four dotenv tests, strict workspace Clippy and formatting pass. Isolated real MCP startup proves dotenv-only origin resolution. Candidate live workflow refused a stale daemon lane; no fence bypass or production replacement. Source integration is pending.
+[P266](docs/dev/plans/0266-2026-10-22-public-origin-env.md), #358, owns the standard dotenv bootstrap omission. Installed identical-task differential fails without the service origin and succeeds with the configured reviewed origin. Authenticated native keyboard input and identical opaque-link reconnect pass; Remote View316 is closed. Loader red/green, four dotenv tests, strict workspace Clippy and formatting pass. Isolated real MCP startup proves dotenv-only origin resolution. Candidate live workflow refused a stale daemon lane; no fence bypass or production replacement. PR360 is integrated and generation `0.28.0-76cec5b73183-79b66b79b467` is installed/ready. Fresh dotenv-only MCP handoff and authenticated native input/reconnect pass; all68native identities and prior runtime IDs are preserved. The cached conversation needs MCP reconnect; shared reload lacked host scope approval.
 [P265](docs/dev/plans/0265-2026-10-22-hosted-launch.md), #348, is source-qualified on platform/hosted-launch-348. Provider PR359 precedes Bots PR172; actual Native fixture cleanup passed. No production publication.
 
 [P264](docs/dev/plans/0264-2026-10-21-missing-browser-selection.md), #344, owns the bounded missing-browser evidence repair. No runtime publication.
@@ -48,9 +51,10 @@ existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 
 [P269](docs/dev/plans/0269-2026-10-22-manual-login.md), #357, owns the bounded
 manual_login workflow through public MCP and managed Native placement. PR362
-source-qualifies the complete lifecycle, including persistent-cookie preservation
-through normal native close and automation reopen, at `116601257`. The plan holds
-the acceptance matrix. No production publication or Google account run.
+preserves a qualified full cookie/lifecycle candidate at `116601257`. Main then
+advanced through PR361 in the same owner/runtime; PR362 is draft for the combined
+attachment/control integration and refreshed gates. The plan holds the matrix.
+No production publication or Google account run.
 
 ### 2026-10-19 stale session host repair
 

@@ -9,12 +9,44 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#357]
-    plan_state: CLOSED
-    custody_state: BRANCH_OWNED
-    dependencies: []
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [P268, P267]
     overlaps: [CochranResearchGroup/agent-browser#349, P240]
     reconciled_overlaps: ["Additive manual launch posture in canonical owner/runtime and MCP; preserve app placement, hosted attach and resource policies; no foreign worktree edits"]
-    validation_status: Source-qualified PR362 at 116601257; real Chrome/X11 synthetic r3 full lifecycle and persistent cookie preservation pass with zero residue; final focused Rust/Clippy/fmt/catalog pass; not installed
+    validation_status: Candidate 116601257 cookie/lifecycle qualified; PR362 draft for late current-main attachment/control integration and refreshed gates; not installed
+    updated_at: 2026-10-22
+
+  - id: P268
+    product_lane: PL-PLATFORM
+    objective: Attach and explicitly share an app-provided browser
+    plan: docs/dev/plans/0268-2026-10-22-hosted-attachment.md
+    branch: platform/hosted-attach-349
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#349]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: [P265]
+    overlaps: [P267]
+    reconciled_overlaps: ["Root owns attachment; necessary P267 auxiliary owns takeover; shared contracts/docs root-arbitrated; user explicitly requests parallel tickets"]
+    validation_status: Source Rust/model/client/docs gates and actual Native04 healthy chat, 63 markers/26WS, 14 app process generations absent before release pass; Native05 cookie continuity and independent cleanup pass; no deploy
+    updated_at: 2026-10-22
+
+  - id: P267
+    product_lane: PL-PLATFORM
+    objective: Explicit human takeover and return across supported routes
+    plan: docs/dev/plans/0267-2026-10-22-hosted-takeover.md
+    branch: platform/hosted-takeover-350
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#350]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: [P265]
+    overlaps: [P268]
+    reconciled_overlaps: ["Subagent auxiliary /tmp/agent-browser-takeover350 bound to root P268; owns control modules/gates; root arbitrates shared integration and removes clean auxiliary"]
+    validation_status: Source Rust/model/client/docs gates and actual Native04 healthy chat, 63 markers/26WS, 14 app process generations absent before release pass; Native05 cookie continuity and independent cleanup pass; no deploy
     updated_at: 2026-10-22
 
   - id: P266
@@ -26,11 +58,11 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#358]
     plan_state: CLOSED
-    custody_state: BRANCH_OWNED
+    custody_state: INTEGRATED
     dependencies: []
     overlaps: [P265]
     reconciled_overlaps: ["Own agent_env allowlist and additive setup guidance; preserve foreign hosted workflow/model edits; no shared runtime restart"]
-    validation_status: Real loader red/green, four dotenv tests, workspace Clippy, fmt, policy/links/handoff guidance pass; isolated MCP dotenv startup passes; installed configured-origin native input/reconnect pass; source publication pending
+    validation_status: Real loader red/green, four dotenv tests, workspace Clippy, fmt, policy/links/handoff guidance pass; isolated MCP dotenv startup passes; installed configured-origin native input/reconnect pass; PR360 integrated; production generation 0.28.0-76cec5b73183-79b66b79b467 accepted; fresh dotenv MCP/native input/reconnect and preserved68native roots pass
     updated_at: 2026-10-22
 
   - id: P265

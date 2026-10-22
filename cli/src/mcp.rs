@@ -3,6 +3,7 @@ use std::io::{self, BufRead, Write};
 use serde_json::{json, Map, Value};
 
 mod catalog;
+mod host_control;
 mod hosted;
 mod playbooks;
 mod workflow;
@@ -213,6 +214,7 @@ fn mcp_command_response_with_config(
     configured_service_state: &ServiceState,
 ) -> Result<Value, String> {
     match args.get(1).map(|value| value.as_str()) {
+        Some("host-control") => host_control::cli(args),
         Some("host-task") => {
             let task_id = hosted::task_argument(args)?;
             Ok(json!({"success": true, "data": hosted::read_snapshot(task_id)?}))
@@ -443,7 +445,7 @@ fn service_operating_guide() -> Value {
         "schemaVersion":"agent-browser.operating-guide.v2",
         "summary":"Open a task, work on its page, hand its desktop to a person, and continue the same task.",
         "workflow":[
-            {"tool":"browser_open","rule":"Supply profile, profileMode, taskKey, URL, serviceName, agentName and taskName. Reuse taskKey when retrying."},
+            {"tool":"browser_open","rule":"Supply profile, profileMode, taskKey, URL, serviceName, agentName and taskName. For app attachment supply hostBinding and attachment instead of URL; preserve app lifecycle. Reuse taskKey when retrying."},
             {"tool":"browser_snapshot","rule":"Use the returned taskId for page actions and task-scoped tabs."},
             {"tool":"browser_handoff","rule":"Share the returned ready HTTPS handoffUrl. Remote View owns the native viewer."},
             {"tool":"browser_continue","rule":"Continue with the same taskId after human input."},
@@ -884,7 +886,7 @@ fn initialize_result(params: Option<&Value>) -> Value {
             "title": "Agent Browser",
             "version": env!("CARGO_PKG_VERSION"),
         },
-        "instructions": "Use browser_open with profile, profileMode, taskKey, URL, serviceName, agentName and taskName. Address subsequent page actions with the returned taskId. Use browser_handoff for a ready native viewer link, browser_continue after human input, and browser_close for task-scoped cleanup. Use browser_discover only when advanced metadata is needed.",
+        "instructions": "Use browser_open with profile, profileMode, taskKey, URL, serviceName, agentName and taskName. Address subsequent page actions with the returned taskId. Use browser_handoff for a ready native viewer link, browser_control for explicit hosted takeover/return, browser_continue to observe the same task, and browser_close for task-scoped cleanup. Use browser_discover only when advanced metadata is needed.",
     })
 }
 
@@ -5398,6 +5400,9 @@ fn call_service_mcp_tool(
     }
     if name.starts_with("browser_") && !matches!(name, "browser_open" | "browser_discover") {
         required_string_argument(arguments, "taskId")?;
+    }
+    if name == "browser_control" {
+        return host_control::call(arguments, session);
     }
     if name == "browser_tab" {
         return workflow::tab(arguments, session);
@@ -11708,6 +11713,7 @@ mod tests {
                 "browser_close",
                 "browser_command",
                 "browser_continue",
+                "browser_control",
                 "browser_discover",
                 "browser_fill",
                 "browser_handoff",

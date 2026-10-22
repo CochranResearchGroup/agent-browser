@@ -4,6 +4,18 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**App browser attachment**: Borrowing an exactly observed app process, canonical
+profile and existing page while Agent Browser supplies task operations. Initial
+page census remains app-owned; attachment grants no termination or relocation.
+Explicit sharing admits exact app participants to distinct logical tasks without
+changing the process owner.
+
+**Cooperative human control**: Durable browser-scoped ownership and epoch shared
+by supported dispatch routes. Viewing alone changes nothing. Explicit takeover
+blocks new mutations, optionally reads/capture; return freshly observes the same
+page. Dispatched uncertainty is retained without replay. Unmanaged controllers
+must cooperate; attribution is separate from operator authority.
+
 **Routine interlock output**: Bounded status/error projection for scheduled
 maintenance. It is distinct from the private latest-pass monitor receipt and
 explicit detailed JSON. Logging mode does not change maintenance authority,

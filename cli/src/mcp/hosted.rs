@@ -48,10 +48,17 @@ fn stamp(path: &Path) -> Result<Option<FileStamp>, String> {
     }
 }
 
-fn stamps(path: &Path) -> Result<[Option<FileStamp>; 2], String> {
+fn stamps(path: &Path) -> Result<[Option<FileStamp>; 3], String> {
     let mut wal = path.as_os_str().to_os_string();
     wal.push("-wal");
-    Ok([stamp(path)?, stamp(&PathBuf::from(wal))?])
+    Ok([
+        stamp(path)?,
+        stamp(&PathBuf::from(wal))?,
+        stamp(
+            path.parent()
+                .ok_or("browser_host_watch_directory_missing")?,
+        )?,
+    ])
 }
 
 #[derive(Default)]

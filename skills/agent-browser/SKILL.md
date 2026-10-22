@@ -26,11 +26,11 @@ The handoff URL resolves the current owned desktop and redirects to native Remot
 
 When the person finishes, call `browser_continue({ "taskId": "<same-task-id>" })` to read the current task identity and URL, then continue page actions. This preserves the current page and edits; it is separate from CLI executable-transfer handoff.
 
-[Host placement, routing and metadata](references/host-integration.md).
+[Hosted app workflows](references/host-integration.md).
 
-The default MCP catalog contains 12 workflow tools: `browser_open`, `browser_navigate`,
+The default MCP catalog contains 13 workflow tools: `browser_open`, `browser_navigate`,
 `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
-`browser_handoff`, `browser_continue`, `browser_close`, `browser_command` and `browser_discover`.
+`browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_command` and `browser_discover`.
 Page actions require `taskId`. Use `browser_tab` to list, create, select or close this
 task's tabs; repeat a stable `tabKey` when retrying creation. Creating a tab after
 an owner restart reconnects to the verified live browser and preserves existing

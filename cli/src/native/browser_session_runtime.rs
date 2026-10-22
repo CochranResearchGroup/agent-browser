@@ -8,12 +8,12 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use agent_browser_service_model::{
-    BrowserDisposableProfilePolicy, BrowserLaunch, BrowserLaunchIntent, BrowserProfileCatalogEntry,
-    BrowserProfileKind, BrowserSessionEffects, BrowserTabAcquisition, BrowserTabSource,
-    ManagedBrowserInstance, ManagedBrowserTab, ManagedDisposableProfile,
-    RemoteViewAssignmentObservation, RemoteViewBrowserProcessEffects,
-    RemoteViewBrowserProcessError, RemoteViewDesktopRuntimeContext, RemoteViewFixedDesktop,
-    RemoteViewPrivateLaunchEnvironment,
+    BrowserAttachmentObservation, BrowserAttachmentRequest, BrowserDisposableProfilePolicy,
+    BrowserLaunch, BrowserLaunchIntent, BrowserProfileCatalogEntry, BrowserProfileKind,
+    BrowserSessionEffects, BrowserTabAcquisition, BrowserTabSource, ManagedBrowserInstance,
+    ManagedBrowserTab, ManagedDisposableProfile, RemoteViewAssignmentObservation,
+    RemoteViewBrowserProcessEffects, RemoteViewBrowserProcessError,
+    RemoteViewDesktopRuntimeContext, RemoteViewFixedDesktop, RemoteViewPrivateLaunchEnvironment,
 };
 use serde_json::Value;
 
@@ -38,6 +38,15 @@ pub(crate) struct BrowserManagerRuntimeConfig {
 }
 
 pub(crate) trait BrowserRuntimeDriver {
+    fn attach_app_browser(
+        &mut self,
+        _request: &BrowserAttachmentRequest,
+        _profile: &BrowserProfileCatalogEntry,
+        _desktop: &RemoteViewFixedDesktop,
+    ) -> Result<BrowserAttachmentObservation, String> {
+        Err("browser_attachment_runtime_unsupported".into())
+    }
+
     fn reconcile_profile_browser(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
@@ -232,6 +241,15 @@ impl<D: RemoteViewBrowserProcessEffects> RemoteViewBrowserProcessEffects
 }
 
 impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdapter<D> {
+    fn attach_app_browser(
+        &mut self,
+        request: &BrowserAttachmentRequest,
+        profile: &BrowserProfileCatalogEntry,
+        desktop: &RemoteViewFixedDesktop,
+    ) -> Result<BrowserAttachmentObservation, String> {
+        self.runtime.attach_app_browser(request, profile, desktop)
+    }
+
     fn acquire_session_initial_tab(
         &mut self,
         browser: &ManagedBrowserInstance,
@@ -480,7 +498,21 @@ fn create_private_directory(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Clone)]
+struct BorrowedAppBrowser {
+    profile_id: String,
+    process: agent_browser_service_model::RecordedProcessIdentity,
+    endpoint: String,
+    targets: BTreeSet<String>,
+}
+
 enum BrowserRuntimeCommand {
+    AttachAppBrowser {
+        request: BrowserAttachmentRequest,
+        profile: BrowserProfileCatalogEntry,
+        desktop: RemoteViewFixedDesktop,
+        reply: mpsc::Sender<Result<BrowserAttachmentObservation, String>>,
+    },
     ReconcileProfile {
         profile: BrowserProfileCatalogEntry,
         browser: Option<ManagedBrowserInstance>,
@@ -490,6 +522,7 @@ enum BrowserRuntimeCommand {
     },
     OperationBaseline {
         shared_browser_ids: BTreeSet<String>,
+        borrowed_app_browsers: HashMap<String, BorrowedAppBrowser>,
         reply: mpsc::Sender<Result<(), String>>,
     },
     PreflightLaunch {
@@ -709,6 +742,24 @@ impl RemoteViewBrowserProcessEffects for BrowserManagerRuntime {
 }
 
 impl BrowserRuntimeDriver for BrowserManagerRuntime {
+    fn attach_app_browser(
+        &mut self,
+        request: &BrowserAttachmentRequest,
+        profile: &BrowserProfileCatalogEntry,
+        desktop: &RemoteViewFixedDesktop,
+    ) -> Result<BrowserAttachmentObservation, String> {
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::AttachAppBrowser {
+                request: request.clone(),
+                profile: profile.clone(),
+                desktop: desktop.clone(),
+                reply,
+            },
+        )
+    }
+
     fn acquire_session_initial_tab(
         &mut self,
         browser: &ManagedBrowserInstance,
@@ -837,6 +888,25 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
             receiver,
             BrowserRuntimeCommand::OperationBaseline {
                 shared_browser_ids: expected.shared_browser_ids.clone(),
+                borrowed_app_browsers: expected
+                    .app_browser_attachments
+                    .iter()
+                    .map(|(id, attachment)| {
+                        (
+                            id.clone(),
+                            BorrowedAppBrowser {
+                                profile_id: attachment.profile_id.clone(),
+                                process: attachment.request.process.clone(),
+                                endpoint: expected
+                                    .browsers
+                                    .get(id)
+                                    .map(|browser| browser.cdp_endpoint.clone())
+                                    .unwrap_or_else(|| attachment.request.cdp_endpoint.clone()),
+                                targets: attachment.borrowed_tab_ids.clone(),
+                            },
+                        )
+                    })
+                    .collect(),
                 reply,
             },
         )
@@ -1045,6 +1115,7 @@ fn run_browser_worker(
     let mut browsers = HashMap::<String, DaemonState>::new();
     let mut manual = manual::ManualBrowsers::default();
     let mut shared_browser_tabs = HashMap::<String, BTreeSet<String>>::new();
+    let mut borrowed_app_browsers = HashMap::<String, BorrowedAppBrowser>::new();
     let mut reconciled_targets = HashMap::<(String, String), String>::new();
     let mut next_browser_sequence = 0_u64;
     while let Ok(command) = receiver.recv() {
@@ -1193,12 +1264,42 @@ fn run_browser_worker(
             }
             BrowserRuntimeCommand::OperationBaseline {
                 shared_browser_ids,
+                borrowed_app_browsers: retained_attachments,
                 reply,
             } => {
                 for id in shared_browser_ids {
                     shared_browser_tabs.entry(id).or_default();
                 }
+                borrowed_app_browsers.extend(retained_attachments);
                 let _ = reply.send(Ok(()));
+            }
+            BrowserRuntimeCommand::AttachAppBrowser {
+                request,
+                profile,
+                desktop,
+                reply,
+            } => {
+                let result = runtime.block_on(async {
+                    let (observation, manager) =
+                        attach_requested_app_browser(&request, &profile, &desktop).await?;
+                    let id = observation.launch.browser_id.clone();
+                    let mut state = DaemonState::new();
+                    state.browser = Some(manager);
+                    state.browser_session_manager_owned = true;
+                    borrowed_app_browsers.insert(
+                        id.clone(),
+                        BorrowedAppBrowser {
+                            profile_id: profile.id.clone(),
+                            process: request.process,
+                            endpoint: observation.launch.cdp_endpoint.clone(),
+                            targets: observation.borrowed_target_ids.clone(),
+                        },
+                    );
+                    shared_browser_tabs.entry(id.clone()).or_default();
+                    browsers.insert(id, state);
+                    Ok(observation)
+                });
+                let _ = reply.send(result);
             }
             BrowserRuntimeCommand::ReconcileProfile {
                 profile,
@@ -1207,6 +1308,15 @@ fn run_browser_worker(
                 navigation,
                 reply,
             } => {
+                if borrowed_app_browsers
+                    .values()
+                    .any(|attachment| attachment.profile_id == profile.id)
+                {
+                    let _ = reply.send(Err(
+                        "browser_attachment_recovery_requires_app_authority".into()
+                    ));
+                    continue;
+                }
                 let result = runtime.block_on(async {
                     if browser
                         .as_ref()
@@ -1325,7 +1435,13 @@ fn run_browser_worker(
                 let _ = reply.send(Ok(()));
             }
             BrowserRuntimeCommand::IsLive { browser, reply } => {
-                let result = runtime.block_on(recorded_browser_is_live(&mut browsers, &browser));
+                let result = if let Some(attachment) = borrowed_app_browsers.get(&browser.id) {
+                    verify_borrowed_app_browser(&browser, attachment).and_then(|()| {
+                        runtime.block_on(recorded_browser_is_live(&mut browsers, &browser))
+                    })
+                } else {
+                    runtime.block_on(recorded_browser_is_live(&mut browsers, &browser))
+                };
                 let _ = reply.send(result);
             }
             BrowserRuntimeCommand::Launch {
@@ -1335,6 +1451,15 @@ fn run_browser_worker(
                 recovery_browser,
                 reply,
             } => {
+                if borrowed_app_browsers
+                    .values()
+                    .any(|attachment| attachment.profile_id == profile.id)
+                {
+                    let _ = reply.send(Err(
+                        "browser_attachment_launch_requires_app_authority".into()
+                    ));
+                    continue;
+                }
                 let result = runtime.block_on(async {
                     if recovery_browser.is_none() && environment.is_none() && desktop.is_none() {
                         if let Some((launch, manager)) =
@@ -1426,6 +1551,11 @@ fn run_browser_worker(
                 let _ = reply.send(result);
             }
             BrowserRuntimeCommand::Close { browser, reply } => {
+                if borrowed_app_browsers.contains_key(&browser.id) {
+                    let _ =
+                        reply.send(Err("browser_attachment_close_requires_app_authority".into()));
+                    continue;
+                }
                 if let Some(targets) = shared_browser_tabs.remove(&browser.id) {
                     let result = runtime.block_on(async {
                         if let Some(mut state) = browsers.remove(&browser.id) {
@@ -1547,6 +1677,15 @@ fn run_browser_worker(
                 tab,
                 reply,
             } => {
+                if borrowed_app_browsers
+                    .get(&browser.id)
+                    .is_some_and(|attachment| attachment.targets.contains(&tab.target_id))
+                {
+                    let _ = reply.send(Err(
+                        "browser_attachment_borrowed_tab_close_requires_app_authority".into(),
+                    ));
+                    continue;
+                }
                 let result = runtime.block_on(async {
                     if !recorded_browser_is_live(&mut browsers, &browser).await? {
                         return if !observed_process_presence(
@@ -1621,47 +1760,49 @@ fn run_browser_worker(
                 reply,
                 ..
             } if command["action"] == "tab_close" && command["operatorClose"] == true => {
-                let result = runtime.block_on(async {
-                    use super::service_store::{
-                        LockedServiceStateRepository, ServiceStateRepository,
-                    };
-                    let repository = LockedServiceStateRepository::default_json()?;
-                    super::stream::verify_operator_tab_close(
-                        &repository.load_snapshot()?,
-                        &command,
-                    )?;
-                    if command["targetId"] != tab.target_id
-                        || command["browserId"] != browser.id
-                        || !recorded_browser_is_live(&mut browsers, &browser).await?
-                    {
-                        return Err("operator_tab_close_process_changed".to_string());
-                    }
-                    let state = browsers
-                        .get_mut(&browser.id)
-                        .ok_or("operator_tab_close_process_changed")?;
-                    let manager = state
-                        .browser
-                        .as_mut()
-                        .ok_or("operator_tab_close_process_changed")?;
-                    if manager.browser_pid() != Some(browser.pid)
-                        || manager.get_cdp_url() != browser.cdp_endpoint
-                    {
-                        return Err("operator_tab_close_process_changed".into());
-                    }
-                    super::stream::verify_operator_tab_close(
-                        &repository.load_snapshot()?,
-                        &command,
-                    )?;
-                    let data = manager
-                        .tab_close_target_id_for_release(&tab.target_id)
-                        .await?;
-                    if let Some(targets) = shared_browser_tabs.get_mut(&browser.id) {
-                        targets.remove(&tab.target_id);
-                    }
-                    state.ref_map.clear();
-                    state.iframe_sessions.clear();
-                    state.active_frame_id = None;
-                    Ok(serde_json::json!({"id":command["id"],"success":true,"data":data}))
+                let result = super::browser_host_control::guarded(&browser.id, &command, || {
+                    runtime.block_on(async {
+                        use super::service_store::{
+                            LockedServiceStateRepository, ServiceStateRepository,
+                        };
+                        let repository = LockedServiceStateRepository::default_json()?;
+                        super::stream::verify_operator_tab_close(
+                            &repository.load_snapshot()?,
+                            &command,
+                        )?;
+                        if command["targetId"] != tab.target_id
+                            || command["browserId"] != browser.id
+                            || !recorded_browser_is_live(&mut browsers, &browser).await?
+                        {
+                            return Err("operator_tab_close_process_changed".to_string());
+                        }
+                        let state = browsers
+                            .get_mut(&browser.id)
+                            .ok_or("operator_tab_close_process_changed")?;
+                        let manager = state
+                            .browser
+                            .as_mut()
+                            .ok_or("operator_tab_close_process_changed")?;
+                        if manager.browser_pid() != Some(browser.pid)
+                            || manager.get_cdp_url() != browser.cdp_endpoint
+                        {
+                            return Err("operator_tab_close_process_changed".into());
+                        }
+                        super::stream::verify_operator_tab_close(
+                            &repository.load_snapshot()?,
+                            &command,
+                        )?;
+                        let data = manager
+                            .tab_close_target_id_for_release(&tab.target_id)
+                            .await?;
+                        if let Some(targets) = shared_browser_tabs.get_mut(&browser.id) {
+                            targets.remove(&tab.target_id);
+                        }
+                        state.ref_map.clear();
+                        state.iframe_sessions.clear();
+                        state.active_frame_id = None;
+                        Ok(serde_json::json!({"id":command["id"],"success":true,"data":data}))
+                    })
                 });
                 let _ = reply.send(result);
             }
@@ -1673,7 +1814,8 @@ fn run_browser_worker(
                 command,
                 reply,
             } => {
-                let result = match browsers.get_mut(&browser.id) {
+                let result = super::browser_host_control::guarded(&browser.id, &command, || {
+                    match browsers.get_mut(&browser.id) {
                     Some(state) => runtime.block_on(async {
                         if command["action"] == "view_focus" && command["operatorFocus"] == true {
                             // No marker clearing or target activation may precede
@@ -1705,10 +1847,7 @@ fn run_browser_worker(
                         // Read the addressed task or popup inventory without
                         // replacing the person's physical selection. Other
                         // actions retain exact-target activation semantics.
-                        if matches!(
-                            command["action"].as_str(),
-                            Some("title" | "url" | "__observe_owned_popup_targets")
-                        ) {
+                        if super::browser_host_control::observation(command["action"].as_str().unwrap_or_default()) {
                             manager.bind_observation_target(&tab.target_id).await?;
                         } else {
                             manager.tab_switch_target_id(&tab.target_id).await?;
@@ -1742,7 +1881,8 @@ fn run_browser_worker(
                         .await)
                     }),
                     None => Err("browser_session_runtime_browser_missing".to_string()),
-                };
+                }
+                });
                 let _ = reply.send(result);
             }
             BrowserRuntimeCommand::IdleRetirement {
@@ -1751,6 +1891,18 @@ fn run_browser_worker(
                 apply,
                 reply,
             } => {
+                if borrowed_app_browsers
+                    .get(&scope.browser.id)
+                    .is_some_and(|attachment| {
+                        tab.as_ref()
+                            .is_none_or(|tab| attachment.targets.contains(&tab.target_id))
+                    })
+                {
+                    let _ = reply.send(Err(
+                        "browser_attachment_retirement_requires_app_authority".into()
+                    ));
+                    continue;
+                }
                 let mut release_original_cache = false;
                 let result = runtime.block_on(async {
                     if apply
@@ -1879,6 +2031,146 @@ fn resolve_remote_view_display(
         ));
     }
     Ok(context.display_name.clone())
+}
+
+/// Validate current OS evidence before touching the CDP transport.
+fn validate_app_attachment_process(
+    request: &BrowserAttachmentRequest,
+    profile: &BrowserProfileCatalogEntry,
+    observed: &crate::process_identity::ObservedProcessIdentity,
+) -> Result<(), String> {
+    let expected = &request.process;
+    if expected.pid == 0
+        || expected.start_token.is_empty()
+        || expected
+            .executable_path
+            .as_ref()
+            .is_none_or(|path| path.is_empty())
+        || observed.pid != expected.pid
+        || observed.start_token.as_deref() != Some(expected.start_token.as_str())
+        || observed.executable_path != expected.executable_path
+        || expected
+            .browser_family
+            .as_ref()
+            .is_some_and(|family| observed.browser_family.as_ref() != Some(family))
+    {
+        return Err("browser_attachment_process_identity_conflict".into());
+    }
+    let expected_profile = fs::canonicalize(&profile.user_data_dir)
+        .map_err(|_| "browser_attachment_profile_unavailable")?;
+    let requested_profile = fs::canonicalize(&request.profile_path)
+        .map_err(|_| "browser_attachment_profile_unavailable")?;
+    if requested_profile != expected_profile {
+        return Err("browser_attachment_profile_identity_conflict".into());
+    }
+    let arguments = observed
+        .command_line
+        .as_ref()
+        .ok_or("browser_attachment_profile_identity_unavailable")?;
+    let supplied = crate::process_identity::command_line_option_value(arguments, "--user-data-dir")
+        .ok_or("browser_attachment_profile_identity_unavailable")?;
+    let observed_profile =
+        fs::canonicalize(supplied).map_err(|_| "browser_attachment_profile_unavailable")?;
+    if observed_profile != expected_profile {
+        return Err("browser_attachment_profile_identity_conflict".into());
+    }
+    Ok(())
+}
+
+fn verify_borrowed_app_browser(
+    browser: &ManagedBrowserInstance,
+    attachment: &BorrowedAppBrowser,
+) -> Result<(), String> {
+    let observed = match crate::process_identity::observe_process(attachment.process.pid) {
+        crate::process_identity::ProcessObservation::Observed(observed) => observed,
+        _ => return Err("browser_attachment_process_unavailable".into()),
+    };
+    if browser.pid != attachment.process.pid
+        || browser.cdp_endpoint != attachment.endpoint
+        || observed.start_token.as_deref() != Some(attachment.process.start_token.as_str())
+        || observed.executable_path != attachment.process.executable_path
+    {
+        return Err("browser_attachment_process_identity_conflict".into());
+    }
+    Ok(())
+}
+
+fn app_attachment_browser_id(
+    request: &BrowserAttachmentRequest,
+    profile: &BrowserProfileCatalogEntry,
+    endpoint: &str,
+) -> Result<String, String> {
+    use sha2::Digest;
+    let canonical_profile = fs::canonicalize(&profile.user_data_dir)
+        .map_err(|_| "browser_attachment_profile_unavailable")?;
+    let bytes = serde_json::to_vec(&(&request.process, canonical_profile, endpoint))
+        .map_err(|_| "browser_attachment_identity_invalid")?;
+    Ok(format!("browser:app:{:x}", sha2::Sha256::digest(bytes)))
+}
+
+/// Every page already present belongs to the app, including pre-existing
+/// popups whose opener is the requested tab. Later targets are not backfilled.
+fn attachment_borrowed_target_census(
+    snapshot: &Value,
+    selected: &str,
+) -> Result<BTreeSet<String>, String> {
+    let targets = snapshot["targetInfos"]
+        .as_array()
+        .ok_or("browser_attachment_target_census_unavailable")?;
+    let mut borrowed = BTreeSet::new();
+    for target in targets.iter().filter(|target| target["type"] == "page") {
+        let id = target["targetId"]
+            .as_str()
+            .filter(|id| !id.is_empty())
+            .ok_or("browser_attachment_target_census_invalid")?;
+        if !borrowed.insert(id.to_owned()) {
+            return Err("browser_attachment_target_census_invalid".into());
+        }
+    }
+    if !borrowed.contains(selected) {
+        return Err("browser_attachment_target_missing".into());
+    }
+    Ok(borrowed)
+}
+
+async fn attach_requested_app_browser(
+    request: &BrowserAttachmentRequest,
+    profile: &BrowserProfileCatalogEntry,
+    desktop: &RemoteViewFixedDesktop,
+) -> Result<(BrowserAttachmentObservation, BrowserManager), String> {
+    request.validate()?;
+    let before = match crate::process_identity::observe_process(request.process.pid) {
+        crate::process_identity::ProcessObservation::Observed(before) => before,
+        _ => return Err("browser_attachment_process_unavailable".into()),
+    };
+    validate_app_attachment_process(request, profile, &before)?;
+    let manager =
+        attach_verified_browser_endpoint(&request.cdp_endpoint, request.process.pid, before)
+            .await?;
+    let target_snapshot = manager
+        .client
+        .send_command_no_params("Target.getTargets", None)
+        .await?;
+    let borrowed_target_ids =
+        attachment_borrowed_target_census(&target_snapshot, &request.target_id)?;
+    let after = match crate::process_identity::observe_process(request.process.pid) {
+        crate::process_identity::ProcessObservation::Observed(after) => after,
+        _ => return Err("browser_attachment_process_unavailable".into()),
+    };
+    validate_app_attachment_process(request, profile, &after)?;
+    let observation = BrowserAttachmentObservation {
+        borrowed_target_ids,
+        assignment: None,
+        launch: BrowserLaunch {
+            process_identity: Some(request.process.clone()),
+            browser_id: app_attachment_browser_id(request, profile, manager.get_cdp_url())?,
+            pid: request.process.pid,
+            cdp_endpoint: manager.get_cdp_url().into(),
+            desktop: Some(desktop.clone()),
+        },
+        target_id: request.target_id.clone(),
+    };
+    Ok((observation, manager))
 }
 
 /// Current OS and CDP evidence, rather than saved inventory, qualifies reuse.
@@ -2397,6 +2689,247 @@ fn tab_acquisition(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn app_attachment_process_requires_exact_kernel_executable_and_profile_identity() {
+        let root = TempDirectory::new();
+        let profile_path = root.0.join("profile");
+        let other_path = root.0.join("peer");
+        fs::create_dir_all(&profile_path).unwrap();
+        fs::create_dir_all(&other_path).unwrap();
+        let profile = BrowserProfileCatalogEntry {
+            id: "app".into(),
+            name: "App".into(),
+            user_data_dir: profile_path.to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Named,
+        };
+        let request = BrowserAttachmentRequest {
+            version: 1,
+            profile_path: profile.user_data_dir.clone(),
+            process: agent_browser_service_model::RecordedProcessIdentity {
+                pid: 42,
+                start_token: "kernel-start".into(),
+                executable_path: Some("/synthetic/chrome".into()),
+                browser_family: Some("chrome".into()),
+            },
+            cdp_endpoint: "ws://127.0.0.1:1/devtools/browser/fixture".into(),
+            target_id: "app-target".into(),
+            shared_with: vec![],
+        };
+        let observed = crate::process_identity::ObservedProcessIdentity {
+            pid: 42,
+            start_token: Some("kernel-start".into()),
+            executable_path: Some("/synthetic/chrome".into()),
+            browser_family: Some("chrome".into()),
+            command_line: Some(vec![format!("--user-data-dir={}", profile_path.display())]),
+        };
+        validate_app_attachment_process(&request, &profile, &observed).unwrap();
+        for changed in [
+            crate::process_identity::ObservedProcessIdentity {
+                pid: 43,
+                ..observed.clone()
+            },
+            crate::process_identity::ObservedProcessIdentity {
+                start_token: Some("reused-pid".into()),
+                ..observed.clone()
+            },
+            crate::process_identity::ObservedProcessIdentity {
+                executable_path: Some("/peer/chrome".into()),
+                ..observed.clone()
+            },
+            crate::process_identity::ObservedProcessIdentity {
+                command_line: None,
+                ..observed.clone()
+            },
+            crate::process_identity::ObservedProcessIdentity {
+                command_line: Some(vec![format!("--user-data-dir={}", other_path.display())]),
+                ..observed.clone()
+            },
+        ] {
+            assert!(validate_app_attachment_process(&request, &profile, &changed).is_err());
+        }
+        let mut wrong_profile = request.clone();
+        wrong_profile.profile_path = other_path.to_string_lossy().into_owned();
+        assert_eq!(
+            validate_app_attachment_process(&wrong_profile, &profile, &observed).unwrap_err(),
+            "browser_attachment_profile_identity_conflict"
+        );
+        let mut missing_executable = request.clone();
+        missing_executable.process.executable_path = None;
+        assert!(validate_app_attachment_process(&missing_executable, &profile, &observed).is_err());
+    }
+
+    #[test]
+    fn app_attachment_census_preserves_preexisting_child_pages_without_claiming_later_popups() {
+        let snapshot = serde_json::json!({"targetInfos":[
+            {"type":"page","targetId":"selected"},
+            {"type":"page","targetId":"preexisting-popup","openerId":"selected"},
+            {"type":"page","targetId":"peer"},
+            {"type":"service_worker","targetId":"worker"}
+        ]});
+        let borrowed = attachment_borrowed_target_census(&snapshot, "selected").unwrap();
+        assert_eq!(
+            borrowed,
+            BTreeSet::from(["selected".into(), "preexisting-popup".into(), "peer".into()])
+        );
+        assert!(!borrowed.contains("later-popup"));
+        assert!(attachment_borrowed_target_census(&snapshot, "worker").is_err());
+        assert!(attachment_borrowed_target_census(&serde_json::json!({}), "selected").is_err());
+    }
+
+    #[test]
+    fn app_attachment_id_is_stable_for_same_process_and_changes_with_pid_epoch() {
+        let root = TempDirectory::new();
+        fs::create_dir_all(&root.0).unwrap();
+        let profile = BrowserProfileCatalogEntry {
+            id: "profile".into(),
+            name: "Profile".into(),
+            user_data_dir: root.0.to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Named,
+        };
+        let request = BrowserAttachmentRequest {
+            version: 1,
+            profile_path: profile.user_data_dir.clone(),
+            process: agent_browser_service_model::RecordedProcessIdentity {
+                pid: 42,
+                start_token: "start".into(),
+                executable_path: Some("/synthetic/chrome".into()),
+                browser_family: None,
+            },
+            cdp_endpoint: "ws://127.0.0.1:1/devtools/browser/test".into(),
+            target_id: "first".into(),
+            shared_with: vec![],
+        };
+        let first = app_attachment_browser_id(&request, &profile, &request.cdp_endpoint).unwrap();
+        let mut changed = request.clone();
+        changed.target_id = "second".into();
+        assert_eq!(
+            first,
+            app_attachment_browser_id(&changed, &profile, &changed.cdp_endpoint).unwrap()
+        );
+        changed.process.start_token = "new-epoch".into();
+        assert_ne!(
+            first,
+            app_attachment_browser_id(&changed, &profile, &changed.cdp_endpoint).unwrap()
+        );
+    }
+
+    #[test]
+    fn app_attachment_baseline_blocks_borrowed_close_and_recovery_without_process_effects() {
+        let mut runtime =
+            BrowserManagerRuntime::start(BrowserManagerRuntimeConfig::default()).unwrap();
+        let request = BrowserAttachmentRequest {
+            version: 1,
+            profile_path: "/synthetic/profile".into(),
+            process: agent_browser_service_model::RecordedProcessIdentity {
+                pid: u32::MAX,
+                start_token: "original".into(),
+                executable_path: Some("/synthetic/chrome".into()),
+                browser_family: None,
+            },
+            cdp_endpoint: "ws://127.0.0.1:1/devtools/browser/test".into(),
+            target_id: "borrowed-target".into(),
+            shared_with: vec![],
+        };
+        let desktop = RemoteViewFixedDesktop {
+            desktop_id: "desktop".into(),
+            generation: 1,
+            friendly_route_label: "app".into(),
+        };
+        let profile = BrowserProfileCatalogEntry {
+            id: "profile".into(),
+            name: "Profile".into(),
+            user_data_dir: "/synthetic/profile".into(),
+            kind: BrowserProfileKind::Named,
+        };
+        let browser = ManagedBrowserInstance {
+            id: "borrowed-browser".into(),
+            profile_id: profile.id.clone(),
+            pid: request.process.pid,
+            cdp_endpoint: request.cdp_endpoint.clone(),
+            desktop: Some(desktop.clone()),
+            active_session_ids: vec![],
+        };
+        let mut state = agent_browser_service_model::BrowserSessionState::default();
+        state.shared_browser_ids.insert(browser.id.clone());
+        state.app_browser_attachments.insert(
+            browser.id.clone(),
+            agent_browser_service_model::BrowserAppAttachment {
+                assignment: None,
+                request,
+                owner: agent_browser_service_model::BrowserHostIdentity {
+                    host_id: "app".into(),
+                    participant_id: "participant".into(),
+                    session_id: "session".into(),
+                },
+                borrowed_tab_ids: BTreeSet::from(["borrowed-target".into()]),
+                profile_id: profile.id.clone(),
+                desktop,
+            },
+        );
+        runtime.begin_operation(&state).unwrap();
+        assert_eq!(
+            runtime.close_browser(&browser).unwrap_err(),
+            "browser_attachment_close_requires_app_authority"
+        );
+        let tab = ManagedBrowserTab {
+            id: "logical-tab".into(),
+            target_id: "borrowed-target".into(),
+            browser_id: browser.id.clone(),
+            session_id: "task".into(),
+            created_at_ms: 1,
+            last_activity_at_ms: 1,
+        };
+        assert_eq!(
+            runtime.close_tab(&browser, &tab).unwrap_err(),
+            "browser_attachment_borrowed_tab_close_requires_app_authority"
+        );
+        assert_eq!(
+            runtime
+                .reconcile_profile_browser(&profile, Some(&browser), &[tab], &[])
+                .unwrap_err(),
+            "browser_attachment_recovery_requires_app_authority"
+        );
+        assert_eq!(
+            runtime.launch_browser(&profile, None).unwrap_err(),
+            "browser_attachment_launch_requires_app_authority"
+        );
+    }
+
+    #[tokio::test]
+    async fn app_attachment_endpoint_pid_mismatch_stops_before_target_or_page_commands() {
+        use futures_util::{SinkExt, StreamExt};
+        use tokio_tungstenite::tungstenite::Message;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("ws://{}", listener.local_addr().unwrap());
+        let methods = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let recorded = methods.clone();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
+            while let Some(Ok(message)) = socket.next().await {
+                if !message.is_text() {
+                    continue;
+                }
+                let command: Value = serde_json::from_str(message.to_text().unwrap()).unwrap();
+                recorded
+                    .lock()
+                    .unwrap()
+                    .push(command["method"].as_str().unwrap().into());
+                socket.send(Message::Text(serde_json::json!({"id":command["id"],"result":{"processInfo":[{"type":"browser","id":u64::from(std::process::id())+1}]}}).to_string())).await.unwrap();
+            }
+        });
+        let before = match crate::process_identity::observe_process(std::process::id()) {
+            crate::process_identity::ProcessObservation::Observed(before) => before,
+            _ => panic!("test process must be observable"),
+        };
+        let result = attach_verified_browser_endpoint(&endpoint, std::process::id(), before).await;
+        assert!(
+            matches!(result,Err(ref error) if error=="browser_session_profile_endpoint_identity_conflict")
+        );
+        assert_eq!(*methods.lock().unwrap(), vec!["SystemInfo.getProcessInfo"]);
+        server.abort();
+    }
 
     #[derive(Default)]
     struct FakeRuntime;

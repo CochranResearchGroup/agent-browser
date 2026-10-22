@@ -128,9 +128,9 @@ conflict; it is never closed, replaced, or attached automatically.
 If closure reports a pending browser prompt, finish it on the desktop and repeat
 `browser_close` before reopening the profile.
 
-The default MCP catalog contains 12 workflow tools: `browser_open`, `browser_navigate`,
+The default MCP catalog contains 13 workflow tools: `browser_open`, `browser_navigate`,
 `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
-`browser_handoff`, `browser_continue`, `browser_close`, `browser_command` and `browser_discover`.
+`browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_command` and `browser_discover`.
 Page actions require `taskId`. Use `browser_tab` to list, create, select or close this
 task's tabs; repeat a stable `tabKey` when retrying creation. Peer tabs stay outside
 this scope. Use `browser_discover` for one advanced operation's argument schema,
@@ -143,6 +143,73 @@ through advanced dispatch. There is no legacy catalog mode. Contract metadata re
 Use the workflow tools directly. Agent Browser owns profile/session coordination;
 Remote View owns the native desktop and viewer. Request advanced metadata only
 when needed, and use the supported CLI/API for service diagnostics or maintenance.
+
+### Attach and explicitly share an app browser
+
+`browser_open` can borrow a currently running app browser instead of launching.
+Supply `profile` (the existing profile name), `profileMode: "existing"`, the normal
+attribution/task key and configured `hostBinding`. Omit `url`; attachment never
+navigates, opens an initial tab, duplicates a profile process or resets work.
+Add this `attachment` object:
+
+```json
+{
+  "version": 1,
+  "process": {
+    "pid": 1234,
+    "startToken": "<current-kernel-process-start-token>",
+    "executablePath": "/opt/chromium/chrome",
+    "browserFamily": "chromium"
+  },
+  "profilePath": "/absolute/canonical/app-profile",
+  "cdpEndpoint": "ws://127.0.0.1:9222/devtools/browser/<browser-id>",
+  "targetId": "<existing-page-target>",
+  "sharedWith": []
+}
+```
+
+The supported local adapter verifies the current process/start/executable,
+canonical profile directory, CDP browser PID, existing page and current Native
+assignment/window PID before publishing a task. Unsupported platforms or missing
+CDP return a concrete capability error without launching. Use the app's native
+browser tools when attachment is unavailable. A profile already on another
+desktop stays there; supported alternatives are retaining it, selecting another
+profile, or an explicit relocation operation when that capability is available.
+
+The original app owns lifecycle. Closing/detaching an attached task preserves
+its borrowed initial page and browser process; task-created tabs retain scoped
+cleanup. Direct close of a borrowed page is refused. A missing borrowed browser
+is reported rather than automatically reopened. The owner may explicitly set
+`sharedWith` to exact `{hostId, participantId, sessionId}` recipients by replaying
+its original attachment task. Each recipient attaches explicitly with its own
+task key and app binding; it cannot change the owner's sharing list. Sharing does
+not transfer termination or relocation authority. Metadata reports
+`custody: "app_borrowed"`; capability presence is not readiness or account proof.
+
+
+### Human takeover and return
+
+Viewing alone does not pause automation. Use `browser_control` with `taskId` and
+`operation: "status"` (or `view`) to read the current browser-scoped epoch.
+Explicit `takeover` requires `expectedEpoch`, an attributable `actor` and a
+concrete `reason`. It blocks new mutations across supported MCP, CLI and Service
+routes; optional `pauseReads: true` also pauses page observation/capture. Status
+and return remain available. Control persists across disconnection and restart.
+
+`return` and deliberate `override` use the current epoch and attribution, then
+freshly observe the same retained page before automation resumes. No automatic
+return, browser replacement or website-effect replay occurs. Pending dispatched
+work retains its observed or uncertain outcome; explicit `reconcile` addresses a
+crashed request without repeating it. Override uses existing trusted operator
+admission; attribution strings grant no authority. Unmanaged OS/CDP controllers
+must cooperate with the current state. See the [control contract](https://github.com/CochranResearchGroup/agent-browser/blob/main/docs/dev/hosted-browser-control.md).
+
+```sh
+agent-browser --json mcp host-control TASK status
+agent-browser --json mcp host-control TASK takeover 0 operator 'Assist with this task'
+agent-browser --json mcp host-control TASK return 1 operator 'Continue after assistance'
+```
+
 
 ## Installation
 
@@ -5670,7 +5737,7 @@ handoff; it verifies an access-plan response can be passed into
 `pnpm test:service-client-example-live` to validate the main trace
 example against a real isolated daemon and browser session.
 
-For MCP clients, run `agent-browser mcp serve`. The default catalog exposes the twelve task workflow tools described above, including `browser_open`, `browser_tab`, `browser_handoff`, `browser_continue` and task-scoped page actions. Resource discovery and reads remain available without launching a browser. Read `agent-browser://operating-guide` for the current workflow and `agent-browser://contracts` for retained service contracts.
+For MCP clients, run `agent-browser mcp serve`. The default catalog exposes the thirteen task workflow tools described above, including `browser_open`, `browser_tab`, `browser_handoff`, `browser_continue` and task-scoped page actions. Resource discovery and reads remain available without launching a browser. Read `agent-browser://operating-guide` for the current workflow and `agent-browser://contracts` for retained service contracts.
 
 The equivalent MCP `tools/call` payload uses the same intent fields:
 
@@ -5685,7 +5752,7 @@ The equivalent MCP `tools/call` payload uses the same intent fields:
 <summary>Advanced adapter and HTTP reference</summary>
 
 These adapter identifiers describe retained implementation and HTTP contracts.
-Use the twelve workflow tools for MCP calls and browser_discover for selected
+Use the thirteen workflow tools for MCP calls and browser_discover for selected
 operation metadata; this table does not add callable MCP tools.
 
 <table>

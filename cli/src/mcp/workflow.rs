@@ -35,8 +35,12 @@ pub(super) fn tools() -> Vec<Value> {
                     "taskKey":{"type":"string","description":"Stable task key. Distinct keys receive independent tabs; reuse the key to continue this task."},
                 "url":{"type":"string","description":"Initial URL for a new task. Replaying a task returns its current page without navigating again."},
                     "serviceName":{"type":"string"},"agentName":{"type":"string"},"taskName":{"type":"string"},
+                    "attachment":{"type":"object","additionalProperties":false,"description":"Borrow an exact existing app browser, with no launch or initial navigation. Requires hostBinding and existing profile; omit url.","properties":{
+                        "version":{"const":1},"process":{"type":"object","properties":{"pid":{"type":"integer","minimum":1},"startToken":{"type":"string"},"executablePath":{"type":"string"},"browserFamily":{"type":"string"}},"required":["pid","startToken","executablePath"]},
+                        "profilePath":{"type":"string"},"cdpEndpoint":{"type":"string"},"targetId":{"type":"string"},
+                        "sharedWith":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"hostId":{"type":"string"},"participantId":{"type":"string"},"sessionId":{"type":"string"}},"required":["hostId","participantId","sessionId"]}}},"required":["version","process","profilePath","cdpEndpoint","targetId"]},
                     "hostBinding":{"type":"object","additionalProperties":false,"description":"Configured app context and exact required/preferred placement; never a viewer URL.","properties":{"version":{"const":1},"hostId":{"type":"string"},"participantId":{"type":"string"},"sessionId":{"type":"string"},"placement":placement},"required":["version","hostId","participantId","sessionId","placement"]}
-                }, "required":["taskKey","url","serviceName","agentName","taskName"]}
+                }, "required":["taskKey","serviceName","agentName","taskName"],"oneOf":[{"required":["url"],"not":{"required":["attachment"]}},{"required":["attachment","hostBinding","profile"],"not":{"required":["url"]}}]}
         }),
         json!({
             "name":"browser_close", "title":"Close a browser task",
@@ -52,7 +56,7 @@ pub(super) fn tools() -> Vec<Value> {
         }),
         json!({
             "name":"browser_continue", "title":"Continue a browser task",
-            "description":"Resume ordinary automation in this task's current page after human assistance. Return its current identity and URL without navigating or creating another task.",
+            "description":"Read this task's current identity and URL without navigation or another task. After explicit human takeover, use browser_control return before mutating automation; continuation never implicitly returns control.",
             "inputSchema":{"type":"object","additionalProperties":false,
                 "properties":{"taskId":{"type":"string"}},"required":["taskId"]}
         }),
@@ -144,6 +148,12 @@ pub(super) fn open(
     transport_session: &str,
     configured: &ServiceState,
 ) -> Result<Value, JsonRpcError> {
+    if arguments.get("attachment").is_some() {
+        if optional_string_argument(arguments, "mode")?.unwrap_or("automation") != "automation" {
+            return Err(issue("manual_login_requires_owned_browser: attachment cannot remove an existing CDP listener"));
+        }
+        return open_attachment(arguments, transport_session);
+    }
     let task_key = required_string_argument(arguments, "taskKey")?;
     let url = required_string_argument(arguments, "url")?;
     let mode = optional_string_argument(arguments, "profileMode")?.unwrap_or("persistent");
@@ -304,6 +314,70 @@ pub(super) fn open(
         transport_session,
         json!({}),
         data,
+        false,
+    ))
+}
+
+/// Attach retains the existing app process and target without initial navigation.
+fn open_attachment(arguments: &Value, transport_session: &str) -> Result<Value, JsonRpcError> {
+    let task_key = required_string_argument(arguments, "taskKey")?;
+    let profile = required_string_argument(arguments, "profile")?;
+    let service = required_string_argument(arguments, "serviceName")?;
+    let agent = required_string_argument(arguments, "agentName")?;
+    let task = required_string_argument(arguments, "taskName")?;
+    if arguments.get("url").is_some()
+        || optional_string_argument(arguments, "profileMode")?
+            .is_some_and(|mode| mode != "existing")
+    {
+        return Err(issue("browser_attachment_does_not_navigate_or_allocate_profile: omit url and use existing mode"));
+    }
+    let binding: agent_browser_service_model::BrowserHostBinding = serde_json::from_value(
+        arguments
+            .get("hostBinding")
+            .cloned()
+            .ok_or_else(|| issue("browser_attachment_host_binding_required"))?,
+    )
+    .map_err(|_| issue("browser_host_binding_invalid"))?;
+    crate::native::browser_host_context::validate_provider(&binding).map_err(issue)?;
+    let attachment: agent_browser_service_model::BrowserAttachmentRequest =
+        serde_json::from_value(arguments["attachment"].clone())
+            .map_err(|_| issue("browser_attachment_invalid"))?;
+    attachment.validate().map_err(issue)?;
+    let identity = serde_json::to_vec(&(
+        service,
+        agent,
+        task_key,
+        Some(profile),
+        &binding.host_id,
+        &binding.participant_id,
+        &binding.session_id,
+    ))
+    .expect("string tuple");
+    let session_name = format!("workflow-{}", hex::encode(Sha256::digest(identity)));
+    let command = json!({"id":uuid::Uuid::new_v4().to_string(),"action":"browser_session_open","sessionName":session_name,
+        "profileId":profile,"attachment":attachment,"hostBinding":binding,
+        "serviceName":service,"agentName":agent,"taskName":task,"originKind":"agent"});
+    let opened = execute(command, transport_session)?;
+    let task_id = opened["sessionId"]
+        .as_str()
+        .ok_or_else(|| issue("browser_task_identity_missing"))?;
+    let session = task_session(task_id)?;
+    let observed = execute(
+        json!({"id":uuid::Uuid::new_v4().to_string(),"action":"url","sessionName":session}),
+        transport_session,
+    )?;
+    let store = BrowserSessionSqliteStore::open_read_only(
+        &BrowserSessionSqliteStore::default_sqlite_path().map_err(issue)?,
+    )
+    .map_err(issue)?;
+    let state = store.load_session_state().map_err(issue)?;
+    let host = crate::native::browser_host_context::snapshot(&state, task_id).map_err(issue)?;
+    Ok(super::tool_response_from_payload(
+        "browser_open",
+        transport_session,
+        json!({}),
+        json!({"taskId":task_id,
+        "profileId":profile,"browserId":host["browserId"],"tabId":host["tabId"],"url":observed["url"],"host":host}),
         false,
     ))
 }
@@ -526,6 +600,20 @@ pub(super) fn tab(arguments: &Value, transport_session: &str) -> Result<Value, J
 #[cfg(test)]
 mod context_tests {
     use super::*;
+
+    #[test]
+    fn manual_login_rejects_cdp_attachment_before_profile_or_transport_effects() {
+        let error = open(
+            &json!({"mode":"manual_login", "attachment":{}}),
+            "unused",
+            &ServiceState::default(),
+        )
+        .unwrap_err();
+        assert!(error.data.as_ref().unwrap()["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("manual_login_requires_owned_browser"));
+    }
 
     #[test]
     fn manual_login_mode_is_exposed_without_internal_launch_plumbing() {

@@ -219,6 +219,15 @@ pub trait BrowserLaunchCustodyStore {
         Err(LaunchCustodyStoreError::Unavailable)
     }
 
+    /// Presentation may use an explicitly borrowed app assignment. This grants
+    /// no launch, retirement or process-close custody.
+    fn published_presentation_assignment(
+        &mut self,
+        browser: &crate::ManagedBrowserInstance,
+    ) -> Result<crate::RemoteViewAssignmentRecord, LaunchCustodyStoreError> {
+        self.published_launch_assignment(browser)
+    }
+
     /// Read only the immutable identity joined to the published launch. Missing
     /// legacy evidence must not be replaced by a current process observation.
     fn published_launch_process_identity(

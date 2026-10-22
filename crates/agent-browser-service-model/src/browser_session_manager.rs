@@ -57,6 +57,17 @@ pub trait BrowserIdleRetirementGuard {}
 impl BrowserIdleRetirementGuard for () {}
 
 pub trait BrowserSessionEffects {
+    /// Borrow an exact app browser using current local and Native observations.
+    /// Unsupported adapters refuse before any launch or target effect.
+    fn attach_app_browser(
+        &mut self,
+        _request: &crate::BrowserAttachmentRequest,
+        _profile: &BrowserProfileCatalogEntry,
+        _desktop: &RemoteViewFixedDesktop,
+    ) -> Result<crate::BrowserAttachmentObservation, String> {
+        Err("browser_attachment_capability_unavailable: exact process/CDP/desktop attachment is not supported by this adapter".into())
+    }
+
     /// Read the current exact provider epoch before retaining a registration
     /// intent. This read confers no access and produces no use evidence.
     fn native_handoff_assignment_target(
@@ -405,7 +416,7 @@ impl BrowserPlacement {
         }
     }
 
-    fn accepts(&self, desktop: Option<&RemoteViewFixedDesktop>) -> bool {
+    pub(crate) fn accepts(&self, desktop: Option<&RemoteViewFixedDesktop>) -> bool {
         desktop.is_some_and(|desktop| {
             self.bindings().iter().any(|binding| {
                 binding.desktop_id == desktop.desktop_id && binding.generation == desktop.generation
@@ -413,7 +424,7 @@ impl BrowserPlacement {
         })
     }
 
-    fn select(
+    pub(crate) fn select(
         &self,
         candidates: &[RemoteViewDesktopCandidate],
     ) -> Result<RemoteViewFixedDesktop, String> {
@@ -753,6 +764,11 @@ pub struct PendingHumanTabRetention {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserSessionState {
+    /// App-provided processes and initial targets never transfer lifecycle custody.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub app_browser_attachments: BTreeMap<String, crate::BrowserAppAttachment>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub attached_task_targets: BTreeMap<String, String>,
     /// App context retained under the logical task session identifier.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub host_bindings: BTreeMap<String, crate::BrowserHostTaskBinding>,
@@ -809,6 +825,8 @@ impl Default for BrowserSessionState {
             shared_browser_ids: BTreeSet::new(),
             profile_executables: BTreeMap::new(),
             host_bindings: BTreeMap::new(),
+            app_browser_attachments: BTreeMap::new(),
+            attached_task_targets: BTreeMap::new(),
             idle_closed_browsers: BTreeMap::new(),
             remote_view_presentations: BTreeMap::new(),
             remote_view_tab_handoffs: BTreeMap::new(),
@@ -1108,6 +1126,45 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .checked_add(self.config.session_idle_timeout_ms)
             .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
         let profile = self.resolve_profile_for_open(&request)?;
+        if self
+            .state
+            .app_browser_attachments
+            .values()
+            .any(|row| row.profile_id == profile.id)
+        {
+            let session = self.state.sessions.values().find(|row| row.name == request.session_name && row.profile_id == profile.id)
+                .cloned().ok_or("browser_attachment_sharing_required: use explicit app attachment for another task")?;
+            let browser = self
+                .state
+                .browsers
+                .get(&session.browser_id)
+                .ok_or("browser_session_browser_missing")?;
+            if request
+                .placement
+                .as_ref()
+                .is_some_and(|placement| !placement.accepts(browser.desktop.as_ref()))
+            {
+                return Err("browser_attachment_placement_conflict: retain current placement or explicitly relocate".into());
+            }
+            if !self.effects.browser_is_live(browser)? {
+                return Err("browser_attachment_lost: app-owned browsers are report-only; no automatic replacement".into());
+            }
+            let stored = self
+                .state
+                .sessions
+                .get_mut(&session.id)
+                .expect("selected task");
+            stored.last_activity_at_ms = request.activity_at_ms;
+            stored.expires_at_ms = expires_at_ms;
+            return Ok(OpenBrowserSessionResult {
+                session_id: session.id,
+                session_name: session.name,
+                profile_id: session.profile_id,
+                browser_id: session.browser_id,
+                disposition: SessionBrowserDisposition::Reused,
+                session_disposition: SessionRecordDisposition::Reused,
+            });
+        }
         request.placement = self.effective_placement(&profile.id, request.placement.as_ref())?;
         if let Some(placement) = &request.placement {
             // Check retained physical identity before expiry, recovery, or task mutation.
@@ -1372,6 +1429,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         if self.effects.browser_is_live(&browser)? {
             return Ok(());
         }
+        if self.state.app_browser_attachments.contains_key(&browser.id) {
+            return Err("browser_attachment_lost: preserve the app browser and request explicit rebind; no automatic recovery".into());
+        }
         let profile = self
             .catalog
             .profiles
@@ -1427,6 +1487,12 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         profile: &BrowserProfileCatalogEntry,
         placement: Option<&BrowserPlacement>,
     ) -> Result<bool, String> {
+        if self.state.app_browser_attachments.contains_key(&browser.id) {
+            return Err(
+                "browser_attachment_lost: no implicit recovery or borrowed target recreation"
+                    .into(),
+            );
+        }
         let tabs = self
             .state
             .tabs
@@ -1826,7 +1892,14 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             self.effects.close_browser(&browser)?;
         } else if !idle_closed {
             for tab in &tabs {
-                self.effects.close_tab(&browser, tab)?;
+                if !self
+                    .state
+                    .app_browser_attachments
+                    .get(&browser.id)
+                    .is_some_and(|row| row.borrowed_tab_ids.contains(&tab.target_id))
+                {
+                    self.effects.close_tab(&browser, tab)?;
+                }
             }
         }
 
@@ -1927,6 +2000,14 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     || target == opener
                     || !owned.contains(opener)
                     || owned.contains(target)
+                {
+                    continue;
+                }
+                if self
+                    .state
+                    .app_browser_attachments
+                    .get(&session.browser_id)
+                    .is_some_and(|row| row.borrowed_tab_ids.contains(target))
                 {
                     continue;
                 }
@@ -2146,6 +2227,16 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             &ManagedBrowserTab,
         ) -> Result<(), String>,
     ) -> Result<CloseBrowserTabResult, String> {
+        if self.state.tabs.get(tab_id).is_some_and(|tab| {
+            self.state
+                .app_browser_attachments
+                .get(&tab.browser_id)
+                .is_some_and(|row| row.borrowed_tab_ids.contains(&tab.target_id))
+        }) {
+            return Err(
+                "browser_attachment_borrowed_tab_close_forbidden: detach the task instead".into(),
+            );
+        }
         let browser_id = self
             .state
             .tabs
@@ -2237,7 +2328,19 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         } else {
             session.expires_at_ms
         };
-        close_target(self.effects, &browser, &tab)?;
+        let borrowed = self
+            .state
+            .app_browser_attachments
+            .get(&browser.id)
+            .is_some_and(|row| row.borrowed_tab_ids.contains(&tab.target_id));
+        if borrowed && reason == BrowserTabEndReason::ExplicitClose {
+            return Err(
+                "browser_attachment_borrowed_tab_close_forbidden: detach the task instead".into(),
+            );
+        }
+        if !borrowed {
+            close_target(self.effects, &browser, &tab)?;
+        }
         self.state.tabs.remove(&tab.id);
         self.state.tab_lifetimes.remove(&tab.id);
         self.state.tab_metadata.remove(&tab.id);

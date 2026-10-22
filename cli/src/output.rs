@@ -7302,66 +7302,69 @@ Usage:
   agent-browser mcp read <uri>
   agent-browser --json mcp host-task <task-id>
   agent-browser --json mcp watch-host-task <task-id>
+  agent-browser --json mcp host-control <task-id> <operation>
 
 Commands:
   serve                 Run the MCP stdio server
-  resources             List explicit read-only diagnostic resources
+  resources             List read-only diagnostic resources
   read                  Read one diagnostic resource as JSON
   host-task             Read hosted-task metadata without browser effects
   watch-host-task       Watch metadata as NDJSON; terminate to disconnect
+  host-control          Status/view/takeover/return/override/reconcile hosted control
 
 Default workflow tools:
-  browser_open          Open or reuse a task with profile, profileMode, taskKey and url
-  browser_navigate      Navigate the task's current page
-  browser_snapshot      Read the page and element references
+  browser_open          Open/reuse a profile task
+  browser_navigate      Navigate this task's page
+  browser_snapshot      Read page and element refs
   browser_click         Click an element
   browser_fill          Fill an input
-  browser_screenshot    Capture the current page
-  browser_tab           List, create, select or close only this task's tabs
-  browser_handoff       Get a ready HTTPS link to the native Remote View viewer
-  browser_continue      Continue the same task after human input
-  browser_close         End this task while preserving peers and profile data
-  browser_command       Run an advanced page action with action and params
-  browser_discover      Load browser, playbook or diagnostic metadata
+  browser_screenshot    Capture the page
+  browser_tab           List/create/select/close this task's tabs
+  browser_handoff       Get a ready native desktop link
+  browser_continue      Read current identity and URL
+  browser_close         Close this task; retain peers/profile
+  browser_control       Read/change hosted control
+  browser_command       Run an advanced page action
+  browser_discover      Load selected operation metadata
 
 Workflow:
-  Use browser_open's taskId on subsequent page actions.
-  profileMode is persistent, existing or disposable; persistent is the default.
-  Reuse taskKey when retrying open; reuse tabKey when retrying tab creation.
-  Send the returned handoffUrl to a person, then continue with the same taskId.
-  Native Remote View owns viewing and authentication.
-  browser_open mode=manual_login opens a named persistent profile without CDP.
-  It returns ready handoffUrl on the Native desktop; reuse taskKey for the same login.
-  Close before reopening that profile in default automation mode.
-  Manual mode rejects DOM actions; the requested URL has urlObserved=false.
-  Configure AGENT_BROWSER_PUBLIC_ORIGIN in environment or ~/.agent-browser/.env.
-  Reconnect MCP clients after startup configuration changes.
-  Hosted browser_open accepts hostBinding version=1, hostId, participantId,
-  sessionId and required/preferred placement with desktopId/generation.
-  AGENT_BROWSER_HOSTS_FILE supplies reviewed app origin/providerApplication;
-  configure both transport/runtime with the same Remote View application.
-  Hosted handoff uses the app's /agent-browser/handoff/<id> resolver.
-  Hosted runtimes leave spare-desktop growth and retirement to the app.
-  Required placement never falls back; preferred uses only listed alternatives.
-  Metadata watching uses local DB/WAL stamps every 250 ms, not provider polling.
-  Events have watchId/sequence; reconnect reads a new full snapshot.
-  browser_discover exposes SiteGuide verify_login, software login-playbook,
-  hosted auth-helper, prepare_login, validate_plan and collect_posts metadata.
-  Login helpers freeze receiving custody; select configured account/source refs.
-  Reconcile with reconcile:true; never replay uncertain credential delivery.
-  Independent native safety releases protected input; site verification follows.
-  prepare_login and validate_plan must pass; reviewedPlan resumes reviewed changes.
-  browser_tab list observes owned popups; verify new destinations before login input.
-  AGENT_BROWSER_SITEGUIDE_DIRECTORY selects reviewed guide JSON files.
-  Diagnostic and administrative effects use supported CLI/API operations.
-  Contract metadata reports the public mcpCatalog and per-adapter mcp.available.
-  Retired authority MCP operations and the legacy catalog are unavailable.
-  If browser_open is absent in your client, configure agent-browser mcp serve
-  and reconnect. Continue with the installed CLI while correcting integration.
+  Use returned taskId for page actions. profileMode=persistent is the default;
+  existing requires a named profile, disposable omits profile.
+  Reuse taskKey on open and tabKey on tab creation; replay preserves current work.
+  Send handoffUrl only when operatorVisible.state=ready. Native Remote View owns
+  viewing and authentication. Configure AGENT_BROWSER_PUBLIC_ORIGIN in environment
+  or ~/.agent-browser/.env; reconnect MCP clients after startup changes.
+  browser_open mode=manual_login opens a named persistent profile without CDP and
+  returns its ready native handoffUrl. DOM actions are unavailable; urlObserved=false.
+  Close it normally and finish any close prompt before reopening for automation.
 
-Examples:
-  agent-browser mcp serve
-  agent-browser mcp read agent-browser://operating-guide
+Hosted:
+  hostBinding: version=1, hostId, participantId, sessionId, required/preferred
+  desktopId/generation. Required never falls back; preferred uses listed alternatives.
+  AGENT_BROWSER_HOSTS_FILE pins app origin/providerApplication. App owns capacity
+  and /agent-browser/handoff/<id>. attachment requires existing profile + hostBinding,
+  no url: version=1, process pid/startToken/executablePath, canonical profilePath,
+  full loopback cdpEndpoint, targetId and optional sharedWith recipients.
+  Native/CDP identity is verified; no implicit launch/navigation. Close detaches
+  borrowed resources and closes task-created tabs; app owns sharing. No manual attach.
+  browser_control effects require current epoch, actor and reason. Viewing does not
+  take over. Explicit return freshly observes the same page, without effect replay.
+  browser_continue never implicitly returns control after human takeover.
+  Metadata watch uses local DB/WAL stamps every 250 ms; watchId/sequence identify
+  events, and reconnect reads a full snapshot without provider polling.
+
+Advanced:
+  Discover browser/playbooks/diagnostics metadata on demand. SiteGuide supports
+  verify_login, login-playbook, hosted auth-helper and collect_posts.
+  Login helpers freeze receiving custody; select configured account/source refs.
+  prepare_login and validate_plan must pass; reviewedPlan resumes reviewed changes.
+  reconcile:true reads uncertain delivery without replay. Native safety releases
+  protected input before site verification. Verify new popup destinations first.
+  AGENT_BROWSER_SITEGUIDE_DIRECTORY selects reviewed guide JSON.
+  Retired authority MCP tools are unavailable; administrative effects use CLI/API.
+  If browser_open is absent, configure agent-browser mcp serve and reconnect;
+  use the installed CLI while correcting client integration.
+
 "##
         }
 

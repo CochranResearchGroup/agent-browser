@@ -99,8 +99,9 @@ pub(crate) fn snapshot(state: &BrowserSessionState, task_id: &str) -> Result<Val
         "desktop":{"desktopId":binding.desktop.desktop_id,"generation":binding.desktop.generation},
         "taskState":if task.is_some() {"recorded"} else {"ended"},
         "browserState":if browser.is_some() {"unverified"} else {"absent_from_state"},
-        "viewerState":"unverified","controllerState":"unverified","accountState":"unverified",
-        "capabilities":{"placement":true,"hostedHandoff":true,"metadataRead":true,"statusEvents":true,"attachment":false,"relocation":false}
+        "viewerState":"unverified","controllerState":task.map(|task|super::browser_host_control::metadata(&task.browser_id)).transpose()?,"accountState":"unverified",
+        "custody":if task.is_some_and(|task|state.app_browser_attachments.contains_key(&task.browser_id)) {"app_borrowed"} else {"agent_browser"},
+        "capabilities":{"placement":true,"hostedHandoff":true,"metadataRead":true,"statusEvents":true,"attachment":cfg!(target_os="linux"),"relocation":false}
     }))
 }
 

@@ -318,6 +318,31 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
         published_assignment(self.remote_view_mutation_connection(), browser)
     }
 
+    fn published_presentation_assignment(
+        &mut self,
+        browser: &agent_browser_service_model::ManagedBrowserInstance,
+    ) -> Result<agent_browser_service_model::RemoteViewAssignmentRecord, LaunchCustodyStoreError>
+    {
+        let state = self
+            .load_session_state()
+            .map_err(|_| LaunchCustodyStoreError::Unavailable)?;
+        if let Some(attached) = state.app_browser_attachments.get(&browser.id) {
+            if state.browsers.get(&browser.id) != Some(browser)
+                || attached.profile_id != browser.profile_id
+                || attached.request.process.pid != browser.pid
+                || attached.request.cdp_endpoint != browser.cdp_endpoint
+                || browser.desktop.as_ref() != Some(&attached.desktop)
+            {
+                return Err(LaunchCustodyStoreError::Conflict);
+            }
+            return attached
+                .assignment
+                .clone()
+                .ok_or(LaunchCustodyStoreError::Unavailable);
+        }
+        self.published_launch_assignment(browser)
+    }
+
     fn published_launch_process_identity(
         &mut self,
         browser: &agent_browser_service_model::ManagedBrowserInstance,

@@ -74,3 +74,54 @@ configuration source, dependency or runtime owner was introduced. Spec: missing
 process origin loads from the selected dotenv file; explicit process origin wins;
 HTTPS origin validation and task ownership remain at their existing seams.
 No blocking findings in this bounded change.
+
+
+## Production deployment | 2026-10-22
+
+Operator explicitly requested merge/deploy. PR360 merged at
+`fa9a03253fe200f923ccafbd363a3107ff879e9a` after preserving P265 hosted workflow
+help and lane records during integration. The production-shaped release built
+once in25m24s and sealed as
+`candidate-acef7f51e9e9c3e5-76cec5b73183681c`.
+Binary SHA256:
+`76cec5b73183681c53cbf2a64ff5c73f71d1fc6131121379940f9d61e6499b9d`.
+
+Isolated `org360` services all executed the sealed bytes. Three disposable
+browser open/read/close/residue cycles passed with production unchanged.
+Development doctor passed every check except the unpublished local hostname
+route. Both namespace front/backend listeners independently returned the exact
+sealed executable and development environment. No shared ingress route was
+changed for that headless qualification. The isolated real MCP startup check
+also read a dotenv-only origin and advanced through origin validation.
+
+The candidate's preserve-mode workstation preview and sealed-artifact validation
+passed. Supported transaction `upgrade-a50a580c-1f99-421b-8c24-810167f89a9b`
+reached accepted/ready with admission reopened. Selected production generation:
+`0.28.0-76cec5b73183-79b66b79b467`. All three production services execute the
+sealed binary; production install doctor passes. This is a local deployment,
+not a formal release.
+
+The reviewed service origin from existing Codex configuration was added to the
+standard dotenv file, preserving its prior settings and a private backup.
+A fresh installed MCP connection with no process origin and no explicit dotenv
+file opened a disposable task and returned a ready opaque HTTPS handoff.
+Production Authelia authentication, Native Desktop16 WebSocket1472x960 pixels,
+paced keyboard marker with independent task readback and identical opaque-link
+reconnect all passed. The marker remained after reconnect.
+
+Both original browser roots and all68native desktop process identities survived
+adoption. All17browser,143profile,38session,40tab and243prior handoff IDs remained
+present. Protected hashes were unchanged across apply. The test's additional
+closed handoff remains attributable. Supported fresh-client task closure and
+birth-qualified observer cleanup left zero of23recorded test processes running;
+final root count returned to two. Qualification services were stopped/disabled.
+All14canonical workflow skill files match their installed shared copies; three
+safe updates retained private backups and additional installed files.
+
+The existing conversation still holds its old MCP process. Its close operation
+refused the stale default lane; a fresh installed MCP closed the exact same task.
+Codex Wake self-refresh configuration was unavailable because shared scope lacks
+host caller approval. No shared reload was attempted. Fresh-client installed
+behavior is qualified; in-place refresh of this cached conversation is not.
+Private receipts: `public-origin-deploy-20261022` under user-scoped Remote View
+state. Foreign dirty worktrees and unintegrated topic fixes were preserved.

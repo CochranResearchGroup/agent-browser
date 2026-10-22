@@ -7500,6 +7500,14 @@ fn manual_login_preserves_posture_through_managed_owner_replay_and_conflict() {
     assert_eq!(refused["success"], false, "{refused}");
     assert!(refused.to_string().contains("manual_login_url_invalid"));
     assert_eq!(calls.get(), 0, "invalid initial URLs cannot launch Chrome");
+    let mut attached = command.clone();
+    attached["attachment"] = serde_json::json!({});
+    let refused = host.handle_command(&attached);
+    assert_eq!(refused["success"], false, "{refused}");
+    assert!(refused
+        .to_string()
+        .contains("manual_login_requires_owned_browser"));
+    assert_eq!(calls.get(), 0, "manual login cannot attach a CDP browser");
     let first = host.handle_command(&command);
     assert_eq!(first["success"], true, "{first}");
     let launch: Value = serde_json::from_slice(
