@@ -453,6 +453,9 @@ fn service_operating_guide() -> Value {
             {"tool":"browser_snapshot","rule":"Use the returned taskId for page actions and task-scoped tabs."},
             {"tool":"browser_handoff","rule":"Share the returned ready HTTPS handoffUrl. Remote View owns the native viewer."},
             {"tool":"browser_continue","rule":"Continue with the same taskId after human input."},
+            {"tool":"browser_reconnect","rule":"Explicit app disconnect/reconnect/rebind/loss policy; preserve control and never replay uncertain website effects."},
+            {"tool":"browser_policy","rule":"Optional app defaults and task rules; unrestricted operations need no grant. Overrides name one task/action/request."},
+            {"tool":"browser_artifact","rule":"Write only to an authorized local handle; publication remains explicit."},
             {"tool":"browser_close","rule":"Close only this task; peer tasks remain open."}
         ],
         "advanced":{"tool":"browser_discover","rule":"Request browser, diagnostics or administration metadata only when needed."},
@@ -11773,6 +11776,7 @@ mod tests {
         assert_eq!(
             names,
             vec![
+                "browser_artifact",
                 "browser_click",
                 "browser_close",
                 "browser_command",
@@ -11783,12 +11787,18 @@ mod tests {
                 "browser_handoff",
                 "browser_navigate",
                 "browser_open",
+                "browser_policy",
+                "browser_reconnect",
                 "browser_screenshot",
                 "browser_snapshot",
                 "browser_tab"
             ]
         );
-        assert!(serde_json::to_vec(tools).unwrap().len() <= 15000);
+        let schema_bytes = serde_json::to_vec(tools).unwrap().len();
+        assert!(
+            schema_bytes <= 15000,
+            "Workflow schemas exceed the 15000-byte selection budget: {schema_bytes}"
+        );
         for tool in tools {
             if !matches!(
                 tool["name"].as_str(),
