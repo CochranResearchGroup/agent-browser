@@ -7494,6 +7494,12 @@ fn manual_login_preserves_posture_through_managed_owner_replay_and_conflict() {
     let command = serde_json::json!({"action":"browser_session_open", "sessionName":"Alice",
         "profileId":"profile-a", "url":"https://accounts.google.com/", "manualLogin":true,
         "activityAtMs":100, "serviceName":"fixture", "agentName":"fixture", "taskName":"Manual login"});
+    let mut invalid = command.clone();
+    invalid["url"] = "--disable-web-security".into();
+    let refused = host.handle_command(&invalid);
+    assert_eq!(refused["success"], false, "{refused}");
+    assert!(refused.to_string().contains("manual_login_url_invalid"));
+    assert_eq!(calls.get(), 0, "invalid initial URLs cannot launch Chrome");
     let first = host.handle_command(&command);
     assert_eq!(first["success"], true, "{first}");
     let launch: Value = serde_json::from_slice(

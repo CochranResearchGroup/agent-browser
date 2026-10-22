@@ -1,10 +1,10 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
-  - id: P266
+  - id: P269
     product_lane: PL-PLATFORM
     objective: One-call MCP manual non-CDP login on managed native desktop
-    plan: docs/dev/plans/0266-2026-10-22-manual-login.md
+    plan: docs/dev/plans/0269-2026-10-22-manual-login.md
     branch: fix/mcp-manual-login-357
     target: main
     accountable_owner: ecochran76

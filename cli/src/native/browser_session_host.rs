@@ -2003,6 +2003,12 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         if manual && !self.effects.admits_ordinary_sessions() {
             return Err("manual_login_requires_native_remote_desktop".into());
         }
+        if manual {
+            // The initial location is passed to Chrome at launch, rather than
+            // through CDP navigation. Never interpret a relative value as a flag.
+            reqwest::Url::parse(required_string(command, "url")?)
+                .map_err(|_| "manual_login_url_invalid")?;
+        }
         let id = optional_string(command, "profileId")
             .or_else(|| optional_string(command, "runtimeProfile"));
         let Some(id) = id else {

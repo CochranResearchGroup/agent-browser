@@ -1,6 +1,6 @@
 # Active plan index
 
-[P266 manual non-CDP login](0266-2026-10-22-manual-login.md), #357; public MCP and managed Native login lifecycle repair in progress.
+[P269 manual non-CDP login](0269-2026-10-22-manual-login.md), #357; public MCP and managed Native login lifecycle repair in progress.
 
 [P265 hosted launch](0265-2026-10-22-hosted-launch.md), #348; closed with source-qualified hosted launch and real Native viewer acceptance. #347 remains open.
 
