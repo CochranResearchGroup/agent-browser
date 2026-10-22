@@ -43,3 +43,14 @@ reviewed commits into this branch for one combined CLI candidate and PR closing
 both independent tickets. This avoids replacing a running shared test executable
 or rebuilding identical provider inputs in parallel; subagent source custody
 remains explicit. No additional product scope or deployment authority.
+
+## Consumer auxiliary
+
+Bots consumer work uses /tmp/grok-bots-hosted-349350, branch
+codex-bots/agent-browser-hosted-349350 from canonical 6b4d17ce6eb4ae23ef6b40f0c5cbe8a7886445da.
+It is necessary to implement both app surfaces without touching 41 registered
+foreign/primary trees (22 dirty at admission). The consumer subagent owns only
+additive hosted adapter/service/UI/tests/docs; root owns provider contract and
+actual synthetic acceptance. No independent merge/runtime authority. Return
+reviewed commits to root; remove the clean auxiliary after integration and unlink
+its test-only dependency symlink without touching the installed target.

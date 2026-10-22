@@ -55,7 +55,7 @@ pub(super) fn tools() -> Vec<Value> {
         }),
         json!({
             "name":"browser_continue", "title":"Continue a browser task",
-            "description":"Resume ordinary automation in this task's current page after human assistance. Return its current identity and URL without navigating or creating another task.",
+            "description":"Read this task's current identity and URL without navigation or another task. After explicit human takeover, use browser_control return before mutating automation; continuation never implicitly returns control.",
             "inputSchema":{"type":"object","additionalProperties":false,
                 "properties":{"taskId":{"type":"string"}},"required":["taskId"]}
         }),

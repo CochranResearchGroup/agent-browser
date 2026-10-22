@@ -683,15 +683,36 @@ fn app_attachment_preferred_fallback_observes_existing_location_without_moving()
 
 #[test]
 fn app_attachment_preexisting_popup_is_preserved_while_new_task_popup_closes() {
-    let mut state=BrowserSessionState::default();let mut effects=effects(&[("one",1,true)]);
-    let owner=app_binding("owner");let request=app_request();let task=attach(&mut state,&mut effects,"task",&owner,&request).unwrap();
-    let cat=catalog();let cfg=BrowserSessionManagerConfig{session_idle_timeout_ms:100,remote_view_desktops:vec![]};
-    let admitted=BrowserSessionManager::new(&mut state,&cat,&mut effects,cfg.clone()).observe_child_tabs(&task.session_id,
-        &[("preexisting-popup".into(),"original-page".into()),("new-popup".into(),"original-page".into())],11).unwrap();
-    assert_eq!(admitted,vec!["new-popup"]);
-    attach(&mut state,&mut effects,"task",&owner,&request).unwrap();
-    let mut steal=request.clone();steal.target_id="new-popup".into();
-    assert!(attach(&mut state,&mut effects,"steal",&owner,&steal).unwrap_err().starts_with("browser_attachment_target_owned_by_task"));
-    BrowserSessionManager::new(&mut state,&cat,&mut effects,cfg).close_session(&task.session_id,SessionEndReason::ExplicitClose,12).unwrap();
-    assert_eq!(effects.mutations,1);assert!(effects.launched.is_empty());
+    let mut state = BrowserSessionState::default();
+    let mut effects = effects(&[("one", 1, true)]);
+    let owner = app_binding("owner");
+    let request = app_request();
+    let task = attach(&mut state, &mut effects, "task", &owner, &request).unwrap();
+    let cat = catalog();
+    let cfg = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 100,
+        remote_view_desktops: vec![],
+    };
+    let admitted = BrowserSessionManager::new(&mut state, &cat, &mut effects, cfg.clone())
+        .observe_child_tabs(
+            &task.session_id,
+            &[
+                ("preexisting-popup".into(), "original-page".into()),
+                ("new-popup".into(), "original-page".into()),
+            ],
+            11,
+        )
+        .unwrap();
+    assert_eq!(admitted, vec!["new-popup"]);
+    attach(&mut state, &mut effects, "task", &owner, &request).unwrap();
+    let mut steal = request.clone();
+    steal.target_id = "new-popup".into();
+    assert!(attach(&mut state, &mut effects, "steal", &owner, &steal)
+        .unwrap_err()
+        .starts_with("browser_attachment_target_owned_by_task"));
+    BrowserSessionManager::new(&mut state, &cat, &mut effects, cfg)
+        .close_session(&task.session_id, SessionEndReason::ExplicitClose, 12)
+        .unwrap();
+    assert_eq!(effects.mutations, 1);
+    assert!(effects.launched.is_empty());
 }
