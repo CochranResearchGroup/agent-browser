@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {cleanupExactOwnedProcesses} from './hosted-fixture-cleanup.mjs';
+import {cleanupExactOwnedProcesses,readFreshCleanupIdentity} from './hosted-fixture-cleanup.mjs';
 import {retainedProcessOwned} from './hosted-process-ownership.mjs';
 
 const processRow=(pid=100,extra={})=>({pid,start:'20',uid:42,executable:'/private/candidate',parentPid:1,session:pid,processGroup:pid,...extra});
@@ -98,4 +98,61 @@ test('census cannot replace retained same-generation executable custody',async()
  assert.equal(result.owned.find(row=>row.pid===100).executable,'/private/candidate');
  assert(result.unresolved.some(row=>row.code==='fixture_cleanup_retained_identity_conflict'));
  assert.equal(result.unknown[0].pid,100);
+});
+
+const missing=()=>Object.assign(Error('not found'),{code:'ENOENT'});
+test('live kernel row with missing exe remains unknown, never absent',async()=>{
+ let reads=0;
+ await assert.rejects(readFreshCleanupIdentity(100,{
+  identity:async()=>{reads++;return processRow();},executable:async()=>{throw missing();},
+ }),{code:'fixture_cleanup_executable_unknown'});
+ assert.equal(reads,2);
+ const f=fixture();f.args.readIdentity=pid=>readFreshCleanupIdentity(pid,{
+  identity:async()=>processRow(),executable:async()=>{throw missing();},
+ });
+ const result=await cleanupExactOwnedProcesses({...f.args,allowSigkill:true});
+ assert.equal(result.qualified,false);assert.equal(f.signals.length,0);
+ assert(result.unknown.every(row=>row.code==='fixture_cleanup_executable_unknown'));
+});
+test('exe disappears followed by positive kernel absence returns null',async()=>{
+ let reads=0;
+ assert.equal(await readFreshCleanupIdentity(100,{
+  identity:async()=>{if(reads++)throw missing();return processRow();},
+  executable:async()=>{throw missing();},
+ }),null);
+ assert.equal(reads,2);
+});
+test('fresh cleanup identity checks UID and start on both sides of executable read',async()=>{
+ let reads=0,exeReads=0;
+ const actual=await readFreshCleanupIdentity(100,{
+  identity:async()=>{reads++;return processRow();},
+  executable:async()=>{exeReads++;return '/private/candidate';},
+ });
+ assert.deepEqual(actual,processRow());assert.equal(reads,2);assert.equal(exeReads,1);
+ for(const changed of [{uid:43},{start:'21'}]){
+  reads=0;
+  await assert.rejects(readFreshCleanupIdentity(100,{
+   identity:async()=>processRow(100,reads++?changed:{}),executable:async()=>'/private/candidate',
+  }),{code:'fixture_cleanup_identity_changed'});
+ }
+});
+test('PID reuse during identity read is unknown until later fresh replacement proof',async()=>{
+ const f=fixture();let reads=0;
+ f.args.census=async()=>({owned:[],unresolved:[]});
+ f.args.readIdentity=pid=>readFreshCleanupIdentity(pid,{
+  identity:async()=>processRow(pid,{start:reads++===0?'20':'21'}),
+  executable:async()=>'/foreign/replacement',
+ });
+ const result=await cleanupExactOwnedProcesses({...f.args,allowSigkill:true});
+ assert.equal(result.qualified,true);assert.equal(f.signals.length,0);
+ assert(result.observations.some(row=>row.state==='unknown'&&row.code==='fixture_cleanup_identity_changed'));
+ assert(result.observations.some(row=>row.state==='replaced'&&row.currentStart==='21'));
+});
+test('unreadable second kernel read or null identity cannot turn exe failure into absence',async()=>{
+ let reads=0;
+ await assert.rejects(readFreshCleanupIdentity(100,{
+  identity:async()=>{if(reads++)throw Object.assign(Error('denied'),{code:'EACCES'});return processRow();},
+  executable:async()=>{throw missing();},
+ }),{code:'EACCES'});
+ await assert.rejects(readFreshCleanupIdentity(100,{identity:async()=>null,executable:async()=>'/private/candidate'}),{code:'fixture_cleanup_kernel_identity_unknown'});
 });

@@ -1136,6 +1136,23 @@ impl Drop for BrowserManagerRuntime {
     }
 }
 
+// The receive boundary owns no browser state and never dispatches recovery.
+fn receive_runtime_command<T>(
+    receiver: &mpsc::Receiver<T>,
+    mut poll_owned_children: impl FnMut(),
+) -> Result<T, mpsc::RecvError> {
+    loop {
+        // Poll before dispatch as well as while idle so a busy queue cannot
+        // indefinitely retain exited direct children. No browser state changes.
+        poll_owned_children();
+        match receiver.recv_timeout(Duration::from_millis(250)) {
+            Ok(command) => return Ok(command),
+            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+            Err(mpsc::RecvTimeoutError::Disconnected) => return Err(mpsc::RecvError),
+        }
+    }
+}
+
 fn run_browser_worker(
     runtime: tokio::runtime::Runtime,
     receiver: mpsc::Receiver<BrowserRuntimeCommand>,
@@ -1146,7 +1163,16 @@ fn run_browser_worker(
     let mut borrowed_app_browsers = HashMap::<String, BorrowedAppBrowser>::new();
     let mut reconciled_targets = HashMap::<(String, String), String>::new();
     let mut next_browser_sequence = 0_u64;
-    while let Ok(command) = receiver.recv() {
+    while let Ok(command) = receive_runtime_command(&receiver, || {
+        for state in browsers.values_mut() {
+            if let Some(manager) = state.browser.as_mut() {
+                if manager.owns_launched_browser_process() {
+                    // try_wait reaps only this manager's Child; retain all state.
+                    let _ = manager.poll_process_exit();
+                }
+            }
+        }
+    }) {
         match command {
             BrowserRuntimeCommand::OperationBaseline {
                 shared_browser_ids,
@@ -2592,6 +2618,82 @@ fn tab_acquisition(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn runtime_idle_receive_reaps_exited_owned_child_without_touching_live_peer() {
+        use std::process::{Child, Command, Stdio};
+        struct OwnedChildren(Child, Child);
+        impl Drop for OwnedChildren {
+            fn drop(&mut self) {
+                for child in [&mut self.0, &mut self.1] {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                }
+            }
+        }
+        fn start(pid: u32) -> String {
+            let stat = fs::read_to_string(format!("/proc/{pid}/stat")).unwrap();
+            stat.rsplit_once(") ")
+                .unwrap()
+                .1
+                .split_whitespace()
+                .nth(19)
+                .unwrap()
+                .to_string()
+        }
+        let spawn = || {
+            Command::new("/bin/sleep")
+                .arg("60")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap()
+        };
+        let mut children = OwnedChildren(spawn(), spawn());
+        let dead_pid = children.0.id();
+        let peer_pid = children.1.id();
+        let peer_start = start(peer_pid);
+        children.0.kill().unwrap();
+        let (sender, receiver) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            let mut children = children;
+            let command = receive_runtime_command(&receiver, || {
+                let _ = children.0.try_wait().unwrap();
+                assert!(children.1.try_wait().unwrap().is_none());
+            });
+            assert_eq!(command.unwrap(), "stop");
+        });
+        // No command is sent while absence is checked. Only the idle owner polls.
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while Path::new(&format!("/proc/{dead_pid}")).exists() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
+        let reaped_while_idle = !Path::new(&format!("/proc/{dead_pid}")).exists();
+        let peer_preserved =
+            Path::new(&format!("/proc/{peer_pid}")).exists() && start(peer_pid) == peer_start;
+        // Unblock and join even on failure so both exact child handles are reaped.
+        sender.send("stop").unwrap();
+        worker.join().unwrap();
+        assert!(
+            reaped_while_idle,
+            "owned exited child remained while runtime was idle"
+        );
+        assert!(
+            peer_preserved,
+            "live peer changed during owned-child polling"
+        );
+        assert!(!Path::new(&format!("/proc/{dead_pid}")).exists());
+        assert!(!Path::new(&format!("/proc/{peer_pid}")).exists());
+    }
+
+    #[test]
+    fn runtime_idle_receive_exits_when_command_channel_disconnects() {
+        let (sender, receiver) = mpsc::channel::<()>();
+        drop(sender);
+        assert!(receive_runtime_command(&receiver, || {}).is_err());
+    }
 
     #[test]
     fn app_attachment_process_requires_exact_kernel_executable_and_profile_identity() {

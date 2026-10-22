@@ -3,6 +3,32 @@ import {sameProcessInstance} from './hosted-process-ownership.mjs';
 const absent = error => ['ENOENT','ESRCH'].includes(error?.code);
 const describe = error => ({code:error?.code??'fixture_cleanup_observation_failed'});
 
+/** Read kernel identity independently of /proc/PID/exe availability.
+ * A zombie or unreadable executable is not kernel absence. Only an identity
+ * read reporting ENOENT/ESRCH permits null; exe failures are wrapped so callers
+ * cannot mistake their ENOENT for an absent PID.
+ */
+export async function readFreshCleanupIdentity(pid,{identity,executable}) {
+ const readKernel=async()=>{
+  try{
+   const row=await identity(pid);
+   if(row?.pid!==pid||!Number.isInteger(row.uid)||typeof row.start!=='string'||!/^\d+$/.test(row.start))throw Object.assign(Error('fixture_cleanup_kernel_identity_unknown'),{code:'fixture_cleanup_kernel_identity_unknown'});
+   return row;
+  }catch(error){if(absent(error))return null;throw error;}
+ };
+ const before=await readKernel();
+ if(before===null)return null;
+ let resolved,executableError;
+ try{resolved=await executable(pid);}catch(error){executableError=error;}
+ // Always re-read stat, including after an exe ENOENT. Its kernel generation
+ // decides absence; executable readability never makes that decision.
+ const after=await readKernel();
+ if(after===null)return null;
+ if(after.start!==before.start||after.uid!==before.uid)throw Object.assign(Error('fixture_cleanup_identity_changed'),{code:'fixture_cleanup_identity_changed'});
+ if(executableError||typeof resolved!=='string'||!resolved.startsWith('/'))throw Object.assign(Error('fixture_cleanup_executable_unknown'),{code:'fixture_cleanup_executable_unknown',cause:executableError});
+ return {...after,executable:resolved};
+}
+
 /**
  * Exact synthetic-fixture cleanup, with injectable OS operations. census returns
  * {owned,unresolved,foreignDenied}; unresolved observations block qualification,

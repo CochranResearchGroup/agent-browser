@@ -24,7 +24,7 @@ import {pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {createMcpStdioClient,runCli,httpJsonResult} from './smoke-utils.js';
 import {appProcessOwned,privateProfileReferenced,retainedProcessOwned} from './hosted-process-ownership.mjs';
-import {cleanupExactOwnedProcesses} from './hosted-fixture-cleanup.mjs';
+import {cleanupExactOwnedProcesses,readFreshCleanupIdentity} from './hosted-fixture-cleanup.mjs';
 import {createColdFirstPixelClock} from './hosted-performance.mjs';
 import {qualifyHostedBrowserControl} from './smoke-hosted-browser-control.mjs';
 import {qualifyHostedBrowserReconnect} from './smoke-hosted-browser-reconnect.mjs';
@@ -205,14 +205,7 @@ async function census({captureDeniedBaseline=false,collectUnresolved=false}={}){
  return collectUnresolved?{owned:rows,unresolved,foreignDenied}:rows;
 }
 
-async function cleanupProcessIdentity(pid){
- try{
-  const before=await processIdentity(pid),executable=await realpath(`/proc/${pid}/exe`),after=await processIdentity(pid);
-  assert.equal(after.start,before.start,'Kernel generation changed during cleanup readback');
-  assert.equal(after.uid,before.uid,'Process ownership changed during cleanup readback');
-  return {...after,executable};
- }catch(error){if(['ENOENT','ESRCH'].includes(error.code))return null;throw error;}
-}
+async function cleanupProcessIdentity(pid){return readFreshCleanupIdentity(pid,{identity:processIdentity,executable:pid=>realpath(`/proc/${pid}/exe`)});}
 
 async function appAbsenceFence(){
  if(!appRootProof)return;
