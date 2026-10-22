@@ -5,10 +5,11 @@
  */
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {performance} from 'node:perf_hooks';
+import {createLatencyWorkload,qualifyControlTransitions} from './hosted-performance.mjs';
 
-export async function qualifyHostedBrowserReconnect({workflow,task,save,syntheticOnly}) {
+export async function qualifyHostedBrowserReconnect({workflow,task,save,syntheticOnly,nativeControl,controlPairs=10,nativePairs=3,requirePerformanceTargets=true}) {
  assert.equal(syntheticOnly,true,'This fixture is synthetic only');
+ assert.equal(typeof requirePerformanceTargets,'boolean');
  assert.equal(typeof workflow,'function');assert(task?.taskId);
  const receipt={passed:false,checks:[],warmStatusMs:[],actualBrowserLossExercised:false,actualDesktopRestartExercised:false};
  const identity=value=>Object.fromEntries(['taskId','browserId','profileId','tabId'].map(key=>[key,value[key]]));
@@ -36,13 +37,31 @@ export async function qualifyHostedBrowserReconnect({workflow,task,save,syntheti
   receipt.checks.push('app-loss-policy-selection-is-explicit-and-restored');
   const continued=await workflow('browser_continue',{taskId:task.taskId});assert.equal(continued.taskId,task.taskId);assert.equal(continued.browserId,original.browserId);
   receipt.checks.push('same-browser-continuation');
+  const statusTiming=createLatencyWorkload({workload:'agent_browser_hosted_metadata_status',targetMs:250});
   for(let index=0;index<12;index++){
-   const start=performance.now();const observed=await status();receipt.warmStatusMs.push(performance.now()-start);
-   assert.deepEqual(identity(observed.host),original);assert.equal(observed.reconnect.pending,false);assert.equal(observed.reconnect.automaticReplay,false);
+   await statusTiming.measure('browser_reconnect.status',status,observed=>{
+    assert.deepEqual(identity(observed.host),original);assert.equal(observed.reconnect.pending,false);assert.equal(observed.reconnect.automaticReplay,false);
+   });
   }
-  const sorted=[...receipt.warmStatusMs].sort((a,b)=>a-b);receipt.warmStatusP95Ms=sorted[Math.ceil(sorted.length*.95)-1];
-  receipt.warmStatusTargetMs=250;receipt.warmStatusTargetMet=receipt.warmStatusP95Ms<250;
-  receipt.final=current.reconnect;receipt.passed=true;
+  const statusPerformance=statusTiming.receipt();
+  receipt.warmStatusMs=statusPerformance.samples.map(sample=>sample.durationMs);receipt.warmStatusP95Ms=statusPerformance.p95Ms;
+  receipt.warmStatusTargetMs=250;receipt.warmStatusTargetMet=statusPerformance.targetMet;
+  const observeTask=async()=>(await status()).host;
+  const publicControl=await qualifyControlTransitions({
+   task,pairs:controlPairs,kind:'agent_browser_public_control',save,observeTask,
+   status:()=>workflow('browser_control',{taskId:task.taskId,operation:'status'}),
+   change:({operation,expectedEpoch,actor,reason,pauseReads})=>workflow('browser_control',{taskId:task.taskId,operation,expectedEpoch,actor,reason,pauseReads}),
+  });
+  let nativePerformance=null;
+  if(nativeControl){
+   nativePerformance=await qualifyControlTransitions({...nativeControl,task,pairs:nativePairs,kind:'consumer_native_coordination',save,observeTask});
+  }
+  receipt.performance={status:statusPerformance,publicControl,nativeControl:nativePerformance??{exercised:false,reason:'No actual consumer/Native callback was supplied; public Agent Browser timing does not qualify this axis'},
+   allMeasuredTargetsMet:statusPerformance.targetMet&&publicControl.passed&&(nativePerformance===null||nativePerformance.passed),nativeCoordinationExercised:nativePerformance!==null};
+  await save('hosted-reconnect-qualification.json',receipt);
+  receipt.functionalPassed=true;receipt.final=current.reconnect;receipt.passed=receipt.performance.allMeasuredTargetsMet;
+  await save('hosted-reconnect-qualification.json',receipt);
+  if(requirePerformanceTargets)assert.equal(receipt.performance.allMeasuredTargetsMet,true,'Measured warm status/control p95 must be below 250ms');
   await save('hosted-reconnect-qualification.json',receipt);return receipt;
  } catch(error) {
   // One deliberate cleanup return is allowed only after a known successful take.

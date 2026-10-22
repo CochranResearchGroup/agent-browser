@@ -1,3 +1,19 @@
+/** Exact current kernel generation and executable, never merely the PID. */
+export function sameProcessInstance(row,prior) {
+ return !!row&&!!prior&&row.pid===prior.pid&&row.uid===prior.uid&&
+  typeof row.start==='string'&&/^\d+$/.test(row.start)&&row.start===prior.start&&
+  typeof row.executable==='string'&&row.executable.startsWith('/')&&row.executable===prior.executable;
+}
+/** Retained positive custody survives env-marker loss, reparenting and SID changes.
+ * A reused PID does not belong to the original custody; an incomplete or changed
+ * executable on that same generation is unknown and must block release proof.
+ */
+export function retainedProcessOwned(row,observed=new Map()) {
+ const prior=observed.get(row.pid);
+ if(!prior||prior.start!==row.start)return false;
+ if(!sameProcessInstance(row,prior))throw Error('fixture_retained_owned_identity_unknown');
+ return true;
+}
 /** Pure Linux fixture custody projection. No PID-only or process-group kills. */
 export function appProcessOwned(row,root,observed=new Map()) {
  if(!root||row.uid!==root.uid)return false;

@@ -1,9 +1,9 @@
 # P270: complete app-directed browser continuity
 
-Status: BLOCKED
+Status: OPEN
 Product lane: PL-PLATFORM
 Work items: CochranResearchGroup/agent-browser#351, #352, #353, #354, #355
-Branch: platform/hosted-continuity-351-355
+Branch: platform/hosted-acceptance-355
 Owner: ecochran76
 
 ## Outcome
@@ -63,3 +63,35 @@ The causal repair binds the durable Execute task ID/name before outer browser-wi
 ## Integrated partial outcome and remaining gate
 
 PR364 integrates #352–354 source qualification and [accepted source evidence](../notes/0270-2026-10-22-hosted-continuity-source.md). Native02 passed the feature checks with warm status p95 5.03 ms over 12 samples; automatic cleanup needed exact independent reconciliation, which passed without changing peers. Original failed receipts are retained. The whole P270 outcome remains BLOCKED: #351 needs Remote View #578, and #355 still needs relocation, actual browser-loss/restart recovery, automatic cleanup under process churn and the complete control/cold-performance matrix. No production or shared-skill publication. Root primary remains retained with its pinned candidates; the read-only consumer auxiliary is removed after clean integration.
+
+## Remaining-work continuation
+
+The operator explicitly selected continuing #351/#355 rather than deployment. Root reuses the clean retained dashboard primary from fetched main d62d0c4dd8456c18fbd454728c02c4a507dfae43 on platform/hosted-acceptance-355, preserving pinned artifacts and both foreign registered checkouts. Root owns provider relocation feasibility/implementation and integration. Two parallel source tracks own automatic fixture cleanup under concurrent process churn and explicit warm-control/cold-pixel measurements respectively. They share this checkout with disjoint helper/test files; root alone edits the main fixture and governs runtime/Git custody. No auxiliary checkout is currently admitted. Provider changes require their own repository plan and current policy review before edits. Existing browser relocation experiments, production deployment and private accounts remain excluded; one future isolated synthetic acceptance must use fresh identities and exact cleanup. Full #355 remains conditional on a supported real relocation and actual loss/restart proof; source refusal is not a substitute.
+
+The continuation helper regressions pass 29 cases. A read-only consumer auxiliary is admitted again at /tmp/bots-p270-acceptance, pinned to the same merged dd6ef3d099 consumer; refreshed whole-repository inventory is retained privately and all foreign work is preserved. Only a temporary installed-dependency symlink is added, and root removes it plus the clean auxiliary after acceptance. The existing a154c5d93 CI binary is reusable because this continuation changes only fixture JavaScript and Markdown/YAML, with no executable-input changes. New fixture revision and evidence directories distinguish the run. Actual loss/restart and provider relocation remain separate from the bounded cleanup/performance run.
+
+## Native03 baseline
+
+Fixture source7125ba352 with the unchanged qualified a154c5d93 binary measured one cold Native first-observed marker at7072.58ms, public Agent Browser control p95 188.73ms across20 transitions and consumer/Native coordination p95 629.97ms across6 transitions. All mutations had validated acknowledgments; the run exited1 on the unchanged250ms target, without uncertain effect or replay. Automatic cleanup qualified20 retained owned kernel generations with no unresolved/remaining processes and released its exact assignment. Independent OS and Native readback both pass; baseline peers are unchanged. This is the first automatic-cleanup acceptance of the repaired ownership retention, not a full355 pass.
+
+Causal source diagnosis found five consumer identity checks per POST, each spawning CLI metadata reads in this fixture, plus a redundant DOM snapshot after successful fresh-observation return. Keep all identity fences. Use existing persistent MCP metadata in the app adapter, instrument stage durations, and repair the redundant consumer return observation. The previously read-only Bots auxiliary is now the sole scoped consumer writer on codex-bots/0162-hosted-control-latency from freshmain5dd190d69; parent#162 owns that source repair. Package/lock inputs are unchanged. Root owns Git/runtime integration and auxiliary cleanup after canonical integration. No deployment.
+
+The consumer normal-return repair passes19focused tests, including reviewed local Chromium UI fixtures with zero skips. The next acceptance uses persistent metadata while keeping every target fence and per-stage timings. Performance results remain independent of functional correctness: a missed250ms target is retained as a failed performance axis while other synthetic feature checks and exact cleanup continue. A separate explicit opt-in loss trial may launch one fresh managed profile on the already owned fixture assignment, terminate only that freshly proven kernel process, independently prove absence, and exercise report-only plus one explicit same-profile blank reopen. This trial cannot claim a desktop restart or physical relocation. The original app browser and baseline assignments remain preserved.
+
+## Native04 failures and idle-child repair
+
+Fixture e2b737bbe with consumer38cd20f and the unchanged a154c5d93 candidate measured public control p95 236.00ms over20 transitions, consumer/Native coordination p95 1036.99ms over6 transitions, and one cold first-observed marker at7096.95ms. Persistent metadata removed the CLI spawning cost, but did not meet the consumer control target. Stage intervals overlap with viewer polling and must not be summed as exclusive request cost. Remote View's production MCP uses a persistent HTTP owner; a subprocess-per-call explanation does not apply.
+
+The fresh managed-loss trial stopped before reconnect: its exact killed browser remained in the kernel process table after10seconds. The failed observation did not retain process state, so a zombie is inferred rather than directly observed. Runtime source waited indefinitely for commands before polling owned children. A regression using two real disposable child processes fails with that receive loop and passes with bounded250ms owned-child polling. The live peer preserves its kernel identity; browser records, continuity intent and recovery policy remain unchanged. Both focused tests pass; strict Rust gates and a rebuilt candidate are required before Native05.
+
+Cleanup now distinguishes a missing executable link from positive kernel absence through independent identity reads before and after executable resolution. Its regression suite and the other continuation helper tests pass34cases. Native04's original automatic receipt used the older callback; independent final OS readback nevertheless proved all24 retained generations absent, no private fixture references or unreadable identities, no active fixture assignment and preserved baseline peers. No residue or production change remains. Full351/355 stays open, including real relocation and desktop restart acceptance.
+
+## Native05 qualified browser-loss recovery
+
+Clean source8ae00bb8b built the isolated CI candidate89e3247561fd085b6c78c81a8b840f07867e40f4430742f455a15ab2986ac4a2. Format and strict workspace Clippy pass; the runtime module passes25tests with8real-browser cases explicitly ignored. Consumer38cd20f is integrated through Bots PR177 at56ebe8e2a. The installed Native executable is positively matched to source db23f903be9d9a60d110fe12784cf83b5b66ae50, not the older provider checkout head.
+
+Native05 passes actual managed browser loss: exact original kernel absence is independently observed before public reconnect, report-only policy preserves loss, the explicit destination remains intent-only, and one explicit reopen retains task/browser/profile/tab identities with a new process and blank page. No website action is replayed. Original app cookie/draft and peers remain intact. Automatic cleanup qualifies27owned generations; independent final OS readback finds all absent with no private namespace references or unreadable identities, and independent Native inventory proves zero active fixture assignments with unchanged baseline peers.
+
+Performance remains failed: public control p95 210.05ms over20transitions, consumer/Native coordination p95 612.10ms over6transitions, and one cold first-observed marker7236.89ms. The overall run exits1 on that unchanged performance requirement. Read-only diagnosis finds multiple three-RPC Native control-status composites per transition and fresh unit readiness checks behind status. Queue delay, D-Bus work and service time still need separate measurements; no provider check is removed or cached. Real desktop restart and same-process relocation remain unexercised. No production deployment or portable display backend is installed.
+
+After consumer canonical merge and final acceptance readbacks, root removed only the auxiliary dependency symlink and clean /tmp/bots-p270-acceptance checkout. The46registered-tree inventory and26dirty states were retained privately before closure; all foreign work remains untouched. Exact path and registration absence are verified. The Agent Browser primary remains retained for its candidate and open continuation; removed consumer paths in old private runner scripts are historical locators, not reusable launch commands.

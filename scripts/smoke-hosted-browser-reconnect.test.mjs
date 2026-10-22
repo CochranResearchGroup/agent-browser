@@ -10,7 +10,7 @@ function fixture({failReturn=false}={}){
   if(name==='browser_control'){
    if(args.operation==='takeover'){owner='human';epoch++;}
    if(args.operation==='return'){if(failReturn)throw Error('unknown return outcome');owner='agent';epoch++;}
-   return {control:{owner,epoch}};
+   return {taskId:task.taskId,browserId:task.browserId,control:{owner,epoch}};
   }
   if(name==='browser_continue')return task;
   assert.equal(name,'browser_reconnect');
@@ -21,7 +21,7 @@ function fixture({failReturn=false}={}){
 }
 test('hosted reconnect helper qualifies public transitions and measured metadata only',async()=>{
  const input=fixture(),result=await qualifyHostedBrowserReconnect(input);assert.equal(result.passed,true);assert.equal(result.warmStatusMs.length,12);assert.equal(result.actualBrowserLossExercised,false);assert.equal(result.actualDesktopRestartExercised,false);
- assert.equal(input.calls.filter(c=>c.args.operation==='return').length,1);assert.equal(input.calls.filter(c=>c.args.operation==='reopen'||c.args.operation==='rebind').length,0);assert.equal(input.saved.length,1);
+ assert.equal(input.calls.filter(c=>c.args.operation==='return').length,11);assert.equal(result.performance.publicControl.completedPairs,10);assert.equal(result.performance.nativeCoordinationExercised,false);assert.equal(input.calls.filter(c=>c.args.operation==='reopen'||c.args.operation==='rebind').length,0);assert(input.saved.some(row=>row.name==='hosted-control-performance-agent-browser-public-control.json'));
 });
 test('unknown return outcome is retained without another dispatch',async()=>{
  const input=fixture({failReturn:true});await assert.rejects(qualifyHostedBrowserReconnect(input),/unknown return/);assert.equal(input.calls.filter(c=>c.args.operation==='return').length,1);assert.equal(input.saved[0].value.passed,false);
