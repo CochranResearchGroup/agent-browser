@@ -44,7 +44,7 @@ const context={env,agentHome,socketDir,tempHome:root,session:'hosted-'+randomUUI
 const {createBotService}=await import(pathToFileURL(join(botsRoot,'src/service.mjs')));
 const {connectRemoteView}=await import(pathToFileURL(join(botsRoot,'src/remote-view.mjs')));
 const require=createRequire(join(botsRoot,'package.json')),{chromium}=require('playwright-core');
-let remote,baseline,broker,service,client,viewer,watcher,task,appBrowser,fixtureSite,appObserver,taskClosed=false,taskCloseDispatched=false,ambiguous=false,passed=false;
+let remote,baseline,broker,service,client,viewer,watcher,task,appBrowser,fixtureSite,appObserver,uiHandoffId,uiTakeoverDispatched=false,uiReturnDispatched=false,uiControlSettled=true,taskClosed=false,taskCloseDispatched=false,ambiguous=false,passed=false;
 const borrowedTasks=[],closedBorrowedTasks=new Set();
 const acquired=[],cleanup={errors:[],retainedEvidence:evidence,processesBefore:[],processesAfter:[],released:[]};
 let step='preflight';
@@ -251,7 +251,7 @@ try{
  const desktops=new Proxy(remote,{get(target,key){if(key!=='acquire')return typeof target[key]==='function'?target[key].bind(target):target[key];return async args=>{let binding;try{binding=await target.acquire(args);}catch(error){ambiguous=true;throw error;}assert(!baseline.assignments.some(a=>a.assignmentId===binding.assignmentId),'Provider returned a baseline peer assignment');acquired.push(binding);await save('acquired.json',acquired);Object.assign(binding,await target.observe(binding));await save('acquired.json',acquired);return binding;};}});
  step='initialize-ab-mcp';client=createMcpStdioClient({context,args:['mcp','serve'],onFatal:()=>{ambiguous=true;}});
  await send('initialize',{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'hosted-native-smoke',version:'1'}});client.notify('notifications/initialized');
- const bot={id:'fixture-'+randomUUID(),threadId:'synthetic-'+randomUUID()},second={id:'shared-'+randomUUID(),threadId:'shared-session-'+randomUUID()};
+ const bot={id:'fixture-'+randomUUID(),name:'Synthetic attachment owner',threadId:'synthetic-'+randomUUID()},second={id:'shared-'+randomUUID(),name:'Synthetic shared participant',threadId:'shared-session-'+randomUUID()};
  step='acquire-app-desktop';const binding=await desktops.acquire({botId:bot.id,idempotencyKey:'attachment-'+randomUUID()});
  assert.equal(acquired.length,1);
  step='app-launch-environment';const launch=await remote.environment(binding);
@@ -287,19 +287,45 @@ try{
   const observed=await remote.bindingForBrowser({pid:original.pid},binding);assert.equal(observed.assignmentId,binding.assignmentId);assert.equal(observed.generation,binding.generation);
   await save('continuity-'+label+'.json',{original,processPreserved:true,preexistingTargetsPreserved:true,syntheticStorageAndDraftPreserved:true,peerPreserved:true,nativeAssignmentPreserved:true});
  }
- const hostBinding={version:1,hostId:'bots',participantId:'bot:'+bot.id,sessionId:bot.threadId,placement:{mode:'required',desktop:{desktopId:binding.desktopId,generation:binding.generation}}};
+ // Seed only the fixture's existing application-owned binding. Attach mode
+ // must never acquire a replacement assignment or accept process/CDP from HTTP.
+ const botsStateDir=join(root,'bots-state');await mkdir(botsStateDir,{mode:0o700});
+ const ownedFor=owner=>({profile:{profileId:'borrowed-profile',profilePath:original.profilePath,botId:owner.id},browser:{pid:original.pid,startTimeTicks:original.start,executable:original.executablePath}});
+ await writeFile(join(botsStateDir,'state.json'),JSON.stringify({bots:[bot,second],desktops:Object.fromEntries([bot,second].map(owner=>[owner.id,{binding,ownedProfiles:{'stealthcdp-chromium':ownedFor(owner)}}]))}),{mode:0o600});
+ const native={status:async()=>({connected:true,activity:'ready',turnId:null,requests:[]}),historyPage:async()=>({messages:[],nextCursor:null})};
+ const observedAttachments=[];
+ step='create-actual-bots-consumer';
+ service=await createBotService({bots:[bot,second],native,stateDir:botsStateDir,desktops,publicOrigin:appOrigin,hostedAgentBrowser:{hostId:'bots',publicOrigin:appOrigin,controlEnabled:true,workflow,readTask,
+  observeAttachment:async input=>{
+   const owner=[bot,second].find(owner=>'bot:'+owner.id===input.participantId&&owner.threadId===input.sessionId);
+   assert(owner,'Trusted attachment observation must address a prepared fixture participant');
+   assert.equal(input.profile,'borrowed-profile');assert.equal(input.profileMode,'existing');
+   assert.deepEqual(input.appBrowser,ownedFor(owner));
+   assert.deepEqual(input.desktop,Object.fromEntries(['assignmentId','desktopId','generation','viewingGeneration'].map(key=>[key,binding[key]])));
+   const fresh=await processIdentity(original.pid);assert.equal(fresh.start,original.start);assert.equal(await realpath(`/proc/${original.pid}/exe`),original.executablePath);assert.equal(await realpath(profilePath),original.profilePath);
+   assert.equal(await targetFor(primary),primaryTarget);
+   const current=await remote.bindingForBrowser({pid:original.pid},binding);assert.equal(current.assignmentId,binding.assignmentId);assert.equal(current.generation,binding.generation);
+   observedAttachments.push({participantId:input.participantId,sessionId:input.sessionId,processPreserved:true,desktopPreserved:true});await save('trusted-attachment-observations.json',observedAttachments);
+   return structuredClone(attachment);
+  }}});
+ async function attachInBots(owner,taskKey,taskName){
+  const input={mode:'attach',sessionId:owner.threadId,requestId:randomUUID(),taskKey,taskName,profileMode:'existing',profile:'borrowed-profile'};
+  let response;try{response=await fetch(service.url+`/api/bots/${owner.id}/hosted-browser`,{method:'POST',headers:{origin:service.url,'content-type':'application/json'},body:JSON.stringify(input),signal:AbortSignal.timeout(120000)});}catch(error){ambiguous=true;throw error;}
+  let opened;try{opened=await response.json();}catch(error){ambiguous=true;throw error;}
+  await save('bots-attach-'+owner.id+'.json',{status:response.status,input,opened});
+  if(response.status!==201)throw Object.assign(Error(opened.message||'Bots attach refused'),{code:opened.error||'fixture_bots_attach_rejected'});
+  const handoff=new URL(opened.handoffUrl);assert.equal(handoff.origin,appOrigin);assert.match(handoff.pathname,/^\/agent-browser\/handoff\/[a-f0-9-]{36}$/i);assert.equal(handoff.search,'');assert.equal(handoff.hash,'');
+  return opened;
+ }
  const primaryTaskKey='attachment-primary-'+randomUUID();
- step='attach-public-workflow';const opened=await workflow('browser_open',{profile:'borrowed-profile',profileMode:'existing',taskKey:primaryTaskKey,serviceName:'attachment-fixture',agentName:'bot:'+bot.id,taskName:'Use app-owned synthetic browser',hostBinding,attachment});task=opened;borrowedTasks.push(opened);
- assert.equal(typeof opened.tabId,'string');assert.notEqual(opened.tabId,primaryTarget);await continuity('first-attach');
+ step='attach-through-bots-http';const opened=await attachInBots(bot,primaryTaskKey,'Use app-owned synthetic browser');task=opened;borrowedTasks.push(opened);
+ assert.equal(typeof opened.tabId,'string');assert.notEqual(opened.tabId,primaryTarget);assert.equal(opened.host.hostId,'bots');assert.equal(opened.host.participantId,'bot:'+bot.id);await continuity('first-attach');
  step='public-page-action';const snapshotBefore=await workflow('browser_snapshot',{taskId:opened.taskId});assert(JSON.stringify(snapshotBefore).includes('ATTACHMENT SYNTHETIC MARKER'));
  await workflow('browser_fill',{taskId:opened.taskId,selector:'#control',value:'public MCP preserved app browser'});assert.equal(await primary.locator('#control').inputValue(),'public MCP preserved app browser');await continuity('public-action');
- step='explicit-shared-attach';const shared=await workflow('browser_open',{profile:'borrowed-profile',profileMode:'existing',taskKey:'attachment-shared-'+randomUUID(),serviceName:'attachment-fixture',agentName:'bot:'+second.id,taskName:'Explicitly share app-owned synthetic browser',hostBinding:{...hostBinding,participantId:'bot:'+second.id,sessionId:second.threadId},attachment});borrowedTasks.push(shared);assert.notEqual(shared.taskId,opened.taskId);assert.notEqual(shared.tabId,opened.tabId);assert.notEqual(shared.tabId,primaryTarget);assert.equal(shared.browserId,opened.browserId);await continuity('shared-attach');
- // Direct native-viewer qualification; no Bots attachment-HTTP claim. Native
- // supplies the existing authenticated viewer, never a fixture substitute.
- const nativeView=await remote.viewer(binding,{idempotencyKey:'attachment-view-'+randomUUID()});
- await save('attachment.json',{original,processProof,initialTargets,primaryTarget,peerTarget,tasks:borrowedTasks.map(t=>({taskId:t.taskId,browserId:t.browserId,tabId:t.tabId,profileId:t.profileId})),scope:'Direct public MCP attachment plus actual Native viewer; Bots attachment HTTP not qualified'});
+ step='shared-attach-through-bots-http';const shared=await attachInBots(second,'attachment-shared-'+randomUUID(),'Explicitly share app-owned synthetic browser');borrowedTasks.push(shared);assert.notEqual(shared.taskId,opened.taskId);assert.notEqual(shared.tabId,opened.tabId);assert.notEqual(shared.tabId,primaryTarget);assert.equal(shared.browserId,opened.browserId);assert.equal(acquired.length,1);await continuity('shared-attach');
+ await save('attachment.json',{original,processProof,initialTargets,primaryTarget,peerTarget,tasks:borrowedTasks.map(t=>({taskId:t.taskId,browserId:t.browserId,tabId:t.tabId,profileId:t.profileId})),scope:'Actual Bots attach HTTP and trusted fresh attachment observation, public Agent Browser controls, app-routed durable handoff and actual Native viewer'});
  task=opened;
- const sessionName='workflow-'+createHash('sha256').update(JSON.stringify(['attachment-fixture','bot:'+bot.id,primaryTaskKey,'borrowed-profile',hostBinding.hostId,hostBinding.participantId,hostBinding.sessionId])).digest('hex');
+ const sessionName='workflow-'+createHash('sha256').update(JSON.stringify(['codex-bots','bot:'+bot.id,primaryTaskKey,'borrowed-profile','bots','bot:'+bot.id,bot.threadId])).digest('hex');
  step='enable-isolated-service-http';
  let stream=JSON.parse((await runCli(context,['--json','--session',sessionName,'stream','status'])).stdout);
  assert.equal(stream.success,true);
@@ -308,14 +334,17 @@ try{
  const servicePort=stream.data.port;
  step='public-control-qualification';
  await qualifyHostedBrowserControl({send,runCli:args=>runCli(context,args),task:opened,sessionName,readTask,save,syntheticOnly:true,
-  serviceRequest:async body=>{const response=await httpJsonResult(servicePort,'POST','/api/service/request',body);return response.body;}});
+  serviceRequest:async body=>{const response=await httpJsonResult(servicePort,'POST','/api/service/request',body);assert.equal(response.statusCode,200);assert.equal(response.body?.success,false);return response.body;}});
  await continuity('after-human-control');
- step='metadata-initial';const watchReader=startWatch(task.taskId);
- const snapshot=await readTask(task.taskId),event=await watchReader.next();assert.equal(event.event,'snapshot');assert.deepEqual(event.data,snapshot);assert.equal(snapshot.taskId,task.taskId);await save('metadata.json',{snapshot,event});
  step='native-viewer';viewer=await chromium.launch({executablePath:chrome,headless:true,env:{...env,AGENT_BROWSER_HOME:agentHome}});
  const viewerContext=await viewer.newContext({...(authState?{storageState:authState}:{}),viewport:{width:1440,height:1000}});
  const page=await viewerContext.newPage();let frames=0;page.on('websocket',ws=>{if(new URL(ws.url()).origin===nativeOrigin.replace('https:','wss:'))ws.on('framereceived',()=>frames++);});
- await page.goto(nativeView.url,{waitUntil:'domcontentloaded',timeout:30000});
+ // Intercept only the reviewed app origin to the actual local Bots source.
+ // Native routes, authentication and pixels remain the real provider's work.
+ await page.route(appOrigin+'/**',async route=>{const request=route.request(),url=new URL(request.url()),headers={...request.headers(),host:new URL(service.url).host};if(headers.origin===appOrigin)headers.origin=service.url;const response=await route.fetch({url:service.url+url.pathname+url.search,headers});await route.fulfill({response});});
+ uiHandoffId=new URL(opened.handoffUrl).pathname.split('/').at(-1);
+ await page.goto(opened.handoffUrl,{waitUntil:'domcontentloaded',timeout:30000});
+ await page.locator('#bot-name').filter({hasText:bot.name}).waitFor({timeout:15000});
  let rendered=false,canvas=null;const renderDeadline=Date.now()+45000;
  while(Date.now()<renderDeadline&&!rendered){
   for(const frame of page.frames().filter(f=>f.url().startsWith(nativeOrigin+'/'))){
@@ -326,6 +355,28 @@ try{
  }
  await page.screenshot({path:join(evidence,'hosted-native.png')});await import('node:fs/promises').then(fs=>fs.chmod(join(evidence,'hosted-native.png'),0o600));
  await save('render.json',{rendered,canvas,receivedWebSocketFrames:frames});assert(rendered,'Actual Native canvas must render the synthetic marker with WebSocket frames');
+ // Qualify the app's real Native toolbar callback against both owners. Viewing
+ // alone is still agent-owned; no Agent Browser dashboard or extra assignment.
+ async function consumerControl(){const response=await fetch(service.url+`/api/agent-browser/handoffs/${uiHandoffId}/control`,{signal:AbortSignal.timeout(15000)});assert.equal(response.status,200);return response.json();}
+ const controlReceipt=value=>({control:Object.fromEntries(['owner','epoch','pauseReads','pendingOutcomeCount'].filter(key=>key in value.control).map(key=>[key,value.control[key]])),native:Object.fromEntries(['owner','state','epoch','hostedOperationId'].filter(key=>key in value.native).map(key=>[key,value.native[key]]))});
+ const beforeUi=await consumerControl();assert.equal(beforeUi.control.owner,'agent');assert.equal(beforeUi.native.owner,'agent');
+ await page.getByText('Browser control options',{exact:true}).click();await page.locator('#hosted-pause-reads').check();
+ step='native-toolbar-takeover';uiTakeoverDispatched=true;uiControlSettled=false;
+ await page.frameLocator('#desktop-frame').getByRole('button',{name:'Take control',exact:true}).click({timeout:15000});
+ await page.frameLocator('#desktop-frame').getByRole('button',{name:'Give control back',exact:true}).waitFor({timeout:30000});
+ const human=await consumerControl();assert.equal(human.control.owner,'human');assert.equal(human.control.pauseReads,true);assert.equal(human.control.epoch,beforeUi.control.epoch+1);assert.equal(human.native.owner,'operator');assert.equal(human.native.state,'ready');uiControlSettled=true;
+ assert.equal((await readTask(opened.taskId)).controllerState.owner,'human');
+ await save('bots-native-control.json',{before:controlReceipt(beforeUi),human:controlReceipt(human),passed:false});
+ step='native-toolbar-return';uiReturnDispatched=true;uiControlSettled=false;
+ await page.frameLocator('#desktop-frame').getByRole('button',{name:'Give control back',exact:true}).click({timeout:15000});
+ await page.frameLocator('#desktop-frame').getByRole('button',{name:'Take control',exact:true}).waitFor({timeout:30000});
+ const returned=await consumerControl();assert.equal(returned.control.owner,'agent');assert.equal(returned.control.epoch,human.control.epoch+1);assert.equal(returned.native.owner,'agent');assert.equal(returned.native.state,'ready');uiControlSettled=true;
+ assert.equal((await readTask(opened.taskId)).controllerState.owner,'agent');await continuity('after-native-toolbar-control');
+ await save('bots-native-control.json',{before:controlReceipt(beforeUi),human:controlReceipt(human),returned:controlReceipt(returned),passed:true});
+ // Start after all control transitions so the remaining event is scoped detach.
+ step='metadata-initial';const watchReader=startWatch(task.taskId);
+ const snapshot=await readTask(task.taskId),event=await watchReader.next();assert.equal(event.event,'snapshot');assert.deepEqual(event.data,snapshot);assert.equal(snapshot.taskId,task.taskId);await save('metadata.json',{snapshot,event});
+
  // Produce a genuine metadata transition after the visual proof. Closing the
  // exact fixture task is dispatched once, including when its outcome is unknown.
  step='close-exact-task';taskCloseDispatched=true;closedBorrowedTasks.add(task.taskId);await workflow('browser_close',{taskId:task.taskId});taskClosed=true;await continuity('first-detach');const sharedSnapshot=await workflow('browser_snapshot',{taskId:shared.taskId});assert(JSON.stringify(sharedSnapshot).includes('ATTACHMENT SYNTHETIC MARKER'));closedBorrowedTasks.add(shared.taskId);await workflow('browser_close',{taskId:shared.taskId});await continuity('all-detached');
@@ -336,9 +387,15 @@ try{
  await save('metadata.json',{snapshot,event,changed,ended});
  assert(!brokerOperations.some(entry=>['acquire','release','release_idle'].includes(entry.operation)), 'Hosted runtime must never request app pool growth or retirement');
  passed=true;
-}catch(error){await save('failure.json',{...safeError(error),ambiguous});process.exitCode=1;}
+}catch(error){if(!uiControlSettled)ambiguous=true;await save('failure.json',{...safeError(error),ambiguous});process.exitCode=1;}
 finally{
  async function clean(name,action){try{await action();}catch(error){cleanup.errors.push({...safeError(error),step:name});process.exitCode=1;}}
+ if(uiHandoffId&&uiTakeoverDispatched&&!uiReturnDispatched)await clean('return-known-native-control',async()=>{
+  const status=await fetch(service.url+`/api/agent-browser/handoffs/${uiHandoffId}/control`,{signal:AbortSignal.timeout(15000)});assert.equal(status.status,200);const current=await status.json();
+  if(current.control.owner==='human'&&current.native.owner==='operator'&&current.native.state==='ready'){
+   uiReturnDispatched=true;const response=await fetch(service.url+`/api/agent-browser/handoffs/${uiHandoffId}/control`,{method:'POST',headers:{origin:service.url,'content-type':'application/json'},body:JSON.stringify({operation:'return',operationId:randomUUID(),expectedEpoch:current.control.epoch,actor:'synthetic-operator',reason:'Explicit synthetic fixture cleanup'}),signal:AbortSignal.timeout(120000)});assert.equal(response.status,200);const returned=await response.json();assert.equal(returned.control.owner,'agent');assert.equal(returned.native.owner,'agent');cleanup.nativeControlReturned=true;
+  }else assert.equal(current.control.owner,'agent','Uncertain Native takeover requires explicit readback');
+ });
  await clean('close-viewer',async()=>{await viewer?.close();});
  await clean('stop-watch',async()=>{if(watcher&&watcher.exitCode===null&&watcher.signalCode===null){const exit=once(watcher,'exit');watcher.kill('SIGTERM');await exit;}});
  for(const borrowed of borrowedTasks)if(!closedBorrowedTasks.has(borrowed.taskId))await clean('close-borrowed-task',async()=>{closedBorrowedTasks.add(borrowed.taskId);await workflow('browser_close',{taskId:borrowed.taskId});});
