@@ -445,6 +445,7 @@ impl BrowserSessionEffects for FixtureEffects {
     ) -> Result<BrowserProfileCatalogEntry, String> {
         self.disposable_allocations.push(allocation_id.to_string());
         Ok(BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: allocation_id.to_string(),
             name: allocation_id.to_string(),
             user_data_dir: format!("{}/{}", policy.user_data_root, allocation_id),
@@ -1301,6 +1302,7 @@ fn retained_handoff_survives_browser_idle_close_and_reconnect_until_explicit_clo
 
 fn catalog_with_named_profile() -> BrowserProfileCatalog {
     let profile = BrowserProfileCatalogEntry {
+        manual_login_url: None,
         id: "profile-a".to_string(),
         name: "Profile A".to_string(),
         user_data_dir: "/managed/profiles/profile-a".to_string(),
@@ -1319,6 +1321,7 @@ fn distinct_profile_browsers_use_least_crowded_configured_desktops() {
     catalog.profiles.insert(
         "profile-b".to_string(),
         BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "profile-b".to_string(),
             name: "Profile B".to_string(),
             user_data_dir: "/managed/profiles/profile-b".to_string(),
@@ -1470,6 +1473,7 @@ fn second_named_session_reuses_live_browser_for_exact_profile() {
 fn same_session_name_can_open_a_different_exact_profile() {
     let mut catalog = catalog_with_named_profile();
     let profile_b = BrowserProfileCatalogEntry {
+        manual_login_url: None,
         id: "profile-b".to_string(),
         name: "Profile B".to_string(),
         user_data_dir: "/managed/profiles/profile-b".to_string(),
@@ -1693,6 +1697,7 @@ fn disposable_byte_quota_evicts_oldest_profile_first() {
 #[test]
 fn exact_intent_rejects_disposable_profile_definition() {
     let profile = BrowserProfileCatalogEntry {
+        manual_login_url: None,
         id: "legacy-one-time".to_string(),
         name: "Legacy One Time".to_string(),
         user_data_dir: "/managed/legacy-one-time".to_string(),

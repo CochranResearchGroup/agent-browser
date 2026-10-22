@@ -31,6 +31,7 @@ pub(super) fn tools() -> Vec<Value> {
                 "properties": {
                     "profile":{"type":"string","description":"Named profile for persistent or existing mode."},
                     "profileMode":{"type":"string","enum":["persistent","existing","disposable"],"default":"persistent"},
+                    "mode":{"type":"string","enum":["automation","manual_login"],"default":"automation","description":"manual_login opens one human-only native remote window without CDP and returns its ready handoff. Close it before reopening the preserved profile for automation."},
                     "taskKey":{"type":"string","description":"Stable task key. Distinct keys receive independent tabs; reuse the key to continue this task."},
                 "url":{"type":"string","description":"Initial URL for a new task. Replaying a task returns its current page without navigating again."},
                     "serviceName":{"type":"string"},"agentName":{"type":"string"},"taskName":{"type":"string"},
@@ -39,7 +40,7 @@ pub(super) fn tools() -> Vec<Value> {
                         "profilePath":{"type":"string"},"cdpEndpoint":{"type":"string"},"targetId":{"type":"string"},
                         "sharedWith":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"hostId":{"type":"string"},"participantId":{"type":"string"},"sessionId":{"type":"string"}},"required":["hostId","participantId","sessionId"]}}},"required":["version","process","profilePath","cdpEndpoint","targetId"]},
                     "hostBinding":{"type":"object","additionalProperties":false,"description":"Configured app context and exact required/preferred placement; never a viewer URL.","properties":{"version":{"const":1},"hostId":{"type":"string"},"participantId":{"type":"string"},"sessionId":{"type":"string"},"placement":placement},"required":["version","hostId","participantId","sessionId","placement"]}
-                }, "required":["taskKey","serviceName","agentName","taskName"],"oneOf":[{"required":["url"],"not":{"required":["attachment"]}},{"required":["attachment","hostBinding","profile"],"not":{"required":["url"]}}]}
+                }, "required":["taskKey","serviceName","agentName","taskName"],"oneOf":[{"required":["url"],"not":{"required":["attachment"]}},{"required":["attachment","hostBinding","profile"],"properties":{"mode":{"enum":["automation"]}},"not":{"required":["url"]}}]}
         }),
         json!({
             "name":"browser_close", "title":"Close a browser task",
@@ -148,12 +149,27 @@ pub(super) fn open(
     configured: &ServiceState,
 ) -> Result<Value, JsonRpcError> {
     if arguments.get("attachment").is_some() {
+        if optional_string_argument(arguments, "mode")?.unwrap_or("automation") != "automation" {
+            return Err(issue("manual_login_requires_owned_browser: attachment cannot remove an existing CDP listener"));
+        }
         return open_attachment(arguments, transport_session);
     }
     let task_key = required_string_argument(arguments, "taskKey")?;
     let url = required_string_argument(arguments, "url")?;
     let mode = optional_string_argument(arguments, "profileMode")?.unwrap_or("persistent");
     let profile = optional_string_argument(arguments, "profile")?;
+    let control_mode = optional_string_argument(arguments, "mode")?.unwrap_or("automation");
+    if !matches!(control_mode, "automation" | "manual_login") {
+        return Err(issue("browser_login_mode_invalid"));
+    }
+    let manual = control_mode == "manual_login";
+    if manual && mode == "disposable" {
+        return Err(issue("manual_login_requires_persistent_profile"));
+    }
+    if manual && !crate::native::browser_session_remote_view::remote_view_settings_present() {
+        return Err(issue("manual_login_requires_native_remote_desktop"));
+    }
+
     if !matches!(mode, "persistent" | "existing" | "disposable") {
         return Err(issue("browser_profile_mode_invalid"));
     }
@@ -178,6 +194,11 @@ pub(super) fn open(
     if let Some(binding) = &hosted {
         crate::native::browser_host_context::validate_provider(binding).map_err(issue)?;
     }
+    if manual && hosted.is_none() {
+        let origin = std::env::var("AGENT_BROWSER_PUBLIC_ORIGIN")
+            .map_err(|_| issue("remote_view_public_origin_missing"))?;
+        crate::native::browser_session_remote_view::public_origin(&origin).map_err(issue)?;
+    }
     let identity = if let Some(binding) = &hosted {
         serde_json::to_vec(&(
             service,
@@ -200,6 +221,7 @@ pub(super) fn open(
     let mut command = json!({"id":uuid::Uuid::new_v4().to_string(),
         "action":"browser_session_open","sessionName":session_name,
         "url":url,"serviceName":service,"agentName":agent,"taskName":task,"originKind":"agent"});
+    command["manualLogin"] = json!(manual);
     if let Some(binding) = &hosted {
         command["hostBinding"] = json!(binding);
     }
@@ -273,6 +295,19 @@ pub(super) fn open(
         object.remove("sessionId");
         object.remove("targetId");
         object.remove("visitedAtMs");
+    }
+    if manual {
+        let handoff = handoff(&json!({"taskId":data["taskId"]}), transport_session)?;
+        let text = handoff["content"][0]["text"]
+            .as_str()
+            .ok_or_else(|| issue("browser_handoff_payload_missing"))?;
+        let payload: Value =
+            serde_json::from_str(text).map_err(|_| issue("browser_handoff_payload_invalid"))?;
+        data["handoffUrl"] = payload["data"]["handoffUrl"].clone();
+        data["operatorVisible"] = payload["data"]["operatorVisible"].clone();
+        data["mode"] = json!("manual_login");
+        data["urlObserved"] = json!(false);
+        data["authentication"] = json!("not_verified");
     }
     Ok(super::tool_response_from_payload(
         "browser_open",
@@ -397,7 +432,8 @@ pub(super) fn continue_task(
         transport_session,
         json!({}),
         json!({"taskId":task_id,"profileId":task.profile_id,"browserId":task.browser_id,
-            "tabId":tab_id,"url":current_url}),
+            "tabId":tab_id,"url":current_url,"urlObserved":observed.get("urlObserved").cloned().unwrap_or(json!(true)),
+            "mode":observed.get("mode").cloned().unwrap_or(json!("automation"))}),
         false,
     ))
 }
@@ -564,6 +600,36 @@ pub(super) fn tab(arguments: &Value, transport_session: &str) -> Result<Value, J
 #[cfg(test)]
 mod context_tests {
     use super::*;
+
+    #[test]
+    fn manual_login_rejects_cdp_attachment_before_profile_or_transport_effects() {
+        let error = open(
+            &json!({"mode":"manual_login", "attachment":{}}),
+            "unused",
+            &ServiceState::default(),
+        )
+        .unwrap_err();
+        assert!(error.data.as_ref().unwrap()["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("manual_login_requires_owned_browser"));
+    }
+
+    #[test]
+    fn manual_login_mode_is_exposed_without_internal_launch_plumbing() {
+        let tools = tools();
+        let open = tools
+            .iter()
+            .find(|tool| tool["name"] == "browser_open")
+            .unwrap();
+        assert_eq!(
+            open["inputSchema"]["properties"]["mode"]["enum"],
+            json!(["automation", "manual_login"])
+        );
+        assert!(open["inputSchema"]["properties"]
+            .get("browserBuild")
+            .is_none());
+    }
 
     #[test]
     fn hosted_input_rejects_invalid_context_before_profile_or_transport_effects() {

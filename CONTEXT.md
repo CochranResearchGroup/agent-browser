@@ -65,6 +65,12 @@ second process. Pressure handling preserves current work.
 kept with active browser state. Bounding this projection does not delete older
 durable history or change live tasks and valid handoffs.
 
+**Manual login mode**: A human-only managed native window with no CDP endpoint,
+debugging listener or DOM control. It owns one task and preserves the durable
+profile. Its URL describes initial intent, not the human's current page or
+verified authentication. Explicit closure permits a later automation launch on
+that same profile. Current launch posture cannot change underneath active tasks.
+
 **Durable profile**: Browser data retained across tasks. Separate tasks can share its browser through distinct sessions and tabs. Profile retention is separate from process, desktop, session and handoff lifetimes.
 
 **Workspace inventory projection**: The redacted managed-owner inventory with

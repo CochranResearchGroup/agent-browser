@@ -1663,6 +1663,7 @@ mod tests {
         catalog.profiles.insert(
             "app".into(),
             agent_browser_service_model::BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: "app".into(),
                 name: "App".into(),
                 user_data_dir: "/synthetic/app".into(),
@@ -1735,6 +1736,7 @@ mod tests {
             .save_session_state(&BrowserSessionState::default())
             .unwrap();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "legacy-profile".into(),
             name: "Old label".into(),
             user_data_dir: directory.0.to_string_lossy().into_owned(),
@@ -1798,6 +1800,7 @@ mod tests {
         catalog.profiles.insert(
             "unrelated-history".into(),
             agent_browser_service_model::BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: "unrelated-history".into(),
                 name: "Unused historical profile".into(),
                 user_data_dir: "/synthetic/private".into(),
@@ -1837,6 +1840,7 @@ mod tests {
         initialize_runtime_schema(&connection).unwrap();
         let mut store = BrowserSessionSqliteStore { connection };
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "stable-id".into(),
             name: "Temporary research".into(),
             user_data_dir: data.to_string_lossy().into_owned(),

@@ -22,6 +22,10 @@ pub struct BrowserProfileCatalogEntry {
     pub name: String,
     pub user_data_dir: String,
     pub kind: BrowserProfileKind,
+    /// A human-only browser starts at this requested URL without a CDP endpoint.
+    /// Mode changes are admitted only after all current profile tasks are closed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manual_login_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -153,6 +157,7 @@ impl BrowserProfileCatalog {
             };
 
             let entry = BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: id.clone(),
                 name: name.to_string(),
                 user_data_dir: user_data_dir.to_string(),
