@@ -376,7 +376,12 @@ fn close_browser_scope_with_observation(
     let result = close()?;
     let absent=match observe(browser.pid) {
         ProcessObservation::Missing=>true,
-        ProcessObservation::Observed(after)=>before.as_ref().is_some_and(|before|before.start_token!=after.start_token),
+        ProcessObservation::Observed(after) => before.as_ref().is_some_and(|before| {
+            match (before.start_token.as_deref(), after.start_token.as_deref()) {
+                (Some(original), Some(current)) => !current.is_empty() && current != original,
+                _ => false,
+            }
+        }),
         ProcessObservation::Failed{..}=>return Err("browser_lifecycle_residue_readback_unavailable: close outcome must be inspected; do not replay".into()),
     };
     if !absent {
@@ -648,6 +653,43 @@ mod tests {
         assert!(error.starts_with("browser_lifecycle_owned_process_residue:"));
         assert_eq!(calls, 1);
     }
+    #[test]
+    fn broader_close_requires_positive_new_process_epoch_for_pid_reuse_readback() {
+        let state = fixture();
+        let command = json!({"actor":"operator","reason":"Close with independent OS readback"});
+        for token in [None, Some(""), Some("original"), Some("replacement")] {
+            let mut after = match process() {
+                crate::process_identity::ProcessObservation::Observed(identity) => identity,
+                _ => unreachable!(),
+            };
+            after.start_token = token.map(str::to_owned);
+            let mut observations = VecDeque::from([
+                process(),
+                crate::process_identity::ProcessObservation::Observed(after),
+            ]);
+            let mut closes = 0;
+            let result = close_browser_scope_with_observation(
+                &state,
+                "alpha",
+                &command,
+                |_| observations.pop_front().unwrap(),
+                || {
+                    closes += 1;
+                    Ok(json!({"closed":true}))
+                },
+            );
+            assert_eq!(closes, 1, "readback must never replay close");
+            assert!(observations.is_empty());
+            if token == Some("replacement") {
+                assert_eq!(result.unwrap()["residue"]["originalProcess"], "absent");
+            } else {
+                assert!(result
+                    .unwrap_err()
+                    .starts_with("browser_lifecycle_owned_process_residue:"));
+            }
+        }
+    }
+
     #[test]
     fn broader_close_preserves_peers_and_borrowed_process_before_any_effect_or_process_query() {
         let mut state = fixture();

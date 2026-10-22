@@ -64,9 +64,10 @@ pub fn canonical_browser_policy_action(action: &str) -> &str {
         "browser_evaluate" | "eval" => "evaluate",
         "browser_click" => "click",
         "browser_fill" => "fill",
-        "browser_tab_new" => "tab_new",
+        "browser_tab_new" | "browser_session_tab_new" => "tab_new",
         "browser_tab_close" | "browser_session_tab_close" => "tab_close",
         "browser_session_close" => "close",
+        "browser_session_focus" => "view_focus",
         other => other,
     }
 }

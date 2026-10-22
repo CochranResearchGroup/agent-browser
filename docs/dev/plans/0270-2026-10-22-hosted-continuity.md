@@ -26,7 +26,7 @@ Canonical PR source integration, exact remote readback, explicit remaining limit
 
 ## Source checkpoint
 
-#351 investigation establishes a missing Native same-process display-transfer capability, tracked in Remote View #578 and the linked [provider-gap note](../notes/0270-2026-10-22-hosted-relocation-provider-gap.md). Neither #351 nor #355 is complete. Parallel #352–354 source is integrated for qualification: explicit continuity journal and borrowed reconnect, optional policy/artifact handles with atomic task publication, and versioned guidance. Actual managed generation-changing rebind remains unsupported rather than rewriting physical custody. No production effects.
+#351 investigation establishes a missing Native same-process display-transfer capability, tracked in Remote View #578 and the linked [provider-gap note](../notes/0270-2026-10-22-hosted-relocation-provider-gap.md). Neither #351 nor #355 is complete. Parallel #352–354 source is integrated for qualification: explicit continuity journal and borrowed reconnect, optional policy/artifact handles with atomic task publication, and versioned guidance. Live-process managed generation-changing rebind remains unsupported rather than rewriting physical custody; absent-process recovery uses a separate approved recovery target. No production effects.
 
 Workspace checks passed during implementation. Focused hosted tests passed 23 cases and policy model tests passed three cases before final atomic-publication regression/owner wiring; final affected-surface tests, strict Rust gates, public catalog and actual synthetic Native acceptance remain pending. First cache-enabled check stalled in sccache rustc-version discovery and only its exact owned scope was terminated; cache-disabled check completed. This is an intermediate custody checkpoint, not merge readiness.
 
@@ -43,3 +43,7 @@ Eleven focused native/cache/SQLite recovery tests pass, including positive gener
 ## Public guidance repair
 
 The first b10884b99 candidate passed public guidance discovery and invalid-intent checks. Public smoke exposed an already oversized MCP help surface and a stale frozen tool allowlist. Help is compacted within the unchanged 4,000-byte budget; the allowlist now matches all16 workflow tools. The skill again names the durable handoff path explicitly and passes the handoff documentation guard below10KB. These are help and fixture corrections; the successful runtime implementation gates remain bounded evidence for unchanged behavior. A rebuilt exact-source candidate is required before Native acceptance.
+
+## Final review repair
+
+The full repaired Service Model suite passed382 tests across23 binaries; hosted/native recovery, owner, MCP, action and strict Rust gates passed within their logged scope. Before Native qualification, independent source review found two direct-route policy aliases missing and an incomplete post-close process token treated as proof of PID replacement. Both require focused regressions before rebuilding. The second CI candidate build was stopped by exact owned-scope SIGTERM (exit143) before qualification; neither stopped build caused runtime effects. The route-confusion wrapper separately overflowed the default test stack; rerun uses the repository-standard16MiB test stack and isolated runtime state rather than changing product behavior.

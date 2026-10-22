@@ -185,3 +185,49 @@ fn failed_updates_preserve_state_and_status_control_remain_available() {
         .check("app", "task", "browser_session_policy", "status", None)
         .unwrap();
 }
+
+#[test]
+fn managed_service_tab_and_focus_routes_cannot_bypass_the_same_dispatch_rule() {
+    let mut policies = BrowserHostPolicies::default();
+    let policy = BrowserTaskPolicy {
+        denied_actions: BTreeSet::from(["tab_new".into(), "view_focus".into()]),
+        ..Default::default()
+    };
+    policies
+        .update(
+            0,
+            "app",
+            "task",
+            "set_task",
+            Some(policy),
+            "app",
+            "Restrict new tabs and focus",
+        )
+        .unwrap();
+    for action in [
+        "tab_new",
+        "browser_tab_new",
+        "browser_session_tab_new",
+        "view_focus",
+        "browser_session_focus",
+    ] {
+        assert!(
+            policies
+                .check("app", "task", action, "request", None)
+                .is_err(),
+            "supported route bypassed rule: {action}"
+        );
+    }
+    policies
+        .check("app", "task", "snapshot", "observation", None)
+        .unwrap();
+    policies
+        .check(
+            "app",
+            "peer",
+            "browser_session_tab_new",
+            "peer-request",
+            None,
+        )
+        .unwrap();
+}
