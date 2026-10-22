@@ -9,12 +9,12 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#348]
-    plan_state: OPEN
-    custody_state: BRANCH_OWNED
+    plan_state: CLOSED
+    custody_state: INTEGRATED
     dependencies: [P264]
     overlaps: [P237, P243]
     reconciled_overlaps: ["Primary owns workflow/model adapters and docs; Bots investigation read-only; no dependent tickets started; preserve foreign worktrees and pinned candidates"]
-    validation_status: Contract and current consumer seam investigation
+    validation_status: Exact ci candidate real Native pixels, sequenced metadata, zero owned residue and standalone continuity pass; model368, MCP139, Rust and client/docs gates pass; source only
     updated_at: 2026-10-22
 
   - id: P264

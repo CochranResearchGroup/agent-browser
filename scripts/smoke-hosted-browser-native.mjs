@@ -56,23 +56,24 @@ function safeError(error){
    ...(typeof error.actual==='number'?{actual:error.actual}:{}),...(typeof error.expected==='number'?{expected:error.expected}:{})}:{}),
   ...(error?.processIdentity?{processIdentity:error.processIdentity}:{})};
 }
-const baselineDeniedProcesses=new Map(),baselineReadableProcesses=new Map(),observedOwnedProcesses=new Map();
+const baselineDeniedProcesses=new Map(),baselineReadableProcesses=new Map(),observedOwnedProcesses=new Map(),harnessAncestors=new Set([process.pid]);
 async function processIdentity(pid){
  const fields=(await readFile(`/proc/${pid}/stat`,'utf8')).split(')').at(-1).trim().split(/\s+/);
- return {pid:Number(pid),start:fields[19],parentPid:Number(fields[1])};
+ return {pid:Number(pid),start:fields[19],parentPid:Number(fields[1]),uid:(await stat(`/proc/${pid}`)).uid};
 }
 async function foreignDeniedAncestry(identity){
  const chain=[],seen=new Set();let current=identity;
  while(current&&chain.length<64){
-  if(seen.has(current.pid)||current.pid===process.pid||current.parentPid<=1)return null;
+  if(seen.has(current.pid)||current.pid===1||harnessAncestors.has(current.pid))return null;
   seen.add(current.pid);chain.push(current);
   if(observedOwnedProcesses.get(current.pid)?.start===current.start)return null;
   const baseline=baselineReadableProcesses.get(current.pid);
-  if(baseline&&baseline.start===current.start&&baseline.parentPid===current.parentPid){
+  if(baseline&&baseline.start===current.start&&baseline.parentPid===current.parentPid&&baseline.uid===current.uid){
    // Re-read every link to reject PID reuse or a reparent during qualification.
-   for(const link of chain){const fresh=await processIdentity(link.pid);if(fresh.start!==link.start||fresh.parentPid!==link.parentPid)return null;}
+   for(const link of chain){const fresh=await processIdentity(link.pid);if(fresh.start!==link.start||fresh.parentPid!==link.parentPid||fresh.uid!==link.uid)return null;}
    return chain;
   }
+  if(current.parentPid<=1)return null;
   const parent=await processIdentity(current.parentPid);
   if(Number(parent.start)>Number(current.start))return null;
   current=parent;
@@ -132,19 +133,26 @@ async function census({captureDeniedBaseline=false}={}){
  const rows=[];
  for(const pid of await readdir('/proc')){
   if(!/^\d+$/.test(pid)||Number(pid)===process.pid)continue;
-  let identity,owned=false;
-  try{const path=`/proc/${pid}`;if((await stat(path)).uid!==process.getuid())continue;
+  let identity,owned=false,uid;
+  try{const path=`/proc/${pid}`;uid=(await stat(path)).uid;
    identity=await processIdentity(pid);assert(/^\d+$/.test(identity.start));
+   if(identity.uid!==process.getuid()){
+    if(captureDeniedBaseline&&identity.pid!==1&&!harnessAncestors.has(identity.pid))baselineReadableProcesses.set(identity.pid,identity);
+    continue;
+   }
    owned=(await readFile(path+'/environ')).toString().split('\0').includes('AGENT_BROWSER_HOME='+agentHome);
-   if(!owned){if(captureDeniedBaseline)baselineReadableProcesses.set(identity.pid,identity);continue;}
+   if(!owned){if(captureDeniedBaseline&&identity.pid!==1&&!harnessAncestors.has(identity.pid))baselineReadableProcesses.set(identity.pid,identity);continue;}
    observedOwnedProcesses.set(identity.pid,identity);
    rows.push({...identity,executable:await realpath(path+'/exe')});
   }catch(error){
    if(['ENOENT','ESRCH'].includes(error.code))continue;
+   // A positively different UID is outside this fixture's process custody.
+   // If its identity is unreadable, omit it as an ancestry anchor.
+   if(uid!==undefined&&uid!==process.getuid()&&['EACCES','EPERM'].includes(error.code))continue;
    if(['EACCES','EPERM'].includes(error.code)&&identity&&!owned){
     if(captureDeniedBaseline){baselineDeniedProcesses.set(identity.pid,identity);continue;}
     const prior=baselineDeniedProcesses.get(identity.pid);
-    if(prior&&prior.start===identity.start&&prior.parentPid===identity.parentPid)continue;
+    if(prior&&prior.start===identity.start&&prior.parentPid===identity.parentPid&&prior.uid===identity.uid)continue;
     const chain=await foreignDeniedAncestry(identity).catch(()=>null);
     if(chain){cleanup.foreignDeniedAncestry??=[];cleanup.foreignDeniedAncestry.push(chain);continue;}
    }
@@ -152,6 +160,29 @@ async function census({captureDeniedBaseline=false}={}){
   }
  }
  return rows;
+}
+
+async function exactOwnedIdentity(row){
+ const path=`/proc/${row.pid}`;
+ try{
+  if((await stat(path)).uid!==process.getuid())return null;
+  const identity=await processIdentity(row.pid);
+  if(identity.start!==row.start)return null;
+  if(!(await readFile(path+'/environ')).toString().split('\0').includes('AGENT_BROWSER_HOME='+agentHome))return null;
+  if(await realpath(path+'/exe')!==row.executable)return null;
+  const confirmed=await processIdentity(row.pid);
+  return confirmed.start===row.start?confirmed:null;
+ }catch(error){if(['ENOENT','ESRCH'].includes(error.code))return null;throw error;}
+}
+async function settledCensus(){
+ const deadline=Date.now()+10000;
+ while(true){
+  try{return await census();}
+  catch(error){if(!['EACCES','EPERM','ENOENT','ESRCH'].includes(error.code)||Date.now()>=deadline)throw error;
+   cleanup.censusSettling??=[];cleanup.censusSettling.push(safeError(error));
+   await new Promise(resolve=>setTimeout(resolve,250));
+  }
+ }
 }
 
 async function send(method,params){
@@ -188,10 +219,29 @@ function startWatch(id){
 }
 
 try{
- step='baseline-process-census';await census({captureDeniedBaseline:true});await save('baseline-denied-processes.json',[...baselineDeniedProcesses.values()]);await save('baseline-readable-processes.json',[...baselineReadableProcesses.values()]);
+ step='baseline-process-census';
+ for(let current=await processIdentity(process.pid),depth=0;current.parentPid>1&&depth<64;depth++){harnessAncestors.add(current.parentPid);current=await processIdentity(current.parentPid);}
+ await census({captureDeniedBaseline:true});await save('baseline-denied-processes.json',[...baselineDeniedProcesses.values()]);await save('baseline-readable-processes.json',[...baselineReadableProcesses.values()]);
  step='private-auth-state';
  const authState=process.env.HOSTED_SMOKE_AUTH_STATE;
- if(authState){assert(isAbsolute(authState));assert.equal((await stat(authState)).mode&0o077,0,'Auth state must be private');}
+ if(authState){
+  assert(isAbsolute(authState));assert.equal((await stat(authState)).mode&0o077,0,'Auth state must be private');
+  step='native-auth-preflight';
+  const storage=JSON.parse(await readFile(authState,'utf8')),nativeUrl=new URL(nativeOrigin),now=Date.now()/1000;
+  const cookies=(storage.cookies??[]).filter(cookie=>{
+   const domain=String(cookie.domain??'').toLowerCase(),host=nativeUrl.hostname.toLowerCase();
+   const domainMatch=domain.startsWith('.')?(host===domain.slice(1)||host.endsWith(domain)):host===domain;
+   return domainMatch&&cookie.path==='/'&&(cookie.expires===-1||cookie.expires>now)&&typeof cookie.name==='string'&&typeof cookie.value==='string'&&!/[\r\n;]/.test(cookie.name+cookie.value);
+  }).map(cookie=>cookie.name+'='+cookie.value).join('; ');
+  let result;
+  try{result=await fetch(nativeOrigin+'/',{method:'GET',headers:cookies?{cookie:cookies}:{},redirect:'manual',signal:AbortSignal.timeout(10000)});}
+  catch{throw Object.assign(Error('Native authentication preflight requires operator readback'),{code:'fixture_auth_preflight_required'});}
+  await result.body?.cancel();
+  let accepted=result.status>=200&&result.status<300;
+  if(result.status>=300&&result.status<400){const location=result.headers.get('location');if(location){try{accepted=new URL(location,nativeOrigin).origin===nativeOrigin;}catch{accepted=false;}}}
+  await save('auth-preflight.json',{method:'GET',status:result.status,accepted,matchedCookieCount:cookies?cookies.split('; ').length:0});
+  if(!accepted)throw Object.assign(Error('Refresh private Native QA authentication before acquiring a fixture assignment'),{code:'fixture_auth_preflight_required'});
+ }
  step='connect-native';remote=await connectRemoteView({expectedInstallationId:installationId,embedOrigin:appOrigin,publicOrigin:nativeOrigin,...(process.env.HOSTED_SMOKE_NATIVE_SOCKET?{socketPath:process.env.HOSTED_SMOKE_NATIVE_SOCKET}:{})});
  baseline=await remote.inventory();await save('baseline.json',baseline);
  broker=await startScopedBroker();env.AGENT_BROWSER_REMOTE_VIEW_ORIGIN=`http://127.0.0.1:${broker.address().port}`;
@@ -245,7 +295,7 @@ finally{
  if(task?.taskId&&!taskCloseDispatched)await clean('close-task',async()=>{taskCloseDispatched=true;await workflow('browser_close',{taskId:task.taskId});taskClosed=true;});
  await clean('close-service',async()=>{await service?.close();});
  await clean('close-mcp',async()=>{await client?.close();});
- await clean('owned-process-cleanup',async()=>{cleanup.processesBefore=await census();for(const row of cleanup.processesBefore){const current=(await census()).find(p=>p.pid===row.pid&&p.start===row.start&&p.executable===row.executable);if(current)process.kill(row.pid,'SIGTERM');}await new Promise(resolve=>setTimeout(resolve,1000));cleanup.processesAfter=await census();assert.equal(cleanup.processesAfter.length,0,'Owned fixture processes remain');cleanup.processesClear=true;});
+ await clean('owned-process-cleanup',async()=>{cleanup.processesBefore=await settledCensus();for(const row of cleanup.processesBefore){const current=await exactOwnedIdentity(row);if(current)process.kill(row.pid,'SIGTERM');}await new Promise(resolve=>setTimeout(resolve,1000));cleanup.processesAfter=await settledCensus();assert.equal(cleanup.processesAfter.length,0,'Owned fixture processes remain');cleanup.processesClear=true;});
  if(remote&&baseline)await clean('assignment-cleanup',async()=>{
   const afterStop=await remote.inventory();
   for(const binding of acquired){assert(!baseline.assignments.some(a=>a.assignmentId===binding.assignmentId));assert.equal(cleanup.processesClear,true,'Fresh process cleanup proof is required before release');if(afterStop.assignments.some(a=>a.assignmentId===binding.assignmentId&&a.state==='active')){const current=await remote.observe(binding);assert.equal(current.generation,binding.generation);await remote.release(current);cleanup.released.push({assignmentId:binding.assignmentId,generation:binding.generation});}}

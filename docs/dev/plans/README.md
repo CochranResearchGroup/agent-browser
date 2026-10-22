@@ -1,6 +1,6 @@
 # Active plan index
 
-[P265 hosted launch](0265-2026-10-22-hosted-launch.md), #348; first dependency provider for #347.
+[P265 hosted launch](0265-2026-10-22-hosted-launch.md), #348; closed with source-qualified hosted launch and real Native viewer acceptance. #347 remains open.
 
 [P264 missing browser selection](0264-2026-10-21-missing-browser-selection.md), #344; bounded context projection repair under #68.
 

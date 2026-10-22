@@ -1,6 +1,6 @@
 # Runbook
 
-[P265](docs/dev/plans/0265-2026-10-22-hosted-launch.md), #348, is in progress on platform/hosted-launch-348. No production effects.
+[P265](docs/dev/plans/0265-2026-10-22-hosted-launch.md), #348, is source-qualified on platform/hosted-launch-348. Provider PR359 precedes Bots PR172; actual Native fixture cleanup passed. No production publication.
 
 [P264](docs/dev/plans/0264-2026-10-21-missing-browser-selection.md), #344, owns the bounded missing-browser evidence repair. No runtime publication.
 
