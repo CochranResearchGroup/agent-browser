@@ -750,11 +750,6 @@ mod tests {
     use super::*;
     #[test]
     fn configured_runtime_wrapper_dispatches_app_attachment_without_provider_io() {
-        let directory = std::env::temp_dir().join(format!(
-            "agent-browser-attachment-dispatch-{}",
-            uuid::Uuid::new_v4()
-        ));
-        std::fs::create_dir_all(&directory).unwrap();
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let endpoint = format!("http://{}", listener.local_addr().unwrap());
@@ -766,7 +761,11 @@ mod tests {
             RemoteViewApplicationHttp::new(&endpoint, Duration::from_secs(1)).unwrap(),
         )
         .unwrap();
-        let store = BrowserSessionSqliteStore::open(&directory).unwrap();
+        let store = BrowserSessionSqliteStore::launch_custody_fixture(
+            rusqlite::Connection::open_in_memory().unwrap(),
+            true,
+        )
+        .unwrap();
         let mut effects = RuntimeSessionEffects::Remote(Box::new(
             RemoteViewSessionEffects::new(local, adapter, store, vec![], || {
                 uuid::Uuid::new_v4().to_string()
@@ -829,7 +828,6 @@ mod tests {
             "browser_attachment_identity_invalid"
         );
         drop(effects);
-        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
