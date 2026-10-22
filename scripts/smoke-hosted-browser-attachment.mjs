@@ -20,6 +20,7 @@ import {isAbsolute,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {createMcpStdioClient,runCli,httpJsonResult} from './smoke-utils.js';
+import {appProcessOwned,privateProfileReferenced} from './hosted-process-ownership.mjs';
 import {qualifyHostedBrowserControl} from './smoke-hosted-browser-control.mjs';
 
 const required=name=>{const value=process.env[name];assert(value,`Missing ${name}`);return value;};
@@ -49,6 +50,7 @@ const require=createRequire(join(botsRoot,'package.json')),{chromium}=require('p
 let remote,baseline,broker,service,client,viewer,watcher,task,appBrowser,fixtureSite,appObserver,uiHandoffId,uiTakeoverDispatched=false,uiReturnDispatched=false,uiControlSettled=true,taskClosed=false,taskCloseDispatched=false,ambiguous=false,passed=false;
 const borrowedTasks=[],closedBorrowedTasks=new Set();
 const acquired=[],cleanup={errors:[],retainedEvidence:evidence,processesBefore:[],processesAfter:[],released:[]};
+let appRootProof=null;const appOwnedProcesses=new Map();
 let step='preflight';
 const errorCode=error=>error?.code||error?.name||'Error';
 function safeError(error){
@@ -63,8 +65,25 @@ function safeError(error){
 const baselineDeniedProcesses=new Map(),baselineReadableProcesses=new Map(),observedOwnedProcesses=new Map(),harnessAncestors=new Set([process.pid]);
 async function processIdentity(pid){
  const fields=(await readFile(`/proc/${pid}/stat`,'utf8')).split(')').at(-1).trim().split(/\s+/);
- return {pid:Number(pid),start:fields[19],parentPid:Number(fields[1]),uid:(await stat(`/proc/${pid}`)).uid};
+ return {pid:Number(pid),start:fields[19],parentPid:Number(fields[1]),processGroup:Number(fields[2]),session:Number(fields[3]),uid:(await stat(`/proc/${pid}`)).uid};
 }
+async function appDescendantAncestry(identity){
+ if(!appRootProof)return false;
+ const chain=[],seen=new Set();let current=identity;
+ while(current&&chain.length<64){
+  if(seen.has(current.pid)||harnessAncestors.has(current.pid)||current.uid!==appRootProof.uid)return false;
+  seen.add(current.pid);chain.push(current);
+  if(appProcessOwned(current,appRootProof,appOwnedProcesses)){
+   for(const link of chain){const fresh=await processIdentity(link.pid);if(fresh.start!==link.start||fresh.parentPid!==link.parentPid||fresh.uid!==link.uid)return false;}
+   return true;
+  }
+  if(current.parentPid<=1)return false;
+  const parent=await processIdentity(current.parentPid);if(BigInt(parent.start)>BigInt(current.start))return false;
+  current=parent;
+ }
+ return false;
+}
+
 async function foreignDeniedAncestry(identity){
  const chain=[],seen=new Set();let current=identity;
  while(current&&chain.length<64){
@@ -144,7 +163,9 @@ async function census({captureDeniedBaseline=false}={}){
     if(captureDeniedBaseline&&identity.pid!==1&&!harnessAncestors.has(identity.pid))baselineReadableProcesses.set(identity.pid,identity);
     continue;
    }
-   owned=(await readFile(path+'/environ')).toString().split('\0').includes('AGENT_BROWSER_HOME='+agentHome);
+   owned=appProcessOwned(identity,appRootProof,appOwnedProcesses)||await appDescendantAncestry(identity);
+   if(owned){const executable=await realpath(path+'/exe');appOwnedProcesses.set(identity.pid,{...identity,executable});}
+   else owned=(await readFile(path+'/environ')).toString().split('\0').includes('AGENT_BROWSER_HOME='+agentHome);
    if(!owned){if(captureDeniedBaseline&&identity.pid!==1&&!harnessAncestors.has(identity.pid))baselineReadableProcesses.set(identity.pid,identity);continue;}
    observedOwnedProcesses.set(identity.pid,identity);
    rows.push({...identity,executable:await realpath(path+'/exe')});
@@ -172,7 +193,7 @@ async function exactOwnedIdentity(row){
   if((await stat(path)).uid!==process.getuid())return null;
   const identity=await processIdentity(row.pid);
   if(identity.start!==row.start)return null;
-  if(!(await readFile(path+'/environ')).toString().split('\0').includes('AGENT_BROWSER_HOME='+agentHome))return null;
+  if(!appProcessOwned(identity,appRootProof,appOwnedProcesses)&&!(await readFile(path+'/environ')).toString().split('\0').includes('AGENT_BROWSER_HOME='+agentHome))return null;
   if(await realpath(path+'/exe')!==row.executable)return null;
   const confirmed=await processIdentity(row.pid);
   return confirmed.start===row.start?confirmed:null;
@@ -187,6 +208,26 @@ async function settledCensus(){
    await new Promise(resolve=>setTimeout(resolve,250));
   }
  }
+}
+
+async function appAbsenceFence(){
+ if(!appRootProof)return;
+ await save('app-process-observed.json',[...appOwnedProcesses.values()]);
+ // Kernel absence, not merely a missing env marker or a recycled PID.
+ for(const row of appOwnedProcesses.values()){
+  try{await processIdentity(row.pid);throw Error('fixture_owned_process_not_absent');}
+  catch(error){if(!['ENOENT','ESRCH'].includes(error.code))throw error;}
+ }
+ const references=[];
+ for(const name of await readdir('/proc')){
+  if(!/^\d+$/.test(name)||Number(name)===process.pid)continue;
+  try{const identity=await processIdentity(name);if(identity.uid!==process.getuid())continue;
+   const cmdline=await readFile(`/proc/${name}/cmdline`,'utf8');
+   if(privateProfileReferenced(cmdline,appRootProof.profilePath))references.push(identity);
+  }catch(error){if(!['ENOENT','ESRCH'].includes(error.code))throw error;}
+ }
+ cleanup.appProfileReferences=references;await save('app-process-absence.json',{root:appRootProof,observed:[...appOwnedProcesses.values()],profileReferences:references,absent:references.length===0});
+ assert.equal(references.length,0,'Unqualified private profile process reference blocks release');
 }
 
 async function send(method,params){
@@ -262,8 +303,16 @@ try{
  const html='<!doctype html><title>App-owned attachment synthetic marker</title><body style="margin:0;background:#165dcc"><div style="height:75vh;background:#ff00aa;color:white;font:48px sans-serif">ATTACHMENT SYNTHETIC MARKER</div><input id="draft"><input id="control"><span id="peer">PREEXISTING PEER</span></body>';
  fixtureSite=createServer((req,res)=>{res.writeHead(200,{'content-type':'text/html'});res.end(html);});await new Promise(resolve=>fixtureSite.listen(0,'127.0.0.1',resolve));
  const site='http://127.0.0.1:'+fixtureSite.address().port;
- step='app-owned-browser-launch';appBrowser=spawn(chrome,[`--user-data-dir=${profilePath}`,'--no-first-run','--no-default-browser-check','--password-store=basic','--remote-debugging-address=127.0.0.1','--remote-debugging-port=0',site+'/primary'],{env:{...env,...launch.environment},stdio:'ignore'});
+ step='app-owned-browser-launch';appBrowser=spawn(chrome,[`--user-data-dir=${profilePath}`,'--no-first-run','--no-default-browser-check','--password-store=basic','--remote-debugging-address=127.0.0.1','--remote-debugging-port=0',site+'/primary'],{env:{...env,...launch.environment,AGENT_BROWSER_HOME:agentHome},detached:true,stdio:'ignore'});
  appBrowser.on('error',()=>{ambiguous=true;});
+ await once(appBrowser,'spawn');
+ appRootProof={...await processIdentity(appBrowser.pid),executable:await realpath(`/proc/${appBrowser.pid}/exe`),profilePath};
+ appOwnedProcesses.set(appRootProof.pid,appRootProof);await save('app-process-root-proof.json',appRootProof);
+ assert.equal(appRootProof.executable,chrome,'App root must be the reviewed Chrome executable');
+ assert.equal(appRootProof.session,appRootProof.pid);assert.equal(appRootProof.processGroup,appRootProof.pid);assert.equal(appRootProof.uid,process.getuid());
+ assert(privateProfileReferenced(await readFile(`/proc/${appBrowser.pid}/cmdline`,'utf8'),profilePath));
+ await save('native-environment-override-keys.json',Object.keys(launch.environment).sort());
+ await census();await save('app-process-observed.json',[...appOwnedProcesses.values()]);
  const deadline=Date.now()+30000;let active;
  while(Date.now()<deadline){try{active=(await readFile(join(profilePath,'DevToolsActivePort'),'utf8')).trim().split('\n');if(active.length===2)break;}catch(error){if(error.code!=='ENOENT')throw error;}if(appBrowser.exitCode!==null)throw Error('App browser exited before CDP readiness');await new Promise(resolve=>setTimeout(resolve,100));}
  assert(active?.length===2,'App browser CDP endpoint must be observed');
@@ -293,7 +342,7 @@ try{
  // must never acquire a replacement assignment or accept process/CDP from HTTP.
  const botsStateDir=join(root,'bots-state');await mkdir(botsStateDir,{mode:0o700});
  const ownedFor=owner=>({profile:{profileId:'borrowed-profile',profilePath:original.profilePath,botId:owner.id},browser:{pid:original.pid,startTimeTicks:original.start,executable:original.executablePath}});
- await writeFile(join(botsStateDir,'state.json'),JSON.stringify({bots:[bot,second],desktops:Object.fromEntries([bot,second].map(owner=>[owner.id,{binding,ownedProfiles:{'stealthcdp-chromium':ownedFor(owner)}}]))}),{mode:0o600});
+ await writeFile(join(botsStateDir,'state.json'),JSON.stringify({bots:[bot,second],submissions:{},sessionRequests:{},desktops:Object.fromEntries([bot,second].map(owner=>[owner.id,{binding,ownedProfiles:{'stealthcdp-chromium':ownedFor(owner)}}]))}),{mode:0o600});
  const native={status:async()=>({connected:true,activity:'ready',turnId:null,requests:[]}),historyPage:async()=>({messages:[],nextCursor:null})};
  const observedAttachments=[];
  step='create-actual-bots-consumer';
@@ -345,8 +394,15 @@ try{
  // Native routes, authentication and pixels remain the real provider's work.
  await page.route(appOrigin+'/**',async route=>{const request=route.request(),url=new URL(request.url()),headers={...request.headers(),host:new URL(service.url).host};if(headers.origin===appOrigin)headers.origin=service.url;const response=await route.fetch({url:service.url+url.pathname+url.search,headers});await route.fulfill({response});});
  uiHandoffId=new URL(opened.handoffUrl).pathname.split('/').at(-1);
+ const chatReady=page.waitForResponse(response=>new URL(response.url()).pathname===`/api/bots/${bot.id}/chat`,{timeout:15000});
+ const statusReady=page.waitForResponse(response=>new URL(response.url()).pathname===`/api/bots/${bot.id}/status`,{timeout:15000});
  await page.goto(opened.handoffUrl,{waitUntil:'domcontentloaded',timeout:30000});
+ const [chatResponse,statusResponse]=await Promise.all([chatReady,statusReady]);assert.equal(chatResponse.status(),200);assert.equal(statusResponse.status(),200);
+ const chatState=await chatResponse.json(),peerStatus=await statusResponse.json();assert.equal(chatState.threadId,bot.threadId);assert(Array.isArray(chatState.messages));assert.equal(peerStatus.connected,true);
+ await save('synthetic-chat-readiness.json',{chatStatus:200,statusStatus:200,threadMatched:true,connected:true});
  await page.locator('#bot-name').filter({hasText:bot.name}).waitFor({timeout:15000});
+ await census();await save('app-process-observed.json',[...appOwnedProcesses.values()]);
+ assert.equal(await page.locator('#error').isVisible(),false,'Synthetic peer chat must not be degraded');
  let rendered=false,canvas=null;const renderDeadline=Date.now()+45000;
  while(Date.now()<renderDeadline&&!rendered){
   for(const frame of page.frames().filter(f=>f.url().startsWith(nativeOrigin+'/'))){
@@ -407,7 +463,7 @@ finally{
  await clean('close-synthetic-site',async()=>{if(fixtureSite){fixtureSite.closeAllConnections();await new Promise(resolve=>fixtureSite.close(resolve));}});
  await clean('close-service',async()=>{await service?.close();});
  await clean('close-mcp',async()=>{await client?.close();});
- await clean('owned-process-cleanup',async()=>{cleanup.processesBefore=await settledCensus();for(const row of cleanup.processesBefore){const current=await exactOwnedIdentity(row);if(current)process.kill(row.pid,'SIGTERM');}await new Promise(resolve=>setTimeout(resolve,1000));cleanup.processesAfter=await settledCensus();assert.equal(cleanup.processesAfter.length,0,'Owned fixture processes remain');cleanup.processesClear=true;});
+ await clean('owned-process-cleanup',async()=>{cleanup.processesBefore=await settledCensus();for(const row of cleanup.processesBefore){const current=await exactOwnedIdentity(row);if(current)process.kill(row.pid,'SIGTERM');}await new Promise(resolve=>setTimeout(resolve,1000));cleanup.processesAfter=await settledCensus();assert.equal(cleanup.processesAfter.length,0,'Owned fixture processes remain');await appAbsenceFence();cleanup.processesClear=true;});
  if(remote&&baseline)await clean('assignment-cleanup',async()=>{
   const afterStop=await remote.inventory();
   for(const binding of acquired){assert(!baseline.assignments.some(a=>a.assignmentId===binding.assignmentId));assert.equal(cleanup.processesClear,true,'Fresh process cleanup proof is required before release');if(afterStop.assignments.some(a=>a.assignmentId===binding.assignmentId&&a.state==='active')){const current=await remote.observe(binding);assert.equal(current.generation,binding.generation);await remote.release(current);cleanup.released.push({assignmentId:binding.assignmentId,generation:binding.generation});}}
