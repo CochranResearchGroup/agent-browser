@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import {execFileSync,spawn} from 'node:child_process';
 import {createHash,randomUUID} from 'node:crypto';
 import {once} from 'node:events';
+import {performance} from 'node:perf_hooks';
 import {createServer} from 'node:http';
 import {mkdir,mkdtemp,readFile,readdir,realpath,stat,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -29,6 +30,8 @@ import {qualifyHostedBrowserReconnect} from './smoke-hosted-browser-reconnect.mj
 import {qualifyHostedBrowserPolicy} from './smoke-hosted-browser-policy.mjs';
 
 let coldPixels;
+const stageTimings=[];
+async function timedStage(stage,operation){const start=performance.now();let outcome='failed_or_unknown';try{const result=await operation();outcome='response';return result;}finally{stageTimings.push({stage,startedMs:start,durationMs:performance.now()-start,outcome});}}
 const required=name=>{const value=process.env[name];assert(value,`Missing ${name}`);return value;};
 async function absolute(name){const value=required(name);assert(isAbsolute(value),`${name} must be absolute`);return realpath(value);}
 function origin(name){const value=required(name),url=new URL(value);assert(url.protocol==='https:'&&url.origin===value,`${name} must be canonical HTTPS`);return value;}
@@ -241,7 +244,8 @@ async function workflow(name,args){
   task=data;await save('browser-open-identity.json',Object.fromEntries(['taskId','browserId','profileId','tabId','host'].filter(k=>k in data).map(k=>[k,data[k]])));
  }return data;
 }
-async function readTask(id){const response=await runCli(context,['--json','mcp','host-task',id]);const value=JSON.parse(response.stdout);assert.equal(value.success,true);return value.data;}
+async function readTask(id){return timedStage('cli.task_metadata',async()=>{const response=await runCli(context,['--json','mcp','host-task',id]);const value=JSON.parse(response.stdout);assert.equal(value.success,true);return value.data;});}
+async function publicWorkflow(name,args){return timedStage('persistent_mcp.'+name+(args.operation?'.'+args.operation:''),async()=>{const reply=await send('tools/call',{name,arguments:args});const value=reply.structuredContent??JSON.parse(reply.content.find(c=>c.type==='text').text);if(reply.isError||value.success===false)throw Object.assign(Error(value.error?.message??JSON.stringify(value.error??value)),{code:value.error?.code??'workflow_rejected'});return value.data??value;});}
 function startWatch(id){
  watcher=spawn(binary,['--json','mcp','watch-host-task',id],{env,stdio:['ignore','pipe','pipe']});watcher.stderr.resume();
  const queue=[];let buffer='',waiting=null,failure=null;
@@ -286,6 +290,7 @@ try{
   if(!accepted)throw Object.assign(Error('Refresh private Native QA authentication before acquiring a fixture assignment'),{code:'fixture_auth_preflight_required'});
  }
  step='connect-native';remote=await connectRemoteView({expectedInstallationId:installationId,embedOrigin:appOrigin,publicOrigin:nativeOrigin,...(process.env.HOSTED_SMOKE_NATIVE_SOCKET?{socketPath:process.env.HOSTED_SMOKE_NATIVE_SOCKET}:{})});
+ for(const name of ['observe','controlStatus','takeControl','releaseControl','acquireSelectiveControl','replaceSelectiveControl','releaseSelectiveControl'])if(typeof remote[name]==='function'){const original=remote[name].bind(remote);remote[name]=(...args)=>timedStage('native.'+name,()=>original(...args));}
  baseline=await remote.inventory();await save('baseline.json',baseline);
  broker=await startScopedBroker();env.AGENT_BROWSER_REMOTE_VIEW_ORIGIN=`http://127.0.0.1:${broker.address().port}`;
  await save('inputs.json',{binary,binarySha256:createHash('sha256').update(await readFile(binary)).digest('hex'),chrome,chromeSha256:createHash('sha256').update(await readFile(chrome)).digest('hex'),botsRoot,botsSourceCommit,installationId,appOrigin,nativeOrigin,agentHome,socketDir});
@@ -346,7 +351,7 @@ try{
  const native={status:async()=>({connected:true,activity:'ready',turnId:null,requests:[]}),historyPage:async()=>({messages:[],nextCursor:null})};
  const observedAttachments=[];
  step='create-actual-bots-consumer';
- service=await createBotService({bots:[bot,second],native,stateDir:botsStateDir,desktops,publicOrigin:appOrigin,hostedAgentBrowser:{hostId:'bots',publicOrigin:appOrigin,controlEnabled:true,workflow,readTask,
+ service=await createBotService({bots:[bot,second],native,stateDir:botsStateDir,desktops,publicOrigin:appOrigin,hostedAgentBrowser:{hostId:'bots',publicOrigin:appOrigin,controlEnabled:true,workflow,readTask:async id=>(await publicWorkflow('browser_reconnect',{taskId:id,operation:'status'})).host,
   observeAttachment:async input=>{
    const owner=[bot,second].find(owner=>'bot:'+owner.id===input.participantId&&owner.threadId===input.sessionId);
    assert(owner,'Trusted attachment observation must address a prepared fixture participant');
@@ -435,12 +440,6 @@ try{
  await save('bots-native-control.json',{before:controlReceipt(beforeUi),human:controlReceipt(human),returned:controlReceipt(returned),passed:true});
  // Start after all control transitions so the remaining event is scoped detach.
  if(process.env.HOSTED_SMOKE_CONTINUITY_REQUIRED==='1'){
-  const publicWorkflow=async(name,args)=>{
-   const reply=await send('tools/call',{name,arguments:args});
-   const value=reply.structuredContent??JSON.parse(reply.content.find(c=>c.type==='text').text);
-   if(reply.isError||value.success===false)throw Object.assign(Error(value.error?.message??JSON.stringify(value.error??value)),{code:value.error?.code??'workflow_rejected'});
-   return value.data??value;
-  };
   step='explicit-host-reconnect';await qualifyHostedBrowserReconnect({workflow:publicWorkflow,task:opened,save,syntheticOnly:true,nativeControl:{status:consumerControl,change:async body=>{
    uiControlSettled=false;
    try{
@@ -472,6 +471,7 @@ try{
 }catch(error){if(!uiControlSettled)ambiguous=true;await save('failure.json',{...safeError(error),ambiguous});process.exitCode=1;}
 finally{
  async function clean(name,action){try{await action();}catch(error){cleanup.errors.push({...safeError(error),step:name});process.exitCode=1;}}
+ await clean('record-stage-timings',()=>save('stage-timings.json',{clock:'performance.now monotonic milliseconds',samples:stageTimings}));
  if(coldPixels)await clean('record-cold-pixel-evidence',()=>save('cold-first-pixels.json',coldPixels.receipt()));
  if(uiHandoffId&&uiTakeoverDispatched&&!uiReturnDispatched)await clean('return-known-native-control',async()=>{
   const status=await fetch(service.url+`/api/agent-browser/handoffs/${uiHandoffId}/control`,{signal:AbortSignal.timeout(15000)});assert.equal(status.status,200);const current=await status.json();
