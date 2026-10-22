@@ -7302,113 +7302,64 @@ Usage:
   agent-browser mcp read <uri>
   agent-browser --json mcp host-task <task-id>
   agent-browser --json mcp watch-host-task <task-id>
+  agent-browser --json mcp host-control TASK OP [epoch actor reason request-id]
+  agent-browser --json mcp host-reconnect TASK OP [options-json]
+  agent-browser --json mcp host-policy '<JSON request>'
 
 Commands:
-  serve                 Run the MCP stdio server
-  resources             List explicit read-only diagnostic resources
-  read                  Read one diagnostic resource as JSON
-  host-control TASK OP  Status/view/takeover/return/override/reconcile hosted control
-                        Effects require current epoch, actor and reason; return
-                        freshly observes the same page and never replays effects.
-  host-reconnect TASK OP [JSON]
-                        Status/disconnect/reconnect/rebind/configure/reopen;
-                        changes require requestId and expectedRevision.
-  host-policy JSON      Optional task/app rules and scoped attributable override
-  host-task             Read compact hosted-task metadata without browser effects
-  watch-host-task       Emit initial/changed NDJSON; terminate process to disconnect
+  serve             Run the MCP server
+  resources/read    Discover/read diagnostic resources without browser launch
+  host-task         Read compact app task metadata
+  watch-host-task   Initial/changed NDJSON; reconnect gets a fresh snapshot
+  host-control      Status/view/takeover/return/override/reconcile
+  host-reconnect    Status/disconnect/reconnect/rebind/configure/reopen
+  host-policy       Optional app/task rules and attributable scoped override
 
 Default workflow tools (16):
-  browser_open          Open or reuse a task with profile, profileMode, taskKey and url
-  browser_navigate      Navigate the task's current page
-  browser_snapshot      Read the page and element references
+  browser_open          Create/reuse task and named or disposable profile
+  browser_navigate      Navigate current page
+  browser_snapshot      Read page and element references
   browser_click         Click an element
   browser_fill          Fill an input
-  browser_screenshot    Capture the current page
-  browser_tab           List, create, select or close only this task's tabs
-  browser_handoff       Get a ready HTTPS link to the native Remote View viewer
-  browser_continue      Continue the same task after human input
-  browser_close         End this task while preserving peers and profile data
-  browser_control       Explicit epoch-fenced human takeover/return; view never pauses
-  browser_reconnect     Explicit retained-target reconnect or opted-in loss reopen
-  browser_policy        Optional app defaults/task rules and scoped override
-  browser_artifact      Capture/download to an authorized local artifact handle
-  browser_command       Run an advanced page action with action and params
-  browser_discover      Load browser, playbook or diagnostic metadata
+  browser_screenshot    Capture current page
+  browser_tab           List/new/select/close task tabs; reuse tabKey for new
+  browser_handoff       Ready HTTPS native Remote View link
+  browser_continue      Observe same task after human input
+  browser_close         Close task; preserve peers/profile/borrowed process
+  browser_control       Explicit takeover/return; view never pauses
+  browser_reconnect     Explicit continuity and opted-in loss recovery
+  browser_policy        App defaults, task replacement/clear and override
+  browser_artifact      Screenshot/download to local handle; no publication
+  browser_command       Selected advanced action with params
+  browser_discover      Advanced browser/playbook/diagnostic schemas
 
-Workflow:
-  Use browser_open's taskId on subsequent page actions.
-  profileMode is persistent, existing or disposable; persistent is the default.
-  Reuse taskKey when retrying open; reuse tabKey when retrying tab creation.
-  Send the returned handoffUrl to a person, then continue with the same taskId.
-  Native Remote View owns the viewer and its authentication.
-  Configure AGENT_BROWSER_PUBLIC_ORIGIN in the process environment or ~/.agent-browser/.env for HTTPS handoffs.
-  Reconnect existing MCP clients after changing startup configuration.
-  browser_reconnect status is metadata-only. Changes require requestId and
-  expectedRevision; configure selects report_only (default) or reopen lossPolicy.
-  reconnect verifies retained process/Native without launch; rebind needs exact
-  desktopId/generation. Explicit reopen never replays history; borrowed reopen
-  needs fresh app attachment/desktop and never launches the app browser.
-  Unknown effects stay pending; human takeover remains held across reconnect.
-  If the original managed process is positively absent, rebind may save a ready
-  recoveryDesktop while state stays browser_lost and old binding stays unchanged.
-  Explicit agent-owned reopen must verify that target before new binding publish.
-  Live managed generation-changing rebind is unavailable; PID-reuse absence blocks.
-  Recovery intent is not physical relocation or proof of an active connection.
-  browser_policy status/set_app/set_task/clear_app/clear_task/override uses taskId;
-  changes require expectedRevision, actor, reason. Policy v1 deniedActions and
-  artifactDestinations are optional. Task rules replace app defaults; clear_task
-  restores them. Scoped override never bypasses human-control or peer custody.
-  browser_artifact takes taskId, kind screenshot/download, handle and relative
-  name; downloads need selector. Destinations must be canonical existing dirs.
-  Existing files, symlinks and traversal are refused. Results are local metadata,
-  publication=not_requested. Unrestricted tasks require no extra grant.
-  browser_open taskPolicy sets an explicit v1 task override before launch.
-  browser_close scope=task is default. Explicit scope=browser needs actor/reason,
-  refuses borrowed/peer browsers, and freshly observes the original process absent;
-  independently census child residue. Never retry an uncertain close effect.
-  Physical same-process relocation is unavailable pending Remote View #578;
-  metadata rebind does not move a browser. Keep the original profile/process.
-  Hosted browser_open attachment borrows an exact app process/profile/page.
-  Use profileMode=existing, profile and hostBinding; omit url. Attachment requires
-  version=1, process pid/startToken/executablePath, canonical profilePath,
-  full loopback cdpEndpoint, targetId and optional exact sharedWith recipients.
-  Native desktop/window and CDP process identity are verified before publication.
-  Missing capability never launches. Close detaches borrowed pages/processes;
-  task-created tabs remain scoped. Only the owning app changes sharing.
+Rules:
+  Use taskId on actions. Reuse taskKey on open; taskPolicy overrides app defaults.
+  Supply serviceName, agentName and taskName on browser_open.
+  profileMode: persistent (default), existing or disposable.
+  Hosted open: hostBinding v1, required/preferred placement; never silent fallback.
+  Attachment: existing profile, exact app process/profile/page; omit url.
+  Preserve borrowed pages/process; sharing needs explicit sharedWith recipients.
+  AGENT_BROWSER_HOSTS_FILE sets app origin/providerApplication/policyDefaults.
+  App owns hosted routing/capacity; Remote View owns desktop/viewer/authentication.
+  Standalone handoff: AGENT_BROWSER_PUBLIC_ORIGIN in env or ~/.agent-browser/.env.
+  Reconnect MCP clients after startup configuration changes.
+  Control: expectedEpoch, actor/reason; fresh observation on return; no auto-resume.
+  Reconnect: requestId/expectedRevision; report_only or reopen lossPolicy.
+  After proven loss, rebind saves recoveryDesktop; verified reopen changes binding.
+  Borrowed reopen needs fresh attachment; managed reopen needs agent/no pending.
+  Unknown effects stay pending, never replayed. Physical relocation is unsupported.
+  Policy v1: deniedActions/artifactDestinations; task replacement or clear_task.
+  Changes: expectedRevision/actor/reason. Override: exact task/action/requestId.
+  Unrestricted tasks need no grant. Artifacts: handle/relative name; download selector.
+  Refuse existing files/symlinks/traversal; publication remains explicit.
+  Close scope=browser needs actor/reason, no peers/borrowed custody; verify OS residue.
+  Watch DB/WAL every 250 ms, not provider polling; events have watchId/sequence.
+  Discover SiteGuide playbooks: prepare_login/validate_plan, verify_login, collect_posts.
+  Helpers keep secrets private; unknown delivery needs readback.
+  AGENT_BROWSER_SITEGUIDE_DIRECTORY selects guides. Retired authority tools are absent.
 
-  Hosted browser_open accepts hostBinding version=1, hostId, participantId,
-  sessionId and required/preferred placement with desktopId/generation.
-  AGENT_BROWSER_HOSTS_FILE supplies reviewed app origin/providerApplication;
-  configure both transport/runtime with the same Remote View application.
-  Hosted handoff uses the app's /agent-browser/handoff/<id> resolver.
-  Hosted runtimes leave spare-desktop growth and retirement to the app.
-  Required placement never falls back; preferred uses only listed alternatives.
-  Metadata watching uses local DB/WAL stamps every 250 ms, not provider polling.
-  Events have watchId/sequence; reconnect reads a new full snapshot.
-  Use browser_discover only when advanced metadata is needed.
-  category=playbooks exposes SiteGuide inspection and verify_login in browser_command.
-  Software login-playbook composes these routines with trusted shared auth-helper custody.
-  Installed hosted-auth-helper discovery keeps bearer material private; callerTaskId identifies Codex work.
-  The receiving browser task/profile/browser/tab is frozen separately; select configured account/source refs.
-  Login playbook reconcile:true reads back the same checkpoint without new credentials or input replay.
-  Independent principal/native safety releases capture; SiteGuide company verification still follows.
-  Verified clean failed login may retire as helper_attempt_released; attempted/unknown history stays.
-  Trusted untouched-input or independently empty protected-field proof needs native safety; no replay.
-  Exact current identifiers need no clear/retype; unknown prior delivery still requires readback.
-  browser_tab list observes owned popup children; login continuation verifies new destinations.
-  BILL and QBO starter SiteGuides share routines; reviewed controls configure private receiving.
-  prepare_login freezes controls; validate_plan rejects changed or stale evidence before input.
-  Login requires both checks; reviewedPlan resumes a reviewed change on the same helper action.
-  collect_posts bounds item/page/scroll reads and distinguishes verified no-results from failed extraction.
-  AGENT_BROWSER_SITEGUIDE_DIRECTORY selects reviewed guide JSON files for the MCP server.
-  Diagnostic and administrative effects use supported CLI/API operations.
-  Contract metadata reports the public mcpCatalog and per-adapter mcp.available.
-  Retired authority MCP operations and the legacy catalog are unavailable.
-  If browser_open is absent in your client, configure agent-browser mcp serve
-  and reconnect. Continue with the installed CLI while correcting integration.
-
-Examples:
-  agent-browser mcp serve
+Full schemas: tools/list or browser_discover. Operating contract:
   agent-browser mcp read agent-browser://operating-guide
 "##
         }
