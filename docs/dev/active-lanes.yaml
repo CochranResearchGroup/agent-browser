@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P266
+    product_lane: PL-PLATFORM
+    objective: One-call MCP manual non-CDP login on managed native desktop
+    plan: docs/dev/plans/0266-2026-10-22-manual-login.md
+    branch: fix/mcp-manual-login-357
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#357]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [CochranResearchGroup/agent-browser#349, P240]
+    reconciled_overlaps: ["Additive manual launch posture in canonical owner/runtime and MCP; preserve app placement, hosted attach and resource policies; no foreign worktree edits"]
+    validation_status: Installed isolated red confirmed; implementation in progress
+    updated_at: 2026-10-22
+
   - id: P265
     product_lane: PL-PLATFORM
     objective: Hosted browser launch and app-routed native handoff

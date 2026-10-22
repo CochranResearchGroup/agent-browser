@@ -109,6 +109,23 @@ output pipe otherwise exits on the next emitted event. Recorded browser state,
 viewer delivery, controller state and account authentication are separate;
 metadata-only reads leave unobserved readiness explicitly unverified.
 
+For human sign-in, call `browser_open` with `mode: "manual_login"`, a named
+persistent profile, and the login URL. For example:
+
+```json
+{"profile":"canvacli","profileMode":"persistent","mode":"manual_login","taskKey":"google-login","url":"https://accounts.google.com/","serviceName":"canvacli","agentName":"codex","taskName":"Google sign-in"}
+```
+
+This opens a headed window on the configured native Remote View desktop without
+CDP, a debugging port, or a debugging pipe. The same call returns `handoffUrl`
+and requires `operatorVisible.state: "ready"`. Reuse the task key to retain the
+login window. DOM/page automation and additional agent tabs are unavailable in
+this mode. The reported URL is the initial requested location (`urlObserved:
+false`); desktop readiness and profile continuity do not verify authentication.
+Use `browser_close` after sign-in, then reopen that same profile in the default
+`automation` mode. An active browser in the other mode produces an explicit
+conflict; it is never closed, replaced, or attached automatically.
+
 The default MCP catalog contains 12 workflow tools: `browser_open`, `browser_navigate`,
 `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
 `browser_handoff`, `browser_continue`, `browser_close`, `browser_command` and `browser_discover`.

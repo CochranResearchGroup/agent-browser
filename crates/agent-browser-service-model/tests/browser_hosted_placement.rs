@@ -105,6 +105,7 @@ impl BrowserSessionEffects for Effects {
 }
 fn catalog() -> BrowserProfileCatalog {
     let p = BrowserProfileCatalogEntry {
+        manual_login_url: None,
         id: "profile".into(),
         name: "Profile".into(),
         user_data_dir: "/fixture/profile".into(),

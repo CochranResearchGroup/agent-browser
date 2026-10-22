@@ -2794,7 +2794,7 @@ pub(crate) async fn resolve_cdp_url(input: &str) -> Result<String, String> {
 }
 
 #[cfg(target_os = "linux")]
-fn focus_x11_browser_window(pid: u32, display_name: &str) -> Result<Value, String> {
+pub(crate) fn focus_x11_browser_window(pid: u32, display_name: &str) -> Result<Value, String> {
     x11_focus::focus_window_for_pid(pid, display_name)
 }
 

@@ -29,6 +29,17 @@ async fn targets(browser: &ManagedBrowserInstance) -> Observation {
         ProcessObservation::Failed { .. } => return Observation::Unknown,
         ProcessObservation::Observed(_) => {}
     }
+    if browser.cdp_endpoint.is_empty() {
+        return match crate::native::browser_session_runtime::manual_browser_is_live(browser) {
+            Ok(true) => Observation::Live {
+                targets: json!({"targetInfos":[{"targetId":format!("manual-window:{}",browser.id),
+                    "type":"manual_window","title":"Manual login"}]}),
+                processes: BTreeSet::from([browser.pid]),
+            },
+            Ok(false) => Observation::Absent,
+            Err(_) => Observation::Unknown,
+        };
+    }
     let read = async {
         let endpoint = reqwest::Url::parse(&browser.cdp_endpoint).ok()?;
         if !matches!(endpoint.scheme(), "ws" | "wss")
@@ -214,7 +225,12 @@ fn publish(
     if published["id"] != browser.id || published["pid"].as_u64() != Some(u64::from(browser.pid)) {
         return;
     }
-    published["presence"] = json!({"state": presence, "source": if browser.desktop.is_some() { "remote-view-and-cdp" } else { "cdp" }});
+    published["presence"] = json!({"state": presence, "source":
+        if browser.cdp_endpoint.is_empty() { "remote-view-and-process" }
+        else if browser.desktop.is_some() { "remote-view-and-cdp" } else { "cdp" }});
+    if browser.cdp_endpoint.is_empty() {
+        published["mode"] = json!("manual_login");
+    }
     let targets = match observation {
         Observation::Live { targets, .. } => targets["targetInfos"].as_array(),
         _ => None,
@@ -244,9 +260,11 @@ fn publish(
             continue;
         }
         let target = targets.and_then(|targets| {
-            targets
-                .iter()
-                .find(|target| target["targetId"] == tab.target_id && target["type"] == "page")
+            targets.iter().find(|target| {
+                target["targetId"] == tab.target_id
+                    && (target["type"] == "page"
+                        || (browser.cdp_endpoint.is_empty() && target["type"] == "manual_window"))
+            })
         });
         let tab_presence = if presence == "live" && target.is_none() {
             "absent"

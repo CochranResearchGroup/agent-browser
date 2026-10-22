@@ -33,6 +33,7 @@ impl Fixture {
             catalog.profiles.insert(
                 id.into(),
                 BrowserProfileCatalogEntry {
+                    manual_login_url: None,
                     id: id.into(),
                     name: id.into(),
                     user_data_dir: fixture.root.join(id).to_string_lossy().into_owned(),
@@ -270,6 +271,13 @@ impl RemoteViewBrowserProcessEffects for Process {
         if matches!(self.mode, Mode::CompetingPublication) {
             competing_write(&self.root);
         }
+        if profile.manual_login_url.is_some() {
+            std::fs::write(
+                self.root.join("manual-launch-profile.json"),
+                serde_json::to_vec(profile).unwrap(),
+            )
+            .unwrap();
+        }
         let live_endpoint = self.root.join("live-cdp-endpoint.json");
         let live: Option<Value> = live_endpoint
             .exists()
@@ -290,10 +298,14 @@ impl RemoteViewBrowserProcessEffects for Process {
             }),
             browser_id: format!("browser:{}", profile.id),
             pid,
-            cdp_endpoint: live.as_ref().map_or_else(
-                || "http://127.0.0.1:9222".into(),
-                |value| value["endpoint"].as_str().unwrap().into(),
-            ),
+            cdp_endpoint: if profile.manual_login_url.is_some() {
+                String::new()
+            } else {
+                live.as_ref().map_or_else(
+                    || "http://127.0.0.1:9222".into(),
+                    |value| value["endpoint"].as_str().unwrap().into(),
+                )
+            },
             desktop: Some(RemoteViewFixedDesktop {
                 desktop_id: intent.assignment.desktop_id.clone(),
                 generation: intent.assignment.generation,
@@ -544,6 +556,7 @@ impl BrowserSessionEffects for Process {
         session: &str,
     ) -> Result<BrowserProfileCatalogEntry, String> {
         Ok(BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: allocation.into(),
             name: session.into(),
             user_data_dir: std::path::Path::new(&policy.user_data_root)

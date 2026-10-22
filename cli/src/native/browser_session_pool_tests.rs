@@ -4384,6 +4384,7 @@ fn native_overflow_wraps_after_restart_without_same_profile_advancing_cursor() {
         catalog.profiles.insert(
             id.into(),
             BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: id.into(),
                 name: id.into(),
                 user_data_dir: fixture.root.join(id).to_string_lossy().into_owned(),
@@ -7482,4 +7483,55 @@ fn ordinary_live_profile_ignores_mismatched_historical_launch_observation() {
         2,
         "recovery launches once after current absence"
     );
+}
+
+#[test]
+fn manual_login_preserves_posture_through_managed_owner_replay_and_conflict() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut host = host(&fixture, provider.clone(), calls.clone());
+    let command = serde_json::json!({"action":"browser_session_open", "sessionName":"Alice",
+        "profileId":"profile-a", "url":"https://accounts.google.com/", "manualLogin":true,
+        "activityAtMs":100, "serviceName":"fixture", "agentName":"fixture", "taskName":"Manual login"});
+    let first = host.handle_command(&command);
+    assert_eq!(first["success"], true, "{first}");
+    let launch: Value = serde_json::from_slice(
+        &std::fs::read(fixture.root.join("manual-launch-profile.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(launch["manualLoginUrl"], command["url"]);
+    let browser = host.state().browsers.values().next().unwrap();
+    assert!(browser.cdp_endpoint.is_empty());
+    let id = first["data"]["sessionId"].as_str().unwrap().to_owned();
+    assert_eq!(host.handle_command(&command)["data"]["sessionId"], id);
+    assert_eq!(calls.get(), 1, "same login task must not launch again");
+    for patch in [
+        serde_json::json!({"manualLogin":false}),
+        serde_json::json!({"sessionName":"Bob"}),
+    ] {
+        let mut incompatible = command.clone();
+        incompatible
+            .as_object_mut()
+            .unwrap()
+            .extend(patch.as_object().unwrap().clone());
+        let refused = host.handle_command(&incompatible);
+        assert_eq!(refused["success"], false, "{refused}");
+        assert_eq!(calls.get(), 1);
+    }
+    host.close_session(&id, SessionEndReason::ExplicitClose, 101)
+        .unwrap();
+    let mut automation = command.clone();
+    automation["manualLogin"] = false.into();
+    let reopened = host.handle_command(&automation);
+    assert_eq!(reopened["success"], true, "{reopened}");
+    assert!(!host
+        .state()
+        .browsers
+        .values()
+        .next()
+        .unwrap()
+        .cdp_endpoint
+        .is_empty());
+    assert_eq!(calls.get(), 2);
 }

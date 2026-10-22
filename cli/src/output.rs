@@ -7330,6 +7330,10 @@ Workflow:
   Reuse taskKey when retrying open; reuse tabKey when retrying tab creation.
   Send the returned handoffUrl to a person, then continue with the same taskId.
   Native Remote View owns the viewer and its authentication.
+  browser_open mode=manual_login opens a named persistent profile on the Native desktop
+  without CDP and returns its ready handoffUrl. Reuse taskKey for the same human login.
+  Close that task before reopening the preserved profile in default automation mode.
+  Manual mode rejects DOM actions and reports the requested URL with urlObserved=false.
   Configure AGENT_BROWSER_PUBLIC_ORIGIN for standalone HTTPS handoffs.
   Hosted browser_open accepts hostBinding version=1, hostId, participantId,
   sessionId and required/preferred placement with desktopId/generation.

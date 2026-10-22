@@ -17,6 +17,8 @@ use agent_browser_service_model::{
 };
 use serde_json::Value;
 
+mod manual;
+
 use super::action_runtime::runtime::DaemonState;
 use super::browser::{BrowserManager, WaitUntil};
 use super::cdp::chrome::LaunchOptions;
@@ -389,6 +391,7 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
         let user_data_dir = root.join(allocation_id);
         create_private_directory(&user_data_dir)?;
         Ok(BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: allocation_id.to_string(),
             name: allocation_id.to_string(),
             user_data_dir: user_data_dir.to_string_lossy().into_owned(),
@@ -1040,11 +1043,154 @@ fn run_browser_worker(
     mut config: BrowserManagerRuntimeConfig,
 ) {
     let mut browsers = HashMap::<String, DaemonState>::new();
+    let mut manual = manual::ManualBrowsers::default();
     let mut shared_browser_tabs = HashMap::<String, BTreeSet<String>>::new();
     let mut reconciled_targets = HashMap::<(String, String), String>::new();
     let mut next_browser_sequence = 0_u64;
     while let Ok(command) = receiver.recv() {
         match command {
+            BrowserRuntimeCommand::ReconcileProfile {
+                profile,
+                browser,
+                reply,
+                ..
+            } if profile.manual_login_url.is_some() => {
+                let result = browser
+                    .as_ref()
+                    .map_or(Ok(()), |browser| {
+                        if !manual::is_manual(browser) {
+                            return Err("browser_login_mode_conflict".into());
+                        }
+                        manual.verify(browser).and_then(|live| {
+                            if live {
+                                Ok(())
+                            } else {
+                                Err("manual_login_ended: close the login task before reopening"
+                                    .into())
+                            }
+                        })
+                    })
+                    .map(|()| None);
+                let _ = reply.send(result);
+            }
+            BrowserRuntimeCommand::Launch {
+                profile,
+                desktop,
+                environment,
+                recovery_browser,
+                reply,
+            } if profile.manual_login_url.is_some() => {
+                let result = (|| {
+                    if recovery_browser.is_some() {
+                        return Err("manual_login_recovery_requires_explicit_reopen".into());
+                    }
+                    let private =
+                        environment.ok_or("manual_login_requires_native_remote_desktop")?;
+                    let display = private
+                        .get("DISPLAY")
+                        .cloned()
+                        .ok_or("manual_login_display_unavailable")?;
+                    let executable = config
+                        .executable_path
+                        .clone()
+                        .or_else(|| {
+                            super::cdp::chrome::find_chrome()
+                                .map(|p| p.to_string_lossy().into_owned())
+                        })
+                        .ok_or("manual_login_browser_unavailable")?;
+                    let options = LaunchOptions {
+                        headless: false,
+                        manual_login: true,
+                        attachable: false,
+                        executable_path: Some(executable),
+                        profile: Some(profile.user_data_dir.clone()),
+                        args: vec![profile
+                            .manual_login_url
+                            .clone()
+                            .expect("matched login mode")],
+                        display: Some(display),
+                        remote_headed: true,
+                        private_launch_environment: Some(private),
+                        ..LaunchOptions::default()
+                    };
+                    manual.launch(&profile, desktop, options)
+                })();
+                let _ = reply.send(result);
+            }
+            BrowserRuntimeCommand::IsLive { browser, reply } if manual::is_manual(&browser) => {
+                let _ = reply.send(manual.verify(&browser));
+            }
+            BrowserRuntimeCommand::Close { browser, reply } if manual::is_manual(&browser) => {
+                let _ = reply.send(manual.close(&browser));
+            }
+            BrowserRuntimeCommand::AcquireInitialTab {
+                browser,
+                attributed_target_ids,
+                reply,
+                ..
+            } if manual::is_manual(&browser) => {
+                let result = manual.verify(&browser).and_then(|live| {
+                    if !live {
+                        return Err("manual_login_process_exited".into());
+                    }
+                    if !attributed_target_ids.is_empty() {
+                        return Err("manual_login_profile_in_use".into());
+                    }
+                    Ok(manual::window_tab(&browser))
+                });
+                let _ = reply.send(result);
+            }
+            BrowserRuntimeCommand::CreateTab { browser, reply } if manual::is_manual(&browser) => {
+                let _ = reply.send(Err("manual_login_additional_tabs_unavailable".into()));
+            }
+            BrowserRuntimeCommand::CloseTab { browser, reply, .. }
+                if manual::is_manual(&browser) =>
+            {
+                // The single human window is closed by the manager's final-task
+                // browser close, with exact original-process readback.
+                let _ = reply.send(manual.verify(&browser).map(|_| ()));
+            }
+            BrowserRuntimeCommand::Navigate {
+                browser,
+                url,
+                reply,
+                ..
+            } if manual::is_manual(&browser) => {
+                let _ = reply.send(
+                    manual
+                        .execute(
+                            &browser,
+                            &serde_json::json!({"action":"navigate","url":url}),
+                        )
+                        .map(|_| ()),
+                );
+            }
+            BrowserRuntimeCommand::Focus { browser, reply, .. } if manual::is_manual(&browser) => {
+                let _ = reply.send(manual.focus(&browser));
+            }
+            BrowserRuntimeCommand::Execute {
+                browser,
+                command,
+                reply,
+                ..
+            } if manual::is_manual(&browser) => {
+                let _ = reply.send(manual.execute(&browser, &command));
+            }
+            BrowserRuntimeCommand::IdleRetirement {
+                scope,
+                apply,
+                reply,
+                ..
+            } if manual::is_manual(&scope.browser) => {
+                // A manual task owns one native window. Its only synthetic tab
+                // retires with that exact process; another task cannot share it.
+                let result = if apply {
+                    manual.close(&scope.browser).map(|()| true)
+                } else {
+                    manual.verify(&scope.browser).map(|live| !live)
+                };
+                let _ = reply.send(result);
+            }
             BrowserRuntimeCommand::OperationBaseline {
                 shared_browser_ids,
                 reply,
@@ -2478,6 +2624,7 @@ mod tests {
         fs::create_dir_all(root.0.join("orphan")).unwrap();
         let allocation = ManagedDisposableProfile {
             profile: BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: "group-orphan".into(),
                 name: "synthetic".into(),
                 user_data_dir: root.0.join("orphan").to_string_lossy().into_owned(),
@@ -2692,6 +2839,7 @@ mod tests {
     fn runtime_original_retirement_reads_exact_targets_and_preserves_the_peer_after_restart() {
         let directory = TempDirectory::new();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "original-retirement-fixture".into(),
             name: "Original retirement fixture".into(),
             user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
@@ -2908,6 +3056,7 @@ mod tests {
         )
         .unwrap();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: intent.profile_id.clone(),
             name: "Synthetic".to_string(),
             user_data_dir: "/synthetic/profile-a".to_string(),
@@ -2933,6 +3082,7 @@ mod tests {
     fn remote_view_desktop_launch_fails_before_local_display_inference() {
         let directory = TempDirectory::new();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "remote-view-fixture".to_string(),
             name: "Remote View fixture".to_string(),
             user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
@@ -3062,6 +3212,7 @@ mod tests {
         ];
         for (path, limit, reason) in cases {
             let profile = BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: "Default".into(),
                 name: "Default".into(),
                 user_data_dir: path,
@@ -3098,6 +3249,7 @@ mod tests {
     fn resource_pressure_rejects_before_local_browser_launch() {
         let directory = TempDirectory::new();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "resource-pressure-fixture".to_string(),
             name: "Resource pressure fixture".to_string(),
             user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
@@ -3119,6 +3271,7 @@ mod tests {
     fn existing_profile_browser_is_reused_without_saved_inventory() {
         let directory = TempDirectory::new();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "reuse-fixture".into(),
             name: "Reuse fixture".into(),
             user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
@@ -3174,6 +3327,7 @@ mod tests {
     fn shared_profile_acquisition_and_close_preserve_peer_work() {
         let directory = TempDirectory::new();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "peer-fixture".into(),
             name: "Peer fixture".into(),
             user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
@@ -3253,6 +3407,7 @@ mod tests {
         };
         let directory = TempDirectory::new();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "publication-replay".into(),
             name: "Publication replay".into(),
             user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
@@ -3335,6 +3490,7 @@ mod tests {
     fn free_profile_recovery_ignores_unrelated_browser_profile_metadata() {
         let directory = TempDirectory::new();
         let occupied = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "unrelated-browser".into(),
             name: "Unrelated browser".into(),
             user_data_dir: directory.0.join("occupied").to_string_lossy().into_owned(),
@@ -3357,6 +3513,7 @@ mod tests {
         // The unrelated process remains live while its old argv path becomes stale.
         fs::rename(&occupied.user_data_dir, directory.0.join("moved-occupied")).unwrap();
         let free = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "free-profile".into(),
             name: "Free profile".into(),
             user_data_dir: directory.0.join("free").to_string_lossy().into_owned(),
@@ -3450,6 +3607,7 @@ mod tests {
             let directory = TempDirectory::new();
             fs::create_dir_all(&directory.0).unwrap();
             let profile = BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: "p237-real-lifetime".into(),
                 name: "Synthetic P237".into(),
                 user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
@@ -3691,6 +3849,7 @@ mod tests {
         };
         let directory = TempDirectory::new();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "ordinary-reuse".into(),
             name: "Ordinary reuse".into(),
             user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
@@ -3875,6 +4034,7 @@ mod tests {
     fn runtime_restart_reattaches_and_closes_recorded_browser() {
         let directory = TempDirectory::new();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "restart-fixture".to_string(),
             name: "Restart fixture".to_string(),
             user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
@@ -3966,6 +4126,7 @@ mod tests {
         let root = TempDirectory::new();
         fs::create_dir_all(&root.0).unwrap();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "profile-a".into(),
             name: "Synthetic".into(),
             user_data_dir: root.0.to_string_lossy().into_owned(),
@@ -4086,4 +4247,10 @@ mod tests {
 
         assert_eq!(directory_regular_file_bytes(&profile).unwrap(), 8);
     }
+}
+
+/// Read-only native workspace presence for a human-only managed process. This
+/// checks the published original identity without creating a CDP connection.
+pub(super) fn manual_browser_is_live(browser: &ManagedBrowserInstance) -> Result<bool, String> {
+    manual::ManualBrowsers::default().verify(browser)
 }
