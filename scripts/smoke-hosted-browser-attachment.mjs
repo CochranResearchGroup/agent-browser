@@ -10,7 +10,7 @@
  * retries effects, borrows a baseline assignment or removes retained evidence.
  */
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
+import {execFileSync,spawn} from 'node:child_process';
 import {createHash,randomUUID} from 'node:crypto';
 import {once} from 'node:events';
 import {createServer} from 'node:http';
@@ -28,6 +28,8 @@ function origin(name){const value=required(name),url=new URL(value);assert(url.p
 const binary=await absolute('HOSTED_SMOKE_AB_BINARY'),chrome=await absolute('HOSTED_SMOKE_CHROME');
 const botsRoot=await absolute('HOSTED_SMOKE_BOTS_ROOT'),appOrigin=origin('HOSTED_SMOKE_APP_ORIGIN'),nativeOrigin=origin('HOSTED_SMOKE_NATIVE_ORIGIN');
 const installationId=required('HOSTED_SMOKE_INSTALLATION_ID');
+const botsSourceCommit=execFileSync('git',['-C',botsRoot,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
+assert.equal(execFileSync('git',['-C',botsRoot,'status','--porcelain','--untracked-files=no'],{encoding:'utf8'}).trim(),'','Commit the reviewed Bots source before actual acceptance');
 const evidence=required('HOSTED_SMOKE_EVIDENCE_DIR');assert(isAbsolute(evidence));
 await mkdir(evidence,{mode:0o700}); // Existing evidence paths fail closed; never overwrite another run.
 assert.equal((await stat(evidence)).mode&0o077,0,'Evidence directory must be private');
@@ -247,7 +249,7 @@ try{
  step='connect-native';remote=await connectRemoteView({expectedInstallationId:installationId,embedOrigin:appOrigin,publicOrigin:nativeOrigin,...(process.env.HOSTED_SMOKE_NATIVE_SOCKET?{socketPath:process.env.HOSTED_SMOKE_NATIVE_SOCKET}:{})});
  baseline=await remote.inventory();await save('baseline.json',baseline);
  broker=await startScopedBroker();env.AGENT_BROWSER_REMOTE_VIEW_ORIGIN=`http://127.0.0.1:${broker.address().port}`;
- await save('inputs.json',{binary,binarySha256:createHash('sha256').update(await readFile(binary)).digest('hex'),chrome,chromeSha256:createHash('sha256').update(await readFile(chrome)).digest('hex'),botsRoot,installationId,appOrigin,nativeOrigin,agentHome,socketDir});
+ await save('inputs.json',{binary,binarySha256:createHash('sha256').update(await readFile(binary)).digest('hex'),chrome,chromeSha256:createHash('sha256').update(await readFile(chrome)).digest('hex'),botsRoot,botsSourceCommit,installationId,appOrigin,nativeOrigin,agentHome,socketDir});
  const desktops=new Proxy(remote,{get(target,key){if(key!=='acquire')return typeof target[key]==='function'?target[key].bind(target):target[key];return async args=>{let binding;try{binding=await target.acquire(args);}catch(error){ambiguous=true;throw error;}assert(!baseline.assignments.some(a=>a.assignmentId===binding.assignmentId),'Provider returned a baseline peer assignment');acquired.push(binding);await save('acquired.json',acquired);Object.assign(binding,await target.observe(binding));await save('acquired.json',acquired);return binding;};}});
  step='initialize-ab-mcp';client=createMcpStdioClient({context,args:['mcp','serve'],onFatal:()=>{ambiguous=true;}});
  await send('initialize',{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'hosted-native-smoke',version:'1'}});client.notify('notifications/initialized');
