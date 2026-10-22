@@ -1,6 +1,6 @@
 # Active plan index
 
-[P266 attachment](0266-2026-10-22-hosted-attachment.md), #349, and P267/#350 takeover are the active parallel frontier after P265.
+[P266 attachment](0266-2026-10-22-hosted-attachment.md), #349, and [P267/#350 takeover](0267-2026-10-22-hosted-takeover.md) are the active parallel frontier after P265.
 
 [P265 hosted launch](0265-2026-10-22-hosted-launch.md), #348; closed with source-qualified hosted launch and real Native viewer acceptance. #347 remains open.
 

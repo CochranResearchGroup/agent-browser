@@ -1036,7 +1036,13 @@ async fn execute_command_after_navigation_admission(
             "network_capture" => handle_service_network_capture(cmd, state).await,
             "file_transfer" => handle_service_file_transfer(cmd, state).await,
             "navigate" => handle_navigate(cmd, state, navigation_admission.clone()).await,
-            "url" => handle_url(state).await,
+            "url" => {
+                if cmd["hostControlFreshObservation"] == true {
+                    super::browser_inspection::handle_url_without_recovery(state).await
+                } else {
+                    handle_url(state).await
+                }
+            }
             "browser_pid" => handle_browser_pid(state),
             "cdp_url" => handle_cdp_url(state),
             "inspect" => handle_inspect(state).await,

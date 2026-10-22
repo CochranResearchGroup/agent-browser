@@ -49,7 +49,7 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
             // Awaiting-observation forbids physical recovery in the host. A lost target
             // remains blocked, preserving the original browser/task rather than reopening.
             super::workflow::execute(
-                json!({"id":uuid::Uuid::new_v4().to_string(),"action":"url","sessionName":task.name,"sessionId":task_id,"targetId":task.current_tab_id.as_ref().and_then(|id|state.tabs.get(id)).map(|tab|&tab.target_id)}),
+                json!({"id":uuid::Uuid::new_v4().to_string(),"action":"url","hostControlFreshObservation":true,"sessionName":task.name,"sessionId":task_id,"targetId":task.current_tab_id.as_ref().and_then(|id|state.tabs.get(id)).map(|tab|&tab.target_id)}),
                 transport,
             )?;
             let fresh = BrowserSessionSqliteStore::open_read_only(&path)

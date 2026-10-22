@@ -1647,7 +1647,7 @@ mod tests {
     #[test]
     fn app_attachment_publication_failure_never_exposes_an_unfenced_profile_after_restart() {
         let directory = TempDirectory::new("attachment-atomic");
-        let mut store = BrowserSessionSqliteStore::open(&directory.0).unwrap();
+        let mut store = BrowserSessionSqliteStore::open_or_migrate(&directory.0, &directory.0.join("legacy.json")).unwrap().0;
         let before = BrowserSessionState::default();
         let before_catalog = BrowserProfileCatalog::default();
         store.save_session_state(&before).unwrap();

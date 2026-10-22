@@ -19,7 +19,8 @@ import {tmpdir} from 'node:os';
 import {isAbsolute,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
-import {createMcpStdioClient,runCli} from './smoke-utils.js';
+import {createMcpStdioClient,runCli,httpJsonResult} from './smoke-utils.js';
+import {qualifyHostedBrowserControl} from './smoke-hosted-browser-control.mjs';
 
 const required=name=>{const value=process.env[name];assert(value,`Missing ${name}`);return value;};
 async function absolute(name){const value=required(name);assert(isAbsolute(value),`${name} must be absolute`);return realpath(value);}
@@ -287,7 +288,8 @@ try{
   await save('continuity-'+label+'.json',{original,processPreserved:true,preexistingTargetsPreserved:true,syntheticStorageAndDraftPreserved:true,peerPreserved:true,nativeAssignmentPreserved:true});
  }
  const hostBinding={version:1,hostId:'bots',participantId:'bot:'+bot.id,sessionId:bot.threadId,placement:{mode:'required',desktop:{desktopId:binding.desktopId,generation:binding.generation}}};
- step='attach-public-workflow';const opened=await workflow('browser_open',{profile:'borrowed-profile',profileMode:'existing',taskKey:'attachment-primary-'+randomUUID(),serviceName:'attachment-fixture',agentName:'bot:'+bot.id,taskName:'Use app-owned synthetic browser',hostBinding,attachment});task=opened;borrowedTasks.push(opened);
+ const primaryTaskKey='attachment-primary-'+randomUUID();
+ step='attach-public-workflow';const opened=await workflow('browser_open',{profile:'borrowed-profile',profileMode:'existing',taskKey:primaryTaskKey,serviceName:'attachment-fixture',agentName:'bot:'+bot.id,taskName:'Use app-owned synthetic browser',hostBinding,attachment});task=opened;borrowedTasks.push(opened);
  assert.equal(typeof opened.tabId,'string');assert.notEqual(opened.tabId,primaryTarget);await continuity('first-attach');
  step='public-page-action';const snapshotBefore=await workflow('browser_snapshot',{taskId:opened.taskId});assert(JSON.stringify(snapshotBefore).includes('ATTACHMENT SYNTHETIC MARKER'));
  await workflow('browser_fill',{taskId:opened.taskId,selector:'#control',value:'public MCP preserved app browser'});assert.equal(await primary.locator('#control').inputValue(),'public MCP preserved app browser');await continuity('public-action');
@@ -297,6 +299,17 @@ try{
  const nativeView=await remote.viewer(binding,{idempotencyKey:'attachment-view-'+randomUUID()});
  await save('attachment.json',{original,processProof,initialTargets,primaryTarget,peerTarget,tasks:borrowedTasks.map(t=>({taskId:t.taskId,browserId:t.browserId,tabId:t.tabId,profileId:t.profileId})),scope:'Direct public MCP attachment plus actual Native viewer; Bots attachment HTTP not qualified'});
  task=opened;
+ const sessionName='workflow-'+createHash('sha256').update(JSON.stringify(['attachment-fixture','bot:'+bot.id,primaryTaskKey,'borrowed-profile',hostBinding.hostId,hostBinding.participantId,hostBinding.sessionId])).digest('hex');
+ step='enable-isolated-service-http';
+ let stream=JSON.parse((await runCli(context,['--json','--session',sessionName,'stream','status'])).stdout);
+ assert.equal(stream.success,true);
+ if(!stream.data?.enabled)stream=JSON.parse((await runCli(context,['--json','--session',sessionName,'stream','enable'])).stdout);
+ assert.equal(stream.success,true);assert(Number.isInteger(stream.data?.port)&&stream.data.port>0);
+ const servicePort=stream.data.port;
+ step='public-control-qualification';
+ await qualifyHostedBrowserControl({send,runCli:args=>runCli(context,args),task:opened,sessionName,readTask,save,syntheticOnly:true,
+  serviceRequest:async body=>{const response=await httpJsonResult(servicePort,'POST','/api/service/request',body);return response.body;}});
+ await continuity('after-human-control');
  step='metadata-initial';const watchReader=startWatch(task.taskId);
  const snapshot=await readTask(task.taskId),event=await watchReader.next();assert.equal(event.event,'snapshot');assert.deepEqual(event.data,snapshot);assert.equal(snapshot.taskId,task.taskId);await save('metadata.json',{snapshot,event});
  step='native-viewer';viewer=await chromium.launch({executablePath:chrome,headless:true,env:{...env,AGENT_BROWSER_HOME:agentHome}});

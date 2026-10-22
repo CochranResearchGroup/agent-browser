@@ -2634,6 +2634,7 @@ mod tests {
     #[test]
     fn app_attachment_id_is_stable_for_same_process_and_changes_with_pid_epoch() {
         let root = TempDirectory::new();
+        fs::create_dir_all(&root.0).unwrap();
         let profile = BrowserProfileCatalogEntry {
             id: "profile".into(),
             name: "Profile".into(),

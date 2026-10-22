@@ -7307,6 +7307,9 @@ Commands:
   serve                 Run the MCP stdio server
   resources             List explicit read-only diagnostic resources
   read                  Read one diagnostic resource as JSON
+  host-control TASK OP  Status/view/takeover/return/override/reconcile hosted control
+                        Effects require current epoch, actor and reason; return
+                        freshly observes the same page and never replays effects.
   host-task             Read compact hosted-task metadata without browser effects
   watch-host-task       Emit initial/changed NDJSON; terminate process to disconnect
 

@@ -757,6 +757,39 @@ mod integration_tests {
                 );
                 assert!(daemon.browser.is_none());
             }
+            // Exercise the canonical public Service request body normalization
+            // shared by HTTP /api/service/request and service MCP ingress, then
+            // its actual native action dispatcher. This does not claim an HTTP
+            // socket/authentication acceptance result.
+            let service_request = json!({"action":"click","sessionName":"hosted-lane","serviceName":"fixture-service","agentName":"control-acceptance","taskName":"Reject automation during human assistance","params":{"selector":"#synthetic-control"}});
+            let normalized = crate::native::service_request::normalize_service_request(
+                crate::native::service_request::ServiceRequestNormalization {
+                    request: &service_request,
+                    service_state: None,
+                    authenticated_principal: None,
+                    fallback_principal: None,
+                    request_id: "service-control-rejection",
+                    effective_session: Some("hosted-lane"),
+                },
+            )
+            .unwrap();
+            assert_eq!(normalized.command["action"], "click");
+            let service_response = runtime.block_on(super::super::actions::execute_command(
+                &normalized.command,
+                &mut daemon,
+            ));
+            assert_eq!(service_response["success"], false);
+            assert!(
+                service_response["error"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("browser_control_human"),
+                "{service_response}"
+            );
+            assert!(
+                daemon.browser.is_none(),
+                "Service refusal must precede launch or browser input"
+            );
             assert!(check_state(
                 &state,
                 "hosted-lane",

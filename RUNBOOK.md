@@ -1,6 +1,6 @@
 # Runbook
 
-[P266/#349](docs/dev/plans/0266-2026-10-22-hosted-attachment.md) uses dashboard primary; P267/#350 uses the root-owned takeover auxiliary. Root arbitrates shared contracts. No production effects.
+[P266/#349](docs/dev/plans/0266-2026-10-22-hosted-attachment.md) uses dashboard primary; [P267/#350](docs/dev/plans/0267-2026-10-22-hosted-takeover.md) uses the root-owned takeover auxiliary. Root arbitrates shared contracts. No production effects.
 
 [P265](docs/dev/plans/0265-2026-10-22-hosted-launch.md), #348, is source-qualified on platform/hosted-launch-348. Provider PR359 precedes Bots PR172; actual Native fixture cleanup passed. No production publication.
 

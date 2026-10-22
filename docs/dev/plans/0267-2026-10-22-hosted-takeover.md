@@ -1,7 +1,11 @@
 # Plan 0267: Hosted human takeover
 
-Product lane: PL-PLATFORM. Work item: #350. Parent specification: #347.
-Status: IN_PROGRESS.
+Status: OPEN
+Product lane: PL-PLATFORM
+Work item: CochranResearchGroup/agent-browser#350
+Branch: platform/hosted-takeover-350
+Owner: ecochran76
+Parent specification: #347
 
 ## Objective
 

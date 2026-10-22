@@ -20,6 +20,26 @@ pub(crate) mod action_commands {
     use serde_json::{json, Value};
     use std::io::Write;
     pub(crate) async fn handle_url(state: &mut DaemonState) -> Result<Value, String> {
+        handle_url_with_recovery(state, true).await
+    }
+    pub(crate) async fn handle_url_without_recovery(
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        handle_url_with_recovery(state, false).await
+    }
+    async fn recover_url_only_when_allowed(
+        allow_recovery: bool,
+        recovery: impl std::future::Future<Output = Result<String, String>>,
+    ) -> Result<String, String> {
+        if !allow_recovery {
+            return Err("browser_control_fresh_observation_target_stale".into());
+        }
+        recovery.await
+    }
+    async fn handle_url_with_recovery(
+        state: &mut DaemonState,
+        allow_recovery: bool,
+    ) -> Result<Value, String> {
         if let Some(ref wb) = state.webdriver_backend {
             if state.browser.is_none() {
                 let url = wb.get_url().await?;
@@ -37,23 +57,52 @@ pub(crate) mod action_commands {
         let url = match first_result {
             Ok(url) => url,
             Err(err) if is_stale_page_session_error(&err) => {
-                let recovered = {
-                    let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
-                    recover_browser_command_channel(mgr, &err).await
-                };
-                if recovered.is_err() {
-                    relaunch_and_restore_page(state, desired_url).await?;
-                }
-                state
-                    .browser
-                    .as_mut()
-                    .ok_or("Browser not launched")?
-                    .get_url()
-                    .await?
+                recover_url_only_when_allowed(allow_recovery, async {
+                    let recovered = {
+                        let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+                        recover_browser_command_channel(mgr, &err).await
+                    };
+                    if recovered.is_err() {
+                        relaunch_and_restore_page(state, desired_url).await?;
+                    }
+                    state
+                        .browser
+                        .as_mut()
+                        .ok_or("Browser not launched")?
+                        .get_url()
+                        .await
+                })
+                .await?
             }
             Err(err) => return Err(err),
         };
         Ok(json!({ "url" : url }))
+    }
+    #[cfg(test)]
+    mod host_control_return_tests {
+        use super::*;
+        #[tokio::test]
+        async fn host_control_fresh_url_observation_never_runs_recovery_future() {
+            let effects = std::sync::atomic::AtomicUsize::new(0);
+            let result = recover_url_only_when_allowed(false, async {
+                effects.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Ok("synthetic recovered URL".into())
+            })
+            .await;
+            assert_eq!(
+                result.unwrap_err(),
+                "browser_control_fresh_observation_target_stale"
+            );
+            assert_eq!(effects.load(std::sync::atomic::Ordering::SeqCst), 0);
+            let normal = recover_url_only_when_allowed(true, async {
+                effects.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Ok("synthetic current URL".into())
+            })
+            .await
+            .unwrap();
+            assert_eq!(normal, "synthetic current URL");
+            assert_eq!(effects.load(std::sync::atomic::Ordering::SeqCst), 1);
+        }
     }
     pub(crate) fn handle_cdp_url(state: &DaemonState) -> Result<Value, String> {
         let mgr = state.browser.as_ref().ok_or("Browser not launched")?;

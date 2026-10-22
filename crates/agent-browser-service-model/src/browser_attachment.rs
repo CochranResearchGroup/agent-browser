@@ -137,7 +137,7 @@ pub fn attach_app_browser_task<E: BrowserSessionEffects>(
         if row.owner != identity && !row.request.shared_with.contains(&identity) {
             return Err("browser_attachment_sharing_required: the owning app must explicitly share this browser with the exact recipient".into());
         }
-        if !row.borrowed_tab_ids.contains(&request.target_id) && state.tabs.values().any(|tab|tab.browser_id==state.app_browser_attachments.iter().find(|(_,candidate)|*candidate==row).map(|(id,_)|id.as_str()).unwrap_or("") && tab.target_id==request.target_id) {
+        if !row.borrowed_tab_ids.contains(&request.target_id) && state.tabs.values().any(|tab|tab.target_id==request.target_id && state.browsers.get(&tab.browser_id).is_some_and(|browser|browser.profile_id==profile.id)) {
             return Err("browser_attachment_target_owned_by_task: retain the existing task's tab custody".into());
         }
         if row.owner != identity && row.request.shared_with != request.shared_with {

@@ -108,6 +108,30 @@ not transfer termination or relocation authority. Metadata reports
 `custody: "app_borrowed"`; capability presence is not readiness or account proof.
 
 
+### Human takeover and return
+
+Viewing alone does not pause automation. Use `browser_control` with `taskId` and
+`operation: "status"` (or `view`) to read the current browser-scoped epoch.
+Explicit `takeover` requires `expectedEpoch`, an attributable `actor` and a
+concrete `reason`. It blocks new mutations across supported MCP, CLI and Service
+routes; optional `pauseReads: true` also pauses page observation/capture. Status
+and return remain available. Control persists across disconnection and restart.
+
+`return` and deliberate `override` use the current epoch and attribution, then
+freshly observe the same retained page before automation resumes. No automatic
+return, browser replacement or website-effect replay occurs. Pending dispatched
+work retains its observed or uncertain outcome; explicit `reconcile` addresses a
+crashed request without repeating it. Override uses existing trusted operator
+admission; attribution strings grant no authority. Unmanaged OS/CDP controllers
+must cooperate with the current state. See the [control contract](https://github.com/CochranResearchGroup/agent-browser/blob/main/docs/dev/hosted-browser-control.md).
+
+```sh
+agent-browser --json mcp host-control TASK status
+agent-browser --json mcp host-control TASK takeover 0 operator 'Assist with this task'
+agent-browser --json mcp host-control TASK return 1 operator 'Continue after assistance'
+```
+
+
 ## Implementation reference
 
 The reference below documents existing integration details. Treat a detail that

@@ -89,3 +89,10 @@ its existing tasks. Each recipient attaches explicitly with its own
 task key and app binding; it cannot change the owner's sharing list. Sharing does
 not transfer termination or relocation authority. Metadata reports
 `custody: "app_borrowed"`; capability presence is not readiness or account proof.
+
+## Explicit human control
+
+Use `browser_control` for status/view, explicit takeover, return or scoped override.
+Viewing never pauses. Takeover blocks supported automation; optional pauseReads
+also stops page reads/capture. Return freshly observes the original page without
+recovery; uncertain work is retained without replay. See the [control contract](https://github.com/CochranResearchGroup/agent-browser/blob/main/docs/dev/hosted-browser-control.md).
