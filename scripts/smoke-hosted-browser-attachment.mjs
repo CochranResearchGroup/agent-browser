@@ -7,7 +7,8 @@
  * HOSTED_SMOKE_BROWSER_MANIFEST optionally pins the reviewed browser manifest.
  * HOSTED_SMOKE_NATIVE_SOCKET pins the already installed provider MCP socket.
  * HOSTED_SMOKE_CONTINUITY_REQUIRED=1 qualifies reconnect, scoped rules and local artifacts.
- * This script creates two borrowed tasks, one app-owned browser and one disposable assignment. It never installs, signs in,
+ * HOSTED_SMOKE_LOSS_REQUIRED=1 adds one separately created managed browser loss/reopen trial.
+ * This script creates two borrowed tasks, one app-owned browser and one disposable assignment, plus the optional managed trial. It never installs, signs in,
  * retries effects, borrows a baseline assignment or removes retained evidence.
  */
 import assert from 'node:assert/strict';
@@ -28,6 +29,7 @@ import {createColdFirstPixelClock} from './hosted-performance.mjs';
 import {qualifyHostedBrowserControl} from './smoke-hosted-browser-control.mjs';
 import {qualifyHostedBrowserReconnect} from './smoke-hosted-browser-reconnect.mjs';
 import {qualifyHostedBrowserPolicy} from './smoke-hosted-browser-policy.mjs';
+import {qualifyHostedBrowserLoss} from './smoke-hosted-browser-loss.mjs';
 
 let coldPixels;
 const stageTimings=[];
@@ -57,7 +59,8 @@ const {createBotService}=await import(pathToFileURL(join(botsRoot,'src/service.m
 const {connectRemoteView}=await import(pathToFileURL(join(botsRoot,'src/remote-view.mjs')));
 const require=createRequire(join(botsRoot,'package.json')),{chromium}=require('playwright-core');
 let remote,baseline,broker,service,client,viewer,watcher,task,appBrowser,fixtureSite,appObserver,uiHandoffId,uiTakeoverDispatched=false,uiReturnDispatched=false,uiControlSettled=true,taskClosed=false,taskCloseDispatched=false,ambiguous=false,passed=false;
-const borrowedTasks=[],closedBorrowedTasks=new Set();
+const borrowedTasks=[],closedBorrowedTasks=new Set(),managedLossTasks=[],closedManagedLossTasks=new Set();
+let performanceTargetsMet=true;
 const acquired=[],cleanup={errors:[],retainedEvidence:evidence,processesBefore:[],processesAfter:[],released:[]};
 let appRootProof=null;const appOwnedProcesses=new Map();
 let step='preflight';
@@ -440,7 +443,7 @@ try{
  await save('bots-native-control.json',{before:controlReceipt(beforeUi),human:controlReceipt(human),returned:controlReceipt(returned),passed:true});
  // Start after all control transitions so the remaining event is scoped detach.
  if(process.env.HOSTED_SMOKE_CONTINUITY_REQUIRED==='1'){
-  step='explicit-host-reconnect';await qualifyHostedBrowserReconnect({workflow:publicWorkflow,task:opened,save,syntheticOnly:true,nativeControl:{status:consumerControl,change:async body=>{
+  step='explicit-host-reconnect';const reconnection=await qualifyHostedBrowserReconnect({workflow:publicWorkflow,task:opened,save,syntheticOnly:true,requirePerformanceTargets:false,nativeControl:{status:consumerControl,change:async body=>{
    uiControlSettled=false;
    try{
     const response=await fetch(service.url+`/api/agent-browser/handoffs/${uiHandoffId}/control`,{method:'POST',headers:{origin:service.url,'content-type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(120000)});
@@ -448,7 +451,7 @@ try{
     assert.equal(value.control.owner,body.operation==='takeover'?'human':'agent');assert.equal(value.native.owner,body.operation==='takeover'?'operator':'agent');
     uiControlSettled=true;return value;
    }catch(error){ambiguous=true;throw error;}
-  }}});
+  }}});performanceTargetsMet=reconnection.performance.allMeasuredTargetsMet;
   await continuity('after-host-reconnect');
   const artifactRoot=join(root,'authorized-artifacts');await mkdir(artifactRoot,{mode:0o700});
   step='task-policy-and-artifacts';await qualifyHostedBrowserPolicy({workflow:publicWorkflow,task:opened,peerTask:shared,artifactRoot,save});
@@ -466,8 +469,40 @@ try{
  assert.equal(changed.cursor.watchId,event.cursor.watchId);assert.equal(changed.cursor.sequence,2);
  const ended=await readTask(task.taskId);assert.equal(ended.taskState,'ended');assert.deepEqual(changed.data,ended);
  await save('metadata.json',{snapshot,event,changed,ended});
+ if(process.env.HOSTED_SMOKE_LOSS_REQUIRED==='1'){
+  step='create-fresh-managed-loss-task';
+  const profileName='managed-loss-'+randomUUID();
+  const created=JSON.parse((await runCli(context,['--json','runtime','create',profileName,'--browser-family','chromium'])).stdout);assert.equal(created.created,true);
+  const lossProfile=await realpath(created.userDataDir);assert(lossProfile.startsWith(root+'/'));
+  const managed=await publicWorkflow('browser_open',{taskKey:'managed-loss-'+randomUUID(),serviceName:'synthetic-hosted-acceptance',agentName:'loss-fixture',taskName:'Qualify exact owned browser loss and explicit reopen',profile:profileName,profileMode:'persistent',url:site+'/primary',hostBinding:{version:1,hostId:'bots',participantId:'managed-loss-'+randomUUID(),sessionId:'managed-loss-'+randomUUID(),placement:{mode:'required',desktop:{desktopId:binding.desktopId,generation:binding.generation}}}});
+  managedLossTasks.push(managed);assert.equal(managed.profileId,profileName);assert.notEqual(managed.browserId,opened.browserId);
+  const record=()=>JSON.parse(execFileSync('python3',['-c',"import json,sqlite3,sys;from pathlib import Path;c=sqlite3.connect(Path(sys.argv[1]).as_uri()+'?mode=ro',uri=True);s=json.loads(c.execute('select json from state_documents where kind=?',('browser_session_state',)).fetchone()[0]);t=s['sessions'][sys.argv[2]];assert t['browserId']==sys.argv[3];print(json.dumps(s['browsers'][sys.argv[3]]))",join(agentHome,'service','runtime.sqlite3'),managed.taskId,managed.browserId],{env,encoding:'utf8',timeout:10000}));
+  const observeProcess=async({expected})=>{
+   if(expected){try{await processIdentity(expected.pid);return {...expected,alive:true,pidAbsent:false};}catch(error){if(!['ENOENT','ESRCH'].includes(error.code))throw error;return {...expected,alive:false,pidAbsent:true};}}
+   const browser=record(),kernel=await cleanupProcessIdentity(browser.pid);assert(kernel&&kernel.uid===process.getuid());assert.equal(browser.profileId,profileName);assert.equal(kernel.executable,chrome);
+   const commandline=await readFile(`/proc/${browser.pid}/cmdline`,'utf8');assert(privateProfileReferenced(commandline,lossProfile));
+   const proof={pid:browser.pid,startToken:`linux:${boot}:${kernel.start}`,uid:kernel.uid,executablePath:kernel.executable,profilePath:lossProfile,freshOwned:true,custody:'managed',alive:true};
+   observedOwnedProcesses.set(kernel.pid,kernel);await census();return proof;
+  };
+  step='actual-managed-browser-loss';
+  await qualifyHostedBrowserLoss({workflow:publicWorkflow,task:managed,desktop:{desktopId:binding.desktopId,generation:binding.generation},syntheticOnly:true,save,observeProcess,
+   terminateOwnedBrowser:async proof=>{
+    const fresh=await observeProcess({expected:null});assert.deepEqual(fresh, {...proof,freshOwned:true,custody:'managed',alive:true});
+    await save('managed-loss-signal-intent.json',{...proof,signal:'SIGKILL',syntheticOnly:true});
+    const confirmed=await cleanupProcessIdentity(proof.pid);assert(confirmed);assert.equal(`linux:${boot}:${confirmed.start}`,proof.startToken);assert.equal(confirmed.uid,proof.uid);assert.equal(confirmed.executable,proof.executablePath);
+    process.kill(proof.pid,'SIGKILL');
+    const deadline=Date.now()+10000;let absent=false;while(Date.now()<deadline){try{await processIdentity(proof.pid);}catch(error){if(!['ENOENT','ESRCH'].includes(error.code))throw error;absent=true;break;}await new Promise(resolve=>setTimeout(resolve,100));}
+    assert.equal(absent,true,'A zombie or reused PID is not qualified process absence');
+    return {pid:proof.pid,startToken:proof.startToken,originalGenerationAbsent:true};
+   },
+   observeDesktop:async()=>{const current=await remote.observe(binding);assert.equal(current.generation,binding.generation);return {desktopId:current.desktopId,generation:current.generation,state:current.state==='ready'?'active':current.state};},
+   observePeers:async()=>{await continuity('during-managed-loss');const inventory=await remote.inventory(),ids=new Set(baseline.assignments.map(a=>a.assignmentId));return peerIdentity(inventory).filter(a=>ids.has(a.assignmentId));},
+  });
+  closedManagedLossTasks.add(managed.taskId);await publicWorkflow('browser_close',{taskId:managed.taskId});await continuity('after-managed-loss');
+ }
  assert(!brokerOperations.some(entry=>['acquire','release','release_idle'].includes(entry.operation)), 'Hosted runtime must never request app pool growth or retirement');
- passed=true;
+ await save('qualification-summary.json',{functionalPassed:true,performancePassed:performanceTargetsMet,passed:performanceTargetsMet});
+ passed=performanceTargetsMet;if(!passed)process.exitCode=1;
 }catch(error){if(!uiControlSettled)ambiguous=true;await save('failure.json',{...safeError(error),ambiguous});process.exitCode=1;}
 finally{
  async function clean(name,action){try{await action();}catch(error){cleanup.errors.push({...safeError(error),step:name});process.exitCode=1;}}
@@ -484,6 +519,7 @@ finally{
  for(const borrowed of borrowedTasks)if(!closedBorrowedTasks.has(borrowed.taskId))await clean('close-borrowed-task',async()=>{closedBorrowedTasks.add(borrowed.taskId);await workflow('browser_close',{taskId:borrowed.taskId});});
  // App observer transport ends only after detach continuity was checked. The
  // exact owned-process census below remains responsible for app cleanup.
+ for(const managed of managedLossTasks)if(!closedManagedLossTasks.has(managed.taskId))await clean('close-managed-loss-task',async()=>{closedManagedLossTasks.add(managed.taskId);await publicWorkflow('browser_close',{taskId:managed.taskId});});
  await clean('close-app-observer',async()=>{await appObserver?.close();});
  await clean('close-synthetic-site',async()=>{if(fixtureSite){fixtureSite.closeAllConnections();await new Promise(resolve=>fixtureSite.close(resolve));}});
  await clean('close-service',async()=>{await service?.close();});
@@ -505,7 +541,7 @@ finally{
   cleanup.unresolvedNewAssignments=final.assignments.filter(a=>!ids.has(a.assignmentId)&&a.state==='active').map(a=>({assignmentId:a.assignmentId,generation:a.generation}));assert.equal(cleanup.unresolvedNewAssignments.length,0,'New assignments require explicit reconciliation');
  });
  await clean('close-scoped-broker',async()=>{if(broker){broker.closeAllConnections();await new Promise(resolve=>broker.close(resolve));}});
- remote?.close();cleanup.ambiguous=ambiguous;cleanup.taskClosed=taskClosed;cleanup.taskCloseDispatched=taskCloseDispatched;cleanup.passed=passed;await save('cleanup.json',cleanup);
+ remote?.close();cleanup.ambiguous=ambiguous;cleanup.taskClosed=taskClosed;cleanup.taskCloseDispatched=taskCloseDispatched;cleanup.passed=passed;cleanup.cleanupQualified=cleanup.processesClear===true&&cleanup.errors.length===0;await save('cleanup.json',cleanup);
  if(ambiguous||cleanup.errors.length||!passed)process.exitCode=1;
- console.log(JSON.stringify({evidence,passed,cleanupQualified:!process.exitCode,ambiguous}));
+ console.log(JSON.stringify({evidence,passed,cleanupQualified:cleanup.cleanupQualified,ambiguous}));
 }

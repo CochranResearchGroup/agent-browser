@@ -7,8 +7,9 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createLatencyWorkload,qualifyControlTransitions} from './hosted-performance.mjs';
 
-export async function qualifyHostedBrowserReconnect({workflow,task,save,syntheticOnly,nativeControl,controlPairs=10,nativePairs=3}) {
+export async function qualifyHostedBrowserReconnect({workflow,task,save,syntheticOnly,nativeControl,controlPairs=10,nativePairs=3,requirePerformanceTargets=true}) {
  assert.equal(syntheticOnly,true,'This fixture is synthetic only');
+ assert.equal(typeof requirePerformanceTargets,'boolean');
  assert.equal(typeof workflow,'function');assert(task?.taskId);
  const receipt={passed:false,checks:[],warmStatusMs:[],actualBrowserLossExercised:false,actualDesktopRestartExercised:false};
  const identity=value=>Object.fromEntries(['taskId','browserId','profileId','tabId'].map(key=>[key,value[key]]));
@@ -58,8 +59,9 @@ export async function qualifyHostedBrowserReconnect({workflow,task,save,syntheti
   receipt.performance={status:statusPerformance,publicControl,nativeControl:nativePerformance??{exercised:false,reason:'No actual consumer/Native callback was supplied; public Agent Browser timing does not qualify this axis'},
    allMeasuredTargetsMet:statusPerformance.targetMet&&publicControl.passed&&(nativePerformance===null||nativePerformance.passed),nativeCoordinationExercised:nativePerformance!==null};
   await save('hosted-reconnect-qualification.json',receipt);
-  assert.equal(receipt.performance.allMeasuredTargetsMet,true,'Measured warm status/control p95 must be below 250ms');
-  receipt.final=current.reconnect;receipt.passed=true;
+  receipt.functionalPassed=true;receipt.final=current.reconnect;receipt.passed=receipt.performance.allMeasuredTargetsMet;
+  await save('hosted-reconnect-qualification.json',receipt);
+  if(requirePerformanceTargets)assert.equal(receipt.performance.allMeasuredTargetsMet,true,'Measured warm status/control p95 must be below 250ms');
   await save('hosted-reconnect-qualification.json',receipt);return receipt;
  } catch(error) {
   // One deliberate cleanup return is allowed only after a known successful take.
