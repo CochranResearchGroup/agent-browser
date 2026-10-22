@@ -319,8 +319,8 @@ try{
  assert(active?.length===2,'App browser CDP endpoint must be observed');
  const endpoint='ws://127.0.0.1:'+active[0]+active[1];
  appObserver=await chromium.connectOverCDP(endpoint);const browserContext=appObserver.contexts()[0],primary=browserContext.pages()[0];await primary.waitForLoadState('domcontentloaded');
- const draft='unfinished-'+randomUUID(),storage='stored-'+randomUUID();
- await primary.evaluate(({draft,storage})=>{document.querySelector('#draft').value=draft;localStorage.setItem('attachment-synthetic',storage);},{draft,storage});
+ const draft='unfinished-'+randomUUID(),storage='stored-'+randomUUID(),cookie='cookie-'+randomUUID();
+ await primary.evaluate(({draft,storage,cookie})=>{document.querySelector('#draft').value=draft;localStorage.setItem('attachment-synthetic',storage);document.cookie='attachment-synthetic='+cookie+'; Path=/; SameSite=Lax';},{draft,storage,cookie});
  const peer=await browserContext.newPage();await peer.goto(site+'/peer',{waitUntil:'domcontentloaded'});await peer.evaluate(()=>{document.querySelector('#draft').value='peer unfinished';});
  await primary.bringToFront();
  const targetFor=async page=>{const cdp=await browserContext.newCDPSession(page);try{return (await cdp.send('Target.getTargetInfo')).targetInfo.targetId;}finally{await cdp.detach();}};
@@ -335,9 +335,10 @@ try{
   const current=await processIdentity(original.pid);assert.equal(current.start,original.start);assert.equal(await realpath(`/proc/${original.pid}/exe`),original.executablePath);
   assert.deepEqual((await Promise.all(browserContext.pages().map(targetFor))).sort(),initialTargets);
   assert.deepEqual(await primary.evaluate(()=>({draft:document.querySelector('#draft').value,storage:localStorage.getItem('attachment-synthetic')})),{draft,storage});
+  assert.equal((await browserContext.cookies(site)).find(value=>value.name==='attachment-synthetic')?.value,cookie,'The app cookie must survive attachment, sharing and control');
   assert.equal(await peer.locator('#draft').inputValue(),'peer unfinished');assert.equal(await targetFor(peer),peerTarget);
   const observed=await remote.bindingForBrowser({pid:original.pid},binding);assert.equal(observed.assignmentId,binding.assignmentId);assert.equal(observed.generation,binding.generation);
-  await save('continuity-'+label+'.json',{original,processPreserved:true,preexistingTargetsPreserved:true,syntheticStorageAndDraftPreserved:true,peerPreserved:true,nativeAssignmentPreserved:true});
+  await save('continuity-'+label+'.json',{original,processPreserved:true,preexistingTargetsPreserved:true,syntheticStorageAndDraftPreserved:true,syntheticCookiePreserved:true,peerPreserved:true,nativeAssignmentPreserved:true});
  }
  // Seed only the fixture's existing application-owned binding. Attach mode
  // must never acquire a replacement assignment or accept process/CDP from HTTP.
