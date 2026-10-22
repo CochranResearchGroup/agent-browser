@@ -886,7 +886,7 @@ fn initialize_result(params: Option<&Value>) -> Value {
             "title": "Agent Browser",
             "version": env!("CARGO_PKG_VERSION"),
         },
-        "instructions": "Use browser_open with profile, profileMode, taskKey, URL, serviceName, agentName and taskName. Address subsequent page actions with the returned taskId. Use browser_handoff for a ready native viewer link, browser_continue after human input, and browser_close for task-scoped cleanup. Use browser_discover only when advanced metadata is needed.",
+        "instructions": "Use browser_open with profile, profileMode, taskKey, URL, serviceName, agentName and taskName. Address subsequent page actions with the returned taskId. Use browser_handoff for a ready native viewer link, browser_control for explicit hosted takeover/return, browser_continue to observe the same task, and browser_close for task-scoped cleanup. Use browser_discover only when advanced metadata is needed.",
     })
 }
 

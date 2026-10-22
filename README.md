@@ -109,9 +109,9 @@ output pipe otherwise exits on the next emitted event. Recorded browser state,
 viewer delivery, controller state and account authentication are separate;
 metadata-only reads leave unobserved readiness explicitly unverified.
 
-The default MCP catalog contains 12 workflow tools: `browser_open`, `browser_navigate`,
+The default MCP catalog contains 13 workflow tools: `browser_open`, `browser_navigate`,
 `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
-`browser_handoff`, `browser_continue`, `browser_close`, `browser_command` and `browser_discover`.
+`browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_command` and `browser_discover`.
 Page actions require `taskId`. Use `browser_tab` to list, create, select or close this
 task's tabs; repeat a stable `tabKey` when retrying creation. Peer tabs stay outside
 this scope. Use `browser_discover` for one advanced operation's argument schema,
@@ -5718,7 +5718,7 @@ handoff; it verifies an access-plan response can be passed into
 `pnpm test:service-client-example-live` to validate the main trace
 example against a real isolated daemon and browser session.
 
-For MCP clients, run `agent-browser mcp serve`. The default catalog exposes the twelve task workflow tools described above, including `browser_open`, `browser_tab`, `browser_handoff`, `browser_continue` and task-scoped page actions. Resource discovery and reads remain available without launching a browser. Read `agent-browser://operating-guide` for the current workflow and `agent-browser://contracts` for retained service contracts.
+For MCP clients, run `agent-browser mcp serve`. The default catalog exposes the thirteen task workflow tools described above, including `browser_open`, `browser_tab`, `browser_handoff`, `browser_continue` and task-scoped page actions. Resource discovery and reads remain available without launching a browser. Read `agent-browser://operating-guide` for the current workflow and `agent-browser://contracts` for retained service contracts.
 
 The equivalent MCP `tools/call` payload uses the same intent fields:
 
@@ -5733,7 +5733,7 @@ The equivalent MCP `tools/call` payload uses the same intent fields:
 <summary>Advanced adapter and HTTP reference</summary>
 
 These adapter identifiers describe retained implementation and HTTP contracts.
-Use the twelve workflow tools for MCP calls and browser_discover for selected
+Use the thirteen workflow tools for MCP calls and browser_discover for selected
 operation metadata; this table does not add callable MCP tools.
 
 <table>
