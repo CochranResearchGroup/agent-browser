@@ -17,7 +17,7 @@ Add one durable browser-scoped control journal and narrow dispatch hooks, plus a
 
 ## Coordination
 
-P266 owns attachment and shared main feature documentation. P267 owns dedicated control modules and minimal MCP, host, action-dispatch and snapshot hooks. Integrate after P266; reconcile overlapping hooks by intent. No production effects or private-account acceptance.
+P268 owns attachment and shared main feature documentation. P267 owns dedicated control modules and minimal MCP, host, action-dispatch and snapshot hooks. Integrate after P268; reconcile overlapping hooks by intent. No production effects or private-account acceptance.
 
 ## Validation
 

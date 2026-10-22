@@ -1,4 +1,4 @@
-# P266: attach and explicitly share an app browser
+# P268: attach and explicitly share an app browser
 
 Status: OPEN
 Product lane: PL-PLATFORM
@@ -54,3 +54,6 @@ additive hosted adapter/service/UI/tests/docs; root owns provider contract and
 actual synthetic acceptance. No independent merge/runtime authority. Return
 reviewed commits to root; remove the clean auxiliary after integration and unlink
 its test-only dependency symlink without touching the installed target.
+
+Plan identifier reconciled to P268 after canonical main allocated P266 to #358.
+Earlier private validation logs retain their original p266 prefix as evidence.

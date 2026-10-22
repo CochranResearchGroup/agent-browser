@@ -1,5 +1,6 @@
 # Agent Browser Notes Index
 
+[P266 MCP origin diagnosis](0266-2026-10-22-public-origin-env.md): same-task environment differential, standard dotenv omission and live native input/reconnect.
 [P265 hosted launch](0265-2026-10-22-hosted-launch.md): exact app placement, durable app handoff, actual Native pixels/status, standalone continuity and qualified fixture cleanup; source only.
 
 [P264 missing browser selection](0264-2026-10-21-missing-browser-selection.md), #344 under #68; exact missing-workspace evidence.
