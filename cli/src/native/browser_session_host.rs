@@ -2174,6 +2174,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 .get(profile_id)
                 .cloned()
                 .unwrap_or_else(|| agent_browser_service_model::BrowserProfileCatalogEntry {
+                    manual_login_url: None,
                     id: profile_id.into(),
                     name: profile_id.into(),
                     user_data_dir: request.profile_path.clone(),

@@ -2698,6 +2698,7 @@ mod tests {
         fs::create_dir_all(&profile_path).unwrap();
         fs::create_dir_all(&other_path).unwrap();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "app".into(),
             name: "App".into(),
             user_data_dir: profile_path.to_string_lossy().into_owned(),
@@ -2782,6 +2783,7 @@ mod tests {
         let root = TempDirectory::new();
         fs::create_dir_all(&root.0).unwrap();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "profile".into(),
             name: "Profile".into(),
             user_data_dir: root.0.to_string_lossy().into_owned(),
@@ -2837,6 +2839,7 @@ mod tests {
             friendly_route_label: "app".into(),
         };
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "profile".into(),
             name: "Profile".into(),
             user_data_dir: "/synthetic/profile".into(),

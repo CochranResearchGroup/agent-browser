@@ -1663,6 +1663,7 @@ mod tests {
         catalog.profiles.insert(
             "app".into(),
             agent_browser_service_model::BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: "app".into(),
                 name: "App".into(),
                 user_data_dir: "/synthetic/app".into(),
