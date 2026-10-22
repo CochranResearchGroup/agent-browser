@@ -309,6 +309,7 @@ try{
  appRootProof={...await processIdentity(appBrowser.pid),executable:await realpath(`/proc/${appBrowser.pid}/exe`),profilePath};
  appOwnedProcesses.set(appRootProof.pid,appRootProof);await save('app-process-root-proof.json',appRootProof);
  assert.equal(appRootProof.executable,chrome,'App root must be the reviewed Chrome executable');
+ assert.equal(appRootProof.executable,chrome,'App process must execute the pinned browser');
  assert.equal(appRootProof.session,appRootProof.pid);assert.equal(appRootProof.processGroup,appRootProof.pid);assert.equal(appRootProof.uid,process.getuid());
  assert(privateProfileReferenced(await readFile(`/proc/${appBrowser.pid}/cmdline`,'utf8'),profilePath));
  await save('native-environment-override-keys.json',Object.keys(launch.environment).sort());
