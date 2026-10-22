@@ -210,6 +210,11 @@ def main():
                 env['DISPLAY'] = ':' + display_number
             finally:
                 os.close(read_fd)
+            deadline = time.monotonic() + 10
+            while run(['xprop', '-root']).returncode != 0:
+                assert xvfb.poll() is None, 'Xvfb exited before accepting X11 clients'
+                assert time.monotonic() < deadline, 'X11 client readiness deadline'
+                time.sleep(.02)
             spawn(['openbox', '--sm-disable'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             deadline = time.monotonic() + 10
             while 'window id #' not in run(['xprop', '-root', '_NET_SUPPORTING_WM_CHECK']).stdout:

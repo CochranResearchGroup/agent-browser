@@ -4179,3 +4179,5 @@ false`); desktop readiness and profile continuity do not verify authentication.
 Use `browser_close` after sign-in, then reopen that same profile in the default
 `automation` mode. An active browser in the other mode produces an explicit
 conflict; it is never closed, replaced, or attached automatically.
+If closure reports a pending browser prompt, finish it on the desktop and repeat
+`browser_close` before reopening the profile.
