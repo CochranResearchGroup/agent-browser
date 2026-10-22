@@ -2168,7 +2168,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     "browser_attachment_profile_conflict: reuse the registered profile name".into(),
                 );
             }
-            let profile = self
+            let mut profile = self
                 .catalog
                 .profiles
                 .get(profile_id)
@@ -2185,6 +2185,10 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     "browser_attachment_profile_conflict: retain the existing profile path".into(),
                 );
             }
+            // A successfully observed CDP attachment is explicit automation.
+            // Clear any prior, closed manual process's launch posture only in
+            // the existing atomic attachment/catalog publication below.
+            profile.manual_login_url = None;
             self.effects.begin_operation(&self.persisted_state)?;
             let result = agent_browser_service_model::attach_app_browser_task(
                 &mut self.state,
@@ -2211,10 +2215,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 }
             }
             let mut next_catalog = self.catalog.clone();
-            next_catalog
-                .profiles
-                .entry(profile.id.clone())
-                .or_insert(profile);
+            next_catalog.profiles.insert(profile.id.clone(), profile);
             // Publication must not expose an app profile before its borrowed
             // lifecycle fence. A failed transaction leaves both unchanged.
             if let Err(error) = self.persistence.publish_app_attachment(
