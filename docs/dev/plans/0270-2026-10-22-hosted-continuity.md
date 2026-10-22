@@ -1,9 +1,9 @@
 # P270: complete app-directed browser continuity
 
-Status: BLOCKED
+Status: OPEN
 Product lane: PL-PLATFORM
 Work items: CochranResearchGroup/agent-browser#351, #352, #353, #354, #355
-Branch: platform/hosted-continuity-351-355
+Branch: platform/hosted-acceptance-355
 Owner: ecochran76
 
 ## Outcome
@@ -63,3 +63,9 @@ The causal repair binds the durable Execute task ID/name before outer browser-wi
 ## Integrated partial outcome and remaining gate
 
 PR364 integrates #352–354 source qualification and [accepted source evidence](../notes/0270-2026-10-22-hosted-continuity-source.md). Native02 passed the feature checks with warm status p95 5.03 ms over 12 samples; automatic cleanup needed exact independent reconciliation, which passed without changing peers. Original failed receipts are retained. The whole P270 outcome remains BLOCKED: #351 needs Remote View #578, and #355 still needs relocation, actual browser-loss/restart recovery, automatic cleanup under process churn and the complete control/cold-performance matrix. No production or shared-skill publication. Root primary remains retained with its pinned candidates; the read-only consumer auxiliary is removed after clean integration.
+
+## Remaining-work continuation
+
+The operator explicitly selected continuing #351/#355 rather than deployment. Root reuses the clean retained dashboard primary from fetched main d62d0c4dd8456c18fbd454728c02c4a507dfae43 on platform/hosted-acceptance-355, preserving pinned artifacts and both foreign registered checkouts. Root owns provider relocation feasibility/implementation and integration. Two parallel source tracks own automatic fixture cleanup under concurrent process churn and explicit warm-control/cold-pixel measurements respectively. They share this checkout with disjoint helper/test files; root alone edits the main fixture and governs runtime/Git custody. No auxiliary checkout is currently admitted. Provider changes require their own repository plan and current policy review before edits. Existing browser relocation experiments, production deployment and private accounts remain excluded; one future isolated synthetic acceptance must use fresh identities and exact cleanup. Full #355 remains conditional on a supported real relocation and actual loss/restart proof; source refusal is not a substitute.
+
+The continuation helper regressions pass 29 cases. A read-only consumer auxiliary is admitted again at /tmp/bots-p270-acceptance, pinned to the same merged dd6ef3d099 consumer; refreshed whole-repository inventory is retained privately and all foreign work is preserved. Only a temporary installed-dependency symlink is added, and root removes it plus the clean auxiliary after acceptance. The existing a154c5d93 CI binary is reusable because this continuation changes only fixture JavaScript and Markdown/YAML, with no executable-input changes. New fixture revision and evidence directories distinguish the run. Actual loss/restart and provider relocation remain separate from the bounded cleanup/performance run.

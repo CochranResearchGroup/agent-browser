@@ -5,16 +5,16 @@ lanes:
     product_lane: PL-PLATFORM
     objective: Complete app-directed relocation, reconnect, policy and joined acceptance
     plan: docs/dev/plans/0270-2026-10-22-hosted-continuity.md
-    branch: platform/hosted-continuity-351-355
+    branch: platform/hosted-acceptance-355
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#351, CochranResearchGroup/agent-browser#352, CochranResearchGroup/agent-browser#353, CochranResearchGroup/agent-browser#354, CochranResearchGroup/agent-browser#355]
-    plan_state: BLOCKED
-    custody_state: INTEGRATED
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
     dependencies: [P268, P267, P265]
     overlaps: [P269]
     reconciled_overlaps: ["Root owns relocation/shared contracts and integration; three subagents own reconnect, policy and guidance in same primary without independent custody; preserve foreign manual-login lane"]
-    validation_status: PR364 source gates and Native02 feature checks pass; status p95 5.03ms; cleanup independently reconciled; #351 provider capability and #355 actual loss/restart/performance remain open
+    validation_status: Continuing #351/#355 after PR364; root provider seam, parallel cleanup and measurement helpers; isolated acceptance pending
     updated_at: 2026-10-22
 
   - id: P268

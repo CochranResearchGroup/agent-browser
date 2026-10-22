@@ -21,11 +21,14 @@ import {isAbsolute,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {createMcpStdioClient,runCli,httpJsonResult} from './smoke-utils.js';
-import {appProcessOwned,privateProfileReferenced} from './hosted-process-ownership.mjs';
+import {appProcessOwned,privateProfileReferenced,retainedProcessOwned} from './hosted-process-ownership.mjs';
+import {cleanupExactOwnedProcesses} from './hosted-fixture-cleanup.mjs';
+import {createColdFirstPixelClock} from './hosted-performance.mjs';
 import {qualifyHostedBrowserControl} from './smoke-hosted-browser-control.mjs';
 import {qualifyHostedBrowserReconnect} from './smoke-hosted-browser-reconnect.mjs';
 import {qualifyHostedBrowserPolicy} from './smoke-hosted-browser-policy.mjs';
 
+let coldPixels;
 const required=name=>{const value=process.env[name];assert(value,`Missing ${name}`);return value;};
 async function absolute(name){const value=required(name);assert(isAbsolute(value),`${name} must be absolute`);return realpath(value);}
 function origin(name){const value=required(name),url=new URL(value);assert(url.protocol==='https:'&&url.origin===value,`${name} must be canonical HTTPS`);return value;}
@@ -155,8 +158,8 @@ async function startScopedBroker(){
  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
  return server;
 }
-async function census({captureDeniedBaseline=false}={}){
- const rows=[];
+async function census({captureDeniedBaseline=false,collectUnresolved=false}={}){
+ const rows=[],unresolved=[],foreignDenied=[];
  for(const pid of await readdir('/proc')){
   if(!/^\d+$/.test(pid)||Number(pid)===process.pid)continue;
   let identity,owned=false,uid;
@@ -166,12 +169,18 @@ async function census({captureDeniedBaseline=false}={}){
     if(captureDeniedBaseline&&identity.pid!==1&&!harnessAncestors.has(identity.pid))baselineReadableProcesses.set(identity.pid,identity);
     continue;
    }
-   owned=appProcessOwned(identity,appRootProof,appOwnedProcesses)||await appDescendantAncestry(identity);
-   if(owned){const executable=await realpath(path+'/exe');appOwnedProcesses.set(identity.pid,{...identity,executable});}
-   else owned=(await readFile(path+'/environ')).toString().split('\0').includes('AGENT_BROWSER_HOME='+agentHome);
+   const retained=observedOwnedProcesses.get(identity.pid);
+   if(retained&&retained.start===identity.start)owned=retainedProcessOwned({...identity,executable:await realpath(path+'/exe')},observedOwnedProcesses);
+   if(!owned){
+    owned=appProcessOwned(identity,appRootProof,appOwnedProcesses)||await appDescendantAncestry(identity);
+    if(owned){const executable=await realpath(path+'/exe');appOwnedProcesses.set(identity.pid,{...identity,executable});}
+    else owned=(await readFile(path+'/environ')).toString().split('\0').includes('AGENT_BROWSER_HOME='+agentHome);
+   }
    if(!owned){if(captureDeniedBaseline&&identity.pid!==1&&!harnessAncestors.has(identity.pid))baselineReadableProcesses.set(identity.pid,identity);continue;}
-   observedOwnedProcesses.set(identity.pid,identity);
-   rows.push({...identity,executable:await realpath(path+'/exe')});
+   const full={...identity,executable:await realpath(path+'/exe')};
+   if(observedOwnedProcesses.get(identity.pid)?.start===full.start)retainedProcessOwned(full,observedOwnedProcesses);
+   observedOwnedProcesses.set(identity.pid,full);
+   rows.push(full);
   }catch(error){
    if(['ENOENT','ESRCH'].includes(error.code))continue;
    // A positively different UID is outside this fixture's process custody.
@@ -182,35 +191,21 @@ async function census({captureDeniedBaseline=false}={}){
     const prior=baselineDeniedProcesses.get(identity.pid);
     if(prior&&prior.start===identity.start&&prior.parentPid===identity.parentPid&&prior.uid===identity.uid)continue;
     const chain=await foreignDeniedAncestry(identity).catch(()=>null);
-    if(chain){cleanup.foreignDeniedAncestry??=[];cleanup.foreignDeniedAncestry.push(chain);continue;}
+    if(chain){cleanup.foreignDeniedAncestry??=[];cleanup.foreignDeniedAncestry.push(chain);foreignDenied.push(chain);continue;}
    }
-   error.processIdentity=identity;throw error;
+   error.processIdentity=identity;if(collectUnresolved){unresolved.push(safeError(error));continue;}throw error;
   }
  }
- return rows;
+ return collectUnresolved?{owned:rows,unresolved,foreignDenied}:rows;
 }
 
-async function exactOwnedIdentity(row){
- const path=`/proc/${row.pid}`;
+async function cleanupProcessIdentity(pid){
  try{
-  if((await stat(path)).uid!==process.getuid())return null;
-  const identity=await processIdentity(row.pid);
-  if(identity.start!==row.start)return null;
-  if(!appProcessOwned(identity,appRootProof,appOwnedProcesses)&&!(await readFile(path+'/environ')).toString().split('\0').includes('AGENT_BROWSER_HOME='+agentHome))return null;
-  if(await realpath(path+'/exe')!==row.executable)return null;
-  const confirmed=await processIdentity(row.pid);
-  return confirmed.start===row.start?confirmed:null;
+  const before=await processIdentity(pid),executable=await realpath(`/proc/${pid}/exe`),after=await processIdentity(pid);
+  assert.equal(after.start,before.start,'Kernel generation changed during cleanup readback');
+  assert.equal(after.uid,before.uid,'Process ownership changed during cleanup readback');
+  return {...after,executable};
  }catch(error){if(['ENOENT','ESRCH'].includes(error.code))return null;throw error;}
-}
-async function settledCensus(){
- const deadline=Date.now()+10000;
- while(true){
-  try{return await census();}
-  catch(error){if(!['EACCES','EPERM','ENOENT','ESRCH'].includes(error.code)||Date.now()>=deadline)throw error;
-   cleanup.censusSettling??=[];cleanup.censusSettling.push(safeError(error));
-   await new Promise(resolve=>setTimeout(resolve,250));
-  }
- }
 }
 
 async function appAbsenceFence(){
@@ -401,6 +396,7 @@ try{
  uiHandoffId=new URL(opened.handoffUrl).pathname.split('/').at(-1);
  const chatReady=page.waitForResponse(response=>new URL(response.url()).pathname===`/api/bots/${bot.id}/chat`,{timeout:15000});
  const statusReady=page.waitForResponse(response=>new URL(response.url()).pathname===`/api/bots/${bot.id}/status`,{timeout:15000});
+ coldPixels=createColdFirstPixelClock();
  await page.goto(opened.handoffUrl,{waitUntil:'domcontentloaded',timeout:30000});
  const [chatResponse,statusResponse]=await Promise.all([chatReady,statusReady]);assert.equal(chatResponse.status(),200);assert.equal(statusResponse.status(),200);
  const chatState=await chatResponse.json(),peerStatus=await statusResponse.json();assert.equal(chatState.threadId,bot.threadId);assert(Array.isArray(chatState.messages));assert.equal(peerStatus.connected,true);
@@ -412,11 +408,12 @@ try{
  while(Date.now()<renderDeadline&&!rendered){
   for(const frame of page.frames().filter(f=>f.url().startsWith(nativeOrigin+'/'))){
    canvas=await frame.evaluate(()=>{for(const c of document.querySelectorAll('canvas')){if(c.width<100||c.height<100)continue;try{const ctx=c.getContext('2d');if(!ctx)continue;let markers=0;for(let x=0.1;x<0.95;x+=0.1)for(let y=0.1;y<0.9;y+=0.1){const p=ctx.getImageData(Math.floor(c.width*x),Math.floor(c.height*y),1,1).data;if(p[0]>200&&p[1]<90&&p[2]>100)markers++;}if(markers>=8)return {width:c.width,height:c.height,markers};}catch{}}return null;});
-   if(canvas&&frames>0){rendered=true;break;}
+   if(canvas&&coldPixels.observe({canvas,receivedWebSocketFrames:frames})){rendered=true;break;}
   }
   if(!rendered)await new Promise(resolve=>setTimeout(resolve,250));
  }
  await page.screenshot({path:join(evidence,'hosted-native.png')});await import('node:fs/promises').then(fs=>fs.chmod(join(evidence,'hosted-native.png'),0o600));
+ await save('cold-first-pixels.json',coldPixels.receipt());
  await save('render.json',{rendered,canvas,receivedWebSocketFrames:frames});assert(rendered,'Actual Native canvas must render the synthetic marker with WebSocket frames');
  // Qualify the app's real Native toolbar callback against both owners. Viewing
  // alone is still agent-owned; no Agent Browser dashboard or extra assignment.
@@ -444,7 +441,15 @@ try{
    if(reply.isError||value.success===false)throw Object.assign(Error(value.error?.message??JSON.stringify(value.error??value)),{code:value.error?.code??'workflow_rejected'});
    return value.data??value;
   };
-  step='explicit-host-reconnect';await qualifyHostedBrowserReconnect({workflow:publicWorkflow,task:opened,save,syntheticOnly:true});
+  step='explicit-host-reconnect';await qualifyHostedBrowserReconnect({workflow:publicWorkflow,task:opened,save,syntheticOnly:true,nativeControl:{status:consumerControl,change:async body=>{
+   uiControlSettled=false;
+   try{
+    const response=await fetch(service.url+`/api/agent-browser/handoffs/${uiHandoffId}/control`,{method:'POST',headers:{origin:service.url,'content-type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(120000)});
+    assert.equal(response.status,200);const value=await response.json();
+    assert.equal(value.control.owner,body.operation==='takeover'?'human':'agent');assert.equal(value.native.owner,body.operation==='takeover'?'operator':'agent');
+    uiControlSettled=true;return value;
+   }catch(error){ambiguous=true;throw error;}
+  }}});
   await continuity('after-host-reconnect');
   const artifactRoot=join(root,'authorized-artifacts');await mkdir(artifactRoot,{mode:0o700});
   step='task-policy-and-artifacts';await qualifyHostedBrowserPolicy({workflow:publicWorkflow,task:opened,peerTask:shared,artifactRoot,save});
@@ -467,6 +472,7 @@ try{
 }catch(error){if(!uiControlSettled)ambiguous=true;await save('failure.json',{...safeError(error),ambiguous});process.exitCode=1;}
 finally{
  async function clean(name,action){try{await action();}catch(error){cleanup.errors.push({...safeError(error),step:name});process.exitCode=1;}}
+ if(coldPixels)await clean('record-cold-pixel-evidence',()=>save('cold-first-pixels.json',coldPixels.receipt()));
  if(uiHandoffId&&uiTakeoverDispatched&&!uiReturnDispatched)await clean('return-known-native-control',async()=>{
   const status=await fetch(service.url+`/api/agent-browser/handoffs/${uiHandoffId}/control`,{signal:AbortSignal.timeout(15000)});assert.equal(status.status,200);const current=await status.json();
   if(current.control.owner==='human'&&current.native.owner==='operator'&&current.native.state==='ready'){
@@ -482,7 +488,15 @@ finally{
  await clean('close-synthetic-site',async()=>{if(fixtureSite){fixtureSite.closeAllConnections();await new Promise(resolve=>fixtureSite.close(resolve));}});
  await clean('close-service',async()=>{await service?.close();});
  await clean('close-mcp',async()=>{await client?.close();});
- await clean('owned-process-cleanup',async()=>{cleanup.processesBefore=await settledCensus();for(const row of cleanup.processesBefore){const current=await exactOwnedIdentity(row);if(current)process.kill(row.pid,'SIGTERM');}await new Promise(resolve=>setTimeout(resolve,1000));cleanup.processesAfter=await settledCensus();assert.equal(cleanup.processesAfter.length,0,'Owned fixture processes remain');await appAbsenceFence();cleanup.processesClear=true;});
+ await clean('owned-process-cleanup',async()=>{
+  cleanup.processesBefore=[...observedOwnedProcesses.values()];
+  cleanup.processCleanup={};
+  const result=await cleanupExactOwnedProcesses({known:observedOwnedProcesses,census:()=>census({collectUnresolved:true}),readIdentity:cleanupProcessIdentity,signal:(pid,selected)=>process.kill(pid,selected),sleep:ms=>new Promise(resolve=>setTimeout(resolve,ms)),allowSigkill:true,graceMs:3000,killMs:3000,pollMs:100,receipt:cleanup.processCleanup,record:async()=>save('cleanup.json',cleanup)});
+  cleanup.processesBefore=result.owned;
+  cleanup.processesAfter=result.remaining;
+  assert.equal(result.qualified,true,'Exact fixture cleanup remains unresolved; assignment cannot be released');
+  await appAbsenceFence();cleanup.processesClear=true;
+ });
  if(remote&&baseline)await clean('assignment-cleanup',async()=>{
   const afterStop=await remote.inventory();
   for(const binding of acquired){assert(!baseline.assignments.some(a=>a.assignmentId===binding.assignmentId));assert.equal(cleanup.processesClear,true,'Fresh process cleanup proof is required before release');if(afterStop.assignments.some(a=>a.assignmentId===binding.assignmentId&&a.state==='active')){const current=await remote.observe(binding);assert.equal(current.generation,binding.generation);await remote.release(current);cleanup.released.push({assignmentId:binding.assignmentId,generation:binding.generation});}}
