@@ -256,8 +256,10 @@ pub(super) fn open(
     };
     if hosted.is_some() {
         // The read-only projection separates recorded inventory from Native readiness.
+        // Initial navigation may have created the first tab since the open read.
+        let published = store.load_session_state().map_err(issue)?;
         data["host"] =
-            crate::native::browser_host_context::snapshot(&state, session_id).map_err(issue)?;
+            crate::native::browser_host_context::snapshot(&published, session_id).map_err(issue)?;
     }
     data["taskId"] = data["sessionId"].clone();
     if let Some(object) = data.as_object_mut() {

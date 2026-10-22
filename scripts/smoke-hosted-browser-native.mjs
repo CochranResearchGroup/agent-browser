@@ -56,7 +56,29 @@ function safeError(error){
    ...(typeof error.actual==='number'?{actual:error.actual}:{}),...(typeof error.expected==='number'?{expected:error.expected}:{})}:{}),
   ...(error?.processIdentity?{processIdentity:error.processIdentity}:{})};
 }
-const baselineDeniedProcesses=new Map();
+const baselineDeniedProcesses=new Map(),baselineReadableProcesses=new Map(),observedOwnedProcesses=new Map();
+async function processIdentity(pid){
+ const fields=(await readFile(`/proc/${pid}/stat`,'utf8')).split(')').at(-1).trim().split(/\s+/);
+ return {pid:Number(pid),start:fields[19],parentPid:Number(fields[1])};
+}
+async function foreignDeniedAncestry(identity){
+ const chain=[],seen=new Set();let current=identity;
+ while(current&&chain.length<64){
+  if(seen.has(current.pid)||current.pid===process.pid||current.parentPid<=1)return null;
+  seen.add(current.pid);chain.push(current);
+  if(observedOwnedProcesses.get(current.pid)?.start===current.start)return null;
+  const baseline=baselineReadableProcesses.get(current.pid);
+  if(baseline&&baseline.start===current.start&&baseline.parentPid===current.parentPid){
+   // Re-read every link to reject PID reuse or a reparent during qualification.
+   for(const link of chain){const fresh=await processIdentity(link.pid);if(fresh.start!==link.start||fresh.parentPid!==link.parentPid)return null;}
+   return chain;
+  }
+  const parent=await processIdentity(current.parentPid);
+  if(Number(parent.start)>Number(current.start))return null;
+  current=parent;
+ }
+ return null;
+}
 const peerIdentity=inventory=>inventory.assignments.map(a=>Object.fromEntries(['assignmentId','desktopId','generation','viewingGeneration','state'].filter(k=>k in a).map(k=>[k,a[k]]))).sort((a,b)=>a.assignmentId.localeCompare(b.assignmentId));
 // Protocol: RemoteViewApplicationEnvelope {application,request}, POST
 // /v1/consumer. Published request fields are snake_case; response inventory is
@@ -112,17 +134,19 @@ async function census({captureDeniedBaseline=false}={}){
   if(!/^\d+$/.test(pid)||Number(pid)===process.pid)continue;
   let identity,owned=false;
   try{const path=`/proc/${pid}`;if((await stat(path)).uid!==process.getuid())continue;
-   const fields=(await readFile(path+'/stat','utf8')).split(')').at(-1).trim().split(/\s+/);
-   identity={pid:Number(pid),start:fields[19],parentPid:Number(fields[1])};assert(/^\d+$/.test(identity.start));
+   identity=await processIdentity(pid);assert(/^\d+$/.test(identity.start));
    owned=(await readFile(path+'/environ')).toString().split('\0').includes('AGENT_BROWSER_HOME='+agentHome);
-   if(!owned)continue;
+   if(!owned){if(captureDeniedBaseline)baselineReadableProcesses.set(identity.pid,identity);continue;}
+   observedOwnedProcesses.set(identity.pid,identity);
    rows.push({...identity,executable:await realpath(path+'/exe')});
   }catch(error){
    if(['ENOENT','ESRCH'].includes(error.code))continue;
    if(['EACCES','EPERM'].includes(error.code)&&identity&&!owned){
     if(captureDeniedBaseline){baselineDeniedProcesses.set(identity.pid,identity);continue;}
     const prior=baselineDeniedProcesses.get(identity.pid);
-    if(prior&&prior.start===identity.start)continue;
+    if(prior&&prior.start===identity.start&&prior.parentPid===identity.parentPid)continue;
+    const chain=await foreignDeniedAncestry(identity).catch(()=>null);
+    if(chain){cleanup.foreignDeniedAncestry??=[];cleanup.foreignDeniedAncestry.push(chain);continue;}
    }
    error.processIdentity=identity;throw error;
   }
@@ -139,7 +163,9 @@ async function workflow(name,args){
  let result;try{result=await send('tools/call',{name,arguments:args});}catch(error){ambiguous=true;throw error;}
  const value=result.structuredContent??JSON.parse(result.content.find(c=>c.type==='text').text);
  if(result.isError||value.success===false)throw Object.assign(Error('Agent Browser rejected workflow'),{code:value.error?.code||'workflow_rejected'});
- const data=value.data??value;if(name==='browser_open')task=data;return data;
+ const data=value.data??value;if(name==='browser_open'){
+  task=data;await save('browser-open-identity.json',Object.fromEntries(['taskId','browserId','profileId','tabId','host'].filter(k=>k in data).map(k=>[k,data[k]])));
+ }return data;
 }
 async function readTask(id){const response=await runCli(context,['--json','mcp','host-task',id]);const value=JSON.parse(response.stdout);assert.equal(value.success,true);return value.data;}
 function startWatch(id){
@@ -162,7 +188,7 @@ function startWatch(id){
 }
 
 try{
- step='baseline-process-census';await census({captureDeniedBaseline:true});await save('baseline-denied-processes.json',[...baselineDeniedProcesses.values()]);
+ step='baseline-process-census';await census({captureDeniedBaseline:true});await save('baseline-denied-processes.json',[...baselineDeniedProcesses.values()]);await save('baseline-readable-processes.json',[...baselineReadableProcesses.values()]);
  step='private-auth-state';
  const authState=process.env.HOSTED_SMOKE_AUTH_STATE;
  if(authState){assert(isAbsolute(authState));assert.equal((await stat(authState)).mode&0o077,0,'Auth state must be private');}
