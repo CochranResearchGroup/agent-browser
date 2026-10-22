@@ -897,6 +897,62 @@ impl<
         Ok(Some(prepared.desktops))
     }
 
+    fn remote_view_placement_candidates(
+        &mut self,
+        placement: &BrowserPlacement,
+    ) -> Result<Option<Vec<RemoteViewDesktopCandidate>>, String> {
+        self.require_operation()?;
+        // Explicit placement reads existing host-owned assignments only. It does
+        // not acquire spare capacity or reject a desktop for having app windows.
+        let inventory = self
+            .adapter
+            .inventory()
+            .map_err(|_| "browser_placement_inventory_unavailable")?;
+        let pool = self
+            .pool
+            .as_ref()
+            .ok_or("browser_placement_provider_unconfigured")?;
+        let pool_id = inventory
+            .pools
+            .iter()
+            .find(|candidate| candidate.name == pool.name)
+            .ok_or("browser_placement_pool_unavailable")?
+            .pool_id
+            .clone();
+        let requested = match placement {
+            BrowserPlacement::Required { desktop } => vec![desktop],
+            BrowserPlacement::Preferred {
+                desktop,
+                alternatives,
+            } => std::iter::once(desktop).chain(alternatives).collect(),
+        };
+        let mut candidates = Vec::new();
+        for desktop in requested {
+            let Some(assignment) = inventory.assignments.iter().find(|assignment| {
+                assignment.pool_id == pool_id
+                    && assignment.state == RemoteViewAssignmentState::Active
+                    && assignment.desktop_id == desktop.desktop_id
+                    && assignment.generation == desktop.generation
+            }) else {
+                continue;
+            };
+            if self.adapter.observe_assignment(assignment).is_err() {
+                continue;
+            }
+            self.assignments
+                .insert(assignment.desktop_id.clone(), assignment.clone());
+            candidates.push(RemoteViewDesktopCandidate {
+                ready: true,
+                desktop: RemoteViewFixedDesktop {
+                    desktop_id: assignment.desktop_id.clone(),
+                    friendly_route_label: assignment.desktop_id.clone(),
+                    generation: assignment.generation,
+                },
+            });
+        }
+        Ok(Some(candidates))
+    }
+
     fn begin_operation(&mut self, expected: &BrowserSessionState) -> Result<(), String> {
         // A failed earlier operation leaves its observation in the durable
         // journal. It must not poison another task through process-local state.

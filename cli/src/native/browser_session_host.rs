@@ -754,6 +754,14 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         &mut self,
         request: OpenBrowserSession,
     ) -> Result<OpenBrowserSessionResult, String> {
+        self.open_with_host_binding(request, None)
+    }
+
+    fn open_with_host_binding(
+        &mut self,
+        request: OpenBrowserSession,
+        hosted: Option<agent_browser_service_model::BrowserHostBinding>,
+    ) -> Result<OpenBrowserSessionResult, String> {
         let existing_task = self
             .state
             .sessions
@@ -791,11 +799,13 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     agent_browser_service_model::BrowserProfileIntent::Disposable { .. }
                         if self.state.disposable_profiles.contains_key(profile_id) =>
                     {
-                        OpenBrowserSession::existing_disposable(
+                        let mut continuation = OpenBrowserSession::existing_disposable(
                             &request.session_name,
                             profile_id,
                             request.activity_at_ms,
-                        )
+                        );
+                        continuation.placement = request.placement.clone();
+                        continuation
                     }
                     agent_browser_service_model::BrowserProfileIntent::Exact {
                         profile_id: requested,
@@ -812,6 +822,21 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             }
             result => result?,
         };
+        if let Some(binding) = hosted {
+            let desktop = self
+                .state
+                .browsers
+                .get(&result.browser_id)
+                .and_then(|browser| browser.desktop.clone())
+                .ok_or("browser_host_desktop_missing")?;
+            self.state.host_bindings.insert(
+                result.session_id.clone(),
+                agent_browser_service_model::BrowserHostTaskBinding {
+                    request: binding,
+                    desktop,
+                },
+            );
+        }
         self.commit_state()?;
         Ok(result)
     }
@@ -1968,8 +1993,34 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         command: &serde_json::Value,
         activity_at_ms: u64,
     ) -> Result<OpenBrowserSessionResult, String> {
+        let hosted = command
+            .get("hostBinding")
+            .map(|value| {
+                serde_json::from_value::<agent_browser_service_model::BrowserHostBinding>(
+                    value.clone(),
+                )
+                .map_err(|_| "browser_host_binding_invalid".to_string())
+            })
+            .transpose()?;
+        if let Some(binding) = &hosted {
+            super::browser_host_context::validate_provider(binding)?;
+        }
         self.register_explicit_profile(command)?;
         let session_name = required_string(command, "sessionName")?;
+        if let Some(binding) = &hosted {
+            for session in self
+                .state
+                .sessions
+                .values()
+                .filter(|session| session.name == session_name)
+            {
+                if let Some(current) = self.state.host_bindings.get(&session.id) {
+                    if current.request != *binding {
+                        return Err("browser_host_binding_changed: explicitly rebind the app before changing an existing task".into());
+                    }
+                }
+            }
+        }
         let request = if let Some(profile_id) = optional_string(command, "profileId") {
             OpenBrowserSession::exact_profile(session_name, profile_id, activity_at_ms)
         } else {
@@ -1980,7 +2031,12 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 activity_at_ms,
             )
         };
-        let opened = self.open(request)?;
+        let request = if let Some(binding) = &hosted {
+            request.with_placement(binding.placement.clone())
+        } else {
+            request
+        };
+        let opened = self.open_with_host_binding(request, hosted)?;
         self.apply_leave_open_choice(&opened.session_id, command)?;
         Ok(opened)
     }
@@ -3219,6 +3275,146 @@ mod tests {
         match peer.admit_launch_intent(&intent, &host.state).unwrap() {
             LaunchCustodyAdmission::Existing(record) => assert!(record.published),
             LaunchCustodyAdmission::New => panic!("publication must retain the original intent"),
+        }
+    }
+
+    #[test]
+    fn hosted_context_publishes_with_task_or_not_at_all() {
+        struct Store {
+            state: BrowserSessionState,
+            catalog: BrowserProfileCatalog,
+            fail: bool,
+            attempts: Vec<BrowserSessionState>,
+        }
+        impl BrowserSessionPersistence for Store {
+            fn load_session_state(&self) -> Result<BrowserSessionState, String> {
+                Ok(self.state.clone())
+            }
+            fn compare_and_save_session_state(
+                &mut self,
+                expected: &BrowserSessionState,
+                next: &BrowserSessionState,
+            ) -> Result<(), String> {
+                assert_eq!(expected, &self.state);
+                // Every publication candidate must carry context with the new task.
+                for session in next.sessions.values() {
+                    assert!(
+                        next.host_bindings.contains_key(&session.id),
+                        "task publication omitted hosted context"
+                    );
+                }
+                self.attempts.push(next.clone());
+                if self.fail {
+                    return Err("synthetic_publication_failure".into());
+                }
+                self.state = next.clone();
+                Ok(())
+            }
+            fn load_or_import_profile_catalog(
+                &self,
+                _: &Path,
+            ) -> Result<BrowserProfileCatalogLoad, String> {
+                Ok(BrowserProfileCatalogLoad {
+                    catalog: self.catalog.clone(),
+                    diagnostics: vec![],
+                    imported_legacy_profiles: false,
+                })
+            }
+            fn save_profile_catalog(&self, _: &BrowserProfileCatalog) -> Result<(), String> {
+                panic!("unexpected profile mutation")
+            }
+        }
+        use agent_browser_service_model::{
+            BrowserDesktopBinding, BrowserHostBinding, BrowserPlacement, BrowserProfileKind,
+            RemoteViewFixedDesktop,
+        };
+        for fail in [false, true] {
+            let desktop = RemoteViewFixedDesktop {
+                desktop_id: "app-desktop".into(),
+                generation: 1,
+                friendly_route_label: "app".into(),
+            };
+            let profile = BrowserProfileCatalogEntry {
+                id: "work".into(),
+                name: "work".into(),
+                user_data_dir: "/synthetic/work".into(),
+                kind: BrowserProfileKind::Named,
+            };
+            let catalog = BrowserProfileCatalog {
+                profiles: std::collections::BTreeMap::from([(profile.id.clone(), profile)]),
+                ..BrowserProfileCatalog::default()
+            };
+            let mut state = BrowserSessionState::default();
+            state.browsers.insert(
+                "browser".into(),
+                ManagedBrowserInstance {
+                    id: "browser".into(),
+                    profile_id: "work".into(),
+                    pid: 42,
+                    cdp_endpoint: "http://synthetic".into(),
+                    desktop: Some(desktop.clone()),
+                    active_session_ids: vec![],
+                },
+            );
+            let mut host = BrowserSessionHost {
+                persistence: Store {
+                    state: state.clone(),
+                    catalog: catalog.clone(),
+                    fail,
+                    attempts: vec![],
+                },
+                effects: BrowserSessionEffectAdapter::new(FixtureRuntime {
+                    live: true,
+                    ..Default::default()
+                }),
+                catalog,
+                state: state.clone(),
+                persisted_state: state.clone(),
+                manager_config: BrowserSessionManagerConfig {
+                    session_idle_timeout_ms: 1000,
+                    remote_view_desktops: vec![
+                        agent_browser_service_model::RemoteViewDesktopCandidate {
+                            desktop,
+                            ready: true,
+                        },
+                    ],
+                },
+                exact_url_history_maximum_bytes: 1024,
+                native_use_cursor: 0,
+            };
+            let binding = BrowserHostBinding {
+                version: 1,
+                host_id: "app".into(),
+                participant_id: "participant".into(),
+                session_id: "app-session".into(),
+                placement: BrowserPlacement::Required {
+                    desktop: BrowserDesktopBinding {
+                        desktop_id: "app-desktop".into(),
+                        generation: 1,
+                    },
+                },
+            };
+            let result = host.open_with_host_binding(
+                OpenBrowserSession::exact_profile("task", "work", 1)
+                    .with_placement(binding.placement.clone()),
+                Some(binding.clone()),
+            );
+            assert_eq!(host.persistence.attempts.len(), 1);
+            if fail {
+                assert_eq!(result.unwrap_err(), "synthetic_publication_failure");
+                assert_eq!(host.persistence.state, state);
+            } else {
+                let opened = result.unwrap();
+                assert_eq!(
+                    host.persistence.state.host_bindings[&opened.session_id].request,
+                    binding
+                );
+                assert!(host
+                    .persistence
+                    .state
+                    .sessions
+                    .contains_key(&opened.session_id));
+            }
         }
     }
 

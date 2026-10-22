@@ -10,7 +10,7 @@ static POOL_MAINTENANCE: std::sync::LazyLock<tokio::sync::Notify> =
 
 /// Coalesce launch-triggered spare work without provisioning under the host lock.
 pub(crate) fn request_pool_maintenance() {
-    if remote_view_settings_present() {
+    if std::env::var_os("AGENT_BROWSER_HOSTS_FILE").is_none() && remote_view_settings_present() {
         POOL_MAINTENANCE.notify_one();
     }
 }
@@ -240,16 +240,37 @@ fn active_workspace_assignment<'a>(
 /// Public acquisition custody coalesces requests from other daemon processes;
 /// no foreground operation waits for spare provisioning.
 pub(crate) fn replenish_configured_remote_view_pool() -> Result<(), String> {
+    // A host registry makes spare growth and retirement app-owned. Check its
+    // presence before opening state, validating provider configuration or I/O.
+    if std::env::var_os("AGENT_BROWSER_HOSTS_FILE").is_some() {
+        return Ok(());
+    }
     let Some(mut context) = configured_remote_view()? else {
         return Ok(());
     };
     let mut store = BrowserSessionSqliteStore::default_sqlite()?;
-    super::browser_session_pool_maintenance::maintain_pool(
-        &mut context.adapter,
-        &mut store,
-        &context.pool,
-    )?;
-    Ok(())
+    let state = store.load_session_state()?;
+    maintain_only_standalone_pool(false, &state, || {
+        super::browser_session_pool_maintenance::maintain_pool(
+            &mut context.adapter,
+            &mut store,
+            &context.pool,
+        )?;
+        Ok(())
+    })
+}
+
+/// Even ended hosted metadata protects app ownership after configuration loss.
+/// The effect closure is never entered for a hosted runtime.
+fn maintain_only_standalone_pool(
+    host_registry_present: bool,
+    state: &BrowserSessionState,
+    maintain: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    if host_registry_present || !state.host_bindings.is_empty() {
+        return Ok(());
+    }
+    maintain()
 }
 
 fn runtime_context(
@@ -475,6 +496,15 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
         match self {
             Self::Local(effects) => effects.remote_view_desktop_candidates(),
             Self::Remote(effects) => effects.remote_view_desktop_candidates(),
+        }
+    }
+    fn remote_view_placement_candidates(
+        &mut self,
+        placement: &BrowserPlacement,
+    ) -> Result<Option<Vec<RemoteViewDesktopCandidate>>, String> {
+        match self {
+            Self::Local(effects) => effects.remote_view_placement_candidates(placement),
+            Self::Remote(effects) => effects.remote_view_placement_candidates(placement),
         }
     }
     fn begin_operation(&mut self, expected: &BrowserSessionState) -> Result<(), String> {
@@ -706,6 +736,56 @@ impl ManagedBrowserCommandEffects for RuntimeSessionEffects {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn hosted_pool_maintenance_never_enters_provider_effects_even_after_task_end() {
+        let mut state = BrowserSessionState::default();
+        maintain_only_standalone_pool(true, &state, || {
+            panic!("host configuration must suppress provider I/O")
+        })
+        .unwrap();
+        state.host_bindings.insert(
+            "ended-task".into(),
+            BrowserHostTaskBinding {
+                request: BrowserHostBinding {
+                    version: 1,
+                    host_id: "app".into(),
+                    participant_id: "participant".into(),
+                    session_id: "session".into(),
+                    placement: BrowserPlacement::Required {
+                        desktop: BrowserDesktopBinding {
+                            desktop_id: "desktop".into(),
+                            generation: 1,
+                        },
+                    },
+                },
+                desktop: RemoteViewFixedDesktop {
+                    desktop_id: "desktop".into(),
+                    generation: 1,
+                    friendly_route_label: "app".into(),
+                },
+            },
+        );
+        assert!(state.sessions.is_empty());
+        maintain_only_standalone_pool(false, &state, || {
+            panic!("lost registry cannot authorize app-owned pool effects")
+        })
+        .unwrap();
+        let mut calls = 0;
+        maintain_only_standalone_pool(false, &BrowserSessionState::default(), || {
+            calls += 1;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(calls, 1);
+        assert_eq!(
+            maintain_only_standalone_pool(false, &BrowserSessionState::default(), || Err(
+                "standalone-provider-failure".into()
+            ))
+            .unwrap_err(),
+            "standalone-provider-failure"
+        );
+    }
+
     #[test]
     fn browser_session_runtime_configuration_performs_no_provider_request() {
         assert!(runtime_context(None, None, None, None).unwrap().is_none());

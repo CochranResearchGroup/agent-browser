@@ -108,6 +108,7 @@ fn add_peer_browser(state: &mut BrowserSessionState) {
 fn release() -> RemoteViewJoinedReleaseOutcome {
     RemoteViewJoinedReleaseOutcome {
         assignment: RemoteViewAssignmentRecord {
+            presentation: None,
             assignment_id: "assignment-a".into(),
             registration_id: "registration-a".into(),
             pool_id: "pool-a".into(),

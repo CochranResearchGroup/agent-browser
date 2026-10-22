@@ -148,6 +148,14 @@ pub trait BrowserSessionEffects {
         Ok(None)
     }
 
+    /// Observe explicit host placement without allocating ordinary spare capacity.
+    fn remote_view_placement_candidates(
+        &mut self,
+        _placement: &BrowserPlacement,
+    ) -> Result<Option<Vec<RemoteViewDesktopCandidate>>, String> {
+        self.remote_view_desktop_candidates()
+    }
+
     /// Receive the host's durable baseline before any operation effects. A
     /// custody adapter must retain unresolved launch intent across failures.
     fn begin_operation(&mut self, _expected: &BrowserSessionState) -> Result<(), String> {
@@ -361,14 +369,80 @@ pub enum BrowserProfileIntent {
     Disposable { policy_id: String },
 }
 
+/// Exact provider-owned desktop identity; generation fences stale assignments.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BrowserDesktopBinding {
+    pub desktop_id: String,
+    pub generation: u64,
+}
+
+/// Caller-authorized placement. Preferred alternatives are ordered and exhaustive.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
+pub enum BrowserPlacement {
+    Required {
+        desktop: BrowserDesktopBinding,
+    },
+    Preferred {
+        desktop: BrowserDesktopBinding,
+        alternatives: Vec<BrowserDesktopBinding>,
+    },
+}
+
+impl BrowserPlacement {
+    fn bindings(&self) -> Vec<&BrowserDesktopBinding> {
+        match self {
+            Self::Required { desktop } => vec![desktop],
+            Self::Preferred {
+                desktop,
+                alternatives,
+            } => std::iter::once(desktop)
+                .chain(alternatives.iter())
+                .collect(),
+        }
+    }
+
+    fn accepts(&self, desktop: Option<&RemoteViewFixedDesktop>) -> bool {
+        desktop.is_some_and(|desktop| {
+            self.bindings().iter().any(|binding| {
+                binding.desktop_id == desktop.desktop_id && binding.generation == desktop.generation
+            })
+        })
+    }
+
+    fn select(
+        &self,
+        candidates: &[RemoteViewDesktopCandidate],
+    ) -> Result<RemoteViewFixedDesktop, String> {
+        for binding in self.bindings() {
+            if let Some(candidate) = candidates.iter().find(|candidate| {
+                candidate.ready
+                    && candidate.desktop.desktop_id == binding.desktop_id
+                    && candidate.desktop.generation == binding.generation
+            }) {
+                return Ok(candidate.desktop.clone());
+            }
+        }
+        Err("browser_placement_unavailable:requested desktop generation is not ready; refresh placement or authorize an alternative".into())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenBrowserSession {
+    pub placement: Option<BrowserPlacement>,
     pub session_name: String,
     pub profile_intent: BrowserProfileIntent,
     pub activity_at_ms: u64,
 }
 
 impl OpenBrowserSession {
+    /// Constrain this open without changing ordinary default placement.
+    pub fn with_placement(mut self, placement: BrowserPlacement) -> Self {
+        self.placement = Some(placement);
+        self
+    }
+
     /// Select one recorded disposable allocation without allocating or guessing
     /// another task's profile. Unknown allocations fail before browser effects.
     pub fn existing_disposable(
@@ -377,6 +451,7 @@ impl OpenBrowserSession {
         activity_at_ms: u64,
     ) -> Self {
         Self {
+            placement: None,
             session_name: session_name.into(),
             profile_intent: BrowserProfileIntent::ExistingDisposable {
                 profile_id: profile_id.into(),
@@ -390,6 +465,7 @@ impl OpenBrowserSession {
         activity_at_ms: u64,
     ) -> Self {
         Self {
+            placement: None,
             session_name: session_name.into(),
             profile_intent: BrowserProfileIntent::Exact {
                 profile_id: profile_id.into(),
@@ -404,6 +480,7 @@ impl OpenBrowserSession {
         activity_at_ms: u64,
     ) -> Self {
         Self {
+            placement: None,
             session_name: session_name.into(),
             profile_intent: BrowserProfileIntent::Disposable {
                 policy_id: policy_id.into(),
@@ -672,6 +749,9 @@ pub struct PendingHumanTabRetention {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserSessionState {
+    /// App context retained under the logical task session identifier.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub host_bindings: BTreeMap<String, crate::BrowserHostTaskBinding>,
     pub schema_version: String,
     pub retention_policy: crate::BrowserRetentionPolicy,
     /// Last native placement, advanced only by a successful independent launch.
@@ -724,6 +804,7 @@ impl Default for BrowserSessionState {
             browsers: BTreeMap::new(),
             shared_browser_ids: BTreeSet::new(),
             profile_executables: BTreeMap::new(),
+            host_bindings: BTreeMap::new(),
             idle_closed_browsers: BTreeMap::new(),
             remote_view_presentations: BTreeMap::new(),
             remote_view_tab_handoffs: BTreeMap::new(),
@@ -971,15 +1052,79 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         self
     }
 
+    /// Intersect all live task constraints sharing a profile. Caller omission
+    /// cannot erase retained app intent; ended task metadata confers no veto.
+    fn effective_placement(
+        &self,
+        profile_id: &str,
+        requested: Option<&BrowserPlacement>,
+    ) -> Result<Option<BrowserPlacement>, String> {
+        let mut constraints = requested.into_iter().collect::<Vec<_>>();
+        constraints.extend(
+            self.state
+                .sessions
+                .values()
+                .filter(|session| session.profile_id == profile_id)
+                .filter_map(|session| self.state.host_bindings.get(&session.id))
+                .map(|binding| &binding.request.placement),
+        );
+        let Some(first) = constraints.first() else {
+            return Ok(None);
+        };
+        let mut allowed = first
+            .bindings()
+            .into_iter()
+            .filter(|binding| {
+                constraints
+                    .iter()
+                    .all(|constraint| constraint.bindings().contains(binding))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if allowed.is_empty() {
+            return Err("browser_placement_conflict:shared tasks require incompatible desktops; explicitly rebind before changing placement".into());
+        }
+        let desktop = allowed.remove(0);
+        Ok(Some(if allowed.is_empty() {
+            BrowserPlacement::Required { desktop }
+        } else {
+            BrowserPlacement::Preferred {
+                desktop,
+                alternatives: allowed,
+            }
+        }))
+    }
+
     pub fn open(
         &mut self,
-        request: OpenBrowserSession,
+        mut request: OpenBrowserSession,
     ) -> Result<OpenBrowserSessionResult, String> {
         let expires_at_ms = request
             .activity_at_ms
             .checked_add(self.config.session_idle_timeout_ms)
             .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
         let profile = self.resolve_profile_for_open(&request)?;
+        request.placement = self.effective_placement(&profile.id, request.placement.as_ref())?;
+        if let Some(placement) = &request.placement {
+            // Check retained physical identity before expiry, recovery, or task mutation.
+            for browser in self
+                .state
+                .browsers
+                .values()
+                .filter(|browser| browser.profile_id == profile.id)
+            {
+                if !placement.accepts(browser.desktop.as_ref()) {
+                    return Err("browser_placement_conflict:existing profile browser uses another desktop; retain it or explicitly relocate/rebind".into());
+                }
+            }
+            let refreshed = self.effects.remote_view_placement_candidates(placement)?;
+            placement.select(
+                refreshed
+                    .as_deref()
+                    .unwrap_or(&self.config.remote_view_desktops),
+            )?;
+        }
+
         let expired_matching_sessions = self
             .state
             .sessions
@@ -1038,7 +1183,11 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 .cloned()
                 .ok_or_else(|| "browser_session_browser_missing".to_string())?;
             if self.effects.browser_is_live(&browser)?
-                || self.reconcile_existing_browser(&browser, &profile)?
+                || self.reconcile_existing_browser_with_placement(
+                    &browser,
+                    &profile,
+                    request.placement.as_ref(),
+                )?
             {
                 let stored = self
                     .state
@@ -1057,7 +1206,10 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 });
             }
             if self.protected_session_ids.contains(&session.id) {
-                self.recover_retained_browser(&browser.id)?;
+                self.recover_retained_browser_with_placement(
+                    &browser.id,
+                    request.placement.as_ref(),
+                )?;
                 let stored = self
                     .state
                     .sessions
@@ -1093,7 +1245,11 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .cloned();
         let (browser_id, disposition, launched) = if let Some(browser) = reusable_browser {
             if self.effects.browser_is_live(&browser)?
-                || self.reconcile_existing_browser(&browser, &profile)?
+                || self.reconcile_existing_browser_with_placement(
+                    &browser,
+                    &profile,
+                    request.placement.as_ref(),
+                )?
             {
                 (browser.id, SessionBrowserDisposition::Reused, None)
             } else if browser
@@ -1101,7 +1257,10 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 .iter()
                 .any(|id| self.protected_session_ids.contains(id))
             {
-                self.recover_retained_browser(&browser.id)?;
+                self.recover_retained_browser_with_placement(
+                    &browser.id,
+                    request.placement.as_ref(),
+                )?;
                 (browser.id, SessionBrowserDisposition::Launched, None)
             } else {
                 self.retire_browser(
@@ -1109,7 +1268,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     SessionEndReason::BrowserUnresponsive,
                     request.activity_at_ms,
                 )?;
-                let launch = self.launch_browser(&profile)?;
+                let launch = self.launch_browser(&profile, request.placement.as_ref())?;
                 (
                     launch.browser_id.clone(),
                     SessionBrowserDisposition::Launched,
@@ -1117,7 +1276,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 )
             }
         } else {
-            let launch = self.launch_browser(&profile)?;
+            let launch = self.launch_browser(&profile, request.placement.as_ref())?;
             (
                 launch.browser_id.clone(),
                 SessionBrowserDisposition::Launched,
@@ -1184,6 +1343,26 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .state
             .browsers
             .get(browser_id)
+            .ok_or("browser_session_recovery_browser_missing")?;
+        let placement = self.effective_placement(&browser.profile_id, None)?;
+        if placement
+            .as_ref()
+            .is_some_and(|placement| !placement.accepts(browser.desktop.as_ref()))
+        {
+            return Err("browser_placement_conflict:retained desktop differs from app placement; explicitly rebind before recovery".into());
+        }
+        self.recover_retained_browser_with_placement(browser_id, placement.as_ref())
+    }
+
+    fn recover_retained_browser_with_placement(
+        &mut self,
+        browser_id: &str,
+        placement: Option<&BrowserPlacement>,
+    ) -> Result<(), String> {
+        let browser = self
+            .state
+            .browsers
+            .get(browser_id)
             .cloned()
             .ok_or("browser_session_recovery_browser_missing")?;
         if self.effects.browser_is_live(&browser)? {
@@ -1201,7 +1380,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             })
             .ok_or("browser_session_recovery_profile_missing")?
             .clone();
-        if self.reconcile_existing_browser(&browser, &profile)? {
+        if self.reconcile_existing_browser_with_placement(&browser, &profile, placement)? {
             return Ok(());
         }
         if !browser
@@ -1227,6 +1406,10 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             &tabs,
             &self.state.navigation_history,
         )?;
+        if placement.is_some_and(|placement| !placement.accepts(recovered.launch.desktop.as_ref()))
+        {
+            return Err("browser_placement_conflict:recovery selected another desktop; explicitly relocate/rebind".into());
+        }
         let browser_id = browser.id.clone();
         self.publish_recovery(browser, tabs, recovered, false)?;
         // A positively absent replacement has fresh launch custody; prior shared attachment does not transfer.
@@ -1234,10 +1417,11 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         Ok(())
     }
 
-    fn reconcile_existing_browser(
+    fn reconcile_existing_browser_with_placement(
         &mut self,
         browser: &ManagedBrowserInstance,
         profile: &BrowserProfileCatalogEntry,
+        placement: Option<&BrowserPlacement>,
     ) -> Result<bool, String> {
         let tabs = self
             .state
@@ -1255,6 +1439,10 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         else {
             return Ok(false);
         };
+        if placement.is_some_and(|placement| !placement.accepts(recovered.launch.desktop.as_ref()))
+        {
+            return Err("browser_placement_conflict:reconciled browser uses another desktop; explicitly relocate/rebind".into());
+        }
         // Reattaching our same process or completing its observed launch keeps
         // its managed lifecycle. A different externally discovered process is
         // borrowed and must survive final task closure.
@@ -1303,6 +1491,19 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         current.desktop = recovered.launch.desktop;
         current.pid = recovered.launch.pid;
         current.cdp_endpoint = recovered.launch.cdp_endpoint;
+        if let Some(desktop) = &current.desktop {
+            for session in self
+                .state
+                .sessions
+                .values()
+                .filter(|session| session.browser_id == current.id)
+            {
+                if let Some(binding) = self.state.host_bindings.get_mut(&session.id) {
+                    binding.desktop = desktop.clone();
+                }
+            }
+        }
+
         self.state.idle_closed_browsers.remove(&current.id);
         self.state.browsers.insert(current.id.clone(), current);
         if relocated {
@@ -1327,6 +1528,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
     fn launch_browser(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
+        placement: Option<&BrowserPlacement>,
     ) -> Result<BrowserLaunch, String> {
         if let Some(path) = self.state.profile_executables.get(&profile.id) {
             self.effects.select_browser_executable(path.clone())?;
@@ -1341,16 +1543,26 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             {
                 return Err("browser_session_recovery_identity_conflict".into());
             }
+            if placement
+                .is_some_and(|placement| !placement.accepts(reconciled.launch.desktop.as_ref()))
+            {
+                return Err("browser_placement_conflict:reconciled browser uses another desktop; explicitly relocate/rebind".into());
+            }
             self.state
                 .shared_browser_ids
                 .insert(reconciled.launch.browser_id.clone());
             return Ok(reconciled.launch);
         }
-        let refreshed = self.effects.remote_view_desktop_candidates()?;
+        let refreshed = match placement {
+            Some(placement) => self.effects.remote_view_placement_candidates(placement)?,
+            None => self.effects.remote_view_desktop_candidates()?,
+        };
         let candidates = refreshed
             .as_deref()
             .unwrap_or(&self.config.remote_view_desktops);
-        let desktop = if candidates.is_empty() {
+        let desktop = if let Some(placement) = placement {
+            Some(placement.select(candidates)?)
+        } else if candidates.is_empty() {
             None
         } else {
             let live_desktop_ids = self

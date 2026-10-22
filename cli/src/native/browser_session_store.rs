@@ -2390,6 +2390,7 @@ mod tests {
                 "browser-a",
                 &RemoteViewJoinedReleaseOutcome {
                     assignment: RemoteViewAssignmentRecord {
+                        presentation: None,
                         assignment_id: "assignment-a".into(),
                         registration_id: "registration-a".into(),
                         pool_id: "pool-a".into(),
