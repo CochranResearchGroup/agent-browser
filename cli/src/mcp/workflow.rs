@@ -12,6 +12,17 @@ use crate::native::service_model::ServiceState;
 use crate::native::service_store::load_default_service_state_snapshot;
 
 pub(super) fn tools() -> Vec<Value> {
+    let desktop = json!({"type":"object","additionalProperties":false,
+        "properties":{"desktopId":{"type":"string","minLength":1},
+        "generation":{"type":"integer","minimum":1}},"required":["desktopId","generation"]});
+    let placement = json!({"oneOf":[
+        {"type":"object","additionalProperties":false,"properties":{
+            "mode":{"const":"required"},"desktop":desktop},"required":["mode","desktop"]},
+        {"type":"object","additionalProperties":false,"properties":{
+            "mode":{"const":"preferred"},"desktop":desktop,
+            "alternatives":{"type":"array","items":desktop}},
+            "required":["mode","desktop","alternatives"]}
+    ]});
     vec![
         json!({
             "name": "browser_open", "title": "Open a browser task",
@@ -22,7 +33,8 @@ pub(super) fn tools() -> Vec<Value> {
                     "profileMode":{"type":"string","enum":["persistent","existing","disposable"],"default":"persistent"},
                     "taskKey":{"type":"string","description":"Stable task key. Distinct keys receive independent tabs; reuse the key to continue this task."},
                 "url":{"type":"string","description":"Initial URL for a new task. Replaying a task returns its current page without navigating again."},
-                    "serviceName":{"type":"string"},"agentName":{"type":"string"},"taskName":{"type":"string"}
+                    "serviceName":{"type":"string"},"agentName":{"type":"string"},"taskName":{"type":"string"},
+                    "hostBinding":{"type":"object","additionalProperties":false,"description":"Configured app context and exact required/preferred placement; never a viewer URL.","properties":{"version":{"const":1},"hostId":{"type":"string"},"participantId":{"type":"string"},"sessionId":{"type":"string"},"placement":placement},"required":["version","hostId","participantId","sessionId","placement"]}
                 }, "required":["taskKey","url","serviceName","agentName","taskName"]}
         }),
         json!({
@@ -149,19 +161,41 @@ pub(super) fn open(
     let service = required_string_argument(arguments, "serviceName")?;
     let agent = required_string_argument(arguments, "agentName")?;
     let task = required_string_argument(arguments, "taskName")?;
-    let session_name = format!(
-        "workflow-{}",
-        hex::encode(Sha256::digest(
-            serde_json::to_vec(&(service, agent, task_key, profile))
-                .expect("string tuple serializes")
+    let hosted = arguments
+        .get("hostBinding")
+        .map(|value| {
+            serde_json::from_value::<agent_browser_service_model::BrowserHostBinding>(value.clone())
+                .map_err(|_| issue("browser_host_binding_invalid"))
+        })
+        .transpose()?;
+    if let Some(binding) = &hosted {
+        crate::native::browser_host_context::validate_provider(binding).map_err(issue)?;
+    }
+    let identity = if let Some(binding) = &hosted {
+        serde_json::to_vec(&(
+            service,
+            agent,
+            task_key,
+            profile,
+            &binding.host_id,
+            &binding.participant_id,
+            &binding.session_id,
         ))
-    );
+    } else {
+        // Preserve existing standalone task keys byte-for-byte.
+        serde_json::to_vec(&(service, agent, task_key, profile))
+    }
+    .expect("string tuple serializes");
+    let session_name = format!("workflow-{}", hex::encode(Sha256::digest(identity)));
     if mode == "persistent" {
         cli(&["runtime", "create", profile.expect("profile validated")])?;
     }
     let mut command = json!({"id":uuid::Uuid::new_v4().to_string(),
         "action":"browser_session_open","sessionName":session_name,
         "url":url,"serviceName":service,"agentName":agent,"taskName":task,"originKind":"agent"});
+    if let Some(binding) = &hosted {
+        command["hostBinding"] = json!(binding);
+    }
     if let Some(profile_id) = profile {
         let mut state = load_default_service_state_snapshot().map_err(issue)?;
         state.overlay_configured_entities(configured.clone());
@@ -220,6 +254,13 @@ pub(super) fn open(
         command["sessionId"] = json!(session_id);
         execute(command, transport_session)?
     };
+    if hosted.is_some() {
+        // The read-only projection separates recorded inventory from Native readiness.
+        // Initial navigation may have created the first tab since the open read.
+        let published = store.load_session_state().map_err(issue)?;
+        data["host"] =
+            crate::native::browser_host_context::snapshot(&published, session_id).map_err(issue)?;
+    }
     data["taskId"] = data["sessionId"].clone();
     if let Some(object) = data.as_object_mut() {
         object.remove("sessionId");
@@ -294,11 +335,22 @@ pub(super) fn continue_task(
 /// provider route or a caller-supplied URL. Remote View retains viewer ownership.
 pub(super) fn handoff(arguments: &Value, transport_session: &str) -> Result<Value, JsonRpcError> {
     let task_id = required_string_argument(arguments, "taskId")?;
-    let configured_origin = std::env::var("AGENT_BROWSER_PUBLIC_ORIGIN").map_err(|_| {
-        issue("remote_view_public_origin_missing: configure AGENT_BROWSER_PUBLIC_ORIGIN with this Agent Browser service's authenticated HTTPS origin")
-    })?;
-    let origin = crate::native::browser_session_remote_view::public_origin(&configured_origin)
-        .map_err(issue)?;
+    let path = BrowserSessionSqliteStore::default_sqlite_path().map_err(issue)?;
+    let store = BrowserSessionSqliteStore::open_read_only(&path).map_err(issue)?;
+    let before = store.load_session_state().map_err(issue)?;
+    let hosted = before.host_bindings.get(task_id).cloned();
+    let origin = if let Some(binding) = &hosted {
+        crate::native::browser_host_context::validate_provider(&binding.request).map_err(issue)?;
+        None
+    } else {
+        let configured_origin = std::env::var("AGENT_BROWSER_PUBLIC_ORIGIN").map_err(|_| {
+            issue("remote_view_public_origin_missing: configure AGENT_BROWSER_PUBLIC_ORIGIN with this Agent Browser service's authenticated HTTPS origin")
+        })?;
+        Some(
+            crate::native::browser_session_remote_view::public_origin(&configured_origin)
+                .map_err(issue)?,
+        )
+    };
     let session_name = task_session(task_id)?;
     // A harmless current-URL read retains the task's handoff through its existing
     // owner. It neither navigates the page nor issues a temporary viewer grant.
@@ -340,9 +392,19 @@ pub(super) fn handoff(arguments: &Value, transport_session: &str) -> Result<Valu
     if presentation["operatorVisible"]["state"] != "ready" {
         return Err(issue("browser_handoff_presentation_pending"));
     }
-    let handoff_url = origin
-        .join(&format!("/remote-view/{}", retained.id))
-        .map_err(|_| issue("remote_view_handoff_url_invalid"))?;
+    let handoff_url = if let Some(binding) = &hosted {
+        if state.host_bindings.get(task_id) != Some(binding) {
+            return Err(issue("browser_host_binding_changed"));
+        }
+        crate::native::browser_host_context::handoff_url(&binding.request, &retained.id)
+            .map_err(issue)?
+    } else {
+        origin
+            .expect("standalone origin checked")
+            .join(&format!("/remote-view/{}", retained.id))
+            .map_err(|_| issue("remote_view_handoff_url_invalid"))?
+            .to_string()
+    };
     Ok(super::tool_response_from_payload(
         "browser_handoff",
         transport_session,
@@ -431,6 +493,31 @@ pub(super) fn tab(arguments: &Value, transport_session: &str) -> Result<Value, J
 #[cfg(test)]
 mod context_tests {
     use super::*;
+
+    #[test]
+    fn hosted_input_rejects_invalid_context_before_profile_or_transport_effects() {
+        let complete = json!({"taskKey":"hosted","url":"data:text/html,synthetic",
+            "profile":"never-created","serviceName":"fixture","agentName":"fixture",
+            "taskName":"Validate placement","hostBinding":{"version":1,"hostId":"app",
+            "participantId":"bot","sessionId":"session","placement":{"mode":"required",
+            "desktop":{"desktopId":"desktop","generation":1}}}});
+        for invalid in [
+            json!(null),
+            json!({"version":1,"hostId":"app","participantId":"bot","sessionId":"session",
+                "placement":{"mode":"required","desktop":{"desktopId":"desktop","generation":1}},
+                "handoffUrl":"https://arbitrary.example/"}),
+            json!({"version":2,"hostId":"app","participantId":"bot","sessionId":"session",
+                "placement":{"mode":"required","desktop":{"desktopId":"desktop","generation":1}}}),
+        ] {
+            let mut input = complete.clone();
+            input["hostBinding"] = invalid;
+            let error = open(&input, "unused", &ServiceState::default()).unwrap_err();
+            assert!(error.data.as_ref().unwrap()["message"]
+                .as_str()
+                .unwrap()
+                .contains("browser_host_binding"));
+        }
+    }
 
     #[test]
     fn handoff_creation_context_mcp_rejects_before_profile_or_transport_effects() {

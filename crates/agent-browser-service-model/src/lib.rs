@@ -3,6 +3,9 @@
 //! This module owns record compatibility and deterministic lifecycle decisions.
 //! Adapters own persistence, browser observation, process control, and transport.
 
+mod browser_host_binding;
+pub use browser_host_binding::*;
+
 mod browser_idle_retirement;
 mod browser_launch_custody;
 pub use browser_launch_custody::{
@@ -114,16 +117,17 @@ pub use browser_retirement::{
     BROWSER_RETIREMENT_PLAN_SCHEMA_V1, BROWSER_RETIREMENT_RECEIPT_SCHEMA_V1,
 };
 pub use browser_session_manager::{
-    BrowserHistoryCompactionEvent, BrowserIdleRetirementGuard, BrowserLaunch,
-    BrowserNavigationDailySummary, BrowserNavigationRecord, BrowserProfileIntent, BrowserRecovery,
-    BrowserSessionEffects, BrowserSessionManager, BrowserSessionManagerConfig, BrowserSessionState,
-    BrowserTabAcquisition, BrowserTabEndReason, BrowserTabLifetime, BrowserTabSource,
-    BrowserTaskMetadata, CloseBrowserSessionResult, CloseBrowserTabResult, FocusBrowserResult,
-    ManagedBrowserCommandEffects, ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab,
-    ManagedBrowserTabRequest, ManagedDisposableProfile, OpenBrowserSession,
-    OpenBrowserSessionResult, PendingHumanTabRetention, ReapBrowserSessionsResult,
-    SessionBrowserDisposition, SessionCloseDisposition, SessionEndReason, SessionRecordDisposition,
-    TerminalBrowserSession, TerminalBrowserTab, BROWSER_SESSION_STATE_SCHEMA_V1,
+    BrowserDesktopBinding, BrowserHistoryCompactionEvent, BrowserIdleRetirementGuard,
+    BrowserLaunch, BrowserNavigationDailySummary, BrowserNavigationRecord, BrowserPlacement,
+    BrowserProfileIntent, BrowserRecovery, BrowserSessionEffects, BrowserSessionManager,
+    BrowserSessionManagerConfig, BrowserSessionState, BrowserTabAcquisition, BrowserTabEndReason,
+    BrowserTabLifetime, BrowserTabSource, BrowserTaskMetadata, CloseBrowserSessionResult,
+    CloseBrowserTabResult, FocusBrowserResult, ManagedBrowserCommandEffects,
+    ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab, ManagedBrowserTabRequest,
+    ManagedDisposableProfile, OpenBrowserSession, OpenBrowserSessionResult,
+    PendingHumanTabRetention, ReapBrowserSessionsResult, SessionBrowserDisposition,
+    SessionCloseDisposition, SessionEndReason, SessionRecordDisposition, TerminalBrowserSession,
+    TerminalBrowserTab, BROWSER_SESSION_STATE_SCHEMA_V1,
 };
 pub use crash_regeneration::{
     apply_phase_receipt, begin_or_resume, crash_regeneration_statuses, finish_ready, interrupt,
@@ -243,7 +247,8 @@ pub use remote_view_application_records::{
     RemoteViewApplicationEvent, RemoteViewApplicationEventBinding,
     RemoteViewApplicationEventObservation, RemoteViewApplicationEvents, RemoteViewApplicationGrant,
     RemoteViewApplicationGrantRequest, RemoteViewApplicationInventory, RemoteViewApplicationPolicy,
-    RemoteViewApplicationPool, RemoteViewApplicationPoolPolicy, RemoteViewApplicationViewIssuance,
+    RemoteViewApplicationPool, RemoteViewApplicationPoolLifecycleManager,
+    RemoteViewApplicationPoolPolicy, RemoteViewApplicationViewIssuance,
     RemoteViewApplicationViewObservation, RemoteViewApplicationViewReadiness,
     RemoteViewApplicationViewRevocation, RemoteViewApplicationWindow, RemoteViewApplicationWindows,
 };
@@ -256,19 +261,20 @@ pub use remote_view_consumer::{
     allocated_desktop_candidate, allocated_desktop_runtime_context, exact_release_reference,
     validate_fixed_desktop_associations, validate_remote_view_foundation,
     validate_remote_view_j3_agent_browser_fixture, validate_remote_view_operation,
-    AgentBrowserDesktopAssociation, RemoteViewApplicationRegistration, RemoteViewAssignmentRecord,
-    RemoteViewAssignmentState, RemoteViewConsumerError, RemoteViewDesktopPresentationBinding,
-    RemoteViewDesktopRecord, RemoteViewDesktopReference, RemoteViewDesktopResources,
-    RemoteViewDesktopRuntimeContext, RemoteViewDesktopViewingRetirement, RemoteViewEffectBoundary,
-    RemoteViewEffectEvidence, RemoteViewFixedDesktop, RemoteViewFoundationCommand,
-    RemoteViewFoundationObservation, RemoteViewJ1ConsumerFixture, RemoteViewJ3AgentBrowserFixture,
-    RemoteViewJoinedReleaseOutcome, RemoteViewLifecycleObservation, RemoteViewOperationRecord,
-    RemoteViewOperationState, RemoteViewPlacementAttempt, RemoteViewPlacementRecord,
-    RemoteViewPlacementState, RemoteViewResourceKind, RemoteViewResourceState,
-    RemoteViewViewerDevice, RemoteViewViewerLiveState, RemoteViewViewerSession,
-    RemoteViewViewerSessionState, RemoteViewViewerSessionStatus, RemoteViewViewingRoute,
-    REMOTE_VIEW_FOUNDATION_CONTRACT_VERSION, REMOTE_VIEW_FOUNDATION_SCHEMA_VERSION,
-    REMOTE_VIEW_J1_SOURCE_CHECKPOINT, REMOTE_VIEW_J3_SOURCE_CHECKPOINT,
+    AgentBrowserDesktopAssociation, RemoteViewApplicationRegistration,
+    RemoteViewAssignmentPresentation, RemoteViewAssignmentRecord, RemoteViewAssignmentState,
+    RemoteViewConsumerError, RemoteViewDesktopPresentationBinding, RemoteViewDesktopRecord,
+    RemoteViewDesktopReference, RemoteViewDesktopResources, RemoteViewDesktopRuntimeContext,
+    RemoteViewDesktopViewingRetirement, RemoteViewEffectBoundary, RemoteViewEffectEvidence,
+    RemoteViewFixedDesktop, RemoteViewFoundationCommand, RemoteViewFoundationObservation,
+    RemoteViewJ1ConsumerFixture, RemoteViewJ3AgentBrowserFixture, RemoteViewJoinedReleaseOutcome,
+    RemoteViewLifecycleObservation, RemoteViewOperationRecord, RemoteViewOperationState,
+    RemoteViewPlacementAttempt, RemoteViewPlacementRecord, RemoteViewPlacementState,
+    RemoteViewResourceKind, RemoteViewResourceState, RemoteViewViewerDevice,
+    RemoteViewViewerLiveState, RemoteViewViewerSession, RemoteViewViewerSessionState,
+    RemoteViewViewerSessionStatus, RemoteViewViewingRoute, REMOTE_VIEW_FOUNDATION_CONTRACT_VERSION,
+    REMOTE_VIEW_FOUNDATION_SCHEMA_VERSION, REMOTE_VIEW_J1_SOURCE_CHECKPOINT,
+    REMOTE_VIEW_J3_SOURCE_CHECKPOINT,
 };
 pub use remote_view_idle_retirement::{
     RemoteViewIdleRetirementFence, RemoteViewIdleRetirementIntent, RemoteViewIdleRetirementRead,

@@ -17,6 +17,22 @@ lanes:
     validation_status: Real loader red/green, four dotenv tests, workspace Clippy, fmt, policy/links/handoff guidance pass; isolated MCP dotenv startup passes; installed configured-origin native input/reconnect pass; source publication pending
     updated_at: 2026-10-22
 
+  - id: P265
+    product_lane: PL-PLATFORM
+    objective: Hosted browser launch and app-routed native handoff
+    plan: docs/dev/plans/0265-2026-10-22-hosted-launch.md
+    branch: platform/hosted-launch-348
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#348]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: [P264]
+    overlaps: [P237, P243]
+    reconciled_overlaps: ["Primary owns workflow/model adapters and docs; Bots investigation read-only; no dependent tickets started; preserve foreign worktrees and pinned candidates"]
+    validation_status: Exact ci candidate real Native pixels, sequenced metadata, zero owned residue and standalone continuity pass; model368, MCP139, Rust and client/docs gates pass; source only
+    updated_at: 2026-10-22
+
   - id: P264
     product_lane: PL-BUGFIX
     objective: Keep absent explicitly selected browser evidence missing

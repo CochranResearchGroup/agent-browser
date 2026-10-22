@@ -3,6 +3,7 @@
 ### 2026-10-22 MCP origin diagnosis
 
 [P266](docs/dev/plans/0266-2026-10-22-public-origin-env.md), #358, owns the standard dotenv bootstrap omission. Installed identical-task differential fails without the service origin and succeeds with the configured reviewed origin. Authenticated native keyboard input and identical opaque-link reconnect pass; Remote View316 is closed. Loader red/green, four dotenv tests, strict workspace Clippy and formatting pass. Isolated real MCP startup proves dotenv-only origin resolution. Candidate live workflow refused a stale daemon lane; no fence bypass or production replacement. Source integration is pending.
+[P265](docs/dev/plans/0265-2026-10-22-hosted-launch.md), #348, is source-qualified on platform/hosted-launch-348. Provider PR359 precedes Bots PR172; actual Native fixture cleanup passed. No production publication.
 
 [P264](docs/dev/plans/0264-2026-10-21-missing-browser-selection.md), #344, owns the bounded missing-browser evidence repair. No runtime publication.
 

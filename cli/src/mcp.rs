@@ -3,6 +3,7 @@ use std::io::{self, BufRead, Write};
 use serde_json::{json, Map, Value};
 
 mod catalog;
+mod hosted;
 mod playbooks;
 mod workflow;
 
@@ -148,6 +149,15 @@ pub fn run_mcp_command(
     session: &str,
     configured_service_state: &ServiceState,
 ) -> i32 {
+    if args.get(1).map(|value| value.as_str()) == Some("watch-host-task") {
+        return match hosted::watch(args, io::stdout().lock()) {
+            Ok(()) => 0,
+            Err(error) => {
+                eprintln!("{error}");
+                1
+            }
+        };
+    }
     if args.get(1).map(|value| value.as_str()) == Some("serve") {
         return match run_stdio_server(
             io::stdin().lock(),
@@ -203,6 +213,10 @@ fn mcp_command_response_with_config(
     configured_service_state: &ServiceState,
 ) -> Result<Value, String> {
     match args.get(1).map(|value| value.as_str()) {
+        Some("host-task") => {
+            let task_id = hosted::task_argument(args)?;
+            Ok(json!({"success": true, "data": hosted::read_snapshot(task_id)?}))
+        }
         Some("resources") | Some("list") => Ok(json!({
             "success": true,
             "data": {

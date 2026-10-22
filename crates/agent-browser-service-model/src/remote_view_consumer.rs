@@ -155,9 +155,21 @@ pub enum RemoteViewAssignmentState {
     AwaitingIntervention,
 }
 
+/// Application-supplied display metadata, never authenticated identity.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RemoteViewAssignmentPresentation {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_label: Option<String>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RemoteViewAssignmentRecord {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presentation: Option<RemoteViewAssignmentPresentation>,
     pub assignment_id: String,
     pub registration_id: String,
     pub pool_id: String,

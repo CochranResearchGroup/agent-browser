@@ -7300,11 +7300,15 @@ Usage:
   agent-browser mcp serve
   agent-browser mcp resources
   agent-browser mcp read <uri>
+  agent-browser --json mcp host-task <task-id>
+  agent-browser --json mcp watch-host-task <task-id>
 
 Commands:
   serve                 Run the MCP stdio server
   resources             List explicit read-only diagnostic resources
   read                  Read one diagnostic resource as JSON
+  host-task             Read compact hosted-task metadata without browser effects
+  watch-host-task       Emit initial/changed NDJSON; terminate process to disconnect
 
 Default workflow tools:
   browser_open          Open or reuse a task with profile, profileMode, taskKey and url
@@ -7328,6 +7332,15 @@ Workflow:
   Native Remote View owns the viewer and its authentication.
   Configure AGENT_BROWSER_PUBLIC_ORIGIN in the process environment or ~/.agent-browser/.env for HTTPS handoffs.
   Reconnect existing MCP clients after changing startup configuration.
+  Hosted browser_open accepts hostBinding version=1, hostId, participantId,
+  sessionId and required/preferred placement with desktopId/generation.
+  AGENT_BROWSER_HOSTS_FILE supplies reviewed app origin/providerApplication;
+  configure both transport/runtime with the same Remote View application.
+  Hosted handoff uses the app's /agent-browser/handoff/<id> resolver.
+  Hosted runtimes leave spare-desktop growth and retirement to the app.
+  Required placement never falls back; preferred uses only listed alternatives.
+  Metadata watching uses local DB/WAL stamps every 250 ms, not provider polling.
+  Events have watchId/sequence; reconnect reads a new full snapshot.
   Use browser_discover only when advanced metadata is needed.
   category=playbooks exposes SiteGuide inspection and verify_login in browser_command.
   Software login-playbook composes these routines with trusted shared auth-helper custody.
@@ -8151,6 +8164,7 @@ Environment:
                                  Managed JSON responses include browserSession identity; successful navigation records durable URL history.
                                  Remote View retains browserSession.handoffId and a durable dashboard-relative handoffUrl for the exact tab.
                                  Resolving that ID retains provider view issuance; status stays converging until tab visibility is proved.
+  AGENT_BROWSER_HOSTS_FILE       Versioned hosted-app origin/provider registry for transport and runtime.
   AGENT_BROWSER_PUBLIC_ORIGIN    Authenticated public HTTPS origin of this Agent Browser service, used by MCP browser_handoff.
   AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN Reviewed external HTTPS origin for click-driven top-level viewing.
                                  The authenticated handoff page opens an already-published grant; browser lifecycle needs no public origin.
