@@ -1,5 +1,7 @@
 # Active plan index
 
+[P270 hosted continuity](0270-2026-10-22-hosted-continuity.md) owns #351–355 under #347. Root implements relocation; parallel subagents implement reconnect/loss, policy/lifecycle and guidance. Joined acceptance follows those dependencies; no production effects.
+
 [P268 attachment](0268-2026-10-22-hosted-attachment.md), #349, and [P267/#350 takeover](0267-2026-10-22-hosted-takeover.md) are closed integrated source outcomes with actual Native04 acceptance and corrected cleanup. Native05 cookie continuity and independent cleanup also pass; no deployment; wider #347 remains open.
 
 

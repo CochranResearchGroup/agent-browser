@@ -1,5 +1,7 @@
 # Runbook
 
+[P270 hosted continuity](docs/dev/plans/0270-2026-10-22-hosted-continuity.md) owns #351–355 under #347. Root implements relocation; parallel subagents implement reconnect/loss, policy/lifecycle and guidance. Joined acceptance follows those dependencies; no production effects.
+
 [P268/#349](docs/dev/plans/0268-2026-10-22-hosted-attachment.md) and [P267/#350](docs/dev/plans/0267-2026-10-22-hosted-takeover.md) close as integrated source through provider PR361 before consumer PR175. [Acceptance](docs/dev/notes/0268-2026-10-22-hosted-attachment-control.md) records healthy Native04 chat/viewer, control and corrected process cleanup. Native05 cookie continuity and independent cleanup also pass. Root owns merge and auxiliary closeout; no deployment.
 
 
