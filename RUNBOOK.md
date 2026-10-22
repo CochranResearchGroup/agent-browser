@@ -1,6 +1,6 @@
 # Runbook
 
-[P268/#349](docs/dev/plans/0268-2026-10-22-hosted-attachment.md) uses dashboard primary; [P267/#350](docs/dev/plans/0267-2026-10-22-hosted-takeover.md) uses the root-owned takeover auxiliary. Root arbitrates shared contracts. No production effects.
+[P268/#349](docs/dev/plans/0268-2026-10-22-hosted-attachment.md) and [P267/#350](docs/dev/plans/0267-2026-10-22-hosted-takeover.md) close as integrated source through provider PR361 before consumer PR175. [Acceptance](docs/dev/notes/0268-2026-10-22-hosted-attachment-control.md) records healthy Native04 chat/viewer, control and corrected process cleanup. Native05 cookie continuity and independent cleanup also pass. Root owns merge and auxiliary closeout; no deployment.
 
 
 ### 2026-10-22 MCP origin diagnosis

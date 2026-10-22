@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P268/P267 attachment and control evidence](0268-2026-10-22-hosted-attachment-control.md): accepted source checks, healthy Native04 chat/viewer and corrected cleanup; Native05 cookie continuity and independent cleanup pass; no deployment.
+
 [P266 MCP origin diagnosis](0266-2026-10-22-public-origin-env.md): same-task environment differential, standard dotenv omission and live native input/reconnect.
 [P265 hosted launch](0265-2026-10-22-hosted-launch.md): exact app placement, durable app handoff, actual Native pixels/status, standalone continuity and qualified fixture cleanup; source only.
 

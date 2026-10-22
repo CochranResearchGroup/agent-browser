@@ -1,6 +1,6 @@
 # Active plan index
 
-[P268 attachment](0268-2026-10-22-hosted-attachment.md), #349, and [P267/#350 takeover](0267-2026-10-22-hosted-takeover.md) are the active parallel frontier after P265.
+[P268 attachment](0268-2026-10-22-hosted-attachment.md), #349, and [P267/#350 takeover](0267-2026-10-22-hosted-takeover.md) are closed integrated source outcomes with actual Native04 acceptance and corrected cleanup. Native05 cookie continuity and independent cleanup also pass; no deployment; wider #347 remains open.
 
 
 [P266 MCP public origin](0266-2026-10-22-public-origin-env.md), #358; standard dotenv bootstrap repair and exact installed handoff diagnosis.

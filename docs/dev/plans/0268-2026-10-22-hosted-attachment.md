@@ -1,6 +1,6 @@
 # P268: attach and explicitly share an app browser
 
-Status: OPEN
+Status: CLOSED
 Product lane: PL-PLATFORM
 Work item: CochranResearchGroup/agent-browser#349
 Branch: platform/hosted-attach-349
@@ -37,10 +37,9 @@ installation, private accounts, held browser use, skill sharing or uncertain rep
 
 ## Integration checkpoint
 
-Fifteen placement/attachment model regressions pass. Native runtime tests and
-public workflow acceptance remain pending. The root integrates P267's separate
-reviewed commits into this branch for one combined CLI candidate and PR closing
-both independent tickets. This avoids replacing a running shared test executable
+The placement/attachment regressions and joined Native run 04 qualify the source
+workflow. Root integrated P267's separate reviewed commits into this branch for
+one combined CLI candidate and PR closing both independent tickets. This avoids replacing a running shared test executable
 or rebuilding identical provider inputs in parallel; subagent source custody
 remains explicit. No additional product scope or deployment authority.
 
@@ -57,3 +56,17 @@ its test-only dependency symlink without touching the installed target.
 
 Plan identifier reconciled to P268 after canonical main allocated P266 to #358.
 Earlier private validation logs retain their original p266 prefix as evidence.
+
+## Source closeout
+
+Integrated with the paired attachment/control outcome through provider PR361 and
+consumer PR175, in provider-first order. The [source acceptance note](../notes/0268-2026-10-22-hosted-attachment-control.md)
+records the model/session/control/MCP/action, strict Rust and client/docs gates,
+actual Native run 04 with healthy chat, 63 marker samples and 26 WebSocket frames,
+and positive absence of 14 observed app process generations before release.
+Native run 03 retains its invalid cleanup history and separate correction evidence.
+Native run 05 also passes synthetic cookie continuity through both task detachments,
+healthy chat, real Native SDK control, 63 markers/47 WebSocket frames and all 14
+observed process generations absent before exact release, with natural harness exit.
+Accepted source only; no production deployment or private-account acceptance.
+The wider #347 specification and unrelated P266/P269 custody remain separate.
