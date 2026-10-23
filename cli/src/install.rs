@@ -1275,6 +1275,14 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             &live_dashboard_runtime,
             &workstation_payload,
         );
+    let installed_mcp_clients = if development {
+        json!({"state": "isolated_development", "staleCount": 0})
+    } else {
+        crate::workstation_install::workstation_root()
+            .and_then(|root| crate::workstation_install::mcp_clients::inventory(&root))
+            .and_then(|inventory| serde_json::to_value(inventory).map_err(|e| e.to_string()))
+            .unwrap_or_else(|error| json!({"state": "unavailable", "error": error}))
+    };
     install_doctor_trace("browser_runtime");
     let browser_runtime = crate::native::browser_session_store::BrowserSessionSqliteStore::default_operational_status_read_only();
     install_doctor_trace("issues");
@@ -1310,6 +1318,16 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             "nextAction": "inspect_profile_lease_doctor",
         })
     }));
+    if matches!(
+        installed_mcp_clients["state"].as_str(),
+        Some("stale" | "unavailable")
+    ) {
+        issues.push(json!({
+            "code": "installed_mcp_clients_not_current",
+            "message": "installed MCP clients are outdated or their generation cannot be proven; reconnect affected MCP hosts after installation",
+            "nextAction": "reconcile_installed_mcp_clients",
+        }));
+    }
     issues.extend(workstation_payload_issues(&workstation_payload));
     issues.extend(
         session_supervisors
@@ -1379,6 +1397,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             "liveDashboardRuntime": live_dashboard_runtime,
             "runtimeInventory": runtime_inventory,
             "runtimeMultiplicity": runtime_multiplicity,
+            "installedMcpClients": installed_mcp_clients,
             "browserRuntime": browser_runtime,
             "runtimeMonitor": runtime_monitor,
             "daemonListenerInventory": daemon_listener_inventory,

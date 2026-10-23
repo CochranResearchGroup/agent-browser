@@ -120,6 +120,18 @@ successor fields and action types are preserved without effect authority, so
 rollback readers retain newer terminal bookkeeping. An already advertised
 recovery action does not require an upgrade merely to apply it.
 
+On Linux, workstation installation converges the complete sealed binary, support
+assets and managed services before acceptance. It also terminates older
+user-owned installed MCP servers after selecting the new generation, with a
+five-second grace period followed by exact-process force termination and a
+five-second exit check. Runtime consistency takes priority over maintaining an
+old MCP connection. Reconnect affected MCP hosts to start the selected server;
+the installer cannot recreate their stdio connections. Current-generation,
+isolated development and foreign processes are preserved. Install doctor exposes
+<code>installedMcpClients</code> and fails when old clients remain or inventory is unproven.
+Retirement targets and outcomes are retained in the private install transaction.
+Forward recovery also reconciles MCP clients against the selected candidate.
+
 Cooperative continuity is the default runtime replacement policy. When an old
 managed runtime cannot complete handoff, run a dry-run with
 <code>--runtime-replacement-policy full-shutdown</code> and review the returned

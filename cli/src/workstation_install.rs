@@ -47,6 +47,7 @@ use crate::runtime_replacement::{
 };
 
 mod current_selection;
+pub(crate) mod mcp_clients;
 mod progress;
 mod retention_hold;
 
@@ -234,6 +235,8 @@ struct WorkstationInstallReport {
     /// runtime replacement. Preserve-mode installs omit this field.
     #[serde(skip_serializing_if = "Option::is_none")]
     runtime_replacement_plan: Option<RuntimeReplacementPlan>,
+    /// Read-only client inventory; older clients are retired after candidate selection.
+    installed_mcp_clients: Value,
     paths: WorkstationPaths,
     phases: Vec<&'static str>,
     host_prepared: bool,
@@ -1305,6 +1308,7 @@ fn resume_prepared_payload_transaction(
             prepared.transaction.state
         ));
     }
+    converge_installed_mcp_clients(&paths, prepared)?;
     let validation = if isolated_root || presentation_bypass {
         match isolated_post_commit_validation(&paths, prepared) {
             Ok(validation) => validation,
@@ -2206,6 +2210,7 @@ fn workstation_upgrade_status_for_root(root: &Path) -> Result<Value, String> {
             })).collect::<Vec<_>>(),
             "dashboardValidationSummary": transaction.dashboard_validation_summary,
             "presentationValidationSummary": transaction.presentation_validation_summary,
+            "mcpClientRetirement": transaction.successor_fields.get("mcpClientRetirement"),
             "terminalResult": transaction.terminal_result,
             "stopReason": transaction.stop_reason,
             "serviceStateMigration": transaction.service_state_migration,
@@ -3678,6 +3683,9 @@ fn run_workstation_install_with_observer(
         candidate_presentation_prerequisite,
         service_state_migration_preview,
         runtime_replacement_plan,
+        installed_mcp_clients: mcp_clients::inventory(&root)
+            .and_then(|inventory| serde_json::to_value(inventory).map_err(|e| e.to_string()))
+            .unwrap_or_else(|error| serde_json::json!({"state": "unavailable", "error": error})),
         paths: WorkstationPaths {
             root: root.display().to_string(),
             binary: paths.binary.display().to_string(),
@@ -11029,7 +11037,63 @@ fn begin_post_commit_validation(
             "post_commit_validating",
         )?;
         persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)
+    })?;
+    converge_installed_mcp_clients(paths, prepared)
+}
+
+/// Retire persistent clients only after the complete candidate payload is selected.
+/// Receipts and custody use short transactions; process waits remain outside locks.
+fn converge_installed_mcp_clients(
+    paths: &InstallPaths,
+    prepared: &mut PreparedPayloadTransaction,
+) -> Result<(), String> {
+    if !cfg!(target_os = "linux") {
+        return Ok(());
+    }
+    with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
+    if selected_generation_id(paths).as_deref()
+        != Some(prepared.transaction.candidate_generation_id.as_str())
+    {
+        return Err("mcp_retirement_selected_generation_changed".to_string());
+    }
+    mcp_clients::retire(&paths.root, |receipt| {
+        with_candidate_install_custody(paths, prepared, |prepared| {
+            record_mcp_client_retirement(
+                &mut prepared.transaction,
+                "mcpClientRetirement",
+                receipt,
+            )?;
+            write_private_json_atomic(&prepared.transaction_path, &prepared.transaction)
+        })
     })
+}
+
+/// Keep interrupted attempts attributable when a resume finds no clients left.
+fn record_mcp_client_retirement(
+    transaction: &mut crate::runtime_adoption::UpgradeTransaction,
+    key: &str,
+    receipt: &Value,
+) -> Result<(), String> {
+    let mut receipt = receipt.clone();
+    if let Some(previous) = transaction.successor_fields.get(key).cloned() {
+        if previous["reconnectRequired"] == true {
+            receipt["reconnectRequired"] = true.into();
+        }
+        if previous["attemptId"] != receipt["attemptId"] {
+            let history = transaction
+                .successor_fields
+                .entry(format!("{key}History"))
+                .or_insert_with(|| serde_json::json!([]));
+            history
+                .as_array_mut()
+                .ok_or_else(|| "mcp_retirement_history_invalid".to_string())?
+                .push(previous);
+        }
+    }
+    transaction
+        .successor_fields
+        .insert(key.to_string(), receipt);
+    Ok(())
 }
 
 /// Starts and stages the generation-specific shadow dashboard before payload
@@ -11466,6 +11530,7 @@ fn accept_prepared_payload_transaction(
             ));
         }
     }
+    converge_installed_mcp_clients(paths, prepared)?;
     complete_candidate_install_custody(paths, prepared, |prepared| {
         prepared.transaction.dashboard_validation_summary = Some(validation.dashboard_summary);
         prepared.transaction.presentation_validation_summary =
@@ -11858,6 +11923,13 @@ fn rollback_prepared_payload_transaction(
             "forward_completion_required",
         )?;
         persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
+        // Forward recovery keeps the candidate selected. End old MCP clients so
+        // inspection and recovery can reconnect using that selected generation.
+        if selected_generation_id(paths).as_deref()
+            == Some(prepared.transaction.candidate_generation_id.as_str())
+        {
+            converge_installed_mcp_clients(paths, prepared)?;
+        }
         return Err(format!(
             "install_transaction_forward_only:{}:{stop_reason}",
             prepared.transaction.transaction_id
@@ -16715,6 +16787,11 @@ mod tests {
             dashboard_candidate: None,
         };
 
+        let binary = paths.generations_dir.join("candidate-a/bin/agent-browser");
+        fs::create_dir_all(binary.parent().unwrap()).unwrap();
+        fs::write(&binary, "fixture").unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("generations/candidate-a", &paths.current_selector).unwrap();
         accept_prepared_payload_transaction(
             &paths,
             &mut prepared,
@@ -18504,6 +18581,18 @@ mod tests {
         let candidate_root = paths.generations_dir.join(candidate_generation);
         fs::create_dir_all(&old_root).unwrap();
         fs::create_dir_all(&candidate_root).unwrap();
+        fs::create_dir_all(candidate_root.join("bin")).unwrap();
+        fs::write(candidate_root.join("bin/agent-browser"), "fixture").unwrap();
+        fs::set_permissions(
+            candidate_root.join("bin/agent-browser"),
+            fs::Permissions::from_mode(0o555),
+        )
+        .unwrap();
+        fs::set_permissions(
+            candidate_root.join("bin"),
+            fs::Permissions::from_mode(0o555),
+        )
+        .unwrap();
         fs::set_permissions(&old_root, fs::Permissions::from_mode(0o555)).unwrap();
         fs::set_permissions(&candidate_root, fs::Permissions::from_mode(0o555)).unwrap();
         fs::create_dir_all(paths.current_selector.parent().unwrap()).unwrap();
@@ -18617,6 +18706,11 @@ mod tests {
 
         fs::set_permissions(&old_root, fs::Permissions::from_mode(0o755)).unwrap();
         fs::set_permissions(&candidate_root, fs::Permissions::from_mode(0o755)).unwrap();
+        fs::set_permissions(
+            candidate_root.join("bin"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
         fs::remove_dir_all(root).unwrap();
     }
 
