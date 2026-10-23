@@ -1,6 +1,6 @@
 # P272: preserve exact MCP task routing
 
-Status: OPEN
+Status: BLOCKED
 Product lane: PL-BUGFIX
 Work items: CochranResearchGroup/agent-browser#365
 Branch: fix/mcp-task-routing-365
@@ -8,12 +8,17 @@ Owner: ecochran76
 
 ## Current State
 
-The original stale-transport refusal no longer reproduces on the installed
-runtime. A subsequent exact-task snapshot failed when a diagnostic disposable
-session and persistent task shared a workflow name. Both diagnostic tasks are
-closed. The source repair and provider-free qualification are complete. Delivery
-is through the linked issue's source PR; merge and installed inspection acceptance
-remain separate. The original source-only boundary is retained above; the operator has now authorized the preserve-mode installed continuation below. Profile resets remain excluded.
+PR370 is integrated. The sealed release from source `16450473a` is installed as
+`0.28.0-ff0b22c3bb93-e5a1b9f945e7`; the preserve transaction is accepted. Installed
+doctor passes, both pre-existing browser-root identities survive, and the original
+open/snapshot/continue/scoped-close cycle passes over fresh installed MCP stdio.
+See the [installed qualification](../notes/0272-2026-10-22-exact-mcp-task-routing-installed.md).
+
+The configured Codex MCP connection still returns `Transport closed` and requires
+host-side client reconnection, for which this session exposes no supported control.
+This is the remaining #365 gate. The AuraCall URL redirects to Authelia; authenticated
+desktop content and human viewer acceptance remain separate under AuraCall #240.
+No credentials were submitted. The acceptance task is closed and its profile retained.
 
 ## Outcome and acceptance
 
@@ -63,7 +68,8 @@ handoff guidance and the service collection no-launch smoke pass. The first buil
 attempt stalled in sccache; its owned Cargo process was stopped and compilation
 completed with cache disabled under unchanged resource limits. A concurrent
 Clippy attempt was deferred by memory admission, then completed after release.
-No comprehensive or installed browser acceptance is claimed.
+These source checks alone do not establish installed acceptance; the installed
+qualification above records the later bounded runtime result.
 
 ## Authorized installed continuation
 

@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P272 installed exact-task routing](0272-2026-10-22-exact-mcp-task-routing-installed.md): sealed production acceptance, fresh MCP inspection, exact cleanup and the remaining configured-client reconnect gate.
+
 [P271 installed component convergence](0271-2026-10-22-install-component-convergence.md): automatic old MCP retirement, independent doctor detection, real stdio reconnect and source-only acceptance.
 
 [P270 continuity, policy and guidance source evidence](0270-2026-10-22-hosted-continuity-source.md): #352–354 source qualification, actual Native feature checks, measured status and explicit cleanup reconciliation; #351/#355 remain blocked.
