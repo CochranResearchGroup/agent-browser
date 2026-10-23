@@ -212,6 +212,7 @@ function validateNamespacedRuntimeIsolation(descriptor, env, userHome) {
   }
 }
 
+/** Keep ingress a client: the dedicated supervisor owns host startup, including boot races. */
 export function renderDevelopmentUnits(descriptor, generationBinary, environment = process.env) {
   const resourceValue = (name, maximum = 18446744073709551615n) => {
     const raw = environment[name];
@@ -309,6 +310,7 @@ Wants=${descriptor.unitNames.backend} network-online.target
 Type=simple
 ${common}
 Environment=AGENT_BROWSER_DASHBOARD_INGRESS=1
+Environment=AGENT_BROWSER_DASHBOARD_INGRESS_SKIP_SERVICE_BACKEND=1
 Environment=AGENT_BROWSER_DASHBOARD_PORT=${descriptor.dashboardPort}
 Environment=AGENT_BROWSER_DASHBOARD_BACKEND_PORT=${descriptor.backendPort}
 ExecStart=${generationBinary}

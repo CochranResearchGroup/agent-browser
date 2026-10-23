@@ -4172,3 +4172,7 @@ The selected desktop error distinguishes handoff preparation from a prepared lin
 Selected-workspace diagnostics and contextual chat use the exact selected owned tab. Missing or foreign targets do not substitute the browser default page. Browser-wide activity retains its owner scope.
 
 Diagnostic and contextual chat exports omit URL userinfo, query strings and fragments and omit whole strings containing opaque data/blob/javascript payloads. Original runtime URLs and explicit Copy URL remain unchanged. This export projection does not remove arbitrary secrets from prose or URL path segments.
+
+## Development host startup
+
+Generated development ingress units stay clients; the dedicated supervisor owns host startup. A failed host unit with a live dashboard-owned lane listener is an ownership conflict, not proof that the host is absent. Preserve that host and its browsers, inspect exact kernel and unit identity, and use supported explicit recovery rather than repeated starts. A recovery plan blocked by retained browser ownership is diagnostic only; never apply it to another runtime or force past the blockers.

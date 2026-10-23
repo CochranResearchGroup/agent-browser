@@ -331,6 +331,8 @@ pnpm smoke:development-browser-launch
 pnpm smoke:development-dashboard-auth -- --dashboard-url https://agent-browser-dev.ecochran.dyndns.org
 ```
 
+Generated development ingress units do not bootstrap a service backend or runtime host. The dedicated supervisor owns startup, including the interval before it publishes its socket. An older ingress unit can race startup and leave a dashboard-owned host holding the lane port while the host unit reports `port_conflict`; preserve that process and its browsers until explicit supervisor recovery.
+
 Development runtime JSON status reports configured listener numbers under
 `ports`. Service process identities remain under `units.*.mainPid`. Doctor
 prints each configured port while separately verifying that its listener is
