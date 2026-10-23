@@ -53,17 +53,17 @@ lanes:
     product_lane: PL-PLATFORM
     objective: Complete app-directed relocation, reconnect, policy and joined acceptance
     plan: docs/dev/plans/0270-2026-10-22-hosted-continuity.md
-    branch: platform/hosted-latency-355
+    branch: platform/native-control-latency-355
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#351, CochranResearchGroup/agent-browser#352, CochranResearchGroup/agent-browser#353, CochranResearchGroup/agent-browser#354, CochranResearchGroup/agent-browser#355]
     plan_state: OPEN
-    custody_state: INTEGRATED
+    custody_state: ACTIVE_WORKTREE
     dependencies: [P268, P267, P265]
     overlaps: [P269, P271]
     reconciled_overlaps: ["Root owns connection.rs warm reuse and P270 metadata; preserve incoming installer catalog row and independent foreign MCP routing, enrollment and manual-login work"]
     validation_status: Shared-host reuse regression and50connection tests pass; Native07/08 public p95 99.83/69.41ms passes, consumer620.35/287.35ms fails250ms; exact independent cleanup passes, no deployment by this lane
-    updated_at: 2026-10-22
+    updated_at: 2026-10-23
 
   - id: P268
     product_lane: PL-PLATFORM

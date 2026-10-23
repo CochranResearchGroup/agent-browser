@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {cleanupExactOwnedProcesses,readFreshCleanupIdentity} from './hosted-fixture-cleanup.mjs';
-import {retainedProcessOwned} from './hosted-process-ownership.mjs';
+import {retainedProcessOwned,viewerCleanupCensus} from './hosted-process-ownership.mjs';
 
 const processRow=(pid=100,extra={})=>({pid,start:'20',uid:42,executable:'/private/candidate',parentPid:1,session:pid,processGroup:pid,...extra});
 function fixture(rows=[processRow()],options={}) {
@@ -155,4 +155,21 @@ test('unreadable second kernel read or null identity cannot turn exe failure int
   executable:async()=>{throw missing();},
  }),{code:'EACCES'});
  await assert.rejects(readFreshCleanupIdentity(100,{identity:async()=>null,executable:async()=>'/private/candidate'}),{code:'fixture_cleanup_kernel_identity_unknown'});
+});
+
+test('restricted viewer descendant blocks cleanup without any signal until positive kernel absence',async()=>{
+ const child=processRow(101,{start:'21',session:100,processGroup:100});
+ const {executable,...kernel}=child;const viewerKnown=new Map([[child.pid,kernel]]);
+ let live=true,kernelReads=0;
+ const census=()=>viewerCleanupCensus(viewerKnown,pid=>readFreshCleanupIdentity(pid,{
+  identity:async()=>{kernelReads++;if(!live)throw missing();return kernel;},
+  executable:async()=>{throw Object.assign(Error('sandbox denied'),{code:'EACCES'});},
+ }));
+ const f=fixture([]);f.args.census=census;
+ const blocked=await cleanupExactOwnedProcesses({...f.args,allowSigkill:true});
+ assert.equal(blocked.qualified,false);assert.equal(blocked.unresolved[0].pid,child.pid);
+ assert.equal(f.signals.length,0);assert(kernelReads>0);
+ // Supported viewer/server close is represented by positive kernel absence.
+ live=false;const cleared=await cleanupExactOwnedProcesses({...f.args,allowSigkill:true});
+ assert.equal(cleared.qualified,true);assert.equal(f.signals.length,0);
 });
