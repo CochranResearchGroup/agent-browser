@@ -3,7 +3,7 @@
 Status: OPEN
 Product lane: PL-PLATFORM
 Work items: CochranResearchGroup/agent-browser#351, #352, #353, #354, #355
-Branch: platform/native-phase-diagnosis-355
+Branch: platform/native-control-ack-355
 Owner: ecochran76
 
 ## Outcome
@@ -154,3 +154,16 @@ Source-bound phase instrumentation loads all three intended modules;20control re
 The highest-value next repair boundary is composed Native control acknowledgment: the selective owner currently performs a fresh final status projection, then the hosted owner immediately performs its own independent final status projection. Investigate eliminating only the discarded intermediate projection through an explicit internal acknowledgment contract. Retain standalone status semantics, every durable pre-effect intent, all five target fences, final independent readback, actor/epoch checks and no-replay recovery. This is a selected repair hypothesis, not a claim of enough savings to pass250ms. Do not remove global freshness checks or persist less based on this trace.
 
 Independent Native11 readback proves38retained process observations absent, one exact fixture assignment released and405baseline peers unchanged. No readable private namespace references remain;76foreign denied proc reads are retained as an explicit census limitation. Provider generation, digest and all source pins remain stable. No production publication occurred. The auxiliary is removed cleanly after canonical ancestry and full fresh inventory; keep the dashboard primary and candidates retained. Issue355remains open.
+
+
+## Composed acknowledgment repair, 2026-10-23
+
+User authorizes removing the discarded intermediate Native projection. Root owns the consumer selective control implementation and hosted wiring in /tmp/bots-p270-ack, branch fix/hosted-control-ack-355 from fresh canonical dff79e3. A delegated writer owns only the new acknowledgment regression file. Consumer plan0070 binds tests, exact effects and cleanup; 50 registered trees include26dirty and zero unreadable checkouts. Preserve unrelated work.
+
+Add distinct internal takeAcknowledged/releaseAcknowledged methods, with no public request flag. Fresh success may return an acknowledgment only after exact provider receipt validation, unchanged target verification and durable completion. Existing standalone methods and recovery/idempotent branches retain their status reads; hosted final independent readback and all five identity fences remain unchanged. One red/green cycle and source-pinned isolated Native12 qualification follow. No production publication, pool growth, broad cleanup or uncertain-effect replay.
+
+Consumer acknowledgment repair is source-qualified in grok-bots PR191:26new regressions and97existing focused/HTTP tests pass; independent review finds no blocker. Standalone final status, recovery/idempotent readback, effect validation, post-effect target verification and durable completion remain intact. Hosted-browser-control is unchanged and still performs final independent readback.
+
+Native12 passes the complete functional workflow. The exact trace proves four Native control RPCs per takeover and three per return, one fewer per transition than Native11. Public p95 is113.00ms over20transitions. Consumer p95 is966.95ms over6transitions and still fails the unchanged250ms target; takeovers257.36–288.51ms and returns263.92–966.95ms. The slow return includes303.64ms complete journal persistence and344.10ms Native grant revocation, with an overlapping122.62ms queue wait following observation. Spans overlap and are not additive; this identifies stalls without proving a disk, host or provider-internal cause. No overall performance improvement is claimed. One cold first-pixel sample is4332.46ms, not a distribution.
+
+Native12 provider9754405/ec6ad187 and source pins remain stable before allocation and after completion. Independent readback proves38retained process observations absent, one exact fixture assignment released and414baseline peers unchanged. There are no readable private namespace references;80foreign denied proc reads remain an explicit limitation. Remove the clean consumer auxiliary only after canonical ancestry and full fresh inventory; retain the dashboard primary and candidates. No production publication. The bounded acknowledgment repair is complete;355and the wider P270 acceptance remain open for the observed durability/grant-revocation stalls.
