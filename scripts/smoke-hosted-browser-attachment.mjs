@@ -23,7 +23,7 @@ import {isAbsolute,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {createMcpStdioClient,runCli,httpJsonResult} from './smoke-utils.js';
-import {appProcessOwned,privateProfileReferenced,retainedProcessOwned} from './hosted-process-ownership.mjs';
+import {appProcessOwned,privateProfileReferenced,retainedProcessOwned,retainViewerProcess,viewerCleanupCensus} from './hosted-process-ownership.mjs';
 import {cleanupExactOwnedProcesses,readFreshCleanupIdentity} from './hosted-fixture-cleanup.mjs';
 import {createColdFirstPixelClock} from './hosted-performance.mjs';
 import {qualifyHostedBrowserControl} from './smoke-hosted-browser-control.mjs';
@@ -58,11 +58,12 @@ const context={env,agentHome,socketDir,tempHome:root,session:'hosted-'+randomUUI
 const {createBotService}=await import(pathToFileURL(join(botsRoot,'src/service.mjs')));
 const {connectRemoteView}=await import(pathToFileURL(join(botsRoot,'src/remote-view.mjs')));
 const require=createRequire(join(botsRoot,'package.json')),{chromium}=require('playwright-core');
-let remote,baseline,broker,service,client,viewer,watcher,task,appBrowser,fixtureSite,appObserver,uiHandoffId,uiTakeoverDispatched=false,uiReturnDispatched=false,uiControlSettled=true,taskClosed=false,taskCloseDispatched=false,ambiguous=false,passed=false;
+let remote,baseline,broker,service,client,viewer,viewerServer,watcher,task,appBrowser,fixtureSite,appObserver,uiHandoffId,uiTakeoverDispatched=false,uiReturnDispatched=false,uiControlSettled=true,taskClosed=false,taskCloseDispatched=false,ambiguous=false,passed=false;
 const borrowedTasks=[],closedBorrowedTasks=new Set(),managedLossTasks=[],closedManagedLossTasks=new Set();
 let performanceTargetsMet=true;
 const acquired=[],cleanup={errors:[],retainedEvidence:evidence,processesBefore:[],processesAfter:[],released:[]};
 let appRootProof=null;const appOwnedProcesses=new Map();
+let viewerRootProof=null;const viewerOwnedProcesses=new Map();
 let step='preflight';
 const errorCode=error=>error?.code||error?.name||'Error';
 function safeError(error){
@@ -101,7 +102,7 @@ async function foreignDeniedAncestry(identity){
  while(current&&chain.length<64){
   if(seen.has(current.pid)||current.pid===1||harnessAncestors.has(current.pid))return null;
   seen.add(current.pid);chain.push(current);
-  if(observedOwnedProcesses.get(current.pid)?.start===current.start)return null;
+  if(observedOwnedProcesses.get(current.pid)?.start===current.start||viewerOwnedProcesses.get(current.pid)?.start===current.start)return null;
   const baseline=baselineReadableProcesses.get(current.pid);
   if(baseline&&baseline.start===current.start&&baseline.parentPid===current.parentPid&&baseline.uid===current.uid){
    // Re-read every link to reject PID reuse or a reparent during qualification.
@@ -168,9 +169,11 @@ async function census({captureDeniedBaseline=false,collectUnresolved=false}={}){
  const rows=[],unresolved=[],foreignDenied=[];
  for(const pid of await readdir('/proc')){
   if(!/^\d+$/.test(pid)||Number(pid)===process.pid)continue;
-  let identity,owned=false,uid;
+  let identity,owned=false,viewerOwned=false,uid;
   try{const path=`/proc/${pid}`;uid=(await stat(path)).uid;
    identity=await processIdentity(pid);assert(/^\d+$/.test(identity.start));
+   viewerOwned=await retainViewerProcess(identity,{root:viewerRootProof,observed:viewerOwnedProcesses,readRoot:cleanupProcessIdentity,readKernel:processIdentity});
+   owned=viewerOwned;
    if(identity.uid!==process.getuid()){
     if(captureDeniedBaseline&&identity.pid!==1&&!harnessAncestors.has(identity.pid))baselineReadableProcesses.set(identity.pid,identity);
     continue;
@@ -188,7 +191,23 @@ async function census({captureDeniedBaseline=false,collectUnresolved=false}={}){
    observedOwnedProcesses.set(identity.pid,full);
    rows.push(full);
   }catch(error){
-   if(['ENOENT','ESRCH'].includes(error.code))continue;
+   if(['ENOENT','ESRCH'].includes(error.code)){
+    // An exe link may disappear while its kernel process is still live.
+    // Only a fresh kernel absence permits dropping owned custody from census.
+    if(!owned&&!viewerOwnedProcesses.has(Number(pid)))continue;
+    try{await processIdentity(pid);}catch(kernelError){if(['ENOENT','ESRCH'].includes(kernelError.code))continue;error=kernelError;}
+    if(['ENOENT','ESRCH'].includes(error.code))error=Object.assign(Error('fixture_process_executable_unknown'),{code:'fixture_process_executable_unknown'});
+   }
+   if(viewerOwned&&['EACCES','EPERM','fixture_process_executable_unknown'].includes(error.code)){
+    const fresh=await processIdentity(pid).catch(kernelError=>{if(['ENOENT','ESRCH'].includes(kernelError.code))return null;throw kernelError;});
+    if(fresh===null)continue;
+    if(fresh.uid!==identity.uid||fresh.start!==identity.start)throw Error('fixture_viewer_identity_changed');
+    // Active custody is visible even when sandboxed /proc files are restricted.
+    // Cleanup cannot signal this row or call it absent while its kernel lives.
+    const restricted={...fresh,kernelOnly:true,code:'fixture_viewer_executable_unavailable'};
+    if(collectUnresolved)unresolved.push(restricted);else rows.push(restricted);
+    continue;
+   }
    // A positively different UID is outside this fixture's process custody.
    // If its identity is unreadable, omit it as an ancestry anchor.
    if(uid!==undefined&&uid!==process.getuid()&&['EACCES','EPERM'].includes(error.code))continue;
@@ -202,6 +221,14 @@ async function census({captureDeniedBaseline=false,collectUnresolved=false}={}){
    error.processIdentity=identity;if(collectUnresolved){unresolved.push(safeError(error));continue;}throw error;
   }
  }
+ if(collectUnresolved){
+  // A /proc directory listing alone is not the absence fence for retained
+  // sandbox descendants. Independently observe every kernel-only generation.
+  const kernelOnly=new Map([...viewerOwnedProcesses].filter(([pid])=>!observedOwnedProcesses.has(pid)));
+  const restricted=await viewerCleanupCensus(kernelOnly,cleanupProcessIdentity);
+  rows.push(...restricted.owned);unresolved.push(...restricted.unresolved);
+ }
+ if(viewerRootProof)await save('viewer-process-observed.json',[...viewerOwnedProcesses.values()]);
  return collectUnresolved?{owned:rows,unresolved,foreignDenied}:rows;
 }
 
@@ -388,7 +415,15 @@ try{
  await qualifyHostedBrowserControl({send,runCli:args=>runCli(context,args),task:opened,sessionName,readTask,save,syntheticOnly:true,
   serviceRequest:async body=>{const response=await httpJsonResult(servicePort,'POST','/api/service/request',body);assert.equal(response.statusCode,200);assert.equal(response.body?.success,false);return response.body;}});
  await continuity('after-human-control');
- step='native-viewer';viewer=await chromium.launch({executablePath:chrome,headless:true,env:{...env,AGENT_BROWSER_HOME:agentHome}});
+ step='native-viewer';viewerServer=await chromium.launchServer({executablePath:chrome,headless:true,env:{...env,AGENT_BROWSER_HOME:agentHome}});
+ const viewerProcess=viewerServer.process();assert(viewerProcess?.pid,'Viewer server must expose its owned process');
+ viewerRootProof=await cleanupProcessIdentity(viewerProcess.pid);assert(viewerRootProof,'Viewer root must be live');
+ observedOwnedProcesses.set(viewerRootProof.pid,viewerRootProof);
+ await save('viewer-process-root-proof.json',viewerRootProof);
+ assert.equal(viewerRootProof.uid,process.getuid());assert.equal(viewerRootProof.executable,chrome);
+ assert.equal(viewerRootProof.session,viewerRootProof.pid);assert.equal(viewerRootProof.processGroup,viewerRootProof.pid);
+ viewerOwnedProcesses.set(viewerRootProof.pid,viewerRootProof);
+ viewer=await chromium.connect(viewerServer.wsEndpoint());
  const viewerContext=await viewer.newContext({...(authState?{storageState:authState}:{}),viewport:{width:1440,height:1000}});
  const page=await viewerContext.newPage();let frames=0;page.on('websocket',ws=>{if(new URL(ws.url()).origin===nativeOrigin.replace('https:','wss:'))ws.on('framereceived',()=>frames++);});
  // Intercept only the reviewed app origin to the actual local Bots source.
@@ -508,6 +543,7 @@ finally{
   }else assert.equal(current.control.owner,'agent','Uncertain Native takeover requires explicit readback');
  });
  await clean('close-viewer',async()=>{await viewer?.close();});
+ await clean('close-viewer-server',async()=>{await viewerServer?.close();});
  await clean('stop-watch',async()=>{if(watcher&&watcher.exitCode===null&&watcher.signalCode===null){const exit=once(watcher,'exit');watcher.kill('SIGTERM');await exit;}});
  for(const borrowed of borrowedTasks)if(!closedBorrowedTasks.has(borrowed.taskId))await clean('close-borrowed-task',async()=>{closedBorrowedTasks.add(borrowed.taskId);await workflow('browser_close',{taskId:borrowed.taskId});});
  // App observer transport ends only after detach continuity was checked. The
