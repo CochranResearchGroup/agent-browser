@@ -3,7 +3,7 @@
 Status: OPEN
 Product lane: PL-PLATFORM
 Work items: CochranResearchGroup/agent-browser#351, #352, #353, #354, #355
-Branch: platform/hosted-acceptance-355
+Branch: platform/hosted-latency-355
 Owner: ecochran76
 
 ## Outcome
@@ -95,3 +95,11 @@ Native05 passes actual managed browser loss: exact original kernel absence is in
 Performance remains failed: public control p95 210.05ms over20transitions, consumer/Native coordination p95 612.10ms over6transitions, and one cold first-observed marker7236.89ms. The overall run exits1 on that unchanged performance requirement. Read-only diagnosis finds multiple three-RPC Native control-status composites per transition and fresh unit readiness checks behind status. Queue delay, D-Bus work and service time still need separate measurements; no provider check is removed or cached. Real desktop restart and same-process relocation remain unexercised. No production deployment or portable display backend is installed.
 
 After consumer canonical merge and final acceptance readbacks, root removed only the auxiliary dependency symlink and clean /tmp/bots-p270-acceptance checkout. The46registered-tree inventory and26dirty states were retained privately before closure; all foreign work remains untouched. Exact path and registration absence are verified. The Agent Browser primary remains retained for its candidate and open continuation; removed consumer paths in old private runner scripts are historical locators, not reusable launch commands.
+
+## Post-adoption Native06 latency qualification
+
+User approved the diagnosing-bugs continuation. Remote View588/P168 source repair is merged through PR590/faac09e12: remove the fixed5ms unit-query batching wait and pipeline the same fresh ownership getters. Compiled real20batch property probe p95 is2.04ms;561Rust tests pass with22opt-ins skipped, plus format, strict Clippy and planning audit. This component proof does not establish the full250ms target. Native PR593 records source custody and cleanup; its earlier unadopted-provider snapshot is retained as dated evidence.
+
+A subsequent fresh readback finds a separately adopted Native build from58b1fadf907196cf53c6617a7900e65fd2eed291, binary142b1718d59d39b4b8d101628d34acbbc37a16ac81b77d3c53f69ffe94efd0bd, which contains the repaired3d1e0f9 source. This session performs no deployment. Root continues serially in the retained primary on platform/hosted-latency-355 from fresh main8dcfb37bb. Four Agent Browser checkouts are inventoried, one foreign dirty; preserve the manual-login, enrollment and install-convergence lanes. A read-only consumer auxiliary is admitted again at the exact merged38cd20f checkpoint only because the provider changed after prior closeout; its46registered-tree inventory has25dirty and zero unreadable trees. Add only the temporary dependency symlink, then remove both symlink and clean auxiliary after the run and independent cleanup.
+
+Native06 reuses the exact qualified89e32475 CI binary and unchanged workflow source, ten public-control pairs, three consumer/Native pairs, cookie/draft/peer checks, one cold-pixel observation and exact owned cleanup. Do not repeat the independent managed-loss axis or infer a desktop restart/relocation. Keep the original612.10ms failed result and unchanged250ms target. Pin the current provider before and after measurement; any change is a separate qualification boundary. Preserve failed or uncertain results without effect replay.
