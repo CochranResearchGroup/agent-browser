@@ -1,6 +1,6 @@
-# P271: preserve exact MCP task routing
+# P272: preserve exact MCP task routing
 
-Status: CLOSED
+Status: OPEN
 Product lane: PL-BUGFIX
 Work items: CochranResearchGroup/agent-browser#365
 Branch: fix/mcp-task-routing-365
@@ -13,7 +13,7 @@ runtime. A subsequent exact-task snapshot failed when a diagnostic disposable
 session and persistent task shared a workflow name. Both diagnostic tasks are
 closed. The source repair and provider-free qualification are complete. Delivery
 is through the linked issue's source PR; merge and installed inspection acceptance
-remain separate. This slice does not install or reset a runtime.
+remain separate. The original source-only boundary is retained above; the operator has now authorized the preserve-mode installed continuation below. Profile resets remain excluded.
 
 ## Outcome and acceptance
 
@@ -64,3 +64,21 @@ attempt stalled in sccache; its owned Cargo process was stopped and compilation
 completed with cache disabled under unchanged resource limits. A concurrent
 Clippy attempt was deferred by memory admission, then completed after release.
 No comprehensive or installed browser acceptance is claimed.
+
+## Authorized installed continuation
+
+The operator directed continuation after PR370 source delivery. Integrate current
+main by preserving both source intents, then build and seal one production-shaped
+candidate, qualify its exact bytes in isolated fixtures, and install through the
+preserve-mode workstation transaction. Reuse native configuration and retain peer
+browser/profile custody. Do not select force-browserless, full-shutdown, provider
+replacement, account authentication or unrelated process cleanup. Verify selected
+binary, live host, component convergence, doctor and one original exact-task
+open/snapshot/scoped-close cycle. Keep AuraCall authenticated desktop acceptance
+separate from a successful browser inspection transport.
+
+Main already reserved P271 for installer component convergence (#367/PR368), so
+this plan and lane become P272 without changing issue/branch identity. Main also
+contains the shared-host connection repair from PR369. Revalidate the MCP,
+connection and exact task seams plus strict Rust quality before completing the
+merge. Historical source-only results remain bounded to their original code.

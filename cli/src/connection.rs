@@ -1007,6 +1007,22 @@ fn wait_for_runtime_host_publication(session: &str, timeout: Duration) {
     }
 }
 
+fn existing_daemon_is_ready_with(
+    shared_runtime_host: bool,
+    mut reachable: impl FnMut() -> bool,
+    settle_legacy_shutdown: impl FnOnce(),
+) -> bool {
+    if !reachable() {
+        return false;
+    }
+    // Only legacy per-session daemons exit after a lane's 100ms close grace.
+    // Shared hosts retain future lanes, so warm reuse needs no timed settle.
+    if !shared_runtime_host {
+        settle_legacy_shutdown();
+    }
+    reachable()
+}
+
 pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {
     cache_runtime_lane_config(session, opts);
     wait_for_runtime_host_publication(session, Duration::from_secs(5));
@@ -1014,53 +1030,51 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
     // Socket connectivity is the sole liveness check — no PID check — so
     // callers in a different PID namespace (e.g. unshare) can still reuse
     // an existing daemon they can reach over the socket.
-    if daemon_ready(session) {
-        // Double-check it's actually responsive by waiting and checking again
-        // This handles the race condition where daemon is shutting down
-        // (daemon has a 100ms shutdown delay, so we wait longer)
-        thread::sleep(Duration::from_millis(150));
-        if daemon_ready(session) {
-            // Check version: if the running daemon is from a different CLI
-            // version (e.g. after an upgrade), kill it and start a fresh one.
-            let sha_matches = if running_daemon_uses_current_executable(session) == Some(true) {
-                true
-            } else {
-                current_executable_sha256()
-                    .ok()
-                    .as_deref()
-                    .map(|sha| daemon_executable_sha_matches(session, sha))
-                    .unwrap_or(true)
-            };
-            let version_matches = daemon_version_matches(session);
-            let auth_token_available = daemon_auth_token_available(session);
-            if unsafe_claim_any_allows_daemon_reuse(auth_token_available) {
-                return Ok(reachable_daemon_result(session));
-            }
-            if opts.allow_stale_daemon_handoff && auth_token_available {
-                return Ok(reachable_daemon_result(session));
-            }
-            if opts.allow_stale_daemon_handoff && !auth_token_available {
-                return Err(format!(
+    if existing_daemon_is_ready_with(
+        crate::runtime_host::admission_enabled(),
+        || daemon_ready(session),
+        || thread::sleep(Duration::from_millis(150)),
+    ) {
+        // Reuse retains the executable, version and authentication checks.
+        // An incompatible owner still requires explicit handoff or recovery.
+        let sha_matches = if running_daemon_uses_current_executable(session) == Some(true) {
+            true
+        } else {
+            current_executable_sha256()
+                .ok()
+                .as_deref()
+                .map(|sha| daemon_executable_sha_matches(session, sha))
+                .unwrap_or(true)
+        };
+        let version_matches = daemon_version_matches(session);
+        let auth_token_available = daemon_auth_token_available(session);
+        if unsafe_claim_any_allows_daemon_reuse(auth_token_available) {
+            return Ok(reachable_daemon_result(session));
+        }
+        if opts.allow_stale_daemon_handoff && auth_token_available {
+            return Ok(reachable_daemon_result(session));
+        }
+        if opts.allow_stale_daemon_handoff && !auth_token_available {
+            return Err(format!(
                     "Cannot prepare executable handoff for session '{}': daemon authentication metadata is unavailable",
                     session
                 ));
-            }
-            if !auth_token_available {
-                return Err(format!(
+        }
+        if !auth_token_available {
+            return Err(format!(
                     "Cannot refresh daemon session '{}': daemon authentication metadata is unavailable, so active browser ownership cannot be handed off safely",
                     session
                 ));
-            }
-            if !version_matches || !sha_matches {
-                let browserless_recovery = runtime_handoff_recovery_command()
+        }
+        if !version_matches || !sha_matches {
+            let browserless_recovery = runtime_handoff_recovery_command()
                     .map(|command| format!("run `{command}` and follow the returned transaction plan before retrying"))
                     .unwrap_or_else(|| "automatic runtime replacement is unavailable on this platform; retain the runtime for operator-directed replacement".to_string());
-                return Err(format!(
+            return Err(format!(
                     "Cannot refresh stale daemon session '{session}' implicitly. Run `agent-browser --session {session} handoff prepare`. If prepared=true, attach its candidate session and finalize the old owner only after candidate commit. If prepared=false and browserPresent=false, no browser transfer candidate exists: {browserless_recovery}. Retain profile data and unresolved effect custody."
                 ));
-            } else {
-                return Ok(reachable_daemon_result(session));
-            }
+        } else {
+            return Ok(reachable_daemon_result(session));
         }
     }
 
@@ -1353,6 +1367,54 @@ fn send_command_once(cmd: &Value, session: &str) -> Result<Response, String> {
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;
+
+    #[test]
+    fn shared_runtime_reuse_does_not_wait_for_legacy_shutdown_grace() {
+        let probes = std::cell::Cell::new(0);
+        assert!(existing_daemon_is_ready_with(
+            true,
+            || {
+                probes.set(probes.get() + 1);
+                true
+            },
+            || panic!("shared runtime must not wait for legacy shutdown grace"),
+        ));
+        assert_eq!(probes.get(), 2);
+    }
+
+    #[test]
+    fn legacy_runtime_reuse_waits_between_both_reachability_probes() {
+        let order = std::cell::RefCell::new(Vec::new());
+        assert!(existing_daemon_is_ready_with(
+            false,
+            || {
+                order.borrow_mut().push("probe");
+                true
+            },
+            || order.borrow_mut().push("legacy_grace"),
+        ));
+        assert_eq!(*order.borrow(), ["probe", "legacy_grace", "probe"]);
+    }
+
+    #[test]
+    fn daemon_reuse_still_refuses_missing_or_lost_reachability() {
+        for shared in [false, true] {
+            let waits = std::cell::Cell::new(0);
+            assert!(!existing_daemon_is_ready_with(
+                shared,
+                || false,
+                || waits.set(waits.get() + 1),
+            ));
+            assert_eq!(waits.get(), 0);
+            let mut probes = [true, false].into_iter();
+            assert!(!existing_daemon_is_ready_with(
+                shared,
+                || probes.next().expect("exactly two reachability probes"),
+                || waits.set(waits.get() + 1),
+            ));
+            assert_eq!(waits.get(), usize::from(!shared));
+        }
+    }
 
     #[cfg(target_os = "linux")]
     #[test]

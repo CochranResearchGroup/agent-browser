@@ -5822,6 +5822,14 @@ recorded SHA-256 provenance. Runtime-host transition checks bind each host to it
 process start token, binary hash, generation, and socket identity. Real-host preflight
 requires at least 6 GiB free before sudo, payload staging, or package mutation.
 
+Linux workstation upgrades also retire older installed MCP servers after candidate
+selection and verify their exit before acceptance. Shutdown allows five seconds
+before exact-process force termination and five seconds for exit proof. Affected
+MCP hosts must reconnect to start the selected generation. Install doctor reports
+installedMcpClients and fails on stale or unproven client inventory. Current,
+isolated development and foreign clients are preserved. Private install
+transactions retain the targets and retirement outcome.
+
 Fresh install and upgrade use one durable transaction engine. Before candidate
 staging, real-host apply joins two read-only runtime census rounds across
 service state, runtime profiles, supervisors, daemon and process identity,

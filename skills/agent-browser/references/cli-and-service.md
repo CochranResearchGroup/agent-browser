@@ -75,6 +75,18 @@ session.
 Real-host preflight requires at least 6 GiB free before sudo, payload staging,
 or package mutation; inspect `hostPlan.availableDiskBytes`,
 `minimumDiskBytes`, and `diskSpaceReady` in JSON output.
+On Linux, workstation installation converges the complete sealed binary, support
+assets and managed services before acceptance. It also terminates older
+user-owned installed MCP servers after selecting the new generation, with a
+five-second grace period followed by exact-process force termination and a
+five-second exit check. Runtime consistency takes priority over maintaining an
+old MCP connection. Reconnect affected MCP hosts to start the selected server;
+the installer cannot recreate their stdio connections. Current-generation,
+isolated development and foreign processes are preserved. Install doctor exposes
+`installedMcpClients` and fails when old clients remain or inventory is unproven.
+Retirement targets and outcomes are retained in the private install transaction.
+Forward recovery also reconciles MCP clients against the selected candidate.
+
 Cooperative runtime preservation is the workstation default. When that path
 cannot converge, run a dry-run with `--runtime-replacement-policy
 full-shutdown`, inspect `runtimeReplacementPlan`, and use its exact

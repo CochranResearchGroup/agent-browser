@@ -1,10 +1,17 @@
 # Runbook
 
-[P271 exact MCP task routing](docs/dev/plans/0271-2026-10-22-exact-mcp-task-routing.md)
-repairs #365's duplicate-name inspection failure. Public dispatch and host
-regressions reproduced independently and pass after repair; source qualification
-is complete with review and installed inspection acceptance separate.
-Installed services and persistent browser profiles are unchanged.
+[P272 exact MCP task routing](docs/dev/plans/0272-2026-10-22-exact-mcp-task-routing.md) repairs #365; source qualification complete in PR370, integration and installed inspection acceptance pending.
+
+### 2026-10-22 Complete installed component convergence
+
+[P271](docs/dev/plans/0271-2026-10-22-install-component-convergence.md), #367,
+qualifies automatic retirement of old installed MCP clients before installation
+acceptance. [Source evidence](docs/dev/notes/0271-2026-10-22-install-component-convergence.md)
+records nine process cases, actual stdio replacement, deliberate stale-client
+doctor failure, zero fixture runtime hosts and passing Rust/docs/install gates.
+Initial broad fixture failures remain explicit. Source integration only;
+production publication remains separate.
+
 
 [P270 hosted continuity](docs/dev/plans/0270-2026-10-22-hosted-continuity.md) continues #351/#355 after merged PR364. Root owns the relocation provider boundary; parallel tracks repair exact fixture cleanup and measure warm control/cold pixels. The portable-launch backend decision is pending; no production effects.
 
