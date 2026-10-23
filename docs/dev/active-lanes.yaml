@@ -53,7 +53,7 @@ lanes:
     product_lane: PL-PLATFORM
     objective: Complete app-directed relocation, reconnect, policy and joined acceptance
     plan: docs/dev/plans/0270-2026-10-22-hosted-continuity.md
-    branch: platform/native-control-latency-355
+    branch: platform/native-phase-diagnosis-355
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#351, CochranResearchGroup/agent-browser#352, CochranResearchGroup/agent-browser#353, CochranResearchGroup/agent-browser#354, CochranResearchGroup/agent-browser#355]
@@ -62,7 +62,7 @@ lanes:
     dependencies: [P268, P267, P265]
     overlaps: [P269, P271]
     reconciled_overlaps: ["Root owns connection.rs warm reuse and P270 metadata; preserve incoming installer catalog row and independent foreign MCP routing, enrollment and manual-login work"]
-    validation_status: Shared-host reuse regression and50connection tests pass; Native07/08 public p95 99.83/69.41ms passes, consumer620.35/287.35ms fails250ms; exact independent cleanup passes, no deployment by this lane
+    validation_status: Native11 functional and independent cleanup pass; public p95 62.11ms over20transitions passes, consumer312.12ms over6transitions fails250ms; phase attribution qualifies Native coordination as dominant, no deployment
     updated_at: 2026-10-23
 
   - id: P268

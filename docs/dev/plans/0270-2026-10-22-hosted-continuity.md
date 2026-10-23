@@ -3,7 +3,7 @@
 Status: OPEN
 Product lane: PL-PLATFORM
 Work items: CochranResearchGroup/agent-browser#351, #352, #353, #354, #355
-Branch: platform/native-control-latency-355
+Branch: platform/native-phase-diagnosis-355
 Owner: ecochran76
 
 ## Outcome
@@ -137,3 +137,20 @@ Native09 is retained as failed diagnostic evidence: the provider changed during 
 Native10 uses a fail-closed source/provider pin before authentication, immediately before fixture allocation and after completion. Preserve09without retrying uncertain effects. The exact provider is now9754405/ec6ad187, so timing comparisons are separate observed source pairs, not a controlled same-provider A/B. Reuse the sealed AB16450473/ff0b22c3 artifact read-only inside the disposable fixture. No production publication occurs.
 
 Native10 on the exact recorded pair completes all functional checks, synthetic first pixels in3680.68ms(one sample),20public control transitions atp95122.10ms, and6consumer/Native transitions atp95748.17ms. The250ms target remains failed. Consumer takeover timings are274.59–325.69ms and returns283.61–748.17ms; do not claim improvement from the journal patch or close355. Native09collected no samples and remains a failed diagnostic. The provider pin is stable before allocation and after the full fixture. Independent readback proves38retained process observations absent, zero readable private-marker references, one exact fixture assignment released and404baseline peers unchanged;79denied foreign proc reads remain explicitly bounded. The36provider-free fixture/adjacent tests pass. Next latency work needs fresh per-phase Native/consumer timing on the current provider rather than another uninstrumented retry. Source integration of the durable-barrier and viewer-custody corrections does not authorize publication or qualify the overall latency objective.
+
+
+## Current-provider phase diagnosis, 2026-10-23
+
+User authorizes the next diagnosis after Native10. Root retains the dashboard primary from fresh main4d0b9ac6 and preserves foreign work/candidates. Existing Native10 spans localize the748ms return to slow Native reads and effects, including169ms status,103ms selective release and71ms control release. Do not remove freshness fences based on aggregate timing.
+
+One instrumented Native11 synthetic run retains the same functional workload and250ms target. A source-hash-bound, process-local Node loader measures Native RPCs, client queue waits, complete journal persistence and consumer control phases without changing installed modules, effect order or error behavior. Twenty control regressions pass under the instrumentation. Native provider/source and sealed AB bytes are pinned before auth, before allocation and after completion. No production mutation, pool growth or uncertain-effect retry.
+
+Necessary read-only consumer auxiliary /tmp/bots-p270-phase-trace is detached at canonical2171376;46tree inventory has24dirty and zero unreadable checkouts. The exact installed dependency directory is used read-only via one symlink. Root owns loader/run artifacts outside Git and P270 metadata; remove the clean auxiliary after independent cleanup. One measurement precedes any evidence-driven repair, and missing provider detail must be named rather than weakening the target.
+
+Native11 completes all functional checks with a stable9754405/ec6ad187 provider and the same sealed AB16450473/ff0b22c3 bytes. Public control p95 is62.11ms over20transitions. Consumer/Native p95 is312.12ms over6transitions, still above the unchanged250ms target. One cold first-pixel observation is4196.15ms. Timing variability across runs is not evidence that instrumentation fixed performance.
+
+Source-bound phase instrumentation loads all three intended modules;20control regressions pass under the loader. Each consumer transition spends140.40–205.91ms in Native coordination,22.98–35.46ms in complete hosted-journal persistence,12.31–62.74ms in Agent Browser workflow calls and15.59–19.08ms in four internal validation calls. These top-level spans partition the control work; nested RPC, journal and validation spans must not be added again. Background viewer activity can overlap global RPC counts. Native control RPCs on the measured path are four status reads plus acquire for takeover, and three status reads plus release for return. Status RPCs span16.89–65.84ms; acquire40.45–53.95ms; release38.56–47.06ms. Ordinary client queue waits are below0.01ms, with small overlapping background waits up to3.18ms. Global event-loop delay peaks280.49ms outside any established per-operation causal attribution; it is not proof of the measured slow transition's cause.
+
+The highest-value next repair boundary is composed Native control acknowledgment: the selective owner currently performs a fresh final status projection, then the hosted owner immediately performs its own independent final status projection. Investigate eliminating only the discarded intermediate projection through an explicit internal acknowledgment contract. Retain standalone status semantics, every durable pre-effect intent, all five target fences, final independent readback, actor/epoch checks and no-replay recovery. This is a selected repair hypothesis, not a claim of enough savings to pass250ms. Do not remove global freshness checks or persist less based on this trace.
+
+Independent Native11 readback proves38retained process observations absent, one exact fixture assignment released and405baseline peers unchanged. No readable private namespace references remain;76foreign denied proc reads are retained as an explicit census limitation. Provider generation, digest and all source pins remain stable. No production publication occurred. The auxiliary is removed cleanly after canonical ancestry and full fresh inventory; keep the dashboard primary and candidates retained. Issue355remains open.
