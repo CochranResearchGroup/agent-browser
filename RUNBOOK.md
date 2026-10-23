@@ -1,6 +1,6 @@
 # Runbook
 
-[P272 exact MCP task routing](docs/dev/plans/0272-2026-10-22-exact-mcp-task-routing.md) repairs #365; source qualification complete in PR370, integration and installed inspection acceptance pending.
+[P272 exact MCP task routing](docs/dev/plans/0272-2026-10-22-exact-mcp-task-routing.md), #365, is integrated through PR370 and installed as sealed `ff0b22c3bb93`. [Qualification](docs/dev/notes/0272-2026-10-22-exact-mcp-task-routing-installed.md) proves accepted preserve upgrade, doctor, two retained browser roots and fresh installed MCP inspection/cleanup. The configured Codex MCP transport remains closed pending client reconnection; AuraCall redirects to Authelia and its authenticated desktop acceptance stays separate.
 
 ### 2026-10-22 Complete installed component convergence
 

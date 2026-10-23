@@ -25,12 +25,13 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#365]
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    plan_state: BLOCKED
+    custody_state: INTEGRATED
     dependencies: []
     overlaps: [P269, P270]
     reconciled_overlaps: ["Preserve main installer/latency changes and manual-login branch; authorized installed continuation serialized through workstation custody"]
-    validation_status: Public and host regression red/green; reads and tab creation pass; MCP138 and consumer116 plus one opt-in ignore; strict Clippy, fmt, docs and no-launch smoke pass; source delivery through PR; no deployment
+    validation_status: PR370 integrated; sealed ff0b22c3bb93 accepted in production; doctor and fresh installed MCP open/snapshot/continue/close pass; both browser roots preserved; own task and process cleanup verified
+    blocker: Configured Codex MCP transport is closed; host-side client reconnection required before configured-client acceptance
     updated_at: 2026-10-22
 
   - id: P271
