@@ -53,7 +53,7 @@ lanes:
     product_lane: PL-PLATFORM
     objective: Complete app-directed relocation, reconnect, policy and joined acceptance
     plan: docs/dev/plans/0270-2026-10-22-hosted-continuity.md
-    branch: platform/native-control-latency-355
+    branch: platform/native-phase-diagnosis-355
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#351, CochranResearchGroup/agent-browser#352, CochranResearchGroup/agent-browser#353, CochranResearchGroup/agent-browser#354, CochranResearchGroup/agent-browser#355]
