@@ -1,6 +1,6 @@
 # P272: preserve exact MCP task routing
 
-Status: BLOCKED
+Status: CLOSED
 Product lane: PL-BUGFIX
 Work items: CochranResearchGroup/agent-browser#365
 Branch: fix/mcp-task-routing-365
@@ -14,11 +14,12 @@ doctor passes, both pre-existing browser-root identities survive, and the origin
 open/snapshot/continue/scoped-close cycle passes over fresh installed MCP stdio.
 See the [installed qualification](../notes/0272-2026-10-22-exact-mcp-task-routing-installed.md).
 
-The configured Codex MCP connection still returns `Transport closed` and requires
-host-side client reconnection, for which this session exposes no supported control.
-This is the remaining #365 gate. The AuraCall URL redirects to Authelia; authenticated
-desktop content and human viewer acceptance remain separate under AuraCall #240.
-No credentials were submitted. The acceptance task is closed and its profile retained.
+On2026-10-23 the configured Codex MCP connection works again. The operator-invoked
+Cooper ingress skill's existing agent account clears Authelia; authenticated
+AuraCall client and inventory200, streamed views and scoped task cleanup are
+verified. The remaining Agent Browser gate is satisfied. AuraCall #240 stays
+separate: Writing is empty, and intended physical root/input proof is incomplete.
+No new marker preparation, ownership rebind or provider input was used.
 
 ## Outcome and acceptance
 

@@ -1,6 +1,6 @@
 # Agent Browser Notes Index
 
-[P272 installed exact-task routing](0272-2026-10-22-exact-mcp-task-routing-installed.md): sealed production acceptance, fresh MCP inspection, exact cleanup and the remaining configured-client reconnect gate.
+[P272 installed exact-task routing](0272-2026-10-22-exact-mcp-task-routing-installed.md): sealed production acceptance, configured authenticated MCP inspection, exact cleanup and separate AuraCall acceptance limits.
 
 [P271 installed component convergence](0271-2026-10-22-install-component-convergence.md): automatic old MCP retirement, independent doctor detection, real stdio reconnect and source-only acceptance.
 

@@ -3,7 +3,7 @@
 Product lane: PL-BUGFIX
 Work item: [#365](https://github.com/CochranResearchGroup/agent-browser/issues/365)
 Plan: [P272](../plans/0272-2026-10-22-exact-mcp-task-routing.md)
-Disposition: installed runtime accepted; configured-client reconnection pending
+Disposition: installed runtime and configured authenticated client accepted
 
 ## Source and candidate
 
@@ -53,7 +53,7 @@ retained their exact PID/start identities. Installed doctor passes; MCP inventor
 is ready with zero stale clients. Public Agent Browser ingress returns HTTP 200;
 that alone is not authenticated application or viewer proof.
 
-## Original workflow and remaining gates
+## Initial workflow checkpoint and then-remaining gates
 
 A fresh installed stdio MCP connection opens the original persistent AuraCall
 inspection task, snapshots its exact returned task ID, continues in the same
@@ -75,3 +75,37 @@ deletion, provider replacement or broad process termination was performed.
 
 Raw RPC, census, process and transaction evidence stays in private user-scoped
 artifacts. This note contains curated non-secret identities and bounded results.
+
+## 2026-10-23 configured-client and authenticated acceptance
+
+The next session's configured Agent Browser MCP connection successfully performs
+metadata discovery, opens the same existing persistent inspection profile, and
+supports snapshots, page selection, scoped tab creation and task close. Installed
+generation remains `0.28.0-ff0b22c3bb93-e5a1b9f945e7`, host PID1660641 active.
+This clears the host-client reconnect gate recorded above.
+
+The operator explicitly invoked the Cooper service ingress skill's approved
+machine-local agent credentials. Password entry occurred through a private
+browser-automation connection, without credential arguments, log output,
+screenshots or source copies. The first submit selector had a case mismatch;
+inspection confirmed zero authentication requests before one corrected form
+submission succeeded without rejection or second factor. Cookies stay private in
+the persistent profile. No credentials or access policies were changed.
+
+Authenticated AuraCall `/desktops` loads and its public inventory returns200.
+Research renders an existing browser stream; a separate retained running desktop
+renders another browser window. Research is ready/1 and Writing empty/0. The
+independent root portal connects to an empty Shared Desktop2; intended root
+content/input is not inferred. Its initial Control active UI was switched to
+View Only, confirming input locked; no native input acceptance test was performed.
+These remaining AuraCall #240 boundaries do not reopen the repaired MCP gate.
+
+Task-scoped close removes both owned inspection tabs and their browser. The task
+and browser record are absent, and all16 captured inspection process identities
+have exited. Authenticated profile state remains private. No screenshots or raw
+inventory are published. The configured-client acceptance for #365 is complete.
+
+A separate bounded configured-MCP task confirms native handoff readiness with
+`operatorVisible.state=ready` and owned-browser-window proof scope. Its task and
+browser are then closed; all14 captured process identities are absent. This
+completes the explicit handoff criterion without AuraCall marker preparation.
