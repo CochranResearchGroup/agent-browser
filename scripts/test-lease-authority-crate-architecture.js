@@ -66,6 +66,10 @@ function check(root) {
         'service_model_persistence_lifecycle_rows',
       );
     }
+    // Control owns a separate durable dispatch journal, not RuntimeOwnerRegistry.
+    if (relative === 'cli/src/native/browser_host_control.rs') {
+      fieldSource = fieldSource.replace(/\bcontrol\s*\.\s*owners\b/g, 'host_control_dispatch_owners');
+    }
     if (unrelatedPrimaryRegistry) fieldSource = fieldSource.replace(/\bself\s*\.\s*owners\b/g, 'primary_connection_rows');
     requireCondition(
       !/\.\s*(?:owners|principal_bindings|lifecycle_records)\b(?!\s*\()/.test(fieldSource),
@@ -165,8 +169,10 @@ function selfTest() {
     writeFileSync(join(root, 'cli/src/native/service_store.rs'), 'fn project(persistence: &RuntimeOwnerPersistenceParts) { let _ = &persistence.lifecycle_records; }\n');
     writeFileSync(join(root, 'cli/src/runtime_owner_transfer.rs'), 'pub(crate) use agent_browser_lease_authority::RuntimeOwnerRegistry;\n');
     writeFileSync(join(root, 'cli/src/runtime_adoption.rs'), 'pub(crate) use agent_browser_lease_authority::BrowserAdoptionMode;\n');
+    writeFileSync(join(root, 'cli/src/native/browser_host_control.rs'), 'fn inspect(control: &Control) { control.owners.get("request"); }\n');
     if (check(root).length) throw new Error('valid extracted fixture was rejected');
     const cases = [
+      ['host control registry access', 'host-control-registry-map'],
       ['missing crate', 'rm-crate'], ['upward import', 'upward-import'],
       ['retained implementation', 'retained-implementation'], ['retained directory', 'retained-directory'],
       ['retained facade', 'retained-facade'], ['missing direct dependency', 'missing-dependency'],
@@ -236,6 +242,7 @@ function selfTest() {
           const name = mutation === 'mutable-registry-getter' ? 'owners_mut' : 'edit_owner_rows';
           writeFileSync(join(mutated, path), `${read(path, root)}\nimpl RuntimeOwnerRegistry { pub fn ${name}(&mut self) -> &mut BTreeMap<String, ProfileOwner> { &mut self.owners } }\n`);
         }
+        if (mutation === 'host-control-registry-map') writeFileSync(join(mutated, 'cli/src/native/browser_host_control.rs'), 'fn inspect() { state.runtime_owner_registry.owners.values(); }\n');
         if (mutation === 'direct-registry-map') writeFileSync(join(mutated, 'cli/src/native/adapter.rs'), 'use agent_browser_lease_authority::Authority;\nfn inspect() { state.runtime_owner_registry\n .owners.values(); }\n');
         if (mutation === 'direct-service-store-registry-map') writeFileSync(join(mutated, 'cli/src/native/service_store.rs'), 'fn inspect() { state.runtime_owner_registry.lifecycle_records.values(); }\n');
         if (mutation === 'direct-registry-revision') writeFileSync(join(mutated, 'cli/src/native/adapter.rs'), 'use agent_browser_lease_authority::Authority;\nfn inspect() { state.runtime_owner_registry.revision; }\n');

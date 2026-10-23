@@ -53,7 +53,7 @@ lanes:
     product_lane: PL-PLATFORM
     objective: Complete app-directed relocation, reconnect, policy and joined acceptance
     plan: docs/dev/plans/0270-2026-10-22-hosted-continuity.md
-    branch: platform/hosted-intent-plan-355
+    branch: platform/atomic-host-return-355
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#351, CochranResearchGroup/agent-browser#352, CochranResearchGroup/agent-browser#353, CochranResearchGroup/agent-browser#354, CochranResearchGroup/agent-browser#355]
@@ -61,8 +61,8 @@ lanes:
     custody_state: ACTIVE_WORKTREE
     dependencies: [P268, P267, P265]
     overlaps: [P269, P271]
-    reconciled_overlaps: ["Root owns connection.rs warm reuse and P270 metadata; preserve incoming installer catalog row and independent foreign MCP routing, enrollment and manual-login work"]
-    validation_status: Upfront intent passes144source tests and Native13 functional/independent cleanup; two hosted flushes, public p95 271.39ms and consumer586.77ms fail250ms; engine return diagnosis active, no deployment
+    reconciled_overlaps: ["Root owns flight-clear host_control, browser_host_control, browser_session_host and P270 metadata; delegated writer owns only new return-test include; preserve independent MCP routing, enrollment and manual-login work"]
+    validation_status: Native13 latency fails; atomic attested return passes24control,11host and124authority tests plus fmt/strict clippy/docs; isolated candidate and Native14 pending, no deployment
     updated_at: 2026-10-23
 
   - id: P268

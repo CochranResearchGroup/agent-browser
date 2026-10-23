@@ -39,12 +39,11 @@ The default MCP catalog contains 16 workflow tools: `browser_open`, `browser_nav
 `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
 `browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_reconnect`, `browser_policy`,
 `browser_artifact`, `browser_command` and `browser_discover`.
-Page actions require `taskId`. Use `browser_tab` to list, create, select or close this
-task's tabs; repeat a stable `tabKey` when retrying creation. Creating a tab after
-an owner restart reconnects to the verified live browser and preserves existing
-tabs. Peer tabs stay outside this scope. Use `browser_discover` for one advanced operation's argument schema,
-then `browser_command` with `taskId`, `action` and page arguments in `params`.
-Close rejects a changed selection.
+Page actions require `taskId`. `browser_tab` manages this task's tabs; retry creation
+with the same `tabKey`. After restart, creation rejoins the verified browser
+and preserves tabs; peer tabs remain outside scope. Discover actions with `browser_discover`; use `browser_command` with `taskId`, `action`, `params`.
+Close rejects changed selection. A pre-commit return failure keeps human control
+and epoch; inspect status and use a fresh explicit intent, never replay uncertainty.
 
 For downloads, use `action: "download"` with the link selector and destination
 path in `params`. Existing-profile tasks use the current browser; clients do not

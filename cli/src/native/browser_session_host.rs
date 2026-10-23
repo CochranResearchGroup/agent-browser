@@ -2053,7 +2053,11 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         if self.effects.browser_is_live(&browser)? {
             return Ok(());
         }
-        if super::browser_host_control::read(browser_id)?.awaiting_observation {
+        // Explicit return observation must never recover a different physical
+        // browser, including while atomic return still retains human ownership.
+        if (command["action"] == "url" && command["hostControlFreshObservation"] == true)
+            || super::browser_host_control::read(browser_id)?.awaiting_observation
+        {
             return Err("browser_control_fresh_observation_cannot_recover_browser".into());
         }
         self.require_explicit_hosted_recovery(browser_id)?;
@@ -3374,6 +3378,83 @@ fn current_unix_ms() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn host_control_return_observation_cannot_recover_while_human_is_still_held() {
+        use crate::test_utils::EnvGuard;
+        let directory = TempDirectory::new();
+        let guard = EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+        ]);
+        guard.set("HOME", directory.0.to_str().unwrap());
+        guard.set(
+            "AGENT_BROWSER_HOME",
+            directory.0.join(".agent-browser").to_str().unwrap(),
+        );
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        fs::create_dir_all(directory.0.join(".agent-browser/service")).unwrap();
+        let legacy = directory.0.join("state.json");
+        fs::write(&legacy, serde_json::json!({"profiles":{"work":{"id":"work","name":"Work","userDataDir":directory.0.join("work"),"profileClass":"durable_named"}}}).to_string()).unwrap();
+        let launches = std::rc::Rc::new(std::cell::Cell::new(0));
+        let mut host = BrowserSessionHost::load(
+            BrowserSessionJsonStore::new(&directory.0),
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                launch_attempts: launches.clone(),
+                ..FixtureRuntime::default()
+            }),
+            &legacy,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_view_desktops: Vec::new(),
+                default_disposable_policy: None,
+                exact_url_history_maximum_bytes: 64 * 1024 * 1024,
+            },
+        )
+        .unwrap();
+        let opened = host
+            .open(OpenBrowserSession::exact_profile(
+                "return-held",
+                "work",
+                1_000,
+            ))
+            .unwrap();
+        let browser = host.state.sessions[&opened.session_id].browser_id.clone();
+        super::super::browser_host_control::change(
+            &browser, "takeover", 0, "operator", "Assist", true,
+        )
+        .unwrap();
+        assert!(
+            !super::super::browser_host_control::read(&browser)
+                .unwrap()
+                .awaiting_observation
+        );
+        let before = host.state.clone();
+        let launched_before = launches.get();
+        let error = host
+            .recover_browser_for_command(
+                &browser,
+                &serde_json::json!({"action":"url","hostControlFreshObservation":true}),
+            )
+            .unwrap_err();
+        assert_eq!(
+            error,
+            "browser_control_fresh_observation_cannot_recover_browser"
+        );
+        assert_eq!(
+            launches.get(),
+            launched_before,
+            "no replacement launch before observation"
+        );
+        assert_eq!(
+            host.state, before,
+            "retained task and browser identity stay intact"
+        );
+        let control = super::super::browser_host_control::read(&browser).unwrap();
+        assert!(control.human);
+        assert_eq!(control.epoch, 1);
+    }
+
     use super::*;
     use crate::native::browser_session_runtime::{
         BrowserRuntimeDriver, BrowserSessionEffectAdapter,
@@ -3388,6 +3469,7 @@ mod tests {
     #[derive(Default)]
     struct FixtureRuntime {
         launches: usize,
+        launch_attempts: std::rc::Rc<std::cell::Cell<u32>>,
         live: bool,
         attachment_required: bool,
         attached: bool,
@@ -3419,6 +3501,7 @@ mod tests {
             desktop: Option<&agent_browser_service_model::RemoteViewFixedDesktop>,
         ) -> Result<BrowserLaunch, String> {
             self.launches += 1;
+            self.launch_attempts.set(self.launch_attempts.get() + 1);
             Ok(BrowserLaunch {
                 process_identity: None,
                 browser_id: format!("browser:{}:{}", profile.id, self.launches),

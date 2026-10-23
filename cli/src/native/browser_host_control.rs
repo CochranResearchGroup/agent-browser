@@ -6,6 +6,8 @@ use std::collections::BTreeMap;
 #[cfg(unix)]
 use std::fs::File;
 use std::fs::OpenOptions;
+#[cfg(unix)]
+use std::io::Read;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -40,6 +42,88 @@ pub(crate) fn path(browser_id: &str) -> Result<PathBuf, String> {
             "host-control-{:x}.json",
             Sha256::digest(browser_id.as_bytes())
         )))
+}
+
+#[cfg(unix)]
+fn return_key_path(browser_id: &str) -> Result<PathBuf, String> {
+    Ok(path(browser_id)?.with_extension("return-key"))
+}
+
+#[cfg(unix)]
+fn load_return_key(browser_id: &str) -> Option<agent_browser_lease_authority::CooperativeReadKey> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    let mut file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(return_key_path(browser_id).ok()?)
+        .ok()?;
+    let metadata = file.metadata().ok()?;
+    // SAFETY: geteuid has no arguments or failure path.
+    let owner = unsafe { libc::geteuid() };
+    if !metadata.is_file()
+        || metadata.uid() != owner
+        || metadata.mode() & 0o077 != 0
+        || metadata.nlink() != 1
+        || metadata.len() > 4096
+    {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    Read::by_ref(&mut file)
+        .take(4097)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    if bytes.len() > 4096 {
+        return None;
+    }
+    serde_json::from_slice(&bytes).ok()
+}
+
+#[cfg(not(unix))]
+fn load_return_key(_browser_id: &str) -> Option<agent_browser_lease_authority::CooperativeReadKey> {
+    None
+}
+
+// Optional provenance sidecar: failure disables the optimization, never the
+// existing control/reconciliation path. Only takeover may initialize it, under
+// the existing control lock; no return-path durability write is introduced.
+#[cfg(unix)]
+fn prepare_return_key(browser_id: &str) -> Result<(), String> {
+    use std::os::unix::fs::OpenOptionsExt;
+    if load_return_key(browser_id).is_some() {
+        return Ok(());
+    }
+    let key_path = return_key_path(browser_id)?;
+    match std::fs::symlink_metadata(&key_path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        _ => return Err("browser_control_return_key_unavailable".into()),
+    }
+    let key = agent_browser_lease_authority::CooperativeReadKey::new()?;
+    let bytes = serde_json::to_vec(&key).map_err(|_| "browser_control_return_key_unavailable")?;
+    let temporary = key_path.with_extension(format!("{}.return-key.tmp", uuid::Uuid::new_v4()));
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(&temporary)
+        .map_err(|_| "browser_control_return_key_unavailable")?;
+    file.write_all(&bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|_| "browser_control_return_key_unavailable")?;
+    std::fs::rename(&temporary, &key_path).map_err(|_| "browser_control_return_key_unavailable")?;
+    File::open(
+        key_path
+            .parent()
+            .ok_or("browser_control_directory_missing")?,
+    )
+    .and_then(|directory| directory.sync_all())
+    .map_err(|_| "browser_control_return_key_unavailable".to_string())
+}
+
+#[cfg(not(unix))]
+fn prepare_return_key(_browser_id: &str) -> Result<(), String> {
+    Ok(())
 }
 
 fn transaction<T>(
@@ -179,11 +263,177 @@ fn permits(control: &Control, action: &str) -> Result<(), String> {
 pub(crate) fn check(browser_id: &str, action: &str) -> Result<(), String> {
     permits(&read(browser_id)?, action)
 }
+/// Explicit return observation uses the existing caller's authority and exact
+/// retained target. This read exception never transfers ownership or permits input.
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReturnObservation {
+    browser_id: String,
+    task_id: String,
+    profile_id: String,
+    target_id: String,
+    expected_epoch: u64,
+    actor: String,
+    reason: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    attestation: String,
+}
+
+fn validate_attribution(actor: &str, reason: &str) -> Result<(), String> {
+    if actor.trim().is_empty()
+        || actor.len() > 160
+        || reason.trim().is_empty()
+        || reason.len() > 320
+    {
+        return Err("browser_control_attribution_required".into());
+    }
+    Ok(())
+}
+
+fn flight_clear(control: &Control) -> bool {
+    !control
+        .flights
+        .values()
+        .any(|state| state == "dispatched" || state == "uncertain_in_flight")
+}
+
+/// Eligibility is read-only; ordinary automation remains human-held until the
+/// post-observation commit. Legacy awaiting/flight states use existing recovery.
+pub(crate) fn eligible_return_observation(
+    browser_id: &str,
+    expected: u64,
+    actor: &str,
+    reason: &str,
+) -> Result<bool, String> {
+    validate_attribution(actor, reason)?;
+    let control = read(browser_id)?;
+    if control.epoch != expected {
+        return Err("browser_control_epoch_changed".into());
+    }
+    Ok(control.human
+        && !control.awaiting_observation
+        && flight_clear(&control)
+        && load_return_key(browser_id).is_some())
+}
+
+fn return_observation_payload(proof: &ReturnObservation) -> Result<Vec<u8>, String> {
+    let mut unsigned = proof.clone();
+    unsigned.attestation.clear();
+    serde_json::to_vec(&unsigned)
+        .map_err(|_| "browser_control_return_observation_scope_invalid".into())
+}
+
+/// Only the trusted control adapter emits the scoped attestation. Ordinary URL
+/// callers cannot manufacture this exception from public status metadata.
+pub(crate) fn attest_return_observation(value: Value) -> Result<Value, String> {
+    let mut proof: ReturnObservation = serde_json::from_value(value)
+        .map_err(|_| "browser_control_return_observation_scope_invalid")?;
+    if !eligible_return_observation(
+        &proof.browser_id,
+        proof.expected_epoch,
+        &proof.actor,
+        &proof.reason,
+    )? {
+        return Err("browser_control_return_observation_unavailable".into());
+    }
+    let key = load_return_key(&proof.browser_id)
+        .ok_or("browser_control_return_observation_unavailable")?;
+    proof.attestation = key.attest(&return_observation_payload(&proof)?);
+    serde_json::to_value(proof)
+        .map_err(|_| "browser_control_return_observation_scope_invalid".into())
+}
+
+fn authorize_return_observation(
+    state: &BrowserSessionState,
+    command: &Value,
+) -> Result<(), String> {
+    let invalid = || "browser_control_return_observation_scope_invalid".to_string();
+    let proof: ReturnObservation =
+        serde_json::from_value(command["hostControlReturnObservation"].clone())
+            .map_err(|_| invalid())?;
+    let task = state.sessions.get(&proof.task_id).ok_or_else(invalid)?;
+    let browser = state.browsers.get(&proof.browser_id).ok_or_else(invalid)?;
+    let tab_id = task.current_tab_id.as_ref().ok_or_else(invalid)?;
+    let tab = state.tabs.get(tab_id).ok_or_else(invalid)?;
+    if command["action"] != "url"
+        || command["hostControlFreshObservation"] != true
+        || command["sessionName"].as_str() != Some(task.name.as_str())
+        || command["sessionId"].as_str() != Some(proof.task_id.as_str())
+        || command["targetId"].as_str() != Some(proof.target_id.as_str())
+        || task.id != proof.task_id
+        || task.browser_id != proof.browser_id
+        || task.profile_id != proof.profile_id
+        || browser.id != proof.browser_id
+        || browser.profile_id != proof.profile_id
+        || tab.id != *tab_id
+        || tab.browser_id != proof.browser_id
+        || tab.session_id != proof.task_id
+        || tab.target_id != proof.target_id
+        || !state.host_bindings.contains_key(&proof.task_id)
+        || command
+            .get("browserId")
+            .is_some_and(|id| id.as_str() != Some(proof.browser_id.as_str()))
+        || command
+            .get("profileId")
+            .is_some_and(|id| id.as_str() != Some(proof.profile_id.as_str()))
+    {
+        return Err(invalid());
+    }
+    let key = load_return_key(&proof.browser_id).ok_or_else(invalid)?;
+    if !key.verify(&return_observation_payload(&proof)?, &proof.attestation) {
+        return Err(invalid());
+    }
+    if !eligible_return_observation(
+        &proof.browser_id,
+        proof.expected_epoch,
+        &proof.actor,
+        &proof.reason,
+    )? {
+        return Err("browser_control_return_observation_unavailable".into());
+    }
+    Ok(())
+}
+
+/// Commit only after the caller freshly observed and rechecked the same target.
+/// Epoch and unresolved-flight checks run again under the ordinary control lock.
+pub(crate) fn commit_observed_return(
+    browser_id: &str,
+    expected: u64,
+    actor: &str,
+    reason: &str,
+) -> Result<u64, String> {
+    validate_attribution(actor, reason)?;
+    transaction(&path(browser_id)?, |control| {
+        if control.epoch != expected {
+            return Err("browser_control_epoch_changed".into());
+        }
+        if !control.human || control.awaiting_observation || !flight_clear(control) {
+            return Err("browser_control_return_observation_unavailable".into());
+        }
+        control.epoch = control
+            .epoch
+            .checked_add(1)
+            .ok_or("browser_control_epoch_exhausted")?;
+        control.human = false;
+        control.pause_reads = false;
+        control.awaiting_observation = false;
+        control.actor = actor.into();
+        control.reason = reason.into();
+        control.audit.push(
+            json!({"epoch":control.epoch,"operation":"return","actor":actor,"reason":reason}),
+        );
+        Ok(control.epoch)
+    })
+}
+
 pub(crate) fn check_state(
     state: &BrowserSessionState,
     name: &str,
     command: &Value,
 ) -> Result<(), String> {
+    if command.get("hostControlReturnObservation").is_some() {
+        return authorize_return_observation(state, command);
+    }
     let action = command["action"].as_str().unwrap_or_default();
     let name = command["sessionName"].as_str().unwrap_or(name);
     for task in state.sessions.values().filter(|task| {
@@ -228,6 +478,9 @@ pub(crate) fn change(
         }
         match operation {
             "takeover" => {
+                // Best effort only: unavailable private provenance retains the
+                // legacy return lane, without changing the control JSON schema.
+                let _ = prepare_return_key(browser_id);
                 control.human = true;
                 control.pause_reads = pause_reads;
                 control.awaiting_observation = false;
@@ -423,10 +676,17 @@ pub(crate) fn admit_command(
 ) -> Result<Option<Admission>, String> {
     let name = command["sessionName"].as_str().or(name);
     let Some(state) = BrowserSessionSqliteStore::default_session_state_read_only()? else {
+        if command.get("hostControlReturnObservation").is_some() {
+            return Err("browser_control_return_observation_scope_invalid".into());
+        }
         return Ok(None);
     };
     super::browser_host_reconnect::check_state(&state, name.unwrap_or_default(), command)?;
     super::browser_host_policy::check_state(&state, name.unwrap_or_default(), command)?;
+    if command.get("hostControlReturnObservation").is_some() {
+        authorize_return_observation(&state, command)?;
+        return Ok(None);
+    }
     let browser = state.sessions.values().find(|task| {
         name == Some(task.name.as_str())
             || name == Some(task.id.as_str())
@@ -854,4 +1114,6 @@ mod integration_tests {
             assert!(check_state(&state, "foreign-lane", &json!({"action":"click"})).is_ok());
         });
     }
+    #[cfg(unix)]
+    include!("browser_host_return_tests.rs");
 }

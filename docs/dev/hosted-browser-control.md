@@ -13,8 +13,12 @@ routes. Default takeover still permits ordinary page observation; `pauseReads`
 also blocks page reads and capture. Status and explicit return remain usable.
 
 `return` or deliberate `override` requires the current epoch, actor and reason.
-It first enters an awaiting-observation state. A fresh URL read of the same
-retained target must succeed before automation resumes. Return never recovers,
+An eligible flight-clear human-held return keeps automation paused during its exact-target
+URL observation, then commits agent ownership and the new epoch once. A failed
+pre-commit observation leaves human ownership and the old epoch intact: inspect
+status and issue a fresh explicit return intent, never replay an uncertain call.
+Legacy journals, unresolved effects, existing awaiting-observation states and deliberate override
+retain the prior awaiting-observation/reconciliation lane. Return never recovers,
 reopens or silently replaces a lost browser. Override records attribution using
 the caller's existing trusted runtime/operator admission; actor and reason are
 descriptive attribution, not proof of authority. The adapter grants no additional
@@ -48,3 +52,12 @@ routes and gives direct controllers current status. It cannot intercept arbitrar
 OS input or unmanaged CDP clients. Such controllers must stop dispatch when human
 ownership or awaiting-observation is reported. Account authentication, Native
 viewer readiness and browser readiness remain independent observations.
+
+
+The internal return-observation exception is purpose-bound and attested using a
+private sidecar initialized during takeover. Public status/attribution fields alone
+cannot construct it. Ordinary dispatch still enforces caller policy, exact retained
+identity and current epoch; the attestation grants no effect authority or viewer
+access. Missing or unusable provenance disables only the optimization and retains
+the legacy return lane. The control JSON schema is unchanged. No user sign-in or
+additional viewer-grant ceremony is introduced.
