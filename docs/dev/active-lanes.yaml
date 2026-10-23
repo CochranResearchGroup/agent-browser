@@ -62,7 +62,7 @@ lanes:
     dependencies: [P268, P267, P265]
     overlaps: [P269, P271]
     reconciled_overlaps: ["Root owns connection.rs warm reuse and P270 metadata; preserve incoming installer catalog row and independent foreign MCP routing, enrollment and manual-login work"]
-    validation_status: Native11 functional and independent cleanup pass; public p95 62.11ms over20transitions passes, consumer312.12ms over6transitions fails250ms; phase attribution qualifies Native coordination as dominant, no deployment
+    validation_status: Acknowledgment repair passes123source tests and Native12 functional/independent cleanup; one fewer Native status RPC per transition, public p95 113.00ms passes, consumer966.95ms fails250ms; no deployment
     updated_at: 2026-10-23
 
   - id: P268
