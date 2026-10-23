@@ -6174,6 +6174,8 @@ Console, Network, Storage, Extensions and runtime health. /activity opens its
 Activity tool. Viewing controls return to the same browser workspace.
 Selected-workspace page evidence follows the exact selected tab; missing targets
 do not substitute the browser default. Browser-wide activity keeps its owner scope.
+Selection Focus requests native focus for a current owned tab. Stale or foreign
+targets require refresh; an accepted request is not observed physical-focus proof.
 Diagnostic/chat exports omit URL userinfo, query strings, fragments and opaque
 payloads. Live URLs and Copy URL stay unchanged; prose/path secrets are outside
 this redaction scope.
