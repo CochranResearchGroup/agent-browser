@@ -395,7 +395,7 @@ pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, 
     let started = Instant::now();
     let observed = super::workflow::execute(
         json!({"id":uuid::Uuid::new_v4().to_string(),
-        "action":"evaluate","script":script,"sessionName":binding["sessionName"]}),
+        "action":"evaluate","script":script,"sessionName":binding["sessionName"],"sessionId":task_id}),
         transport_session,
     )?;
     let current = task_context(task_id)?;

@@ -1,5 +1,7 @@
 # Runbook
 
+[P272 exact MCP task routing](docs/dev/plans/0272-2026-10-22-exact-mcp-task-routing.md) repairs #365; source qualification complete in PR370, integration and installed inspection acceptance pending.
+
 ### 2026-10-22 Complete installed component convergence
 
 [P271](docs/dev/plans/0271-2026-10-22-install-component-convergence.md), #367,

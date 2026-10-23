@@ -10,7 +10,18 @@ mod hosted;
 mod playbooks;
 mod workflow;
 
-use crate::connection::{send_command, Response};
+use crate::connection::Response;
+
+// Public page adapters carry the canonical session ID as their route. Resolve
+// only at the transport boundary so typed command builders cannot discard it.
+fn send_command(mut command: Value, route: &str) -> Result<Response, String> {
+    if route.starts_with("session:") {
+        let lane = workflow::address_task_command(&mut command, route)?;
+        crate::connection::send_command(command, &lane)
+    } else {
+        crate::connection::send_command(command, route)
+    }
+}
 use crate::native::service_access::{
     parse_service_access_plan_query, service_access_plan_for_state,
     service_access_plan_for_state_with_principal,
@@ -5472,14 +5483,14 @@ fn call_service_mcp_tool(
         }
         validate_browser_command_action(arguments)?;
     }
-    let task_session = if name.starts_with("browser_") {
-        optional_string_argument(arguments, "taskId")?
-            .map(workflow::task_session)
-            .transpose()?
+    let task_route = if name.starts_with("browser_") {
+        let task_id = required_string_argument(arguments, "taskId")?;
+        workflow::task_session(task_id)?;
+        Some(task_id)
     } else {
         None
     };
-    let session = task_session.as_deref().unwrap_or(session);
+    let session = task_route.unwrap_or(session);
 
     dispatch_mcp_adapter(name, arguments, session, configured_service_state)
 }
@@ -6290,7 +6301,9 @@ fn call_browser_command(
         });
         command["id"] = json!(request_id);
         command["policyOverrideId"] = json!(token);
-        command["sessionName"] = json!(session);
+        command["sessionName"] = json!(workflow::task_session(required_string_argument(
+            arguments, "taskId"
+        )?)?);
         command["sessionId"] = json!(required_string_argument(arguments, "taskId")?);
         let result = workflow::execute(command, session)?;
         return Ok(tool_response_from_payload(

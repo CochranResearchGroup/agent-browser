@@ -143,6 +143,21 @@ pub(super) fn task_session(task_id: &str) -> Result<String, JsonRpcError> {
         .ok_or_else(|| issue(format!("browser_task_not_found:{task_id}")))
 }
 
+/// Join opaque task identity to its transport lane without name-based selection.
+pub(super) fn address_task_command(command: &mut Value, task_id: &str) -> Result<String, String> {
+    let path = BrowserSessionSqliteStore::default_sqlite_path()?;
+    let store = BrowserSessionSqliteStore::open_read_only(&path)?;
+    let state = store.load_session_state()?;
+    let task = state
+        .sessions
+        .get(task_id)
+        .ok_or_else(|| format!("browser_task_not_found:{task_id}"))?;
+    command["sessionId"] = json!(task.id);
+    command["sessionName"] = json!(task.name);
+    command["profileId"] = json!(task.profile_id);
+    Ok(task.name.clone())
+}
+
 pub(super) fn open(
     arguments: &Value,
     transport_session: &str,
@@ -250,6 +265,7 @@ pub(super) fn open(
             return Err(issue("browser_task_current_tab_missing"));
         }
         command["action"] = json!(super::BROWSER_GET_URL_TOOL.action);
+        command["sessionId"] = json!(session_id);
         command
             .as_object_mut()
             .expect("command object")
@@ -335,7 +351,7 @@ fn open_attachment(arguments: &Value, transport_session: &str) -> Result<Value, 
         .ok_or_else(|| issue("browser_task_identity_missing"))?;
     let session = task_session(task_id)?;
     let observed = execute(
-        json!({"id":uuid::Uuid::new_v4().to_string(),"action":"url","sessionName":session}),
+        json!({"id":uuid::Uuid::new_v4().to_string(),"action":"url","sessionName":session,"sessionId":task_id}),
         transport_session,
     )?;
     let store = BrowserSessionSqliteStore::open_read_only(
@@ -393,7 +409,7 @@ pub(super) fn continue_task(
     let session_name = task_session(task_id)?;
     let observed = execute(
         json!({"id":uuid::Uuid::new_v4().to_string(),
-        "action":"url","sessionName":session_name}),
+        "action":"url","sessionName":session_name,"sessionId":task_id}),
         transport_session,
     )?;
     let current_url = observed["url"]
@@ -446,7 +462,7 @@ pub(super) fn handoff(arguments: &Value, transport_session: &str) -> Result<Valu
     // owner. It neither navigates the page nor issues a temporary viewer grant.
     execute(
         json!({"id":uuid::Uuid::new_v4().to_string(),"action":"url",
-        "sessionName":session_name}),
+        "sessionName":session_name,"sessionId":task_id}),
         transport_session,
     )?;
     let path = BrowserSessionSqliteStore::default_sqlite_path().map_err(issue)?;
@@ -527,7 +543,7 @@ pub(super) fn tab(arguments: &Value, transport_session: &str) -> Result<Value, J
         .map_err(issue)?;
         execute(
             json!({"id":uuid::Uuid::new_v4().to_string(),
-            "action":"url","sessionName":session_name,"observeChildTabs":true}),
+            "action":"url","sessionName":session_name,"sessionId":task_id,"observeChildTabs":true}),
             transport_session,
         )?;
     }

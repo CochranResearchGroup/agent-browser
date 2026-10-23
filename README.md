@@ -23,6 +23,11 @@ Close only the task's session. Closing one session must preserve its peers; the 
 
 ## Service integration reference
 
+MCP page actions retain the exact `taskId` returned by `browser_open`, including
+when another browser profile has a task with the same session name. Missing or
+conflicting task identity fails instead of selecting a peer or launching a
+replacement. Name-only CLI routing still rejects ambiguous names.
+
 ### MCP browser tasks
 
 If the client cannot call `browser_open`, configure its MCP integration with
