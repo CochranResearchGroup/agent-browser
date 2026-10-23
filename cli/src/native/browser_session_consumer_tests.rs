@@ -629,6 +629,81 @@ fn consumer_preflight_failure_preserves_reason_and_allows_same_host_retry() {
 }
 
 #[test]
+fn consumer_exact_task_route_survives_duplicate_names_and_rejects_missing_identity() {
+    let fixture = Fixture::new();
+    let calls = Rc::new(Cell::new(0));
+    let requests = Rc::new(Cell::new(0));
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
+    let first = host
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let second = host
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-b", 101))
+        .unwrap();
+    assert_ne!(first.session_id, second.session_id);
+    assert!(host
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"url", "activityAtMs":102
+            })
+        )
+        .unwrap_err()
+        .starts_with("browser_session_name_ambiguous:"));
+    for task in [&first, &second] {
+        let result = host
+            .execute_managed_command(
+                "Alice",
+                &serde_json::json!({
+                    "action":"url", "sessionId":task.session_id, "activityAtMs":102
+                }),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(result["targetId"], format!("target:{}", task.browser_id));
+        let added = host
+            .execute_managed_command(
+                "Alice",
+                &serde_json::json!({
+                    "id":format!("add-{}", task.session_id), "action":"tab_new",
+                    "sessionId":task.session_id, "activityAtMs":103
+                }),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(added["browserSession"]["sessionId"], task.session_id);
+        assert_eq!(added["browserSession"]["browserId"], task.browser_id);
+    }
+    let before = calls.get();
+    assert!(host.execute_managed_command("Alice", &serde_json::json!({
+        "action":"url", "sessionId":first.session_id, "profileId":"profile-b", "activityAtMs":103
+    })).is_err(), "conflicting profile intent must not select the peer");
+    assert!(host
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"url", "sessionId":"missing-task", "activityAtMs":103
+            })
+        )
+        .is_err());
+    assert_eq!(
+        calls.get(),
+        before,
+        "an unknown exact ID must not launch a fallback browser"
+    );
+    assert!(
+        host.execute_managed_command(
+            "Bob",
+            &serde_json::json!({
+                "action":"url", "sessionId":first.session_id, "activityAtMs":104
+            })
+        )
+        .is_err(),
+        "an exact ID must not override conflicting name intent"
+    );
+}
+
+#[test]
 fn consumer_host_managed_dispatch_uses_current_tab_after_publication() {
     let fixture = Fixture::new();
     let calls = Rc::new(Cell::new(0));

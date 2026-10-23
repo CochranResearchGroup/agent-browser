@@ -2,6 +2,8 @@
 
 [P273 development host startup](0273-2026-10-22-development-host-startup.md), #356, prevents ingress from spawning a competing host during supervisor boot; installed ownership recovery remains separate.
 
+[P272 exact MCP task routing](0272-2026-10-22-exact-mcp-task-routing.md), #365; exact task identity through page dispatch, integration and installed acceptance pending.
+
 [P271: installed component convergence](0271-2026-10-22-install-component-convergence.md), #367, owns exact old MCP retirement and complete installation acceptance.
 
 [P270 hosted continuity](0270-2026-10-22-hosted-continuity.md) continues #351/#355 after merged PR364. Root owns the relocation provider boundary; parallel tracks repair exact fixture cleanup and measure warm control/cold pixels. The portable-launch backend decision is pending; no production effects.

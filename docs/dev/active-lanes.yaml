@@ -17,6 +17,22 @@ lanes:
     validation_status: Selected executable supervisor test passes; real startup port conflict and generated-ingress competing-host regression reproduce; guard repair passes with exact cleanup; live installation unchanged
     updated_at: 2026-10-22
 
+  - id: P272
+    product_lane: PL-BUGFIX
+    objective: Preserve exact task identity through MCP page dispatch
+    plan: docs/dev/plans/0272-2026-10-22-exact-mcp-task-routing.md
+    branch: fix/mcp-task-routing-365
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#365]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [P269, P270]
+    reconciled_overlaps: ["Preserve main installer/latency changes and manual-login branch; authorized installed continuation serialized through workstation custody"]
+    validation_status: Public and host regression red/green; reads and tab creation pass; MCP138 and consumer116 plus one opt-in ignore; strict Clippy, fmt, docs and no-launch smoke pass; source delivery through PR; no deployment
+    updated_at: 2026-10-22
+
   - id: P271
     product_lane: PL-BUGFIX
     objective: Converge every installed component and retire outdated MCP clients
