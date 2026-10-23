@@ -1,5 +1,7 @@
 # Runbook
 
+[P273 development supervision recovery](docs/dev/plans/0273-2026-10-22-development-host-startup.md), #356, qualifies the original development host under its dedicated unit without restarting it. Host 1331 and selected 9c8edd62 generation, four browser roots and original sessions are preserved; host/backend/ingress units are active. Doctor passes 33/34 checks with preexisting development guidance drift. PR371 prevents the boot race; no production or account effects.
+
 [P272 exact MCP task routing](docs/dev/plans/0272-2026-10-22-exact-mcp-task-routing.md), #365, is integrated through PR370 and installed as sealed `ff0b22c3bb93`. [Qualification](docs/dev/notes/0272-2026-10-22-exact-mcp-task-routing-installed.md) proves accepted preserve upgrade, doctor, two retained browser roots and fresh installed MCP inspection/cleanup. The configured Codex MCP transport remains closed pending client reconnection; AuraCall redirects to Authelia and its authenticated desktop acceptance stays separate.
 
 ### 2026-10-22 Complete installed component convergence

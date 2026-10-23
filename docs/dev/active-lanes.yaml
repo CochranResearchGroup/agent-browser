@@ -5,17 +5,17 @@ lanes:
     product_lane: PL-BUGFIX
     objective: Qualify development runtime host startup and preserve selected generation
     plan: docs/dev/plans/0273-2026-10-22-development-host-startup.md
-    branch: fix/development-host-startup-356
+    branch: fix/development-supervision-recovery-356
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#356]
-    plan_state: OPEN
+    plan_state: CLOSED
     custody_state: INTEGRATED
     dependencies: []
     overlaps: [P270, P271]
-    reconciled_overlaps: ["Root owns startup diagnosis and P273 metadata in retained dashboard primary; preserve foreign MCP merge and enrollment; P270 worker read-only with no checkout"]
-    validation_status: Actual boot-window red/green, selected supervisor test, development fixtures, independent cleanup, fmt, strict Clippy and docs/policy pass; source PR371; retained live host recovery blocked, no installation effect
-    updated_at: 2026-10-22
+    reconciled_overlaps: ["Root owns development-only supervision recovery and P273 metadata; production identities and foreign work preserved; P270 candidate remains retained"]
+    validation_status: PR371 plus same-process systemd adoption qualified; original host/start/executable, generation, four browser roots and sessions preserved; three units active, steady samples and cleanup pass; doctor 33/34 with preexisting skill drift
+    updated_at: 2026-10-23
 
   - id: P272
     product_lane: PL-BUGFIX
