@@ -71,7 +71,7 @@ Return, store, and reopen only `handoffUrl`: standalone `/remote-view/<handoff-i
 
 ## Operator workspace
 
-Read [Operator workspace](references/cli-and-service.md#operator-workspace) before dashboard tab selection, sharing, handoff-policy editing or investigating rail freshness. Remote View owns the viewer and its existing authentication.
+Read [Operator workspace](references/cli-and-service.md#operator-workspace) before tab, sharing or handoff-policy work. Focus needs a current owned tab; acceptance is not observed focus. Remote View owns viewing/authentication.
 
 ## Sharing a profile between tasks
 
