@@ -233,7 +233,7 @@ async function send(method,params){
  finally{clearTimeout(timer);}
 }
 async function workflow(name,args){
- let result;try{result=await send('tools/call',{name,arguments:args});}catch(error){ambiguous=true;throw error;}
+ let result;try{result=await timedStage('consumer_workflow.'+name+(args.operation?'.'+args.operation:''),()=>send('tools/call',{name,arguments:args}));}catch(error){ambiguous=true;throw error;}
  const value=result.structuredContent??JSON.parse(result.content.find(c=>c.type==='text').text);
  if(result.isError||value.success===false)throw Object.assign(Error('Agent Browser rejected workflow'),{code:value.error?.code||'workflow_rejected'});
  const data=value.data??value;if(name==='browser_open'){
