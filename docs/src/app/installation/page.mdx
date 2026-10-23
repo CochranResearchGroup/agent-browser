@@ -525,6 +525,8 @@ hash, generation, and socket identity.
 
 Headless development validation does not require legacy RDP helpers. Explicitly configured native or required legacy presentation providers keep their own readiness checks. Older SQLite migration evidence is read without replacing browser or profile state. Sealed development publication retains the source commit, tree and candidate manifest digest independently of the original build path. Unsealed binaries do not imply source provenance.
 
+Generated development ingress stays a client during boot; the dedicated supervisor owns runtime startup. Older units may let ingress spawn a competing host before supervisor publication. A failed host unit with a live dashboard-owned lane listener is an ownership conflict: retain its browser processes and use explicit supervisor recovery rather than repeatedly starting another host.
+
 For isolated development, run <code>agent-browser-dev install doctor</code>
 or the namespaced development launcher. The check binds the selected binary,
 exact launcher bytes and configured dashboard port. Missing or changed bindings

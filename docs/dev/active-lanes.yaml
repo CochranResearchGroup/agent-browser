@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P273
+    product_lane: PL-BUGFIX
+    objective: Qualify development runtime host startup and preserve selected generation
+    plan: docs/dev/plans/0273-2026-10-22-development-host-startup.md
+    branch: fix/development-host-startup-356
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#356]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [P270, P271]
+    reconciled_overlaps: ["Root owns startup diagnosis and P273 metadata in retained dashboard primary; preserve foreign MCP merge and enrollment; P270 worker read-only with no checkout"]
+    validation_status: Selected executable supervisor test passes; real startup port conflict and generated-ingress competing-host regression reproduce; guard repair passes with exact cleanup; live installation unchanged
+    updated_at: 2026-10-22
+
   - id: P271
     product_lane: PL-BUGFIX
     objective: Converge every installed component and retire outdated MCP clients
@@ -26,7 +42,7 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#351, CochranResearchGroup/agent-browser#352, CochranResearchGroup/agent-browser#353, CochranResearchGroup/agent-browser#354, CochranResearchGroup/agent-browser#355]
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     dependencies: [P268, P267, P265]
     overlaps: [P269, P271]
     reconciled_overlaps: ["Root owns connection.rs warm reuse and P270 metadata; preserve incoming installer catalog row and independent foreign MCP routing, enrollment and manual-login work"]
