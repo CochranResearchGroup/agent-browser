@@ -1007,6 +1007,8 @@ agent-browser find role button click --name "Submit"
 
 ## RDP Remote-View Quick Start
 
+In Diagnostics → Selection, Focus requests native focus for the exact current owned tab. Missing, foreign or stale targets require a workspace refresh. Requests on one desktop stay ordered; feedback reports pending, accepted or unconfirmed requests, not independently observed physical focus.
+
 In the default browser workspace, open a tab’s SVG overflow menu or use its
 context menu (Shift+F10) for Properties and Copy URL. Properties shows supplied
 origin and purpose alongside current browser, profile, desktop, URL, title and

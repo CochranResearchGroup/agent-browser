@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -27,12 +27,17 @@ import {
 } from "@/lib/selected-workspace-context";
 import { updateDashboardWorkspaceUrlSelection } from "@/lib/workspace-url-selection";
 import type { WorkspaceNodeAction, WorkspaceNodeActionId } from "@/lib/service-workspaces";
+import type { ServiceManagedWorkspace } from "@agent-browser/client/service-observability";
+import { requestNativeTaskFocus, selectedWorkspaceNativeFocus } from "@/lib/native-task-focus";
+import { queueWorkspaceFocusRequest } from "@/lib/workspace-focus-request";
 
 type WorkspaceSelectionPanelProps = {
   context: SelectedWorkspaceContext;
   loading?: boolean;
   error?: string | null;
   onRefresh?: () => void;
+  managedWorkspace?: ServiceManagedWorkspace;
+  presenceCurrent?: boolean;
 };
 
 const ACTION_ICONS = {
@@ -70,6 +75,7 @@ const FRONTEND_RUNNABLE_ACTIONS = new Set<WorkspaceNodeActionId>([
   "external-open",
   "view",
   "control",
+  "focus",
 ]);
 
 export function WorkspaceSelectionPanel({
@@ -77,9 +83,21 @@ export function WorkspaceSelectionPanel({
   loading = false,
   error = null,
   onRefresh,
+  managedWorkspace,
+  presenceCurrent = false,
 }: WorkspaceSelectionPanelProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [actionError, setActionError] = useState<string | null>(null);
+  const focusTarget = selectedWorkspaceNativeFocus(managedWorkspace, context.selection, presenceCurrent);
+  const focusIdentity = focusTarget ? JSON.stringify(focusTarget) : null;
+  const currentFocus = useRef(focusIdentity);
+  currentFocus.current = focusIdentity;
+  const focusAttempt = useRef(0);
+  const [focusFeedback, setFocusFeedback] = useState<{ identity: string; pending: boolean; message: string } | null>(null);
+  const mounted = useRef(true);
+  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; focusAttempt.current += 1; }; }, []);
+  const visibleFocusFeedback = focusFeedback?.identity === focusIdentity ? focusFeedback : null;
+
   const diagnosticText = useMemo(
     () => JSON.stringify(selectedWorkspaceDiagnosticBundle(context), null, 2),
     [context],
@@ -104,6 +122,30 @@ export function WorkspaceSelectionPanel({
 
   const runAction = async (actionId: string) => {
     setActionError(null);
+    if (actionId === "focus") {
+      if (!focusTarget || !focusIdentity || !context.actions.some(action => action.id === "focus" && action.enabled)) return;
+      const target = focusTarget;
+      const identity = focusIdentity;
+      const attempt = ++focusAttempt.current;
+      const isCurrent = () => mounted.current && currentFocus.current === identity && focusAttempt.current === attempt;
+      setFocusFeedback({ identity, pending: true, message: "Requesting focus for the selected tab…" });
+      await queueWorkspaceFocusRequest(JSON.stringify(["native-desktop", target.displayAllocationId]), async () => {
+        if (!isCurrent()) return;
+        // A wait behind an earlier display operation can outlive the census.
+        // Recheck the retained owner snapshot at dispatch, not just at click.
+        if (JSON.stringify(selectedWorkspaceNativeFocus(managedWorkspace, context.selection, presenceCurrent)) !== identity) {
+          setFocusFeedback({ identity, pending: false, message: "Workspace evidence expired. Refresh the selected workspace before requesting focus." });
+          return;
+        }
+        try {
+          await requestNativeTaskFocus(target, AbortSignal.timeout(15000));
+          if (isCurrent()) setFocusFeedback({ identity, pending: false, message: "Focus request accepted for the selected tab." });
+        } catch {
+          if (isCurrent()) setFocusFeedback({ identity, pending: false, message: "Focus request could not be confirmed. Refresh the selected workspace before trying again." });
+        }
+      });
+      return;
+    }
     if (actionId === "copy-link") {
       if (!(await copyTextToClipboard(window.location.href))) {
         setActionError("Clipboard write failed. Use the address bar to copy this workspace link.");
@@ -177,8 +219,11 @@ export function WorkspaceSelectionPanel({
           const unsupportedReason = action.enabled && !FRONTEND_RUNNABLE_ACTIONS.has(action.id)
             ? "Backend support is advertised, but this compact Workspace action is not wired here yet."
             : null;
-          const reason = action.reason ?? unsupportedReason ?? action.label;
-          const canRun = action.enabled && FRONTEND_RUNNABLE_ACTIONS.has(action.id);
+          const focusReason = action.id === "focus" && !focusTarget
+            ? "Select a current owned browser tab, then refresh the workspace before requesting focus."
+            : action.id === "focus" && visibleFocusFeedback?.pending ? "Focus request is pending." : null;
+          const reason = focusReason ?? action.reason ?? unsupportedReason ?? action.label;
+          const canRun = action.enabled && FRONTEND_RUNNABLE_ACTIONS.has(action.id) && !focusReason;
           return (
             <Button
               key={action.id}
@@ -203,6 +248,8 @@ export function WorkspaceSelectionPanel({
           {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy diagnostics"}
         </Button>
       </div>
+
+      {visibleFocusFeedback && <p role="status" data-workspace-focus-pending={visibleFocusFeedback.pending ? "true" : "false"}>{visibleFocusFeedback.message}</p>}
 
       <FactGrid rows={workspaceFactRows(context)} />
 

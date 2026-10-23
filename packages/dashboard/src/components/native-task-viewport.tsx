@@ -2,17 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  requestServiceRemoteViewHandoff,
   ServiceOperationError, ServiceRequestHttpError,
 } from "@agent-browser/client/service-request";
 import { queueWorkspaceFocusRequest } from "@/lib/workspace-focus-request";
+import { requestNativeTaskFocus, type NativeTaskFocusTarget } from "@/lib/native-task-focus";
 
-export type NativeTaskViewportTarget = {
-  browserId: string;
-  sessionName: string;
-  targetId: string;
-  displayAllocationId: string;
-};
+export type NativeTaskViewportTarget = NativeTaskFocusTarget;
 
 type ViewFailure = "handoff" | "operator-access" | "viewer-page" | "viewer-access";
 type ViewState = { identity: string; status: "opening" | "opened" | "failed"; url?: string; failure?: ViewFailure };
@@ -66,17 +61,7 @@ export function NativeTaskViewport({ target, unverifiedTarget = null, hasSelecti
     void queueWorkspaceFocusRequest(JSON.stringify(["native-desktop", displayAllocationId]), async () => {
       if (generation.current !== current) return;
       try {
-        const attribution = {
-          browserId, sessionName, serviceName: "agent-browser-dashboard",
-          agentName: "operator", taskName: "Select native browser task", jobTimeoutMs: 10000,
-        };
-        const handoff = await requestServiceRemoteViewHandoff({
-          ...attribution, baseUrl: window.location.origin,
-          // Preparing an existing-task handoff already performs signed focus.
-          // Keep it in the display queue so a later selection wins after this
-          // effect completes, with the same native maximize behavior.
-          displayAllocationId, params: { targetId, maximize: true }, signal: AbortSignal.timeout(15000),
-        });
+        const handoff = await requestNativeTaskFocus({ browserId, sessionName, targetId, displayAllocationId }, AbortSignal.timeout(15000));
         if (generation.current !== current) return;
         const url = new URL(handoff.handoffUrl, window.location.href);
         if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {

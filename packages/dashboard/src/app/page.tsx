@@ -845,7 +845,7 @@ function DashboardDiagnostics({ section, user, onLogout }: {
           <aside className="min-h-0 border-l" aria-label="Service detail inspector"><ServiceDetailInspector selection={serviceInspectorSelection} actions={serviceInspectorActions} /></aside>
         </div>
       </TabsContent>
-      <TabsContent value="workspace" className="min-h-0 flex-1 overflow-auto"><WorkspaceSelectionPanel context={selectedWorkspace.context} loading={selectedWorkspace.loading} error={selectedWorkspace.error} onRefresh={() => void selectedWorkspace.refresh()} /></TabsContent>
+      <TabsContent value="workspace" className="min-h-0 flex-1 overflow-auto"><WorkspaceSelectionPanel context={selectedWorkspace.context} managedWorkspace={selectedWorkspace.managedWorkspace} presenceCurrent={selectedWorkspace.presenceCurrent} loading={selectedWorkspace.loading} error={selectedWorkspace.error} onRefresh={() => void selectedWorkspace.refresh()} /></TabsContent>
       <TabsContent value="activity" className="min-h-0 flex-1 overflow-hidden"><ActivityFeed selectedWorkspaceContext={selectedWorkspace.context} /></TabsContent>
       <TabsContent value="chat" className="min-h-0 flex-1 overflow-hidden"><ChatPanel selectedWorkspaceContext={selectedWorkspace.context} authenticatedUser={user} /></TabsContent>
       <TabsContent value="console" className="min-h-0 flex-1 overflow-hidden"><ConsolePanel selectedWorkspaceContext={selectedWorkspace.context} /></TabsContent>
