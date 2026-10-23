@@ -1,9 +1,9 @@
 # P273: development host startup attribution
 
-Status: OPEN
+Status: CLOSED
 Product lane: PL-BUGFIX
 Work item: CochranResearchGroup/agent-browser#356
-Branch: fix/development-host-startup-356
+Branch: fix/development-supervision-recovery-356
 Owner: ecochran76
 
 ## Outcome
@@ -35,3 +35,15 @@ P270 source branch is integrated through PR369; its catalog custody is reconcile
 Validation: selected executable reboot smoke passes; boot race regression is red before the guard and green afterward, including later same-PID readiness and independently confirmed absence of both fixture generations. Existing development-runtime fixtures, policy wiring and documentation links pass. Cargo format and strict Clippy wait for the unchanged resource-admission reserve while a foreign release build is active; no thresholds or foreign processes are changed.
 
 Final source qualification: resource admission cleared without changing limits or foreign work. Cargo format and strict integrated workspace Clippy pass (24.51seconds); development fixtures and policy/link checks pass. Current main MCP routing changes are integrated, preserving both P272 and P273 catalog/index entries; no source conflict. The exact tested boot renderer and fixture are unchanged. PR371 lands source only; selected installed9c8edd62 generation and live host remain unchanged.
+
+## Installed same-process supervision recovery, 2026-10-23
+
+The user explicitly approved recovering the existing development host under its proper supervisor while preserving browsers and selected generation. This supersedes the earlier source-only no-adoption boundary for this exact development operation. The PR371 prevention repair remains canonical. Current main and all registered primaries are reconciled; this session reuses the retained dashboard primary, preserves the pinned P270 candidate and foreign work, and creates no auxiliary checkout.
+
+Systemd255 process attachment and MAINPID acknowledgment are qualified first on a disposable process, including the installed NoNewPrivileges/private-mount sandbox and restoration to ordinary service settings without a process restart. The non-delegated test is a retained typed refusal. The first live helper stops before attachment because its sandbox cannot inspect the existing executable. The outside caller retains full UID/PID/start/executable/hash/environment checks; the sandboxed unit only acknowledges the already-confirmed attachment. An unsupported caller Python pidfd API causes a second pre-dispatch failure and notifier timeout. Fresh source-cgroup identity proves no migration in either failed preparation. The corrected system Python caller performs exactly one live attachment, with pidfd liveness and fresh identity readbacks. No uncertain effect is replayed. All failure and synthetic cleanup receipts remain in the user-scoped operation artifact.
+
+The existing development host PID 1331, start token 2213, and exact 9c8edd62a16f executable remain unchanged. Only supervision changes from the dashboard cgroup to agent-browser-dev-runtime-host.service. The destination acknowledges that same MainPID. Its temporary adoption override is removed, and normal Type=simple, Delegate=no, KillMode=process and Restart=on-failure are restored without restarting the host. The retained process keeps its original privilege and mount context; restored unit sandbox settings apply on the next normal start. Adoption does not qualify fresh-start isolation. A persistent development-ingress drop-in applies only PR371's existing skip-bootstrap setting for future startup. The selected generation, application ownership, runtime identity files, original session IDs and all four tracked browser roots remain intact. No host/browser termination or executable publication occurs.
+
+The existing development backend unit starts using the same selected generation. All three development units are active, with host 1331, ingress 816 and backend 968156. Three steady samples preserve the host kernel generation, all four browser roots, original sessions and production unit readbacks. The lane responds HTTP200. Development doctor passes 33 of 34 checks; its sole failure is development-skill source drift, positively present in the pre-recovery status. Guidance publication is outside this recovery and remains unchanged.
+
+The logical operation p273-supervision-adoption is complete, with one live attachment, all synthetic processes absent and no adoption override left loaded. Its curated receipt and raw private evidence live under the user-scoped repairs/p273-development-host-startup/supervision-adoption directory. Browser content and account authentication were not inspected. This qualifies356's recovery and preservation outcome; an actual OS reboot is not part of this acceptance. P270/#355 latency and the wider dashboard objective remain open.
