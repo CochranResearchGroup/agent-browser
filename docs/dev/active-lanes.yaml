@@ -25,14 +25,13 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#365]
-    plan_state: BLOCKED
+    plan_state: CLOSED
     custody_state: INTEGRATED
     dependencies: []
     overlaps: [P269, P270]
     reconciled_overlaps: ["Preserve main installer/latency changes and manual-login branch; authorized installed continuation serialized through workstation custody"]
-    validation_status: PR370 integrated; sealed ff0b22c3bb93 accepted in production; doctor and fresh installed MCP open/snapshot/continue/close pass; both browser roots preserved; own task and process cleanup verified
-    blocker: Configured Codex MCP transport is closed; host-side client reconnection required before configured-client acceptance
-    updated_at: 2026-10-22
+    validation_status: Installed sealed ff0b22c3bb93 accepted; configured MCP and authenticated AuraCall inspection pass; scoped two-tab close and all16 process exits verified; separate AuraCall Writing/root/input gates retained
+    updated_at: 2026-10-23
 
   - id: P271
     product_lane: PL-BUGFIX
