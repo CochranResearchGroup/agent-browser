@@ -1,6 +1,23 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P274
+    product_lane: PL-BUGFIX
+    objective: Enable exact current owned-tab Focus in Selection
+    plan: docs/dev/plans/0274-2026-10-23-selection-focus.md
+    branch: fix/selection-focus-integration-68
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#68]
+    plan_state: COMPLETED
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [P237, P260]
+    reconciled_overlaps: ["P274 owns Selection Focus and common existing Native focus helper only; preserve broader inspector/App Intelligence and foreign manual-login/enrollment source"]
+    validation_status: Six mounted synthetic scenarios and exact process cleanup pass; TypeScript and inspector/context/action gates pass; root integration checks recorded in P274
+    limitations: ["Actual Native focus and production publication unrun", "Broad issue68 remains open", "Auxiliary closes through governed exact-identity operation after integration"]
+    updated_at: 2026-10-23
+
   - id: P273
     product_lane: PL-BUGFIX
     objective: Qualify development runtime host startup and preserve selected generation
