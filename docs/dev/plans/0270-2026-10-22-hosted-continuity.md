@@ -3,7 +3,7 @@
 Status: OPEN
 Product lane: PL-PLATFORM
 Work items: CochranResearchGroup/agent-browser#351, #352, #353, #354, #355
-Branch: platform/native-control-ack-355
+Branch: platform/hosted-intent-plan-355
 Owner: ecochran76
 
 ## Outcome
@@ -167,3 +167,15 @@ Consumer acknowledgment repair is source-qualified in grok-bots PR191:26new regr
 Native12 passes the complete functional workflow. The exact trace proves four Native control RPCs per takeover and three per return, one fewer per transition than Native11. Public p95 is113.00ms over20transitions. Consumer p95 is966.95ms over6transitions and still fails the unchanged250ms target; takeovers257.36–288.51ms and returns263.92–966.95ms. The slow return includes303.64ms complete journal persistence and344.10ms Native grant revocation, with an overlapping122.62ms queue wait following observation. Spans overlap and are not additive; this identifies stalls without proving a disk, host or provider-internal cause. No overall performance improvement is claimed. One cold first-pixel sample is4332.46ms, not a distribution.
 
 Native12 provider9754405/ec6ad187 and source pins remain stable before allocation and after completion. Independent readback proves38retained process observations absent, one exact fixture assignment released and414baseline peers unchanged. There are no readable private namespace references;80foreign denied proc reads remain an explicit limitation. Remove the clean consumer auxiliary only after canonical ancestry and full fresh inventory; retain the dashboard primary and candidates. No production publication. The bounded acknowledgment repair is complete;355and the wider P270 acceptance remain open for the observed durability/grant-revocation stalls.
+
+
+## Upfront durable effect plan, 2026-10-23
+
+User directs local latency continuation while rv-2 owns authentication/ingress cutover. Native revoke_view validates the consumer and writes viewing.json locally; the331KB live checkpoint reads/parses in2ms, so checkpoint size alone does not explain344ms. Independent review confirms hosted pending recovery never uses phase to dispatch remaining effects. A complete immutable ordered effect plan can replace the intermediate phase-only flush while retaining durable pre-effect intent.
+
+Root owns hosted-browser-control and existing regressions in /tmp/bots-p270-plan, branch fix/hosted-durable-plan-355 from fresh canonical e1fd896. A delegated test writer owns only the new effect-plan regression file.50registered consumer trees include25dirty and zero unreadable checkouts; preserve foreign work. Store the full input/fingerprint, attribution, task/session/native identity, exact local Native controller epoch and prior hosted operation, ordered step preconditions. Persist before either effect; require exact first-owner acknowledgment before the next; retain all owner journals, target fences, final readback and completion flush. Pending progress remains unknown and observation-only, including legacy records. No auth/ingress changes, production effects, storage migration, uncertain replay or weakened250ms target.
+
+
+The upfront-plan implementation passes41direct control/plan tests and103existing desktop, selective, acknowledgment, hosted-journal and HTTP tests. Independent review finds no blocker. Both owner steps remain covered by a first durable barrier, exact first-owner acknowledgment gates the second, and final readback/completion persistence remains. Fresh successful transitions now have two hosted flushes instead of three.
+
+Before Native13, independently verified public redirect identifies cooper-auth.ecochran.dyndns.org and Cooper deployment PR25 is merged at7219610. Rv-2 owns that cutover; this lane changes only its private synthetic QA sign-in helper to the approved origin, never authentication/ingress configuration. Record the changed topology instead of claiming a controlled same-topology A/B. Keep the exact source/provider pin before auth, before allocation and after completion, original workload and strict250ms target.
