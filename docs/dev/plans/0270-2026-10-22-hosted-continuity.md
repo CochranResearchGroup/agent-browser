@@ -3,12 +3,12 @@
 Status: OPEN
 Product lane: PL-PLATFORM
 Work items: CochranResearchGroup/agent-browser#351, #352, #353, #354, #355
-Branch: platform/atomic-host-return-355
+Branch: platform/hosted-acceptance-accounting-355
 Owner: ecochran76
 
 ## Outcome
 
-Complete approved spec #347: explicit same-process native relocation, disconnect/rebind/loss policy, optional restrictions and authorized artifacts, versioned host guidance, and joined actual-host acceptance with measured warm versus cold latency. Preserve application browser ownership, peer work and current human-control state. Remote View owns desktop operations and viewer.
+Qualify the active portion of approved spec #347: disconnect/rebind/loss policy, optional restrictions and authorized artifacts, versioned host guidance, and joined actual-host acceptance with measured warm versus cold latency. Existing-browser relocation is explicitly deferred by the operator in Remote View #578; it is not delivered or a prerequisite to continuing the active campaign. Preserve application browser ownership, peer work and current human-control state. Remote View owns desktop operations and viewer.
 
 ## Custody and dependencies
 
@@ -221,3 +221,26 @@ PR379 owns this source change. This qualifies the bounded warm axis only:355 sta
 
 
 Final architecture validation exposes a pre-existing name collision: host Control's durable dispatch owners map is unrelated to RuntimeOwnerRegistry. Narrow the lexical checker only for control.owners in that exact adapter. The positive control-journal fixture and same-file negative registry-map mutation pass, alongside the existing architecture mutation suite. No Rust or candidate executable source changes after Native14. Changed-document links verify5files; remote-view handoff guidance checks pass.
+
+
+## Current campaign reconciliation, 2026-10-23
+
+This section supersedes earlier open-relocation and pending-Native14 status statements without deleting their historical evidence. Remote View [#578](https://github.com/CochranResearchGroup/remote-view/issues/578) explicitly records operator deferral, closed not planned. Existing browsers remain on their desktops; PR607 is parked. Do not resume relocation from a generic continuation, a new compositor demo or library availability. Agent Browser351 is closed with completed metadata, which does not prove physical relocation. Its provider capability remains unsupported.352–354 are closed and their source contracts are integrated.
+
+| Acceptance axis | Current evidence | Remaining boundary |
+| --- | --- | --- |
+| Attachment, app ingress, sharing and continuity | Native14 functional workflow passes with retained synthetic page state | No private-account acceptance implied |
+| Human control and explicit return | Native14 public20/20 and consumer/Native6/6 validated transitions | Pointer-to-toolbar and focus completion latency excluded |
+| Warm latency | Public p9545.75ms, consumer/Native p95199.61ms under strict250ms; prior warm status evidence retained | One bounded workload, not robustness across host load |
+| Disconnect/reconnect, policy, artifacts and closure | Native14 functional checks pass | Generation-changing desktop restart is not exercised |
+| Actual managed browser loss and explicit reopen | Native05 retained separately | Different source pair from Native14; no claim of one combined pair |
+| Cold native first pixels | Native14 one sample5152.79ms; earlier samples retained per source pair | No same-pair cold distribution |
+| Process and peer preservation | Native14 independent29kernel generations absent, fixture released,416peers unchanged |75denied foreign reads bound scan coverage |
+| Existing-browser relocation | Operator deferred, Native578 | Not delivered; explicit new request required to resume |
+
+355 remains open for the actual desktop-generation/rebind acceptance and the remaining combined-pair/cold-distribution evidence. Do not reinterpret a same-generation reconnect or a browser-only death as a desktop restart. Next runtime qualification must first identify a provider-supported lifecycle operation restricted to one newly owned synthetic desktop assignment, with exact generation fencing, current input custody, peer baseline and cleanup. Restarting the shared provider, touching an existing desktop, or inventing lifecycle metadata is outside current authority. Until that exact isolated operation is reviewed and admitted, continue read-only capability investigation and fixture preparation only. Production remains unchanged.
+
+PR379 is merged at97b0e05cfb01f49afb32a7d261bc4786f3726d8f. Its sealed fast_iteration candidate remains pinned in the retained primary. After a fresh51-tree consumer inventory and exact merged-source ancestry, the clean consumer auxiliary was removed through committed worktree-closeout operation worktree-closeout-c39d6f98-4175-47de-9fd6-694d99f90f80. The installed dependency target was never modified. No active auxiliary remains for this root lane.
+
+
+Read-only provider investigation uses the deployed Native Git object9754405ca395a5b29f5c67a2bb207d373816cb07, not the foreign checkout's current index. ConsumerRequest in src/consumer_policy.rs exposes assignment acquisition/release, application placement, viewing, input and observation; it does not expose desktop restart. CloseDesktopRequest is an operator close contract, not evidence of a consumer-scoped restart/recreate operation. The Agent Browser reconnect fixture explicitly records actualDesktopRestartExercised:false. The next provider prerequisite is an exact owned-assignment restart/recreate contract or a separately reviewed isolated provider fixture. No such effect is dispatched here; no shared provider restart is authorized.
