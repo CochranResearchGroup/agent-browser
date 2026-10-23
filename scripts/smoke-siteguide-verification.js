@@ -52,9 +52,9 @@ try {
  await client.send('initialize',{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'siteguide-verification',version:'1'}});client.notify('notifications/initialized');
  const discovery=await call('browser_discover',{category:'playbooks'});assert(discovery.operations.includes('verify_login'));
  console.log('Public SiteGuide routine discovery passed');
- const alice=await call('browser_open',{profile:'siteguide-fixture',profileMode:'persistent',taskKey:'alice',url:origin});tasks.push(alice.taskId);
+ const alice=await call('browser_open',{serviceName:'siteguide-verification-fixture',agentName:'synthetic-software-client',taskName:'Verify intended synthetic account and company',profile:'siteguide-fixture',profileMode:'persistent',taskKey:'alice',url:origin});tasks.push(alice.taskId);
  const guide=await call('browser_command',{taskId:alice.taskId,action:'playbook',params:{operation:'inspect_guide',guideId}});assert.equal(guide.guideId,guideId);
- const bob=await call('browser_open',{profile:'siteguide-fixture',profileMode:'existing',taskKey:'bob',url:'data:text/html,<p>Peer work preserved</p>'});tasks.push(bob.taskId);
+ const bob=await call('browser_open',{serviceName:'siteguide-verification-fixture',agentName:'synthetic-peer',taskName:'Preserve unrelated synthetic peer work',profile:'siteguide-fixture',profileMode:'existing',taskKey:'bob',url:'data:text/html,<p>Peer work preserved</p>'});tasks.push(bob.taskId);
  const verify=params=>call('browser_command',{taskId:alice.taskId,action:'playbook',params:{operation:'verify_login',guideId,accountRef,organizationRef,...params}});
  const software=createPlaybookClient((name,args)=>client.send('tools/call',{name,arguments:args}));
  const completed=await software.verifyLogin({taskId:alice.taskId,guideId,accountRef,organizationRef});assert.equal(completed.status,'completed');assert.equal(completed.taskId,alice.taskId);assert.equal(completed.effectState,'no_effect');
