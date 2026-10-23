@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P271
+    product_lane: PL-BUGFIX
+    objective: Converge every installed component and retire outdated MCP clients
+    plan: docs/dev/plans/0271-2026-10-22-install-component-convergence.md
+    branch: fix/install-component-convergence
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#367]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: []
+    overlaps: [P266, P240]
+    reconciled_overlaps: ["Own installer and MCP component convergence only; preserve foreign dashboard/resource primaries and P269 checkout"]
+    validation_status: Nine process regressions, post-commit and forward recovery, real public MCP replacement and doctor rejection, zero fixture hosts, fmt, strict Clippy, docs and installation gates pass; source only
+    updated_at: 2026-10-22
+
   - id: P270
     product_lane: PL-PLATFORM
     objective: Complete app-directed relocation, reconnect, policy and joined acceptance

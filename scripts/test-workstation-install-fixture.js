@@ -18,7 +18,8 @@ import {
 import { createHash, randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { createInterface } from 'node:readline';
 
 const repoRoot = resolve(import.meta.dirname, '..');
 const fixtureRoot = mkdtempSync(join(tmpdir(), 'agent-browser-workstation-install-'));
@@ -38,6 +39,7 @@ const fixtureEnv = Object.fromEntries(
 fixtureEnv.AGENT_BROWSER_FIXTURE_RUN_ID = fixtureRunId;
 fixtureEnv.AGENT_BROWSER_FIXTURE_BIN = agentBrowser;
 const fixtureBinarySha256 = sha256(agentBrowser);
+const mcpClients = [];
 
 const expectedUnits = new Set([
   'agent-browser-dashboard-backend.service',
@@ -767,6 +769,9 @@ try {
     assertTransactionTerminal(transactionStore, 'failed_preserved_old_generation');
   }
 
+  const previousMcp = await startFixtureMcp(join(baselineGenerationRoot, 'bin', 'agent-browser'));
+  const beforeUpgradeClients = JSON.parse(runInstaller(installRoot, ['--dry-run', '--json']).stdout);
+  assert.equal(beforeUpgradeClients.installedMcpClients.clients.some((client) => client.identity.pid === previousMcp.child.pid), true);
   const upgradedApply = runInstaller(
     installRoot,
     ['--apply', '--dashboard-port', '4999', '--json'],
@@ -777,6 +782,31 @@ try {
     `changed workstation payload must select successfully:\n${upgradedApply.stdout}${upgradedApply.stderr}`,
   );
   assertJsonSuccess(upgradedApply.stdout, 'changed payload apply');
+  await waitFixtureMcpExit(previousMcp);
+  const acceptedStatus = JSON.parse(runInstaller(installRoot, ['status', '--json']).stdout);
+  assert.equal(acceptedStatus.latestTransaction.mcpClientRetirement.state, 'ready');
+  assert.equal(acceptedStatus.latestTransaction.mcpClientRetirement.reconnectRequired, true);
+  const freshMcp = await startFixtureMcp(stableBinary);
+  assert.notEqual(freshMcp.child.pid, previousMcp.child.pid);
+  const currentClients = JSON.parse(runInstaller(installRoot, ['--dry-run', '--json']).stdout).installedMcpClients;
+  assert.equal(currentClients.staleCount, 0);
+  assert.equal(currentClients.clients.some((client) => client.identity.pid === freshMcp.child.pid), true);
+  freshMcp.child.stdin.end();
+  await waitFixtureMcpExit(freshMcp);
+
+  // Doctor independently detects a host that reconnects to a pinned old binary.
+  const pinnedOldMcp = await startFixtureMcp(join(baselineGenerationRoot, 'bin', 'agent-browser'));
+  const doctor = spawnSync(agentBrowser, ['install', 'doctor', '--json'], {
+    cwd: fixtureRoot, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+    env: fixtureProcessEnv(installRoot, { AGENT_BROWSER_HOME: join(installRoot, '.agent-browser') }),
+  });
+  const doctorPayload = JSON.parse(doctor.stdout);
+  assert.equal(doctorPayload.data.installedMcpClients.staleCount, 1);
+  assert.equal(doctorPayload.data.issues.some((issue) => issue.code === 'installed_mcp_clients_not_current'), true);
+  assert.equal(doctorPayload.success, false);
+  pinnedOldMcp.child.stdin.end();
+  await waitFixtureMcpExit(pinnedOldMcp);
+
   const upgradedSelectorTarget = readlinkSync(currentSelector);
   assert.notEqual(
     upgradedSelectorTarget,
@@ -992,6 +1022,10 @@ try {
 
   console.log('Workstation install source-free fixture passed');
 } finally {
+  for (const client of mcpClients) {
+    if (client.child.exitCode === null && client.child.signalCode === null) client.child.kill('SIGKILL');
+    await waitFixtureMcpExit(client).catch(() => {});
+  }
   cleanupFixtureRuntimeHosts();
   makeTreeWritable(fixtureRoot);
   rmSync(fixtureRoot, { recursive: true, force: true });
@@ -1043,25 +1077,78 @@ function sha256(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
 }
 
+async function waitFixtureMcpExit(client) {
+  let timer;
+  try {
+    await Promise.race([client.exited, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('fixture MCP exit was not proven')), 10000);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+async function startFixtureMcp(binary) {
+  const child = spawn(binary, ['mcp', 'serve'], {
+    cwd: fixtureRoot,
+    env: fixtureProcessEnv(installRoot, { AGENT_BROWSER_HOME: join(installRoot, '.agent-browser') }),
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  const exited = new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', resolve);
+  });
+  // Observe rejection immediately, including failure before the readiness wait.
+  exited.catch(() => {});
+  const client = { child, exited };
+  mcpClients.push(client);
+  child.stderr.resume();
+  const lines = createInterface({ input: child.stdout });
+  const ready = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('fixture MCP initialization timed out')), 10000);
+    child.once('exit', () => { clearTimeout(timer); reject(new Error('fixture MCP exited before initialization')); });
+    lines.on('line', (line) => {
+      let response;
+      try { response = JSON.parse(line); } catch { return; }
+      if (response.id === 1) {
+        if (response.error) { clearTimeout(timer); reject(new Error('fixture MCP initialization failed')); return; }
+        child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
+        child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })}\n`);
+      }
+      if (response.id !== 2) return;
+      clearTimeout(timer);
+      if (response.error || !response.result?.tools?.some((tool) => tool.name === 'browser_open')) {
+        reject(new Error('fixture MCP workflow catalog unavailable'));
+      } else resolve();
+    });
+  });
+  child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {
+    protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'install-fixture', version: '1' },
+  } })}\n`);
+  await ready;
+  return client;
+}
+
 function runInstaller(root, flags, extraEnv = {}) {
   return spawnSync(agentBrowser, ['install', 'workstation', ...flags], {
     cwd: fixtureRoot,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
-    env: {
-      ...fixtureEnv,
-      HOME: home,
-      XDG_CONFIG_HOME: join(xdgRoot, 'config'),
-      XDG_DATA_HOME: join(xdgRoot, 'data'),
-      XDG_STATE_HOME: join(xdgRoot, 'state'),
-      XDG_CACHE_HOME: join(xdgRoot, 'cache'),
-      XDG_RUNTIME_DIR: join(xdgRoot, 'runtime'),
-      PATH: `${fakeBin}:/usr/bin:/bin`,
-      AGENT_BROWSER_WORKSTATION_ROOT: root,
-      AGENT_BROWSER_WORKSTATION_COMMAND_LOG: commandLog,
-      ...extraEnv,
-    },
+    env: fixtureProcessEnv(root, extraEnv),
   });
+}
+
+function fixtureProcessEnv(root, extraEnv = {}) {
+  return {
+    ...fixtureEnv, HOME: home,
+    XDG_CONFIG_HOME: join(xdgRoot, 'config'),
+    XDG_DATA_HOME: join(xdgRoot, 'data'),
+    XDG_STATE_HOME: join(xdgRoot, 'state'),
+    XDG_CACHE_HOME: join(xdgRoot, 'cache'),
+    XDG_RUNTIME_DIR: join(xdgRoot, 'runtime'),
+    PATH: `${fakeBin}:/usr/bin:/bin`,
+    AGENT_BROWSER_WORKSTATION_ROOT: root,
+    AGENT_BROWSER_WORKSTATION_COMMAND_LOG: commandLog,
+    ...extraEnv,
+  };
 }
 
 function assertWorkstationInterface() {
