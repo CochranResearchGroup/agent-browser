@@ -1,5 +1,11 @@
 # Runbook
 
+[P271 exact MCP task routing](docs/dev/plans/0271-2026-10-22-exact-mcp-task-routing.md)
+repairs #365's duplicate-name inspection failure. Public dispatch and host
+regressions reproduced independently and pass after repair; source qualification
+is complete with review and installed inspection acceptance separate.
+Installed services and persistent browser profiles are unchanged.
+
 [P270 hosted continuity](docs/dev/plans/0270-2026-10-22-hosted-continuity.md) continues #351/#355 after merged PR364. Root owns the relocation provider boundary; parallel tracks repair exact fixture cleanup and measure warm control/cold pixels. The portable-launch backend decision is pending; no production effects.
 
 [P268/#349](docs/dev/plans/0268-2026-10-22-hosted-attachment.md) and [P267/#350](docs/dev/plans/0267-2026-10-22-hosted-takeover.md) close as integrated source through provider PR361 before consumer PR175. [Acceptance](docs/dev/notes/0268-2026-10-22-hosted-attachment-control.md) records healthy Native04 chat/viewer, control and corrected process cleanup. Native05 cookie continuity and independent cleanup also pass. Root owns merge and auxiliary closeout; no deployment.

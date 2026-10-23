@@ -1,5 +1,8 @@
 # Active plan index
 
+[P271 exact MCP task routing](0271-2026-10-22-exact-mcp-task-routing.md), #365;
+provider-free repair of identity loss between page adapters and managed dispatch.
+
 [P270 hosted continuity](0270-2026-10-22-hosted-continuity.md) continues #351/#355 after merged PR364. Root owns the relocation provider boundary; parallel tracks repair exact fixture cleanup and measure warm control/cold pixels. The portable-launch backend decision is pending; no production effects.
 
 [P268 attachment](0268-2026-10-22-hosted-attachment.md), #349, and [P267/#350 takeover](0267-2026-10-22-hosted-takeover.md) are closed integrated source outcomes with actual Native04 acceptance and corrected cleanup. Native05 cookie continuity and independent cleanup also pass; no deployment; wider #347 remains open.

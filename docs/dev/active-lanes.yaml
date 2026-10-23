@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P271
+    product_lane: PL-BUGFIX
+    objective: Preserve exact task identity through MCP page dispatch
+    plan: docs/dev/plans/0271-2026-10-22-exact-mcp-task-routing.md
+    branch: fix/mcp-task-routing-365
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#365]
+    plan_state: CLOSED
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [P269, P270]
+    reconciled_overlaps: ["Branch from current origin/main; preserve manual-login branch and other checkouts; no runtime effects"]
+    validation_status: Public and host regression red/green; reads and tab creation pass; MCP138 and consumer116 plus one opt-in ignore; strict Clippy, fmt, docs and no-launch smoke pass; source delivery through PR; no deployment
+    updated_at: 2026-10-22
+
   - id: P270
     product_lane: PL-PLATFORM
     objective: Complete app-directed relocation, reconnect, policy and joined acceptance

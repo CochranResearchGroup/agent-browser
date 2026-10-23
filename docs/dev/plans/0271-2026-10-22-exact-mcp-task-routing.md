@@ -1,0 +1,66 @@
+# P271: preserve exact MCP task routing
+
+Status: CLOSED
+Product lane: PL-BUGFIX
+Work items: CochranResearchGroup/agent-browser#365
+Branch: fix/mcp-task-routing-365
+Owner: ecochran76
+
+## Current State
+
+The original stale-transport refusal no longer reproduces on the installed
+runtime. A subsequent exact-task snapshot failed when a diagnostic disposable
+session and persistent task shared a workflow name. Both diagnostic tasks are
+closed. The source repair and provider-free qualification are complete. Delivery
+is through the linked issue's source PR; merge and installed inspection acceptance
+remain separate. This slice does not install or reset a runtime.
+
+## Outcome and acceptance
+
+Preserve the returned task ID through public page adapters and workflow reads.
+The host must select that exact durable session and reject missing or conflicting
+identity without launching a fallback browser. Name-only callers retain their
+existing ambiguity refusal. Persistent profiles and peer tasks remain intact.
+
+Public stdio regression uses isolated SQLite and a synthetic Unix transport
+with two same-name tasks. Provider-free host composition verifies exact target
+selection and rejection. Run focused Rust/MCP tests, format, strict workspace
+Clippy, and relevant policy/documentation checks. Preserve red/green evidence.
+
+## Custody and boundaries
+
+Reuse the clean canonical checkout on a new branch from origin/main 8dcfb37bb;
+preserve unmerged fix/mcp-manual-login-357 and three other registered checkouts.
+Expected writes: MCP adapters/workflow, managed host dispatch, regression fixtures
+and these source-contract notes. No provider probes, production replacement,
+deployment, broad cleanup or memory writes. Canonical issue remains the intake
+authority; source validation is separate from installed desktop acceptance.
+
+## Validation evidence
+
+The public fixture against the installed CLI fails with
+`browser_session_name_ambiguous:workflow-duplicate`; the patched debug CLI passes
+both IDs across snapshot, navigate, click, fill, screenshot, advanced URL and
+advanced evaluation dispatch. A missing ID is rejected before any transport send.
+Run it with `python3 scripts/test-mcp-task-routing.py cli/target/debug/agent-browser`.
+
+The real host/SQLite composition regression failed before the host fix with
+`browser_session_name_ambiguous:Alice`; after repair it selects each exact target,
+retains name-only ambiguity refusal and rejects missing IDs or conflicting names
+and browser profiles. The tab-creation branch is covered in the same fixture.
+
+Focused evidence: 138 MCP tests pass. Across the broader consumer selection,
+116 pass and one opt-in Native viewer fixture is ignored. The initial raw Cargo
+run omitted the required 16 MiB stack and aborted at the queued-action test;
+98 prior passes and one ignore are retained, and the failed/unexecuted 18 cases
+pass with the repository-required stack. This was a harness correction, not a
+product retry. The final tab assertion changes only the regression test, so
+unmodified implementation coverage is retained and that test is rerun through
+`rust-tests.sh --focused consumer_exact_task_route`.
+
+Strict workspace Clippy, format, policy wiring, documentation links, Remote View
+handoff guidance and the service collection no-launch smoke pass. The first build
+attempt stalled in sccache; its owned Cargo process was stopped and compilation
+completed with cache disabled under unchanged resource limits. A concurrent
+Clippy attempt was deferred by memory admission, then completed after release.
+No comprehensive or installed browser acceptance is claimed.

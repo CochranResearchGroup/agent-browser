@@ -4,6 +4,11 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Exact task routing**: MCP retains task identity through page command builders
+and resolves the transport lane separately. The managed host joins the exact ID
+to the task name and selected browser profile. Missing or conflicting identity
+cannot fall back to another same-name task or a fresh launch.
+
 **App browser attachment**: Borrowing an exactly observed app process, canonical
 profile and existing page while Agent Browser supplies task operations. Initial
 page census remains app-owned; attachment grants no termination or relocation.

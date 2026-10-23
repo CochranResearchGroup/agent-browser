@@ -2592,6 +2592,7 @@ where
         let mut prepared = command.clone();
         super::browser_host_policy::prepare_command(&self.state, session_name, &mut prepared)?;
         let command = &prepared;
+        let exact_task_id = self.exact_task_selector(session_name, command)?;
         super::browser_host_control::check_state(&self.state, session_name, command)?;
         super::browser_host_reconnect::check_state(&self.state, session_name, command)?;
         super::browser_host_policy::check_state(&self.state, session_name, command)?;
@@ -2656,12 +2657,13 @@ where
             .values()
             .filter(|session| {
                 session.name == session_name
+                    && exact_task_id.is_none_or(|id| session.id == id)
                     && profile_id.is_none_or(|profile_id| session.profile_id == profile_id)
             })
             .map(|session| session.id.clone())
             .collect::<Vec<_>>();
         let session_id = match matching_ids.as_slice() {
-            [] if automatic => {
+            [] if automatic && exact_task_id.is_none() => {
                 require_managed_runtime_admission("launch", command)?;
                 if self.state.managed_tab_requests.values().any(|request| {
                     request.response.is_none()
@@ -2686,6 +2688,9 @@ where
                     ),
                 };
                 self.open(request)?.session_id
+            }
+            [] if exact_task_id.is_some() => {
+                return Err("browser_session_exact_selector_conflict".into());
             }
             [] => return Ok(None),
             [session_id] => session_id.clone(),
@@ -2890,6 +2895,7 @@ where
         command: &serde_json::Value,
     ) -> Result<serde_json::Value, String> {
         use sha2::{Digest, Sha256};
+        let exact_task_id = self.exact_task_selector(session_name, command)?;
         let response_id = required_string(command, "id")?;
         let id = if command.get("tabRequestId").is_some() {
             required_string(command, "tabRequestId")?
@@ -2991,11 +2997,15 @@ where
             .values()
             .filter(|session| {
                 session.name == session_name
+                    && exact_task_id.is_none_or(|id| session.id == id)
                     && profile.as_ref().is_none_or(|id| &session.profile_id == id)
             })
             .map(|session| session.id.clone())
             .collect::<Vec<_>>();
         let existing = match matches.as_slice() {
+            [] if exact_task_id.is_some() => {
+                return Err("browser_session_exact_selector_conflict".into());
+            }
             [] => None,
             [id] => Some(id.clone()),
             _ => return Err("browser_session_name_ambiguous".into()),
@@ -3156,6 +3166,27 @@ where
             .response = Some(response.clone());
         self.commit_state()?;
         Ok(response)
+    }
+
+    /// An explicit ID is an exact selector, never permission to create a fallback.
+    fn exact_task_selector<'a>(
+        &self,
+        session_name: &str,
+        command: &'a serde_json::Value,
+    ) -> Result<Option<&'a str>, String> {
+        if command.get("sessionId").is_none() {
+            return Ok(None);
+        }
+        let id = required_string(command, "sessionId")?;
+        let task = self
+            .state
+            .sessions
+            .get(id)
+            .ok_or_else(|| format!("browser_session_not_found:{id}"))?;
+        if task.name != session_name {
+            return Err("browser_session_exact_selector_conflict".into());
+        }
+        Ok(Some(id))
     }
 
     /// Exact catalog selection; a raw profile path must already belong to a
