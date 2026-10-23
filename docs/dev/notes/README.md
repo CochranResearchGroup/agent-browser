@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P271 installed component convergence](0271-2026-10-22-install-component-convergence.md): automatic old MCP retirement, independent doctor detection, real stdio reconnect and source-only acceptance.
+
 [P270 continuity, policy and guidance source evidence](0270-2026-10-22-hosted-continuity-source.md): #352–354 source qualification, actual Native feature checks, measured status and explicit cleanup reconciliation; #351/#355 remain blocked.
 
 [P270 relocation provider gap](0270-2026-10-22-hosted-relocation-provider-gap.md), #351: current Native display-transfer capability is absent; Remote View #578 is the prerequisite. #355 remains blocked; parallel #352–354 qualification continues.
