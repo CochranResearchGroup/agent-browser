@@ -2,9 +2,9 @@
 
 Product lane: PL-BUGFIX
 Work item: #183
-Branch: fix/failed-upgrade-shutdown-183
+Branch: fix/shutdown-retry-fixture-183
 State: COMPLETED
-Version: 1
+Version: 2
 Lane: P239
 
 ## Bounded outcome
@@ -67,3 +67,15 @@ introducing another authority ceremony.
 The issue's current review supersedes its historical helper/container checklist.
 Native Remote View and foreign lanes are preserved. Legacy privileged helper,
 Guacamole-container and global route shutdown are not acceptance requirements.
+
+
+## Bounded continuation, 2026-10-23
+
+Root takes183 after next-ticket instruction in the retained clean dashboard primary from ade8ecd. This packet repairs current public fixture attribution and extends the existing isolated preservation oracle to two sequential host exit/continuation cycles under a proven active drain. Each cycle pins its newly created host and unchanged browser process/CDP/profile, enforces the existing five-second exit bound, verifies drain bytes and endpoint retirement, then explicitly removes only its own drain for same-task continuation. This is repeated graceful-host preservation, not a workstation-wide shutdown command, multi-binary generation retirement or transaction reconciliation. Keep183 open for those wider gates.
+
+The existing negative control must still fail exactly at browser preservation and finish exact owned cleanup. Use the sealed fast_iteration f16e5df/33fdd29 candidate and reviewed Chrome in disposable namespaces only. No production, provider, account, shared cleanup, legacy helper or privileged effects. Root is sole writer of this script and P239 metadata. A separately admitted clean auxiliary /tmp/agent-browser-focus-68 belongs only to the parallel274 Selection Focus repair; no shared source writer or runtime effect overlaps. Current stock capability81 and resource105 audits find no new implementation defect; preserve their explicit wider gates.
+
+
+Continuation result: current public fixture first fails before browser launch because required attribution is absent. After the two-call attribution repair and repeated-cycle extension, sealed33fdd29 candidate passes both exact host exits in30ms and29ms, independently proves two distinct host PID/start instances, same original browser/CDP/profile lock and same-task continuation. The deliberate negative control fails exactly at the browser-preservation assertion and completes zero-owned-residue cleanup. Its injected failure occurs in the first cycle; it is not an independent second-cycle-only negative proof. Source review finds no new blocker. Syntax and patch hygiene pass.
+
+Fresh independent proc/stat readback proves both recorded host generations absent and zero readable private fixture markers. Denied foreign proc reads bound census coverage in the user-scoped receipt. Do not equate unavailable executable links with process absence or infer global visibility. Wider183 shutdown dispositions, failed-ledger reconciliation, multi-binary generations and terminal retry idempotence remain open; this packet qualifies repeated graceful-host preservation only. Original red, green and negative logs remain /tmp/p239-current-{red,green,negative}.log. Production and Native services remain unchanged.

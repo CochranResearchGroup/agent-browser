@@ -835,7 +835,7 @@ lanes:
     product_lane: PL-BUGFIX
     objective: Verify exact browser preservation through graceful host exit under failed-upgrade admission drain
     plan: docs/dev/plans/0239-2026-10-12-failed-upgrade-preservation.md
-    branch: fix/failed-upgrade-shutdown-183
+    branch: fix/shutdown-retry-fixture-183
     target: main
     plan_state: COMPLETED
     custody_state: INTEGRATED
@@ -843,8 +843,8 @@ lanes:
     dependencies: [P233, P234]
     overlaps: [P237, P238]
     reconciled_overlaps: ["P239 owns new synthetic fixture and evidence only; no Rust lifecycle or dashboard writes; P237 retains 260/261; clean enrollment checkout reused with P238 branch and P232 sealed bytes preserved"]
-    validation_status: Exact browser PID and CDP preserved under active drain; negative control catches browser loss; zero final fixture-owned residue
-    limitations: ["One graceful host exit only", "Workstation-wide shutdown, failed transaction reconciliation and multigeneration retry remain unqualified", "No production runtime effects"]
+    validation_status: Two sequential exact host exits under active drain pass30/29ms with same browser/CDP/profile/task; negative control catches first-cycle browser loss; zero final fixture-owned residue and independent host absence
+    limitations: ["Two sequential host instances of one binary only", "Workstation-wide shutdown, failed transaction reconciliation and multigeneration retry remain unqualified", "No production runtime effects"]
     updated_at: 2026-10-12
   - id: P240
     product_lane: PL-PLATFORM

@@ -65,6 +65,7 @@ try {
   await client.send('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'failed-upgrade-preservation', version: '1' } });
   client.notify('notifications/initialized');
   const opened = await call('browser_open', {
+    serviceName: 'failed-upgrade-preservation-fixture', agentName: 'synthetic-preservation-worker', taskName: 'Preserve exact synthetic browser across repeated host exits',
     profile: 'failed-upgrade-preserved', profileMode: 'persistent', taskKey: 'preserved',
     url: 'data:text/html,<title>Preserved upgrade browser</title><h1>Preserved upgrade browser</h1>',
   });
@@ -79,38 +80,45 @@ try {
   const before = await (await fetch(versionUrl)).json();
   const profileLock = readlinkSync(join(profile, 'SingletonLock'));
   assert(profileLock.endsWith(`-${browser.pid}`), 'Profile control belongs to exact owned browser');
-  mkdirSync(join(drain, '..'), { recursive: true });
-  const drainBytes = JSON.stringify({ schemaVersion: 'agent-browser.runtime-adoption.v1', transactionId: 'failed-upgrade-fixture', candidateGenerationId: 'failed-candidate', transactionRevision: 7, recordedAt: new Date().toISOString() });
-  writeFileSync(drain, drainBytes);
-  await assert.rejects(call('browser_open', { profileMode: 'disposable', taskKey: 'blocked', url: 'about:blank' }), /runtime_admission_draining/);
-  const started = performance.now();
-  assert(sameProcess(owner), 'Recheck runtime identity before its graceful signal');
-  process.kill(owner.pid, 'SIGTERM');
-  await waitFor(() => !sameProcess(owner), 'Owned runtime host must exit within five seconds');
-  // Negative control breaks only this fixture's browser to prove the PID oracle.
-  if (process.argv.includes('--break-preservation')) {
-    assert(sameProcess(browser), 'Pin fixture browser before the negative control');
-    process.kill(browser.pid, 'SIGTERM');
-    await waitFor(() => !sameProcess(browser), 'Negative-control browser must exit');
+  const completedCycles = [];
+  for (let cycle = 1; cycle <= 2; cycle += 1) {
+    mkdirSync(join(drain, '..'), { recursive: true });
+    const drainBytes = JSON.stringify({ schemaVersion: 'agent-browser.runtime-adoption.v1', transactionId: 'failed-upgrade-fixture', candidateGenerationId: 'failed-candidate', transactionRevision: 7, recordedAt: new Date().toISOString() });
+    writeFileSync(drain, drainBytes);
+    await assert.rejects(call('browser_open', { serviceName: 'failed-upgrade-preservation-fixture', agentName: 'synthetic-admission-probe', taskName: 'Verify drain refuses a new disposable task', profileMode: 'disposable', taskKey: `blocked-${cycle}`, url: 'about:blank' }), /runtime_admission_draining/);
+    owner = identity(Number(readFileSync(join(context.socketDir, 'runtime-host.pid'), 'utf8')));
+    assert(owner && owner.executable === realpathSync(binary) && ownedProcesses().some(record => record.pid === owner.pid), 'Pin the exact current owned host for each cycle');
+    assert(!completedCycles.some(previous => previous.hostPid === owner.pid && previous.hostStart === owner.start), 'Continuation must create a new host process instance');
+    const started = performance.now();
+    assert(sameProcess(owner), 'Recheck runtime identity before its graceful signal');
+    process.kill(owner.pid, 'SIGTERM');
+    await waitFor(() => !sameProcess(owner), 'Owned runtime host must exit within five seconds');
+    // Negative control breaks only this fixture's browser to prove the PID oracle.
+    if (process.argv.includes('--break-preservation')) {
+      assert(sameProcess(browser), 'Pin fixture browser before the negative control');
+      process.kill(browser.pid, 'SIGTERM');
+      await waitFor(() => !sameProcess(browser), 'Negative-control browser must exit');
+    }
+    assert(sameProcess(browser), 'Preserve exact browser PID and process instance through host exit');
+    const after = await (await fetch(versionUrl)).json();
+    assert.equal(after.webSocketDebuggerUrl, before.webSocketDebuggerUrl, 'Keep exact browser CDP endpoint');
+    assert.equal(readlinkSync(join(profile, 'SingletonLock')), profileLock, 'Preserved browser keeps occupied profile control');
+    assert.equal(readFileSync(drain, 'utf8'), drainBytes, 'Host shutdown must not silently clear failed-upgrade drain');
+    for (const suffix of ['pid', 'identity', 'version', 'exe', 'token', 'sock']) {
+      assert(!existsSync(join(context.socketDir, `runtime-host.${suffix}`)), `Retire owned endpoint ${suffix}`);
+    }
+    const elapsedMs = Math.round(performance.now() - started);
+    completedCycles.push({ cycle, hostPid: owner.pid, hostStart: owner.start, elapsedMs });
+    // Only the fixture's exact drain is removed to qualify continuation and cleanup.
+    rmSync(drain);
+    const continued = await call('browser_continue', { taskId });
+    assert.equal(continued.taskId, taskId, 'Keep logical task identity after owner restart');
+    assert(sameProcess(browser), 'Continuation must reuse preserved browser');
   }
-  assert(sameProcess(browser), 'Preserve exact browser PID and process instance through host exit');
-  const after = await (await fetch(versionUrl)).json();
-  assert.equal(after.webSocketDebuggerUrl, before.webSocketDebuggerUrl, 'Keep exact browser CDP endpoint');
-  assert.equal(readlinkSync(join(profile, 'SingletonLock')), profileLock, 'Preserved browser keeps occupied profile control');
-  assert.equal(readFileSync(drain, 'utf8'), drainBytes, 'Host shutdown must not silently clear failed-upgrade drain');
-  for (const suffix of ['pid', 'identity', 'version', 'exe', 'token', 'sock']) {
-    assert(!existsSync(join(context.socketDir, `runtime-host.${suffix}`)), `Retire owned endpoint ${suffix}`);
-  }
-  const elapsedMs = Math.round(performance.now() - started);
-  // Only the fixture's exact drain is removed to qualify continuation and cleanup.
-  rmSync(drain);
-  const continued = await call('browser_continue', { taskId });
-  assert.equal(continued.taskId, taskId, 'Keep logical task identity after owner restart');
-  assert(sameProcess(browser), 'Continuation must reuse preserved browser');
   await call('browser_close', { taskId });
   taskId = null;
   await waitFor(() => !sameProcess(browser), 'Explicit task close retires exact owned browser');
-  console.log(JSON.stringify({ success: true, binarySha256: createHash('sha256').update(readFileSync(binary)).digest('hex'), elapsedMs, browserPidPreserved: true, cdpEndpointPreserved: true, occupiedProfilePreserved: true, continuationPassed: true, scope: 'one graceful owner exit under an active failed-upgrade drain; no workstation-wide shutdown claim' }));
+  console.log(JSON.stringify({ success: true, binarySha256: createHash('sha256').update(readFileSync(binary)).digest('hex'), completedHostExitCycles: completedCycles.length, cycles: completedCycles, browserPidPreserved: true, cdpEndpointPreserved: true, occupiedProfilePreserved: true, continuationPassed: true, scope: 'two sequential graceful owner exits under active failed-upgrade drains; no workstation-wide or multi-binary-generation shutdown claim' }));
 } finally {
   if (existsSync(drain)) rmSync(drain);
   if (taskId) { try { await call('browser_close', { taskId }); } catch {} }
