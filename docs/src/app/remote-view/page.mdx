@@ -181,6 +181,8 @@ concrete `reason`. It blocks new mutations across supported MCP, CLI and Service
 routes; optional `pauseReads: true` also pauses page observation/capture. Status
 and return remain available. Control persists across disconnection and restart.
 
+An eligible human-held, flight-clear `return` observes the exact retained target while ordinary automation stays paused, then commits agent ownership once. A failed pre-commit observation leaves human ownership and the original epoch intact. Inspect status and use a fresh explicit return intent; never replay an uncertain request. Legacy journals, unresolved effects and existing awaiting-observation states keep their explicit reconciliation path.
+
 `return` and deliberate `override` use the current epoch and attribution, then
 freshly observe the same retained page before automation resumes. No automatic
 return, browser replacement or website-effect replay occurs. Pending dispatched

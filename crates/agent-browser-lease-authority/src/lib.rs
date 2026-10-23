@@ -7,11 +7,13 @@
 
 #[allow(dead_code)]
 mod authority;
+mod cooperative_read;
 mod principal;
 mod profile_identity;
 mod runtime_owner;
 
 pub use authority::*;
+pub use cooperative_read::CooperativeReadKey;
 pub use principal::{
     authenticate_profile_capability, authenticated_authority_is_current,
     generate_profile_capability_token, profile_capability_digest, register_profile_capability,

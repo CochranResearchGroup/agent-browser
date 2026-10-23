@@ -39,7 +39,16 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
                 .as_bool()
                 .ok_or_else(|| issue("browser_control_pause_reads_invalid"))?,
         };
-        let epoch = if operation == "reconcile" {
+        let retained_target = task
+            .current_tab_id
+            .as_ref()
+            .and_then(|id| state.tabs.get(id))
+            .map(|tab| tab.target_id.clone());
+        let atomic_return = operation == "return"
+            && retained_target.is_some()
+            && control::eligible_return_observation(&browser_id, expected, actor, reason)
+                .map_err(issue)?;
+        let epoch = if operation == "reconcile" || atomic_return {
             expected
         } else {
             control::change(&browser_id, operation, expected, actor, reason, pause)
@@ -48,10 +57,11 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
         if matches!(operation, "return" | "override" | "reconcile") {
             // Awaiting-observation forbids physical recovery in the host. A lost target
             // remains blocked, preserving the original browser/task rather than reopening.
-            super::workflow::execute(
-                json!({"id":uuid::Uuid::new_v4().to_string(),"action":"url","hostControlFreshObservation":true,"sessionName":task.name,"sessionId":task_id,"targetId":task.current_tab_id.as_ref().and_then(|id|state.tabs.get(id)).map(|tab|&tab.target_id)}),
-                transport,
-            )?;
+            let mut observation = json!({"id":uuid::Uuid::new_v4().to_string(),"action":"url","hostControlFreshObservation":true,"sessionName":task.name,"sessionId":task_id,"targetId":retained_target});
+            if atomic_return {
+                observation["hostControlReturnObservation"] = control::attest_return_observation(json!({"browserId":browser_id,"taskId":task_id,"profileId":task.profile_id,"targetId":retained_target,"expectedEpoch":expected,"actor":actor,"reason":reason})).map_err(issue)?;
+            }
+            super::workflow::execute(observation, transport)?;
             let fresh = BrowserSessionSqliteStore::open_read_only(&path)
                 .map_err(issue)?
                 .load_session_state()
@@ -74,7 +84,12 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
                 )
                 .map_err(issue)?;
             }
-            control::observed(&browser_id, epoch).map_err(issue)?;
+            if atomic_return {
+                control::commit_observed_return(&browser_id, expected, actor, reason)
+                    .map_err(issue)?;
+            } else {
+                control::observed(&browser_id, epoch).map_err(issue)?;
+            }
         }
     }
     Ok(super::tool_response_from_payload(

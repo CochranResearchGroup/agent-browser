@@ -3,7 +3,7 @@
 Status: OPEN
 Product lane: PL-PLATFORM
 Work items: CochranResearchGroup/agent-browser#351, #352, #353, #354, #355
-Branch: platform/hosted-intent-plan-355
+Branch: platform/atomic-host-return-355
 Owner: ecochran76
 
 ## Outcome
@@ -185,3 +185,25 @@ Native13 passes the complete functional workflow and independent cleanup. The tr
 Independent readback proves38retained process observations absent, no readable private markers, one released fixture assignment and415baseline peers unchanged;76foreign denied proc reads remain bounded evidence. Post-run pressure/CPU samples are not contemporaneous attribution. Per-process IO accounting is unavailable, including for the live collector; empty IO lists are not absence proof. Preserve all foreign workloads. No production publication. Consumer PR209 integrates the bounded upfront-plan correction; wider355remains open.
 
 Next engine hypothesis is a one-commit return fast path only when flight-clear and human-held. Review identifies required narrow exact-epoch/task/target observation admission, an independent no-physical-recovery fence, unchanged post-observation identity checks and a final locked CAS. Preserve the existing awaiting-observation/reconcile lane for unresolved flights and legacy states. A boolean pause bypass is explicitly insufficient. A failed pre-commit observation leaves human ownership and its old epoch, requiring a fresh explicit return intent rather than automatic replay; this changed failure contract needs focused proof and user-facing documentation before source qualification. Retain the actively needed, clean consumer auxiliary as read-only acceptance source while this shared-engine diagnosis proceeds; close it promptly once no active qualification needs it.
+
+
+## Flight-clear atomic engine return, 2026-10-23
+
+User continues the local latency objective after consumer PR209 integrates. Root owns cli/src/mcp/host_control.rs, native/browser_host_control.rs and browser_session_host.rs plus required help/guidance/docs. Delegated writer owns only a new browser_host_return_tests.rs test include. Fresh primary branch platform/atomic-host-return-355 starts from merged main3831f7cf. The existing consumer auxiliary remains active read-only acceptance source; no new checkout or authentication/ingress writer.
+
+Only a human-held, flight-clear return may freshly observe the exact existing task/tab while ordinary automation stays paused, then commit agent ownership, new epoch and audit once. Narrow internal observation admission binds current browser/task/profile/raw target, epoch and attribution; a boolean alone never bypasses pause. All dispatcher layers revalidate scope. Independently forbid physical recovery for return observation before host launch/recovery. Recheck unchanged browser/task/tab after observation and use a final locked epoch/flight CAS. Preserve the legacy two-stage awaiting-observation/reconcile path for unresolved flights and already-awaiting states; terminal uncertain_no_replay remains eligible.
+
+A failed precommit read retains human ownership and old epoch. Recovery uses a fresh explicit return request, not automatic replay of an uncertain hosted intent. Lost final acknowledgment remains observation-only. Document and test this failure-state change. Ordinary observation and mutation APIs retain existing admission. No new user ceremony, profile/browser replacement, private-site effects or production publication.
+
+Require focused provider-free Rust RED/GREEN tests for scoped pause refusal, exact admission, CAS races, flight eligibility and no-recovery; relevant host workflow tests, cargo-safe fmt and strict workspace clippy before source qualification. Preserve the prior sealed binaries and candidate custody. Build one optimized isolated candidate only when checks pass, then one exact-source synthetic Native qualification under the unchanged250ms target, with independent cleanup. Source success alone does not close355.
+
+
+Self-review adds a genuine negative regression: unsigned exact task/epoch metadata must not manufacture the paused-read exception. It fails on the initial scoped-only implementation. Harden the private request with purpose-bound attestation mechanics in the Lease Authority crate. The CLI initializes a private optional sidecar during existing takeover, without changing Control JSON or adding return-path sync. Missing/unusable provenance retains the legacy lane. Keep metadata free of secrets and every caller-policy/scope/epoch check. This is internal request provenance, not a new user authorization or viewer-access layer.
+
+
+Attestation integration passes23focused control tests (including unsigned/wrong-key refusal and legacy/non-private-key fallback),7new pure kernel tests and11host-runtime tests. The host recovery regression proves missing physical browsers cannot be replaced while human control remains held. Private sidecars are optional and initialized during existing takeover; Control JSON stays unchanged for older workers. Current optimization requires a supported private-key adapter; other platforms retain the legacy lane. Initial strict workspace clippy and fmt pass; final checks and isolated candidate qualification remain pending. Preserve the first sccache compiler-identity stall/cancel and fixture-build failures as diagnostic logs, not regression or acceptance proof.
+
+
+Final review identifies an optional-sidecar FIFO open that could block while holding the control lock. The bounded regression reproduces RED and unblocks its own worker before failing; nonblocking no-follow open preserves fallback for non-regular files. Add that refusal before qualification. Keep MCP help within its unchanged4000-byte budget and the repository skill below10000bytes by condensing existing guidance, not raising ceilings.
+
+The final attested return slice passes24control tests,11host-runtime tests and all124Lease Authority tests on Linux. The unsigned-proof and FIFO regressions fail on their respective prior implementations and pass after hardening. Workspace fmt and strict clippy pass. Documentation builds and changed-link checks pass within their unchanged source scope; MCP help is3982bytes and the skill9996bytes. These are focused source gates, not performance or production qualification. Build one sealed fast-iteration candidate in a distinct candidate-build target directory, preserving the earlier binaries; no production publication. The candidate-only guidance and exact-source Native14 gates remain pending.

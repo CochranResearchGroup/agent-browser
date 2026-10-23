@@ -7321,6 +7321,7 @@ Commands:
   host-task         Read compact app task metadata
   watch-host-task   Initial/changed NDJSON; reconnect gets a fresh snapshot
   host-control      Status/view/takeover/return/override/reconcile
+                    Pre-commit failure keeps human/epoch; inspect status, use a fresh explicit return intent.
   host-reconnect    Status/disconnect/reconnect/rebind/configure/reopen
   host-policy       Optional app/task rules and attributable scoped override
 
@@ -7344,19 +7345,19 @@ Default workflow tools (16):
 
 Rules:
   Use taskId on actions. Reuse taskKey on open; taskPolicy overrides app defaults.
-  Supply serviceName, agentName and taskName on browser_open.
+  browser_open requires serviceName/agentName/taskName.
   profileMode: persistent (default), existing or disposable.
   Hosted open: hostBinding v1, required/preferred placement; never silent fallback.
   Attachment: existing profile, exact app process/profile/page; omit url.
-  Preserve borrowed pages/process; sharing needs explicit sharedWith recipients.
+  Preserve borrowed pages/process; sharing requires sharedWith.
   AGENT_BROWSER_HOSTS_FILE sets app origin/providerApplication/policyDefaults.
-  App owns hosted routing/capacity; Remote View owns desktop/viewer/authentication.
+  App owns routing/capacity; Remote View owns desktop/viewer/auth.
   Standalone handoff: AGENT_BROWSER_PUBLIC_ORIGIN in env or ~/.agent-browser/.env.
-  Reconnect MCP clients after startup configuration changes.
+  Reconnect clients after startup config changes.
   Control: expectedEpoch, actor/reason; fresh observation on return; no auto-resume.
-  Reconnect: requestId/expectedRevision; report_only or reopen lossPolicy.
-  After proven loss, rebind saves recoveryDesktop; verified reopen changes binding.
-  Borrowed reopen needs fresh attachment; managed reopen needs agent/no pending.
+  Reconnect: requestId/expectedRevision, lossPolicy=report_only|reopen.
+  After proven loss: rebind saves recoveryDesktop; verified reopen binds it.
+  Reopen: borrowed needs fresh attachment; managed needs agent/no pending.
   Unknown effects stay pending, never replayed. Physical relocation is unsupported.
   Policy v1: deniedActions/artifactDestinations; task replacement or clear_task.
   Changes: expectedRevision/actor/reason. Override: exact task/action/requestId.
@@ -7364,8 +7365,8 @@ Rules:
   Refuse existing files/symlinks/traversal; publication remains explicit.
   Close scope=browser needs actor/reason, no peers/borrowed custody; verify OS residue.
   Watch DB/WAL every 250 ms, not provider polling; events have watchId/sequence.
-  Discover SiteGuide playbooks: prepare_login/validate_plan, verify_login, collect_posts.
-  Helpers keep secrets private; unknown delivery needs readback.
+  SiteGuide: prepare_login/validate_plan, verify_login, collect_posts.
+  Keep secrets private; inspect unknown delivery.
   AGENT_BROWSER_SITEGUIDE_DIRECTORY selects guides. Retired authority tools are absent.
 
 Full schemas: tools/list or browser_discover. Operating contract:
