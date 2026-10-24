@@ -1,6 +1,23 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P277
+    product_lane: PL-PLATFORM
+    objective: Qualify explicit rebind after an isolated real Native restart
+    plan: docs/dev/plans/0277-2026-10-23-native-restart-acceptance355.md
+    branch: platform/restart-acceptance-355
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#355]
+    plan_state: CLOSED
+    custody_state: INTEGRATION_READY
+    dependencies: [P270]
+    overlaps: [P270]
+    reconciled_overlaps: ["Primary owns new restart fixture/oracle and P277 metadata only; preserve all foreign MCP, dashboard, enrollment and manual-login work; Native source auxiliary is read-only"]
+    validation_status: 33Node and2Python checks pass; ordinary Native10 recovery functional pass and warm20of20 p9547.20ms; Native8 unknown reopen remains unresolved
+    limitations: ["No production effects or relocation578", "Full355 matrix remains separate"]
+    updated_at: 2026-10-23
+
   - id: P276
     product_lane: PL-BUGFIX
     objective: Qualify exact Selection Focus on an owned synthetic Native desktop

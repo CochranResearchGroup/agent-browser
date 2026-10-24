@@ -1,5 +1,7 @@
 # Runbook
 
+[P277 Native restart acceptance](docs/dev/plans/0277-2026-10-23-native-restart-acceptance355.md) records ordinary Native10 functional recovery across viewing1 to2, stable assignment lifecycle1, same task/profile blank reopen, independently observed Native window and exact cleanup. Public warm20/20 p9547.20ms passes. [Evidence](docs/dev/notes/0277-2026-10-23-native-restart-acceptance355.md) retains Native8 unknown reopen; #355 remains open for that disposition and the combined coordination/cold matrix. No production effects; relocation578 remains deferred.
+
 [P273 development supervision recovery](docs/dev/plans/0273-2026-10-22-development-host-startup.md), #356, qualifies the original development host under its dedicated unit without restarting it. Host 1331 and selected 9c8edd62 generation, four browser roots and original sessions are preserved; host/backend/ingress units are active. Doctor passes 33/34 checks with preexisting development guidance drift. PR371 prevents the boot race; no production or account effects.
 
 [P272 exact MCP task routing](docs/dev/plans/0272-2026-10-22-exact-mcp-task-routing.md), #365, is installed and now qualified through the configured MCP client and authenticated AuraCall inspection. [Acceptance](docs/dev/notes/0272-2026-10-22-exact-mcp-task-routing-installed.md) records approved Authelia login, streamed views and scoped cleanup. AuraCall Writing/root/input acceptance remains separate under #240.
@@ -15,7 +17,7 @@ Initial broad fixture failures remain explicit. Source integration only;
 production publication remains separate.
 
 
-[P270 hosted continuity](docs/dev/plans/0270-2026-10-22-hosted-continuity.md) continues #351/#355 after merged PR364. Root owns the relocation provider boundary; parallel tracks repair exact fixture cleanup and measure warm control/cold pixels. The portable-launch backend decision is pending; no production effects.
+[P270 hosted continuity](docs/dev/plans/0270-2026-10-22-hosted-continuity.md) retains Native14 functional and strict warm-control acceptance. #355 remains open for combined-pair restart/loss and cold-distribution evidence; Native578 relocation was explicitly deferred. P277 owns the isolated restart continuation.
 
 [P268/#349](docs/dev/plans/0268-2026-10-22-hosted-attachment.md) and [P267/#350](docs/dev/plans/0267-2026-10-22-hosted-takeover.md) close as integrated source through provider PR361 before consumer PR175. [Acceptance](docs/dev/notes/0268-2026-10-22-hosted-attachment-control.md) records healthy Native04 chat/viewer, control and corrected process cleanup. Native05 cookie continuity and independent cleanup also pass. Root owns merge and auxiliary closeout; no deployment.
 
