@@ -209,6 +209,7 @@ function identity(pid) {
     await page.getByLabel('Active session').getByText('fixture-session-B', { exact: true }).waitFor();
     await scopedFeed.getByText('Waiting for events...', { exact: true }).waitFor();
     await scopedChat.getByRole('button', { name: 'Inspect selected workspace', exact: true }).click();
+    await scopedChat.getByText('packet bbbbbbbbbbbb', { exact: true }).waitFor();
     await scopedChat.getByRole('button', { name: 'Record as accepted', exact: true }).last().click();
     const bReview = scopedFeed.getByRole('button', { name: /accepted/i });
     await bReview.waitFor(); assert.equal(await bReview.count(), 1, 'Only B review appears in B session');
@@ -231,6 +232,46 @@ function identity(pid) {
     assert.equal(inspections.length, 6); assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
     fs.writeFileSync(path.join(artifacts, 'late-scope-and-clear.json'), JSON.stringify({ passed: true, historicalAObservedAt: originalObservedAt, lateARecordedOnlyOnA: true, bClearPreservesA: true }));
     console.log('late-A-session-isolation-and-clear: passed');
+
+    // Exercise the real WebSocket-to-streamEvents owner. A later stream update
+    // replaces its own event array without erasing the separate local review.
+    await page.close(); page = await browser.newPage(); page.setDefaultTimeout(5000);
+    page.on('pageerror', error => errors.push(error.message));
+    let stream = null;
+    await page.routeWebSocket('**/*', socket => {
+      const address = new URL(socket.url());
+      if (address.protocol !== 'ws:' || address.hostname !== 'localhost' || address.port !== '9223' || address.pathname !== '/') { unexpected.push(socket.url()); socket.close(); return; }
+      stream = socket;
+    });
+    await page.route('**/*', intercept); await page.goto(origin);
+    await page.getByLabel('Active session').getByText('fixture-session-A', { exact: true }).waitFor();
+    const streamFeed = page.getByRole('region', { name: 'Activity feed', exact: true });
+    const streamChat = page.getByRole('region', { name: 'Inspection Chat', exact: true });
+    await streamFeed.getByRole('button', { name: 'Off', exact: true }).click();
+    await page.getByRole('button', { name: 'Connect synthetic stream', exact: true }).click();
+    const streamDeadline = Date.now() + 5000;
+    while (!stream && Date.now() < streamDeadline) await page.waitForTimeout(20);
+    assert(stream, 'Synthetic WebSocket is intercepted before connecting');
+    const streamResult = suffix => JSON.stringify({ type: 'result', id: `stream-${suffix}`, action: `synthetic.stream.${suffix}`, success: true, data: { fixture: true }, duration_ms: 1, timestamp: Date.now() });
+    stream.send(streamResult('before'));
+    await streamFeed.getByRole('button', { name: /synthetic.stream.before/ }).waitFor();
+    await streamChat.getByRole('button', { name: 'Inspect selected workspace', exact: true }).click();
+    await streamChat.getByText('SYNTHETIC-PRIVATE-OBSERVATION-PROSE', { exact: true }).waitFor();
+    await streamChat.getByRole('button', { name: 'Record as accepted', exact: true }).click();
+    await streamFeed.getByRole('button', { name: /accepted/i }).waitFor();
+    stream.send(streamResult('after'));
+    await streamFeed.getByRole('button', { name: /synthetic.stream.after/ }).waitFor();
+    assert.equal(await streamFeed.getByRole('button', { name: /accepted/i }).count(), 1, 'Stream replacement preserves one local review');
+    await streamFeed.getByRole('button', { name: /accepted/i }).click();
+    let streamText = await streamFeed.innerText();
+    for (const expected of ['inspection-run-A', packetHash, 'browser:browser-A', 'session-A', 'tab-A', 'profile-A']) assert(streamText.includes(expected), `Stream update preserves ${expected}`);
+    await page.reload();
+    await page.getByLabel('Active session').getByText('fixture-session-A', { exact: true }).waitFor();
+    await streamFeed.getByRole('button', { name: /accepted/i }).waitFor();
+    assert.equal(await streamFeed.getByRole('button', { name: /accepted/i }).count(), 1, 'Review restores once after stream activity');
+    assert.equal(inspections.length, 7); assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
+    fs.writeFileSync(path.join(artifacts, 'stream-replacement.json'), JSON.stringify({ passed: true, actualStreamHook: true, interceptedWebSockets: 1, preservedReviews: 1 }));
+    console.log('websocket-stream-replacement-preserves-review: passed');
   } finally {
     if (page && !page.isClosed()) fs.writeFileSync(path.join(artifacts, 'final-dom.txt'), await page.locator('body').innerText().catch(() => 'unavailable'));
     fs.writeFileSync(path.join(artifacts, 'requests.json'), JSON.stringify({ inspections, unexpected, errors }, null, 2));

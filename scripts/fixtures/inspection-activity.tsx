@@ -6,12 +6,16 @@ import { ActivityFeed } from '@/components/activity-feed';
 import { useActivitySync } from '@/store/activity';
 import { activePortAtom, activeSessionNameAtom, useSessionsSync } from '@/store/sessions';
 import { useChatStatusSync } from '@/store/chat';
+import { useStreamSync } from '@/store/stream';
 import { buildSelectedWorkspaceContext } from '@/lib/selected-workspace-context';
 
 /** Owned synthetic workspace metadata. Session metadata enters through the real
  * sessions HTTP hook; no inspection/review/store collaborator is replaced. */
 function Fixture() {
   const [scope, setScope] = useState('A');
+  const [streamEnabled, setStreamEnabled] = useState(false);
+  const port = useAtomValue(activePortAtom);
+  useStreamSync(port, streamEnabled);
   const setPort = useSetAtom(activePortAtom);
   const session = useAtomValue(activeSessionNameAtom);
   useSessionsSync();
@@ -25,6 +29,7 @@ function Fixture() {
   }), [scope]);
   return <main>
     <nav aria-label="Fixture selection">{['A', 'B'].map(value => <button type="button" key={value} onClick={() => { setScope(value); setPort(value === 'A' ? 9223 : 9224); }}>Select workspace {value}</button>)}</nav>
+    <button type="button" onClick={() => setStreamEnabled(true)}>Connect synthetic stream</button>
     <output aria-label="Active session">{session}</output>
     <section aria-label="Inspection Chat"><ChatPanel selectedWorkspaceContext={context} authenticatedUser={{ username: "synthetic-reviewer", displayName: "Synthetic reviewer", role: "operator" }} /></section>
     <section aria-label="Activity feed"><ActivityFeed selectedWorkspaceContext={context} /></section>
