@@ -1,5 +1,11 @@
 # Roadmap
 
+[P280 upgrade client drain retirement](docs/dev/plans/0280-2026-10-24-retire-client-upgrade-drain.md) owns issue #394 under PL-BUGFIX.
+Ordinary clients must ignore persistent installer drain metadata. Production
+marker mitigation passed disposable open and scoped close; the upgrade remains
+unaccepted. Source validation is in progress.
+
+
 [P243 profile-proof maintenance](docs/dev/maintenance/p243-profile-proof-namespace.md) repairs existing-profile continuation when runtime user namespaces deny descriptor-link observation. Focused source and observer checks pass; installed workflow qualification remains separate.
 
 [P279 combined actual-host acceptance](docs/dev/plans/0279-2026-10-23-combined-host-matrix355.md) qualifies the remaining #355 matrix on one frozen pair, including real Native input, managed loss and generation-changing explicit recovery. [Evidence](docs/dev/notes/0279-2026-10-24-combined-host-matrix355.md) preserves strict warm targets, the separate five-context cold distribution and exact cleanup. Source integration remains distinct from production deployment; cold-open latency remains separate work. [P278 diagnosis](docs/dev/plans/0278-2026-10-23-reopen-launch-diagnosis355.md) retains the unexplained Native8 failure and qualified phase diagnostics. Native578 relocation stays deferred.

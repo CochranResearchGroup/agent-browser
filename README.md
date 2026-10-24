@@ -611,6 +611,11 @@ isolated development and foreign processes are preserved. Install doctor exposes
 Retirement targets and outcomes are retained in the private install transaction.
 Forward recovery also reconciles MCP clients against the selected candidate.
 
+Ordinary browser work does not consult the legacy upgrade admission marker.
+Installer recovery state is diagnostic; per-browser ownership and profile fences
+still apply. Use installation status and recovery commands to resolve an
+unaccepted upgrade without treating it as a client-wide outage.
+
 Fresh install and upgrade use one durable transaction engine. Real-host apply
 records two read-only runtime census rounds before it stages a candidate or
 stops user units. The census joins service browser and
@@ -718,9 +723,9 @@ When old handoff aliases no longer name the current browser, bootstrap can
 instead admit one exact retained RDP browser whose process, target, owner,
 reattach recommendation, and an available ready route all agree. The staged
 candidate may reattach that browser and issue a durable handoff receipt for the
-independent operator-presentation axis. While the workstation admission drain is active, this
-reattach must carry the exact current transaction ID and revision as its
-runtime admission claim.
+independent operator-presentation axis. Installer reattach records its exact
+transaction ID and revision for correlation; legacy admission metadata does
+not block ordinary clients.
 Recovery requalifies the current provider inventory immediately before route
 reservation so a pre-transfer inventory error cannot survive after the exact
 owner transfer completes.
@@ -759,7 +764,7 @@ an identity-bound supervisor takeover. It retires only the exact selected
 unsupervised host, starts `agent-browser-runtime-host.service`, and requires a
 fresh census to prove that the supervisor PID, selected ingress, executable,
 configured stream ports, and sole production runtime-host listener agree. The
-workstation admission drain remains active through this step. The transaction
+workstation transaction retains coordination metadata through this step. It
 becomes accepted only after the supervised single-runtime state is established.
 Duplicate-profile pressure and executable drift in an inactive optional
 session supervisor remain visible as install-doctor advisories, but they do not

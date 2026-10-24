@@ -183,7 +183,6 @@ pub(crate) async fn execute_shared_remote_view_open(
         if command.get("url").is_none() && command.get("browserId").is_some() && command.get("targetId").is_some() {
             return host.prepare_existing_task_handoff(&name, &command).map(Some);
         }
-        require_managed_runtime_admission("launch", &command)?;
         validate_handoff_ttl(&command, current_unix_ms(), &agent_browser_service_model::BrowserRetentionPolicy::default())?;
         let selected_build = optional_string(&command, "browserBuild");
         let selected_executable = match selected_build {
@@ -1567,16 +1566,6 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         {
             return Err("browser_session_leave_open_invalid".into());
         }
-        require_managed_runtime_admission(
-            match action {
-                "browser_session_status" => "service_status",
-                "browser_session_open" | "remote_view_open" => "launch",
-                "browser_session_navigate" => "navigate",
-                "browser_session_close" => "close",
-                _ => action,
-            },
-            command,
-        )?;
         let now_ms = command
             .get("activityAtMs")
             .and_then(serde_json::Value::as_u64)
@@ -1773,7 +1762,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     self.commit_state()?;
                     return Ok(response);
                 }
-                self.recreate_expired_handoff(handoff_id, now_ms, command)?;
+                self.recreate_expired_handoff(handoff_id, now_ms)?;
                 if command["nativeDesktop"] == true {
                     if self.persistence.load_session_state()? != self.persisted_state {
                         return Err("browser_session_publication_conflict".into());
@@ -2035,8 +2024,8 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         Ok(())
     }
 
-    /// Attach a live recorded browser during drain, but admit any physical
-    /// recovery through the same upgrade authority as an explicit launch.
+    /// Attach or recover the exact recorded browser through its per-owner
+    /// publication fence, independently of legacy installer metadata.
     fn recover_browser_for_command(
         &mut self,
         browser_id: &str,
@@ -2061,7 +2050,6 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             return Err("browser_control_fresh_observation_cannot_recover_browser".into());
         }
         self.require_explicit_hosted_recovery(browser_id)?;
-        require_managed_runtime_admission("launch", command)?;
         self.manager()?.recover_retained_browser(browser_id)?;
         self.commit_state()
     }
@@ -2127,7 +2115,6 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     return Err("browser_session_profile_selector_conflict".into());
                 }
             } else {
-                require_managed_runtime_admission("launch", command)?;
                 if self
                     .catalog
                     .profiles
@@ -2368,12 +2355,7 @@ where
 {
     /// Recreate only an automatically expired addressed task. Freeze the request
     /// before effects and use the ordinary no-replay tab creation protocol.
-    fn recreate_expired_handoff(
-        &mut self,
-        handoff_id: &str,
-        now_ms: u64,
-        command: &serde_json::Value,
-    ) -> Result<(), String> {
+    fn recreate_expired_handoff(&mut self, handoff_id: &str, now_ms: u64) -> Result<(), String> {
         if agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, handoff_id)
             .is_ok()
         {
@@ -2384,8 +2366,6 @@ where
             handoff_id,
             now_ms,
         )?;
-        require_managed_runtime_admission("launch", command)?;
-        require_managed_runtime_admission("tab_new", command)?;
         let mut link = self
             .state
             .remote_view_tab_handoffs
@@ -2615,7 +2595,6 @@ where
                 .unwrap_or_else(current_unix_ms),
             &self.state.retention_policy,
         )?;
-        require_managed_runtime_admission(command["action"].as_str().unwrap_or_default(), command)?;
         self.register_explicit_profile(command)?;
         let automatic = self.effects.admits_ordinary_sessions();
         // Existing managed tasks need the same owned, replayable tab operation
@@ -2668,7 +2647,6 @@ where
             .collect::<Vec<_>>();
         let session_id = match matching_ids.as_slice() {
             [] if automatic && exact_task_id.is_none() => {
-                require_managed_runtime_admission("launch", command)?;
                 if self.state.managed_tab_requests.values().any(|request| {
                     request.response.is_none()
                         && (request.session_name == session_name
@@ -2708,9 +2686,6 @@ where
             .browser_id
             .clone();
         self.recover_browser_for_command(&browser_id, command)?;
-        if self.state.sessions[&session_id].current_tab_id.is_none() {
-            require_managed_runtime_admission("tab_new", command)?;
-        }
         self.apply_leave_open_choice(&session_id, command)?;
         let tab = self.tab_for_navigation(&session_id, now_ms)?;
         let session = self
@@ -3237,16 +3212,6 @@ where
         }
         Ok(selected)
     }
-}
-
-/// Managed dispatch precedes the native action adapter, so it must enforce
-/// that adapter's admission authority before its own profile/browser effects.
-fn require_managed_runtime_admission(
-    action: &str,
-    command: &serde_json::Value,
-) -> Result<(), String> {
-    let path = crate::runtime_adoption::runtime_admission_drain_path()?;
-    crate::runtime_adoption::require_runtime_admission(&path, action, command)
 }
 
 fn capture_task_policy(

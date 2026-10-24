@@ -1030,146 +1030,119 @@ fn seed_upgrade_admission_drain(root: &std::path::Path, malformed: bool) {
 }
 
 #[test]
-fn consumer_upgrade_drain_blocks_explicit_open_before_publication() {
+fn consumer_retired_upgrade_drain_allows_explicit_open_and_publication() {
     for malformed in [false, true] {
         let fixture = Fixture::new();
         let guard = crate::test_utils::EnvGuard::new(&["HOME"]);
         guard.set("HOME", fixture.root.to_str().unwrap());
         let calls = Rc::new(Cell::new(0));
         let requests = Rc::new(Cell::new(0));
-        let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
-        let before = host.state().clone();
-        let catalog = fixture.store(false).load_profile_catalog().unwrap().catalog;
+        let mut host = fixture.host(Mode::Success, calls.clone(), requests);
         let path = fixture.root.join("new-profile");
         std::fs::create_dir(&path).unwrap();
         seed_upgrade_admission_drain(&fixture.root, malformed);
         let result = host.handle_command(&serde_json::json!({
             "action": "browser_session_navigate", "sessionName": "Alice",
             "profileId": "new-profile", "runtimeProfile": "new-profile", "profile": path,
-            "url": "https://synthetic.example/", "activityAtMs": 100,
-            "runtimeAdmissionClaim": {"transactionId": "upgrade-fixture", "transactionRevision": 7}
+            "url": "https://synthetic.example/", "activityAtMs": 100
         }));
-        let expected = if malformed {
-            "runtime_admission_drain_invalid"
-        } else {
-            "runtime_admission_draining"
-        };
-        assert!(
-            result["error"]
-                .as_str()
-                .unwrap_or_default()
-                .starts_with(expected),
-            "{result}"
-        );
-        assert_eq!(host.state(), &before);
-        assert_eq!(
-            fixture.store(false).load_profile_catalog().unwrap().catalog,
-            catalog
-        );
-        assert_eq!(calls.get(), 0);
-        assert_eq!(requests.get(), 0);
+        assert_eq!(result["success"], true, "{result}");
+        assert_eq!(calls.get(), 1);
+        assert!(fixture
+            .store(false)
+            .load_profile_catalog()
+            .unwrap()
+            .catalog
+            .profiles
+            .contains_key("new-profile"));
         assert!(fixture
             .store(false)
             .unpublished_launch_records()
             .unwrap()
             .is_empty());
-        let status = host.handle_command(&serde_json::json!({"action":"browser_session_status"}));
-        assert_eq!(status["success"], true);
     }
 }
 
 #[test]
-fn consumer_upgrade_drain_blocks_implicit_open_from_observation() {
-    let fixture = Fixture::new();
-    std::fs::write(fixture.root.join("automatic-pool"), "enabled").unwrap();
-    let guard = crate::test_utils::EnvGuard::new(&["HOME"]);
-    guard.set("HOME", fixture.root.to_str().unwrap());
-    let calls = Rc::new(Cell::new(0));
-    let requests = Rc::new(Cell::new(0));
-    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
-    let before = host.state().clone();
-    seed_upgrade_admission_drain(&fixture.root, false);
-    let error = host
-        .execute_managed_command(
-            "Alice",
-            &serde_json::json!({
-                "action":"url", "profileId":"profile-a", "activityAtMs":100
-            }),
-        )
-        .unwrap_err();
-    assert!(error.starts_with("runtime_admission_draining"), "{error}");
-    assert_eq!(host.state(), &before);
-    assert_eq!(calls.get(), 0);
-    assert_eq!(requests.get(), 0);
+fn consumer_retired_upgrade_drain_allows_implicit_open_and_owned_tab() {
+    for malformed in [false, true] {
+        for already_open in [false, true] {
+            let fixture = Fixture::new();
+            std::fs::write(fixture.root.join("automatic-pool"), "enabled").unwrap();
+            let guard = crate::test_utils::EnvGuard::new(&["HOME"]);
+            guard.set("HOME", fixture.root.to_str().unwrap());
+            let calls = Rc::new(Cell::new(0));
+            let requests = Rc::new(Cell::new(0));
+            let mut host = fixture.host(Mode::Success, calls.clone(), requests);
+            if already_open {
+                host.open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+                    .unwrap();
+            }
+            seed_upgrade_admission_drain(&fixture.root, malformed);
+            let result = host
+                .execute_managed_command(
+                    "Alice",
+                    &serde_json::json!({
+                        "action":"url", "profileId":"profile-a", "activityAtMs":101
+                    }),
+                )
+                .unwrap()
+                .unwrap();
+            assert_eq!(result["success"], true, "{result}");
+            assert_eq!(calls.get(), 1);
+            assert_eq!(host.state().tabs.len(), 1);
+            assert!(fixture
+                .store(false)
+                .unpublished_launch_records()
+                .unwrap()
+                .is_empty());
+        }
+    }
 }
 
 #[test]
-fn consumer_upgrade_drain_keeps_live_observation_but_blocks_physical_recovery() {
-    let fixture = Fixture::new();
-    std::fs::write(fixture.root.join("automatic-pool"), "enabled").unwrap();
-    let guard = crate::test_utils::EnvGuard::new(&["HOME"]);
-    guard.set("HOME", fixture.root.to_str().unwrap());
-    let calls = Rc::new(Cell::new(0));
-    let requests = Rc::new(Cell::new(0));
-    let mut host = fixture.host(Mode::IdleRecovery, calls.clone(), requests.clone());
-    let command = serde_json::json!({"action":"url", "profileId":"profile-a", "activityAtMs":100});
-    let first = host
-        .execute_managed_command("Alice", &command)
-        .unwrap()
-        .unwrap();
-    seed_upgrade_admission_drain(&fixture.root, false);
-    let live = host
-        .execute_managed_command("Alice", &command)
-        .unwrap()
-        .unwrap();
-    assert_eq!(live["success"], true);
-    assert_eq!(live["browserSession"], first["browserSession"]);
-    assert_eq!(calls.get(), 1);
-    let before = host.state().clone();
-    let provider_requests = requests.get();
-    for action in ["navigate", "close", "tab_new"] {
-        let error = host
+fn consumer_retired_upgrade_drain_allows_live_navigation_and_physical_recovery() {
+    for malformed in [false, true] {
+        let fixture = Fixture::new();
+        std::fs::write(fixture.root.join("automatic-pool"), "enabled").unwrap();
+        let guard = crate::test_utils::EnvGuard::new(&["HOME"]);
+        guard.set("HOME", fixture.root.to_str().unwrap());
+        let calls = Rc::new(Cell::new(0));
+        let requests = Rc::new(Cell::new(0));
+        let mut host = fixture.host(Mode::IdleRecovery, calls.clone(), requests);
+        let command =
+            serde_json::json!({"action":"url", "profileId":"profile-a", "activityAtMs":100});
+        let first = host
+            .execute_managed_command("Alice", &command)
+            .unwrap()
+            .unwrap();
+        seed_upgrade_admission_drain(&fixture.root, malformed);
+        let live = host
+            .execute_managed_command("Alice", &command)
+            .unwrap()
+            .unwrap();
+        assert_eq!(live["browserSession"], first["browserSession"]);
+        let navigate = host
             .execute_managed_command(
                 "Alice",
                 &serde_json::json!({
-                    "action": action, "profileId": "profile-a", "url": "https://synthetic.example/"
+                    "action":"navigate", "profileId":"profile-a", "url":"https://synthetic.example/"
                 }),
             )
-            .unwrap_err();
-        assert!(error.starts_with("runtime_admission_draining"), "{error}");
-        assert_eq!(host.state(), &before);
+            .unwrap()
+            .unwrap();
+        assert_eq!(navigate["success"], true, "{navigate}");
         assert_eq!(calls.get(), 1);
-        assert_eq!(requests.get(), provider_requests);
+        std::fs::write(fixture.root.join("idle-process-absent"), "absent").unwrap();
+        let recovered = host
+            .execute_managed_command("Alice", &command)
+            .unwrap()
+            .unwrap();
+        assert_eq!(recovered["success"], true, "{recovered}");
+        assert_eq!(calls.get(), 2);
+        assert_eq!(
+            recovered["browserSession"]["sessionId"],
+            first["browserSession"]["sessionId"]
+        );
     }
-    std::fs::write(fixture.root.join("idle-process-absent"), "absent").unwrap();
-    let error = host.execute_managed_command("Alice", &command).unwrap_err();
-    assert!(error.starts_with("runtime_admission_draining"), "{error}");
-    assert_eq!(host.state(), &before);
-    assert_eq!(calls.get(), 1);
-    assert_eq!(requests.get(), provider_requests);
-}
-
-#[test]
-fn consumer_upgrade_drain_observation_without_owned_tab_cannot_create_one() {
-    let fixture = Fixture::new();
-    let guard = crate::test_utils::EnvGuard::new(&["HOME"]);
-    guard.set("HOME", fixture.root.to_str().unwrap());
-    let calls = Rc::new(Cell::new(0));
-    let requests = Rc::new(Cell::new(0));
-    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
-    host.open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
-        .unwrap();
-    let before = host.state().clone();
-    seed_upgrade_admission_drain(&fixture.root, false);
-    let error = host
-        .execute_managed_command(
-            "Alice",
-            &serde_json::json!({
-                "action":"url", "profileId":"profile-a", "activityAtMs":101
-            }),
-        )
-        .unwrap_err();
-    assert!(error.starts_with("runtime_admission_draining"), "{error}");
-    assert_eq!(host.state(), &before);
-    assert_eq!(calls.get(), 1);
 }

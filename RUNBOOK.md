@@ -1,5 +1,11 @@
 # Runbook
 
+[P280 upgrade client drain retirement](docs/dev/plans/0280-2026-10-24-retire-client-upgrade-drain.md) owns issue #394 under PL-BUGFIX.
+Ordinary clients must ignore persistent installer drain metadata. Production
+marker mitigation passed disposable open and scoped close; the upgrade remains
+unaccepted. Source validation is in progress.
+
+
 [P279 combined hosted acceptance](docs/dev/plans/0279-2026-10-23-combined-host-matrix355.md) is integrated through [PR388](https://github.com/CochranResearchGroup/agent-browser/pull/388), merge2ae94c2a3. #355 and parent #347 are closed under the approved relocation deferral. [Evidence](docs/dev/notes/0279-2026-10-24-combined-host-matrix355.md) records the complete same-pair matrix, warm p9532.57ms/169.85ms, cold median4.44s/tail11.06s,47absent kernel generations and exact cleanup. No production deployment or cold-latency fix is claimed. Earlier failures remain retained; Native578 stays deferred.
 
 [P278 reopen diagnosis](docs/dev/plans/0278-2026-10-23-reopen-launch-diagnosis355.md) retains the unresolved Native8 cause and qualified secret-free phase diagnostics. Its three reduced and three actual Native diagnostic cases remain distinct from P279's later complete matrix. [Evidence](docs/dev/notes/0278-2026-10-23-reopen-launch-diagnosis355.md) preserves all failures; candidate29370244 has no production adoption. Relocation578 stays deferred.

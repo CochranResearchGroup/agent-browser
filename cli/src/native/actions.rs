@@ -708,19 +708,6 @@ async fn execute_command_after_navigation_admission(
         false
     };
     if !state.browser_session_manager_owned
-        && crate::runtime_owner_transfer::action_requires_runtime_admission(action)
-    {
-        let admission_drain = match crate::runtime_adoption::runtime_admission_drain_path() {
-            Ok(path) => path,
-            Err(error) => return error_response(&id, &error),
-        };
-        if let Err(error) =
-            crate::runtime_adoption::require_runtime_admission(&admission_drain, action, cmd)
-        {
-            return error_response(&id, &error);
-        }
-    }
-    if !state.browser_session_manager_owned
         && !managed_request
         && crate::runtime_owner_transfer::action_requires_owner_effect_authority(action)
     {

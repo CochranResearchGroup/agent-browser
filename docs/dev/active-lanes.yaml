@@ -1,6 +1,19 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P280
+    product_lane: PL-BUGFIX
+    objective: Retire persistent upgrade client lockout
+    plan: docs/dev/plans/0280-2026-10-24-retire-client-upgrade-drain.md
+    branch: fix/retire-client-upgrade-drain
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#394]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    overlaps: []
+    reconciled_overlaps: ["Own drain retirement only; preserve authentication and all clean peer checkouts and candidate bytes"]
+    updated_at: 2026-10-24
   - id: P279
     product_lane: PL-PLATFORM
     objective: Qualify the remaining combined hosted matrix on one pinned pair

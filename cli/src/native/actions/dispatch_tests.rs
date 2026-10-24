@@ -558,12 +558,26 @@ async fn test_execute_empty_action() {
     assert_eq!(result["success"], false);
 }
 #[tokio::test]
-async fn test_execute_close_without_browser() {
-    let mut state = DaemonState::new();
-    let cmd = json!({ "action" : "close", "id" : "test-3" });
-    let result = execute_command(&cmd, &mut state).await;
-    assert_eq!(result["success"], true, "{}", result);
-    assert_eq!(result["data"]["closed"], true);
+#[allow(clippy::await_holding_lock)]
+async fn retired_upgrade_drain_allows_native_close_without_browser() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = std::env::temp_dir().join(format!("native-retired-drain-{}", uuid::Uuid::new_v4()));
+    let path = home.join(".agent-browser/runtime-adoption/admission-drain.json");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    for payload in [
+        "invalid-json",
+        r#"{"schemaVersion":"agent-browser.runtime-adoption.v1","transactionId":"upgrade-fixture","candidateGenerationId":"candidate-fixture","transactionRevision":7,"recordedAt":"2026-10-24T00:00:00Z"}"#,
+    ] {
+        std::fs::write(&path, payload).unwrap();
+        let mut state = DaemonState::new();
+        let result =
+            execute_command(&json!({"action":"close", "id":"retired-drain"}), &mut state).await;
+        assert_eq!(result["success"], true, "{result}");
+        assert_eq!(result["data"]["closed"], true);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), payload);
+    }
+    std::fs::remove_dir_all(home).unwrap();
 }
 #[tokio::test]
 async fn test_navigate_without_browser() {

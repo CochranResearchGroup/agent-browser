@@ -411,12 +411,12 @@ try {
   assert.notEqual(
     ordinaryProfileAdmission.status,
     0,
-    'the transaction claim must not admit an ordinary managed profile',
+    'the deliberately invalid executable must still fail',
   );
-  assert.match(
+  assert.doesNotMatch(
     JSON.parse(ordinaryProfileAdmission.stdout).error,
-    /runtime_admission_draining/,
-    'ordinary managed profiles must remain blocked by the admission drain',
+    /runtime_admission_drain/,
+    'legacy installer metadata must not block ordinary managed profiles',
   );
   for (const unit of expectedUnits) {
     const unitPath = join(installRoot, '.config', 'systemd', 'user', unit);

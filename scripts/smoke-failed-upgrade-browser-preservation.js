@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Isolated failed-upgrade drain acceptance. Never stops a workstation service. */
+/** Isolated browser continuity with legacy upgrade metadata. Never stops a workstation service. */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, writeFileSync, existsSync, rmSync } from 'node:fs';
@@ -25,6 +25,7 @@ mkdirSync(context.env.XDG_RUNTIME_DIR, { mode: 0o700 });
 const client = createMcpStdioClient({ context, args: ['mcp', 'serve'], onFatal: () => {} });
 const drain = join(context.tempHome, '.agent-browser', 'runtime-adoption', 'admission-drain.json');
 let taskId;
+const probeTaskIds = new Set();
 let browser;
 let owner;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -83,9 +84,14 @@ try {
   const completedCycles = [];
   for (let cycle = 1; cycle <= 2; cycle += 1) {
     mkdirSync(join(drain, '..'), { recursive: true });
-    const drainBytes = JSON.stringify({ schemaVersion: 'agent-browser.runtime-adoption.v1', transactionId: 'failed-upgrade-fixture', candidateGenerationId: 'failed-candidate', transactionRevision: 7, recordedAt: new Date().toISOString() });
+    const drainBytes = cycle === 1
+      ? JSON.stringify({ schemaVersion: 'agent-browser.runtime-adoption.v1', transactionId: 'failed-upgrade-fixture', candidateGenerationId: 'failed-candidate', transactionRevision: 7, recordedAt: new Date().toISOString() })
+      : 'invalid-json';
     writeFileSync(drain, drainBytes);
-    await assert.rejects(call('browser_open', { serviceName: 'failed-upgrade-preservation-fixture', agentName: 'synthetic-admission-probe', taskName: 'Verify drain refuses a new disposable task', profileMode: 'disposable', taskKey: `blocked-${cycle}`, url: 'about:blank' }), /runtime_admission_draining/);
+    const probe = await call('browser_open', { serviceName: 'failed-upgrade-preservation-fixture', agentName: 'synthetic-admission-probe', taskName: 'Verify legacy upgrade metadata allows a new disposable task', profileMode: 'disposable', taskKey: `admitted-${cycle}`, url: 'about:blank' });
+    probeTaskIds.add(probe.taskId);
+    await call('browser_close', { taskId: probe.taskId });
+    probeTaskIds.delete(probe.taskId);
     owner = identity(Number(readFileSync(join(context.socketDir, 'runtime-host.pid'), 'utf8')));
     assert(owner && owner.executable === realpathSync(binary) && ownedProcesses().some(record => record.pid === owner.pid), 'Pin the exact current owned host for each cycle');
     assert(!completedCycles.some(previous => previous.hostPid === owner.pid && previous.hostStart === owner.start), 'Continuation must create a new host process instance');
@@ -109,8 +115,7 @@ try {
     }
     const elapsedMs = Math.round(performance.now() - started);
     completedCycles.push({ cycle, hostPid: owner.pid, hostStart: owner.start, elapsedMs });
-    // Only the fixture's exact drain is removed to qualify continuation and cleanup.
-    rmSync(drain);
+    // Continue while legacy metadata remains, including across host restart.
     const continued = await call('browser_continue', { taskId });
     assert.equal(continued.taskId, taskId, 'Keep logical task identity after owner restart');
     assert(sameProcess(browser), 'Continuation must reuse preserved browser');
@@ -118,9 +123,10 @@ try {
   await call('browser_close', { taskId });
   taskId = null;
   await waitFor(() => !sameProcess(browser), 'Explicit task close retires exact owned browser');
-  console.log(JSON.stringify({ success: true, binarySha256: createHash('sha256').update(readFileSync(binary)).digest('hex'), completedHostExitCycles: completedCycles.length, cycles: completedCycles, browserPidPreserved: true, cdpEndpointPreserved: true, occupiedProfilePreserved: true, continuationPassed: true, scope: 'two sequential graceful owner exits under active failed-upgrade drains; no workstation-wide or multi-binary-generation shutdown claim' }));
+  console.log(JSON.stringify({ success: true, binarySha256: createHash('sha256').update(readFileSync(binary)).digest('hex'), completedHostExitCycles: completedCycles.length, cycles: completedCycles, browserPidPreserved: true, cdpEndpointPreserved: true, occupiedProfilePreserved: true, continuationPassed: true, scope: 'two sequential graceful owner exits with nonblocking legacy upgrade metadata; no workstation-wide or multi-binary-generation shutdown claim' }));
 } finally {
   if (existsSync(drain)) rmSync(drain);
+  for (const probeTaskId of probeTaskIds) { try { await call('browser_close', { taskId: probeTaskId }); } catch {} }
   if (taskId) { try { await call('browser_close', { taskId }); } catch {} }
   client.close();
   for (const process_ of ownedProcesses().filter((record) => record.executable === realpathSync(binary))) {
