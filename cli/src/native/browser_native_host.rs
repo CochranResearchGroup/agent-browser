@@ -32,6 +32,17 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         };
         self.effects.begin_operation(&self.persisted_state)?;
         let assignment = self.effects.native_handoff_assignment_target(target)?;
+        self.native_process_command(&original, &assignment, command)
+    }
+
+    /// A private launched-process proof can be qualified before publication.
+    /// Callers retain the exact launch claim; this grants no additional access.
+    pub(crate) fn native_process_command(
+        &self,
+        original: &agent_browser_service_model::RecordedProcessIdentity,
+        assignment: &agent_browser_service_model::RemoteViewApplicationTarget,
+        command: &Value,
+    )->Result<Value,String> {
         let origin = std::env::var("AGENT_BROWSER_REMOTE_VIEW_ORIGIN")
             .map_err(|_| "browser_native_owner_unconfigured")?;
         let http = super::super::remote_view_application_http::RemoteViewApplicationHttp::new(
@@ -60,7 +71,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             persistence: &self.persistence,
             expected: &self.persisted_state,
         };
-        super::super::browser_native_control::execute(&original, &assignment, command, &mut owner)
+        super::super::browser_native_control::execute(original, assignment, command, &mut owner)
     }
 
     pub(super) fn execute_native_task(

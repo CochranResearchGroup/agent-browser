@@ -15,7 +15,7 @@ pub fn execute(
 ) -> Result<Value, String> {
     if !matches!(
         command["action"].as_str(),
-        Some("native_input" | "native_capture" | "native_close" | "native_focus")
+        Some("native_input" | "native_capture" | "native_close" | "native_focus" | "native_ready")
     ) {
         return Err("browser_native_action_unavailable".into());
     }
@@ -72,6 +72,9 @@ pub fn execute(
             )
         }
     };
+    if command["action"] == "native_ready" {
+        return Ok(json!({"source":"remote_view_native","ready":true,"windowId":window["id"],"nativeContextScope":"browser","taskCompleted":false}));
+    }
     if command["action"] == "native_focus" {
         let action = "activate";
         let reply = owner.request("window", &json!({
