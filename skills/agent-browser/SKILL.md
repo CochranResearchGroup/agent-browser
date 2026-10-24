@@ -126,6 +126,8 @@ Read the advanced reference for bounded host resource waits and retained session
 Use `browser_discover` for advanced MCP metadata.
 
 
+Dashboard static text assets negotiate gzip; successful hashed Next assets use immutable browser caching. HTML and dynamic APIs keep their existing freshness and authentication behavior.
+
 ### Dashboard summary diagnostics
 
 For subsystem health, workspace inventory or embedded-viewer failures, read [Dashboard summary diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics). A prepared handoff or reachable service alone does not prove a connected Native display. For a failed embedded page, read [failure guidance](references/cli-and-service.md#embedded-native-desktop-failure-guidance) before retrying.

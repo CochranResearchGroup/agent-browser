@@ -386,6 +386,8 @@ active service independently validates its banked executable before reading
 the request; ordinary clients do not need access to the root process's
 `/proc/<pid>/exe` link.
 
+Dashboard static text assets negotiate gzip; successful hashed Next assets use immutable browser caching. HTML and dynamic APIs keep their existing freshness and authentication behavior.
+
 The dashboard labels this runtime `Development`, and its runtime manifest
 reports `runtimeEnvironment: "development"`. The Cooper service inventory owns
 the separate `agent-browser-dev` local and external ingress routes. Its isolated

@@ -1,5 +1,7 @@
 # Roadmap
 
+[P280 dashboard static delivery](docs/dev/plans/0280-2026-10-24-dashboard-static-delivery.md), #391, reduces cold asset transfer with negotiated gzip and hashed-asset caching across both HTTP listeners. [Evidence](docs/dev/notes/0280-2026-10-24-dashboard-static-delivery.md) separates reproduced public startup delays, source gates and pending candidate/public qualification. The second-poll tail and Native first pixels remain separate.
+
 [P243 profile-proof maintenance](docs/dev/maintenance/p243-profile-proof-namespace.md) repairs existing-profile continuation when runtime user namespaces deny descriptor-link observation. Focused source and observer checks pass; installed workflow qualification remains separate.
 
 [P279 combined actual-host acceptance](docs/dev/plans/0279-2026-10-23-combined-host-matrix355.md) qualifies the remaining #355 matrix on one frozen pair, including real Native input, managed loss and generation-changing explicit recovery. [Evidence](docs/dev/notes/0279-2026-10-24-combined-host-matrix355.md) preserves strict warm targets, the separate five-context cold distribution and exact cleanup. Source integration remains distinct from production deployment; cold-open latency remains separate work. [P278 diagnosis](docs/dev/plans/0278-2026-10-23-reopen-launch-diagnosis355.md) retains the unexplained Native8 failure and qualified phase diagnostics. Native578 relocation stays deferred.

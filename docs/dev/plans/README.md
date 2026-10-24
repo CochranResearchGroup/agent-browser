@@ -1,5 +1,7 @@
 # Active plan index
 
+[P280 dashboard static delivery](0280-2026-10-24-dashboard-static-delivery.md), #391; negotiate gzip and cache only positively hashed assets.
+
 [P279 combined hosted matrix](0279-2026-10-23-combined-host-matrix355.md), #355; complete same-pair actual Native matrix accepted, including five cold contexts, strict warm targets, human input, managed loss and generation-changing rebind/reopen. Source integration only.
 
 [P278 reopen diagnosis](0278-2026-10-23-reopen-launch-diagnosis355.md) owns the bounded probe and private launch phase diagnostics; original Native8 remains unexplained.
