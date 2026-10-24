@@ -481,6 +481,7 @@ try{
  coldPixels=null;
   try{
    viewerContext=await viewer.newContext({...(authState?{storageState:authState}:{}),viewport:{width:1440,height:1000},ignoreHTTPSErrors:fixtureTls});
+   if(fixtureNativeConnectOrigin)await viewerContext.grantPermissions(['local-network-access'],{origin:appOrigin});
    assert(!coldContexts.has(viewerContext));coldContexts.add(viewerContext);assert.equal(viewer.contexts().length,1,'Cold contexts must not overlap');sample.contextCreated=true;
    page=await viewerContext.newPage();page.on('websocket',ws=>{if(new URL(ws.url()).origin===nativeOrigin.replace('https:','wss:'))ws.on('framereceived',()=>sampleFrames++);});
    // Only the app origin reaches the local actual consumer. Native frames and

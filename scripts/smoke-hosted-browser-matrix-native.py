@@ -178,7 +178,7 @@ def main():
                 raise
 
         def configure_fixture(self, config):
-            config = config.replace('[consumers.fixture]', '[consumers.fixture]\nembed_origins = ' + json.dumps([self.app_origin]))
+            config = config.replace('[consumers.fixture]', '[consumers.fixture]\nselective_input = true\nembed_origins = ' + json.dumps([self.app_origin]))
             return config.replace('[tools]', '[tools]\nwindow_inventory = { adapter = "native_x11", fallback_to_xdotool = false }\ndesktop_control = { adapter = "native_x11", fallback_to_xdotool = false }')
 
         def start_owner(self):
