@@ -28,7 +28,7 @@ for (const path of [root, profile]) await mkdir(path, { mode: 0o700 });
 const marker = `p276-${randomUUID()}`, token = randomUUID();
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('AGENT_BROWSER_') && !key.startsWith('XDG_') && !key.startsWith('P276_')));
 Object.assign(env, { HOME: root, AGENT_BROWSER_HOME: join(root, '.agent-browser'), AGENT_BROWSER_SOCKET_DIR: sockets,
-  AGENT_BROWSER_RUNTIME_HOST: '1', AGENT_BROWSER_SESSION: 'default', AGENT_BROWSER_HEADED: '1',
+  AGENT_BROWSER_RUNTIME_HOST: '1', AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS: '0', AGENT_BROWSER_SESSION: 'default', AGENT_BROWSER_HEADED: '1',
   AGENT_BROWSER_EXECUTABLE_PATH: chrome, AGENT_BROWSER_ARGS: '--no-sandbox,--disable-background-networking',
   AGENT_BROWSER_DASHBOARD_AUTH_DIR: join(root, 'operator-auth'), AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY: 'disabled',
   AGENT_BROWSER_REMOTE_VIEW_APPLICATION: 'agent-browser', AGENT_BROWSER_REMOTE_VIEW_POOL: 'main',
@@ -120,10 +120,11 @@ try {
   const allowed = new Set(['observe_assignment', 'launch_environment', 'windows', 'activate', 'events', 'observe_idle', 'read_idle_retirement', 'register_native_handoff_observation']);
   const correlations = new Set();
   broker = createServer(async (req, res) => {
+    let operation = 'unparsed';
     try {
       assert(req.method === 'POST' && req.url === '/v1/consumer'); let text = '';
       for await (const part of req) { text += part; assert(text.length < 65536); }
-      const envelope = JSON.parse(text), request = envelope.request; assert.equal(envelope.application, 'agent-browser');
+      const envelope = JSON.parse(text), request = envelope.request; operation = request.operation; assert.equal(envelope.application, 'agent-browser');
       if (request.operation !== 'inventory' && request.operation !== 'observe_native_handoff_use') {
         assert(allowed.has(request.operation)); assert.equal(request.assignment_id, assignment.assignmentId); assert.equal(request.expected_generation, assignment.generation);
         if ('expected_viewing_generation' in request) assert.equal(request.expected_viewing_generation, observation.target.viewingGeneration);
@@ -137,7 +138,7 @@ try {
       if (request.operation === 'register_native_handoff_observation') correlations.add(result.correlationId ?? result.observation?.correlationId);
       requests.push({ operation: request.operation, success: true }); await save('broker-requests.json', requests);
       res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(result));
-    } catch (error) { errors.push({ step: 'broker', message: error.message }); res.writeHead(502); res.end(JSON.stringify({ code: 'fixture_scope_refused', message: 'Inspect fixture evidence', retryable: false })); }
+    } catch (error) { errors.push({ step: 'broker', operation, message: error.message }); void save('broker-errors.json', errors).catch(() => {}); res.writeHead(502); res.end(JSON.stringify({ code: 'fixture_scope_refused', message: 'Inspect fixture evidence', retryable: false })); }
   });
   await new Promise(resolve => broker.listen(0, '127.0.0.1', resolve)); env.AGENT_BROWSER_REMOTE_VIEW_ORIGIN = `http://127.0.0.1:${broker.address().port}`;
   step = 'start-isolated-host';
