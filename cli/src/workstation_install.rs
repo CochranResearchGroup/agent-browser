@@ -1784,7 +1784,6 @@ fn recover_operator_required_upgrade_for_root(
             "selectedGenerationId": transaction.candidate_generation_id,
             "direction": "forward",
             "supervisor": supervisor,
-            "admissionDraining": false,
         }));
     }
     let old_generation_id = transaction
@@ -1817,8 +1816,6 @@ fn recover_operator_required_upgrade_for_root(
             "selectedGenerationId": old_generation_id,
             "candidatePayloadStaged": false,
             "runtimeObservation": {"advisory":true,"available":false,"complete":false,"reason":"no_census_was_required_for_effect_free_recovery"},
-            "admissionDrainPresent": false,
-            "admissionDraining": false,
         }));
     }
 
@@ -1937,7 +1934,6 @@ fn recover_operator_required_upgrade_for_root(
         "candidateRuntimeHostRouteAbsent": true,
         "runtimeCensusStable": census.activation_allowed,
         "runtimeObservation": live_work_observation(Ok(census)),
-        "admissionDraining": false,
     }))
 }
 
@@ -5777,7 +5773,7 @@ fn expected_upgrade_doctor_diagnostics(
         })
         .unwrap_or(0);
     format!(
-        "transactionIdMatch={},state={:?},draining={:?},selectedMatch={},transactionIssueCount={},dashboardTransition={},supervisorTransition={},runtimeHostTransition={}",
+        "transactionIdMatch={},state={:?},selectedMatch={},transactionIssueCount={},dashboardTransition={},supervisorTransition={},runtimeHostTransition={}",
         upgrade
             .pointer("/latestTransaction/transactionId")
             .and_then(Value::as_str)
@@ -5785,7 +5781,6 @@ fn expected_upgrade_doctor_diagnostics(
         upgrade
             .pointer("/latestTransaction/state")
             .and_then(Value::as_str),
-        upgrade.get("admissionDraining").and_then(Value::as_bool),
         upgrade.get("selectedGenerationId").and_then(Value::as_str)
             == Some(expected.candidate_generation_id.as_str()),
         transaction_issue_count,
@@ -5886,8 +5881,7 @@ fn install_doctor_issues_are_advisory(data: &Value, issues: &[Value]) -> bool {
 }
 
 /// During the transaction's own post-commit validation, install doctor must
-/// remain globally non-ready because the transaction and admission drain are
-/// still active. The installer may consume the component evidence only when
+/// may report its active transaction as an advisory. Consume component evidence when
 /// the only additional blockers are the exact expected transaction at the
 /// exact `post_commit_validating` revision, the runtime monitor startup gap
 /// created by this installer quiescing and reactivating its units, and
@@ -5912,7 +5906,6 @@ fn install_doctor_reports_expected_upgrade_ready(
             .pointer("/latestTransaction/state")
             .and_then(Value::as_str)
             == Some("post_commit_validating")
-        && upgrade.get("admissionDraining").and_then(Value::as_bool) == Some(true)
         && upgrade.get("selectedGenerationId").and_then(Value::as_str)
             == Some(expected.candidate_generation_id.as_str());
 
@@ -5938,10 +5931,6 @@ fn install_doctor_reports_expected_upgrade_ready(
         && upgrade
             .pointer("/latestTransaction/state")
             .and_then(Value::as_str)
-            .is_none()
-        && upgrade
-            .get("admissionDraining")
-            .and_then(Value::as_bool)
             .is_none()
         && upgrade
             .get("selectedGenerationId")
@@ -17123,7 +17112,7 @@ mod tests {
 
         assert_eq!(report["changed"], true);
         assert_eq!(report["selectedGenerationId"], old_generation_id);
-        assert_eq!(report["admissionDrainPresent"], false);
+        assert!(report.get("admissionDrainPresent").is_none());
         let recovered: crate::runtime_adoption::UpgradeTransaction =
             serde_json::from_slice(&fs::read(transaction_path).unwrap()).unwrap();
         assert_eq!(
@@ -19110,7 +19099,6 @@ mod tests {
                 "liveDashboardRuntime": {
                     "workstationUpgrade": {
                         "selectedGenerationId": "generation-new",
-                        "admissionDraining": true,
                         "latestTransaction": {
                             "transactionId": transaction.transaction_id.clone(),
                             "state": "post_commit_validating",
@@ -19183,7 +19171,6 @@ mod tests {
                 "liveDashboardRuntime": {
                     "workstationUpgrade": {
                         "selectedGenerationId": "generation-new",
-                        "admissionDraining": true,
                         "latestTransaction": {
                             "transactionId": transaction.transaction_id.clone(),
                             "state": "post_commit_validating",
@@ -19308,7 +19295,6 @@ mod tests {
                 "liveDashboardRuntime": {
                     "workstationUpgrade": {
                         "selectedGenerationId": "generation-new",
-                        "admissionDraining": true,
                         "latestTransaction": {
                             "transactionId": transaction.transaction_id.clone(),
                             "state": "post_commit_validating",
@@ -19748,7 +19734,6 @@ mod tests {
                 "liveDashboardRuntime": {
                     "workstationUpgrade": {
                         "selectedGenerationId": "generation-new",
-                        "admissionDraining": true,
                         "dashboardIngress": {
                             "dashboardIngressReady": true,
                             "operatorJourneyReady": true,
