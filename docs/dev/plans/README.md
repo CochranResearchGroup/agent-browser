@@ -1,5 +1,7 @@
 # Active plan index
 
+[P279 combined hosted matrix](0279-2026-10-23-combined-host-matrix355.md), #355; complete same-pair actual Native matrix accepted, including five cold contexts, strict warm targets, human input, managed loss and generation-changing rebind/reopen. Source integration only.
+
 [P278 reopen diagnosis](0278-2026-10-23-reopen-launch-diagnosis355.md) owns the bounded probe and private launch phase diagnostics; original Native8 remains unexplained.
 
 [P277 Native restart acceptance](0277-2026-10-23-native-restart-acceptance355.md) records ordinary functional recovery, the lifecycle/viewing distinction and unresolved launch/cold/coordination gates for355.

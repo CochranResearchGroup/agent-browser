@@ -1,6 +1,23 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P279
+    product_lane: PL-PLATFORM
+    objective: Qualify the remaining combined hosted matrix on one pinned pair
+    plan: docs/dev/plans/0279-2026-10-23-combined-host-matrix355.md
+    branch: platform/combined-host-matrix-355
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#355]
+    plan_state: COMPLETED
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [P277]
+    overlaps: [P270, P277]
+    reconciled_overlaps: ["P278 diagnostics integrated before pinning; root owns combined fixture/evidence; consumer read-only auxiliary completed governed closeout; foreign source and candidates preserved"]
+    validation_status: Matrix6 ACCEPT; warm20/20 p9532.57ms and6/6 p95169.85ms; five cold contexts; real human input and Native restart/reopen; independent47-generation and Native resource cleanup;53Node and19Python cases pass
+    limitations: ["No production deployment or existing desktop effects", "Cold median4.44s and p9511.06s remain separate latency evidence", "Original Native8 cause remains unexplained; failures retained", "Relocation578 remains deferred"]
+    updated_at: 2026-10-24
+
   - id: P277
     product_lane: PL-PLATFORM
     objective: Qualify explicit rebind after an isolated real Native restart

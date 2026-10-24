@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P279 combined actual-host acceptance](0279-2026-10-24-combined-host-matrix355.md): one-pair complete matrix, Native human input and generation-changing recovery, qualified warm targets, separate five-context cold distribution and independent cleanup; no deployment.
+
 [P278 reopen diagnosis](0278-2026-10-23-reopen-launch-diagnosis355.md): six bounded passes, unresolved Native8 cause, qualified phase-only diagnostics and exact cleanup; production unchanged.
 
 [P277 actual Native restart acceptance](0277-2026-10-23-native-restart-acceptance355.md): ordinary functional pass, generation-domain distinction and retained unknown reopen; full355 remains open.
