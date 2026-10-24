@@ -19,6 +19,25 @@ Remote View supplies desktop operation and the native viewer. Agent Browser inte
 
 Browser work must not depend on opening a dashboard, using a copied Remote View service or duplicate viewer, taking an extra Open desktop step, or issuing and renewing an additional Agent Browser viewer grant. Diagnostics should help explain a failure without becoming the normal task workflow.
 
+## Workstation operator authority
+
+The operator is in charge of their own workstation. Agent Browser must not
+refuse a valid operator-authorized request because of warnings, upgrade
+markers, stale diagnostic state, or concern about interrupting live work.
+Warnings are advisory and may present concrete remedial actions. They never
+become permission gates or requests for approval already given.
+
+On request, report what Agent Browser currently thinks is live, including
+uncertainty, so the operator can decide whether to upgrade. An observation
+neither grants nor withholds authority. Upgrade and drain marker files have
+no control-plane role and must not be created, consumed or required.
+
+Keep execution truthful: serialize competing writers, bind effects to the
+requested processes and resources, and report actual execution failures with
+observed effects and runnable remedies. These mechanics must not be presented
+as a policy veto over a valid operator request or expand authority to someone
+else's resources.
+
 ## Why agents choose it
 
 - Less plumbing: consistent launch, navigation, inspection, interaction and closure.

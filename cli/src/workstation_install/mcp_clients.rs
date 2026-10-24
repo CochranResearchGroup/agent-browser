@@ -460,7 +460,6 @@ mod tests {
             transaction_path: path.clone(),
             transaction,
             previous_selector: None,
-            admission_drain_path: fixture.root.join("drain.json"),
             runtime_handoffs: Vec::new(),
             dashboard_candidate: None,
         };
@@ -526,7 +525,6 @@ mod tests {
             transaction_path: transaction_path(&fixture.root, &transaction.transaction_id),
             transaction,
             previous_selector: Some("generations/old".into()),
-            admission_drain_path: fixture.root.join("drain.json"),
             runtime_handoffs: Vec::new(),
             dashboard_candidate: None,
         };
