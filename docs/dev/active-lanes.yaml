@@ -1,10 +1,10 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
-  - id: P280
+  - id: P281
     product_lane: PL-BUGFIX
     objective: Retire persistent upgrade client lockout
-    plan: docs/dev/plans/0280-2026-10-24-retire-client-upgrade-drain.md
+    plan: docs/dev/plans/0281-2026-10-24-retire-client-upgrade-drain.md
     branch: fix/retire-client-upgrade-drain
     target: main
     accountable_owner: ecochran76

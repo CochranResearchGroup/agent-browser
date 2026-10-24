@@ -1,6 +1,6 @@
 # Runbook
 
-[P280 upgrade client drain retirement](docs/dev/plans/0280-2026-10-24-retire-client-upgrade-drain.md) owns issue #394 under PL-BUGFIX.
+[P281 upgrade client drain retirement](docs/dev/plans/0281-2026-10-24-retire-client-upgrade-drain.md) owns issue #394 under PL-BUGFIX.
 Ordinary clients must ignore persistent installer drain metadata. Production
 marker mitigation passed disposable open and scoped close; the upgrade remains
 unaccepted. Source validation is in progress.
