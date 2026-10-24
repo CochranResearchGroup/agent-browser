@@ -2640,3 +2640,30 @@ fn owner_operation_retains_tasks_during_automatic_reaping() {
     assert!(result.expired_session_ids.is_empty());
     assert!(state.sessions.contains_key(&opened.session_id));
 }
+
+#[test]
+fn owner_mode_replacement_preserves_logical_task_and_handoff() {
+    let catalog=catalog_with_named_profile();
+    let mut state=BrowserSessionState::default();
+    let mut effects=FixtureEffects{browser_live:true,initial_tab:Some(BrowserTabAcquisition{tab_id:"original-tab".into(),target_id:"original-target".into(),source:BrowserTabSource::SessionInitial}),..FixtureEffects::default()};
+    let config=BrowserSessionManagerConfig{session_idle_timeout_ms:300_000,remote_view_desktops:vec![]};
+    let opened=BrowserSessionManager::new(&mut state,&catalog,&mut effects,config.clone()).open(OpenBrowserSession::exact_profile("owner","profile-a",1000)).unwrap();
+    BrowserSessionManager::new(&mut state,&catalog,&mut effects,config.clone()).navigate(&opened.session_id,"https://synthetic.test/",1001).unwrap();
+    let tab=state.sessions[&opened.session_id].current_tab_id.clone().unwrap();
+    agent_browser_service_model::retain_remote_view_tab_handoff(&mut state,"durable-original",&opened.session_id,&tab).unwrap();
+    let mut retained=serde_json::to_value(state).unwrap();
+    retained["profileOperationIds"]=serde_json::json!({"profile-a":"mode-one"});
+    let mut state:BrowserSessionState=serde_json::from_value(retained).unwrap();
+    let previous=state.clone();
+    let replacement=agent_browser_service_model::BrowserRecovery {
+        launch:BrowserLaunch{browser_id:opened.browser_id.clone(),pid:999,cdp_endpoint:String::new(),desktop:None,
+            process_identity:Some(agent_browser_service_model::RecordedProcessIdentity{pid:999,start_token:"boot:new".into(),executable_path:Some("/fixture/chrome".into()),browser_family:Some("chrome".into())})},
+        target_ids:BTreeMap::from([(tab.clone(),"native-window-new".into())]),
+    };
+    BrowserSessionManager::new(&mut state,&catalog,&mut effects,config).publish_owner_replacement(&opened.browser_id,"mode-one",replacement).unwrap();
+    assert_eq!(state.sessions,previous.sessions);
+    assert_eq!(state.remote_view_tab_handoffs,previous.remote_view_tab_handoffs);
+    assert_eq!(state.tabs[&tab].target_id,"native-window-new");
+    assert_eq!(state.browsers[&opened.browser_id].pid,999);
+    assert!(state.browsers[&opened.browser_id].cdp_endpoint.is_empty());
+}
