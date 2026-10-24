@@ -1,6 +1,6 @@
 # Retire global upgrade client lockout
 
-State: OPEN
+State: CLOSED
 Product lane: PL-BUGFIX
 Owner: ecochran76
 Work item: CochranResearchGroup/agent-browser#394
@@ -42,3 +42,14 @@ Prove native dispatch reaches its actual target checks instead of global drain
 rejection. Run focused consumer/action and installer contracts, fmt and strict
 workspace clippy. Update help, README, skill and installation docs. Verify
 production disposable open/close independently of source qualification.
+
+## Closeout
+
+[Acceptance](../notes/0281-2026-10-24-retire-client-upgrade-drain.md) records
+203 selected Rust passes, one explicit Native viewer fixture exclusion,
+strict Clippy/format, documentation checks, two real Chrome owner-exit cycles,
+full workstation fixture and independent zero-residue scans. PR397 owns source
+integration. The production marker mitigation passed ordinary MCP open/close;
+the original upgrade remains unaccepted and this source binary is unpublished.
+No sealed candidate is pinned here. Remove this clean primary through the
+worktree closeout helper after integration; preserve all foreign checkouts.

@@ -1,12 +1,13 @@
 # P281 upgrade client lockout retirement
 
 Product lane: PL-BUGFIX
-Disposition: active-input
+Disposition: accepted-evidence
 Owning plan or work item: P281 / CochranResearchGroup/agent-browser#394
 Related lanes: none
 Work item: CochranResearchGroup/agent-browser#394
 Pull request: https://github.com/CochranResearchGroup/agent-browser/pull/397
 Source checkpoint: 3d94bf152e27814101859e0425482b895e7a4c45
+Reconciled executable checkpoint: d58c08184567bbe3086ce97b241c09b2ee526c7d
 
 ## Reproduction and behavior
 
@@ -32,11 +33,32 @@ with both valid and malformed metadata, including across owner restarts.
 
 ## Validation boundaries
 
-The four focused repaired cases pass. Broader consumer/dispatch and installer
-checks and isolated real-browser continuity are pending final readback.
-Workspace strict Clippy, formatting, policy wiring, handoff documentation and
-the docs build pass. These are focused source gates, not comprehensive or
-cross-platform CI evidence. GitHub CI remains disabled.
+The four focused repaired cases pass. The surrounding consumer run passes
+107 cases with one explicit real Native viewer fixture ignored (648.09 seconds).
+That run began before the concurrent merge; its consumer module and fixture
+inputs are unchanged by that merge. Final merged-source checks pass 17 dispatch,
+24 owner-transfer, 51 adoption, one preserving-installer and three physical
+current-selection/recovery tests. These are focused source gates, not
+comprehensive or cross-platform CI evidence. GitHub CI remains disabled.
+
+Workspace strict Clippy, formatting, policy wiring, handoff documentation,
+changed local links and the merged docs build pass. Cargo runs use the safe
+admission wrapper with the compiler cache disabled after its identity probe
+stalled. The final source candidate uses the ordinary debug profile and is
+not production-promotable.
+
+The merged-source debug binary SHA-256 is
+`9a1951f9cd4654649d802b8ef442c7b154203ff100b99e184e2365179f57ae5f`.
+Its isolated real Chrome fixture passes both host-exit cycles (55 ms each),
+new disposable task opening/closure, and same-task continuation while valid
+then malformed legacy metadata remains present. The original browser PID,
+CDP websocket and occupied profile lock survive. Fixture cleanup and a fresh
+independent process scan both report zero owned residue. This is one binary
+with two sequential host generations, not workstation-wide or multi-binary
+failed-upgrade shutdown acceptance. The full workstation installer fixture passes, including ordinary profile
+admission with legacy metadata, failure injection and recovery. Its cleanup
+retires two owned hosts with zero residue; an independent OS scan also finds
+no process belonging to that exact fixture root.
 
 ## Operational mitigation
 
