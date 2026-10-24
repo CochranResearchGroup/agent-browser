@@ -109,10 +109,20 @@ fn owner_pid(file: &mut File) -> Result<Option<u32>, String> {
         .and_then(|value| Path::new(value).file_name())
         .and_then(|value| value.to_str());
     let arguments = observed.command_line.unwrap_or_default();
+    let mutation = arguments.iter().any(|arg| arg == "--apply")
+        || arguments.windows(2).any(|pair| {
+            (pair[0] == "transactions"
+                && matches!(pair[1].as_str(), "resume" | "rollback" | "close"))
+                || (pair[0] == "workstation"
+                    && matches!(
+                        pair[1].as_str(),
+                        "reconcile" | "recover" | "finalize" | "retain-generation"
+                    ))
+        });
     Ok((executable == Some("agent-browser")
         && arguments.iter().any(|arg| arg == "install")
-        && arguments.iter().any(|arg| arg == "--apply"))
-    .then_some(pid))
+        && mutation)
+        .then_some(pid))
 }
 
 impl Drop for WorkstationLock {

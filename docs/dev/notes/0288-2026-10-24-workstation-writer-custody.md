@@ -1,7 +1,7 @@
 # P288 writer custody TDD evidence
 
 Product lane: PL-BUGFIX
-Disposition: implementation-evidence
+Disposition: accepted-evidence
 Owning plan or work item: P288 / CochranResearchGroup/agent-browser#414
 Related lanes: P284, P283, P285
 
@@ -16,3 +16,5 @@ The implementation binds a logical writer claim to exact process-start identity 
 Slice 2 red: the same public fixture against slice1's owned CI binary exits1 because takeover sees `workstation_transaction_busy` while full-shutdown preview returns `ready_for_full_shutdown`. After adding that code to the inherited contention set, the same command against the rebuilt binary exits0. The fixture now also proves a competing isolated apply stops before candidate staging under a real exclusive filesystem writer. An initial systemctl-barrier harness attempt exited before its intended boundary; it is retained as a harness failure and is not red product evidence.
 
 Before final qualification, a third compatibility slice covers older PID-only writers running mutation commands without an apply flag. This remains the same custody seam and preserves serialization across the format transition.
+
+Slice 3 red: the public CLI fixture pauses `install transactions close` at its transaction-file read, then presents its older PID-only wire record. The command has no apply flag. The fixture exits1 because takeover fails to report its executing custody. The initial fixture ID lacked the required upgrade prefix and failed before the boundary; retain it separately as a harness failure. The final compatibility change recognizes existing mutating workstation/transaction verbs. Slice 3 green: the same public fixture against the final rebuilt CI binary exits0. It observes the actual guarded transaction under both new process-instance and older PID-only records, blocks a competing apply before staging under a held filesystem writer, reports shutdown contention, then completes takeover despite unrelated retained PID diagnostics.

@@ -8,6 +8,8 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
+  readlinkSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -181,6 +183,8 @@ const source = spawn(binary, ['session', 'supervisor', 'run-host'], {
 });
 let sourceOutput = '';
 let writer;
+let legacyWriter;
+let fifoWriter;
 
 source.stdout.on('data', (chunk) => { sourceOutput += chunk; });
 source.stderr.on('data', (chunk) => { sourceOutput += chunk; });
@@ -207,6 +211,52 @@ try {
   // Its retained diagnostics must not veto the operator's host transfer.
   const staleWriterPath = join(home, '.agent-browser/convergence/workstation.lock');
   mkdirSync(join(home, '.agent-browser/convergence'), { recursive: true });
+  writeFileSync(staleWriterPath, `${process.pid}\n`);
+  // A guarded public transaction command registers custody before reading
+  // its supplied transaction. Pause that OS read and present the older wire
+  // format to qualify cross-version exclusion without a private test API.
+  const legacyTransaction = join(home, '.agent-browser/runtime-adoption/transactions/upgrade-legacy-writer.json');
+  mkdirSync(join(home, '.agent-browser/runtime-adoption/transactions'), {recursive:true});
+  const fifo = spawnSync('mkfifo', [legacyTransaction], {encoding:'utf8'});
+  assert(fifo.status === 0, `fixture FIFO creation failed: ${fifo.stderr}`);
+  fifoWriter = spawn('python3', ['-c', `import os,sys
+fd=os.open(sys.argv[1],os.O_RDWR)
+print('fifo-ready',flush=True)
+sys.stdin.readline()
+os.write(fd,b'{}')
+os.close(fd)
+`, legacyTransaction], {stdio:['pipe','pipe','pipe']});
+  let fifoReady = false;
+  fifoWriter.stdout.on('data', chunk => { fifoReady ||= chunk.toString().includes('fifo-ready'); });
+  await waitFor(() => fifoReady || fifoWriter.exitCode !== null, 'transaction input boundary');
+  assert(fifoReady, 'fixture FIFO writer did not start');
+  let legacyOutput = '';
+  legacyWriter = spawn(binary, ['install', 'transactions', 'close',
+    '--transaction-id', 'upgrade-legacy-writer', '--expected-revision', '1',
+    '--candidate-generation', 'fixture', '--census-digest', 'none', '--json'],
+  {cwd:rootDir,env,stdio:['ignore','pipe','pipe']});
+  legacyWriter.stdout.on('data', chunk => { legacyOutput += chunk; });
+  legacyWriter.stderr.on('data', chunk => { legacyOutput += chunk; });
+  await waitFor(() => legacyWriter.exitCode !== null || (() => {
+    try {
+      return readdirSync(`/proc/${legacyWriter.pid}/fd`).some(fd =>
+        readlinkSync(`/proc/${legacyWriter.pid}/fd/${fd}`) === legacyTransaction);
+    } catch { return false; }
+  })(), 'executing transaction writer');
+  assert(legacyWriter.exitCode === null, `transaction exited before input boundary: ${legacyOutput}`);
+  // The open descriptor is the synchronization boundary; remove the pathname
+  // so unrelated diagnostic inventory cannot wait on the prepared FIFO.
+  rmSync(legacyTransaction);
+  const claimedBusy = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
+  assert(claimedBusy.blockers.some(blocker => blocker.code === 'workstation_transaction_busy'),
+    'an executing transaction must retain its process-instance custody between physical locks');
+  writeFileSync(staleWriterPath, `${legacyWriter.pid}\n`);
+  const legacyBusy = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
+  assert(legacyBusy.blockers.some(blocker => blocker.code === 'workstation_transaction_busy'),
+    'an executing legacy transaction without an apply flag must retain custody');
+  fifoWriter.stdin.end('release\n');
+  await waitFor(() => legacyWriter.exitCode !== null, 'legacy transaction completion');
+  assert(legacyWriter.exitCode !== 0, 'the deliberately invalid transaction must not mutate state');
   writeFileSync(staleWriterPath, `${process.pid}\n`);
   // Pause a real filesystem writer in the short claim-publication critical
   // section. Mock only the OS boundary; observe contention through public CLI.
@@ -275,6 +325,15 @@ with open(sys.argv[1], 'r+') as claim:
   const supervisorOutput = existsSync(systemctlLog) ? readFileSync(systemctlLog, 'utf8') : '';
   throw new Error(`${error.message}\nsource output:\n${sourceOutput}\nsupervisor output:\n${supervisorOutput}`);
 } finally {
+  if (fifoWriter && fifoWriter.exitCode === null) fifoWriter.stdin.end('release\n');
+  if (legacyWriter && legacyWriter.exitCode === null) {
+    await waitFor(() => legacyWriter.exitCode !== null, 'legacy fixture writer cleanup').catch(() => {});
+    if (legacyWriter.exitCode === null) legacyWriter.kill('SIGTERM');
+  }
+  if (fifoWriter && fifoWriter.exitCode === null) {
+    await waitFor(() => fifoWriter.exitCode !== null, 'FIFO fixture cleanup').catch(() => {});
+    if (fifoWriter.exitCode === null) fifoWriter.kill('SIGTERM');
+  }
   if (writer && writer.exitCode === null) {
     writer.stdin.end('release\n');
     await waitFor(() => writer.exitCode !== null, 'fixture writer cleanup').catch(() => {});
