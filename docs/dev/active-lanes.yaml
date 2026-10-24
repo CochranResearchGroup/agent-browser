@@ -17,6 +17,23 @@ lanes:
     limitations: ["Production-shaped publication pending after P284 reconciliation", "No stale-data substitution, provider/ingress change or private-account activity", "Cold shell tail remains distinct"]
     updated_at: 2026-10-24
 
+  - id: P284
+    product_lane: PL-PLATFORM
+    objective: Remove upgrade markers and make operator warnings advisory
+    plan: docs/dev/plans/0284-2026-10-24-operator-led-upgrades.md
+    branch: platform/operator-led-upgrades
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#399]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [P281, P282]
+    overlaps: [P280, P282]
+    reconciled_overlaps: ["Own marker retirement and advisory operator contract; retain P282 selected-dashboard proof and P280 static delivery; preserve all foreign checkouts"]
+    validation_status: Combined222 workstation cases, focused regressions, strict Rust gates, docs and exact417d5886c68e installer, supervisor and Chrome fixtures pass
+    limitations: ["Installed publication pending", "CI disabled; no formal release or cross-platform claim"]
+    updated_at: 2026-10-24
+
   - id: P282
     product_lane: PL-BUGFIX
     objective: Repair recovery proof across dashboard builds

@@ -773,9 +773,6 @@ fn accepted_workstation_selected_executable() -> Option<PathBuf> {
 }
 
 fn workstation_status_authorizes_supervisor_rebind(status: &Value) -> bool {
-    if status.get("admissionDraining").and_then(Value::as_bool) == Some(true) {
-        return false;
-    }
     let accepted = status.get("ready").and_then(Value::as_bool) == Some(true)
         && status
             .pointer("/readiness/runtimeConvergenceReady")
@@ -1542,19 +1539,17 @@ mod tests {
     fn accepted_converged_workstation_authorizes_selected_manifest_rebinding() {
         let ready = json!({
             "ready": true,
-            "admissionDraining": false,
             "readiness": {"runtimeConvergenceReady": true}
         });
         assert!(workstation_status_authorizes_supervisor_rebind(&ready));
 
         let mut draining = ready.clone();
         draining["admissionDraining"] = json!(true);
-        assert!(!workstation_status_authorizes_supervisor_rebind(&draining));
+        assert!(workstation_status_authorizes_supervisor_rebind(&draining));
 
         let preserved = json!({
             "ready": false,
             "selectedGenerationId": "generation-old",
-            "admissionDraining": false,
             "readiness": {
                 "payloadReady": true,
                 "selectedGenerationReady": true,

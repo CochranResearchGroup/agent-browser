@@ -246,7 +246,7 @@
     },
     {
       "path": "docs/dev/policies/0054-browser-product-contract.md",
-      "sha256": "f98141d041cde0284851ffc2519fbd5f162abc9a877b2463b759bbceb575717e"
+      "sha256": "f398d4bc0c5bfd6be9d064a4e19b460ac9e3371bed8ceeb1a3d35cbb83c0a6a5"
     }
   ],
   "profiles": [
@@ -393,7 +393,7 @@
         },
         {
           "path": "docs/dev/policies/0054-browser-product-contract.md",
-          "sha256": "f98141d041cde0284851ffc2519fbd5f162abc9a877b2463b759bbceb575717e",
+          "sha256": "f398d4bc0c5bfd6be9d064a4e19b460ac9e3371bed8ceeb1a3d35cbb83c0a6a5",
           "sections": [
             {
               "heading_path": [
@@ -571,7 +571,7 @@
           {
             "id": "agent-browser-documentation.product-value",
             "kind": "required_gate",
-            "statement": "Every substantive product change must improve a concrete browser workflow with less effort or fewer failures. Support task-appropriate existing, managed persistent or disposable profiles; Remote View owns the native desktop/viewer. Human handoff and continued automation must not require a dashboard, duplicate viewer or additional viewer-grant ceremony. Keep current gaps distinct from the product direction.",
+            "statement": "Every substantive product change must improve a concrete browser workflow with less effort or fewer failures. Support task-appropriate existing, managed persistent or disposable profiles; Remote View owns the native desktop/viewer. Human handoff and continued automation must not require a dashboard, duplicate viewer or additional viewer-grant ceremony. Keep current gaps distinct from the product direction. The workstation operator controls valid requests; warnings and live-work observations are advisory. Upgrade marker files must not be created, consumed or required.",
             "citations": [
               {
                 "path": "docs/dev/policies/0054-browser-product-contract.md",
@@ -742,7 +742,7 @@
         },
         {
           "path": "docs/dev/policies/0054-browser-product-contract.md",
-          "sha256": "f98141d041cde0284851ffc2519fbd5f162abc9a877b2463b759bbceb575717e",
+          "sha256": "f398d4bc0c5bfd6be9d064a4e19b460ac9e3371bed8ceeb1a3d35cbb83c0a6a5",
           "sections": [
             {
               "heading_path": [
@@ -941,7 +941,7 @@
           {
             "id": "agent-browser-implementation.product-value",
             "kind": "required_gate",
-            "statement": "Every substantive product change must improve a concrete browser workflow with less effort or fewer failures. Support task-appropriate existing, managed persistent or disposable profiles; Remote View owns the native desktop/viewer. Human handoff and continued automation must not require a dashboard, duplicate viewer or additional viewer-grant ceremony. Keep current gaps distinct from the product direction.",
+            "statement": "Every substantive product change must improve a concrete browser workflow with less effort or fewer failures. Support task-appropriate existing, managed persistent or disposable profiles; Remote View owns the native desktop/viewer. Human handoff and continued automation must not require a dashboard, duplicate viewer or additional viewer-grant ceremony. Keep current gaps distinct from the product direction. The workstation operator controls valid requests; warnings and live-work observations are advisory. Upgrade marker files must not be created, consumed or required.",
             "citations": [
               {
                 "path": "docs/dev/policies/0054-browser-product-contract.md",
@@ -1099,7 +1099,7 @@
         },
         {
           "path": "docs/dev/policies/0054-browser-product-contract.md",
-          "sha256": "f98141d041cde0284851ffc2519fbd5f162abc9a877b2463b759bbceb575717e",
+          "sha256": "f398d4bc0c5bfd6be9d064a4e19b460ac9e3371bed8ceeb1a3d35cbb83c0a6a5",
           "sections": [
             {
               "heading_path": [
@@ -1277,7 +1277,7 @@
           {
             "id": "agent-browser-planning.product-value",
             "kind": "required_gate",
-            "statement": "Every substantive product change must improve a concrete browser workflow with less effort or fewer failures. Support task-appropriate existing, managed persistent or disposable profiles; Remote View owns the native desktop/viewer. Human handoff and continued automation must not require a dashboard, duplicate viewer or additional viewer-grant ceremony. Keep current gaps distinct from the product direction.",
+            "statement": "Every substantive product change must improve a concrete browser workflow with less effort or fewer failures. Support task-appropriate existing, managed persistent or disposable profiles; Remote View owns the native desktop/viewer. Human handoff and continued automation must not require a dashboard, duplicate viewer or additional viewer-grant ceremony. Keep current gaps distinct from the product direction. The workstation operator controls valid requests; warnings and live-work observations are advisory. Upgrade marker files must not be created, consumed or required.",
             "citations": [
               {
                 "path": "docs/dev/policies/0054-browser-product-contract.md",
@@ -1447,7 +1447,7 @@
         },
         {
           "path": "docs/dev/policies/0054-browser-product-contract.md",
-          "sha256": "f98141d041cde0284851ffc2519fbd5f162abc9a877b2463b759bbceb575717e",
+          "sha256": "f398d4bc0c5bfd6be9d064a4e19b460ac9e3371bed8ceeb1a3d35cbb83c0a6a5",
           "sections": [
             {
               "heading_path": [
@@ -1664,7 +1664,7 @@
           {
             "id": "agent-browser-runtime.product-value",
             "kind": "required_gate",
-            "statement": "Every substantive product change must improve a concrete browser workflow with less effort or fewer failures. Support task-appropriate existing, managed persistent or disposable profiles; Remote View owns the native desktop/viewer. Human handoff and continued automation must not require a dashboard, duplicate viewer or additional viewer-grant ceremony. Keep current gaps distinct from the product direction.",
+            "statement": "Every substantive product change must improve a concrete browser workflow with less effort or fewer failures. Support task-appropriate existing, managed persistent or disposable profiles; Remote View owns the native desktop/viewer. Human handoff and continued automation must not require a dashboard, duplicate viewer or additional viewer-grant ceremony. Keep current gaps distinct from the product direction. The workstation operator controls valid requests; warnings and live-work observations are advisory. Upgrade marker files must not be created, consumed or required.",
             "citations": [
               {
                 "path": "docs/dev/policies/0054-browser-product-contract.md",

@@ -43,7 +43,6 @@ fn generation_gc_preserves_latest_terminal_rollback_readiness_without_pinning_ol
             &paths,
             Some("selected"),
             Some(&latest),
-            false,
             &serde_json::json!({}),
         )["rollbackReady"]
             .clone()

@@ -58,6 +58,28 @@ installCommandShim('sudo');
 
 try {
   assertWorkstationInterface();
+  const beforeLive = liveStateManifest();
+  const live = runInstaller(installRoot, ['live', '--json']);
+  assert.equal(live.status, 0, live.stderr);
+  const observation = assertJsonSuccess(live.stdout, 'live observation');
+  assert.equal(observation.advisory, true);
+  assert.equal(observation.operatorControlsUpgrade, true);
+  assert.equal(typeof observation.complete, 'boolean');
+  assert.deepEqual(liveStateManifest(), beforeLive,
+    'live-work observation must not mutate persisted runtime state or launch a browser');
+  const pendingState = join(home, '.agent-browser/service/state.json.transaction.json');
+  mkdirSync(dirname(pendingState), { recursive: true });
+  writeFileSync(pendingState, 'retained pending transaction');
+  const beforePending = liveStateManifest();
+  const pendingObservation = runInstaller(installRoot, ['live', '--json']);
+  assert.equal(pendingObservation.status, 0, pendingObservation.stderr);
+  const unavailable = assertJsonSuccess(pendingObservation.stdout, 'pending state observation');
+  assert.equal(unavailable.available, false);
+  assert.equal(unavailable.runtimes, null);
+  assert.match(unavailable.warnings[0].message, /runtime_observation_pending_service_state_transaction/);
+  assert.deepEqual(liveStateManifest(), beforePending,
+    'observation must leave pending state recovery to an explicit request');
+  rmSync(pendingState);
   const beforeDryRun = treeManifest(fixtureRoot, ignoredFixturePaths());
   const dryRun = runInstaller(installRoot, ['--dry-run', '--json']);
   assert.equal(
@@ -190,7 +212,8 @@ try {
     transactionStatusPayload.latestTransaction.state,
     'accepted',
   );
-  assert.equal(transactionStatusPayload.admissionDraining, false);
+  assert.equal(Object.hasOwn(transactionStatusPayload, 'admissionDraining'), false,
+    'upgrade status must not expose an admission marker as authority');
   assert.equal(transactionStatusPayload.selectedGenerationId, generationIds[0]);
   assert.deepEqual(transactionStatusPayload.readiness, {
     payloadReady: true,
@@ -244,6 +267,8 @@ try {
     0,
     'the installed agent-browser payload must be executable',
   );
+  assert.equal(existsSync(join(installRoot, '.agent-browser/runtime-adoption/admission-drain.json')), false,
+    'installation must not create an upgrade marker');
   const admissionRoot = join(home, '.agent-browser', 'runtime-adoption');
   mkdirSync(admissionRoot, { recursive: true });
   writeFileSync(
@@ -977,24 +1002,34 @@ try {
   );
   mkdirSync(dirname(staleDrainPath), { recursive: true });
   writeFileSync(staleDrainPath, '{}');
-  const drainBlockedApply = runInstaller(drainBlockedRoot, ['--apply', '--json']);
-  assert.notEqual(drainBlockedApply.status, 0);
-  assert.match(
-    `${drainBlockedApply.stdout}${drainBlockedApply.stderr}`,
-    /prior workstation transaction did not converge automatically: Prior runtime admission drain is invalid/,
-  );
-  assert.equal(
-    existsSync(join(drainBlockedRoot, '.local', 'lib', 'agent-browser', 'generations')),
-    false,
-    'an existing admission drain must block before candidate staging',
-  );
-  assert.equal(
-    existsSync(
-      join(drainBlockedRoot, '.agent-browser', 'runtime-adoption', 'transactions'),
-    ),
-    false,
-    'an invalid prior drain must not cause a second install transaction',
-  );
+  const legacyMarkerApply = runInstaller(drainBlockedRoot, ['--apply', '--json']);
+  assert.equal(legacyMarkerApply.status, 0, legacyMarkerApply.stderr);
+  assertJsonSuccess(legacyMarkerApply.stdout, 'legacy-marker apply');
+  assertTransactionTerminal(join(drainBlockedRoot, '.agent-browser/runtime-adoption/transactions'), 'accepted');
+  assert.equal(readFileSync(staleDrainPath, 'utf8'), '{}',
+    'a malformed legacy marker must neither block nor be rewritten');
+  assert.ok(existsSync(join(drainBlockedRoot, '.local', 'lib', 'agent-browser', 'generations')));
+  for (const shape of ['valid', 'directory']) {
+    rmSync(staleDrainPath, { recursive: true, force: true });
+    if (shape === 'valid') {
+      writeFileSync(staleDrainPath, JSON.stringify({
+        schemaVersion: 'agent-browser.runtime-adoption.v1',
+        transactionId: 'unrelated-retained-upgrade', candidateGenerationId: 'old',
+        transactionRevision: 999, recordedAt: '2026-01-01T00:00:00Z',
+      }));
+    } else {
+      mkdirSync(staleDrainPath);
+      writeFileSync(join(staleDrainPath, 'sentinel'), 'preserve');
+    }
+    const beforeMarker = shape === 'valid' ? readFileSync(staleDrainPath, 'utf8') : treeManifest(staleDrainPath);
+    const reapplied = runInstaller(drainBlockedRoot, ['--apply', '--json']);
+    assert.equal(reapplied.status, 0, `${shape} legacy marker: ${reapplied.stderr}`);
+    assertJsonSuccess(reapplied.stdout, `${shape} legacy-marker reapply`);
+    assertTransactionTerminal(join(drainBlockedRoot, '.agent-browser/runtime-adoption/transactions'), 'accepted');
+    assert.deepEqual(shape === 'valid' ? readFileSync(staleDrainPath, 'utf8') : treeManifest(staleDrainPath), beforeMarker,
+      'legacy metadata must remain untouched');
+  }
+
 
   const lockDir = join(lockedInstallRoot, '.agent-browser', 'convergence');
   mkdirSync(lockDir, { recursive: true });
@@ -1299,6 +1334,21 @@ function assertTransactionTerminal(transactionStore, expectedState) {
       transactions[0].payload.checkpoints.length > 0,
     'latest transaction must retain checkpoint history',
   );
+}
+
+// Synchronization files may be initialized and hold owner diagnostics during reads.
+// Every persisted runtime record and its bytes remain checked.
+function liveStateManifest() {
+  const coordination = new Set(['home/.agent-browser/runtime-host-ingress.json.lock', 'home/.agent-browser/service/state.json.lock']);
+  return treeManifest(fixtureRoot, ignoredFixturePaths()).filter((entry) => {
+    if (coordination.has(entry.path)) {
+      assert.equal(entry.type, 'file');
+      assert.ok(readFileSync(join(fixtureRoot, entry.path)).length <= 4096,
+        'coordination metadata must remain bounded');
+      return false;
+    }
+    return !['home/.agent-browser', 'home/.agent-browser/service'].includes(entry.path);
+  });
 }
 
 function ignoredFixturePaths() {

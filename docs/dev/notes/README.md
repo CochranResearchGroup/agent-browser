@@ -2,6 +2,8 @@
 
 [P285 inventory latency](0285-2026-10-24-workspace-inventory-latency.md): generation dashboard bypasses diagnostic fallback; empty/one-browser reads measured in milliseconds; installed acceptance remains separate.
 
+[P284 operator-led upgrades](0284-2026-10-24-operator-led-upgrades.md): retire upgrade marker producers and recovery vetoes; optional advisory live-work inspection and operator authority. Source and exact-candidate qualification pass; installed publication is pending.
+
 [P282 recovery manifest identity](0282-2026-10-24-recovery-dashboard-manifest.md): differing-assets red-green, five proof cases and accepted combined production deployment; public workflow, timing and preservation limits recorded.
 
 [P281 upgrade client lockout retirement](0281-2026-10-24-retire-client-upgrade-drain.md): nonblocking client repair qualified by selected Rust, real-browser and installer fixtures; integrated repair installed in the accepted combined generation.

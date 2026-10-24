@@ -5857,13 +5857,13 @@ Its temporary candidate session is scoped to the upgrade transaction, so a
 retry cannot reuse a candidate daemon left by an earlier failed transaction.
 A committed or finalized runtime handoff is forward-only. Transaction inspect
 then advertises resume and refuses rollback; later candidate deployment
-readiness failure retains the candidate and admission drain for exact guarded
+readiness failure retains the candidate and durable receipts for exact guarded
 resume rather than routing through workstation recover.
 If service projection metadata omits the runtime-profile name, orphan adoption
 recovers it only from one runtime-state record with the same exact process
 identity and DevTools browser endpoint; zero or multiple matches fail closed.
 Any conversion failure restores the original files and selector. It
-installs host prerequisites before admission drain or ownership transfer,
+installs host prerequisites before ownership transfer,
 transfers cooperative and verified orphan runtimes through receipt-bearing
 owner generations. The same atomic service-state transaction commits effect
 authority to ~/.agent-browser/service/runtime-owner-registry.json. New
@@ -5892,11 +5892,15 @@ seven-axis readiness projection without private paths or endpoint evidence.
 currentSelectionEvidence reports whether a later selected Linux installation
 proves its payload, dashboard and live host identity despite unrelated failed
 upgrade history. Active and uncertain transactions remain blocking.
-Before a new apply creates another candidate transaction, it reads any existing
-admission drain and automatically resumes or recovers that exact owning
-transaction. It never selects the prior transaction by file recency. Changed,
-ambiguous, or unsupported evidence stops the install with the exact blocker and
-leaves the recorded transaction available for inspection and explicit recovery.
+The workstation operator decides whether to upgrade. Run install workstation
+live --json for a read-only observation of what Agent Browser currently thinks
+is live. Incomplete observations and interruption warnings are advisory, with
+remedial actions; they never veto a valid operator request. Apply does not
+require a prior observation or acknowledgement. Upgrade/drain marker files are
+never created, parsed or required. New apply does not auto-resume a historical
+operation based on a marker. Inspect and explicitly select a durable transaction
+to resume or recover it. Actual process targeting and transaction serialization
+remain execution mechanics, rather than permission authority.
 Every workstation dry-run includes serviceStateMigrationPreview. It reads
 Service State without writing and reports exact changed IDs by record class,
 candidate-led browser contamination, preserved unknown fields, recovery-artifact
@@ -5946,23 +5950,17 @@ Fresh and isolated installs do not require a retained
 presentation handoff. A structured
 handoff never falls back to a stale session label when current owner evidence
 is absent.
-Pass --force-browserless-upgrade only after intentionally closing managed
-browsers. Two adjacent runtime census rounds must each prove that no
-cooperative, adoptable, conflicting, or insufficiently identified owned browser
-remains. External or manual-preservation process churn stays preserved and does
-not block the browserless install. The transaction records both-round census
-evidence and its browserless validation reason. Ambiguous or live-owned runtimes
-still block.
-Use --runtime-replacement-policy full-shutdown when cooperative handoff cannot
-produce one coherent runtime. Dry-run returns an exact replacement plan and
-digest without mutation. Apply additionally requires that digest through
---expected-runtime-replacement-plan-digest. The reviewed plan closes only its
-named managed sessions, preserves their profile directories and stored
-credentials, proves a browserless census, retires only the recorded source
-process identity, and starts the candidate generation. Live tabs and
-in-memory session state end. Once the first close effect is receipted, recovery
-is forward-only and guarded rollback is unavailable. The default preserve
-policy retains the cooperative continuity path.
+The legacy --force-browserless-upgrade flag remains accepted for compatibility.
+It records the operator's choice; live work and uncertain observations are
+advisory and do not veto the upgrade. Inspect optional live-work observations
+with install workstation live --json.
+Choose --runtime-replacement-policy full-shutdown to end owned runtime sessions
+while preserving profiles and credentials. Dry-run inspection and the
+--expected-runtime-replacement-plan-digest target pin are optional. The operator
+explicitly chooses this policy; warnings do not choose it. Exact recorded
+process targets are checked before effects. Live tabs and in-memory state end.
+After a close receipt, recovery moves forward through the recorded transaction.
+The default preserve policy retains cooperative continuity.
 Real-host apply starts a shadow candidate dashboard on the second port after
 ingress. The shadow stays backend-only while all old-generation cooperative
 lanes complete handoff prepare. A no-browser stream-status bootstrap starts the
@@ -6091,17 +6089,17 @@ Options:
   --apply              Materialize the installed workstation payload
   --progress-json      Emit incremental observations on stderr; requires --apply --json
   --force-browserless-upgrade
-                       Bypass stale presentation history only when a stable census proves no owned live browser remains
+                       Legacy operator-choice flag; runtime observations remain advisory
   --runtime-replacement-policy <preserve|full-shutdown>
-                       Preserve live runtime continuity by default, or review an exact managed-runtime shutdown plan
+                       Preserve live runtime continuity by default, or explicitly close owned runtime sessions
   --expected-runtime-replacement-plan-digest <sha256>
-                       Required on full-shutdown apply; must equal the current dry-run plan digest
+                       Optional full-shutdown target pin; if supplied, must equal the current observed plan digest
   --dashboard-port <port>
                        Set the workstation dashboard port (default: 4848)
   --guacamole-port <port>
                        Set the loopback Guacamole port (default: 8092)
   --transaction-id <id>
-                       Acknowledge the exact operator-recovery transaction that owns admission
+                       Select the exact durable transaction to inspect or recover
   --expected-revision <revision>
                        Compare-and-swap revision required for install transaction mutations
   --candidate-generation <generation>
@@ -6123,7 +6121,8 @@ Examples:
   agent-browser install workstation --apply --force-browserless-upgrade --json
   agent-browser install workstation --dry-run --runtime-replacement-policy full-shutdown --json
   agent-browser install workstation --apply --runtime-replacement-policy full-shutdown --expected-runtime-replacement-plan-digest <sha256> --json
-  agent-browser install workstation status --json
+  agent-browser install workstation live --json  # Advisory live-work observation
+agent-browser install workstation status --json
   agent-browser install workstation recover --transaction-id upgrade-... --json
   agent-browser install workstation finalize --json
   agent-browser install workstation gc --dry-run --json
@@ -7888,7 +7887,7 @@ Sessions:
   session supervisor install Install one named lane under the Linux runtime host
   session supervisor status  Report shared host and lane-port readiness
   session supervisor recover-host
-                             Transfer a proven browserless host into supervisor custody
+                             Transfer the selected host into supervisor custody
   session supervisor remove  Close and remove only one named runtime lane
 
 Chat (AI):
@@ -8102,9 +8101,9 @@ Configuration:
   protection across host restart. Use `--leave-open false close` to end the task.
   After a graceful runtime-host stop, the next command on the same session and
   profile reattaches its retained browser.
-  Legacy upgrade admission markers do not block ordinary task opening,
-  navigation, continuation or closure. Installer recovery status is diagnostic;
-  per-browser ownership and profile fences still apply.
+  Upgrade/drain markers have no control-plane role and are never created.
+  Warnings are advisory; valid operator requests proceed. Use install workstation
+  live --json to inspect current live-work observations before deciding to upgrade.
   Set `preferences.defaultViewport` to a WIDTHxHEIGHT value such as 960x640
   to resize the browser content area after launch and before the command runs.
   Set `service.reconcileIntervalMs` or pass `--service-reconcile-interval`
