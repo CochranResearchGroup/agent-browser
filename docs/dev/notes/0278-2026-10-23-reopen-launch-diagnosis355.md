@@ -64,7 +64,7 @@ private phase boundary tests passed, journal13passed and output40passed. These
 are overlapping affected selections, not a full suite. Workspace strict Clippy,
 format,33focused Node checks,2Python profile guards, provider generation shape
 checks, Python compile, policy/planning/link checks and documentation webpack
-build pass. Initial sccache version-query stall was ended only in its owned
+build pass. The global active-lane audit remains non-green for existing catalog metadata/state drift; its raw report is retained and is not claimed as a passing gate. The closed P278 packet is tracked by its plan, PR, refs and governed closeout rather than adding another permanent active row. Initial sccache version-query stall was ended only in its owned
 Cargo scope and retried cache-disabled. Intermediate fixture failures are kept.
 
 Independent OS/resource readback finds no owned probe or Native processes,
