@@ -78,6 +78,7 @@ def main():
         cookie_after_close = threading.Event()
         cookie_restored = threading.Event()
         get_requests = []
+        native_page=threading.Event(); native_mouse=threading.Event(); native_scroll=threading.Event(); native_auth=threading.Event()
         def spawn(command, **kwargs):
             child = subprocess.Popen(command, env=env, start_new_session=True, **kwargs)
             children.append(child)
@@ -116,6 +117,16 @@ def main():
             def log_message(self, *_):
                 pass
             def do_GET(self):
+                if self.path in ['/native-login','/mouse-proof','/scroll-proof','/auth-check']:
+                    if self.path=='/mouse-proof':native_mouse.set()
+                    if self.path=='/scroll-proof':native_scroll.set()
+                    if self.path=='/auth-check' and 'native_auth=verified' in self.headers.get('Cookie',''):native_auth.set()
+                    self.send_response(200);self.send_header('Content-Type','text/html');self.end_headers()
+                    if self.path=='/native-login':
+                        self.wfile.write(b"<!doctype html><title>Native login</title><body style='height:3000px'><form method='POST' action='/native-submit'><input name='proof'><button>Sign in</button></form><script>document.addEventListener('click',()=>fetch('/mouse-proof'));window.addEventListener('scroll',()=>fetch('/scroll-proof'))</script></body>")
+                        native_page.set()
+                    else:self.wfile.write(b'<!doctype html><title>Native proof</title>Observed')
+                    return
                 if self.path not in ['/login-fixture', '/cookie-check']:
                     self.send_response(404)
                     self.end_headers()
@@ -135,6 +146,10 @@ def main():
                 self.end_headers()
                 self.wfile.write(b"<!doctype html><title>Manual login fixture</title><script>fetch('/cookie-check')</script>")
             def do_POST(self):
+                if self.path=='/native-submit':
+                    proof=self.rfile.read(int(self.headers['Content-Length']))
+                    assert proof==b'proof=synthetic-proof', 'synthetic form submission independently verified'
+                    self.send_response(303);self.send_header('Set-Cookie','native_auth=verified; Max-Age=3600; Path=/; HttpOnly; SameSite=Lax');self.send_header('Location','/auth-check');self.end_headers();return
                 body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 if self.path.startswith('/v1/agent-desktop/'):
                     operation=self.path.rsplit('/',1)[1]
@@ -155,6 +170,11 @@ def main():
                                 if action['kind']=='key': result=run(['xdotool','key','--clearmodifiers',action['chord']])
                                 elif action['kind']=='text': result=run(['xdotool','type','--clearmodifiers','--delay','0','--',action['text']])
                                 elif action['kind']=='move': result=run(['xdotool','mousemove',str(action['x']),str(action['y'])])
+                                elif action['kind'] in ['click','scroll']:
+                                    result=run(['xdotool','mousemove',str(action['x']),str(action['y'])]);assert result.returncode==0
+                                    button=action['button'] if action['kind']=='click' else (4 if action['direction']=='up' else 5)
+                                    count=action['count'] if action['kind']=='click' else action['steps']
+                                    result=run(['xdotool','click','--repeat',str(count),'--delay','60',str(button)])
                                 else: raise AssertionError('unsupported synthetic input')
                                 assert result.returncode==0,result.stderr
                         elif operation=='capture_region':
@@ -294,6 +314,13 @@ def main():
                 assert cookie_restored.wait(10),'native navigation independently delivers preserved cookie'
                 captured=rpc('tools/call',dict(name='browser_command',arguments=dict(taskId=task['taskId'],action='native_capture',params={})))
                 assert any(block.get('type')=='image' and block.get('mimeType')=='image/png' for block in captured.get('content',[])), 'native screenshot must be agent-visible image content'
+                call('browser_command',dict(taskId=task['taskId'],action='native_input',params=dict(actions=[dict(kind='key',chord='ctrl+l'),dict(kind='text',text=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/native-login'),dict(kind='key',chord='Return')])))
+                assert native_page.wait(5),'native login page served'
+                time.sleep(.3)
+                call('browser_command',dict(taskId=task['taskId'],action='native_input',params=dict(actions=[dict(kind='click',x=500,y=500,button=1,count=1),dict(kind='scroll',x=500,y=500,direction='down',steps=3)])))
+                assert native_mouse.wait(5) and native_scroll.wait(5),'independently observed native click and scroll effects'
+                call('browser_command',dict(taskId=task['taskId'],action='native_input',params=dict(actions=[dict(kind='key',chord='ctrl+Home'),dict(kind='key',chord='Tab'),dict(kind='text',text='synthetic-proof'),dict(kind='key',chord='Return')])))
+                assert native_auth.wait(5),'native form login independently authenticated'
                 back=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-back',mode='cdp',choice='relaunch')))
                 for _ in range(30):
                     if back['phase']=='completed': break
@@ -306,6 +333,9 @@ def main():
                 assert final_link['handoffUrl']==original[3], 'same durable handoff'
                 call('browser_navigate',dict(taskId=task['taskId'],url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/login-fixture'))
                 assert cookie_restored.is_set()
+                native_auth.clear()
+                call('browser_navigate',dict(taskId=task['taskId'],url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/auth-check'))
+                assert native_auth.wait(5),'native login continuity after CDP return'
                 call('browser_close',dict(taskId=task['taskId']))
                 task=None
             else:
