@@ -1,7 +1,8 @@
 # Advanced CLI and service reference
 
-Only an executing workstation writer delays a conflicting change. Stale PID
-diagnostics do not establish writer custody or veto a valid request.
+Only an executing workstation writer delays a conflicting change. Renaming or
+unlinking its executable does not release that custody. Stale PID diagnostics
+do not establish writer custody or veto a valid request.
 
 The workstation operator decides whether to upgrade. Warnings about live work
 or incomplete observations are advisory and can suggest remedies; they never

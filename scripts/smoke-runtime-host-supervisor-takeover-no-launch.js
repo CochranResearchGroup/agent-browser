@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import {
   chmodSync,
   closeSync,
+  copyFileSync,
   openSync,
   existsSync,
   mkdtempSync,
@@ -232,7 +233,9 @@ os.close(fd)
   await waitFor(() => fifoReady || fifoWriter.exitCode !== null, 'transaction input boundary');
   assert(fifoReady, 'fixture FIFO writer did not start');
   let legacyOutput = '';
-  legacyWriter = spawn(binary, ['install', 'transactions', 'close',
+  const writerExecutable = join(fixtureRoot, 'agent-browser');
+  copyFileSync(binary, writerExecutable);
+  legacyWriter = spawn(writerExecutable, ['install', 'transactions', 'close',
     '--transaction-id', 'upgrade-legacy-writer', '--expected-revision', '1',
     '--candidate-generation', 'fixture', '--census-digest', 'none', '--json'],
   {cwd:rootDir,env,stdio:['ignore','pipe','pipe']});
@@ -251,6 +254,12 @@ os.close(fd)
   const busy = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
   assert(busy.blockers.some(blocker => blocker.code === 'workstation_transaction_busy'),
     'an executing writer must exclude takeover effects');
+  // Removing an executable does not stop its process or release writer custody.
+  // Unlink only this fixture's copy, preserving the selected validation binary.
+  rmSync(writerExecutable);
+  const unlinkedBusy = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
+  assert(unlinkedBusy.blockers.some(blocker => blocker.code === 'workstation_transaction_busy'),
+    'an executing writer must retain custody after its executable is unlinked');
   const competing = spawnSync(binary, ['install', 'workstation', '--apply', '--json'], {
     cwd:rootDir, env:{...env, AGENT_BROWSER_WORKSTATION_ROOT:home}, encoding:'utf8',
   });

@@ -1,5 +1,7 @@
 # Active plan index
 
+[P290 writer executable continuity](0290-2026-10-24-writer-executable-continuity.md), #417, owns the PR415 live-writer unlink regression under PL-BUGFIX.
+
 [P288 writer custody](0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. PR415 carries the qualified source;221 workstation cases, strict Rust, fixtures and docs pass. Installed production is unchanged.
 
 [P285 inventory latency](0285-2026-10-24-workspace-inventory-latency.md), #393, owns the measured workspace-read repair under PL-BUGFIX.

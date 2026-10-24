@@ -1,6 +1,23 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P290
+    product_lane: PL-BUGFIX
+    objective: Preserve executing writer custody after executable unlink
+    plan: docs/dev/plans/0290-2026-10-24-writer-executable-continuity.md
+    branch: fix/writer-executable-continuity
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#417]
+    plan_state: OPEN
+    custody_state: ACTIVE
+    dependencies: [P288]
+    overlaps: [P289]
+    reconciled_overlaps: ["Own writer module, public takeover fixture and writer-only prose; preserve P289 acquisition and all peer work"]
+    validation_status: Public unlink regression red then green; strict Rust quality and docs pass; workstation and installer checks pending
+    limitations: ["Source repair only; no production or foreign effects"]
+    updated_at: 2026-10-24
+
   - id: P288
     product_lane: PL-BUGFIX
     objective: Remove stale writer refusal and report actual contention
