@@ -1007,6 +1007,26 @@ try {
   assert.equal(readFileSync(staleDrainPath, 'utf8'), '{}',
     'a malformed legacy marker must neither block nor be rewritten');
   assert.ok(existsSync(join(drainBlockedRoot, '.local', 'lib', 'agent-browser', 'generations')));
+  for (const shape of ['valid', 'directory']) {
+    rmSync(staleDrainPath, { recursive: true, force: true });
+    if (shape === 'valid') {
+      writeFileSync(staleDrainPath, JSON.stringify({
+        schemaVersion: 'agent-browser.runtime-adoption.v1',
+        transactionId: 'unrelated-retained-upgrade', candidateGenerationId: 'old',
+        transactionRevision: 999, recordedAt: '2026-01-01T00:00:00Z',
+      }));
+    } else {
+      mkdirSync(staleDrainPath);
+      writeFileSync(join(staleDrainPath, 'sentinel'), 'preserve');
+    }
+    const beforeMarker = shape === 'valid' ? readFileSync(staleDrainPath, 'utf8') : treeManifest(staleDrainPath);
+    const reapplied = runInstaller(drainBlockedRoot, ['--apply', '--json']);
+    assert.equal(reapplied.status, 0, `${shape} legacy marker: ${reapplied.stderr}`);
+    assert.equal(JSON.parse(reapplied.stdout).workstationReady, true);
+    assert.deepEqual(shape === 'valid' ? readFileSync(staleDrainPath, 'utf8') : treeManifest(staleDrainPath), beforeMarker,
+      'legacy metadata must remain untouched');
+  }
+
 
   const lockDir = join(lockedInstallRoot, '.agent-browser', 'convergence');
   mkdirSync(lockDir, { recursive: true });
