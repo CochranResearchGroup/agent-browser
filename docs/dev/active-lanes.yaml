@@ -9,12 +9,12 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#405]
-    plan_state: IN_PROGRESS
-    custody_state: ACTIVE
+    plan_state: CLOSED
+    custody_state: INTEGRATED
     overlaps: [P280]
     reconciled_overlaps: ["Same primary owner; only current_selection.rs; preserve peer upgrade and mode work"]
-    validation_status: Exact red-green regression; five current-selection tests and strict workspace Clippy pass; publication pending
-    limitations: ["Production deployment blocked; no ingress or provider changes"]
+    validation_status: PR407 integrated; five proof tests and strict Rust gates pass; sealed bf263f69342b installed with public and disposable workflow acceptance
+    limitations: ["Doctor advisory warnings retained;393 and399 open", "Primary and sealed candidates retained; no Native first-pixel requalification"]
     updated_at: 2026-10-24
 
   - id: P281
@@ -30,7 +30,7 @@ lanes:
     overlaps: []
     reconciled_overlaps: ["Own drain retirement only; preserve authentication and all clean peer checkouts and candidate bytes"]
     validation_status: 203 selected Rust passes and one explicit viewer fixture ignored; strict Clippy, format, docs, real Chrome continuity, full installer and independent zero-residue checks pass
-    limitations: ["Production marker mitigated; original upgrade remains unaccepted", "This source binary is not published; CI remains disabled"]
+    limitations: ["Combined bf263f69342b is installed; original and new upgrades accepted", "Broader marker retirement399 remains separate; CI stays disabled"]
     integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/397
     updated_at: 2026-10-24
 
@@ -42,13 +42,13 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#391]
-    plan_state: IN_PROGRESS
+    plan_state: CLOSED
     custody_state: INTEGRATED
     dependencies: []
     overlaps: [P279]
     reconciled_overlaps: ["PR392 merged ecd2950a3; primary and sealed8532c10293f1 retained for pending installed acceptance; temporary s391 stopped; foreign work preserved"]
-    validation_status: Sealed8532c10293f1 isolated acceptance; JS/CSS wire bytes reduced62.77%;252 stream tests pass with2 ignored; strict Clippy, format, docs and three browser cycles pass;16 probe generations absent
-    limitations: ["Production publication awaits existing forward-recovery operation; no competing effect", "Issue393 owns producer-side inventory wait; Native first pixels unqualified", "Temporary namespace stopped; candidate and primary retained", "No ingress changes"]
+    validation_status: Combined bf263f69342b installed; public JS/CSS wire bytes reduced62.77%; five populated-rail contexts and disposable workflow pass; settled doctor exits0; source gates retained
+    limitations: ["Installed acceptance recorded in P282;393 latency remains open", "Native first pixels not requalified; doctor advisory warnings retained", "Temporary namespaces stopped; candidate and primary retained", "No ingress changes"]
     updated_at: 2026-10-24
 
   - id: P279

@@ -1,6 +1,6 @@
 # Runbook
 
-P282/#405: combined deployment reached an older-dashboard identity mismatch. The bounded repair owns current-selection proof only and reuses observed-backend executable binding; production acceptance remains pending.
+P280/P281/P282 combined deployment accepted on source5cce1577d, installed generation bf263f69342b. Exact recovery, preserve-mode installation, public assets/auth/rail and disposable browser workflow pass. Settled doctor exits0 with advisory warnings; #393 latency and #399 operator-led upgrade work remain open. See [installed evidence](docs/dev/notes/0282-2026-10-24-recovery-dashboard-manifest.md#combined-installed-acceptance-2026-10-24).
 
 [P281 upgrade client drain retirement](docs/dev/plans/0281-2026-10-24-retire-client-upgrade-drain.md) owns issue #394 under PL-BUGFIX.
 Ordinary clients must ignore persistent installer drain metadata. Production
