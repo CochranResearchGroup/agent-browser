@@ -3,7 +3,7 @@ work_item_tracking: required
 lanes:
   - id: P283
     product_lane: PL-PLATFORM
-    objective: Inspect verified browser mode across public interfaces and the rail
+    objective: Deliver browser mode and independent profile controls through owner workflows
     plan: docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md
     branch: platform/browser-mode-401
     target: main
@@ -12,7 +12,7 @@ lanes:
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
     dependencies: []
-    validation_status: "401 source under draft PR408; resumed402/403 backend cores integrated as partial source with focused evidence; public adapter and real workflow gates remain incomplete"
+    validation_status: "401 source validated; third-window402 Native controls and403 owner adapters integrated with focused tests; full conversion and actual Native/cookie workflows incomplete; PR408 draft"
     overlaps: [P269, P282]
     reconciled_overlaps: ["401 owns read-only mode projection, MCP adapter, schema/client and rail; preserve P269 manual launch and P282 upgrade source, coordinate shared docs at integration"]
     updated_at: 2026-10-24
