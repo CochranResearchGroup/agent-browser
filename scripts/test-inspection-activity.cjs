@@ -42,7 +42,7 @@ function identity(pid) {
     browser = await chromium.connect(browserServer.wsEndpoint()); await retainBrowserProcesses();
     page = await browser.newPage(); page.setDefaultTimeout(5000);
     page.on('pageerror', error => errors.push(error.message));
-    await page.route('**/*', async route => {
+    const intercept = async route => {
       const request = route.request(), url = new URL(request.url());
       if (url.origin === origin && ['/', '/bundle.js'].includes(url.pathname)) return route.continue();
       if (url.origin !== origin) { unexpected.push(url.origin + url.pathname); return route.abort(); }
@@ -56,7 +56,8 @@ function identity(pid) {
         return route.fulfill({ json: { success: true, data: { observation, ledger: { runId: observation.runId, contextPacketHash: packetHash, observationPath: '/private/synthetic-observation.json', eventLogPath: '/private/synthetic-events.json' } } } });
       }
       unexpected.push(url.pathname); return route.abort();
-    });
+    };
+    await page.route('**/*', intercept);
     await page.goto(origin);
     await page.getByLabel('Active session').getByText('fixture-session-A', { exact: true }).waitFor();
     const feed = page.getByRole('region', { name: 'Activity feed', exact: true });
@@ -84,6 +85,44 @@ function identity(pid) {
     assert.equal(inspections.length, 1, 'Reload must not repeat inspection or review'); assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
     fs.writeFileSync(path.join(artifacts, 'accept-reload.json'), JSON.stringify({ passed: true, inspectedScope: inspections[0].packet.selection, restoredReviews: 1 }));
     console.log('accept-and-reload: passed');
+
+    // Independent public workflow: corrections append; repeating the current
+    // verdict through an ordinary double-click must not append another record.
+    await page.close(); page = await browser.newPage(); page.setDefaultTimeout(5000);
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/*', intercept); await page.goto(origin);
+    await page.getByLabel('Active session').getByText('fixture-session-A', { exact: true }).waitFor();
+    const correctionFeed = page.getByRole('region', { name: 'Activity feed', exact: true });
+    const correctionChat = page.getByRole('region', { name: 'Inspection Chat', exact: true });
+    await correctionFeed.getByRole('button', { name: 'Off', exact: true }).click();
+    await correctionChat.getByRole('button', { name: 'Inspect selected workspace', exact: true }).click();
+    await correctionChat.getByText('SYNTHETIC-PRIVATE-OBSERVATION-PROSE', { exact: true }).waitFor();
+    const acceptReview = correctionChat.getByRole('button', { name: 'Record as accepted', exact: true });
+    const rejectReview = correctionChat.getByRole('button', { name: 'Record as rejected', exact: true });
+    const acceptedRows = correctionFeed.getByRole('button', { name: /accepted/i });
+    const rejectedRows = correctionFeed.getByRole('button', { name: /rejected/i });
+    await acceptReview.dblclick();
+    assert.equal(await acceptedRows.count(), 1, 'Repeated accepted intent records once');
+    assert(await acceptReview.isDisabled(), 'Latest accepted verdict cannot be recorded again');
+    await rejectReview.dblclick();
+    assert.equal(await acceptedRows.count(), 1, 'Reject preserves original acceptance');
+    assert.equal(await rejectedRows.count(), 1, 'Repeated rejected intent records once');
+    assert(await rejectReview.isDisabled());
+    await acceptReview.dblclick();
+    assert.equal(await acceptedRows.count(), 2, 'Acceptance after rejection appends a new correction');
+    assert.equal(await rejectedRows.count(), 1, 'Earlier rejection remains');
+    const reviewOrder = () => correctionFeed.getByRole('button', { name: /(?:accepted|rejected) inspection review/i }).allTextContents();
+    assert.deepEqual((await reviewOrder()).map(value => /accepted/i.test(value) ? 'accepted' : 'rejected'), ['accepted', 'rejected', 'accepted']);
+    await page.reload();
+    await page.getByLabel('Active session').getByText('fixture-session-A', { exact: true }).waitFor();
+    await acceptedRows.first().waitFor();
+    assert.equal(await acceptedRows.count(), 2, 'Both separate accepted decisions survive reload once');
+    assert.equal(await rejectedRows.count(), 1, 'Rejected correction survives reload once');
+    assert.deepEqual((await reviewOrder()).map(value => /accepted/i.test(value) ? 'accepted' : 'rejected'), ['accepted', 'rejected', 'accepted']);
+    assert.equal(inspections.length, 2, 'Corrections and reload never invoke another inspection');
+    assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
+    fs.writeFileSync(path.join(artifacts, 'corrections.json'), JSON.stringify({ passed: true, accepted: 2, rejected: 1, repeatedVerdictsDeduplicated: true }));
+    console.log('corrections-and-repeated-intent: passed');
   } finally {
     if (page && !page.isClosed()) fs.writeFileSync(path.join(artifacts, 'final-dom.txt'), await page.locator('body').innerText().catch(() => 'unavailable'));
     fs.writeFileSync(path.join(artifacts, 'requests.json'), JSON.stringify({ inspections, unexpected, errors }, null, 2));
