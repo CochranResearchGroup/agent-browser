@@ -13,6 +13,10 @@ import select
 import subprocess
 import sys
 import time
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 
 
 def main():
@@ -43,6 +47,9 @@ def main():
                     'reopenRequired': True, 'automaticReplay': False}
 
     class Acceptance(h.Fixture):
+        def configure_fixture(self, config):
+            return config.replace('[tools]', '[tools]\nwindow_inventory = { adapter = "native_x11", fallback_to_xdotool = false }\ndesktop_control = { adapter = "native_x11", fallback_to_xdotool = false }')
+
         def start_owner(self):
             token = self.home / 'secrets/control.token'
             token.write_text(self.token); token.chmod(0o600)
@@ -60,9 +67,33 @@ def main():
             assignment = self.pre_assignments[0]
             target = self.control({'operation': 'observe_assignment', 'assignment_id': assignment['assignmentId'],
                                    'expected_generation': assignment['generation']})['target']
+            outer = self
+            exchanges = []
+            class Broker(BaseHTTPRequestHandler):
+                def log_message(self, *_args):
+                    pass
+                def do_POST(self):
+                    raw = self.rfile.read(int(self.headers['Content-Length']))
+                    envelope = json.loads(raw)
+                    assert self.path == '/v1/consumer' and envelope['application'] == 'fixture'
+                    assert envelope['request']['operation'] not in ('acquire', 'release', 'release_idle')
+                    request = Request(f'http://127.0.0.1:{outer.control_port}/v1/consumer', data=raw,
+                                      headers={'Authorization': 'Bearer ' + outer.token, 'Content-Type': 'application/json'})
+                    try:
+                        with urlopen(request, timeout=30) as reply:
+                            status, body = reply.status, reply.read()
+                    except HTTPError as error:
+                        status, body = error.code, error.read()
+                    exchanges.append({'request': envelope['request'], 'status': status, 'response': json.loads(body)})
+                    h.private_json(args.results / 'native-exchanges.json', exchanges)
+                    self.send_response(status); self.send_header('Content-Type', 'application/json')
+                    self.end_headers(); self.wfile.write(body)
+            broker = ThreadingHTTPServer(('127.0.0.1', 0), Broker)
+            self.servers.append(broker)
+            threading.Thread(target=broker.serve_forever, daemon=True).start()
             config = {'binary': str(args.agent_binary.resolve()), 'chrome': str(args.chrome.resolve()),
                       'results': str(args.results), 'target': target, 'publicOrigin': self.public,
-                      'controlOrigin': f'http://127.0.0.1:{self.control_port}',
+                      'controlOrigin': f'http://127.0.0.1:{broker.server_port}',
                       'tokenFile': str(self.home / 'secrets/control.token')}
             h.private_json(args.results / 'bridge-config.json', config)
             child = subprocess.Popen(['node', str(repo / 'scripts/smoke-hosted-browser-restart-runner.mjs'),
