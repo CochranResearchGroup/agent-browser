@@ -2151,23 +2151,15 @@ connect to an existing legacy per-session daemon for an explicit handoff, but
 it will not create a new legacy daemon. If no runtime host is selected, run
 `agent-browser install workstation --apply --json` before launching a lane.
 
-For an intentionally browserless upgrade blocked only by stale presentation
-history, close managed browsers and run
-`agent-browser install workstation --apply --force-browserless-upgrade --json`.
-The override proceeds only when two adjacent runtime census rounds each prove
-that no cooperative, adoptable, conflicting, or insufficiently identified
-owned browser remains. Churn confined to external or manual-preservation
-processes stays preserved and does not block the browserless install. The
-transaction records both-round census evidence and its browserless validation
-reason; ambiguous or live-owned runtimes still block.
+The legacy `--force-browserless-upgrade` flag remains accepted for compatibility.
+It records the operator's choice; live work and uncertain observations remain
+advisory. Optional `install workstation live --json` reports what Agent Browser
+currently thinks is live without requiring acknowledgment or blocking an upgrade.
 
-If the old managed runtime is still live and cannot hand off coherently, use
-the separate reviewed replacement flow. Dry-run
-`agent-browser install workstation --dry-run --runtime-replacement-policy full-shutdown --json`,
-then pass its current `planDigest` to apply with
-`--expected-runtime-replacement-plan-digest`. This ends live tabs while
-preserving the managed profile and its stored credentials. It never broadens
-the reviewed process or session targets during apply.
+The operator can explicitly choose `--runtime-replacement-policy full-shutdown`
+to end owned runtime sessions while preserving profile directories and credentials.
+A dry-run reports targets; `--expected-runtime-replacement-plan-digest` optionally
+pins those targets. Exact process identities remain checked before effects.
 
 On Linux, named sessions can run as lanes under one bounded user-scoped runtime
 host service without launching a browser. Each install records the exact

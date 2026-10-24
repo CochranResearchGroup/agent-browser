@@ -5950,23 +5950,17 @@ Fresh and isolated installs do not require a retained
 presentation handoff. A structured
 handoff never falls back to a stale session label when current owner evidence
 is absent.
-Pass --force-browserless-upgrade only after intentionally closing managed
-browsers. Two adjacent runtime census rounds must each prove that no
-cooperative, adoptable, conflicting, or insufficiently identified owned browser
-remains. External or manual-preservation process churn stays preserved and does
-not block the browserless install. The transaction records both-round census
-evidence and its browserless validation reason. Ambiguous or live-owned runtimes
-still block.
-Use --runtime-replacement-policy full-shutdown when cooperative handoff cannot
-produce one coherent runtime. Dry-run returns an exact replacement plan and
-digest without mutation. Apply additionally requires that digest through
---expected-runtime-replacement-plan-digest. The reviewed plan closes only its
-named managed sessions, preserves their profile directories and stored
-credentials, proves a browserless census, retires only the recorded source
-process identity, and starts the candidate generation. Live tabs and
-in-memory session state end. Once the first close effect is receipted, recovery
-is forward-only and guarded rollback is unavailable. The default preserve
-policy retains the cooperative continuity path.
+The legacy --force-browserless-upgrade flag remains accepted for compatibility.
+It records the operator's choice; live work and uncertain observations are
+advisory and do not veto the upgrade. Inspect optional live-work observations
+with install workstation live --json.
+Choose --runtime-replacement-policy full-shutdown to end owned runtime sessions
+while preserving profiles and credentials. Dry-run inspection and the
+--expected-runtime-replacement-plan-digest target pin are optional. The operator
+explicitly chooses this policy; warnings do not choose it. Exact recorded
+process targets are checked before effects. Live tabs and in-memory state end.
+After a close receipt, recovery moves forward through the recorded transaction.
+The default preserve policy retains cooperative continuity.
 Real-host apply starts a shadow candidate dashboard on the second port after
 ingress. The shadow stays backend-only while all old-generation cooperative
 lanes complete handoff prepare. A no-browser stream-status bootstrap starts the
@@ -6095,9 +6089,9 @@ Options:
   --apply              Materialize the installed workstation payload
   --progress-json      Emit incremental observations on stderr; requires --apply --json
   --force-browserless-upgrade
-                       Bypass stale presentation history only when a stable census proves no owned live browser remains
+                       Legacy operator-choice flag; runtime observations remain advisory
   --runtime-replacement-policy <preserve|full-shutdown>
-                       Preserve live runtime continuity by default, or review an exact managed-runtime shutdown plan
+                       Preserve live runtime continuity by default, or explicitly close owned runtime sessions
   --expected-runtime-replacement-plan-digest <sha256>
                        Optional full-shutdown target pin; if supplied, must equal the current observed plan digest
   --dashboard-port <port>
