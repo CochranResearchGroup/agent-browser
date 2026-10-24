@@ -29,16 +29,30 @@ def main():
     args.results = args.results.resolve(); args.results.mkdir(mode=0o700, parents=True, exist_ok=False)
     assert not Path(f'/tmp/.X11-unix/X{args.display}').exists()
     assert not Path(f'/tmp/.X{args.display}-lock').exists()
+    assert f'X{args.display} ' not in subprocess.check_output(['ss', '-xln'], text=True), 'abstract X display already occupied'
     env = os.environ | {'HOME': str(args.results), 'DISPLAY': f':{args.display}',
                         'AGENT_BROWSER_EXECUTABLE_PATH': str(args.chrome.resolve())}
+    authority = args.results / 'synthetic-xauthority'
+    authority.touch(mode=0o600)
+    env['XAUTHORITY'] = str(authority)
     wire = json.loads((Path(__file__).resolve().parents[1] / 'docs/dev/contracts/remote-view-application-r3.v1.fixture.json').read_text())
     target = wire['assignmentObservation']['target']
     server = None; child = None; display = None; failure = None; complete = False
     def start_display():
         process = subprocess.Popen(['Xvfb', f':{args.display}', '-screen', '0', '640x480x24', '-ac', '-nolisten', 'tcp'],
                                    stdout=subprocess.DEVNULL, stderr=(args.results / 'xvfb.log').open('a'))
-        wait(lambda: subprocess.run(['xdpyinfo'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0)
-        return process
+        try:
+            def ready():
+                assert process.poll() is None, 'owned X server exited'
+                try:
+                    return subprocess.run(['xdpyinfo'], env=env, timeout=1, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+                except subprocess.TimeoutExpired:
+                    return False
+            wait(ready, 10)
+            return process
+        except BaseException:
+            process.terminate(); process.wait(timeout=5)
+            raise
     try:
         display = start_display()
         server = start_native_provider_fixture(env, args.results)
