@@ -609,6 +609,9 @@ isolated development and foreign processes are preserved. Install doctor exposes
 Retirement targets and outcomes are retained in the private install transaction.
 Forward recovery also reconciles MCP clients against the selected candidate.
 
+Only an executing workstation writer delays a conflicting change. Stale PID
+diagnostics do not establish writer custody or veto a valid request.
+
 The workstation operator decides whether to upgrade. Warnings about live work
 or incomplete observations are advisory and can suggest remedies; they never
 veto a valid operator-authorized request. Use `agent-browser install workstation

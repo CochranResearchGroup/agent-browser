@@ -180,6 +180,8 @@ const source = spawn(binary, ['session', 'supervisor', 'run-host'], {
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let sourceOutput = '';
+let writer;
+
 source.stdout.on('data', (chunk) => { sourceOutput += chunk; });
 source.stderr.on('data', (chunk) => { sourceOutput += chunk; });
 
@@ -206,6 +208,38 @@ try {
   const staleWriterPath = join(home, '.agent-browser/convergence/workstation.lock');
   mkdirSync(join(home, '.agent-browser/convergence'), { recursive: true });
   writeFileSync(staleWriterPath, `${process.pid}\n`);
+  // Pause a real filesystem writer in the short claim-publication critical
+  // section. Mock only the OS boundary; observe contention through public CLI.
+  writer = spawn('python3', ['-c', `import fcntl,sys
+with open(sys.argv[1], 'r+') as claim:
+ fcntl.flock(claim, fcntl.LOCK_EX)
+ print('writer-ready', flush=True)
+ sys.stdin.readline()
+`, staleWriterPath], {stdio:['pipe','pipe','pipe']});
+  let writerReady = false;
+  writer.stdout.on('data', chunk => { writerReady ||= chunk.toString().includes('writer-ready'); });
+  await waitFor(() => writerReady || writer.exitCode !== null, 'executing filesystem writer');
+  assert(writerReady, 'fixture writer did not acquire its OS lock');
+  const busy = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
+  assert(busy.blockers.some(blocker => blocker.code === 'workstation_transaction_busy'),
+    'an executing writer must exclude takeover effects');
+  const competing = spawnSync(binary, ['install', 'workstation', '--apply', '--json'], {
+    cwd:rootDir, env:{...env, AGENT_BROWSER_WORKSTATION_ROOT:home}, encoding:'utf8',
+  });
+  assert(competing.status !== 0 && `${competing.stdout}${competing.stderr}`.includes('already active'),
+    'a competing apply must stop before effects while writer custody is held');
+  assert(!existsSync(join(home, '.local/lib/agent-browser/generations')),
+    'a competing apply must not stage a candidate generation');
+  const preview = spawnSync(binary, ['install', 'workstation', '--dry-run',
+    '--runtime-replacement-policy', 'full-shutdown', '--json'], {cwd:rootDir,env,encoding:'utf8'});
+  assert(preview.status === 0, `replacement preview failed: ${preview.stdout} ${preview.stderr}`);
+  const replacement = JSON.parse(preview.stdout).runtimeReplacementPlan;
+  assert(replacement.disposition === 'blocked'
+    && replacement.blockers.some(blocker => blocker.code === 'workstation_transaction_busy'),
+  `replacement preview must report executing writer contention: ${JSON.stringify(replacement)}`);
+  writer.stdin.end('release\n');
+  await waitFor(() => writer.exitCode !== null, 'filesystem writer completion');
+  assert(writer.exitCode === 0, 'fixture writer failed');
   const plan = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
   assert(plan.disposition === 'ready_for_takeover', `stale writer metadata must not veto takeover: ${JSON.stringify(plan)}`);
   assert(plan.selectedBackend.pid === sourcePid, 'plan selected a different process');
@@ -241,6 +275,11 @@ try {
   const supervisorOutput = existsSync(systemctlLog) ? readFileSync(systemctlLog, 'utf8') : '';
   throw new Error(`${error.message}\nsource output:\n${sourceOutput}\nsupervisor output:\n${supervisorOutput}`);
 } finally {
+  if (writer && writer.exitCode === null) {
+    writer.stdin.end('release\n');
+    await waitFor(() => writer.exitCode !== null, 'fixture writer cleanup').catch(() => {});
+    if (writer.exitCode === null) writer.kill('SIGTERM');
+  }
   if (source.exitCode === null && processIsLive(source.pid)) source.kill('SIGTERM');
   if (existsSync(systemctlState)) {
     const pid = Number.parseInt(readFileSync(systemctlState, 'utf8'), 10);

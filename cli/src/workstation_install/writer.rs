@@ -7,7 +7,7 @@ use crate::process_identity::{
 };
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 #[derive(Serialize, Deserialize)]
@@ -64,12 +64,12 @@ pub(crate) fn workstation_transaction_is_foreign(
     path: &Path,
     current_pid: u32,
 ) -> Result<bool, String> {
-    let mut file = match OpenOptions::new().read(true).write(true).open(path) {
+    let mut file = match OpenOptions::new().read(true).open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
         Err(error) => return Err(format!("workstation_writer_observation_failed:{error}")),
     };
-    if file.try_lock().is_err() {
+    if file.try_lock_shared().is_err() {
         return Ok(true);
     }
     Ok(owner_pid(&mut file)?.is_some_and(|pid| pid != current_pid))

@@ -37,7 +37,6 @@ use serde::Serialize;
 use serde_json::Value;
 use std::env;
 use std::fs;
-use std::fs::OpenOptions;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{exit, Child, Command, Output, Stdio};
@@ -2877,9 +2876,8 @@ fn workstation_candidate_presentation_prerequisite(
     }
 }
 
-/// Permit an explicit browserless upgrade only after two adjacent census rounds
-/// each prove that no Agent Browser-owned live browser needs transfer. External
-/// and manual-preservation churn remains preserved and does not block install.
+/// Retain the legacy operator-choice flag without a browserless admission gate.
+/// Live-work observations are advisory; unproved targets remain preserved.
 fn authorize_browserless_upgrade_override(prerequisite: &mut Value) -> Result<(), String> {
     let census = observe_host_runtime_census();
     prerequisite["ready"] = Value::Bool(true);
