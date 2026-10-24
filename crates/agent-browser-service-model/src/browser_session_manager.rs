@@ -136,7 +136,11 @@ pub trait BrowserSessionEffects {
 
     /// Select an executable for subsequent launches; existing browsers retain identity.
     /// Pin one profile's next launches without changing another profile's build.
-    fn select_profile_browser_executable(&mut self, _profile_id: String, _path: String) -> Result<(), String> {
+    fn select_profile_browser_executable(
+        &mut self,
+        _profile_id: String,
+        _path: String,
+    ) -> Result<(), String> {
         Err("browser_profile_build_selection_unsupported".into())
     }
 
@@ -1086,9 +1090,13 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .filter(|id| state.sessions.contains_key(*id))
             .cloned()
             .collect::<BTreeSet<_>>();
-        leave_open_session_ids.extend(state.sessions.values()
-            .filter(|task| state.profile_operation_ids.contains_key(&task.profile_id))
-            .map(|task| task.id.clone()));
+        leave_open_session_ids.extend(
+            state
+                .sessions
+                .values()
+                .filter(|task| state.profile_operation_ids.contains_key(&task.profile_id))
+                .map(|task| task.id.clone()),
+        );
         protected_session_ids.extend(leave_open_session_ids.iter().cloned());
         Self {
             state,
@@ -1575,15 +1583,40 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         operation_id: &str,
         recovered: BrowserRecovery,
     ) -> Result<(), String> {
-        let browser = self.state.browsers.get(browser_id).cloned()
+        let browser = self
+            .state
+            .browsers
+            .get(browser_id)
+            .cloned()
             .ok_or("browser_owner_replacement_browser_missing")?;
-        if self.state.profile_operation_ids.get(&browser.profile_id).map(String::as_str) != Some(operation_id)
-            || recovered.launch.process_identity.as_ref().is_none_or(|identity|
-                identity.pid != recovered.launch.pid || identity.start_token.is_empty()
-                    || identity.executable_path.as_deref().is_none_or(str::is_empty)) {
+        if self
+            .state
+            .profile_operation_ids
+            .get(&browser.profile_id)
+            .map(String::as_str)
+            != Some(operation_id)
+            || recovered
+                .launch
+                .process_identity
+                .as_ref()
+                .is_none_or(|identity| {
+                    identity.pid != recovered.launch.pid
+                        || identity.start_token.is_empty()
+                        || identity
+                            .executable_path
+                            .as_deref()
+                            .is_none_or(str::is_empty)
+                })
+        {
             return Err("browser_owner_replacement_identity_unverified".into());
         }
-        let tabs = self.state.tabs.values().filter(|tab| tab.browser_id == browser.id).cloned().collect();
+        let tabs = self
+            .state
+            .tabs
+            .values()
+            .filter(|tab| tab.browser_id == browser.id)
+            .cloned()
+            .collect();
         self.publish_recovery(browser, tabs, recovered, false, true)?;
         self.state.app_browser_attachments.remove(browser_id);
         self.state.shared_browser_ids.remove(browser_id);
@@ -1881,6 +1914,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .get(session_id)
             .cloned()
             .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?;
+        if let Some(operation) = self.state.profile_operation_ids.get(&session.profile_id) {
+            return Err(format!("browser_profile_operation_pending:{operation}:inspect or cancel the owner operation before closing"));
+        }
         let browser = self
             .state
             .browsers

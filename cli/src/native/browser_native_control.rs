@@ -13,13 +13,22 @@ pub fn execute(
     command: &Value,
     owner: &mut impl NativeOwner,
 ) -> Result<Value, String> {
-    if !matches!(command["action"].as_str(), Some("native_input" | "native_capture" | "native_close" | "native_focus")) {
+    if !matches!(
+        command["action"].as_str(),
+        Some("native_input" | "native_capture" | "native_close" | "native_focus")
+    ) {
         return Err("browser_native_action_unavailable".into());
     }
     let actions = if command["action"] == "native_input" {
-        Some(command["actions"].as_array().filter(|a| !a.is_empty() && a.len() <= 16)
-            .ok_or("browser_native_actions_required")?)
-    } else { None };
+        Some(
+            command["actions"]
+                .as_array()
+                .filter(|a| !a.is_empty() && a.len() <= 16)
+                .ok_or("browser_native_actions_required")?,
+        )
+    } else {
+        None
+    };
     let snapshot = owner.request("observe", &json!({"desktopId":target.viewing_desktop_id,"expectedGeneration":target.viewing_generation}))?;
     if snapshot["desktopId"] != target.viewing_desktop_id
         || snapshot["generation"] != target.viewing_generation
@@ -69,16 +78,26 @@ pub fn execute(
             "desktopId":target.viewing_desktop_id,"expectedGeneration":target.viewing_generation,
             "windowId":window["id"],"expectedProcessIdentity":window["processIdentity"],"action":action
         }))?;
-        return Ok(json!({"source":"remote_view_native","delivery":reply["delivery"].as_str().unwrap_or("unknown"),"taskCompleted":false}));
+        return Ok(
+            json!({"source":"remote_view_native","delivery":reply["delivery"].as_str().unwrap_or("unknown"),"taskCompleted":false}),
+        );
     }
     if command["action"] == "native_close" && window["active"] != true {
-        owner.request("window", &json!({"desktopId":target.viewing_desktop_id,
+        owner.request(
+            "window",
+            &json!({"desktopId":target.viewing_desktop_id,
             "expectedGeneration":target.viewing_generation,"windowId":window["id"],
-            "expectedProcessIdentity":window["processIdentity"],"action":"activate"}))?;
+            "expectedProcessIdentity":window["processIdentity"],"action":"activate"}),
+        )?;
         // Observe and fence again after focus. This recursion is bounded: the
         // input action cannot take the close/focus branch a second time.
-        return execute(original,target,&json!({"action":"native_input",
-            "actions":[{"kind":"key","chord":"alt+F4"}]}),owner);
+        return execute(
+            original,
+            target,
+            &json!({"action":"native_input",
+            "actions":[{"kind":"key","chord":"alt+F4"}]}),
+            owner,
+        );
     }
     let width = snapshot
         .pointer("/geometry/current/width")
@@ -100,9 +119,11 @@ pub fn execute(
     }
     if command["action"] == "native_capture" {
         body.as_object_mut().unwrap().remove("actions");
-        body["region"] = command.get("region").cloned().unwrap_or_else(|| json!({
-            "x":window["x"],"y":window["y"],"width":window["width"],"height":window["height"]
-        }));
+        body["region"] = command.get("region").cloned().unwrap_or_else(|| {
+            json!({
+                "x":window["x"],"y":window["y"],"width":window["width"],"height":window["height"]
+            })
+        });
         let capture = owner.request("capture_region", &body)?;
         return Ok(json!({"source":"remote_view_native","capture":capture,"taskCompleted":false}));
     }

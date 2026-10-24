@@ -613,7 +613,9 @@ pub(crate) trait BrowserSessionPersistence {
 }
 
 impl BrowserSessionPersistence for BrowserSessionSqliteStore {
-    fn runtime_database_path(&self) -> Result<PathBuf, String> { self.database_path() }
+    fn runtime_database_path(&self) -> Result<PathBuf, String> {
+        self.database_path()
+    }
 
     fn publish_app_attachment(
         &mut self,
@@ -1536,10 +1538,17 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .ok_or_else(|| "browser_session_action_missing".to_string())?;
         if action == "browser_session_profile_duplicate" {
             self.refresh_before_ordinary_command()?;
-            if let Some(task_id) = optional_string(command,"sessionId").or_else(||optional_string(command,"taskId")) {
-                let task = self.state.sessions.get(task_id).ok_or("profile_duplicate_task_missing")?;
-                if optional_string(command,"sourceProfileId") != Some(task.profile_id.as_str())
-                    || optional_string(command,"sessionName").is_some_and(|name|name!=task.name) {
+            if let Some(task_id) =
+                optional_string(command, "sessionId").or_else(|| optional_string(command, "taskId"))
+            {
+                let task = self
+                    .state
+                    .sessions
+                    .get(task_id)
+                    .ok_or("profile_duplicate_task_missing")?;
+                if optional_string(command, "sourceProfileId") != Some(task.profile_id.as_str())
+                    || optional_string(command, "sessionName").is_some_and(|name| name != task.name)
+                {
                     return Err("profile_duplicate_task_profile_conflict".into());
                 }
             }
@@ -2701,9 +2710,12 @@ where
         super::browser_host_policy::prepare_command(&self.state, session_name, &mut prepared)?;
         let command = &prepared;
         let exact_task_id = self.exact_task_selector(session_name, command)?;
-        for task in self.state.sessions.values().filter(|task| {
-            exact_task_id.map_or(task.name == session_name, |id|task.id == id)
-        }) {
+        for task in self
+            .state
+            .sessions
+            .values()
+            .filter(|task| exact_task_id.map_or(task.name == session_name, |id| task.id == id))
+        {
             if let Some(operation) = self.state.profile_operation_ids.get(&task.profile_id) {
                 return Err(format!("browser_profile_operation_pending:{operation}:inspect or cancel the owner operation before page actions"));
             }
@@ -2712,7 +2724,10 @@ where
         super::browser_host_control::check_state(&self.state, session_name, command)?;
         super::browser_host_reconnect::check_state(&self.state, session_name, command)?;
         super::browser_host_policy::check_state(&self.state, session_name, command)?;
-        if matches!(command["action"].as_str(), Some("native_input" | "native_capture")) {
+        if matches!(
+            command["action"].as_str(),
+            Some("native_input" | "native_capture")
+        ) {
             return self.execute_native_task(session_name, command);
         }
         let pending_human_ttl = pending_human_retention(command)?;

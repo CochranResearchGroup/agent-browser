@@ -667,8 +667,13 @@ impl<
     ) -> Result<BrowserRecovery, String> {
         self.recover_browser_with_target(browser, profile, tabs, navigation, Some(desktop))
     }
-    fn select_profile_browser_executable(&mut self, profile_id: String, path: String) -> Result<(), String> {
-        self.effects.select_profile_browser_executable(profile_id, path)
+    fn select_profile_browser_executable(
+        &mut self,
+        profile_id: String,
+        path: String,
+    ) -> Result<(), String> {
+        self.effects
+            .select_profile_browser_executable(profile_id, path)
     }
     fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
         self.effects.select_browser_executable(path)

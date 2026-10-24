@@ -17,7 +17,6 @@ pub mod browser_download;
 pub mod browser_emulation;
 #[allow(dead_code)]
 pub mod browser_frame;
-pub(crate) mod browser_native_control;
 pub(crate) mod browser_host_context;
 pub(crate) mod browser_host_control;
 pub(crate) mod browser_host_policy;
@@ -34,6 +33,7 @@ mod browser_launch_custody_store;
 pub mod browser_lifecycle;
 #[allow(dead_code)]
 pub mod browser_locator;
+pub(crate) mod browser_native_control;
 #[allow(dead_code)]
 pub mod browser_navigation;
 #[allow(dead_code)]

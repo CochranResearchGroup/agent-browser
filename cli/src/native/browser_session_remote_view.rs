@@ -485,10 +485,14 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
         }
     }
 
-    fn select_profile_browser_executable(&mut self, profile_id: String, path: String) -> Result<(), String> {
+    fn select_profile_browser_executable(
+        &mut self,
+        profile_id: String,
+        path: String,
+    ) -> Result<(), String> {
         match self {
-            Self::Local(effects) => effects.select_profile_browser_executable(profile_id,path),
-            Self::Remote(effects) => effects.select_profile_browser_executable(profile_id,path),
+            Self::Local(effects) => effects.select_profile_browser_executable(profile_id, path),
+            Self::Remote(effects) => effects.select_profile_browser_executable(profile_id, path),
         }
     }
     fn select_browser_executable(&mut self, path: String) -> Result<(), String> {

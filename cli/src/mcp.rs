@@ -5,10 +5,10 @@ use serde_json::{json, Map, Value};
 mod catalog;
 mod host_control;
 mod host_policy;
-mod profile_duplicate;
 mod host_reconnect;
 mod hosted;
 mod playbooks;
+mod profile_duplicate;
 mod workflow;
 
 use crate::connection::Response;
@@ -240,15 +240,22 @@ fn mcp_command_response_with_config(
             if args.len() != 5 || !matches!(args[3].as_str(), "native_capture" | "native_input") {
                 return Err("Usage: agent-browser --json mcp browser-native <task-id> <native_capture|native_input> '<params-json>'".into());
             }
-            let params: Value = serde_json::from_str(&args[4]).map_err(|_| "browser_native_params_invalid")?;
+            let params: Value =
+                serde_json::from_str(&args[4]).map_err(|_| "browser_native_params_invalid")?;
             let arguments = json!({"taskId":args[2],"action":args[3],"params":params});
             validate_browser_command_action(&arguments).map_err(|error| error.message)?;
             let mut command = browser_command_command(BrowserCommandArgs {
-                action:&args[3], params:params.as_object(), job_timeout_ms:None,
-                service_name:None,agent_name:None,task_name:None,
+                action: &args[3],
+                params: params.as_object(),
+                job_timeout_ms: None,
+                service_name: None,
+                agent_name: None,
+                task_name: None,
             });
             let session = workflow::address_task_command(&mut command, &args[2])?;
-            Ok(json!({"success":true,"data":workflow::execute(command, &session).map_err(|error| error.message)?}))
+            Ok(
+                json!({"success":true,"data":workflow::execute(command, &session).map_err(|error| error.message)?}),
+            )
         }
         Some("browser-mode") => {
             if args.len() != 3 || args[2].trim().is_empty() {

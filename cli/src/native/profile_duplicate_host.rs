@@ -259,7 +259,8 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                     attachment.request.process.clone()
                 } else {
                     BrowserSessionSqliteStore::open_read_only(database)?
-                        .published_launch_process_identity(&browser).map_err(|_|"profile_duplicate_original_identity_unavailable")?
+                        .published_launch_process_identity(&browser)
+                        .map_err(|_| "profile_duplicate_original_identity_unavailable")?
                         .ok_or("profile_duplicate_original_identity_missing")?
                 };
             if !crate::process_identity::recorded_process_is_running(&original).unwrap_or(false) {
@@ -339,7 +340,11 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             "cancel" => Choice::Cancel,
             _ => return Err("profile_duplicate_choice_invalid".into()),
         };
-        let choice = if first_review && choice == Choice::CloseAndDuplicate { Choice::Reconcile } else { choice };
+        let choice = if first_review && choice == Choice::CloseAndDuplicate {
+            Choice::Reconcile
+        } else {
+            choice
+        };
         let mut runtime = HostedDuplication {
             host: self,
             database: database.to_path_buf(),
@@ -529,12 +534,22 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 self.host.state.profile_operation_ids.remove(&source.id);
                 let retirement = (|| {
                     for id in &self.binding.reviewed_tasks {
-                        self.host.manager()?.close_session(id, SessionEndReason::ExplicitClose, current_unix_ms())?;
+                        self.host.manager()?.close_session(
+                            id,
+                            SessionEndReason::ExplicitClose,
+                            current_unix_ms(),
+                        )?;
                     }
-                    Ok::<(),String>(())
+                    Ok::<(), String>(())
                 })();
-                self.host.state.profile_operation_ids.insert(source.id.clone(), self.operation_id.clone());
-                if let Err(error) = retirement {self.host.state=before_retirement;return Err(error);}
+                self.host
+                    .state
+                    .profile_operation_ids
+                    .insert(source.id.clone(), self.operation_id.clone());
+                if let Err(error) = retirement {
+                    self.host.state = before_retirement;
+                    return Err(error);
+                }
                 self.host.commit_state()?;
                 return Ok(CloseOutcome::Stopped);
             }
