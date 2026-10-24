@@ -224,7 +224,7 @@ also appended to
 typed category and code, occurrence time, runtime and boot epoch, safe causal
 identifiers, and a bounded redacted summary. They exclude page content,
 credentials, request headers, bearer material, raw operator URLs, raw durable
-handoff IDs, and query strings.
+handoff IDs, and query strings. Private browser-launch records include a fixed <code>details.phase</code> label distinguishing validation, process/endpoint startup, protocol initialization, CDP connection, target discovery, active session and download policy. The label contains no raw error or private environment value. Unknown outcomes still require readback before another attempt.
 
 Authenticated operators and software clients can read recent records with
 <code>GET /api/service/failures?limit=100</code>. The reader skips malformed

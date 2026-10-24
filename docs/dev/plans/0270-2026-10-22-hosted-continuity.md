@@ -1,10 +1,22 @@
 # P270: complete app-directed browser continuity
 
 Status: OPEN
+Lane: P270
 Product lane: PL-PLATFORM
 Work items: CochranResearchGroup/agent-browser#351, #352, #353, #354, #355
 Branch: platform/hosted-acceptance-accounting-355
 Owner: ecochran76
+
+## Current State
+
+352–354 source contracts and bounded Native14 functional/warm evidence are
+integrated. Relocation351/Native578 is explicitly deferred. Native624 is complete.
+P277 qualifies one ordinary same-assignment recovery across Native viewing1 to2,
+but Native8's earlier unknown reopen remains unresolved. P278 owns the bounded
+probe and secret-free launch-phase diagnostic repair. Full355 stays OPEN for
+that failure disposition and same-pair combined coordination/cold evidence.
+Earlier execution sections retain their dated source/effect and custody history;
+no production changes or relocation experiments are admitted by this status.
 
 ## Outcome
 

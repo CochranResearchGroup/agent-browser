@@ -1,6 +1,6 @@
 # Roadmap
 
-[P270 hosted continuity](docs/dev/plans/0270-2026-10-22-hosted-continuity.md) continues #351/#355 after merged PR364. Root owns the relocation provider boundary; parallel tracks repair exact fixture cleanup and measure warm control/cold pixels. The portable-launch backend decision is pending; no production effects.
+[P270 hosted continuity](docs/dev/plans/0270-2026-10-22-hosted-continuity.md) retains bounded Native14 warm/function evidence and P277 actual restart/reopen proof. #355 remains open for the unknown Native8 launch outcome and same-pair combined coordination/cold evidence. [P278 diagnosis](docs/dev/plans/0278-2026-10-23-reopen-launch-diagnosis355.md) owns the bounded causal probe and secret-free phase diagnostics. Native578 relocation remains explicitly deferred; no production effects.
 
 [P268 attachment](docs/dev/plans/0268-2026-10-22-hosted-attachment.md) and [P267/#350 takeover](docs/dev/plans/0267-2026-10-22-hosted-takeover.md) close as integrated source outcomes. [Acceptance](docs/dev/notes/0268-2026-10-22-hosted-attachment-control.md) records actual Native04 workflow and corrected cleanup; Native05 cookie continuity and independent cleanup also pass. No deployment; wider #347 remains open.
 

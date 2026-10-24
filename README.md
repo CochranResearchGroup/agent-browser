@@ -1372,7 +1372,7 @@ Repeating `stream enable` with no port, port zero, or the current port returns t
 
 Failed browser launches and non-success service jobs are also written to the
 append-only user-scoped forensic journal at
-`~/.agent-browser/service/failure-journal.jsonl`. The authenticated dashboard
+`~/.agent-browser/service/failure-journal.jsonl`. Private browser-launch records include a fixed `details.phase` label for validation, process/endpoint startup, protocol initialization, CDP connection, target discovery, active session or download policy. Raw private launch errors remain redacted; an unknown outcome still requires readback before another attempt. The authenticated dashboard
 adds observations for failed Guacamole loads, unusable handoff links, CDP feeds
 that connect without delivering frames, and dashboard actions that fail before
 the service can create a job. Read recent privacy-bounded records with

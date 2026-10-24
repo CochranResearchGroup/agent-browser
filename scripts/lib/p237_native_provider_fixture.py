@@ -27,6 +27,10 @@ def start_native_provider_fixture(env, artifacts):
     callback_token.chmod(0o600)
     env['AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE'] = str(callback_token)
 
+    def current_viewing_generation():
+        path = artifacts / 'managed-provider-viewing-generation.json'
+        return json.loads(path.read_text()) if path.exists() else 19
+
     class Handler(http.server.BaseHTTPRequestHandler):
         def log_message(self, *_args):
             pass
@@ -41,13 +45,14 @@ def start_native_provider_fixture(env, artifacts):
                 self.send_error(400)
                 return
             result = None
+            current_generation = current_viewing_generation()
             if operation == 'inventory':
                 result = copy.deepcopy(wire['inventory'])
                 result['policy']['pools']['main']['maximum_reserved'] = 1
                 result['pools'][0]['capacity'] = 1
                 result['desktops'][0]['viewing'] = {
                     'lifecycleGeneration': 7, 'desktopId': wire['assignmentObservation']['target']['viewingDesktopId'],
-                    'generation': 19, 'publicRoute': '/1',
+                    'generation': current_generation, 'publicRoute': '/1',
                 }
             elif operation == 'observe_assignment':
                 result = copy.deepcopy(wire['assignmentObservation'])
@@ -56,9 +61,11 @@ def start_native_provider_fixture(env, artifacts):
                     result['target']['viewingGeneration'] = json.loads(generation_override.read_text())
             elif operation == 'launch_environment':
                 result = copy.deepcopy(wire['launchEnvironment'])
-                result['environment'] = {'DISPLAY': env['DISPLAY'], 'XAUTHORITY': str(authority), 'REMOTE_VIEW_SLOT_GENERATION': '19'}
+                result['target']['viewingGeneration'] = current_generation
+                result['environment'] = {'DISPLAY': env['DISPLAY'], 'XAUTHORITY': str(authority), 'REMOTE_VIEW_SLOT_GENERATION': str(current_generation)}
             elif operation == 'windows':
                 result = copy.deepcopy(wire['windows'])
+                result['viewingGeneration'] = current_generation
                 result['windows'] = []
                 found = subprocess.run(['xdotool', 'search', '--onlyvisible', '--class', 'Google-chrome'], env=env, capture_output=True, text=True)
                 for window in found.stdout.split():

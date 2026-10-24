@@ -85,12 +85,11 @@ stdio command in that client and reconnect to refresh its cached catalog. Use
 the installed CLI to continue the task while integration is corrected; server
 `tools/list` alone does not prove client exposure.
 
-Command help runs without browser launch. MCP payloads use `success`, `data`, `error`; CLI failures add `type`. Inspect local help before CLI fallback.
+Help never launches browsers. MCP uses `success`, `data`, `error`; CLI failures add `type`. Private launch journals retain secret-free `details.phase`; unknown outcomes need readback.
 
-Inspect `agent-browser.runtime-health.v1` for proactive runtime drift and
-bounded recourse. Read the advanced reference's runtime custody diagnostics
-before maintenance, retirement reconciliation or interpreting unknown effects.
-Compact logs; scrub exported URLs.
+Read `agent-browser.runtime-health.v1` for drift and bounded recourse. Consult
+advanced runtime custody diagnostics before maintenance, retirement or unknown
+effect interpretation. Compact logs; scrub exported URLs.
 
 
 Use the installed `agent-browser` executable when MCP is unavailable. Read
