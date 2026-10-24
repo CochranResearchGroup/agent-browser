@@ -109,3 +109,33 @@ export function createColdFirstPixelClock({now=defaultNow,minimumMarkers=8,minim
    authentication:'existing caller-provided state',distributionClaim:false};},
  };
 }
+
+/** Summarize the predeclared cold attempts separately from warm API latency.
+ * This validates receipts; the creating live harness remains responsible for
+ * actual fresh contexts, Native frames and independently inspected pixels. */
+export function summarizeColdFirstPixels(samples,{runId,pairDigest,expectedSamples=5}={}){
+ assert(Array.isArray(samples));assert(Number.isSafeInteger(expectedSamples)&&expectedSamples>0);
+ assert(samples.length<=expectedSamples,'Cold attempts exceed the predeclared sample budget');
+ assert(typeof runId==='string'&&runId.length>0);assert(/^[a-f0-9]{64}$/.test(pairDigest));
+ const ids=new Set(),contexts=new Set();
+ for(const sample of samples){
+  assert.equal(sample.runId,runId,'Cold sample belongs to another run');assert.equal(sample.pairDigest,pairDigest,'Cold sample belongs to another source pair');
+  assert(typeof sample.id==='string'&&sample.id.length>0);assert(typeof sample.contextId==='string'&&sample.contextId.length>0);
+  assert(!ids.has(sample.id),'Cold sample ID was reused');assert(!contexts.has(sample.contextId),'Cold browser context was reused');ids.add(sample.id);contexts.add(sample.contextId);
+ }
+ const validated=samples.filter(sample=>sample.outcome==='validated_response'&&sample.pixels?.validated===true);
+ const durations=validated.map(sample=>{
+  const pixels=sample.pixels;assert.equal(pixels.sampleCount,1);
+  let instant=finiteTime(pixels.startedMs);const check=createColdFirstPixelClock({now:()=>instant});instant=finiteTime(pixels.firstPixelMs);
+  assert(check.observe({canvas:pixels.canvas,receivedWebSocketFrames:pixels.receivedWebSocketFrames}),'Cold receipt lacks validated Native frames and canvas markers');
+  assert.equal(pixels.durationMs,instant-pixels.startedMs,'Cold receipt duration differs from its monotonic boundary');
+  return finiteTime(pixels.durationMs);
+ });
+ const complete=samples.length===expectedSamples&&validated.length===expectedSamples;
+ return {version:1,workload:'cold_native_viewer_first_pixels',runId,pairDigest,
+  expectedSamples,attempted:samples.length,validated:validated.length,failedOrUnknown:samples.length-validated.length,
+  unit:'milliseconds',quantileMethod:'nearest-rank ceil(n * 0.95)',
+  minMs:durations.length?Math.min(...durations):null,medianMs:percentile(durations,.5),
+  p95Ms:percentile(durations,.95),maxMs:durations.length?Math.max(...durations):null,
+  complete,distributionClaim:complete,targetMs:null,targetMet:null,samples:structuredClone(samples)};
+}
