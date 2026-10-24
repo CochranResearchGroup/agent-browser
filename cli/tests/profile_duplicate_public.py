@@ -285,7 +285,7 @@ def main():
                 displays.append(':'+number)
             finally:os.close(read2)
             spawn(['openbox','--sm-disable'],env=dict(env,DISPLAY=displays[1]),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-            deadline=time.monotonic()+10
+            deadline=time.monotonic()+20
             while 'window id #' not in run(['xprop','-root','_NET_SUPPORTING_WM_CHECK'],displays[1]).stdout:
                 assert time.monotonic()<deadline,'second window manager readiness deadline';time.sleep(.02)
             created = run([str(Path(args.binary).resolve()), 'runtime', 'create', 'manual-fixture', '--json'])
@@ -317,7 +317,7 @@ def main():
                 attachment=dict(version=1,process=dict(pid=borrowed.pid,startToken='linux:'+identity['boot_id']+':'+identity['start_token'],executablePath=identity['executable'],browserFamily='chrome'),profilePath=str(profile),cdpEndpoint='ws://127.0.0.1:'+port+path,targetId=page['id'])
                 binding=dict(version=1,hostId='fixture',participantId='agent',sessionId='app-session',placement=dict(mode='required',desktop=dict(desktopId=wire['assignment']['desktopId'],generation=7)))
                 attached_request={key:value for key,value in request.items() if key!='url'}
-                attached_request.update(mode='automation',attachment=attachment,hostBinding=binding)
+                attached_request.update(mode='automation',profileMode='existing',attachment=attachment,hostBinding=binding)
                 task=call('browser_open',attached_request)
                 # The supplying app owns reaping its original child on normal exit.
                 def reap_app_original():
