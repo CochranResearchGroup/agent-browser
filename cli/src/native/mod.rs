@@ -34,6 +34,7 @@ mod browser_launch_custody_store;
 pub mod browser_lifecycle;
 #[allow(dead_code)]
 pub mod browser_locator;
+pub(crate) mod browser_native_control;
 #[allow(dead_code)]
 pub mod browser_navigation;
 #[allow(dead_code)]

@@ -4,10 +4,14 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   chmodSync,
+  closeSync,
+  openSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
+  readlinkSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -180,6 +184,9 @@ const source = spawn(binary, ['session', 'supervisor', 'run-host'], {
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let sourceOutput = '';
+let legacyWriter;
+let fifoWriter;
+
 source.stdout.on('data', (chunk) => { sourceOutput += chunk; });
 source.stderr.on('data', (chunk) => { sourceOutput += chunk; });
 
@@ -201,8 +208,83 @@ try {
   const legacyMarker = join(home, '.agent-browser', 'runtime-adoption', 'admission-drain.json');
   mkdirSync(join(home, '.agent-browser', 'runtime-adoption'), { recursive: true });
   writeFileSync(legacyMarker, 'malformed retained upgrade metadata');
+  // A crashed writer's PID may now belong to an unrelated live process.
+  // Its retained diagnostics must not veto the operator's host transfer.
+  const staleWriterPath = join(home, '.agent-browser/convergence/workstation.lock');
+  mkdirSync(join(home, '.agent-browser/convergence'), { recursive: true });
+  writeFileSync(staleWriterPath, `${process.pid}\n`);
+  // A guarded public transaction command registers custody before reading
+  // its supplied transaction. Pause that OS read and present the older wire
+  // format to qualify cross-version exclusion without a private test API.
+  const legacyTransaction = join(home, '.agent-browser/runtime-adoption/transactions/upgrade-legacy-writer.json');
+  mkdirSync(join(home, '.agent-browser/runtime-adoption/transactions'), {recursive:true});
+  const fifo = spawnSync('mkfifo', [legacyTransaction], {encoding:'utf8'});
+  assert(fifo.status === 0, `fixture FIFO creation failed: ${fifo.stderr}`);
+  fifoWriter = spawn('python3', ['-c', `import os,sys
+fd=os.open(sys.argv[1],os.O_RDWR)
+print('fifo-ready',flush=True)
+sys.stdin.readline()
+os.write(fd,b'{}')
+os.close(fd)
+`, legacyTransaction], {stdio:['pipe','pipe','pipe']});
+  let fifoReady = false;
+  fifoWriter.stdout.on('data', chunk => { fifoReady ||= chunk.toString().includes('fifo-ready'); });
+  await waitFor(() => fifoReady || fifoWriter.exitCode !== null, 'transaction input boundary');
+  assert(fifoReady, 'fixture FIFO writer did not start');
+  let legacyOutput = '';
+  legacyWriter = spawn(binary, ['install', 'transactions', 'close',
+    '--transaction-id', 'upgrade-legacy-writer', '--expected-revision', '1',
+    '--candidate-generation', 'fixture', '--census-digest', 'none', '--json'],
+  {cwd:rootDir,env,stdio:['ignore','pipe','pipe']});
+  legacyWriter.stdout.on('data', chunk => { legacyOutput += chunk; });
+  legacyWriter.stderr.on('data', chunk => { legacyOutput += chunk; });
+  await waitFor(() => legacyWriter.exitCode !== null || (() => {
+    try {
+      return readdirSync(`/proc/${legacyWriter.pid}/fd`).some(fd =>
+        readlinkSync(`/proc/${legacyWriter.pid}/fd/${fd}`) === legacyTransaction);
+    } catch { return false; }
+  })(), 'executing transaction writer');
+  assert(legacyWriter.exitCode === null, `transaction exited before input boundary: ${legacyOutput}`);
+  // The open descriptor is the synchronization boundary; remove the pathname
+  // so unrelated diagnostic inventory cannot wait on the prepared FIFO.
+  rmSync(legacyTransaction);
+  const busy = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
+  assert(busy.blockers.some(blocker => blocker.code === 'workstation_transaction_busy'),
+    'an executing writer must exclude takeover effects');
+  const competing = spawnSync(binary, ['install', 'workstation', '--apply', '--json'], {
+    cwd:rootDir, env:{...env, AGENT_BROWSER_WORKSTATION_ROOT:home}, encoding:'utf8',
+  });
+  assert(competing.status !== 0 && `${competing.stdout}${competing.stderr}`.includes('already active'),
+    'a competing apply must stop before effects while writer custody is held');
+  assert(!existsSync(join(home, '.local/lib/agent-browser/generations')),
+    'a competing apply must not stage a candidate generation');
+  const preview = spawnSync(binary, ['install', 'workstation', '--dry-run',
+    '--runtime-replacement-policy', 'full-shutdown', '--json'], {cwd:rootDir,env,encoding:'utf8'});
+  assert(preview.status === 0, `replacement preview failed: ${preview.stdout} ${preview.stderr}`);
+  const replacement = JSON.parse(preview.stdout).runtimeReplacementPlan;
+  assert(replacement.disposition === 'blocked'
+    && replacement.blockers.some(blocker => blocker.code === 'workstation_transaction_busy'),
+  `replacement preview must report executing writer contention: ${JSON.stringify(replacement)}`);
+  const claimedBusy = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
+  assert(claimedBusy.blockers.some(blocker => blocker.code === 'workstation_transaction_busy'),
+    'an executing transaction must retain its process-instance custody between physical locks');
+  assert(readFileSync(staleWriterPath, 'utf8').trim() === String(legacyWriter.pid),
+    'the legacy coordination protocol must retain PID-only writer text for older binaries');
+  // Older writers replace the PID file. Hold its old inode open while
+  // recreating it, without reaching into the richer record's implementation.
+  const previousPidFile = openSync(staleWriterPath, 'r');
+  rmSync(staleWriterPath);
+  writeFileSync(staleWriterPath, `${legacyWriter.pid}\n`);
+  closeSync(previousPidFile);
+  const legacyBusy = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
+  assert(legacyBusy.blockers.some(blocker => blocker.code === 'workstation_transaction_busy'),
+    'an executing legacy transaction without an apply flag must retain custody');
+  fifoWriter.stdin.end('release\n');
+  await waitFor(() => legacyWriter.exitCode !== null, 'legacy transaction completion');
+  assert(legacyWriter.exitCode !== 0, 'the deliberately invalid transaction must not mutate state');
+  writeFileSync(staleWriterPath, `${process.pid}\n`);
   const plan = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
-  assert(plan.disposition === 'ready_for_takeover', `unexpected disposition: ${JSON.stringify(plan)}`);
+  assert(plan.disposition === 'ready_for_takeover', `stale writer metadata must not veto takeover: ${JSON.stringify(plan)}`);
   assert(plan.selectedBackend.pid === sourcePid, 'plan selected a different process');
   assert(plan.selectedListenerPorts.includes(streamPort), 'plan did not prove the fixed port owner');
   assert(plan.p147CapabilityReady === true, 'P147 capability evidence was not ready');
@@ -236,6 +318,15 @@ try {
   const supervisorOutput = existsSync(systemctlLog) ? readFileSync(systemctlLog, 'utf8') : '';
   throw new Error(`${error.message}\nsource output:\n${sourceOutput}\nsupervisor output:\n${supervisorOutput}`);
 } finally {
+  if (fifoWriter && fifoWriter.exitCode === null) fifoWriter.stdin.end('release\n');
+  if (legacyWriter && legacyWriter.exitCode === null) {
+    await waitFor(() => legacyWriter.exitCode !== null, 'legacy fixture writer cleanup').catch(() => {});
+    if (legacyWriter.exitCode === null) legacyWriter.kill('SIGTERM');
+  }
+  if (fifoWriter && fifoWriter.exitCode === null) {
+    await waitFor(() => fifoWriter.exitCode !== null, 'FIFO fixture cleanup').catch(() => {});
+    if (fifoWriter.exitCode === null) fifoWriter.kill('SIGTERM');
+  }
   if (source.exitCode === null && processIsLive(source.pid)) source.kill('SIGTERM');
   if (existsSync(systemctlState)) {
     const pid = Number.parseInt(readFileSync(systemctlState, 'utf8'), 10);

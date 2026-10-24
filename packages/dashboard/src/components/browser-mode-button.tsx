@@ -3,13 +3,16 @@
 import { useEffect, useState } from "react";
 import { CircleHelp, Code2, MousePointer2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ProfileDuplicateDialog } from "@/components/profile-duplicate-dialog";
 import type { ServiceBrowserModeInspection } from "@agent-browser/client/service-observability";
 
 /** Inspect owner evidence without focusing a browser, opening a viewer or changing mode. */
-export function BrowserModeButton({ label, inspection, observed = false, onRefresh }: {
-  label: string; observed?: boolean; inspection?: ServiceBrowserModeInspection | null; onRefresh: () => Promise<void>;
+export function BrowserModeButton({ label, inspection, profileId, observed = false, onRefresh }: {
+  label: string; profileId?: string | null; observed?: boolean; inspection?: ServiceBrowserModeInspection | null; onRefresh: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const sourceProfileId = profileId ?? inspection?.profileId;
   const [, expireEvidence] = useState(0);
   useEffect(() => {
     const age = Date.now() - (inspection?.observedAtMs ?? Number.NaN);
@@ -28,7 +31,7 @@ export function BrowserModeButton({ label, inspection, observed = false, onRefre
     setRefreshing(true); setError(false);
     try { await onRefresh(); } catch { setError(true); } finally { setRefreshing(false); }
   };
-  return <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+  return <><DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
     <DropdownMenuTrigger asChild>
       <button type="button" className="native-browser-mode" aria-label={`Browser mode for ${label}: ${name}`}
         title={`Browser mode: ${name}`} onPointerEnter={event => { if (event.pointerType !== "touch") setOpen(true); }}>
@@ -44,8 +47,9 @@ export function BrowserModeButton({ label, inspection, observed = false, onRefre
       <DropdownMenuLabel>Native input: Unverified</DropdownMenuLabel>
       {name === "Unverified" && <DropdownMenuLabel>Refresh inventory to observe this browser again.</DropdownMenuLabel>}
       <DropdownMenuSeparator />
+      {sourceProfileId && <DropdownMenuItem onSelect={() => { setOpen(false); setDuplicateOpen(true); }}>Duplicate profile</DropdownMenuItem>}
       <DropdownMenuItem disabled={refreshing} onSelect={event => { event.preventDefault(); void refresh(); }}>{refreshing ? "Refreshing inventory…" : "Refresh inventory"}</DropdownMenuItem>
       {error && <DropdownMenuLabel role="alert">Inventory refresh failed. Try again.</DropdownMenuLabel>}
     </DropdownMenuContent>
-  </DropdownMenu>;
+  </DropdownMenu>{sourceProfileId && <ProfileDuplicateDialog open={duplicateOpen} onOpenChange={setDuplicateOpen} profileId={sourceProfileId} onRefresh={onRefresh} />}</>;
 }

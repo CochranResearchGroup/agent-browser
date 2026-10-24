@@ -25,3 +25,7 @@ The regression failed with the broad diagnostic response, then all253 stream cas
 ## Publication phase
 
 The no-production-effect bound applied to diagnosis. After source integration, continue the already authorized dashboard deployment through one production-shaped combined candidate and the supported preserve-mode installer. P284/PR406 is now canonical and must be reconciled first. Recheck policy and custody; preserve browsers, foreign work and Native ownership. No formal release or provider/ingress changes.
+
+## Installed checkpoint and remaining work
+
+PR410 is merged and sealed combined candidate4c8131146eb9 is installed through the supported preserve transaction. All11 browser process generations survive. Paired backend median improves487.841ms to32.755ms. Keep this plan IN_PROGRESS: one public first-context rail sample takes4.98s, while five follow-up samples take0.83–1.03s. The remaining tail is not explained. #412 tracks the separate Native pool acquisition failure blocking the production disposable workflow. Retain the primary checkout and candidates. Next packet is measurement at the initial owner-response / presence / rendered-rail boundary; no further provider mutation or speculative timing fix.

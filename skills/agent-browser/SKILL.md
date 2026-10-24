@@ -16,7 +16,7 @@ Creation context is immutable. Cards omit missing identity; polling, Share and j
 
 ## MCP task workflow
 
-Warnings stay advisory: `install workstation live --json`.
+Warnings are advisory; executing writers serialize.
 
 Use `browser_open` with `{"serviceName":"my-app","agentName":"editor","taskName":"Edit draft","profile":"editorial","profileMode":"persistent","taskKey":"editing","url":"https://example.com"}`. Read `data.taskId`, `profileId`, `browserId`, `tabId`, `url`. Address actions with `taskId`. Reuse `taskKey` to preserve the page/edits without navigation; distinct keys separate tasks. `browser_close` ends only the addressed task.
 
@@ -140,6 +140,6 @@ Development startup ownership: [diagnostics](references/cli-and-service.md#devel
 
 ## Read browser mode
 
-Discover browser operation `mode`; call `browser_command` with `taskId` and action `mode`. CLI: `agent-browser --json mcp browser-mode <task-id>`. CDP/no-CDP/Unverified evidence never proves native input or login. [Mode inspection](references/cli-and-service.md#browser-mode-inspection).
+Discover browser operation `mode`; call `browser_command` with `taskId` and action `mode`. CLI: `agent-browser --json mcp browser-mode <task-id>`. Use `browser_command` actions `native_capture`/`native_input` for Native control without CDP. Delivery does not prove login. Discover `profile_duplicate` for independent copies; retain its operation ID for remediation. [Controls](references/cli-and-service.md#browser-mode-inspection).
 
 Diagnostics retain `?view=service:<name>` and selected `workspace`, `browser`, `session`, `tab`, `profile`, `job` query fields.

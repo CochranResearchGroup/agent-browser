@@ -3,7 +3,7 @@ work_item_tracking: required
 lanes:
   - id: P283
     product_lane: PL-PLATFORM
-    objective: Inspect verified browser mode across public interfaces and the rail
+    objective: Deliver browser mode and independent profile controls through owner workflows
     plan: docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md
     branch: platform/browser-mode-401
     target: main
@@ -12,9 +12,27 @@ lanes:
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
     dependencies: []
-    validation_status: "401 source under draft PR408; resumed402/403 backend cores integrated as partial source with focused evidence; public adapter and real workflow gates remain incomplete"
+    validation_status: "401 source validated; third-window402 Native controls and403 owner adapters integrated with focused tests; full conversion and actual Native/cookie workflows incomplete; PR408 draft"
     overlaps: [P269, P282]
     reconciled_overlaps: ["401 owns read-only mode projection, MCP adapter, schema/client and rail; preserve P269 manual launch and P282 upgrade source, coordinate shared docs at integration"]
+    updated_at: 2026-10-24
+
+  - id: P288
+    product_lane: PL-BUGFIX
+    objective: Remove stale writer refusal and report actual contention
+    plan: docs/dev/plans/0288-2026-10-24-workstation-writer-custody.md
+    branch: fix/workstation-writer-custody
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#414]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: [P284]
+    overlaps: [P283, P285]
+    reconciled_overlaps: [P283, P285]
+    validation_status: Four public red-green cases;221 workstation tests, strict Rust gates, installer and takeover fixtures, docs and independent zero-residue readback pass
+    limitations: ["No production publication; preserve all peer work and browsers"]
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/415
     updated_at: 2026-10-24
 
   - id: P285
@@ -29,8 +47,8 @@ lanes:
     custody_state: ACTIVE
     overlaps: [P283, P284]
     reconciled_overlaps: ["Own dashboard/http routing and rail freshness prose only; P283/P284 retain profile/store/observation and installer source; reuse primary and retain pinned artifacts"]
-    validation_status: Real-handler red-green;253 stream passes with2 ignored; strict Rust/docs/parity gates; exact development empty median3.358ms and one-browser12.867ms
-    limitations: ["Production-shaped publication pending after P284 reconciliation", "No stale-data substitution, provider/ingress change or private-account activity", "Cold shell tail remains distinct"]
+    validation_status: PR410 merged; sealed preserve install accepted;11 browser generations preserved; paired installed workspace median32.755ms; Rust/docs/parity and exact installer fixture pass
+    limitations: ["Installed; one4.98s public cold rail tail remains unexplained", "No stale-data substitution, provider/ingress change or private-account activity", "Production synthetic open blocked by pending Native acquisition; tracked separately in #412"]
     updated_at: 2026-10-24
 
   - id: P284

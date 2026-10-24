@@ -972,13 +972,19 @@ try {
     0,
     'failure injection after units-staged must return a nonzero status',
   );
+  const failedCoordination = new Set(['workstation.lock', 'workstation.guard', 'workstation.owner.json']
+    .map(name => join(failedInstallRoot, '.agent-browser/convergence', name)));
+  for (const path of failedCoordination) {
+    if (existsSync(path)) assert.ok(readFileSync(path).length <= 8192,
+      'retained writer diagnostics must stay bounded');
+  }
   const failedRegularFiles = regularFiles(failedInstallRoot).filter(
-    (path) => basename(path) !== 'workstation.lock',
+    path => !failedCoordination.has(path),
   );
   assert.equal(
     failedRegularFiles.length,
     1,
-    'a failed first apply must retain only its durable transaction',
+    'a failed first apply must retain only its transaction and bounded writer diagnostics',
   );
   assert.match(failedRegularFiles[0], /runtime-adoption\/transactions\/upgrade-.*\.json$/);
   assertTransactionTerminal(
@@ -993,6 +999,11 @@ try {
     0,
     'a failed apply must not activate systemd units',
   );
+
+  const afterFailedWriter = runInstaller(failedInstallRoot, ['--apply', '--json']);
+  assert.equal(afterFailedWriter.status, 0, afterFailedWriter.stderr);
+  assertJsonSuccess(afterFailedWriter.stdout, 'apply after failed writer exit');
+  assertTransactionTerminal(join(failedInstallRoot, '.agent-browser/runtime-adoption/transactions'), 'accepted');
 
   const staleDrainPath = join(
     drainBlockedRoot,
@@ -1035,24 +1046,12 @@ try {
   mkdirSync(lockDir, { recursive: true });
   writeFileSync(join(lockDir, 'workstation.lock'), `${process.pid}\n`);
   writeFileSync(commandLog, '');
-  const lockedApply = runInstaller(lockedInstallRoot, ['--apply', '--json']);
-  assert.notEqual(lockedApply.status, 0, 'a concurrent apply must fail before staging');
-  assert.match(`${lockedApply.stdout}${lockedApply.stderr}`, /already active/);
-  assert.equal(
-    regularFiles(lockedInstallRoot).filter(
-      (path) => basename(path) !== 'workstation.lock',
-    ).length,
-    1,
-    'a lock-rejected apply must retain only its blocked transaction',
-  );
+  const staleWriterApply = runInstaller(lockedInstallRoot, ['--apply', '--json']);
+  assert.equal(staleWriterApply.status, 0, staleWriterApply.stderr);
+  assertJsonSuccess(staleWriterApply.stdout, 'stale writer diagnostics apply');
   assertTransactionTerminal(
     join(lockedInstallRoot, '.agent-browser', 'runtime-adoption', 'transactions'),
-    'blocked_inflight_effect',
-  );
-  assert.equal(
-    readFileSync(commandLog, 'utf8'),
-    '',
-    'a lock-rejected apply must not quiesce or activate user units',
+    'accepted',
   );
 
   console.log('Workstation install source-free fixture passed');

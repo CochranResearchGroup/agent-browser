@@ -59,7 +59,11 @@ pub(crate) trait BrowserRuntimeDriver {
     }
 
     /// Pin one profile's next launches without changing another profile's build.
-    fn select_profile_browser_executable(&mut self, _profile_id: String, _path: String) -> Result<(), String> {
+    fn select_profile_browser_executable(
+        &mut self,
+        _profile_id: String,
+        _path: String,
+    ) -> Result<(), String> {
         Err("browser_profile_build_selection_unsupported".into())
     }
 
@@ -276,8 +280,13 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
             .reconcile_profile_browser(profile, browser, tabs, navigation)
     }
 
-    fn select_profile_browser_executable(&mut self, profile_id: String, path: String) -> Result<(), String> {
-        self.runtime.select_profile_browser_executable(profile_id, path)
+    fn select_profile_browser_executable(
+        &mut self,
+        profile_id: String,
+        path: String,
+    ) -> Result<(), String> {
+        self.runtime
+            .select_profile_browser_executable(profile_id, path)
     }
 
     fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
@@ -571,7 +580,9 @@ enum BrowserRuntimeCommand {
         reply: mpsc::Sender<Result<(), String>>,
     },
     SelectProfileExecutable {
-        profile_id: String, path: String, reply: mpsc::Sender<Result<(), String>>,
+        profile_id: String,
+        path: String,
+        reply: mpsc::Sender<Result<(), String>>,
     },
     SelectExecutable {
         path: String,
@@ -955,9 +966,20 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
             },
         )
     }
-    fn select_profile_browser_executable(&mut self, profile_id: String, path: String) -> Result<(), String> {
-        let (reply, receiver)=mpsc::channel();
-        self.request(receiver, BrowserRuntimeCommand::SelectProfileExecutable {profile_id,path,reply})
+    fn select_profile_browser_executable(
+        &mut self,
+        profile_id: String,
+        path: String,
+    ) -> Result<(), String> {
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::SelectProfileExecutable {
+                profile_id,
+                path,
+                reply,
+            },
+        )
     }
 
     fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
@@ -1180,7 +1202,7 @@ fn run_browser_worker(
 ) {
     let mut browsers = HashMap::<String, DaemonState>::new();
     let mut manual = manual::ManualBrowsers::default();
-    let mut profile_executables: HashMap<String,String> = HashMap::new();
+    let mut profile_executables: HashMap<String, String> = HashMap::new();
     let mut shared_browser_tabs = HashMap::<String, BTreeSet<String>>::new();
     let mut borrowed_app_browsers = HashMap::<String, BorrowedAppBrowser>::new();
     let mut reconciled_targets = HashMap::<(String, String), String>::new();
@@ -1237,7 +1259,10 @@ fn run_browser_worker(
                         .get("DISPLAY")
                         .cloned()
                         .ok_or("manual_login_display_unavailable")?;
-                    let executable = profile_executables.get(&profile.id).cloned().or_else(|| config.executable_path.clone())
+                    let executable = profile_executables
+                        .get(&profile.id)
+                        .cloned()
+                        .or_else(|| config.executable_path.clone())
                         .or_else(|| {
                             super::cdp::chrome::find_chrome()
                                 .map(|p| p.to_string_lossy().into_owned())
@@ -1512,8 +1537,12 @@ fn run_browser_worker(
                 };
                 let _ = reply.send(result);
             }
-            BrowserRuntimeCommand::SelectProfileExecutable { profile_id, path, reply } => {
-                profile_executables.insert(profile_id,path);
+            BrowserRuntimeCommand::SelectProfileExecutable {
+                profile_id,
+                path,
+                reply,
+            } => {
+                profile_executables.insert(profile_id, path);
                 let _ = reply.send(Ok(()));
             }
             BrowserRuntimeCommand::SelectExecutable { path, reply } => {
@@ -1589,7 +1618,10 @@ fn run_browser_worker(
                     let mut manager = BrowserManager::launch(
                         LaunchOptions {
                             headless: config.headless && display.is_none(),
-                            executable_path: profile_executables.get(&profile.id).cloned().or_else(|| config.executable_path.clone()),
+                            executable_path: profile_executables
+                                .get(&profile.id)
+                                .cloned()
+                                .or_else(|| config.executable_path.clone()),
                             profile: Some(profile.user_data_dir.clone()),
                             display,
                             remote_headed: config.remote_headed || desktop.is_some(),
@@ -2820,17 +2852,40 @@ mod tests {
     #[test]
     fn profile_build_pin_does_not_change_unrelated_launches() {
         let root = TempDirectory::new();
-        let default = root.0.join("missing-default-chrome").to_string_lossy().into_owned();
-        let pinned = root.0.join("missing-pinned-chrome").to_string_lossy().into_owned();
+        let default = root
+            .0
+            .join("missing-default-chrome")
+            .to_string_lossy()
+            .into_owned();
+        let pinned = root
+            .0
+            .join("missing-pinned-chrome")
+            .to_string_lossy()
+            .into_owned();
         let mut runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
-            headless:true, executable_path:Some(default.clone()), ..Default::default()
-        }).unwrap();
-        runtime.select_profile_browser_executable("source".into(),pinned.clone()).unwrap();
-        for (id, expected) in [("source",&pinned),("unrelated",&default)] {
-            let directory=root.0.join(id); fs::create_dir_all(&directory).unwrap();
-            let profile=BrowserProfileCatalogEntry { id:id.into(),name:id.into(),user_data_dir:directory.to_string_lossy().into_owned(),kind:BrowserProfileKind::Named,manual_login_url:None };
-            let failure=runtime.launch_browser(&profile,None).unwrap_err();
-            assert!(failure.contains(expected), "wrong executable selected: {failure}");
+            headless: true,
+            executable_path: Some(default.clone()),
+            ..Default::default()
+        })
+        .unwrap();
+        runtime
+            .select_profile_browser_executable("source".into(), pinned.clone())
+            .unwrap();
+        for (id, expected) in [("source", &pinned), ("unrelated", &default)] {
+            let directory = root.0.join(id);
+            fs::create_dir_all(&directory).unwrap();
+            let profile = BrowserProfileCatalogEntry {
+                id: id.into(),
+                name: id.into(),
+                user_data_dir: directory.to_string_lossy().into_owned(),
+                kind: BrowserProfileKind::Named,
+                manual_login_url: None,
+            };
+            let failure = runtime.launch_browser(&profile, None).unwrap_err();
+            assert!(
+                failure.contains(expected),
+                "wrong executable selected: {failure}"
+            );
         }
     }
 

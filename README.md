@@ -643,6 +643,9 @@ isolated development and foreign processes are preserved. Install doctor exposes
 Retirement targets and outcomes are retained in the private install transaction.
 Forward recovery also reconciles MCP clients against the selected candidate.
 
+Only an executing workstation writer delays a conflicting change. Stale PID
+diagnostics do not establish writer custody or veto a valid request.
+
 The workstation operator decides whether to upgrade. Warnings about live work
 or incomplete observations are advisory and can suggest remedies; they never
 veto a valid operator-authorized request. Use `agent-browser install workstation
@@ -7177,3 +7180,35 @@ upgrade does not guess a missing historical choice from profile contents.
 Retained browser recovery reconciles an unobserved launch claim after proving the exact profile has no live process. The original claim remains in history. Provider environment checks run before process admission, so unavailable desktops do not create new launch claims.
 
 Configure the native Remote View origin, pool, application and public origin in `~/.agent-browser/.env` or the process environment. When native Remote View settings are present, workstation installation and reconciliation verify the native application inventory, admitted pool, and existing protected lease authority. They do not provision RDP users, the RDP privileged helper, XRDP, Docker, or Guacamole. Partial native settings fail validation. Missing authority readiness requires a separate authority repair; a native upgrade does not install or replace that service. Live-browser upgrades prepare retained source owners before verifying that source writers are quiet. Candidate startup remains blocked until that stability check passes.
+
+
+Native task observation and input use the existing Remote View owner. MCP
+`browser_command` supports `native_capture` and `native_input`; discover their
+arguments with `browser_discover`. CLI equivalent:
+`agent-browser --json mcp browser-native TASK native_input '{"actions":[{"kind":"key","chord":"Tab"}]}'`.
+HTTP clients send the same action, exact `sessionId` and `sessionName` to
+`POST /api/command`. Capture returns a fresh, process-fenced window region;
+input reports delivery separately from completed page effects. Observe after
+an uncertain reply before deciding another input is appropriate. These actions
+never attach CDP, acquire another task, or return explicit human takeover.
+An unavailable Native owner or changed process/window returns remediation.
+Mode conversion remains a separate operation under development.
+
+
+The rail's browser-mode menu offers **Duplicate profile**. Enter a copy name,
+review affected tasks, and select the returned action. A running source closes
+only after the selected confirmation. A source without qualified clean-close
+history offers **Open source for review**. The copy has a new identity and
+writable directory; source and copy evolve independently. Copy success does
+not prove that stored authentication works in the copy.
+
+MCP: discover `profile_duplicate`, then use `browser_command` with
+`action: "profile_duplicate"` and `params` containing `operationId`,
+`sourceProfileId`, `destinationName`, `choice` and `launch`. An optional `taskId`
+binds the source profile to that task. CLI:
+`agent-browser --json mcp profile-duplicate '{"operationId":"copy-one","sourceProfileId":"PROFILE","destinationName":"Independent copy","choice":"prepare","launch":true}'`.
+HTTP: send these fields and `action: "browser_session_profile_duplicate"` to
+`POST /api/command`. Follow the returned actions using the same `operationId`;
+set `ownerConfirmed: true` only for the explicitly selected consequential
+choice. After a lost reply, reconcile that operation before attempting another
+effect. Cancelling a request does not reopen a source already stopped.

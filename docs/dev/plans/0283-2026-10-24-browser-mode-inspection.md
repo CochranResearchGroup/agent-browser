@@ -1,17 +1,19 @@
-# P283 Browser mode inspection
+# P283 Browser modes and independent profiles
 
 State: OPEN
 Product lane: PL-PLATFORM
 Accountable owner: ecochran76
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/400
-Work item: https://github.com/CochranResearchGroup/agent-browser/issues/401
+Work items: #401, #402 and #403 under spec #400; #404 remains blocked
 Integration branch: platform/browser-mode-401
 Base: 07fb4c9cb020bb6349d3faf1efcd152cc34fd9ee
-Deadline: 2026-10-24T20:15:41Z (resumed window; first-window cutoff retained below)
+Deadline: 2026-10-24T21:35:13Z (third implementation window; earlier windows retained as history)
 
 ## Current State
 
-Initially401 was the only unblocked ticket; root implemented it with TDD. It is now validated at `ba1c60ea9`, and402/403 are running as bounded auxiliary workers. 402 and403 depend on validated401;404 depends on402 and403. No worker is dispatched against an unmet blocker. Existing five checkouts and dirty source are preserved. This necessary isolated primary is the sixth checkout. P282 operator-upgrade work retains its source; this lane owns only mode inspection and matching contracts/UI/docs.
+The authoritative third-window integration is `platform/browser-mode-401`, source checkpoint `ac79fc8a1` before final documentation custody. Current main through `ae6adde7f` is reconciled. #401 remains source validated; #402 and #403 are integrated partial implementations with the exact gates below. #404 is not unlocked. No installation or production publication occurred. Earlier ledger rows and dated windows are retained evidence, not current completion claims.
+
+Root owns #402 and shared adapters; `duplicate_403_r2` owned #403 child host/backend tests in its necessary auxiliary. The worker source was cherry-picked serially, excluding its separately retained unqualified Chrome diagnostic fixture. A foreign writer-custody primary appeared during execution, taking inventory from six to seven trees; it and all other foreign work remain untouched.
 
 ## Packet and seams
 
@@ -140,3 +142,35 @@ Worker backend ea3632d0e is integrated; separate unqualified browser fixture9ca6
 Corrected manual-source rerun passes32 tests. The earlier compile failure was fixed with explicit manual_login_url None in the newer reconnect fixture. Final inspection and root-frontier profile/native tests and formatting remain recorded by their actual logs/handles17310,81709,76345, not inferred from worker results. Workspace and mode/native test-target strict Clippy pass. Both tickets remain incomplete and unreviewed as full tickets; broader affected Rust gates and full public/native/cookie workflow qualification remain required before merge readiness.
 
 Memory disposition: queued in agent_browser_main, receipt window2-memory-disposition.json in the user-scoped checkpoint directory. Queue acceptance is not retrieval proof. Goal stops at20:15:41UTC with the full requirement graph retained.
+
+### Third implementation window, 2026-10-24 20:35:13 UTC
+
+Stop and checkpoint at 21:35:13 UTC. Previous turn verified tracker records but did not advance implementation. Integration branch remains `platform/browser-mode-401`; `d5f55cb72` reconciles current main through `ae6adde7f`, preserving P284 operator authority and P285 inventory fixes alongside P283.
+
+Root owns #402, native task control, shared host declarations, model/contracts and public adapters/documentation. Worker `duplicate_403_r2` resumes full #403 in necessary auxiliary `/home/ecochran76/workspace.local/agent-browser-duplicate-403`, branch `platform/profile-duplicate-403`, merged base `36bb1e719`. It owns profile duplicate modules and tests; shared host declarations remain root-owned. Six registered worktrees include five retained primaries. Foreign auth receipts dirty work and dashboard/enrollment/profile-proof custody are preserved. Worker returns by 21:30 UTC for serial integration and checkpoint.
+
+Acceptance remains the full ticket contracts. Existing transaction cores are partial evidence; public controls, actual lifecycle and synthetic browser/Native workflow qualification remain required. Test seam is the managed browser workflow, with exact Native process/window fencing and public interface parity. No production installation or private account effects. No new broad review until completed ticket acceptance.
+
+
+### Third-window source checkpoint and acceptance limits
+
+Source commits include `d5f55cb72` main reconciliation, `0fd3e3e4a` managed Native owner routing, `087e3d767` capture/window hooks, `92eda5d9b` durable profile owner custody, `3b096b729` logical replacement/public profile build pins, `f0df5685a` Native MCP/CLI/HTTP controls, `0ce00df55` graceful Native input close, `e2e91eb06` duplication host bridge, `ffe62e8bf` rail/MCP/CLI/HTTP owner controls, `2fe55c0b5` competing close guard, `d7a7278f9` bootstrap/handoff repair, `e06a45855` copied no-CDP posture, and `ac79fc8a1` formatting.
+
+Qualified evidence in this window:
+
+- Native process/window/generation input and capture, plus transport contracts: 13 passing integration tests. Actual capture/keyboard effects on a Native desktop are not established by those fixtures.
+- Native graceful close initially used Remote View window-close. Integration discovery showed that provider path uses destructive `xdotool windowclose`; [the upstream command contract](https://github.com/jordansissel/xdotool/blob/main/xdotool.pod) distinguishes graceful requests. A real regression failed on the old request and passes with process/window-fenced Alt+F4. Positive input dispatch is still separate from exact process exit and lock release.
+- Profile owner open/reaper/legacy-close exclusion and logical task/handoff replacement: 47 model tests pass. Three owner-custody cycles have observed red/green; logical replacement also preserves the original durable handoff.
+- Profile-scoped build pin: a focused isolated CLI runtime test passes, selecting the pinned executable for its source and the default for an unrelated profile. Missing executable fixtures create no Chrome process.
+- Duplication host: three worker tests pass for stopped-source preparation, durable cancellation, live peer review, bootstrap acquisition and lost-handoff reconciliation without another launch. The bootstrap regression was written after its fix and is GREEN-only evidence; do not describe that repair as test-first.
+- Copy/custody: nine worker tests pass. A genuine red/green regression proves canonical manual-login posture is retained on the independent destination without copying live ownership.
+- Mounted rail: review has no browser effect, confirmation precedes close-and-copy, and a lost reply removes effect choices until reconciliation with the original operation ID. Original mode evidence expiry and observed-window accessibility still pass.
+- Dashboard and documentation builds pass. Service API/MCP parity passes. Default MCP catalog remains 16 tools and below the 15,000-byte schema bound; final candidate readback is retained in the window receipts. Final strict Clippy and format readback follow below.
+
+Remaining acceptance is the full original tickets. #402 still needs the transaction core connected to actual in-place mode replacement, both relaunch choices, same-task/profile/cookie/handoff round trip and actual Native visual/input proof. #403 still needs actual Native clean-close through copy and same-build independent launch, actual cookie continuity, borrowed/app source anchoring and complete failure/recovery qualification. The real Chrome diagnostic still fails Page.navigate before copying, so no copy/authentication result can be inferred. Independent test seams and source compilation are not that workflow acceptance. No additional broad review ran because no full new ticket met its acceptance; #401's earlier single review remains recorded. All tickets remain open and PR #408 remains draft.
+
+Worker source is retained on `platform/profile-duplicate-403`; its diagnostic-only Chrome fixture is excluded from this integration. Worker closeout receipt is `/tmp/p283-403-r3-worker-closeout.md`, and its fresh exact-marker OS census has zero fixture Chrome processes. Root final receipts live outside Git under the user-scoped implementation checkpoint directory. Resume from current source, not from the older ledger's unqualified first-window cores.
+
+Final third-window checks: strict workspace Clippy and Cargo format check pass after the bootstrap/posture integration. Candidate build passes; its bounded MCP readback is16 tools,14,779 schema bytes and3,994 help bytes. Final dashboard/docs builds, service API/MCP parity, policy wiring and documentation links pass. Model47, Native13, worker host3 and copy/custody9 are the qualified focused counts, not comprehensive Rust or actual Native workflow acceptance. The profile-pin RED compiler emitted the missing-method diagnostic, then was deliberately stopped with exit143 before the passing isolated rebuild; do not describe that diagnostic run as a normally completed test command.
+
+Auxiliary disposition: retain `/home/ecochran76/workspace.local/agent-browser-duplicate-403` for unfinished #403 qualification and its private build artifacts. Governed inspection found no dirty state, active candidate build or pinned candidate; branch and remote are exactly `4b985266704ea27a01610159fdbe5873ef2c7bf8`. No removal operation was started. Root and worker command sessions are terminal; fresh marker-scoped OS census has zero fixture Chrome matches and no live repository test/build commands. This is not a whole-workstation health claim. User-scoped receipts are under `~/.local/state/agent-browser/implementation-checkpoints/20261024-spec400/window3/`. All new-ticket acceptance remains incomplete and the next mandatory proof is actual workflow qualification, not another backend-only substitute.

@@ -5891,7 +5891,8 @@ status for a redacted selected-generation, migration, blocker, terminal, and
 seven-axis readiness projection without private paths or endpoint evidence.
 currentSelectionEvidence reports whether a later selected Linux installation
 proves its payload, dashboard and live host identity despite unrelated failed
-upgrade history. Active and uncertain transactions remain blocking.
+upgrade history. Executing writers serialize conflicting changes; stale
+PID diagnostics and uncertain history do not veto valid operator requests.
 The workstation operator decides whether to upgrade. Run install workstation
 live --json for a read-only observation of what Agent Browser currently thinks
 is live. Incomplete observations and interruption warnings are advisory, with
@@ -7325,12 +7326,13 @@ Usage:
 
 Commands:
   serve             Run the MCP server
-  resources/read    Read diagnostic resources; no browser launch
+  resources/read    Diagnostic reads; no launch
   host-task         Read compact app task metadata
-  browser-mode      Read CDP/no-CDP posture; no effects
-  watch-host-task   Initial/changed NDJSON; reconnect gets a fresh snapshot
-  host-control      Status/view/takeover/return/override/reconcile
-                    Failed pre-commit keeps human/epoch; inspect status before fresh return.
+  browser-mode TASK Read mode; no effects
+  browser-native TASK ACTION JSON  Native input/capture
+  profile-duplicate JSON  Owner profile duplication
+  watch-host-task   Initial/changed NDJSON; fresh reconnect
+  host-control      Status/view/takeover/return/override/reconcile; inspect failed return.
   host-reconnect    Status/disconnect/reconnect/rebind/configure/reopen
   host-policy       Optional app/task rules and attributable scoped override
 
@@ -7355,7 +7357,7 @@ Default workflow tools (16):
 Rules:
   Use taskId on actions. Reuse taskKey on open; taskPolicy overrides app defaults.
   Open requires serviceName/agentName/taskName.
-  mode=manual_login: no-CDP; close before automation.
+  mode=manual_login: no-CDP; native_capture/native_input work.
   profileMode: persistent (default), existing or disposable.
   Hosted open: hostBinding v1, required/preferred placement; never silent fallback.
   Attachment: existing profile, exact app process/profile/page; omit url.
