@@ -604,13 +604,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             &profile.destination.id,
             current_unix_ms(),
         ))?;
-        let tab = self
-            .host
-            .state
-            .sessions
-            .get(&task.session_id)
-            .and_then(|task| task.current_tab_id.clone())
-            .ok_or("profile_duplicate_destination_tab_missing")?;
+        let tab = self.host.tab_for_navigation(&task.session_id,current_unix_ms())?.tab_id;
         let handoff_id = uuid::Uuid::new_v4().to_string();
         agent_browser_service_model::retain_remote_view_tab_handoff_at(
             &mut self.host.state,
@@ -633,20 +627,17 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         let Some(task) = self.host.state.sessions.values().find(|task| {
             task.profile_id == profile.destination.id
                 && task.name == format!("profile-duplicate:{}", profile.operation_id)
-        }) else {
-            return Ok(None);
-        };
-        Ok(self
-            .host
-            .state
-            .remote_view_tab_handoffs
-            .values()
-            .find(|link| link.session_id == task.id)
-            .map(|link| LaunchReceipt {
-                task_id: task.id.clone(),
-                browser_id: task.browser_id.clone(),
-                handoff_id: link.id.clone(),
-            }))
+        }).cloned() else { return Ok(None); };
+        if let Some(link)=self.host.state.remote_view_tab_handoffs.values().find(|link|link.session_id==task.id && link.check_link_at(current_unix_ms()).is_ok()) {
+            return Ok(Some(LaunchReceipt{task_id:task.id,browser_id:task.browser_id,handoff_id:link.id.clone()}));
+        }
+        // The browser/task may have published before its reply or handoff was
+        // retained. Complete that same task; never issue another browser launch.
+        let tab=self.host.tab_for_navigation(&task.id,current_unix_ms())?.tab_id;
+        let handoff_id=uuid::Uuid::new_v4().to_string();
+        agent_browser_service_model::retain_remote_view_tab_handoff_at(&mut self.host.state,&handoff_id,&task.id,&tab,current_unix_ms())?;
+        self.host.commit_state()?;
+        Ok(Some(LaunchReceipt{task_id:task.id,browser_id:task.browser_id,handoff_id}))
     }
 }
 
@@ -655,17 +646,19 @@ mod tests {
     use super::*;
     use crate::native::browser_session_runtime::BrowserRuntimeDriver;
     use agent_browser_service_model::*;
-    struct NoRuntime;
+    struct NoRuntime { launches: Option<Rc<std::cell::Cell<u32>>> }
     impl BrowserRuntimeDriver for NoRuntime {
+        fn select_profile_browser_executable(&mut self,_:String,_:String)->Result<(),String>{if self.launches.is_some(){Ok(())}else{Err("unexpected build selection".into())}}
         fn browser_is_live(&mut self, _: &ManagedBrowserInstance) -> Result<bool, String> {
-            Err("unexpected runtime effect".into())
+            if self.launches.is_some(){Ok(true)}else{Err("unexpected runtime effect".into())}
         }
         fn launch_browser(
             &mut self,
             _: &BrowserProfileCatalogEntry,
             _: Option<&RemoteViewFixedDesktop>,
         ) -> Result<BrowserLaunch, String> {
-            Err("unexpected launch".into())
+            let launches=self.launches.as_ref().ok_or("unexpected launch")?;launches.set(launches.get()+1);
+            Ok(BrowserLaunch{process_identity:None,browser_id:"independent-browser".into(),pid:4242,cdp_endpoint:"ws://127.0.0.1:9422/devtools/browser/synthetic".into(),desktop:None})
         }
         fn close_browser(&mut self, _: &ManagedBrowserInstance) -> Result<(), String> {
             Err("unexpected close".into())
@@ -675,7 +668,7 @@ mod tests {
             _: &ManagedBrowserInstance,
             _: &[String],
         ) -> Result<BrowserTabAcquisition, String> {
-            Err("unexpected tab".into())
+            if self.launches.is_some(){Ok(BrowserTabAcquisition{tab_id:"independent-tab".into(),target_id:"independent-target".into(),source:BrowserTabSource::Bootstrap})}else{Err("unexpected tab".into())}
         }
         fn create_tab(
             &mut self,
@@ -723,7 +716,7 @@ mod tests {
         store.save_profile_catalog(&catalog).unwrap();
         let mut host = BrowserSessionHost::load(
             store,
-            BrowserSessionEffectAdapter::new(NoRuntime),
+            BrowserSessionEffectAdapter::new(NoRuntime{launches:None}),
             Path::new(""),
             BrowserSessionHostConfig {
                 session_idle_timeout_ms: 60000,
@@ -765,7 +758,7 @@ mod tests {
         store.save_profile_catalog(&catalog).unwrap();
         let mut host = BrowserSessionHost::load(
             store,
-            BrowserSessionEffectAdapter::new(NoRuntime),
+            BrowserSessionEffectAdapter::new(NoRuntime{launches:None}),
             Path::new(""),
             BrowserSessionHostConfig {
                 session_idle_timeout_ms: 60000,
@@ -878,4 +871,19 @@ mod tests {
         drop(connection);
         std::fs::remove_dir_all(root).unwrap();
     }
+    #[test]
+    fn profile_duplicate_launch_and_lost_handoff_resume_bootstrap_without_relaunch() {
+        let root=std::env::temp_dir().join(format!("duplicate-host-launch-{}",uuid::Uuid::new_v4()));std::fs::create_dir_all(root.join("destination")).unwrap();std::fs::write(root.join("build"),b"synthetic build identity").unwrap();
+        let store=BrowserSessionSqliteStore::launch_custody_fixture(rusqlite::Connection::open(root.join("runtime.sqlite3")).unwrap(),true).unwrap();store.save_session_state(&BrowserSessionState::default()).unwrap();
+        let catalog:BrowserProfileCatalog=serde_json::from_value(json!({"schemaVersion":"agent-browser.browser-profile-catalog.v1","profiles":{"destination":{"id":"destination","name":"Independent","userDataDir":root.join("destination"),"kind":"named"}},"disposablePolicies":{}})).unwrap();store.save_profile_catalog(&catalog).unwrap();
+        let launches=Rc::new(std::cell::Cell::new(0));let mut host=BrowserSessionHost::load(store,BrowserSessionEffectAdapter::new(NoRuntime{launches:Some(launches.clone())}),Path::new(""),BrowserSessionHostConfig{session_idle_timeout_ms:60000,remote_view_desktops:vec![],default_disposable_policy:None,exact_url_history_maximum_bytes:1024}).unwrap();
+        let binding:OwnerBinding=serde_json::from_value(json!({"original":{"pid":42,"startToken":"synthetic","executablePath":"/synthetic"},"browser":{"id":"source-browser","profileId":"source","pid":42,"cdpEndpoint":"","activeSessionIds":["source-task"]},"session":{"id":"source-task","name":"Source","profileId":"source","browserId":"source-browser","createdAtMs":1,"lastActivityAtMs":1,"expiresAtMs":9999,"currentTabId":"source-tab"},"tab":{"id":"source-tab","targetId":"source-target","browserId":"source-browser","sessionId":"source-task","createdAtMs":1,"lastActivityAtMs":1},"executable":root.join("build"),"digest":executable_digest(&root.join("build")).unwrap(),"close_dispatched":true,"clean_close":true,"reviewed_tasks":[]})).unwrap();
+        let profile=DuplicateProfile{destination:DestinationProfile{id:"destination".into(),name:"Independent".into(),user_data_dir:root.join("destination")},source_profile_id:"source".into(),operation_id:"launch-resume".into(),browser_build:binding.digest.clone()};
+        let mut runtime=HostedDuplication{host:&mut host,database:root.join("runtime.sqlite3"),binding,connection:rusqlite::Connection::open_in_memory().unwrap(),operation_id:"launch-resume".into(),guard:Rc::new(RefCell::new(None))};
+        let first=runtime.launch_duplicate(&profile).unwrap();assert_eq!(launches.get(),1);assert!(runtime.host.state.sessions[&first.task_id].current_tab_id.is_some());
+        runtime.host.state.remote_view_tab_handoffs.clear();runtime.host.commit_state().unwrap();
+        let resumed=runtime.reconcile_launch(&profile).unwrap().unwrap();assert_eq!(resumed.task_id,first.task_id);assert_eq!(resumed.browser_id,first.browser_id);assert_ne!(resumed.handoff_id,first.handoff_id);assert_eq!(launches.get(),1);
+        assert_eq!(runtime.reconcile_launch(&profile).unwrap().unwrap(),resumed);drop(runtime);drop(host);std::fs::remove_dir_all(root).unwrap();
+    }
+
 }
