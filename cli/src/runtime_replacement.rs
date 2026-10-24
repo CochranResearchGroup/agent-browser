@@ -815,6 +815,7 @@ fn replacement_must_preserve_takeover_blocker(code: &str) -> bool {
             | "blocked_unrelated_port_owner"
             | "blocked_active_admission_drain"
             | "blocked_active_workstation_transaction"
+            | "workstation_transaction_busy"
             | "blocked_active_takeover_transaction"
     )
 }
