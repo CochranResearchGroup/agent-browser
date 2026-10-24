@@ -544,11 +544,16 @@ try{workload:{
  if(workloadPlan){
   step='native-human-text-edit';
   const edit='native-human-'+randomUUID();
-  await save('native-human-edit-intent.json',{syntheticOnly:true,dispatchCount:1,expectedValue:edit,through:'Native canvas keyboard'});
+  await save('native-human-edit-intent.json',{syntheticOnly:true,state:'prepared',dispatchCount:0,expectedValue:edit,through:'Native canvas keyboard'});
   const nativeFrame=page.frames().find(frame=>frame.url().startsWith(nativeOrigin+'/'));
   assert(nativeFrame,'The actual Native frame must remain attached');
-  await nativeFrame.locator('#connection-status[data-state="connected"]').waitFor({timeout:15000});
-  await nativeFrame.waitForFunction(()=>['active','released'].includes(document.querySelector('#input-status')?.dataset.state),null,{timeout:15000});
+  const readiness=async phase=>save('native-human-readiness-'+phase+'.json',await nativeFrame.evaluate(()=>({capability:document.body.dataset.capability,connection:document.querySelector('#connection-status')?.dataset.state,connectionMessage:document.querySelector('#connection-status')?.textContent,input:document.querySelector('#input-status')?.dataset.state,activeId:document.activeElement.id})));
+  await readiness('before');
+  try{
+   step='native-human-viewer-connected';await nativeFrame.waitForFunction(()=>document.querySelector('#connection-status')?.dataset.state==='connected',null,{timeout:15000});
+   step='native-human-input-unlocked';await nativeFrame.waitForFunction(()=>['active','released'].includes(document.querySelector('#input-status')?.dataset.state),null,{timeout:15000});
+  }finally{await readiness('after');}
+  step='native-human-text-edit';
   const surface=await nativeFrame.evaluate(()=>{
    const candidates=[...document.querySelectorAll('canvas')].filter(c=>c.width>=100&&c.height>=100).sort((a,b)=>b.width*b.height-a.width*a.height);
    const canvas=candidates[0];if(!canvas)return null;canvas.dataset.hostedInputSurface='true';return {width:canvas.clientWidth,height:canvas.clientHeight};
@@ -565,6 +570,7 @@ try{workload:{
   await page.keyboard.press('Control+A');
   // Dispatch exactly once; independent CDP reads may observe completion, never
   // repeat keyboard input after an uncertain response.
+  await save('native-human-edit-intent.json',{syntheticOnly:true,state:'dispatching',dispatchCount:1,expectedValue:edit,through:'Native canvas keyboard'});
   await page.keyboard.type(edit);
   await primary.waitForFunction(expected=>document.querySelector('#control').value===expected,edit,{timeout:15000});
   assert.equal(await primary.locator('#control').inputValue(),edit);await continuity('after-native-human-edit');
