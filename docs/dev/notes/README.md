@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P278 reopen diagnosis](0278-2026-10-23-reopen-launch-diagnosis355.md): six bounded passes, unresolved Native8 cause, qualified phase-only diagnostics and exact cleanup; production unchanged.
+
 [P277 actual Native restart acceptance](0277-2026-10-23-native-restart-acceptance355.md): ordinary functional pass, generation-domain distinction and retained unknown reopen; full355 remains open.
 
 [P272 installed exact-task routing](0272-2026-10-22-exact-mcp-task-routing-installed.md): sealed production acceptance, configured authenticated MCP inspection, exact cleanup and separate AuraCall acceptance limits.

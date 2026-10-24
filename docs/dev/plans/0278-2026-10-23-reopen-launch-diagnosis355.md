@@ -1,20 +1,22 @@
 # P278: Diagnose the retained unknown reopen launch
 
-Status: OPEN
+Status: CLOSED
 Lane: P270
 Product lane: PL-BUGFIX
 Work item: CochranResearchGroup/agent-browser#355
 Branch: fix/reopen-launch-diagnosis-355
 Owner: ecochran76
 Target: main
-Integration: scoped PR
+Integration: source qualified; scoped PR pending
 
 ## Current State
 
-P277 Native8 retained an explicit reopen failure after actual Native restart;
-Chrome published its endpoint1.785seconds before the generic private-launch
-failure. Diagnostic9 and ordinary10 passed, without resolving its cause.
-User selected diagnosis. No failed operation may be replayed.
+Original Native8 cause remains UNRESOLVED. Three reduced and three instrumented
+actual Native cases pass; no natural failure was captured. The proven diagnostic
+gap is repaired: real pre/post-endpoint failures retain fixed phase labels while
+private text stays redacted. Source704afe4e9/candidate29370244 is qualified for
+synthetic diagnostics; production is unchanged. See [evidence](../notes/0278-2026-10-23-reopen-launch-diagnosis355.md).
+The bounded diagnosis packet ends without a claimed recovery fix;355 stays open.
 
 ## Bounded outcome and execution
 
@@ -61,3 +63,12 @@ DIAGNOSTIC_ACCEPT on success and cannot close355. Keep the original Native image
 reviewed Chrome and task/profile/no-replay oracle pinned. No uncertain operation
 is retried. Build targets are disposable; preserve only a qualified candidate and
 compact receipts. A passing batch still cannot establish the old failure's cause.
+
+## Outcome
+
+DIAGNOSIS_INCONCLUSIVE for Native8; source observability repair qualified.
+Original and intermediate failed receipts retained. Strict affected checks pass;
+three actual Native diagnostic cases pass on one sealed candidate. Six own image
+refs removed and all owned resources independently absent. Archive the single
+candidate through governed closeout; remove only the parent-owned Native source
+auxiliary and own clean integrated primary. No production adoption or relocation.

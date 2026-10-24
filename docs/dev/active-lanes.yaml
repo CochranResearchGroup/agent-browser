@@ -9,12 +9,12 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#355]
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    plan_state: CLOSED
+    custody_state: INTEGRATION_READY
     dependencies: [P277]
     overlaps: [P277, P270]
     reconciled_overlaps: ["Primary owns browser launch phase diagnostics and synthetic probe only; preserve all foreign dashboard, enrollment and manual-login work; no production effects"]
-    validation_status: Three minimal X11 restart/reopen instances pass; original Native8 cause unproven; missing-phase regression fails on original journal; phase implementation gates pending
+    validation_status: Three reduced plus3actual Native diagnostic cases pass on sealed29370244; phase gap red/green and affected Rust/docs gates pass; original Native8 cause remains unresolved
     limitations: ["Not Native acceptance", "No reliability or root cause claim", "Relocation578 remains deferred"]
     updated_at: 2026-10-23
 

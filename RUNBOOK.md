@@ -1,6 +1,6 @@
 # Runbook
 
-[P278 reopen diagnosis](docs/dev/plans/0278-2026-10-23-reopen-launch-diagnosis355.md) records three passing minimal restart/reopen probes and an unresolved Native8 cause. A real failed-launch regression exposes missing phase evidence; fixed secret-free phase labels are undergoing validation. Production and relocation578 remain excluded.
+[P278 reopen diagnosis](docs/dev/plans/0278-2026-10-23-reopen-launch-diagnosis355.md) ends with the original Native8 cause unresolved: three reduced and three actual Native diagnostic cases pass. [Evidence](docs/dev/notes/0278-2026-10-23-reopen-launch-diagnosis355.md) qualifies fixed secret-free launch phases and exact cleanup, retaining all failures. Candidate29370244 is source-qualified only; production is unchanged. #355 remains open; relocation578 deferred.
 
 [P277 Native restart acceptance](docs/dev/plans/0277-2026-10-23-native-restart-acceptance355.md) records ordinary Native10 functional recovery across viewing1 to2, stable assignment lifecycle1, same task/profile blank reopen, independently observed Native window and exact cleanup. Public warm20/20 p9547.20ms passes. [Evidence](docs/dev/notes/0277-2026-10-23-native-restart-acceptance355.md) retains Native8 unknown reopen; #355 remains open for that disposition and the combined coordination/cold matrix. No production effects; relocation578 remains deferred.
 
