@@ -804,6 +804,7 @@ mod tests {
             shared_with: vec![],
         };
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "profile".into(),
             name: "Profile".into(),
             user_data_dir: request.profile_path.clone(),

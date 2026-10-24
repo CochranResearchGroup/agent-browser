@@ -7,7 +7,7 @@ Spec: https://github.com/CochranResearchGroup/agent-browser/issues/400
 Work item: https://github.com/CochranResearchGroup/agent-browser/issues/401
 Integration branch: platform/browser-mode-401
 Base: 07fb4c9cb020bb6349d3faf1efcd152cc34fd9ee
-Deadline: 2026-10-24T19:09:28Z
+Deadline: 2026-10-24T20:15:41Z (resumed window; first-window cutoff retained below)
 
 ## Current State
 
@@ -98,3 +98,45 @@ Workers stopped edits and only their own still-unadmitted test/format wrappers a
 Governed closeout inspected both auxiliary trees, found no pinned candidates or active candidate builds, created durable operations, previewed consequences and removed only the exact two clean checkouts at their verified commits. Receipts: `worktree-closeout-3d9b1b26-a34d-446b-a6f6-587b0eb00110` (402) and `worktree-closeout-47351bff-7dbf-41cb-b4e6-d4f4e37437f2` (403). Their user-scoped receipts and detailed worker checkpoints/logs are retained beside the validation manifest. Their remote branches remain recoverable. Population returns to six; all five foreign checkouts remain intact. The primary401 checkout is retained for PR review and continuation of integration, with no production candidate publication.
 
 User-directed stop/checkpoint is at19:09:28UTC. Ticket401 is locally validated, unmerged, open in draft PR408. Tickets402/403 remain incomplete;404 remains blocked. The overall goal is paused at the requested time limit, not complete. Resume requires fresh branch/ledger/policy/readiness reconciliation, not blind repetition of the stopped checks.
+
+## Resumed implementation window, 19:15:41 UTC
+
+Fresh user goal resumes implementation for one hour, cutoff20:15:41UTC. Root owns full ticket402; `duplicate_403_r2` owns full403.401 remains validated before this window;404 remains blocked. Currentmain recovery checkpoint9e0a01b8a is merged by intent with both installed-recovery and mode records retained. Root resumes402 source from d41f7c459; profileworker resumes403 from a4d0e62ca in parent-owned auxiliary `/tmp/agent-browser-p283-403-r2`, then merges the current integration checkpoint672f669dd. Six preserved primaries plus one explicitly delegated necessary auxiliary. Root retains shared lifecycle/mode, schemas/client/MCP/CLI/dashboard/docs; profileworker owns copy backend and its tests. No production or private-account effects. Workers stopedits20:10UTC, return20:11 for integration/checkpoint reserve.
+
+Stable seams this window: public durable owner-operation API with injected OS/desktop boundary catches target/process fencing, interrupted effect reconciliation and identity preservation; actual isolated native workflow must separately prove no-CDP input and cookie continuity. Profileworker tests governed filesystem copy/publication through backend API with synthetic data and failure injection; that does not alone prove public-adapter parity or live browser authentication.
+
+## Window2 source reconciliation and TDD evidence
+
+Merged current main9e0a01b8a in local integration custody e3f37a857, preserving installed-recovery and mode records. Resumed402 checkpoint672f669dd. Reconciled PR362 lifecycle foundation in local merge46bf93b3f, preserving current16-tool catalog, hosted reconnect/policy/artifact semantics and resource poller, while adding no-debug manual launch/normal close. This is local integration, not PR362 closure, production deployment or conversion acceptance. Documentation links and API/MCP parity pass on the resolution.
+
+The first shared-target build exposed a stale model artifact (CLI source had manual_login_url while the linked model did not). Root now owns a private `cli/target`, seeded only with cached external artifacts and with workspace fingerprints removed. Worker retains the previous target; divergent workspace compilation no longer shares outputs. The new private model rebuild passes the inherited close-prompt test. Real two-test red/green then proves same-task/profile completion and no repeated process effects on completed replay. A second red/green proves lost launch replies reconcile the original operation after DB reopen, without another launch. A third red/green proves actionable close prompt focus and explicitly confirmed force-close retaining Forced/data-loss semantics. Four tests pass (`/tmp/p283-r2-prompt-green.log`); new retry/cancel and actual adapter qualification remain in progress. All positive lifecycle observations so far are synthetic OS-boundary evidence, not actual Chrome/Remote View conversion acceptance.
+
+Read-only Native contract discovery confirms Remote View already owns input/capture through its agent-desktop API. Source-backed endpoint: POST /v1/agent-desktop/{operation}, protected by the existing operator/control authentication; no alternate input authority or viewer will be invented. Current application-consumer revision3 alone contains lifecycle verbs, not generic native input. No live desktop input, capture, process effect or account access has occurred during this discovery.
+
+## Window2 checkpoint scope, 20:07 UTC
+
+402 coordinator has seven passing behavioral seam tests, including a genuine simultaneous-owner race red/green fixed with an OS-backed per-browser effect lock. The lock has no stale-file veto and releases on process exit. An eighth verification case exercises unknown close reply and fresh original-exit readback. Native transport/target seam has ten passing tests, including exact viewing generation, immutable original process and geometry passed to the existing Remote View input owner. This Native adapter is staged and unadvertised, not production task wiring or real Native effect qualification. Source protocol inspection used Remote View read-only; no private browser data was copied into Git.
+
+Full402 remains incomplete: concrete close/replacement and publication adapters, verified tab/task restoration, public rail/MCP/CLI/HTTP controls and mode-dependent capability discovery, owner pause/immediate/previous-configuration recovery, and the actual synthetic Native login/cookie round trip are not qualified. `CloseMethod` records the requested method and is not by itself a clean-close receipt for copying. No broad review is restarted on a partial ticket; the user-requested review follows full ticket completion.401's earlier review remains recorded, not repeated.
+
+Required quality work spans the whole merged batch. Workspace strict Clippy passes. Docs build, service client/parity, changed links and built CLI catalog pass (16 tools,14703 schema bytes,3993 help bytes). Manual-source unit compilation found one newer reconnect fixture missing the added optional manual field; it now explicitly initializes None and requires rerun. Format and exact integration-target checks are retained in user-scoped logs. No passing CLI unit result is inferred from the failed compile.
+
+For cached integration targets only, one-job bounded Cargo invocations cap at4GiB with the16GiB host reserve preserved; the incoming4GiB claim is paired with26GiB reserve accounting so another default14GiB claim is not undercounted by the wrapper's incoming-claim formula. Main unit compilation uses an8GiB cap and22GiB accounting reserve. Shared aggregate caps and all foreign builds remain unchanged. This is per-invocation fixture validation, not an admission-policy change or uncapped override.
+
+## Window2 integrated partial source
+
+Root checkpoint c69bb72c7 retains the tested402 coordinator and staged Native-owner transport/target seams. Eight coordinator tests now pass, adding unknown-close reply readback to the seven red/green cases. The Native target seam also has a replaced-process no-dispatch regression check. No Native helper is advertised as a public supported operation before concrete owner/task wiring and actual workflow qualification.
+
+Worker403 checkpoint ea3632d0eb5a281917a29dcffc87d72d2c9252b2 is merged into the integration branch. Scope is four backend/test paths: independent stopped-source copying, durable phases/staging/replay, same-connection canonical acquisition fence and catalog/lineage publication, and bounded public projection. Nine tests and worker workspace/test-target strict Clippy plus wrapper formatting pass for that backend scope. Root integration checks against the newer manual-profile model are separate. The source-custody guard fences canonical SQLite launch-claim writers; it is not proof of arbitrary external Chrome custody or an OS snapshot.
+
+Full403 remains incomplete: actual graceful-close evidence producer, source lifecycle/public rail/MCP/CLI/HTTP adapters, ready same-build launch binding and authenticated-cookie/concurrent-browser acceptance. The worker's actual Chrome fixture failed before backend copy at synthetic localhost navigation. It is diagnostic, not acceptance, and remains a separate unqualified fixture checkpoint. No ticket is closed or marked validated from this partial core;404 stays blocked.
+
+No second broad review is run on these incomplete tickets. The requested post-ticket review remains a gate once a ticket's full acceptance is met; the earlier401 review is retained without repeating it.
+
+## Window2 terminal custody
+
+Worker backend ea3632d0e is integrated; separate unqualified browser fixture9ca690d41 remains only on remote platform/profile-duplicate-403. Worker commands stopped, fixture census zero, clean auxiliary removed by governed operation worktree-closeout-9a5f0dd2-72b8-477a-b937-d7b3c35ffd82 after remote verification. Fresh inventory has five worktrees; the upgrade-policy checkout disappeared independently. No foreign checkout was changed by this lane.
+
+Corrected manual-source rerun passes32 tests. The earlier compile failure was fixed with explicit manual_login_url None in the newer reconnect fixture. Final inspection and root-frontier profile/native tests and formatting remain recorded by their actual logs/handles17310,81709,76345, not inferred from worker results. Workspace and mode/native test-target strict Clippy pass. Both tickets remain incomplete and unreviewed as full tickets; broader affected Rust gates and full public/native/cookie workflow qualification remain required before merge readiness.
+
+Memory disposition: queued in agent_browser_main, receipt window2-memory-disposition.json in the user-scoped checkpoint directory. Queue acceptance is not retrieval proof. Goal stops at20:15:41UTC with the full requirement graph retained.

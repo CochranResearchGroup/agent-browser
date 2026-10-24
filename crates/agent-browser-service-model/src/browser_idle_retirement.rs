@@ -99,7 +99,10 @@ impl BrowserIdleRetirementIntent {
             if browser.id.is_empty()
                 || browser.profile_id.is_empty()
                 || browser.pid == 0
-                || browser.cdp_endpoint.is_empty()
+                || (browser.cdp_endpoint.is_empty()
+                    && (browser.desktop.is_none()
+                        || scope.tabs.len() != 1
+                        || scope.tabs[0].target_id != format!("manual-window:{}", browser.id)))
                 || !browsers.insert(&browser.id)
                 || desktop.desktop_id != self.provider.assignment.desktop_id
                 || desktop.generation != self.provider.assignment.generation

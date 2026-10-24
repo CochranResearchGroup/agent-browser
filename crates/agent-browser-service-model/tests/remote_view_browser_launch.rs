@@ -132,6 +132,7 @@ fn inputs(f: &Value) -> (BrowserLaunchIntent, BrowserProfileCatalogEntry) {
             assignment: serde_json::from_value(f["assignment"].clone()).unwrap(),
         },
         BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "profile-a".into(),
             name: "Synthetic".into(),
             user_data_dir: "/synthetic/profile-a".into(),

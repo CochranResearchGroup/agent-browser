@@ -1,6 +1,9 @@
 # Active plan index
 
 [P283 browser mode inspection](0283-2026-10-24-browser-mode-inspection.md) owns #401 under spec #400; TDD source work, no runtime publication.
+[P285 inventory latency](0285-2026-10-24-workspace-inventory-latency.md), #393, owns the measured workspace-read repair under PL-BUGFIX.
+
+[P284 operator-led upgrades](0284-2026-10-24-operator-led-upgrades.md), #399, removes persistent upgrade markers and warning-based upgrade vetoes. The operator controls their workstation; optional live-work inspection is advisory. PR406 is integrated and exact candidate417d5886c68e is installed and accepted. Doctor and same-tab unsaved-work continuity pass.
 
 [P282 recovery dashboard identity](0282-2026-10-24-recovery-dashboard-manifest.md), #405, closes with exact recovery and accepted combined deployment. P280/P281 repairs are installed;393 and399 remain open.
 
@@ -28,6 +31,8 @@ Ordinary clients ignore persistent installer drain metadata. PR397 is integrated
 [P271: installed component convergence](0271-2026-10-22-install-component-convergence.md), #367, owns exact old MCP retirement and complete installation acceptance.
 
 [P270 hosted continuity](0270-2026-10-22-hosted-continuity.md) continues #351/#355 after merged PR364. Root owns the relocation provider boundary; parallel tracks repair exact fixture cleanup and measure warm control/cold pixels. The portable-launch backend decision is pending; no production effects.
+
+[P269 manual non-CDP login](0269-2026-10-22-manual-login.md), #357; source-qualified in PR362 on the attachment/control frontier, with persistent-cookie and catalog proof; no deployment.
 
 [P268 attachment](0268-2026-10-22-hosted-attachment.md), #349, and [P267/#350 takeover](0267-2026-10-22-hosted-takeover.md) are closed integrated source outcomes with actual Native04 acceptance and corrected cleanup. Native05 cookie continuity and independent cleanup also pass; no deployment; wider #347 remains open.
 

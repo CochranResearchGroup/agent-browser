@@ -930,6 +930,7 @@ mod tests {
         catalog.profiles.insert(
             "profile".into(),
             BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: "profile".into(),
                 name: "Fixture".into(),
                 user_data_dir: directory.join("profile").to_string_lossy().into(),

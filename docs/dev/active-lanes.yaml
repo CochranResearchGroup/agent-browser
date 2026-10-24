@@ -12,9 +12,43 @@ lanes:
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
     dependencies: []
-    validation_status: "401 validated at ba1c60ea9 in draft PR408; 402/403 partial checkpoints retained separately, green/format unverified after user time cutoff"
+    validation_status: "401 source under draft PR408; resumed402/403 backend cores integrated as partial source with focused evidence; public adapter and real workflow gates remain incomplete"
     overlaps: [P269, P282]
     reconciled_overlaps: ["401 owns read-only mode projection, MCP adapter, schema/client and rail; preserve P269 manual launch and P282 upgrade source, coordinate shared docs at integration"]
+    updated_at: 2026-10-24
+
+  - id: P285
+    product_lane: PL-BUGFIX
+    objective: Diagnose and repair workspace inventory latency
+    plan: docs/dev/plans/0285-2026-10-24-workspace-inventory-latency.md
+    branch: fix/workspace-inventory-latency-393
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#393]
+    plan_state: IN_PROGRESS
+    custody_state: ACTIVE
+    overlaps: [P283, P284]
+    reconciled_overlaps: ["Own dashboard/http routing and rail freshness prose only; P283/P284 retain profile/store/observation and installer source; reuse primary and retain pinned artifacts"]
+    validation_status: Real-handler red-green;253 stream passes with2 ignored; strict Rust/docs/parity gates; exact development empty median3.358ms and one-browser12.867ms
+    limitations: ["Production-shaped publication pending after P284 reconciliation", "No stale-data substitution, provider/ingress change or private-account activity", "Cold shell tail remains distinct"]
+    updated_at: 2026-10-24
+
+  - id: P284
+    product_lane: PL-PLATFORM
+    objective: Remove upgrade markers and make operator warnings advisory
+    plan: docs/dev/plans/0284-2026-10-24-operator-led-upgrades.md
+    branch: platform/operator-led-upgrades
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#399]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: [P281, P282]
+    overlaps: [P280, P282]
+    reconciled_overlaps: [P280, P282]
+    validation_status: PR406 integrated; exact417d5886c68e installed and accepted; doctor, same-tab unsaved continuity and fresh disposable open pass
+    limitations: ["Slow browser operations remain separate; exact test cleanup passes", "CI disabled; no formal release or cross-platform claim"]
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/406
     updated_at: 2026-10-24
 
   - id: P282
@@ -215,6 +249,23 @@ lanes:
     reconciled_overlaps: ["Root owns flight-clear host_control, browser_host_control, browser_session_host and P270 metadata; delegated writer owns only new return-test include; preserve independent MCP routing, enrollment and manual-login work"]
     validation_status: PR379 merged; Native14 functional and warm250ms gates pass public20/20 p9545.75ms and consumer6/6 p95199.61ms; relocation deferred by operator; desktop-generation and combined-pair cold-distribution acceptance remain open, no deployment
     updated_at: 2026-10-23
+
+
+  - id: P269
+    product_lane: PL-PLATFORM
+    objective: One-call MCP manual non-CDP login on managed native desktop
+    plan: docs/dev/plans/0269-2026-10-22-manual-login.md
+    branch: fix/mcp-manual-login-357
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#357]
+    plan_state: CLOSED
+    custody_state: BRANCH_OWNED
+    dependencies: [P268, P267]
+    overlaps: [CochranResearchGroup/agent-browser#349, P240]
+    reconciled_overlaps: ["Additive manual launch posture in canonical owner/runtime and MCP; preserve app placement, hosted attach and resource policies; no foreign worktree edits"]
+    validation_status: Source-qualified PR362 at f7c982787 on main 2f7135b77; real Chrome cookie/lifecycle, full model, MCP140/control8/session172, Clippy/fmt/docs and catalog consistency pass; no deploy
+    updated_at: 2026-10-22
 
   - id: P268
     product_lane: PL-PLATFORM

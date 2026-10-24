@@ -134,6 +134,7 @@ pub fn operator_focus_failure_code(error: &str) -> Option<&str> {
     .then_some(code)
 }
 
+/// Classify current operation failures. Installer history has no admission role.
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
     // Emitted only by freshness input checks before the profile is changed.
     // Storage/commit errors keep their original uncertainty classification.
@@ -176,23 +177,6 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
                 "blind_retry".to_string(),
                 "impersonate_controller_viewer".to_string(),
             ],
-            ..ServiceFailureRecourse::default()
-        };
-    }
-    if error.starts_with("runtime_admission_draining:") {
-        return ServiceFailureRecourse {
-            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
-            code: "runtime_admission_draining".to_string(),
-            axis: ServiceFailureAxis::LifecycleOwner,
-            phase: ServiceFailurePhase::LaunchAdmission,
-            effect_state: ServiceEffectState::NoEffect,
-            retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
-            recommended_action: "inspect_install_transaction".to_string(),
-            safe_next_actions: vec![
-                "inspect_install_transaction".to_string(),
-                "wait_for_transaction_terminal".to_string(),
-            ],
-            hard_stops: vec!["blind_retry".to_string()],
             ..ServiceFailureRecourse::default()
         };
     }
@@ -956,6 +940,16 @@ mod tests {
     use super::*;
     use crate::{ProfileConnectionState, ProfileIdentityAssurance, ProfilePermission};
     use serde_json::json;
+
+    #[test]
+    fn retired_upgrade_error_does_not_recreate_transaction_wait_recourse() {
+        let failure = classify_service_failure("runtime_admission_draining:legacy-upgrade");
+        assert_eq!(failure.code, "service_operation_failed");
+        assert!(!failure
+            .safe_next_actions
+            .iter()
+            .any(|action| action == "wait_for_transaction_terminal"));
+    }
 
     fn child_evidence() -> crate::ProfileChildAccessEvidence {
         crate::ProfileChildAccessEvidence {

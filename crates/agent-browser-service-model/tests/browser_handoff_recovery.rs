@@ -413,6 +413,7 @@ fn recovery_restores_peer_tabs_and_failed_restoration_keeps_unpublished_custody(
             ..Default::default()
         }));
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "profile-a".into(),
             name: "Synthetic".into(),
             user_data_dir: "/synthetic/profile-a".into(),
