@@ -38,6 +38,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('native-source', 'native-binary', 'agent-binary', 'chrome', 'vnc-binary', 'vnc-lib', 'results'):
         parser.add_argument('--' + name, type=Path, required=True)
+    parser.add_argument('--chrome-launcher', type=Path, help='Optional reviewed synthetic diagnostic exec shim; not acceptance of ordinary launch')
     parser.add_argument('--display', type=int, required=True)
     parser.add_argument('--vnc-port', type=int, required=True)
     parser.add_argument('--subnet', required=True)
@@ -108,6 +109,8 @@ def main():
             self.servers.append(broker)
             threading.Thread(target=broker.serve_forever, daemon=True).start()
             config = {'binary': str(args.agent_binary.resolve()), 'chrome': str(args.chrome.resolve()),
+                      'launchExecutable': str(args.chrome_launcher.resolve()) if args.chrome_launcher else str(args.chrome.resolve()),
+                      'diagnosticOnly': bool(args.chrome_launcher),
                       'results': str(args.results), 'target': target, 'publicOrigin': self.public,
                       'controlOrigin': f'http://127.0.0.1:{broker.server_port}',
                       'tokenFile': str(self.home / 'secrets/control.token')}

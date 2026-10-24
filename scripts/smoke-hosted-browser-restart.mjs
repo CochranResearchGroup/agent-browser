@@ -26,7 +26,7 @@ export async function qualifyHostedBrowserRestart({workflow,task,restartNative,o
  assert.equal(transition.before.desktopId,transition.after.desktopId);
  assert.equal(transition.before.assignmentId,transition.after.assignmentId);
  assert.equal(transition.before.lifecycleGeneration,old.generation);
- assert(transition.after.viewingGeneration>old.generation);
+ assert(transition.after.viewingGeneration>transition.before.viewingGeneration);
  assert.equal(transition.launchBinding.readinessScope,'live_resource');
  assert.equal(transition.applicationLoss.observed,'lost');
  assert.equal(transition.websiteEffectsReplayed,false);
