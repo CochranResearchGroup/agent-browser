@@ -88,6 +88,7 @@ const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
 // Advanced MCP commands stay inside the addressed task's page. Owner and
 // authority operations remain outside this browser command seam.
 const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = &[
+    "mode",
     "navigate",
     "evaluate",
     "back",
@@ -230,6 +231,12 @@ fn mcp_command_response_with_config(
         Some("host-control") => host_control::cli(args),
         Some("host-reconnect") => host_reconnect::cli(args),
         Some("host-policy") => host_policy::cli(args),
+        Some("browser-mode") => {
+            if args.len() != 3 || args[2].trim().is_empty() {
+                return Err("Usage: agent-browser --json mcp browser-mode <task-id>".into());
+            }
+            Ok(json!({"success":true,"data":workflow::inspect_mode(&args[2])?}))
+        }
         Some("host-task") => {
             let task_id = hosted::task_argument(args)?;
             Ok(json!({"success": true, "data": hosted::read_snapshot(task_id)?}))
@@ -5482,6 +5489,18 @@ fn call_service_mcp_tool(
             return playbooks::call(arguments, session);
         }
         validate_browser_command_action(arguments)?;
+        if arguments["action"] == "mode" {
+            let task_id = required_string_argument(arguments, "taskId")?;
+            let data = workflow::inspect_mode(task_id)
+                .map_err(|error| JsonRpcError::invalid_params(&error))?;
+            return Ok(tool_response_from_payload(
+                "browser_command",
+                session,
+                json!({}),
+                data,
+                false,
+            ));
+        }
     }
     let task_route = if name.starts_with("browser_") {
         let task_id = required_string_argument(arguments, "taskId")?;
@@ -11953,6 +11972,101 @@ mod tests {
         .unwrap();
         assert_eq!(missing_provider["id"], "provider");
         assert_eq!(missing_provider["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_mode_inspection_public_cli_and_mcp_preserve_task_without_transport() {
+        use crate::native::browser_session_store::BrowserSessionSqliteStore;
+        use agent_browser_service_model::{
+            BrowserSessionState, ManagedBrowserInstance, ManagedBrowserSession,
+        };
+        let directory =
+            std::env::temp_dir().join(format!("browser-mode-public-{}", uuid::Uuid::new_v4()));
+        let sockets = directory.join("sockets");
+        let guard = crate::test_utils::EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_SOCKET_DIR",
+        ]);
+        guard.set("HOME", directory.to_str().unwrap());
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        guard.set("AGENT_BROWSER_HOME", directory.to_str().unwrap());
+        guard.set("AGENT_BROWSER_SOCKET_DIR", sockets.to_str().unwrap());
+        assert!(BrowserSessionSqliteStore::default_sqlite_path()
+            .unwrap()
+            .starts_with(&directory));
+        let store = BrowserSessionSqliteStore::default_sqlite().unwrap();
+        let mut state = BrowserSessionState::default();
+        state.browsers.insert(
+            "browser".into(),
+            ManagedBrowserInstance {
+                id: "browser".into(),
+                profile_id: "profile".into(),
+                pid: std::process::id(),
+                cdp_endpoint: String::new(),
+                desktop: None,
+                active_session_ids: vec!["task".into()],
+            },
+        );
+        state.sessions.insert(
+            "task".into(),
+            ManagedBrowserSession {
+                id: "task".into(),
+                name: "lane".into(),
+                profile_id: "profile".into(),
+                browser_id: "browser".into(),
+                created_at_ms: 1,
+                last_activity_at_ms: 1,
+                expires_at_ms: 0,
+                current_tab_id: None,
+            },
+        );
+        store.save_session_state(&state).unwrap();
+        let cli =
+            mcp_command_response(&["mcp".into(), "browser-mode".into(), "task".into()]).unwrap();
+        let response = handle_jsonrpc_line(r#"{"jsonrpc":"2.0","id":401,"method":"tools/call","params":{"name":"browser_command","arguments":{"taskId":"task","action":"mode"}}}"#, "unused-transport").unwrap();
+        let mcp: Value =
+            serde_json::from_str(response["result"]["content"][0]["text"].as_str().unwrap())
+                .unwrap();
+        for data in [&cli["data"], &mcp["data"]] {
+            assert_eq!(data["browserId"], "browser");
+            assert_eq!(data["profileId"], "profile");
+            assert_eq!(data["taskId"], "task");
+            assert_eq!(
+                data["mode"], "unverified",
+                "legacy missing original identity is not negative CDP evidence"
+            );
+        }
+        assert_eq!(store.load_session_state().unwrap(), state);
+        assert!(
+            !sockets.exists(),
+            "inspection must not create a transport or browser owner"
+        );
+        drop(store);
+        fn remove_fixture(path: &std::path::Path) {
+            let metadata = std::fs::symlink_metadata(path).unwrap();
+            if metadata.is_dir() {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+                }
+                for entry in std::fs::read_dir(path).unwrap() {
+                    remove_fixture(&entry.unwrap().path());
+                }
+                std::fs::remove_dir(path).unwrap();
+            } else {
+                #[cfg(windows)]
+                {
+                    let mut permissions = metadata.permissions();
+                    permissions.set_readonly(false);
+                    std::fs::set_permissions(path, permissions).unwrap();
+                }
+                std::fs::remove_file(path).unwrap();
+            }
+        }
+        remove_fixture(&directory);
     }
 
     #[test]

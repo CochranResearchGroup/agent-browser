@@ -7,7 +7,7 @@ import { CompactNativeWorkspace } from "@/components/compact-native-workspace";
 
 const nodes = [
   { id: "empty-desktop", browserId: "empty-browser", label: "Empty native desktop", live: true, relatedIds: { serviceSessionIds: [] } },
-  { id: "browser:alice-browser", browserId: "alice-browser", label: "Research", profileId: "shared-profile", live: true, relatedIds: { serviceSessionIds: ["alice-session"] } },
+  { id: "browser:alice-browser", browserId: "alice-browser", label: "Research", browserMode: { schemaVersion: "agent-browser.browser-mode.v1" as const, browserId: "alice-browser", profileId: "shared-profile", pid: 42, mode: "cdp" as const, observedAtMs: Date.now(), ownership: "managed" as const, reason: null, executable: { name: "chrome", family: "chrome", version: null }, capabilities: { debugging: "enabled" as const, nativeObservation: "unverified" as const, nativeInput: "unverified" as const } }, profileId: "shared-profile", live: true, relatedIds: { serviceSessionIds: ["alice-session"] } },
   { id: "browser:carol-browser", browserId: "carol-browser", label: "Analysis", profileId: "independent-profile", live: true, relatedIds: { serviceSessionIds: ["carol-session"] } },
 ];
 const tabs = [

@@ -4178,3 +4178,20 @@ Diagnostic and contextual chat exports omit URL userinfo, query strings and frag
 ## Development host startup
 
 Generated development ingress units stay clients; the dedicated supervisor owns host startup. A failed host unit with a live dashboard-owned lane listener is an ownership conflict, not proof that the host is absent. Preserve that host and its browsers, inspect exact kernel and unit identity, and use supported explicit recovery rather than repeated starts. A recovery plan blocked by retained browser ownership is diagnostic only; never apply it to another runtime or force past the blockers.
+
+## Browser mode inspection
+
+Discover category `browser`, operation `mode`, then call `browser_command` with
+the existing `taskId` and action `mode`. CLI clients use
+`agent-browser --json mcp browser-mode <task-id>`. Service status and
+`GET /api/service/status?projection=workspace` expose the same `browserMode`
+per browser. The rail mode SVG opens details by hover, click or keyboard and
+offers inventory refresh. Inspection does not launch, attach, focus, navigate,
+create a handoff or change control.
+
+CDP and No CDP require current original-process identity and complete command-line
+evidence; missing/stale/changed evidence is Unverified. Executable name/family
+omit private paths and arguments; unavailable version, native input, viewer
+readiness and account authentication remain unverified. A mode-only read does
+not establish session conversion or native input support; those are tracked by
+#402. Refresh inventory to reobserve without changing the browser.

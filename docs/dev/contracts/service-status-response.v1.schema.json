@@ -168,6 +168,113 @@
                   "state"
                 ],
                 "properties": {
+                  "browserMode": {
+                    "type": "object",
+                    "required": [
+                      "schemaVersion",
+                      "browserId",
+                      "profileId",
+                      "pid",
+                      "mode",
+                      "observedAtMs",
+                      "ownership",
+                      "reason",
+                      "executable",
+                      "capabilities"
+                    ],
+                    "properties": {
+                      "schemaVersion": {
+                        "const": "agent-browser.browser-mode.v1"
+                      },
+                      "browserId": {
+                        "type": "string"
+                      },
+                      "profileId": {
+                        "type": "string"
+                      },
+                      "pid": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "mode": {
+                        "enum": [
+                          "cdp",
+                          "cdp_free",
+                          "unverified"
+                        ]
+                      },
+                      "observedAtMs": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "ownership": {
+                        "enum": [
+                          "managed",
+                          "app_provided"
+                        ]
+                      },
+                      "reason": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "executable": {
+                        "type": "object",
+                        "required": [
+                          "name",
+                          "family",
+                          "version"
+                        ],
+                        "properties": {
+                          "name": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "family": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "version": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "capabilities": {
+                        "type": "object",
+                        "required": [
+                          "debugging",
+                          "nativeObservation",
+                          "nativeInput"
+                        ],
+                        "properties": {
+                          "debugging": {
+                            "enum": [
+                              "enabled",
+                              "disabled",
+                              "unverified"
+                            ]
+                          },
+                          "nativeObservation": {
+                            "const": "unverified"
+                          },
+                          "nativeInput": {
+                            "const": "unverified"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
                   "presence": {
                     "type": "object",
                     "required": ["state"],

@@ -1,3 +1,4 @@
+import type { ServiceBrowserModeInspection } from "@agent-browser/client/service-observability";
 import { tabDescription } from "./tab-description.ts";
 import type { SessionInfo, TabInfo } from "../types.ts";
 import type { ServiceViewStream } from "./service-view-streams.ts";
@@ -187,6 +188,7 @@ export type WorkspaceNodeTakeover = {
 };
 
 export type WorkspaceNode = {
+  browserMode?: ServiceBrowserModeInspection | null;
   id: string;
   source: WorkspaceNodeSource;
   role: WorkspaceNodeRole;
@@ -256,6 +258,7 @@ export type WorkspaceNodeLiveControlEligibility = {
 };
 
 export type WorkspaceServiceBrowser = {
+  browserMode?: ServiceBrowserModeInspection | null;
   id: string;
   profileId?: string | null;
   host?: string | null;
@@ -1382,6 +1385,7 @@ function createBrowserWorkspaceNode({
     serviceSessionId: sessions[0]?.id ?? null,
     profileId: browser.profileId ?? allocation?.profileId ?? null,
     browserBuild: browser.browserBuild ?? allocation?.browserBuild ?? null,
+    browserMode: browser.browserMode ?? null,
     host: browser.host ?? null,
     process: browserProcessIndicators(browser, viewStream),
     ownership,

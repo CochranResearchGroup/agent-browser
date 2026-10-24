@@ -1,5 +1,7 @@
 # Active plan index
 
+[P283 browser mode inspection](0283-2026-10-24-browser-mode-inspection.md) owns #401 under spec #400; TDD source work, no runtime publication.
+
 [P281 upgrade client drain retirement](0281-2026-10-24-retire-client-upgrade-drain.md) owns issue #394 under PL-BUGFIX.
 Ordinary clients must ignore persistent installer drain metadata. Production
 marker mitigation passed disposable open and scoped close; the upgrade remains

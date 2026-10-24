@@ -1988,3 +1988,23 @@ projection’s `bindingWarnings` report the cause; admitted capacity becomes zer
 and new presentation effects are refused with `inventory_admission`. Restore
 the configured inventory and its ownership evidence to requalify capacity.
 Ordinary browser diagnostics remain available during the outage.
+
+## Inspect browser mode
+
+Each managed browser has an SVG mode button in the rail. Hover, click or use
+keyboard activation to inspect CDP, No CDP or Unverified evidence without
+selecting a tab or changing the browser. Refresh inventory requests another
+read-only observation. Old or missing evidence remains Unverified.
+
+Agents discover category `browser`, operation `mode`, then use `browser_command`
+with the existing `taskId` and action `mode`. CLI clients use
+`agent-browser --json mcp browser-mode <task-id>`. HTTP clients read the
+`browserRuntime.workspace.browsers` map from
+`GET /api/service/status?projection=workspace`; ordinary Service status includes
+this evidence too. All routes use the owner's original-process identity.
+
+The reported executable name and family omit private directories and launch
+arguments. Browser version remains unknown until separately observed. Debugging
+posture does not prove native input, viewer readiness or authentication. This
+inspection does not relaunch the browser or attach a debugger. Mode conversion
+and agentic CDP-free desktop input are separate delivery work.

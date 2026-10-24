@@ -131,6 +131,12 @@ pub(super) fn execute(command: Value, session: &str) -> Result<Value, JsonRpcErr
     Ok(response.data.unwrap_or(Value::Null))
 }
 
+/// Read the existing owner store and OS only; do not create a transport or attach CDP.
+pub(super) fn inspect_mode(task_id: &str) -> Result<Value, String> {
+    let path = BrowserSessionSqliteStore::default_sqlite_path()?;
+    BrowserSessionSqliteStore::open_read_only(&path)?.inspect_task_mode(task_id)
+}
+
 /// An opaque task identity resolves through the existing durable session state.
 pub(super) fn task_session(task_id: &str) -> Result<String, JsonRpcError> {
     let path = BrowserSessionSqliteStore::default_sqlite_path().map_err(issue)?;

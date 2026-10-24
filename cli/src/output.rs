@@ -7316,6 +7316,7 @@ Usage:
   agent-browser mcp serve
   agent-browser mcp resources
   agent-browser mcp read <uri>
+  agent-browser --json mcp browser-mode <task-id>
   agent-browser --json mcp host-task <task-id>
   agent-browser --json mcp watch-host-task <task-id>
   agent-browser --json mcp host-control TASK OP [epoch actor reason request-id]
@@ -7324,31 +7325,32 @@ Usage:
 
 Commands:
   serve             Run the MCP server
-  resources/read    Discover/read diagnostic resources without browser launch
+  resources/read    Read diagnostic resources; no browser launch
   host-task         Read compact app task metadata
+  browser-mode      Read CDP/no-CDP posture; no effects
   watch-host-task   Initial/changed NDJSON; reconnect gets a fresh snapshot
   host-control      Status/view/takeover/return/override/reconcile
-                    Pre-commit failure keeps human/epoch; inspect status, use a fresh explicit return intent.
+                    Failed pre-commit keeps human/epoch; inspect status before fresh return.
   host-reconnect    Status/disconnect/reconnect/rebind/configure/reopen
   host-policy       Optional app/task rules and attributable scoped override
 
 Default workflow tools (16):
-  browser_open          Create/reuse task and named or disposable profile
+  browser_open          Open/reuse task and profile
   browser_navigate      Navigate current page
   browser_snapshot      Read page and element references
   browser_click         Click an element
   browser_fill          Fill an input
   browser_screenshot    Capture current page
-  browser_tab           List/new/select/close task tabs; reuse tabKey for new
-  browser_handoff       Ready HTTPS native Remote View link
-  browser_continue      Observe same task after human input
+  browser_tab           Task tabs; reuse tabKey for new
+  browser_handoff       Ready HTTPS Remote View link
+  browser_continue      Observe task after human input
   browser_close         Close task; preserve peers/profile/borrowed process
   browser_control       Explicit takeover/return; view never pauses
   browser_reconnect     Explicit continuity and opted-in loss recovery
   browser_policy        App defaults, task replacement/clear and override
   browser_artifact      Screenshot/download to local handle; no publication
-  browser_command       Selected advanced action with params
-  browser_discover      Advanced browser/playbook/diagnostic schemas
+  browser_command       Advanced task action with params
+  browser_discover      Discover browser/playbook/diagnostic schemas
 
 Rules:
   Use taskId on actions. Reuse taskKey on open; taskPolicy overrides app defaults.
@@ -7363,7 +7365,7 @@ Rules:
   Reconnect clients after startup config changes.
   Control: expectedEpoch, actor/reason; fresh observation on return; no auto-resume.
   Reconnect: requestId/expectedRevision, lossPolicy=report_only|reopen.
-  After proven loss: rebind saves recoveryDesktop; verified reopen binds it.
+  Proven loss: rebind saves recoveryDesktop; verified reopen uses it.
   Reopen: borrowed needs fresh attachment; managed needs agent/no pending.
   Unknown effects stay pending, never replayed. Physical relocation is unsupported.
   Policy v1: deniedActions/artifactDestinations; task replacement or clear_task.

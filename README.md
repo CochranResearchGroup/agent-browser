@@ -13,6 +13,21 @@ simpler or specialized task. See the [governing product contract](docs/dev/polic
 
 Implementation and acceptance status live in [RUNBOOK](RUNBOOK.md).
 
+Browser mode inspection is read-only. Use `browser_discover` with category
+`browser` and operation `mode`, then `browser_command` with the existing
+`taskId` and action `mode`. The CLI equivalent is
+`agent-browser --json mcp browser-mode <task-id>`. Service status and
+`GET /api/service/status?projection=workspace` expose the same `browserMode`
+evidence per browser. The rail SVG button opens mode details on hover, click
+or keyboard activation and offers inventory refresh without selecting a tab.
+
+CDP, No CDP and Unverified describe current original-process debugging posture.
+Missing or stale evidence remains Unverified. Executable name and family are
+reported without private paths or command-line arguments; unavailable version,
+native control and authentication evidence remain unverified. This inspection
+slice does not relaunch, duplicate, attach or transfer control. Session
+conversion and CDP-free native input are tracked separately in #402.
+
 ## Sharing a profile between tasks
 
 Use one named session and tab per task. When tasks deliberately need the same login and stored browser data, select the same durable profile so they reuse one browser. Give each task its own session name; address commands through that session rather than a global active tab.

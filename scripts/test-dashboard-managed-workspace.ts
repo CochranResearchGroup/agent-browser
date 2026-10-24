@@ -5,11 +5,12 @@ import { managedWorkspaceSources, managedWorkspaceViewport } from '../packages/d
 const sources = managedWorkspaceSources({
   schemaVersion: 'agent-browser.managed-workspace.v1', source: 'managed-owner', observedAtMs: Date.now(),
   profiles: { p: { id: 'p', name: 'My retained browser', kind: 'named' } },
-  browsers: { b: { id: 'b', profileId: 'p', pid: 42, presence: { state: 'live' }, desktop: { desktop_id: 'desktop-a', generation: 7, friendly_route_label: 'Research desktop' }, activeSessionIds: ['s'], state: 'reported' } },
+  browsers: { b: { id: 'b', profileId: 'p', pid: 42, browserMode: { schemaVersion: 'agent-browser.browser-mode.v1', browserId: 'b', profileId: 'p', pid: 42, mode: 'cdp', observedAtMs: Date.now(), ownership: 'managed', reason: null, executable: { name: 'chrome', family: 'chrome', version: null }, capabilities: { debugging: 'enabled', nativeObservation: 'unverified', nativeInput: 'unverified' } }, presence: { state: 'live' }, desktop: { desktop_id: 'desktop-a', generation: 7, friendly_route_label: 'Research desktop' }, activeSessionIds: ['s'], state: 'reported' } },
   sessions: { s: { id: 's', name: 'alice', profileId: 'p', browserId: 'b', createdAtMs: 100, lastActivityAtMs: 100, expiresAtMs: 0, currentTabId: 't' } },
   tabs: { t: { id: 't', targetId: 'native-target', presence: { state: 'live' }, browserId: 'b', sessionId: 's', createdAtMs: 100, url: 'https://example.test/task', taskMetadata: { taskName: 'Research task', agentName: 'Supplied label' }, lifetime: null, pendingHuman: null } },
 });
 assert.equal(sources.browsers[0].id, 'b');
+assert.equal(sources.browsers[0].browserMode?.mode, 'cdp', 'owner mode evidence reaches the browser rail without inferring it from the family');
 assert.equal(sources.browsers[0].displayAllocationId, 'desktop-a');
 assert.equal(sources.browsers[0].operatorVisibleProof, undefined, 'owner inventory must not invent native viewer readiness');
 assert.equal(sources.browsers[0].cdpEndpoint, undefined);

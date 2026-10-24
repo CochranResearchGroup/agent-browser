@@ -201,8 +201,10 @@ fn operation_schema(category: &str, operation: &str) -> Result<Value, super::Jso
         .find(|tool| tool["name"] == tool_name)
         .map(|tool| tool["inputSchema"].clone())
         .or_else(|| match operation {
-            "back" | "forward" | "reload" | "service_resources" => Some(json!({"type":"object",
-                "additionalProperties":false,"properties":{},"required":[]})),
+            "mode" | "back" | "forward" | "reload" | "service_resources" => {
+                Some(json!({"type":"object",
+                "additionalProperties":false,"properties":{},"required":[]}))
+            }
             "evaluate" => Some(json!({"type":"object","additionalProperties":false,
                 "properties":{"script":{"type":"string"}},"required":["script"]})),
             _ => None,

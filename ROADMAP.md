@@ -48,6 +48,8 @@ P250 [dashboard subsystem health](docs/dev/plans/0250-2026-10-19-dashboard-subsy
 
 Updated: 2026-10-19
 
+[P283](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md) owns #401's read-only mode inspection under specification #400. Session conversion with native agentic input, profile duplication and Chrome/Chromium choice remain dependent tickets #402–#404.
+
 ## Current direction
 
 [The product contract](docs/dev/policies/0054-browser-product-contract.md) owns the value proposition: complete browser work, hand it to a person, and continue afterward with less effort and fewer failures.

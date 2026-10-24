@@ -17,6 +17,13 @@ try {
   assert(help.stdout.includes('browser_discover'));
   assert(!help.stdout.includes('service_access_plan'));
   const { tools } = await client.send('tools/list');
+  const modeDiscovery = await client.send('tools/call', {
+    name: 'browser_discover', arguments: { category: 'browser', operation: 'mode' },
+  });
+  const modeMetadata = JSON.parse(modeDiscovery.content[0].text).data;
+  assert.equal(modeMetadata.execution.action, 'mode');
+  assert.deepEqual(modeMetadata.inputSchema.properties, {});
+
   const bytes = Buffer.byteLength(JSON.stringify(tools));
   console.log(JSON.stringify({ toolCount: tools.length, schemaBytes: bytes }));
   assert.deepEqual(

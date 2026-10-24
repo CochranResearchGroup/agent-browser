@@ -4,6 +4,12 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Browser mode inspection**: Read-only current original-process debugging posture.
+CDP and no-CDP require complete current process evidence joined to immutable
+owner identity. Missing, changed or stale evidence is unverified. Executable
+name/family, native input readiness, viewer delivery and authentication remain
+separate observations; inspection does not acquire or mutate a browser.
+
 **Inspection review**: An explicit accepted or rejected judgment about one frozen inspection run, scoped to its original workspace, task, browser, tab and profile. Activity retains bounded identity and evidence-reference metadata. The judgment does not change observation validity, execution authority or readiness.
 
 **Exact task routing**: MCP retains task identity through page command builders

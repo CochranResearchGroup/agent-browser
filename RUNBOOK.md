@@ -1,5 +1,7 @@
 # Runbook
 
+[P283 browser mode inspection](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md), #401 under #400, implements read-only original-process posture through workspace status, task-scoped MCP/CLI and the rail. TDD checks are recorded in the plan; final Rust quality, candidate smoke and review remain pending. No runtime publication.
+
 [P281 upgrade client drain retirement](docs/dev/plans/0281-2026-10-24-retire-client-upgrade-drain.md) owns issue #394 under PL-BUGFIX.
 Ordinary clients must ignore persistent installer drain metadata. Production
 marker mitigation passed disposable open and scoped close; the upgrade remains

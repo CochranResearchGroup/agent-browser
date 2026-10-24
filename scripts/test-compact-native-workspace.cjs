@@ -5,9 +5,11 @@ const path = require('node:path');
 const http = require('node:http');
 const crypto = require('node:crypto');
 const { chromium } = require('playwright');
+const { execFileSync } = require('node:child_process');
 const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-browser-fixture.cjs');
 (async () => {
   const root = path.resolve(__dirname, '..');
+  execFileSync(process.execPath, [path.join(__dirname, 'test-browser-mode-inspection.cjs')], { stdio: 'inherit' });
   const artifacts = fs.mkdtempSync(path.join(os.tmpdir(), 'p237-compact-workspace-'));
   // Use the existing TSX harness and the real workspace CSS below.
   await buildWorkspaceViewportFixture(root, path.join(root, 'scripts/fixtures/compact-native-workspace.tsx'), artifacts);
@@ -106,6 +108,28 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
       body: '<body id="viewer" data-workspace="true"><p>Synthetic native viewer transport</p></body>' }));
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
+    const unknownMode = page.getByRole('button', { name: 'Browser mode for Analysis: Unverified', exact: true });
+    await unknownMode.waitFor({ timeout: 3000 });
+    const beforeModeRequests = requests.length;
+    await unknownMode.hover();
+    await page.getByRole('menu', { name: 'Browser mode details' }).waitFor({ timeout: 3000 });
+    assert.match(await page.getByRole('menu').innerText(), /Mode: Unverified/);
+    assert.equal(requests.length, beforeModeRequests, 'Mode inspection must have no browser effect');
+    await page.keyboard.press('Escape');
+    const cdpMode = page.getByRole('button', { name: 'Browser mode for Research: CDP', exact: true });
+    await cdpMode.focus();
+    await page.keyboard.press('ArrowDown');
+    await page.getByRole('menu', { name: 'Browser mode details' }).waitFor();
+    assert.match(await page.getByRole('menu').innerText(), /Executable: chrome/);
+    assert.match(await page.getByRole('menu').innerText(), /Ownership: Managed/);
+    assert.equal(await page.getByRole('menuitem', { name: /Relaunch|Duplicate/ }).count(), 0, 'No dead mutation controls before their implementation');
+    await page.keyboard.press('Escape');
+    await cdpMode.click();
+    await page.getByRole('menu', { name: 'Browser mode details' }).waitFor();
+    await page.getByRole('menuitem', { name: 'Refresh inventory' }).click();
+    await page.keyboard.press('Escape');
+    assert.equal(requests.length, beforeModeRequests, 'All mode inspection gestures leave browser actions untouched');
+
     await page.getByRole('button', { name: 'Bob invoice', exact: true }).waitFor();
     await page.locator('[data-runtime-environment="development"]').waitFor({timeout:1500});
     assert.equal(await page.locator('[data-runtime-environment="development"]').innerText(), 'Development');
