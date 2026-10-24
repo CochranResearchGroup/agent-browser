@@ -1,14 +1,11 @@
 # Roadmap
 
-[P284 operator-led upgrades](docs/dev/plans/0284-2026-10-24-operator-led-upgrades.md), #399, removes persistent upgrade markers and warning-based upgrade vetoes. The operator controls their workstation; optional live-work inspection is advisory. Source qualification is in progress; publication remains a separate evidence boundary.
+[P284 operator-led upgrades](docs/dev/plans/0284-2026-10-24-operator-led-upgrades.md), #399, removes persistent upgrade markers and warning-based upgrade vetoes. The operator controls their workstation; optional live-work inspection is advisory. Source and exact-candidate qualification pass; installed publication is pending.
 
 [P281 upgrade client drain retirement](docs/dev/plans/0281-2026-10-24-retire-client-upgrade-drain.md) owns issue #394 under PL-BUGFIX.
-Ordinary clients must ignore persistent installer drain metadata. Production
-marker mitigation passed disposable open and scoped close; the upgrade remains
-unaccepted. Source qualification passes 203 selected Rust cases, the real browser
-and full installer fixtures. [PR397](https://github.com/CochranResearchGroup/agent-browser/pull/397) owns integration; runtime publication remains separate.
+Ordinary clients ignore persistent installer drain metadata. PR397 is integrated and installed in the accepted combined generation bf263f69342b. Source, full installer and ordinary disposable workflow qualification pass. Broader marker retirement remains separate under #399 / PR406.
 
-[P280 dashboard static delivery](docs/dev/plans/0280-2026-10-24-dashboard-static-delivery.md), #391, reduces cold asset transfer with negotiated gzip and hashed-asset caching across both HTTP listeners. [Evidence](docs/dev/notes/0280-2026-10-24-dashboard-static-delivery.md) records62.77% wire reduction and isolated candidate acceptance. Production publication awaits an existing forward-recovery operation; #393 owns the separate producer inventory wait. Native first pixels remain unqualified.
+[P280 dashboard static delivery](docs/dev/plans/0280-2026-10-24-dashboard-static-delivery.md), #391, reduces cold asset transfer with negotiated gzip and hashed-asset caching across both HTTP listeners. [Evidence](docs/dev/notes/0280-2026-10-24-dashboard-static-delivery.md) records62.77% wire reduction and isolated candidate acceptance. Combined generation bf263f69342b is installed and accepted, with public transfer and rendered-rail checks. #393 owns the remaining producer inventory wait; fresh Native first pixels were not requalified.
 
 [P243 profile-proof maintenance](docs/dev/maintenance/p243-profile-proof-namespace.md) repairs existing-profile continuation when runtime user namespaces deny descriptor-link observation. Focused source and observer checks pass; installed workflow qualification remains separate.
 

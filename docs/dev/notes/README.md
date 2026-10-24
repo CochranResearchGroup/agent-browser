@@ -1,12 +1,12 @@
 # Agent Browser Notes Index
 
-[P284 operator-led upgrades](0284-2026-10-24-operator-led-upgrades.md): retire upgrade marker producers and recovery vetoes; optional advisory live-work inspection and operator authority. Qualification is in progress.
+[P284 operator-led upgrades](0284-2026-10-24-operator-led-upgrades.md): retire upgrade marker producers and recovery vetoes; optional advisory live-work inspection and operator authority. Source and exact-candidate qualification pass; installed publication is pending.
 
-[P282 recovery manifest identity](0282-2026-10-24-recovery-dashboard-manifest.md): differing-assets red-green and five proof cases; installed acceptance pending.
+[P282 recovery manifest identity](0282-2026-10-24-recovery-dashboard-manifest.md): differing-assets red-green, five proof cases and accepted combined production deployment; public workflow, timing and preservation limits recorded.
 
-[P281 upgrade client lockout retirement](0281-2026-10-24-retire-client-upgrade-drain.md): nonblocking client repair qualified by selected Rust, real-browser and installer fixtures; production marker mitigated, original upgrade unaccepted.
+[P281 upgrade client lockout retirement](0281-2026-10-24-retire-client-upgrade-drain.md): nonblocking client repair qualified by selected Rust, real-browser and installer fixtures; integrated repair installed in the accepted combined generation.
 
-[P280 static delivery](0280-2026-10-24-dashboard-static-delivery.md): sealed candidate qualifies62.77% static wire reduction across both HTTP listeners; production awaits existing forward recovery and393 owns the remaining producer wait.
+[P280 static delivery](0280-2026-10-24-dashboard-static-delivery.md): sealed candidate qualifies62.77% static wire reduction across both HTTP listeners; public installed acceptance passes;393 owns the remaining producer wait.
 
 [P279 combined actual-host acceptance](0279-2026-10-24-combined-host-matrix355.md): one-pair complete matrix, Native human input and generation-changing recovery, qualified warm targets, separate five-context cold distribution and independent cleanup; no deployment.
 

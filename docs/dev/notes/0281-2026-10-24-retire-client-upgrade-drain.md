@@ -83,3 +83,7 @@ this mitigation nor source qualification attests upgrade acceptance or deploys
 this source binary. Future publication must use the canonical installed
 candidate workflow. No formal release, provider replacement, private-account
 operation or historical shutdown program is included.
+
+## Installed checkpoint
+
+The combined generation bf263f69342b is installed and accepted. See [P282 installed acceptance](0282-2026-10-24-recovery-dashboard-manifest.md#combined-installed-acceptance-2026-10-24) for exact source, public workflow, transfer, warnings and preservation limits. #393 and #399 remain separate.

@@ -40,3 +40,7 @@ An existing production install, started outside this lane, remains in forward-re
 PR392 merges as ecd2950a3bb0b524b1e9060bb84d9ec7615d882f. Fresh canonical readback proves the sealed source commit is an ancestor and all562 executable inputs still match. Source custody is integrated; the primary checkout, exact candidate and stopped development namespace remain retained for installed acceptance. The entry guidance is9960 bytes and the exact sealed executable passes the public MCP discovery/refusal guidance gate.
 
 Final readback still reports the pre-existing production forward-completion gate. The source fix is merged, but this lane performs zero production installs or recovery attempts, and391 remains open. Issue393 is ready for the distinct producer diagnosis; it is not a hard source dependency for static delivery.
+
+## Installed checkpoint
+
+The combined generation bf263f69342b is installed and accepted. See [P282 installed acceptance](0282-2026-10-24-recovery-dashboard-manifest.md#combined-installed-acceptance-2026-10-24) for exact source, public workflow, transfer, warnings and preservation limits. #393 and #399 remain separate.
