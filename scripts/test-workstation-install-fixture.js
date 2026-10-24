@@ -212,7 +212,8 @@ try {
     transactionStatusPayload.latestTransaction.state,
     'accepted',
   );
-  assert.equal(transactionStatusPayload.admissionDraining, false);
+  assert.equal(Object.hasOwn(transactionStatusPayload, 'admissionDraining'), false,
+    'upgrade status must not expose an admission marker as authority');
   assert.equal(transactionStatusPayload.selectedGenerationId, generationIds[0]);
   assert.deepEqual(transactionStatusPayload.readiness, {
     payloadReady: true,
