@@ -47,7 +47,7 @@ admission wrapper with the compiler cache disabled after its identity probe
 stalled. The final source candidate uses the ordinary debug profile and is
 not production-promotable.
 
-The merged-source debug binary SHA-256 is
+The d58c08184 tested debug binary SHA-256 is
 `9a1951f9cd4654649d802b8ef442c7b154203ff100b99e184e2365179f57ae5f`.
 Its isolated real Chrome fixture passes both host-exit cycles (55 ms each),
 new disposable task opening/closure, and same-task continuation while valid
@@ -59,6 +59,14 @@ failed-upgrade shutdown acceptance. The full workstation installer fixture passe
 admission with legacy metadata, failure injection and recovery. Its cleanup
 retires two owned hosts with zero residue; an independent OS scan also finds
 no process belonging to that exact fixture root.
+
+PR398 entered main after this candidate freeze. Its exact current-profile
+endpoint fallback and four qualified tests are retained unchanged: that change
+only discovers a nonzero port from the already proved process when its port
+file is absent. It neither reads installer metadata nor changes this repair's
+native/managed gate deletion or consumer fixtures. No shared source hunk needs
+resolution. Retain each lane's evidence within that scope; this fixture binary
+is not represented as a build of the later final canonical merge.
 
 ## Operational mitigation
 
