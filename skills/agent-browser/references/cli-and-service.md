@@ -155,9 +155,8 @@ browser only when its exact ready owner and valid target agree, attachability
 recommends `service_remote_view_browser_reattach`, and one unallocated ready
 route exists. The staged candidate may perform that reattach and produce a
 generation-bound durable handoff receipt for the independent presentation axis.
-During the workstation
-admission drain, bind the reattach to the exact current transaction ID and
-revision through `runtimeAdmissionClaim`.
+Installer reattach records its exact transaction ID and revision for
+correlation; legacy admission metadata does not block ordinary clients.
 The candidate requalifies current provider inventory immediately before the
 recovery reservation; do not reuse a pre-transfer admission error as current
 route evidence.
@@ -474,7 +473,7 @@ Warning-severity doctor observations remain visible without making the command
 nonzero. Treat a quiescent historical stopped supervisor as advisory, but keep
 active-process or stream evidence, startup failure, executable drift, port
 conflict, and unavailable supervisor status as blocking.
-The workstation transaction remains unaccepted and keeps admission drained
+The workstation transaction remains unaccepted and retains coordination metadata
 until runtime-host manifests are rebound, the old exact host surrenders, the
 user supervisor starts the replacement, and a fresh listener census proves one
 selected production runtime host. A merely active supervisor is insufficient
@@ -1320,11 +1319,10 @@ and protects the task from idle cleanup. Use `--leave-open false close` to
 end the task explicitly; peer tasks remain active. After a graceful runtime-host
 stop, use the same session and profile: the next command reattaches the retained
 browser.
-During an upgrade admission drain, managed browser effects return
-`runtime_admission_draining`. Reads of an existing live task remain available;
-a read that needs a browser launch, physical recovery, or a new tab is blocked.
-Use the owning upgrade transaction's status and recovery commands before retrying;
-do not remove the drain marker to bypass it.
+Ordinary browser work does not consult the legacy upgrade admission marker.
+Installer recovery state is diagnostic; per-browser ownership and profile fences
+still apply. Use installation status and recovery commands to resolve an
+unaccepted upgrade without treating it as a client-wide outage.
 Development executable replacement uses the two-phase `agent-browser handoff`
 protocol. `prepare` keeps the old daemon authoritative and returns a candidate
 session. Run `resume --source-session <old>` in that candidate, then run

@@ -1,5 +1,10 @@
 # Installation
 
+Ordinary browser work does not consult the legacy upgrade admission marker.
+Installer recovery state is diagnostic; per-browser ownership and profile fences
+still apply. Use installation status and recovery commands to resolve an
+unaccepted upgrade without treating it as a client-wide outage.
+
 ## GitHub release binary (recommended)
 
 Download the native Rust binary from this fork's GitHub releases. Pick the asset
@@ -428,12 +433,12 @@ the bootstrap may instead use an exact retained RDP browser whose ready owner,
 valid target, reattach recommendation, and an unallocated ready route agree.
 This is advisory presentation evidence. The candidate may reattach the browser
 and record a generation-bound durable handoff receipt after deployment.
-While the workstation admission drain is active, bind this reattach to the
-exact current transaction ID and revision through its runtime admission claim.
+Installer reattach records the exact current transaction ID and revision for
+correlation. Legacy admission metadata does not block ordinary clients.
 The candidate requalifies the current provider inventory immediately before
 reserving recovery capacity, after the retained owner transfer has completed.
 
-The installer keeps runtime admission drained while it rewrites runtime-host
+The installer retains coordination metadata while it rewrites runtime-host
 manifests and transfers the selected host to the user supervisor. It records
 the workstation transaction as accepted only after the old exact host exits,
 the replacement supervisor is active, selected ingress agrees, and the daemon

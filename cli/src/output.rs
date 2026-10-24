@@ -5938,8 +5938,8 @@ an exact retained RDP browser whose ready owner, valid target, reattach
 recommendation, and one unallocated ready route agree. Candidate staging reports
 this evidence for the independent operator-presentation axis, but missing
 evidence does not block executable deployment. The
-reattach must carry the current workstation transaction ID and revision as its
-runtime admission claim while the drain is active. Apply
+installer reattach records the current workstation transaction ID and revision
+for correlation; legacy admission metadata does not block ordinary clients. Apply
 continues while reporting when neither bootstrap proof is available.
 Recovery requalifies current provider inventory before reserving the route.
 Fresh and isolated installs do not require a retained
@@ -5978,8 +5978,8 @@ before using its saved HTTP port after a runtime-host restart. Failed preparatio
 returns durable_handoff_owner_prepare_failed before forwarding the request.
 Before a workstation transaction becomes accepted, apply rewrites the
 runtime-host lane manifests for the selected executable and completes an
-identity-bound takeover into the user supervisor while admission remains
-drained. Readiness requires one selected supervised host whose PID, executable,
+identity-bound takeover into the user supervisor while installer coordination
+remains active. Readiness requires one selected supervised host whose PID, executable,
 ingress identity, configured stream ports, and sole production listener pass a
 fresh census.
 A Ready retained owner reconnects to the exact handoff target after identity checks.
@@ -8101,10 +8101,9 @@ Configuration:
   protection across host restart. Use `--leave-open false close` to end the task.
   After a graceful runtime-host stop, the next command on the same session and
   profile reattaches its retained browser.
-  During upgrade admission drain, managed browser effects return
-  runtime_admission_draining. Reads of a live task remain available; reads
-  needing launch, physical recovery, or a new tab are blocked. Use the owning
-  upgrade transaction's status and recovery commands before retrying.
+  Legacy upgrade admission markers do not block ordinary task opening,
+  navigation, continuation or closure. Installer recovery status is diagnostic;
+  per-browser ownership and profile fences still apply.
   Set `preferences.defaultViewport` to a WIDTHxHEIGHT value such as 960x640
   to resize the browser content area after launch and before the command runs.
   Set `service.reconcileIntervalMs` or pass `--service-reconcile-interval`

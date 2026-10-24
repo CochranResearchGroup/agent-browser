@@ -6,7 +6,7 @@ allowed-tools: Bash(agent-browser:*)
 
 # Browser Automation with agent-browser
 
-Read [Remote View setup](references/cli-and-service.md) before configuring native control credentials.
+Read [Remote View setup](references/cli-and-service.md) for native credentials.
 
 ## Handoff creator context
 
@@ -15,6 +15,8 @@ Supply `serviceName`, `agentName` and a concrete `taskName` on `browser_open`. T
 Creation context is retained once; polling and Share do not replace it. Cards omit missing identity fields and use profile/session context. Job IDs never replace creator labels.
 
 ## MCP task workflow
+
+Upgrade metadata does not block tasks.
 
 Use `browser_open` with `{ "serviceName": "my-app", "agentName": "editor", "taskName": "Edit draft", "profile": "editorial", "profileMode": "persistent", "taskKey": "editing", "url": "https://example.com" }`. It creates or reuses the profile and returns `data.taskId`, `profileId`, `browserId`, `tabId`, and `url` in the MCP text payload. Pass `taskId` to subsequent page actions. Replay the same `taskKey` to return its current page and preserve edits without navigating again; use distinct keys for independent tasks. End only your task with `browser_close({ "taskId": "<returned-task-id>" })`.
 

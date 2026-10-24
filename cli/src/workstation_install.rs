@@ -20715,25 +20715,6 @@ mod tests {
                 "close:dashboard-service-backend"
             ]
         );
-        let exact_claim = serde_json::json!({
-            "runtimeAdmissionClaim": {
-                "transactionId": transaction.transaction_id,
-                "transactionRevision": transaction.revision,
-            }
-        });
-        assert!(crate::runtime_adoption::require_runtime_admission(
-            &admission_drain_path,
-            "close",
-            &exact_claim,
-        )
-        .unwrap_err()
-        .contains("runtime_admission_draining"));
-        crate::runtime_adoption::require_runtime_admission(
-            &admission_drain_path,
-            "runtime_handoff_prepare",
-            &serde_json::json!({}),
-        )
-        .unwrap();
         fs::remove_dir_all(root).unwrap();
     }
 
