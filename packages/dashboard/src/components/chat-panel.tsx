@@ -9,6 +9,8 @@ import { activeSessionNameAtom } from "@/store/sessions";
 import { consoleLogsAtom, streamEventsAtom } from "@/store/stream";
 import { useAtomValue, useSetAtom } from "jotai/react";
 import type { ActivityEvent } from "@/types";
+import { InspectionReviewControls } from "@/components/inspection-review-controls";
+import { captureInspectionReviewContext, inspectionReviewSource, inspectionSelection, type InspectionReviewSource } from "@/lib/inspection-review";
 import type { SelectedWorkspaceContext } from "@/lib/selected-workspace-context";
 import { buildSelectedWorkspaceConsoleEvidence } from "@/lib/selected-workspace-console";
 import {
@@ -334,6 +336,7 @@ function MessageFooter({ provider, timestamp, text }: { provider: string; timest
 
 interface CodexInspectionEntry {
   id: string;
+  reviewSource?: InspectionReviewSource | null;
   prompt: string;
   observation?: CodexWorkspaceObservation;
   failure?: {
@@ -669,7 +672,7 @@ function CodexEvidenceSelector({
   );
 }
 
-function CodexInspectionBlock({ entry }: { entry: CodexInspectionEntry }) {
+function CodexInspectionBlock({ entry, reviewControls }: { entry: CodexInspectionEntry; reviewControls?: React.ReactNode }) {
   const { observation, failure, ledger } = entry;
   const evidenceRefs = observation ? observationEvidenceRefs(observation) : [];
   return (
@@ -711,6 +714,7 @@ function CodexInspectionBlock({ entry }: { entry: CodexInspectionEntry }) {
           </div>
         </div>
       )}
+      {observation && reviewControls}
       {observation && observation.blockers.length > 0 && (
         <CodexObservationList
           title="Blockers"
@@ -1172,6 +1176,9 @@ export function ChatPanel({
   }, [messages, isLoading, storageKey]);
 
   const inspectWithCodex = useCallback(async (prompt: string, packet: SelectedWorkspaceChatPacket) => {
+    // Capture the source before the request: a late response belongs to this
+    // historical packet, never whichever workspace happens to be selected later.
+    const reviewContext = captureInspectionReviewContext(packet, sessionRef.current);
     setCodexSubmitting(true);
     setCodexError(null);
     try {
@@ -1198,6 +1205,7 @@ export function ChatPanel({
         ...prev,
         {
           id: observation?.runId ?? ledger?.runId ?? `codex-inspection-${Date.now()}`,
+          reviewSource: inspectionReviewSource(reviewContext, observation, ledger),
           prompt,
           observation,
           failure,
@@ -1708,7 +1716,9 @@ export function ChatPanel({
           </div>
 
           {codexInspections.map((entry) => (
-            <CodexInspectionBlock key={entry.id} entry={entry} />
+            <CodexInspectionBlock key={entry.id} entry={entry} reviewControls={
+              <InspectionReviewControls source={entry.reviewSource ?? null} selection={inspectionSelection(selectedWorkspacePacket)} actor={authenticatedUser?.username} />
+            } />
           ))}
 
           {messages.map((message) => {
