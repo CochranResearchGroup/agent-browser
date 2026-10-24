@@ -1,15 +1,17 @@
 # P279: Combined hosted acceptance matrix
 
-Status: OPEN
+Status: COMPLETED
 Product lane: PL-PLATFORM
 Work item: CochranResearchGroup/agent-browser#355
 Branch: platform/combined-host-matrix-355
-Accountable owner: ecochran76
+Owner: ecochran76
 Baseline: 9d0d18caef57d5a961c2e7646b335f6651ed8761
 
 ## Outcome and coordination
 
-Complete the remaining #355 same-pair synthetic host matrix using the delivered Native624 producer fixture and P277 restart oracle. PR386 already qualifies ordinary explicit rebind/reopen after actual Native viewing-generation change; its Native8 uncertain launch remains unresolved. Another active checkout on fix/reopen-launch-diagnosis-355 owns cli/src/native/browser.rs, private launch diagnosis and its associated guidance. This lane does not edit those surfaces or replay its preserved intent. Root owns combined workload/oracle, test-only isolated integration adapters, this plan and P279 metadata. No additional worktree is admitted. Preserve foreign enrollment, dashboard/manual-login source, candidates and the active reopen checkout. Integrate its fix before pinning any new full acceptance pair.
+The complete #355 same-pair synthetic host matrix is accepted in matrix6. Root owns the combined workload/oracle, test-only isolated adapters and P279 evidence. P278's diagnostic repair entered through PR387 before the exact candidate was pinned; no prior uncertain intent was replayed. This lane changes no Rust, production install or shared skill. One necessary read-only consumer auxiliary completed governed closeout; no additional Agent Browser worktree was created. Foreign enrollment, manual-login work, source and candidates are preserved. Native8's original cause remains unexplained and its historical failure remains retained.
+
+Accepted evidence: [same-pair matrix](../notes/0279-2026-10-24-combined-host-matrix355.md). Public warm20/20 p9532.57ms and consumer/Native6/6 p95169.85ms meet the unchanged strict250ms target. Five cold contexts report a separate median4,444.73ms and p9511,061.81ms. Actual Native human input/return, managed loss, Native viewing1-to2 restart and explicit rebind/reopen pass on the same pair. Independent47-generation absence, one released target, peer preservation and Native process/container/network/volume absence pass. Exact owned image tags are removed. Ordinary PR integration remains; this is not production deployment or cold-latency remediation.
 
 ## Frozen workload and effects
 
