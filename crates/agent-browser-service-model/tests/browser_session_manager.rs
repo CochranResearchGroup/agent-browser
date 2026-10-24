@@ -2613,3 +2613,30 @@ fn quota_checks_later_orphan_before_closing_first_browser_and_releases_on_failur
     assert!(state.disposable_profiles.is_empty());
     assert!(!active.load(std::sync::atomic::Ordering::SeqCst));
 }
+
+#[test]
+fn retained_owner_operation_prevents_competing_profile_open() {
+    let catalog=catalog_with_named_profile();
+    let mut retained=serde_json::to_value(BrowserSessionState::default()).unwrap();
+    retained["profileOperationIds"]=serde_json::json!({"profile-a":"mode-one"});
+    let mut state:BrowserSessionState=serde_json::from_value(retained).unwrap();
+    let mut effects=FixtureEffects::default();
+    let mut manager=BrowserSessionManager::new(&mut state,&catalog,&mut effects,BrowserSessionManagerConfig{session_idle_timeout_ms:300_000,remote_view_desktops:vec![]});
+    assert_eq!(manager.open(OpenBrowserSession::exact_profile("competing","profile-a",1000)).unwrap_err(),"browser_profile_operation_pending:mode-one:inspect or resume the owner operation");
+}
+
+#[test]
+fn owner_operation_retains_tasks_during_automatic_reaping() {
+    let catalog=catalog_with_named_profile();
+    let mut state=BrowserSessionState::default();
+    let mut effects=FixtureEffects{browser_live:true,..FixtureEffects::default()};
+    let config=BrowserSessionManagerConfig{session_idle_timeout_ms:100,remote_view_desktops:vec![]};
+    let opened=BrowserSessionManager::new(&mut state,&catalog,&mut effects,config.clone()).open(OpenBrowserSession::exact_profile("owner","profile-a",1000)).unwrap();
+    let mut retained=serde_json::to_value(state).unwrap();
+    retained["profileOperationIds"]=serde_json::json!({"profile-a":"mode-one"});
+    let mut state:BrowserSessionState=serde_json::from_value(retained).unwrap();
+    let result=BrowserSessionManager::new(&mut state,&catalog,&mut effects,config).reap(10_000).unwrap();
+    assert!(result.closed_browser_ids.is_empty());
+    assert!(result.expired_session_ids.is_empty());
+    assert!(state.sessions.contains_key(&opened.session_id));
+}
