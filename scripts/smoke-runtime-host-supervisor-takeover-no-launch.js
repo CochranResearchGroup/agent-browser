@@ -4,6 +4,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   chmodSync,
+  closeSync,
+  openSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -268,8 +270,12 @@ os.close(fd)
     'an executing transaction must retain its process-instance custody between physical locks');
   assert(readFileSync(staleWriterPath, 'utf8').trim() === String(legacyWriter.pid),
     'the legacy coordination protocol must retain PID-only writer text for older binaries');
-  rmSync(join(home, '.agent-browser/convergence/workstation.owner.json'));
+  // Older writers replace the PID file. Hold its old inode open while
+  // recreating it, without reaching into the richer record's implementation.
+  const previousPidFile = openSync(staleWriterPath, 'r');
+  rmSync(staleWriterPath);
   writeFileSync(staleWriterPath, `${legacyWriter.pid}\n`);
+  closeSync(previousPidFile);
   const legacyBusy = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
   assert(legacyBusy.blockers.some(blocker => blocker.code === 'workstation_transaction_busy'),
     'an executing legacy transaction without an apply flag must retain custody');

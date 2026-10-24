@@ -1,6 +1,6 @@
 # P288: Workstation writer custody
 
-State: OPEN
+State: CLOSED
 Product lane: PL-BUGFIX
 Owner: ecochran76
 Work item: CochranResearchGroup/agent-browser#414
@@ -19,7 +19,7 @@ Use one red/green vertical slice at a time through existing public CLI fixtures.
 
 ## Worker assignments
 
-One primary, no delegation. Own workstation writer coordination and takeover/replacement consumers, their existing CLI fixtures, installer-help paragraphs and bounded planning/evidence. P283 owns mode help and P285 owns dashboard routing/help. Authentication retains its dirty source and credential guidance. Reconciled inventory: canonical authentication, active dashboard/mode/duplicate peers and clean retained enrollment/profile-proof checkouts. Preserve every peer. This dedicated primary is bound to issue414 and removed after clean integration; retained directories do not become active task ownership.
+One primary, no delegation. Own workstation writer coordination and takeover/replacement consumers, their existing CLI fixtures, installer-help paragraphs and bounded planning/evidence. P283 owns mode help and P285 owns dashboard routing/help. Authentication retains its dirty source and credential guidance. P288 owns only the new workstation-writer definition under Install convergence owner in CONTEXT.md; authentication retains all other domain vocabulary. Reconciled inventory: canonical authentication, active dashboard/mode/duplicate peers and clean retained enrollment/profile-proof checkouts. Preserve every peer. This dedicated primary is bound to issue414 and removed after clean integration; retained directories do not become active task ownership.
 
 ## Evidence and exit
 
@@ -30,3 +30,7 @@ Record exact red and green commands, source/binary identity and independent fixt
 Compatibility refinement: after two semantic greens, preserve executing older PID-only writers for transaction mutations without an apply flag. One final vertical slice and CI iteration build replace the initial two-build allowance; this is a demonstrated compatibility risk in the custody format change, not another product scope.
 
 Bidirectional compatibility refinement: the public legacy protocol regression proves that JSON in workstation.lock hides active new writers from older readers. Retain PID text and original release semantics, with exact process and inode identity in a separate custody record behind a stable short guard. Consolidate contention checks onto the actual guarded public transaction rather than the filesystem test double. One final cycle/build is justified by this new red; canceled pre-wire test compilation is not qualification.
+
+## Qualified source outcome
+
+PR415 closes the bounded repair. Four red/green cases and the final public guarded-transaction fixture pass; all221 workstation cases, strict workspace Clippy, formatting, installer fixture, docs build, policy wiring, selected planning and changed links pass. Exact final CI binary194e22319840 is retained privately as a fast-iteration artifact, not a production candidate. Independent OS readback finds no matching fixture processes. No production publication is included. The primary checkout is removed through governed closeout after integration.

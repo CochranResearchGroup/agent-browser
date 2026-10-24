@@ -9,13 +9,14 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#414]
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    plan_state: CLOSED
+    custody_state: INTEGRATED
     dependencies: [P284]
     overlaps: [P283, P285]
     reconciled_overlaps: [P283, P285]
-    validation_status: PR406 review reproduces stale PID refusal and lost preview contention; TDD pending
+    validation_status: Four public red-green cases;221 workstation tests, strict Rust gates, installer and takeover fixtures, docs and independent zero-residue readback pass
     limitations: ["No production publication; preserve all peer work and browsers"]
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/415
     updated_at: 2026-10-24
 
   - id: P285
