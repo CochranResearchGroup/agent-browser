@@ -1,6 +1,6 @@
 # P290: Writer executable continuity
 
-State: OPEN
+State: CLOSED
 Product lane: PL-BUGFIX
 Owner: ecochran76
 Work item: CochranResearchGroup/agent-browser#417
@@ -24,3 +24,8 @@ One primary, no delegation. Own writer.rs, existing takeover fixture and only wr
 ## Evidence and exit
 
 Keep exact red/green commands, executable digest and independent owned-process readback in the evidence note. Passing source checks do not authorize production publication. Close the issue and plan only after source integration and report any remaining installed boundary explicitly.
+
+
+## Qualified source outcome
+
+PR419 closes issue417 with one public red-green slice and one optimized CI iteration build. The unlink, legacy compatibility, competing apply, preview and stale-record recovery fixture passes. All221 workstation tests, full installer fixture, format, strict workspace Clippy, docs build, policy wiring, selected planning, links and patch hygiene pass. Independent OS readback finds no matching fixture processes. Preserve the ordinary CI executable and receipts privately, then remove the clean primary through governed closeout after integration. No production publication is included.

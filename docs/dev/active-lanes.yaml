@@ -9,13 +9,14 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#417]
-    plan_state: OPEN
-    custody_state: ACTIVE
+    plan_state: CLOSED
+    custody_state: INTEGRATED
     dependencies: [P288]
     overlaps: [P289]
     reconciled_overlaps: ["Own writer module, public takeover fixture and writer-only prose; preserve P289 acquisition and all peer work"]
-    validation_status: Public unlink regression red then green; strict Rust quality and docs pass; workstation and installer checks pending
+    validation_status: One public red-green slice;221 workstation tests, full installer fixture, strict Rust quality, docs and independent zero-residue readback pass
     limitations: ["Source repair only; no production or foreign effects"]
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/419
     updated_at: 2026-10-24
 
   - id: P288

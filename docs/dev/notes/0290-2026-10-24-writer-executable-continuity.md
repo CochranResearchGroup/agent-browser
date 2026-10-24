@@ -1,7 +1,7 @@
 # P290 writer executable continuity evidence
 
 Product lane: PL-BUGFIX
-Disposition: active-input
+Disposition: accepted-evidence
 Owning plan or work item: P290 / CochranResearchGroup/agent-browser#417
 Related lanes: P288, P289
 
@@ -15,4 +15,15 @@ The minimal implementation checks the claimed PID-file identity and exact proces
 
 Green command: `AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD=<owned-cli/target/ci/agent-browser> P290_VALIDATION_RUN=<isolated-run> TMPDIR=/tmp node scripts/smoke-runtime-host-supervisor-takeover-no-launch.js`. It exits0. The paused writer retains exclusion after unlink, competing apply stops before staging, full-shutdown preview reports contention, PID-only compatibility passes, and normal takeover plus zero-effect steady state succeeds after writer exit. One owned CI build completes in4m22s; exact binary SHA256 isaf198f49c0b068d5b197a404323603b76d126b7c677033e572aa15f8f5786e21.
 
-Formatting, strict workspace Clippy, docs build and policy wiring pass. The selected planning audit and15-file local-link check pass after correcting the new plan status and note disposition to the auditor's existing vocabulary. Preserve those initial metadata audit failures separately. Workstation tests and full installer fixture remain pending. No production publication, provider effect or foreign cleanup.
+Formatting, strict workspace Clippy, docs build and policy wiring pass. The selected planning audit and15-file local-link check pass after correcting the new plan status and note disposition to the auditor's existing vocabulary. Initial metadata audit findings remain in the session record. All221 workstation tests pass with zero failures or ignores and3420 filtered cases; this is not a comprehensive Rust claim. The full installer fixture passes, including exact cleanup of two owned runtime hosts with zero residue. No production publication, provider effect or foreign cleanup.
+
+
+## Final integration qualification
+
+PR419 carries the repair for issue417. Final executable source is frozen at99db70da3; later changes qualify documentation only. Independent post-run OS environment and executable readback finds no matching task fixture processes. Foreign unreadable or raced entries remain unclaimed. The validation binary and raw commands/receipts are retained privately outside Git; the ordinary CI artifact is not production-promotable. No candidate seal or installed-runtime claim is made.
+
+The changed-surface selector selects a broad lane because installer help shares output source; no service schema, model, generated client, action contract, provisioning, browser, Native/Guacamole route or VM behavior changed. Qualification covers writer custody through the public CLI, workstation cases, strict Rust quality and documentation checks. CI remains disabled and was not dispatched.
+
+Self-review confirms claimed PID-file identity and boot/start token preserve executing custody across executable unlink; absent or different process instances remain recoverable. Legacy PID-only classification retains the executing installer/mutation requirements. No generic browser identity rule changed. Scope remains one red-green slice and one owned CI iteration build.
+
+Memory disposition: forbidden. New repair-outcome memory writes lack explicit user authorization; preserve a user-scoped machine-readable non-write receipt without a memory cloud effect.
