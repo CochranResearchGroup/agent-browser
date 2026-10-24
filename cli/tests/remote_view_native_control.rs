@@ -129,8 +129,14 @@ fn native_task_window_remediation_uses_only_the_verified_window() {
         let mut owner=NativeFixture{calls:vec![]};
         let result=browser_native_control::execute(&original,&target,&serde_json::json!({"action":action}),&mut owner).unwrap();
         assert_eq!(result["taskCompleted"],false);
+        if action == "native_close" {
+            assert_eq!(owner.calls[1].0,"input","graceful close must never destroy the native window");
+            assert_eq!(owner.calls[1].1["actions"],serde_json::json!([{"kind":"key","chord":"alt+F4"}]));
+            assert_eq!(owner.calls[1].1["expectedProcessIdentity"]["start_token"],"11");
+        } else {
         assert_eq!(owner.calls[1].0,"window");
         assert_eq!(owner.calls[1].1,serde_json::json!({"desktopId":"viewing","expectedGeneration":9,"windowId":7,"expectedProcessIdentity":{"pid":42,"boot_id":"boot","start_token":"11","executable":"/synthetic/chrome","uid":1000,"cgroup":"fixture"},"action":expected}));
+        }
         assert!(result.get("processExited").is_none(),"dispatch does not prove exit");
     }
 }
