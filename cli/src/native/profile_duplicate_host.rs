@@ -148,7 +148,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                     return Err("profile_duplicate_owner_confirmation_required".into());
                 }
                 let _ = self.open(OpenBrowserSession::exact_profile(
-                    format!("profile-duplicate-source:{}", operation_id),
+                    duplicate_session_name(operation_id, true),
                     &intent.source_profile_id,
                     current_unix_ms(),
                 ))?;
@@ -166,6 +166,8 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
 
 #[derive(Clone, Serialize, Deserialize)]
 struct OwnerBinding {
+    #[serde(default)]
+    borrowed_anchor: Option<profile_duplicate_custody::BorrowedSourceAnchor>,
     original: RecordedProcessIdentity,
     browser: agent_browser_service_model::ManagedBrowserInstance,
     session: agent_browser_service_model::ManagedBrowserSession,
@@ -184,6 +186,13 @@ impl OwnerBinding {
             tab: self.tab.clone(),
         }
     }
+}
+fn duplicate_session_name(operation_id: &str, source: bool) -> String {
+    format!(
+        "pd{}-{:x}",
+        if source { "s" } else { "d" },
+        Sha256::digest(operation_id.as_bytes())
+    )
 }
 fn executable_digest(path: &Path) -> Result<String, String> {
     let mut file = std::fs::File::open(path).map_err(|_| "profile_duplicate_build_unavailable")?;
@@ -218,6 +227,20 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         directory: &Path,
         database: &Path,
     ) -> Result<Value, String> {
+        // Repair only this operation's legacy task label. Task/browser/handoff
+        // identities stay stable, and its existing browser is never relaunched.
+        let safe_name = duplicate_session_name(&intent.operation_id, false);
+        let legacy_name = format!("profile-duplicate:{}", intent.operation_id);
+        let mut repaired = false;
+        for task in self.state.sessions.values_mut().filter(|task| {
+            task.profile_id == intent.destination_profile_id && task.name == legacy_name
+        }) {
+            task.name = safe_name.clone();
+            repaired = true;
+        }
+        if repaired {
+            self.commit_state()?;
+        }
         let connection = rusqlite::Connection::open(directory.join("operations.sqlite3"))
             .map_err(|_| "profile_duplicate_journal_unavailable")?;
         connection.execute_batch("CREATE TABLE IF NOT EXISTS profile_duplicate_owner_bindings(id TEXT PRIMARY KEY,binding TEXT NOT NULL)").map_err(|_|"profile_duplicate_journal_unavailable")?;
@@ -282,7 +305,34 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 .filter(|task| task.profile_id == intent.source_profile_id)
                 .map(|task| task.id.clone())
                 .collect();
+            let borrowed_anchor = if self.state.app_browser_attachments.contains_key(&browser.id) {
+                let profile = self
+                    .catalog
+                    .profiles
+                    .get(&intent.source_profile_id)
+                    .ok_or("profile_duplicate_source_profile_missing")?;
+                let source = SourceProfile {
+                    id: profile.id.clone(),
+                    name: profile.name.clone(),
+                    user_data_dir: PathBuf::from(&profile.user_data_dir),
+                    browser_build: digest.clone(),
+                    generation: browser
+                        .desktop
+                        .as_ref()
+                        .map(|desktop| desktop.generation)
+                        .unwrap_or(1),
+                };
+                Some(profile_duplicate_custody::BorrowedSourceAnchor::capture(
+                    &intent.operation_id,
+                    &source,
+                    &self.state,
+                    &browser.id,
+                )?)
+            } else {
+                None
+            };
             let binding = OwnerBinding {
+                borrowed_anchor,
                 original,
                 browser,
                 session,
@@ -407,10 +457,82 @@ struct HostedDuplication<'a, P, E> {
     guard: Rc<RefCell<Option<profile_duplicate_custody::SourceCustody>>>,
 }
 impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserCommandEffects>
+    HostedDuplication<'_, P, E>
+{
+    fn ready_receipt(
+        &mut self,
+        task_id: String,
+        browser_id: String,
+        handoff_id: String,
+    ) -> Result<LaunchReceipt, String> {
+        let session = self
+            .host
+            .state
+            .sessions
+            .get(&task_id)
+            .cloned()
+            .ok_or("profile_duplicate_destination_task_missing")?;
+        let tab = session
+            .current_tab_id
+            .as_ref()
+            .and_then(|id| self.host.state.tabs.get(id))
+            .cloned()
+            .ok_or("profile_duplicate_destination_tab_missing")?;
+        let browser = self
+            .host
+            .state
+            .browsers
+            .get(&browser_id)
+            .cloned()
+            .ok_or("profile_duplicate_destination_browser_missing")?;
+        let target = RemoteViewTabHandoffTarget {
+            session,
+            tab,
+            browser,
+        };
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            match self
+                .host
+                .native_browser_command(&target, &json!({"action":"native_ready"}))
+            {
+                Ok(observation) if observation["ready"] == true => {
+                    return Ok(LaunchReceipt {
+                        task_id,
+                        browser_id,
+                        handoff_id,
+                    })
+                }
+                Ok(_) => return Err("profile_duplicate_native_readiness_unverified".into()),
+                Err(error)
+                    if error.starts_with("browser_native_window_unverified")
+                        && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(100))
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+}
+impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserCommandEffects>
     DuplicationRuntime for HostedDuplication<'_, P, E>
 {
     type Guard = Rc<RefCell<Option<profile_duplicate_custody::SourceCustody>>>;
     fn inspect_source(&mut self, source: &SourceProfile) -> Result<SourceObservation, String> {
+        // Reconcile a positively acknowledged close without dispatching again.
+        // The callback skips Native input once this private receipt is retained;
+        // it only reaps/observes the original and retires its logical records.
+        if self.binding.close_dispatched
+            && self
+                .host
+                .state
+                .browsers
+                .contains_key(&self.binding.browser.id)
+        {
+            let operation_id = self.operation_id.clone();
+            self.graceful_close_source(source, &operation_id)?;
+        }
         Ok(SourceObservation {
             generation: source.generation,
             running: self
@@ -446,20 +568,23 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             profile_lock_released: source_locks_released(&source.user_data_dir),
             force_kill_attempted: false,
         };
-        *self.guard.borrow_mut() = Some(SourceCustody::acquire(
-            &self.database,
-            source,
-            &evidence,
-            |pid| match crate::process_identity::observe_process(pid) {
-                crate::process_identity::ProcessObservation::Missing => {
-                    OriginalProcessState::Absent
-                }
-                crate::process_identity::ProcessObservation::Observed(_) => {
-                    OriginalProcessState::Live
-                }
-                _ => OriginalProcessState::Unknown,
-            },
-        )?);
+        let observe = |pid| match crate::process_identity::observe_process(pid) {
+            crate::process_identity::ProcessObservation::Missing => OriginalProcessState::Absent,
+            crate::process_identity::ProcessObservation::Observed(_) => OriginalProcessState::Live,
+            _ => OriginalProcessState::Unknown,
+        };
+        let guard = if let Some(anchor) = self.binding.borrowed_anchor.as_ref() {
+            SourceCustody::acquire_with_borrowed_anchor(
+                &self.database,
+                source,
+                &evidence,
+                anchor,
+                observe,
+            )?
+        } else {
+            SourceCustody::acquire(&self.database, source, &evidence, observe)?
+        };
+        *self.guard.borrow_mut() = Some(guard);
         Ok(self.guard.clone())
     }
     fn focus_source(&mut self, _: &SourceProfile) -> Result<(), String> {
@@ -517,6 +642,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 crate::process_identity::ProcessObservation::Missing
             ) && source_locks_released(&source.user_data_dir)
             {
+                // Exit can race the first child poll. Reap a retained owned
+                // child after the independent kernel/lock readback as well.
+                let _ = self.host.effects.browser_is_live(&self.binding.browser)?;
                 self.binding.clean_close = true;
                 save_binding(&self.connection, &self.operation_id, &self.binding)?;
                 self.host
@@ -532,6 +660,15 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 // ordinary competing-client close guard cannot veto the owner.
                 let before_retirement = self.host.state.clone();
                 self.host.state.profile_operation_ids.remove(&source.id);
+                if self.binding.borrowed_anchor.is_some() {
+                    self.host
+                        .state
+                        .app_browser_attachments
+                        .remove(&self.binding.browser.id);
+                    for id in &self.binding.reviewed_tasks {
+                        self.host.state.attached_task_targets.remove(id);
+                    }
+                }
                 let retirement = (|| {
                     for id in &self.binding.reviewed_tasks {
                         self.host.manager()?.close_session(
@@ -600,7 +737,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             self.binding.executable.clone(),
         )?;
         let task = self.host.open(OpenBrowserSession::exact_profile(
-            format!("profile-duplicate:{}", profile.operation_id),
+            duplicate_session_name(&profile.operation_id, false),
             &profile.destination.id,
             current_unix_ms(),
         ))?;
@@ -617,11 +754,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             current_unix_ms(),
         )?;
         self.host.commit_state()?;
-        Ok(LaunchReceipt {
-            task_id: task.session_id,
-            browser_id: task.browser_id,
-            handoff_id,
-        })
+        self.ready_receipt(task.session_id, task.browser_id, handoff_id)
     }
     fn reconcile_launch(
         &mut self,
@@ -634,7 +767,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             .values()
             .find(|task| {
                 task.profile_id == profile.destination.id
-                    && task.name == format!("profile-duplicate:{}", profile.operation_id)
+                    && task.name == duplicate_session_name(&profile.operation_id, false)
             })
             .cloned()
         else {
@@ -649,11 +782,10 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 link.session_id == task.id && link.check_link_at(current_unix_ms()).is_ok()
             })
         {
-            return Ok(Some(LaunchReceipt {
-                task_id: task.id,
-                browser_id: task.browser_id,
-                handoff_id: link.id.clone(),
-            }));
+            let handoff_id = link.id.clone();
+            return self
+                .ready_receipt(task.id, task.browser_id, handoff_id)
+                .map(Some);
         }
         // The browser/task may have published before its reply or handoff was
         // retained. Complete that same task; never issue another browser launch.
@@ -670,11 +802,8 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             current_unix_ms(),
         )?;
         self.host.commit_state()?;
-        Ok(Some(LaunchReceipt {
-            task_id: task.id,
-            browser_id: task.browser_id,
-            handoff_id,
-        }))
+        self.ready_receipt(task.id, task.browser_id, handoff_id)
+            .map(Some)
     }
 }
 
@@ -879,6 +1008,7 @@ mod tests {
             rusqlite::Connection::open(root.join("profile-duplication/operations.sqlite3"))
                 .unwrap();
         let binding = OwnerBinding {
+            borrowed_anchor: None,
             original: RecordedProcessIdentity {
                 pid: browser.pid,
                 start_token: "synthetic-review-only".into(),
@@ -940,7 +1070,7 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
     #[test]
-    fn profile_duplicate_launch_and_lost_handoff_resume_bootstrap_without_relaunch() {
+    fn profile_duplicate_launch_retains_bootstrap_and_reconciles_without_fabricating_readiness() {
         let root =
             std::env::temp_dir().join(format!("duplicate-host-launch-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(root.join("destination")).unwrap();
@@ -989,22 +1119,66 @@ mod tests {
             operation_id: "launch-resume".into(),
             guard: Rc::new(RefCell::new(None)),
         };
-        let first = runtime.launch_duplicate(&profile).unwrap();
+        let first_error = runtime.launch_duplicate(&profile).unwrap_err();
+        assert!(
+            first_error.starts_with("browser_native_original_identity_"),
+            "unexpected readiness failure: {first_error}"
+        );
         assert_eq!(launches.get(), 1);
-        assert!(runtime.host.state.sessions[&first.task_id]
-            .current_tab_id
-            .is_some());
+        let task = runtime
+            .host
+            .state
+            .sessions
+            .values()
+            .find(|task| task.profile_id == "destination")
+            .unwrap()
+            .clone();
+        assert!(
+            task.current_tab_id.is_some(),
+            "bootstrap tab must precede readiness qualification"
+        );
+        let original_handoff = runtime
+            .host
+            .state
+            .remote_view_tab_handoffs
+            .keys()
+            .next()
+            .unwrap()
+            .clone();
         runtime.host.state.remote_view_tab_handoffs.clear();
         runtime.host.commit_state().unwrap();
-        let resumed = runtime.reconcile_launch(&profile).unwrap().unwrap();
-        assert_eq!(resumed.task_id, first.task_id);
-        assert_eq!(resumed.browser_id, first.browser_id);
-        assert_ne!(resumed.handoff_id, first.handoff_id);
-        assert_eq!(launches.get(), 1);
+        let resumed_error = runtime.reconcile_launch(&profile).unwrap_err();
+        assert!(resumed_error.starts_with("browser_native_original_identity_"));
+        let resumed_handoff = runtime
+            .host
+            .state
+            .remote_view_tab_handoffs
+            .keys()
+            .next()
+            .unwrap()
+            .clone();
+        assert_ne!(resumed_handoff, original_handoff);
         assert_eq!(
-            runtime.reconcile_launch(&profile).unwrap().unwrap(),
-            resumed
+            runtime
+                .host
+                .state
+                .sessions
+                .values()
+                .find(|current| current.profile_id == "destination")
+                .unwrap()
+                .id,
+            task.id
         );
+        assert_eq!(launches.get(), 1);
+        assert!(runtime
+            .reconcile_launch(&profile)
+            .unwrap_err()
+            .starts_with("browser_native_original_identity_"));
+        assert_eq!(
+            runtime.host.state.remote_view_tab_handoffs.keys().next(),
+            Some(&resumed_handoff)
+        );
+        assert_eq!(launches.get(), 1);
         drop(runtime);
         drop(host);
         std::fs::remove_dir_all(root).unwrap();
