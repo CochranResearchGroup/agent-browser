@@ -1004,7 +1004,7 @@ try {
   writeFileSync(staleDrainPath, '{}');
   const legacyMarkerApply = runInstaller(drainBlockedRoot, ['--apply', '--json']);
   assert.equal(legacyMarkerApply.status, 0, legacyMarkerApply.stderr);
-  assert.equal(JSON.parse(legacyMarkerApply.stdout).workstationReady, true);
+  assert.equal(JSON.parse(legacyMarkerApply.stdout).ready, true);
   assert.equal(readFileSync(staleDrainPath, 'utf8'), '{}',
     'a malformed legacy marker must neither block nor be rewritten');
   assert.ok(existsSync(join(drainBlockedRoot, '.local', 'lib', 'agent-browser', 'generations')));
@@ -1023,7 +1023,7 @@ try {
     const beforeMarker = shape === 'valid' ? readFileSync(staleDrainPath, 'utf8') : treeManifest(staleDrainPath);
     const reapplied = runInstaller(drainBlockedRoot, ['--apply', '--json']);
     assert.equal(reapplied.status, 0, `${shape} legacy marker: ${reapplied.stderr}`);
-    assert.equal(JSON.parse(reapplied.stdout).workstationReady, true);
+    assert.equal(JSON.parse(reapplied.stdout).ready, true);
     assert.deepEqual(shape === 'valid' ? readFileSync(staleDrainPath, 'utf8') : treeManifest(staleDrainPath), beforeMarker,
       'legacy metadata must remain untouched');
   }

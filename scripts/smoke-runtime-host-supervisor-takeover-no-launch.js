@@ -198,6 +198,9 @@ try {
   assert(conflict.status !== 0, 'a second unsupervised host unexpectedly started');
   assert(`${conflict.stdout}${conflict.stderr}`.includes('port_conflict'),
     `the fixture did not reproduce the original port conflict: ${conflict.stdout}${conflict.stderr}`);
+  const legacyMarker = join(home, '.agent-browser', 'runtime-adoption', 'admission-drain.json');
+  mkdirSync(join(home, '.agent-browser', 'runtime-adoption'), { recursive: true });
+  writeFileSync(legacyMarker, 'malformed retained upgrade metadata');
   const plan = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
   assert(plan.disposition === 'ready_for_takeover', `unexpected disposition: ${JSON.stringify(plan)}`);
   assert(plan.selectedBackend.pid === sourcePid, 'plan selected a different process');
@@ -216,8 +219,8 @@ try {
   assert(processIsLive(outcome.replacementPid), 'replacement host is not live');
   const transaction = JSON.parse(readFileSync(join(fixtureRoot, 'takeover.json'), 'utf8'));
   assert(transaction.state === 'accepted', 'durable transaction was not accepted');
-  assert(!existsSync(join(home, '.agent-browser', 'runtime-adoption', 'admission-drain.json')),
-    'accepted recovery retained the admission drain');
+  assert(readFileSync(legacyMarker, 'utf8') === 'malformed retained upgrade metadata',
+    'takeover must ignore retained upgrade markers without rewriting them');
   const steadyPlan = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
   assert(steadyPlan.disposition === 'already_supervised',
     `accepted recovery did not reach supervised steady state: ${JSON.stringify(steadyPlan)}`);

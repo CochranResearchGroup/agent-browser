@@ -1707,10 +1707,10 @@ fn recover_operator_required_upgrade_for_root(
     }
     // Current selected-payload and process proof below determines recovery.
     // Historical checkpoint labels are diagnostic evidence, not permission.
-    let accepted_forward_recovery = matches!(
-        transaction.state,
-        UpgradeTransactionState::Accepted | UpgradeTransactionState::OperatorRecoveryRequired
-    );
+    let accepted_forward_recovery = matches!(transaction.state, UpgradeTransactionState::Accepted)
+        || (transaction.state == UpgradeTransactionState::OperatorRecoveryRequired
+            && transaction.old_generation_id.as_deref()
+                != Some(transaction.candidate_generation_id.as_str()));
     if accepted_forward_recovery
         && selected_generation_id(&paths).as_deref()
             == Some(transaction.candidate_generation_id.as_str())
