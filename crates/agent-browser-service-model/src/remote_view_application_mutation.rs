@@ -366,7 +366,15 @@ impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
             return Err(RemoteViewApplicationResponseError::InvalidShape.into());
         };
         let inventory = self.inventory()?;
-        inventory.validate_acquisition(pool_name, assignment)?;
+        // A same-key acquisition may have completed and subsequently been
+        // released before this pending local record was reconciled. Validate
+        // its acquisition identity, then require the exact current terminal
+        // record below. Persist the real released outcome, never active capacity.
+        let mut identity = assignment.clone();
+        if identity.state == RemoteViewAssignmentState::Released {
+            identity.state = RemoteViewAssignmentState::Active;
+        }
+        inventory.validate_acquisition(pool_name, &identity)?;
         if !inventory.assignments.contains(assignment) {
             return Err(RemoteViewApplicationResponseError::StaleTarget.into());
         }

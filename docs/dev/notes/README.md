@@ -1,5 +1,6 @@
 # Agent Browser Notes Index
 
+[P289 terminal acquisition](0289-2026-10-24-terminal-acquisition-recovery.md): exact provider-released replay unblocks interrupted acquisition without resurrecting capacity.
 [P288 writer custody](0288-2026-10-24-workstation-writer-custody.md): public CLI red/green repair of stale writer refusal and contention projection.
 
 [P285 inventory latency](0285-2026-10-24-workspace-inventory-latency.md): generation dashboard bypasses diagnostic fallback; installed workspace reads measured in milliseconds; intermittent cold rail tail and Native acquisition acceptance remain open.

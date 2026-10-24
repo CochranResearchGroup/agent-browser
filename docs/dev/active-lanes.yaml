@@ -1,6 +1,23 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P289
+    product_lane: PL-BUGFIX
+    objective: Reconcile exact released Native acquisitions without resurrecting capacity
+    plan: docs/dev/plans/0289-2026-10-24-terminal-acquisition-recovery.md
+    branch: fix/native-acquisition-412
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#412]
+    plan_state: IN_PROGRESS
+    custody_state: ACTIVE
+    dependencies: [P285, P288]
+    overlaps: [P283]
+    reconciled_overlaps: ["Own mutation reconciliation and focused tests only; preserve P283 mode/profile/store/observation and Native provider ownership; reuse retained primary serially after PR416"]
+    validation_status: Exact pending key maps to provider-released assignment; regression pending
+    limitations: ["No terminal inference from missing records", "No provider or ingress reconfiguration", "Installed acceptance remains separate"]
+    updated_at: 2026-10-24
+
   - id: P288
     product_lane: PL-BUGFIX
     objective: Remove stale writer refusal and report actual contention
