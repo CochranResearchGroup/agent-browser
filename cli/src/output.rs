@@ -6176,6 +6176,10 @@ Selected-workspace page evidence follows the exact selected tab; missing targets
 do not substitute the browser default. Browser-wide activity keeps its owner scope.
 Selection Focus requests native focus for a current owned tab. Stale or foreign
 targets require refresh; an accepted request is not observed physical-focus proof.
+Chat inspection reviews can be recorded as accepted or rejected in Activity.
+Reviews retain scoped run/evidence/reviewer metadata without observation prose or
+ledger paths and execute no action. Persistence stays opt-in; Clear is scoped to
+the current session and unavailable storage is reported.
 Diagnostic/chat exports omit URL userinfo, query strings, fragments and opaque
 payloads. Live URLs and Copy URL stay unchanged; prose/path secrets are outside
 this redaction scope.

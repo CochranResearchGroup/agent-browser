@@ -4,6 +4,8 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Inspection review**: An explicit accepted or rejected judgment about one frozen inspection run, scoped to its original workspace, task, browser, tab and profile. Activity retains bounded identity and evidence-reference metadata. The judgment does not change observation validity, execution authority or readiness.
+
 **Exact task routing**: MCP retains task identity through page command builders
 and resolves the transport lane separately. The managed host joins the exact ID
 to the task name and selected browser profile. Missing or conflicting identity

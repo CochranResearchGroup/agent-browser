@@ -1,5 +1,7 @@
 # Active plan index
 
+[P275 inspection reviews](0275-2026-10-23-inspection-activity.md), #68; metadata-only accepted/rejected judgments in existing Activity with opt-in persistence and original-run scope. Native Focus and wider #68 remain separate.
+
 [P274 selected-workspace Focus](0274-2026-10-23-selection-focus.md), #68; exact owned-tab source repair with mounted refusal/race qualification. Actual Native focus and broader inspector outcomes remain open.
 
 [P273 development host startup](0273-2026-10-22-development-host-startup.md), #356, is closed after PR371 and installed same-process supervision recovery. The selected generation, four browser roots and sessions are preserved; existing development guidance drift remains separate.
