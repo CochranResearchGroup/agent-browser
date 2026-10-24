@@ -362,3 +362,21 @@ closed-scope receipt/history/identity counterexample table is pending at this
 checkpoint. The recovery-only mode reuses the existing live physical validator;
 ordinary readiness keeps its strict presentation requirement. No production
 controller invocation or runtime adoption has occurred in this source lane.
+
+## P243/P232 maintenance: explicit existing-profile debug endpoint
+
+An already qualified current browser may use a nonzero explicit debug port and
+have no DevToolsActivePort file. Preserve valid port-file reuse. Only genuine
+file absence permits the same observed process's explicit port as a loopback
+HTTP discovery input; retain unchanged CDP PID and kernel identity fences.
+Malformed present files and absent, zero or invalid argv ports remain errors.
+This finite slice owns endpoint lookup and focused fixtures on
+fix/profile-explicit-debug-endpoint. No port scans, legacy inventory fallback,
+profile writes, runtime candidate build, production recovery or installation.
+Source RED/GREEN and closed-world review remain pending.
+
+Endpoint regression checkpoint: the missing-file joined-argv lookup failed with
+the real endpoint-unavailable error before fallback and passed afterward.
+Final lookup counterexamples and existing wrong-PID attachment regression remain
+pending at this checkpoint. Verified attachment is unchanged; only explicit
+metadata discovery input changes after exact profile/process qualification.

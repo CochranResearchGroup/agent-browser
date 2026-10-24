@@ -50,3 +50,14 @@ in this recovery mode, matching ordinary post-commit acceptance; reject partial,
 stale or invalid receipts. The ordinary unrelated-history readiness contract
 remains strict. Source tests and an optimized controller candidate are required;
 only the parent operator may perform production recovery or installation.
+
+## Follow-up: explicit debug-port reuse
+
+Branch: fix/profile-explicit-debug-endpoint, based on canonical 5f2cc772d.
+After exact profile/process proof, preserve a valid DevToolsActivePort endpoint.
+Only genuinely absent files permit the same observed PID's explicit nonzero
+u16 debug port through existing joined-argv parsing and loopback discovery.
+Present malformed files and unavailable/invalid argv must reject. Keep the
+existing verified attachment's CDP PID and before/after process checks unchanged.
+Finite acceptance is focused lookup cases and the existing wrong-PID attachment
+regression. This source packet authorizes no production build or runtime effects.
