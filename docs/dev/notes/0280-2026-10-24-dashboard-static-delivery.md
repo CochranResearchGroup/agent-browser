@@ -34,3 +34,9 @@ Five fresh contexts with one owned headless fixture yield shell median797.70ms a
 Issue393 owns the separate producer-side inventory delay. With zero browsers and tabs, explicit fresh workspace reads take2598 to2960ms. Direct backend reads take2378 to3079ms, almost entirely before headers for approximately14KB bodies. The HTTP workspace projection directly calls the read-only owner snapshot/enrichment path. The precise wait inside that producer is not established. These diagnostic timings do not create a new SLA.
 
 An existing production install, started outside this lane, remains in forward-recovery state and previously returned502 during a public sign-in probe. No production install, recovery, rollback, restart or ingress effect is performed by this lane. Public post-fix latency and installed acceptance remain open under391 until that operation is resolved. Failed preflights and the interrupted public probe remain private evidence; they are not counted as successful acceptance.
+
+## Canonical integration
+
+PR392 merges as ecd2950a3bb0b524b1e9060bb84d9ec7615d882f. Fresh canonical readback proves the sealed source commit is an ancestor and all562 executable inputs still match. Source custody is integrated; the primary checkout, exact candidate and stopped development namespace remain retained for installed acceptance. The entry guidance is9960 bytes and the exact sealed executable passes the public MCP discovery/refusal guidance gate.
+
+Final readback still reports the pre-existing production forward-completion gate. The source fix is merged, but this lane performs zero production installs or recovery attempts, and391 remains open. Issue393 is ready for the distinct producer diagnosis; it is not a hard source dependency for static delivery.
