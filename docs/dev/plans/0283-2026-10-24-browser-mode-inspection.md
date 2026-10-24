@@ -132,3 +132,11 @@ Worker403 checkpoint ea3632d0eb5a281917a29dcffc87d72d2c9252b2 is merged into the
 Full403 remains incomplete: actual graceful-close evidence producer, source lifecycle/public rail/MCP/CLI/HTTP adapters, ready same-build launch binding and authenticated-cookie/concurrent-browser acceptance. The worker's actual Chrome fixture failed before backend copy at synthetic localhost navigation. It is diagnostic, not acceptance, and remains a separate unqualified fixture checkpoint. No ticket is closed or marked validated from this partial core;404 stays blocked.
 
 No second broad review is run on these incomplete tickets. The requested post-ticket review remains a gate once a ticket's full acceptance is met; the earlier401 review is retained without repeating it.
+
+## Window2 terminal custody
+
+Worker backend ea3632d0e is integrated; separate unqualified browser fixture9ca690d41 remains only on remote platform/profile-duplicate-403. Worker commands stopped, fixture census zero, clean auxiliary removed by governed operation worktree-closeout-9a5f0dd2-72b8-477a-b937-d7b3c35ffd82 after remote verification. Fresh inventory has five worktrees; the upgrade-policy checkout disappeared independently. No foreign checkout was changed by this lane.
+
+Corrected manual-source rerun passes32 tests. The earlier compile failure was fixed with explicit manual_login_url None in the newer reconnect fixture. Final inspection and root-frontier profile/native tests and formatting remain recorded by their actual logs/handles17310,81709,76345, not inferred from worker results. Workspace and mode/native test-target strict Clippy pass. Both tickets remain incomplete and unreviewed as full tickets; broader affected Rust gates and full public/native/cookie workflow qualification remain required before merge readiness.
+
+Memory disposition: queued in agent_browser_main, receipt window2-memory-disposition.json in the user-scoped checkpoint directory. Queue acceptance is not retrieval proof. Goal stops at20:15:41UTC with the full requirement graph retained.
