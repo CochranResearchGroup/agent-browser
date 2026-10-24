@@ -7190,3 +7190,22 @@ an uncertain reply before deciding another input is appropriate. These actions
 never attach CDP, acquire another task, or return explicit human takeover.
 An unavailable Native owner or changed process/window returns remediation.
 Mode conversion remains a separate operation under development.
+
+
+The rail's browser-mode menu offers **Duplicate profile**. Enter a copy name,
+review affected tasks, and select the returned action. A running source closes
+only after the selected confirmation. A source without qualified clean-close
+history offers **Open source for review**. The copy has a new identity and
+writable directory; source and copy evolve independently. Copy success does
+not prove that stored authentication works in the copy.
+
+MCP: discover `profile_duplicate`, then use `browser_command` with
+`action: "profile_duplicate"` and `params` containing `operationId`,
+`sourceProfileId`, `destinationName`, `choice` and `launch`. An optional `taskId`
+binds the source profile to that task. CLI:
+`agent-browser --json mcp profile-duplicate '{"operationId":"copy-one","sourceProfileId":"PROFILE","destinationName":"Independent copy","choice":"prepare","launch":true}'`.
+HTTP: send these fields and `action: "browser_session_profile_duplicate"` to
+`POST /api/command`. Follow the returned actions using the same `operationId`;
+set `ownerConfirmed: true` only for the explicitly selected consequential
+choice. After a lost reply, reconcile that operation before attempting another
+effect. Cancelling a request does not reopen a source already stopped.

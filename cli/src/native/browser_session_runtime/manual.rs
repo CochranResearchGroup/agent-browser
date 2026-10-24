@@ -1,4 +1,4 @@
-//! Human-only managed windows. No CDP client or debugging endpoint is created.
+//! Managed CDP-free windows. Native control belongs to the Remote View owner.
 use super::*;
 use agent_browser_service_model::{BrowserLaunchCustodyStore, RecordedProcessIdentity};
 use serde_json::json;
@@ -197,7 +197,7 @@ impl ManualBrowsers {
             Some("url") => json!({"url":requested,"urlObserved":false,"mode":"manual_login","authentication":"not_verified"}),
             Some("navigate") if command["url"] == requested =>
                 json!({"url":requested,"urlObserved":false,"mode":"manual_login","authentication":"not_verified"}),
-            _ => return Err("manual_login_automation_unavailable: finish login, close this task, then reopen the preserved profile for automation".into()),
+            _ => return Err("manual_login_automation_unavailable: use native_capture/native_input for visual control, or close and reopen this preserved profile for DOM automation".into()),
         };
         Ok(json!({"id":command["id"],"success":true,"data":data}))
     }

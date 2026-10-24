@@ -25,8 +25,8 @@ pub struct BrowserLaunch {
     pub process_identity: Option<crate::RecordedProcessIdentity>,
     pub browser_id: String,
     pub pid: u32,
-    /// Empty for a human-only managed native window. Such a browser uses exact
-    /// process/window custody and never permits CDP attachment or page actions.
+    /// Empty for a managed CDP-free native window. Native observation and input
+    /// use Remote View; DOM actions and debugging attachment are unavailable.
     pub cdp_endpoint: String,
     pub desktop: Option<RemoteViewFixedDesktop>,
 }
@@ -595,8 +595,8 @@ pub struct ManagedBrowserInstance {
     pub id: String,
     pub profile_id: String,
     pub pid: u32,
-    /// Empty for a human-only managed native window. Such a browser uses exact
-    /// process/window custody and never permits CDP attachment or page actions.
+    /// Empty for a managed CDP-free native window. Native observation and input
+    /// use Remote View; DOM actions and debugging attachment are unavailable.
     pub cdp_endpoint: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub desktop: Option<RemoteViewFixedDesktop>,

@@ -5,6 +5,7 @@ use serde_json::{json, Map, Value};
 mod catalog;
 mod host_control;
 mod host_policy;
+mod profile_duplicate;
 mod host_reconnect;
 mod hosted;
 mod playbooks;
@@ -85,12 +86,13 @@ const PROFILE_DIAGNOSIS_TEMPLATE: &str = SERVICE_PROFILE_DIAGNOSIS_MCP_RESOURCE_
 const PROFILE_SEEDING_HANDOFF_TEMPLATE: &str =
     "agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}";
 const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
-// Advanced MCP commands stay inside the addressed task's page. Owner and
-// authority operations remain outside this browser command seam.
+// Advanced commands address one task. Explicit profile duplication also
+// supports a source profile without acquiring a task.
 const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = &[
     "mode",
     "native_capture",
     "native_input",
+    "profile_duplicate",
     "navigate",
     "evaluate",
     "back",
@@ -233,6 +235,7 @@ fn mcp_command_response_with_config(
         Some("host-control") => host_control::cli(args),
         Some("host-reconnect") => host_reconnect::cli(args),
         Some("host-policy") => host_policy::cli(args),
+        Some("profile-duplicate") => profile_duplicate::cli(args),
         Some("browser-native") => {
             if args.len() != 5 || !matches!(args[3].as_str(), "native_capture" | "native_input") {
                 return Err("Usage: agent-browser --json mcp browser-native <task-id> <native_capture|native_input> '<params-json>'".into());
@@ -5505,6 +5508,9 @@ fn call_service_mcp_tool(
             return playbooks::call(arguments, session);
         }
         validate_browser_command_action(arguments)?;
+        if arguments["action"] == "profile_duplicate" {
+            return profile_duplicate::call(arguments, session);
+        }
         if arguments["action"] == "mode" {
             let task_id = required_string_argument(arguments, "taskId")?;
             let data = workflow::inspect_mode(task_id)

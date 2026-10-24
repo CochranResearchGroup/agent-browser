@@ -17,6 +17,14 @@ try {
   assert(help.stdout.includes('browser_discover'));
   assert(!help.stdout.includes('service_access_plan'));
   const { tools } = await client.send('tools/list');
+  for (const operation of ['native_capture','native_input','profile_duplicate']) {
+    const discovery=await client.send('tools/call',{name:'browser_discover',arguments:{category:'browser',operation}});
+    const metadata=JSON.parse(discovery.content[0].text).data;
+    assert.equal(metadata.operation,operation);
+    assert.equal(metadata.execution.tool,'browser_command');
+    assert(metadata.inputSchema?.properties || metadata.arguments?.properties || metadata.schema?.properties,'operation exposes argument metadata');
+  }
+
   const modeDiscovery = await client.send('tools/call', {
     name: 'browser_discover', arguments: { category: 'browser', operation: 'mode' },
   });
@@ -52,7 +60,11 @@ try {
   for (const tool of tools.filter(
     (tool) => !['browser_open', 'browser_discover'].includes(tool.name)
   )) {
-    assert(tool.inputSchema.required.includes('taskId'), `${tool.name} addresses a task`);
+    if (tool.name === 'browser_command') {
+      assert(tool.inputSchema.required.includes('action'));
+      assert(tool.inputSchema.anyOf.some(branch => branch.required?.includes('taskId')));
+      assert(tool.inputSchema.anyOf.some(branch => branch.properties?.action?.const === 'profile_duplicate'));
+    } else assert(tool.inputSchema.required.includes('taskId'), `${tool.name} addresses a task`);
     for (const property of ['profileCapability', 'sessionId', 'routeId', 'revision', 'provider']) {
       assert(
         !Object.hasOwn(tool.inputSchema.properties, property),

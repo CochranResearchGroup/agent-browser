@@ -21,6 +21,8 @@ use super::browser_session_store::{BrowserProfileCatalogLoad, BrowserSessionSqli
 
 #[path = "browser_native_host.rs"]
 mod browser_native_host;
+#[path = "profile_duplicate_host.rs"]
+mod profile_duplicate_host;
 
 const DEFAULT_SESSION_IDLE_TIMEOUT_MS: u64 = 300_000;
 const DEFAULT_DISPOSABLE_CLEANUP_DELAY_MS: u64 = 300_000;
@@ -1498,6 +1500,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         let admission = if command["action"]
             .as_str()
             .is_some_and(|action| action.starts_with("browser_session_"))
+            && command["action"] != "browser_session_profile_duplicate"
             && !(command["action"] == "browser_session_close" && command["scope"] == "browser")
         {
             super::browser_host_control::admit_command(None, None, command, false)
@@ -1531,6 +1534,19 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .get("action")
             .and_then(serde_json::Value::as_str)
             .ok_or_else(|| "browser_session_action_missing".to_string())?;
+        if action == "browser_session_profile_duplicate" {
+            self.refresh_before_ordinary_command()?;
+            if let Some(task_id) = optional_string(command,"sessionId").or_else(||optional_string(command,"taskId")) {
+                let task = self.state.sessions.get(task_id).ok_or("profile_duplicate_task_missing")?;
+                if optional_string(command,"sourceProfileId") != Some(task.profile_id.as_str())
+                    || optional_string(command,"sessionName").is_some_and(|name|name!=task.name) {
+                    return Err("profile_duplicate_task_profile_conflict".into());
+                }
+            }
+            // The owner operation presents its affected tasks and explicit
+            // consequence choices before a close. It never changes human control.
+            return self.profile_duplicate(command);
+        }
         super::browser_host_control::check_state(&self.state, "", command)?;
         if action.starts_with("browser_session_") && action != "browser_session_status" {
             self.refresh_before_ordinary_command()?;
@@ -2685,6 +2701,14 @@ where
         super::browser_host_policy::prepare_command(&self.state, session_name, &mut prepared)?;
         let command = &prepared;
         let exact_task_id = self.exact_task_selector(session_name, command)?;
+        for task in self.state.sessions.values().filter(|task| {
+            exact_task_id.map_or(task.name == session_name, |id|task.id == id)
+        }) {
+            if let Some(operation) = self.state.profile_operation_ids.get(&task.profile_id) {
+                return Err(format!("browser_profile_operation_pending:{operation}:inspect or cancel the owner operation before page actions"));
+            }
+        }
+
         super::browser_host_control::check_state(&self.state, session_name, command)?;
         super::browser_host_reconnect::check_state(&self.state, session_name, command)?;
         super::browser_host_policy::check_state(&self.state, session_name, command)?;
@@ -2826,7 +2850,7 @@ where
             if !allowed {
                 // This is a known preflight refusal, not an attempted physical
                 // command. Do not leave unknown activity that fences close.
-                return Err("manual_login_automation_unavailable: finish login, close this task, then reopen the preserved profile for automation".into());
+                return Err("manual_login_automation_unavailable: use native_capture/native_input for visual control, or close and reopen this preserved profile for DOM automation".into());
             }
         }
         self.recover_browser_for_command(&browser_id, command)?;

@@ -140,6 +140,6 @@ Development startup ownership: [diagnostics](references/cli-and-service.md#devel
 
 ## Read browser mode
 
-Discover browser operation `mode`; call `browser_command` with `taskId` and action `mode`. CLI: `agent-browser --json mcp browser-mode <task-id>`. Use `browser_command` actions `native_capture`/`native_input` for Native control without CDP. Delivery does not prove login. [Mode inspection](references/cli-and-service.md#browser-mode-inspection).
+Discover browser operation `mode`; call `browser_command` with `taskId` and action `mode`. CLI: `agent-browser --json mcp browser-mode <task-id>`. Use `browser_command` actions `native_capture`/`native_input` for Native control without CDP. Delivery does not prove login. Discover `profile_duplicate` for independent copies; retain its operation ID for remediation. [Controls](references/cli-and-service.md#browser-mode-inspection).
 
 Diagnostics retain `?view=service:<name>` and selected `workspace`, `browser`, `session`, `tab`, `profile`, `job` query fields.
