@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {qualifyHostedBrowserRestart} from './smoke-hosted-browser-restart.mjs';
 function fixture({unknownReopen=false,unchangedGeneration=false,unprovenAbsence=false}={}){
  const old={desktopId:'owned',generation:1},task={taskId:'t',browserId:'b',profileId:'p',tabId:'tab',host:{desktop:old}};
- let revision=0,state='connected',target=old,recoveryDesktop=null;const calls=[],saved=[];
+ let revision=0,state='connected',target=old,recoveryDesktop=null,reopened=false;const calls=[],saved=[];
  const workflow=async(name,args)=>{
   calls.push(args.operation??name);
   if(name==='browser_command')return {result:{url:'about:blank',body:''}};
@@ -13,15 +13,15 @@ function fixture({unknownReopen=false,unchangedGeneration=false,unprovenAbsence=
    if(args.operation==='rebind')recoveryDesktop=args.desktop;
    if(args.operation==='reopen'){
     if(unknownReopen)throw Error('unknown reopen');
-    target=recoveryDesktop;recoveryDesktop=null;state='connected';
+    target=recoveryDesktop;recoveryDesktop=null;state='connected';reopened=true;
    }
   }
   return {host:{...task,desktop:target},reconnect:{revision,state,automaticReplay:false,recoveryDesktop,pending:false}};
  };
  return {task,workflow,syntheticOnly:true,calls,saved,
-  observeProcess:async expected=>expected?{pidAbsent:!unprovenAbsence}:{alive:true,pid:10,startToken:state==='connected'&&target.generation===2?'new':'old',profilePath:'/owned/profile'},
-  observePeers:async()=>({peer:'same-birth'}),save:async(_,value)=>saved.push(structuredClone(value)),
-  restartNative:async()=>({state:'ready_for_explicit_rebind',before:{desktopId:'native',assignmentId:'a',viewingGeneration:1},after:{desktopId:'native',assignmentId:'a',viewingGeneration:unchangedGeneration?1:2},launchBinding:{readinessScope:'live_resource'},applicationLoss:{observed:'lost'},websiteEffectsReplayed:false})};
+  observeProcess:async expected=>expected?{pidAbsent:!unprovenAbsence}:{alive:true,pid:10,startToken:reopened?'new':'old',profilePath:'/owned/profile'},
+  observePeers:async()=>({peer:'same-birth'}),observeReopenedNative:async proof=>({desktopId:'native',viewingGeneration:2,processId:proof.pid,windowObserved:true}),save:async(_,value)=>saved.push(structuredClone(value)),
+  restartNative:async()=>({state:'ready_for_explicit_rebind',before:{desktopId:'native',assignmentId:'a',lifecycleGeneration:1,viewingGeneration:1},after:{desktopId:'native',assignmentId:'a',lifecycleGeneration:1,viewingGeneration:unchangedGeneration?1:2},launchBinding:{readinessScope:'live_resource'},applicationLoss:{observed:'lost'},websiteEffectsReplayed:false})};
 }
 test('new Native generation remains recovery intent until one explicit blank reopen',async()=>{
  const f=fixture(),result=await qualifyHostedBrowserRestart(f);assert.equal(result.passed,true);

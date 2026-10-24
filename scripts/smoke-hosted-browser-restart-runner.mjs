@@ -63,7 +63,7 @@ try{
  stage='open';task=await workflow('browser_open',{taskKey:'restart-'+randomUUID(),serviceName:'synthetic-restart',agentName:'fixture',taskName:'Continue after Native restart without action replay',profile:name,profileMode:'persistent',url:'data:text/html,<title>Restart synthetic marker</title><input id="draft" value="unfinished">',hostBinding:{version:1,hostId:'fixture',participantId:randomUUID(),sessionId:randomUUID(),placement:{mode:'required',desktop:{desktopId:cfg.target.desktopId,generation:cfg.target.viewingGeneration}}}});
  await save('task-before.json',task);
  stage='warm';await qualifyHostedBrowserReconnect({workflow,task,save,syntheticOnly:true,controlPairs:10,requirePerformanceTargets:false});
- stage='restart';await qualifyHostedBrowserRestart({workflow,task,observeProcess,save,syntheticOnly:true,restartNative:proof=>bridge('restart',{proof}),observePeers:()=>bridge('peers')});
+ stage='restart';await qualifyHostedBrowserRestart({workflow,task,observeProcess,save,syntheticOnly:true,restartNative:proof=>bridge('restart',{proof}),observePeers:()=>bridge('peers'),observeReopenedNative:proof=>bridge('reopened',{proof})});
  stage='close';closeDispatched=true;await workflow('browser_close',{taskId:task.taskId});task=null;
 }catch(error){failure={stage,code:error.code??error.name,message:String(error.message).slice(0,600)};await save('failure.json',failure);}
 finally{

@@ -7,7 +7,7 @@ import {randomUUID} from 'node:crypto';
 const logical=task=>['taskId','browserId','profileId','tabId'].map(key=>task[key]);
 const desktop=value=>({desktopId:value.desktopId,generation:value.generation});
 
-export async function qualifyHostedBrowserRestart({workflow,task,restartNative,observeProcess,observePeers,save,syntheticOnly=false}){
+export async function qualifyHostedBrowserRestart({workflow,task,restartNative,observeProcess,observePeers,observeReopenedNative,save,syntheticOnly=false}){
  assert.equal(syntheticOnly,true);
  const original=logical(task);assert(original.every(value=>typeof value==='string'&&value));
  const old=desktop(task.host.desktop),peers=await observePeers();
@@ -25,7 +25,7 @@ export async function qualifyHostedBrowserRestart({workflow,task,restartNative,o
  assert.equal(transition.state,'ready_for_explicit_rebind');
  assert.equal(transition.before.desktopId,transition.after.desktopId);
  assert.equal(transition.before.assignmentId,transition.after.assignmentId);
- assert.equal(transition.before.viewingGeneration,old.generation);
+ assert.equal(transition.before.lifecycleGeneration,old.generation);
  assert(transition.after.viewingGeneration>old.generation);
  assert.equal(transition.launchBinding.readinessScope,'live_resource');
  assert.equal(transition.applicationLoss.observed,'lost');
@@ -36,7 +36,8 @@ export async function qualifyHostedBrowserRestart({workflow,task,restartNative,o
  await change('reconnect');
  assert(['browser_lost','desktop_lost'].includes(current.reconnect.state));
  assert.deepEqual(desktop(current.host.desktop),old,'Observed generation must not silently replace host binding');
- const next={desktopId:old.desktopId,generation:transition.after.viewingGeneration};
+ // Public desktop generation is assignment lifecycle, not Native viewing.
+ const next={desktopId:old.desktopId,generation:transition.after.lifecycleGeneration};
  await change('configure',{lossPolicy:'reopen'});
  await change('rebind',{desktop:next});
  assert.deepEqual(desktop(current.host.desktop),old,'Rebind records intent before explicit reopen');
@@ -49,7 +50,12 @@ export async function qualifyHostedBrowserRestart({workflow,task,restartNative,o
  assert.notEqual(replacement.startToken,before.startToken);assert.equal(replacement.profilePath,before.profilePath);
  const page=(await workflow('browser_command',{taskId:task.taskId,action:'evaluate',params:{script:'({url:location.href,body:document.body?.textContent??""})'}})).result;
  assert.equal(page.url,'about:blank');assert.equal(page.body,'');
+ const native=await observeReopenedNative(replacement);
+ assert.equal(native.viewingGeneration,transition.after.viewingGeneration);
+ assert.equal(native.desktopId,transition.after.desktopId);
+ assert.equal(native.processId,replacement.pid);
+ assert.equal(native.windowObserved,true);
  assert.deepEqual(await observePeers(),peers);
- await record('same-logical-task-profile-new-process-blank-page',{replacement});
+ await record('same-logical-task-profile-new-process-blank-page',{replacement,native});
  receipt.passed=true;await save('restart-acceptance.json',receipt);return receipt;
 }

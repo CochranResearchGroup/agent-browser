@@ -142,6 +142,18 @@ def main():
                     fixture = seam.RestartFixture(backend, {'task': 'synthetic-restart', 'profile': proof['profilePath']})
                     value = fixture.restart(fixture.binding)
                     h.private_json(args.results / 'native-restart-handoff.json', value)
+                elif request['operation'] == 'reopened':
+                    assert backend is not None
+                    current = backend.observe()
+                    proof = request['proof']
+                    assert h.birth(proof['pid']) == proof['kernelStart']
+                    windows = self.control({'operation': 'windows', 'assignment_id': current['assignmentId'],
+                                            'expected_generation': current['lifecycleGeneration'],
+                                            'expected_viewing_generation': current['viewingGeneration']})
+                    h.private_json(args.results / 'reopened-native-windows.json', windows)
+                    assert any(window.get('pid') == proof['pid'] for window in windows['windows'])
+                    value = {'desktopId': current['desktopId'], 'viewingGeneration': current['viewingGeneration'],
+                             'processId': proof['pid'], 'windowObserved': True}
                 elif request['operation'] == 'complete':
                     assert request['passed'], 'Agent consumer checks failed; retained agent receipt'
                     assert backend is not None
