@@ -69,7 +69,9 @@ async function native(request) {
   try {
     const response = await fetch('http://127.0.0.1:19096/v1/consumer', { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ application: 'agent-browser', request }), redirect: 'error', signal: AbortSignal.timeout(45000) });
-    const body = await response.json(); assert(response.ok, `Native ${request.operation} returned ${response.status}`);
+    const body = await response.json();
+    if (mutates) await save(`response-${request.operation}-${randomUUID()}.json`, { status: response.status, body });
+    assert(response.ok, `Native ${request.operation} returned ${response.status}`);
     assert(body && typeof body === 'object');
     if (request.operation === 'acquire') assert(typeof body.assignmentId === 'string' && typeof body.desktopId === 'string' && Number.isSafeInteger(body.generation) && body.state === 'active', 'Unqualified acquisition response');
     return body;
