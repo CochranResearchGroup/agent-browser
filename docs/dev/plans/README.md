@@ -1,5 +1,7 @@
 # Active plan index
 
+[P284 operator-led upgrades](0284-2026-10-24-operator-led-upgrades.md), #399, removes persistent upgrade markers and warning-based upgrade vetoes. The operator controls their workstation; optional live-work inspection is advisory. Source and exact-candidate qualification pass; installed publication is pending.
+
 [P282 recovery dashboard identity](0282-2026-10-24-recovery-dashboard-manifest.md), #405, closes with exact recovery and accepted combined deployment. P280/P281 repairs are installed;393 and399 remain open.
 
 [P281 upgrade client drain retirement](0281-2026-10-24-retire-client-upgrade-drain.md) owns issue #394 under PL-BUGFIX.

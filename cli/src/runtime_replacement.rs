@@ -63,6 +63,8 @@ pub(crate) struct RuntimeReplacementPlan {
     pub(crate) policy: RuntimeReplacementPolicy,
     pub(crate) disposition: RuntimeReplacementDisposition,
     pub(crate) blockers: Vec<RuntimeReplacementBlocker>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) warnings: Vec<RuntimeReplacementBlocker>,
     pub(crate) ingress_revision: u64,
     pub(crate) selected_backend: RuntimeHostBackend,
     pub(crate) selected_process_identity: Option<RecordedProcessIdentity>,
@@ -288,6 +290,8 @@ pub(crate) struct RuntimeReplacementEffectReceipt {
     #[serde(default)]
     pub(crate) forced_browser_ids: Vec<String>,
     pub(crate) final_census_digest: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) observation_warning: Option<String>,
     pub(crate) source_exit_proven: bool,
     pub(crate) profiles_preserved: bool,
 }
@@ -603,6 +607,7 @@ fn execute_full_shutdown_with(
             closed_sessions: Vec::new(),
             forced_browser_ids: Vec::new(),
             final_census_digest: None,
+            observation_warning: None,
             source_exit_proven: false,
             profiles_preserved: true,
         };
@@ -613,12 +618,9 @@ fn execute_full_shutdown_with(
         if effects.source_is_running()? {
             return Err("runtime_replacement_source_reappeared_after_receipt".to_string());
         }
-        let replay_census = effects.collect_stable_census()?;
-        if !browserless_after_full_shutdown(&replay_census) {
-            return Err("runtime_replacement_replay_census_not_browserless".to_string());
-        }
-        if receipt.final_census_digest.as_deref() != Some(replay_census.digest.as_str()) {
-            receipt.final_census_digest = Some(replay_census.digest);
+        let previous = receipt.clone();
+        record_final_observation(&mut receipt, effects.collect_stable_census());
+        if receipt != previous {
             effects.checkpoint(&receipt)?;
         }
         return Ok(receipt);
@@ -692,10 +694,6 @@ fn execute_full_shutdown_with(
         effects.checkpoint(&receipt)?;
     }
 
-    let pre_retirement_census = effects.collect_stable_census()?;
-    if !browserless_after_full_shutdown(&pre_retirement_census) {
-        return Err("runtime_replacement_post_close_census_not_browserless".to_string());
-    }
     receipt.state = RuntimeReplacementEffectState::BrowsersClosed;
     effects.checkpoint(&receipt)?;
 
@@ -708,28 +706,28 @@ fn execute_full_shutdown_with(
     if effects.source_is_running()? {
         return Err("runtime_replacement_source_exit_unproven".to_string());
     }
-    let final_census = effects.collect_stable_census()?;
-    if !browserless_after_full_shutdown(&final_census) {
-        return Err("runtime_replacement_post_retirement_census_not_browserless".to_string());
-    }
-    receipt.final_census_digest = Some(final_census.digest);
+    record_final_observation(&mut receipt, effects.collect_stable_census());
     receipt.source_exit_proven = true;
     receipt.state = RuntimeReplacementEffectState::SourceAbsent;
     effects.checkpoint(&receipt)?;
     Ok(receipt)
 }
 
-fn browserless_after_full_shutdown(census: &StableRuntimeCensus) -> bool {
-    census.activation_allowed
-        && census.records.iter().all(|record| {
-            matches!(
-                record.classification,
-                RuntimeClassification::IdleDaemon
-                    | RuntimeClassification::StaleMetadata
-                    | RuntimeClassification::ExternalObserved
-                    | RuntimeClassification::ManualPreserveOnly
-            )
-        })
+// Exact target exits are checked above. Global census uncertainty is advisory.
+fn record_final_observation(
+    receipt: &mut RuntimeReplacementEffectReceipt,
+    observed: Result<StableRuntimeCensus, String>,
+) {
+    match observed {
+        Ok(census) => {
+            receipt.final_census_digest = Some(census.digest);
+            receipt.observation_warning = (!census.activation_allowed).then(|| "Live-work observation is incomplete; unproved and unrelated processes remain untouched.".into());
+        }
+        Err(error) => {
+            receipt.final_census_digest = None;
+            receipt.observation_warning = Some(format!("Live-work observation unavailable: {error}. Inspect current processes or retry observation if useful."));
+        }
+    }
 }
 
 /// Observe the selected runtime and return a deterministic, effect-free
@@ -758,6 +756,15 @@ pub(crate) fn plan_runtime_replacement(
         takeover.census,
         &browser_process_identities,
     )?;
+    plan.warnings.extend(
+        takeover
+            .warnings
+            .into_iter()
+            .map(|warning| RuntimeReplacementBlocker {
+                code: warning.code,
+                message: warning.message,
+            }),
+    );
     plan.blockers.extend(inherited);
     plan.blockers.sort_by(|left, right| {
         left.code
@@ -868,13 +875,6 @@ fn build_runtime_replacement_plan(
                 "The selected runtime host lacks an exact executable and process-start identity.",
             ),
         }
-        if !census.activation_allowed {
-            push_blocker(
-                &mut blockers,
-                "blocked_ambiguous_census",
-                "The stable runtime census does not authorize activation.",
-            );
-        }
         for record in &census.records {
             if matches!(
                 record.classification,
@@ -890,23 +890,6 @@ fn build_runtime_replacement_plan(
                         record.logical_browser_id
                     ),
                 );
-            }
-            match record.classification {
-                RuntimeClassification::OrphanAdoptable => {}
-                RuntimeClassification::ConflictingOwner
-                | RuntimeClassification::InsufficientEvidence => push_blocker(
-                    &mut blockers,
-                    "blocked_ambiguous_runtime_owner",
-                    &format!(
-                        "Browser {} does not have unambiguous package ownership.",
-                        record.logical_browser_id
-                    ),
-                ),
-                RuntimeClassification::CooperativeLiveOwner
-                | RuntimeClassification::ManualPreserveOnly
-                | RuntimeClassification::IdleDaemon
-                | RuntimeClassification::StaleMetadata
-                | RuntimeClassification::ExternalObserved => {}
             }
         }
     }
@@ -930,6 +913,10 @@ fn build_runtime_replacement_plan(
         policy,
         disposition,
         blockers,
+        warnings: census.records.iter().filter(|record| matches!(record.classification, RuntimeClassification::ConflictingOwner | RuntimeClassification::InsufficientEvidence)).map(|record| RuntimeReplacementBlocker {
+            code: "unproved_runtime_preserved".into(),
+            message: format!("{} has uncertain ownership and is left untouched; inspect it if it also needs shutdown.", record.logical_browser_id),
+        }).collect(),
         ingress_revision,
         selected_backend,
         selected_process_identity,
@@ -952,6 +939,9 @@ fn push_blocker(blockers: &mut Vec<RuntimeReplacementBlocker>, code: &str, messa
 fn digest_plan(plan: &RuntimeReplacementPlan) -> Result<String, String> {
     let mut unsigned = plan.clone();
     unsigned.plan_digest.clear();
+    unsigned.census_digest.clear();
+    unsigned.warnings.clear();
+    unsigned.browsers.retain(|browser| browser.close_required);
     serde_json::to_vec(&unsigned)
         .map(|bytes| format!("{:x}", Sha256::digest(bytes)))
         .map_err(|error| format!("runtime_replacement_plan_serialize_failed:{error}"))
@@ -1069,6 +1059,78 @@ mod tests {
         let payload = serde_json::to_string(&first).unwrap();
         assert!(!payload.contains("user-data"));
         assert!(!payload.contains("research.gov"));
+    }
+
+    #[test]
+    fn uncertain_peers_are_advisory_and_do_not_change_pinned_effect_targets() {
+        let (revision, backend, identity, mut census) = observation();
+        let original = build_runtime_replacement_plan(
+            RuntimeReplacementPolicy::FullShutdown,
+            revision,
+            backend.clone(),
+            identity.clone(),
+            census.clone(),
+            &browser_identities(),
+        )
+        .unwrap();
+        let mut peer = census.records[0].clone();
+        peer.logical_browser_id = "uncertain-peer".into();
+        peer.classification = RuntimeClassification::InsufficientEvidence;
+        peer.disposition = RuntimeDisposition::RejectedAmbiguity;
+        census.records.push(peer);
+        census.activation_allowed = false;
+        census.digest = "d".repeat(64);
+        let changed = build_runtime_replacement_plan(
+            RuntimeReplacementPolicy::FullShutdown,
+            revision,
+            backend,
+            identity,
+            census,
+            &browser_identities(),
+        )
+        .unwrap();
+        assert_eq!(
+            changed.disposition,
+            RuntimeReplacementDisposition::ReadyForFullShutdown
+        );
+        assert_eq!(changed.plan_digest, original.plan_digest);
+        assert!(!changed.warnings.is_empty());
+        assert!(
+            !changed
+                .browsers
+                .iter()
+                .find(|browser| browser.logical_browser_id == "uncertain-peer")
+                .unwrap()
+                .close_required
+        );
+        let mut different_target = original.clone();
+        different_target.selected_backend.pid += 1;
+        assert_ne!(
+            digest_plan(&different_target).unwrap(),
+            original.plan_digest
+        );
+    }
+
+    #[test]
+    fn unavailable_final_observation_is_reported_without_vetoing_completed_effects() {
+        let mut receipt = RuntimeReplacementEffectReceipt {
+            schema_version: "agent-browser.runtime-replacement-effect-receipt.v1".into(),
+            state: RuntimeReplacementEffectState::SourceAbsent,
+            plan_digest: "a".repeat(64),
+            closed_sessions: vec![],
+            forced_browser_ids: vec![],
+            final_census_digest: None,
+            observation_warning: None,
+            source_exit_proven: true,
+            profiles_preserved: true,
+        };
+        record_final_observation(&mut receipt, Err("fixture observation failed".into()));
+        assert!(receipt.source_exit_proven);
+        assert!(receipt.final_census_digest.is_none());
+        assert!(receipt
+            .observation_warning
+            .unwrap()
+            .contains("fixture observation failed"));
     }
 
     #[test]
@@ -1292,7 +1354,6 @@ mod tests {
                 "force-browser:84",
                 "browser-running:84",
                 "checkpoint:BrowsersClosing",
-                "census",
                 "checkpoint:BrowsersClosed",
                 "source-running",
                 "checkpoint:SourceRetiring",

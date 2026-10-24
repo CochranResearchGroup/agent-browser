@@ -383,48 +383,46 @@ mod tests {
         let drain = fixture
             .root
             .join(".agent-browser/runtime-adoption/admission-drain.json");
-        super::super::persist_admission_drain(&drain, &transaction).unwrap();
-        for invalid in ["missing", "future", "undated"] {
-            let mut rejected = transaction.clone();
-            match invalid {
-                "missing" => rejected.checkpoints.clear(),
+        super::super::seed_legacy_upgrade_marker(&drain, &transaction).unwrap();
+        for diagnostic in ["missing", "future", "undated"] {
+            let mut observed = transaction.clone();
+            match diagnostic {
+                "missing" => observed.checkpoints.clear(),
                 "future" => {
-                    rejected
+                    observed
                         .checkpoints
                         .last_mut()
                         .unwrap()
                         .transaction_revision = 19
                 }
-                "undated" => rejected.checkpoints.last_mut().unwrap().recorded_at.clear(),
+                "undated" => observed.checkpoints.last_mut().unwrap().recorded_at.clear(),
                 _ => unreachable!(),
             }
-            super::super::write_private_json_atomic(&path, &rejected).unwrap();
-            assert_eq!(
-                super::super::recover_operator_required_upgrade_for_root(
-                    &fixture.root,
-                    &rejected.transaction_id,
-                    true
-                )
-                .unwrap_err(),
-                "workstation_recovery_old_generation_not_selected",
-                "{invalid}"
-            );
+            super::super::write_private_json_atomic(&path, &observed).unwrap();
+            let report = super::super::recover_operator_required_upgrade_for_root(
+                &fixture.root,
+                &observed.transaction_id,
+                true,
+            )
+            .unwrap();
+            assert_eq!(report["state"], "accepted", "{diagnostic}");
             assert!(drain.exists());
         }
         super::super::write_private_json_atomic(&path, &transaction).unwrap();
         let mut foreign_drain: Value = serde_json::from_slice(&fs::read(&drain).unwrap()).unwrap();
         foreign_drain["transactionId"] = Value::String("upgrade-another-owner".into());
         super::super::write_private_json_atomic(&drain, &foreign_drain).unwrap();
-        assert_eq!(
-            super::super::recover_operator_required_upgrade_for_root(
-                &fixture.root,
-                &transaction.transaction_id,
-                true
-            )
-            .unwrap_err(),
-            "workstation_recovery_transaction_does_not_own_admission"
-        );
-        super::super::persist_admission_drain(&drain, &transaction).unwrap();
+        let marker_before = fs::read(&drain).unwrap();
+        let report = super::super::recover_operator_required_upgrade_for_root(
+            &fixture.root,
+            &transaction.transaction_id,
+            true,
+        )
+        .unwrap();
+        assert_eq!(report["state"], "accepted");
+        assert_eq!(fs::read(&drain).unwrap(), marker_before);
+        super::super::write_private_json_atomic(&path, &transaction).unwrap();
+        super::super::seed_legacy_upgrade_marker(&drain, &transaction).unwrap();
         let report = super::super::recover_operator_required_upgrade_for_root(
             &fixture.root,
             &transaction.transaction_id,
@@ -433,7 +431,7 @@ mod tests {
         .unwrap();
         assert_eq!(report["direction"], "forward");
         assert_eq!(report["state"], "accepted");
-        assert!(!drain.exists());
+        assert!(drain.exists());
         let accepted: crate::runtime_adoption::UpgradeTransaction =
             serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
         assert!(accepted
@@ -517,12 +515,11 @@ mod tests {
         let original_transaction = serde_json::to_value(&transaction).unwrap();
         let readiness = |transaction: &crate::runtime_adoption::UpgradeTransaction,
                          ingress: &Value,
-                         draining| {
+                         _legacy_draining: bool| {
             super::super::workstation_upgrade_readiness(
                 &paths,
                 Some("generation-current"),
                 Some(transaction),
-                draining,
                 ingress,
             )
         };
@@ -539,7 +536,7 @@ mod tests {
         );
         assert_eq!(
             readiness(&transaction, &fixture.ingress, true)["ready"],
-            false
+            true
         );
         transaction.state = crate::runtime_adoption::UpgradeTransactionState::FailedEffectUncertain;
         assert_eq!(

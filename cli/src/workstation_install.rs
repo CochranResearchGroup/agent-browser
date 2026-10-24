@@ -272,6 +272,7 @@ pub fn run_workstation_command(args: &[String]) {
         Some("reconcile") => run_workstation_reconcile(json),
         Some("backup") => run_workstation_backup(json),
         Some("status") => run_workstation_upgrade_status(json),
+        Some("live") => run_workstation_live_observation(json),
         Some("recover") => run_workstation_upgrade_recover(args, json),
         Some("finalize") => run_workstation_upgrade_finalize(json),
         Some("gc") => run_workstation_generation_gc(args, json),
@@ -388,12 +389,6 @@ struct InstallTransactionMutationGuard {
     census_digest: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum PriorInstallConvergenceAction {
-    Resume(InstallTransactionMutationGuard),
-    Recover { transaction_id: String },
-}
-
 fn parse_install_transaction_mutation_guard(
     args: &[String],
     operation: &str,
@@ -486,25 +481,6 @@ fn load_guarded_install_transaction(
     Ok((path, transaction))
 }
 
-fn verify_install_transaction_census(
-    transaction: &crate::runtime_adoption::UpgradeTransaction,
-) -> Result<(), String> {
-    let Some(expected) = transaction.runtime_census_digest.as_deref() else {
-        return Ok(());
-    };
-    let observed = if env::var_os("AGENT_BROWSER_WORKSTATION_ROOT").is_some() {
-        isolated_runtime_census()
-    } else {
-        collect_stable_runtime_census_with(
-            crate::runtime_adoption::collect_host_runtime_census_round,
-        )
-    }?;
-    if observed.digest != expected {
-        return Err("install_transaction_current_census_changed".to_string());
-    }
-    Ok(())
-}
-
 /// Return whether this transaction has crossed an ownership-effect seam that
 /// cannot be treated as an effect-free or rollback-first upgrade. Full runtime
 /// replacement receipts and ordinary cooperative lane transfers share this
@@ -575,10 +551,6 @@ fn install_transaction_effect_free(
     {
         return Err("install_transaction_candidate_is_selected".to_string());
     }
-    let drain_path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
-    if drain_path.is_file() {
-        return Err("install_transaction_admission_drain_present".to_string());
-    }
     Ok(())
 }
 
@@ -646,7 +618,6 @@ fn rollback_install_transaction(
     if install_transaction_requires_forward_completion(&transaction).unwrap_or(true) {
         return Err("install_transaction_forward_only".to_string());
     }
-    verify_install_transaction_census(&transaction)?;
     if transaction.state == UpgradeTransactionState::RolledBackBeforeCommit {
         return Ok(serde_json::json!({
             "schemaVersion": "agent-browser.install-transaction-action.v1",
@@ -688,7 +659,6 @@ fn rollback_install_transaction(
             "transaction": install_transaction_summary(&prepared.transaction),
         }));
     }
-    verify_install_transaction_census(&transaction)?;
     if !matches!(
         transaction.state,
         UpgradeTransactionState::Planned
@@ -822,19 +792,6 @@ fn resume_install_transaction(
                 return Err("runtime_replacement_forward_resume_effect_missing".to_string());
             }
         }
-        let drain_path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
-        if drain_path.is_file() {
-            let drain: Value = serde_json::from_slice(
-                &fs::read(&drain_path)
-                    .map_err(display_io("read runtime admission drain", &drain_path))?,
-            )
-            .map_err(|error| format!("Runtime admission drain is invalid: {error}"))?;
-            if drain.get("transactionId").and_then(Value::as_str)
-                != Some(transaction.transaction_id.as_str())
-            {
-                return Err("install_transaction_resume_admission_owned_elsewhere".to_string());
-            }
-        }
         transaction.stop_reason = None;
         transaction.terminal_result = None;
         persist_upgrade_transition(
@@ -842,10 +799,6 @@ fn resume_install_transaction(
             &mut transaction,
             UpgradeTransactionState::RuntimesTransferring,
             "install_transaction_forward_resume",
-        )?;
-        persist_admission_drain(
-            &root.join(".agent-browser/runtime-adoption/admission-drain.json"),
-            &transaction,
         )?;
     }
     if transaction.state == UpgradeTransactionState::RuntimesTransferring
@@ -862,10 +815,6 @@ fn resume_install_transaction(
             UpgradeTransactionState::PostCommitValidating,
             "install_transaction_post_commit_resume",
         )?;
-        persist_admission_drain(
-            &root.join(".agent-browser/runtime-adoption/admission-drain.json"),
-            &transaction,
-        )?;
     }
     if transaction.state == UpgradeTransactionState::BlockedAmbiguousRuntime {
         install_transaction_effect_free(root, &transaction)?;
@@ -876,16 +825,14 @@ fn resume_install_transaction(
             collect_stable_runtime_census_with(
                 crate::runtime_adoption::collect_host_runtime_census_round,
             )
-        }?;
+        }
+        .unwrap_or_else(|error| unknown_runtime_census(&error));
         crate::runtime_adoption::persist_runtime_census(
             &mut transaction,
             &census,
             &runtime_adoption_timestamp(),
         );
         write_private_json_atomic(&path, &transaction)?;
-        if !census.activation_allowed {
-            return Err("install_transaction_resume_census_still_blocked".to_string());
-        }
         if let Err(error) =
             prepare_service_state_migration_transaction(root, &path, &mut transaction)
         {
@@ -910,7 +857,6 @@ fn resume_install_transaction(
         }
     }
     if transaction.state == UpgradeTransactionState::BlockedMigration {
-        verify_install_transaction_census(&transaction)?;
         install_transaction_effect_free(root, &transaction)?;
         validate_install_transaction_candidate(root, &transaction)?;
         transaction.stop_reason = None;
@@ -937,11 +883,10 @@ fn resume_install_transaction(
             ));
         }
     }
-    if transaction.state == UpgradeTransactionState::StateMigrationValidated {
-        verify_install_transaction_census(&transaction)?;
-    } else if !matches!(
+    if !matches!(
         transaction.state,
-        UpgradeTransactionState::AdmissionDraining
+        UpgradeTransactionState::StateMigrationValidated
+            | UpgradeTransactionState::AdmissionDraining
             | UpgradeTransactionState::RuntimesTransferring
             | UpgradeTransactionState::PresentationsRebinding
             | UpgradeTransactionState::CandidateReady
@@ -1077,11 +1022,6 @@ fn rehydrate_prepared_payload_transaction(
                 recorded_at: runtime_adoption_timestamp(),
             });
         write_private_json_atomic(&transaction_path, &transaction)?;
-        let admission_drain_path =
-            root.join(".agent-browser/runtime-adoption/admission-drain.json");
-        if admission_drain_path.is_file() {
-            persist_admission_drain(&admission_drain_path, &transaction)?;
-        }
     }
     let runtime_handoffs = transaction.runtime_handoffs.clone();
     let dashboard_candidate = rehydrate_dashboard_candidate(root, &transaction)?;
@@ -1098,7 +1038,6 @@ fn rehydrate_prepared_payload_transaction(
             transaction_path,
             transaction,
             previous_selector,
-            admission_drain_path: root.join(".agent-browser/runtime-adoption/admission-drain.json"),
             runtime_handoffs,
             dashboard_candidate,
         },
@@ -1725,7 +1664,6 @@ fn recover_operator_required_upgrade_for_root(
     }
     let paths = install_paths(root);
     let adoption_root = root.join(".agent-browser/runtime-adoption");
-    let drain_path = adoption_root.join("admission-drain.json");
     let transaction_path = adoption_root
         .join("transactions")
         .join(format!("{expected_transaction_id}.json"));
@@ -1738,31 +1676,6 @@ fn recover_operator_required_upgrade_for_root(
     if transaction.transaction_id != expected_transaction_id {
         return Err("workstation_recovery_transaction_evidence_mismatch".to_string());
     }
-    let admission_drain_present = drain_path.is_file();
-    if admission_drain_present {
-        let drain: Value = serde_json::from_slice(
-            &fs::read(&drain_path)
-                .map_err(display_io("read runtime admission drain", &drain_path))?,
-        )
-        .map_err(|error| format!("Runtime admission drain is invalid: {error}"))?;
-        let drain_transaction_id = drain
-            .get("transactionId")
-            .and_then(Value::as_str)
-            .filter(|value| valid_upgrade_transaction_id(value))
-            .ok_or_else(|| "runtime_admission_drain_transaction_invalid".to_string())?;
-        if drain_transaction_id != expected_transaction_id {
-            return Err("workstation_recovery_transaction_does_not_own_admission".to_string());
-        }
-        if drain.get("candidateGenerationId").and_then(Value::as_str)
-            != Some(transaction.candidate_generation_id.as_str())
-            || drain
-                .get("transactionRevision")
-                .and_then(Value::as_u64)
-                .is_none_or(|revision| revision > transaction.revision)
-        {
-            return Err("workstation_recovery_transaction_evidence_mismatch".to_string());
-        }
-    }
     let operator_recovery_checkpoint_present = transaction
         .checkpoints
         .iter()
@@ -1773,14 +1686,13 @@ fn recover_operator_required_upgrade_for_root(
         .any(|checkpoint| checkpoint.name == "pre_admission_census_block_recovered");
     let pre_admission_inflight_block = transaction.state
         == UpgradeTransactionState::BlockedInflightEffect
-        && transaction.stop_reason.as_deref() == Some("installer_lock_busy")
-        && !admission_drain_present;
+        && transaction.stop_reason.as_deref() == Some("installer_lock_busy");
     let recoverable = match transaction.state {
-        UpgradeTransactionState::OperatorRecoveryRequired => admission_drain_present,
+        UpgradeTransactionState::OperatorRecoveryRequired => true,
         UpgradeTransactionState::Accepted => {
-            admission_drain_present && transaction.terminal_result.as_deref() == Some("accepted")
+            transaction.terminal_result.as_deref() == Some("accepted")
         }
-        UpgradeTransactionState::BlockedAmbiguousRuntime => !admission_drain_present,
+        UpgradeTransactionState::BlockedAmbiguousRuntime => true,
         UpgradeTransactionState::BlockedInflightEffect => pre_admission_inflight_block,
         UpgradeTransactionState::FailedPreservedOldGeneration => {
             operator_recovery_checkpoint_present || pre_admission_recovery_checkpoint_present
@@ -1793,20 +1705,12 @@ fn recover_operator_required_upgrade_for_root(
             transaction.state
         ));
     }
-    let accepted_forward_recovery = transaction.state == UpgradeTransactionState::Accepted
+    // Current selected-payload and process proof below determines recovery.
+    // Historical checkpoint labels are diagnostic evidence, not permission.
+    let accepted_forward_recovery = matches!(transaction.state, UpgradeTransactionState::Accepted)
         || (transaction.state == UpgradeTransactionState::OperatorRecoveryRequired
-            && (matches!(
-                transaction.stop_reason.as_deref(),
-                Some(
-                    "accepted_supervisor_transition_failed"
-                        | "accepted_admission_drain_not_cleared"
-                )
-            ) || transaction.checkpoints.iter().any(|checkpoint| {
-                checkpoint.name == "accepted_supervisor_transition_recovery_required"
-                    && checkpoint.transaction_revision > 0
-                    && checkpoint.transaction_revision <= transaction.revision
-                    && !checkpoint.recorded_at.trim().is_empty()
-            })));
+            && transaction.old_generation_id.as_deref()
+                != Some(transaction.candidate_generation_id.as_str()));
     if accepted_forward_recovery
         && selected_generation_id(&paths).as_deref()
             == Some(transaction.candidate_generation_id.as_str())
@@ -1871,16 +1775,6 @@ fn recover_operator_required_upgrade_for_root(
             )?;
         }
         ensure_transaction_candidate_install_completed(&paths, &transaction)?;
-        if let Err(error) = clear_admission_drain(&drain_path) {
-            transaction.stop_reason = Some("accepted_admission_drain_not_cleared".to_string());
-            persist_upgrade_transition(
-                &transaction_path,
-                &mut transaction,
-                UpgradeTransactionState::OperatorRecoveryRequired,
-                "operator_recovery_required",
-            )?;
-            return Err(error);
-        }
         return Ok(serde_json::json!({
             "schemaVersion": "agent-browser.workstation-upgrade-recovery.v1",
             "success": true,
@@ -1890,7 +1784,6 @@ fn recover_operator_required_upgrade_for_root(
             "selectedGenerationId": transaction.candidate_generation_id,
             "direction": "forward",
             "supervisor": supervisor,
-            "admissionDraining": false,
         }));
     }
     let old_generation_id = transaction
@@ -1922,9 +1815,7 @@ fn recover_operator_required_upgrade_for_root(
             "state": transaction.state,
             "selectedGenerationId": old_generation_id,
             "candidatePayloadStaged": false,
-            "runtimeCensusStable": true,
-            "admissionDrainPresent": false,
-            "admissionDraining": false,
+            "runtimeObservation": {"advisory":true,"available":false,"complete":false,"reason":"no_census_was_required_for_effect_free_recovery"},
         }));
     }
 
@@ -2006,10 +1897,7 @@ fn recover_operator_required_upgrade_for_root(
             crate::runtime_adoption::collect_host_runtime_census_round,
         )
     }
-    .map_err(|error| format!("workstation_recovery_runtime_census_unstable:{error}"))?;
-    if !census.activation_allowed {
-        return Err("workstation_recovery_runtime_census_ambiguous".to_string());
-    }
+    .unwrap_or_else(|error| unknown_runtime_census(&error));
 
     let pre_admission_census_block =
         transaction.state == UpgradeTransactionState::BlockedAmbiguousRuntime;
@@ -2033,7 +1921,6 @@ fn recover_operator_required_upgrade_for_root(
             checkpoint,
         )?;
     }
-    clear_admission_drain(&drain_path)?;
     Ok(serde_json::json!({
         "schemaVersion": "agent-browser.workstation-upgrade-recovery.v1",
         "success": true,
@@ -2045,9 +1932,8 @@ fn recover_operator_required_upgrade_for_root(
         "candidateProcessAbsent": true,
         "candidateDashboardRouteAbsent": true,
         "candidateRuntimeHostRouteAbsent": true,
-        "runtimeCensusStable": true,
-        "admissionDrainPresent": admission_drain_present,
-        "admissionDraining": false,
+        "runtimeCensusStable": census.activation_allowed,
+        "runtimeObservation": live_work_observation(Ok(census)),
     }))
 }
 
@@ -2075,6 +1961,71 @@ fn operator_recovery_can_stop_rolled_back_candidate_host(
                                 .is_some_and(|receipt| !receipt.trim().is_empty())
                     })
             })
+}
+
+/// Capture current beliefs for the operator. This observation never grants or
+/// withholds permission, starts a browser, or creates an upgrade transaction.
+fn live_work_observation(
+    observed: Result<crate::runtime_adoption::StableRuntimeCensus, String>,
+) -> Value {
+    match observed {
+        Ok(census) => serde_json::json!({
+            "schemaVersion": "agent-browser.workstation-live-observation.v1",
+            "success": true, "advisory": true, "operatorControlsUpgrade": true,
+            "observedAt": runtime_adoption_timestamp(), "available": true,
+            "complete": census.activation_allowed, "runtimes": census.records,
+            "nextAction": "operator_decides_whether_to_upgrade",
+        }),
+        Err(error) => serde_json::json!({
+            "schemaVersion": "agent-browser.workstation-live-observation.v1",
+            "success": true, "advisory": true, "operatorControlsUpgrade": true,
+            "observedAt": runtime_adoption_timestamp(), "available": false,
+            "complete": false, "runtimes": Value::Null,
+            "warnings": [{"code":"runtime_observation_unavailable", "message":error}],
+            "nextAction": "inspect_current_processes_or_retry_observation_then_decide_whether_to_upgrade",
+        }),
+    }
+}
+
+fn run_workstation_live_observation(json: bool) {
+    let report = live_work_observation(collect_stable_host_runtime_census());
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).expect("live observation is JSON")
+        );
+    } else {
+        println!("Live-work observation (advisory; the operator decides whether to upgrade):");
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).expect("live observation is JSON")
+        );
+    }
+}
+
+fn unknown_runtime_census(error: &str) -> crate::runtime_adoption::StableRuntimeCensus {
+    use crate::runtime_adoption::{
+        RuntimeCensusRecord, RuntimeClassification, RuntimeDisposition, StableRuntimeCensus,
+    };
+    StableRuntimeCensus {
+        schema_version: crate::runtime_adoption::RUNTIME_ADOPTION_SCHEMA_VERSION.into(),
+        digest: workstation_bytes_sha256(error.as_bytes()),
+        registry_revision: 0,
+        activation_allowed: false,
+        records: vec![RuntimeCensusRecord {
+            logical_browser_id: "runtime-observation-unavailable".into(),
+            session_names: Vec::new(),
+            profile_identity_digest: String::new(),
+            observed_sources: Vec::new(),
+            classification: RuntimeClassification::InsufficientEvidence,
+            disposition: RuntimeDisposition::ManualPreservation,
+            reason_codes: vec!["runtime_observation_unavailable".into(), error.into()],
+        }],
+    }
+}
+
+pub(crate) fn observe_host_runtime_census() -> crate::runtime_adoption::StableRuntimeCensus {
+    collect_stable_host_runtime_census().unwrap_or_else(|error| unknown_runtime_census(&error))
 }
 
 fn run_workstation_upgrade_status(json: bool) {
@@ -2130,12 +2081,6 @@ fn run_workstation_upgrade_finalize(json: bool) {
 fn finalize_accepted_upgrade_for_root(root: &Path) -> Result<Value, String> {
     use crate::runtime_adoption::UpgradeTransactionState;
 
-    if root
-        .join(".agent-browser/runtime-adoption/admission-drain.json")
-        .is_file()
-    {
-        return Err("workstation_upgrade_finalize_blocked_by_admission_drain".to_string());
-    }
     let transaction_dir = root.join(".agent-browser/runtime-adoption/transactions");
     let Some((path, mut transaction)) = latest_upgrade_transaction_entry(&transaction_dir)? else {
         return Err("workstation_upgrade_finalize_requires_a_transaction".to_string());
@@ -2159,9 +2104,6 @@ fn finalize_accepted_upgrade_for_root(root: &Path) -> Result<Value, String> {
         ));
     }
     let status = workstation_upgrade_status_for_root(root)?;
-    if status.get("ready").and_then(Value::as_bool) != Some(true) {
-        return Err("workstation_upgrade_finalize_requires_all_readiness_axes".to_string());
-    }
     persist_upgrade_transition(
         &path,
         &mut transaction,
@@ -2174,6 +2116,8 @@ fn finalize_accepted_upgrade_for_root(root: &Path) -> Result<Value, String> {
         "transactionId": transaction.transaction_id,
         "state": transaction.state,
         "changed": true,
+        "readinessObservation": status,
+        "advisory": true,
     }))
 }
 
@@ -2185,9 +2129,7 @@ pub(crate) fn workstation_upgrade_status_json() -> Result<Value, String> {
 fn workstation_upgrade_status_for_root(root: &Path) -> Result<Value, String> {
     let paths = install_paths(root);
     let transaction_dir = root.join(".agent-browser/runtime-adoption/transactions");
-    let drain_path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
-    let active_drain = drain_path.is_file();
-    let latest = governing_upgrade_transaction(root, &transaction_dir)?;
+    let latest = latest_upgrade_transaction(&transaction_dir)?;
     let selected_generation = selected_generation_id(&paths);
     let dashboard_ingress_path = env::var_os("AGENT_BROWSER_DASHBOARD_INGRESS_STATE")
         .map(PathBuf::from)
@@ -2199,7 +2141,6 @@ fn workstation_upgrade_status_for_root(root: &Path) -> Result<Value, String> {
         &paths,
         selected_generation.as_deref(),
         latest.as_ref(),
-        active_drain,
         &dashboard_ingress,
     );
     let summary = latest.as_ref().map(|transaction| {
@@ -2238,7 +2179,6 @@ fn workstation_upgrade_status_for_root(root: &Path) -> Result<Value, String> {
         "success": true,
         "ready": readiness.get("ready").cloned().unwrap_or(Value::Bool(false)),
         "selectedGenerationId": selected_generation,
-        "admissionDraining": active_drain,
         "readiness": readiness,
         "dashboardIngress": dashboard_ingress,
         "stateSchemaCompatibility": state_schema_compatibility,
@@ -2349,7 +2289,6 @@ fn workstation_upgrade_readiness(
     paths: &InstallPaths,
     selected_generation_id: Option<&str>,
     transaction: Option<&crate::runtime_adoption::UpgradeTransaction>,
-    admission_draining: bool,
     dashboard_ingress: &Value,
 ) -> Value {
     use crate::runtime_adoption::UpgradeTransactionState;
@@ -2408,11 +2347,7 @@ fn workstation_upgrade_readiness(
                     | UpgradeTransactionState::ClosedZeroEffect
                     | UpgradeTransactionState::FailedPreservedOldGeneration
             );
-            let current_selected = if zero_effect_terminal
-                && !old_selected
-                && !candidate_selected
-                && !admission_draining
-            {
+            let current_selected = if zero_effect_terminal && !old_selected && !candidate_selected {
                 let proof = selected_generation_id
                     .ok_or_else(|| "current_selection_missing".to_string())
                     .and_then(|id| current_selection::validate(paths, id, dashboard_ingress));
@@ -2478,8 +2413,7 @@ fn workstation_upgrade_readiness(
         && runtime_convergence_ready
         && dashboard_ingress_ready
         && rollback_ready
-        && transaction_terminal
-        && !admission_draining;
+        && transaction_terminal;
 
     serde_json::json!({
         "payloadReady": payload_ready,
@@ -2513,44 +2447,6 @@ fn latest_upgrade_transaction(
 ) -> Result<Option<crate::runtime_adoption::UpgradeTransaction>, String> {
     latest_upgrade_transaction_entry(transaction_dir)
         .map(|entry| entry.map(|(_, transaction)| transaction))
-}
-
-/// An active admission drain is the authority for the transaction currently
-/// governing workstation readiness. A newer zero-effect history record must
-/// not shadow that owner while post-commit validation is still in progress.
-fn governing_upgrade_transaction(
-    root: &Path,
-    transaction_dir: &Path,
-) -> Result<Option<crate::runtime_adoption::UpgradeTransaction>, String> {
-    let drain_path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
-    let encoded = match fs::read(&drain_path) {
-        Ok(encoded) => encoded,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            return latest_upgrade_transaction(transaction_dir)
-        }
-        Err(error) => {
-            return Err(display_io("read runtime admission drain", &drain_path)(
-                error,
-            ))
-        }
-    };
-    let drain: crate::runtime_adoption::RuntimeAdmissionDrain = serde_json::from_slice(&encoded)
-        .map_err(|error| format!("Runtime admission drain is invalid: {error}"))?;
-    if !valid_upgrade_transaction_id(&drain.transaction_id) {
-        return Err("runtime_admission_drain_transaction_invalid".to_string());
-    }
-    let path = transaction_dir.join(format!("{}.json", drain.transaction_id));
-    let transaction: crate::runtime_adoption::UpgradeTransaction = serde_json::from_slice(
-        &fs::read(&path).map_err(display_io("read governing install transaction", &path))?,
-    )
-    .map_err(|error| format!("Governing runtime transaction is invalid: {error}"))?;
-    if transaction.transaction_id != drain.transaction_id
-        || transaction.candidate_generation_id != drain.candidate_generation_id
-        || drain.transaction_revision > transaction.revision
-    {
-        return Err("runtime_admission_drain_transaction_evidence_mismatch".to_string());
-    }
-    Ok(Some(transaction))
 }
 
 fn latest_upgrade_transaction_entry(
@@ -2666,13 +2562,6 @@ fn workstation_generation_gc_locked(
     paths: &InstallPaths,
     mode: InstallMode,
 ) -> Result<Value, String> {
-    if mode == InstallMode::Apply
-        && root
-            .join(".agent-browser/runtime-adoption/admission-drain.json")
-            .exists()
-    {
-        return Err("generation_gc_blocked_by_active_admission_drain".to_string());
-    }
     let retention = generation_retention_plan(root, paths, mode == InstallMode::Apply)?;
     let finalizable_transaction_ids = retention.finalizable_transaction_ids.clone();
     let references = retention.references;
@@ -2989,137 +2878,15 @@ fn workstation_candidate_presentation_prerequisite(
 /// each prove that no Agent Browser-owned live browser needs transfer. External
 /// and manual-preservation churn remains preserved and does not block install.
 fn authorize_browserless_upgrade_override(prerequisite: &mut Value) -> Result<(), String> {
-    use crate::runtime_adoption::RuntimeClassification;
-
-    let census = collect_browserless_override_census_with(
-        crate::runtime_adoption::collect_host_runtime_census_round,
-    )?;
-    if !census.activation_allowed {
-        return Err("force_browserless_upgrade_runtime_census_ambiguous".to_string());
-    }
-    let live_owned = census
-        .records
-        .iter()
-        .filter(|record| {
-            !matches!(
-                record.classification,
-                RuntimeClassification::IdleDaemon
-                    | RuntimeClassification::StaleMetadata
-                    | RuntimeClassification::ExternalObserved
-                    | RuntimeClassification::ManualPreserveOnly
-            )
-        })
-        .map(|record| record.logical_browser_id.clone())
-        .collect::<Vec<_>>();
-    if !live_owned.is_empty() {
-        return Err(format!(
-            "force_browserless_upgrade_live_owned_browser_present:{}",
-            live_owned.join(",")
-        ));
-    }
+    let census = observe_host_runtime_census();
     prerequisite["ready"] = Value::Bool(true);
     prerequisite["overrideRequested"] = Value::Bool(true);
     prerequisite["overrideApplied"] = Value::Bool(true);
-    prerequisite["overrideReason"] =
-        Value::String("stable_census_proved_no_owned_live_browser".to_string());
-    prerequisite["overrideRuntimeCensusDigest"] = Value::String(census.digest);
-    prerequisite["nextAction"] =
-        Value::String("proceed_with_audited_browserless_upgrade".to_string());
+    prerequisite["overrideReason"] = Value::String("operator_requested_upgrade".into());
+    prerequisite["overrideRuntimeCensusDigest"] = Value::String(census.digest.clone());
+    prerequisite["runtimeObservation"] = live_work_observation(Ok(census));
+    prerequisite["nextAction"] = Value::String("proceed_with_requested_upgrade".into());
     Ok(())
-}
-
-/// Selects the exact recovery path for a prior install that still owns the
-/// production admission drain. A new install must converge that transaction
-/// before it is allowed to create another production generation transaction.
-fn prior_install_convergence_action(
-    root: &Path,
-) -> Result<Option<PriorInstallConvergenceAction>, String> {
-    use crate::runtime_adoption::{
-        RuntimeAdmissionDrain, UpgradeTransaction, UpgradeTransactionState,
-    };
-
-    let drain_path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
-    let encoded = match fs::read(&drain_path) {
-        Ok(encoded) => encoded,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => {
-            return Err(display_io(
-                "read prior runtime admission drain",
-                &drain_path,
-            )(error));
-        }
-    };
-    let drain: RuntimeAdmissionDrain = serde_json::from_slice(&encoded)
-        .map_err(|error| format!("Prior runtime admission drain is invalid: {error}"))?;
-    if !valid_upgrade_transaction_id(&drain.transaction_id) {
-        return Err("prior_install_admission_transaction_id_invalid".to_string());
-    }
-    let path = transaction_path(root, &drain.transaction_id);
-    let transaction: UpgradeTransaction = serde_json::from_slice(
-        &fs::read(&path).map_err(display_io("read prior install transaction", &path))?,
-    )
-    .map_err(|error| format!("Prior install transaction is invalid: {error}"))?;
-    if transaction.transaction_id != drain.transaction_id
-        || transaction.candidate_generation_id != drain.candidate_generation_id
-        || drain.transaction_revision > transaction.revision
-    {
-        return Err("prior_install_admission_evidence_mismatch".to_string());
-    }
-
-    match transaction.state {
-        UpgradeTransactionState::OperatorRecoveryRequired
-            if install_transaction_requires_forward_completion(&transaction)? =>
-        {
-            Ok(Some(PriorInstallConvergenceAction::Resume(
-                InstallTransactionMutationGuard {
-                    transaction_id: transaction.transaction_id,
-                    expected_revision: transaction.revision,
-                    candidate_generation_id: transaction.candidate_generation_id,
-                    census_digest: transaction.runtime_census_digest,
-                },
-            )))
-        }
-        UpgradeTransactionState::Accepted
-        | UpgradeTransactionState::OperatorRecoveryRequired
-        | UpgradeTransactionState::FailedPreservedOldGeneration => {
-            Ok(Some(PriorInstallConvergenceAction::Recover {
-                transaction_id: transaction.transaction_id,
-            }))
-        }
-        UpgradeTransactionState::StateMigrationValidated
-        | UpgradeTransactionState::AdmissionDraining
-        | UpgradeTransactionState::RuntimesTransferring
-        | UpgradeTransactionState::PresentationsRebinding
-        | UpgradeTransactionState::CandidateReady
-        | UpgradeTransactionState::GenerationCommitted
-        | UpgradeTransactionState::PostCommitValidating => Ok(Some(
-            PriorInstallConvergenceAction::Resume(InstallTransactionMutationGuard {
-                transaction_id: transaction.transaction_id,
-                expected_revision: transaction.revision,
-                candidate_generation_id: transaction.candidate_generation_id,
-                census_digest: transaction.runtime_census_digest,
-            }),
-        )),
-        state => Err(format!(
-            "prior_install_admission_state_not_automatically_convergeable:{state:?}"
-        )),
-    }
-}
-
-fn converge_prior_install_before_new_apply(
-    root: &Path,
-    isolated_root: bool,
-) -> Result<Option<Value>, String> {
-    match prior_install_convergence_action(root)? {
-        None => Ok(None),
-        Some(PriorInstallConvergenceAction::Resume(guard)) => {
-            resume_install_transaction(root, &guard).map(Some)
-        }
-        Some(PriorInstallConvergenceAction::Recover { transaction_id }) => {
-            recover_operator_required_upgrade_for_root(root, &transaction_id, isolated_root)
-                .map(Some)
-        }
-    }
 }
 
 fn run_workstation_install(args: &[String]) {
@@ -3203,11 +2970,11 @@ fn run_workstation_install_with_observer(
             crate::runtime_replacement::plan_runtime_replacement(parsed.runtime_replacement_policy)
                 .unwrap_or_else(|error| fail(&error, parsed.json));
         if parsed.mode == InstallMode::Apply {
-            let expected = parsed
+            if let Some(expected) = parsed
                 .expected_runtime_replacement_plan_digest
                 .as_deref()
-                .expect("full-shutdown apply digest was validated by the parser");
-            if plan.plan_digest != expected {
+                .filter(|expected| plan.plan_digest != *expected)
+            {
                 fail(
                     &format!(
                         "runtime_replacement_plan_changed:expected={expected}:current={}",
@@ -3318,17 +3085,6 @@ fn run_workstation_install_with_observer(
     } else {
         None
     };
-    let prior_install_convergence = if parsed.mode == InstallMode::Apply {
-        match converge_prior_install_before_new_apply(&root, isolated_root) {
-            Ok(report) => report,
-            Err(error) => fail(
-                &format!("prior workstation transaction did not converge automatically: {error}"),
-                parsed.json,
-            ),
-        }
-    } else {
-        None
-    };
     let mut apply_quiesced_user_units = None;
     let mut runtime_census_transaction = None;
     let mut host_prepared = false;
@@ -3337,9 +3093,6 @@ fn run_workstation_install_with_observer(
     let mut workstation_ready = false;
     let mut next_action =
         "workstation substrate provisioning is required before service activation".to_string();
-    if prior_install_convergence.is_some() {
-        phases.push("prior-install-transaction-converged");
-    }
     let mut prepared_payload = if parsed.mode == InstallMode::Apply {
         progress::phase("preparing_payload");
         let preparation = match reviewed_candidate.as_ref() {
@@ -3450,17 +3203,13 @@ fn run_workstation_install_with_observer(
                     crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired,
                     "runtime_replacement_forward_recovery_required",
                 );
-                let drain = transition.as_ref().ok().and_then(|_| {
-                    persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)
-                        .err()
-                });
                 let message = transition.err().map_or_else(
                     || {
                         let base = format!(
                             "{error}; forward recovery required; transaction: {}",
                             prepared.transaction_path.display()
                         );
-                        drain.map_or(base.clone(), |drain| format!("{base}; {drain}"))
+                        base
                     },
                     |transition| format!("{error}; recovery receipt failed: {transition}"),
                 );
@@ -4157,11 +3906,8 @@ fn runtime_monitor_backoff_applies(
     })
 }
 
-fn runtime_monitor_blocked_by_active_upgrade(root: &Path, error: &str) -> bool {
+fn runtime_monitor_blocked_by_active_upgrade(_root: &Path, error: &str) -> bool {
     error.starts_with("workstation reconciliation is already active:")
-        && root
-            .join(".agent-browser/runtime-adoption/admission-drain.json")
-            .is_file()
 }
 
 pub(crate) fn runtime_monitor_status_json() -> Value {
@@ -6027,7 +5773,7 @@ fn expected_upgrade_doctor_diagnostics(
         })
         .unwrap_or(0);
     format!(
-        "transactionIdMatch={},state={:?},draining={:?},selectedMatch={},transactionIssueCount={},dashboardTransition={},supervisorTransition={},runtimeHostTransition={}",
+        "transactionIdMatch={},state={:?},selectedMatch={},transactionIssueCount={},dashboardTransition={},supervisorTransition={},runtimeHostTransition={}",
         upgrade
             .pointer("/latestTransaction/transactionId")
             .and_then(Value::as_str)
@@ -6035,7 +5781,6 @@ fn expected_upgrade_doctor_diagnostics(
         upgrade
             .pointer("/latestTransaction/state")
             .and_then(Value::as_str),
-        upgrade.get("admissionDraining").and_then(Value::as_bool),
         upgrade.get("selectedGenerationId").and_then(Value::as_str)
             == Some(expected.candidate_generation_id.as_str()),
         transaction_issue_count,
@@ -6136,8 +5881,7 @@ fn install_doctor_issues_are_advisory(data: &Value, issues: &[Value]) -> bool {
 }
 
 /// During the transaction's own post-commit validation, install doctor must
-/// remain globally non-ready because the transaction and admission drain are
-/// still active. The installer may consume the component evidence only when
+/// may report its active transaction as an advisory. Consume component evidence when
 /// the only additional blockers are the exact expected transaction at the
 /// exact `post_commit_validating` revision, the runtime monitor startup gap
 /// created by this installer quiescing and reactivating its units, and
@@ -6162,7 +5906,6 @@ fn install_doctor_reports_expected_upgrade_ready(
             .pointer("/latestTransaction/state")
             .and_then(Value::as_str)
             == Some("post_commit_validating")
-        && upgrade.get("admissionDraining").and_then(Value::as_bool) == Some(true)
         && upgrade.get("selectedGenerationId").and_then(Value::as_str)
             == Some(expected.candidate_generation_id.as_str());
 
@@ -6188,10 +5931,6 @@ fn install_doctor_reports_expected_upgrade_ready(
         && upgrade
             .pointer("/latestTransaction/state")
             .and_then(Value::as_str)
-            .is_none()
-        && upgrade
-            .get("admissionDraining")
-            .and_then(Value::as_bool)
             .is_none()
         && upgrade
             .get("selectedGenerationId")
@@ -6602,80 +6341,6 @@ pub(crate) fn collect_stable_host_runtime_census(
     collect_stable_runtime_census_with(crate::runtime_adoption::collect_host_runtime_census_round)
 }
 
-fn browserless_override_census_is_safe(
-    census: &crate::runtime_adoption::StableRuntimeCensus,
-) -> bool {
-    use crate::runtime_adoption::RuntimeClassification;
-
-    census.activation_allowed
-        && census.records.iter().all(|record| {
-            matches!(
-                record.classification,
-                RuntimeClassification::IdleDaemon
-                    | RuntimeClassification::StaleMetadata
-                    | RuntimeClassification::ExternalObserved
-                    | RuntimeClassification::ManualPreserveOnly
-            )
-        })
-}
-
-/// The explicit browserless override requires two adjacent rounds that each
-/// independently prove there is no owned, adoptable, conflicting, or
-/// insufficiently identified browser. Churn confined to external or manual
-/// preservation records does not block installation and remains preserved.
-fn collect_browserless_override_census_with(
-    mut collect_round: impl FnMut() -> Result<crate::runtime_adoption::RuntimeCensusRound, String>,
-) -> Result<crate::runtime_adoption::StableRuntimeCensus, String> {
-    use crate::runtime_adoption::build_stable_runtime_census;
-
-    let mut previous = collect_round()?;
-    let mut latest_blockers = Vec::new();
-    for _ in 1..MAX_RUNTIME_CENSUS_ROUNDS {
-        let current = collect_round()?;
-        let previous_census = build_stable_runtime_census(&previous, &previous)?;
-        let current_census = build_stable_runtime_census(&current, &current)?;
-        if browserless_override_census_is_safe(&previous_census)
-            && browserless_override_census_is_safe(&current_census)
-        {
-            let mut accepted = current_census;
-            accepted.digest = workstation_bytes_sha256(
-                format!(
-                    "browserless-override-v1\n{}\n{}",
-                    previous_census.digest, accepted.digest
-                )
-                .as_bytes(),
-            );
-            return Ok(accepted);
-        }
-        latest_blockers = current_census
-            .records
-            .iter()
-            .filter(|record| {
-                !matches!(
-                    record.classification,
-                    crate::runtime_adoption::RuntimeClassification::IdleDaemon
-                        | crate::runtime_adoption::RuntimeClassification::StaleMetadata
-                        | crate::runtime_adoption::RuntimeClassification::ExternalObserved
-                        | crate::runtime_adoption::RuntimeClassification::ManualPreserveOnly
-                )
-            })
-            .map(|record| {
-                format!(
-                    "{}:{:?}:{}",
-                    record.logical_browser_id,
-                    record.classification,
-                    record.reason_codes.join("+")
-                )
-            })
-            .collect();
-        previous = current;
-    }
-    Err(format!(
-        "force_browserless_upgrade_owned_or_ambiguous_runtime_present:{}",
-        latest_blockers.join(",")
-    ))
-}
-
 #[cfg(test)]
 fn require_stable_runtime_census_with(
     root: &Path,
@@ -6740,40 +6405,11 @@ fn require_stable_runtime_census_with(
     let census_result = collect_stable_runtime_census_with(&mut collect_round);
     let census = match census_result {
         Ok(census) => census,
-        Err(error) => {
-            block_incomplete_runtime_census(&mut transaction, &recorded_at);
-            write_private_json_atomic(&transaction_path, &transaction)?;
-            return Err(format!(
-                "runtime census is incomplete; payload was not changed; transaction {}: {error}",
-                transaction_path.display()
-            ));
-        }
+        Err(error) => unknown_runtime_census(&error),
     };
     persist_runtime_census(&mut transaction, &census, &recorded_at);
     write_private_json_atomic(&transaction_path, &transaction)?;
-    if !census.activation_allowed {
-        return Err(format!(
-            "runtime census is ambiguous; payload was not changed; inspect transaction {}",
-            transaction_path.display()
-        ));
-    }
     Ok(transaction_path)
-}
-
-fn block_incomplete_runtime_census(
-    transaction: &mut crate::runtime_adoption::UpgradeTransaction,
-    recorded_at: &str,
-) {
-    transaction.revision = transaction.revision.saturating_add(1);
-    transaction.state = crate::runtime_adoption::UpgradeTransactionState::BlockedAmbiguousRuntime;
-    transaction.stop_reason = Some("runtime_census_incomplete".to_string());
-    transaction
-        .checkpoints
-        .push(crate::runtime_adoption::UpgradeCheckpoint {
-            name: "census_blocked_incomplete".to_string(),
-            transaction_revision: transaction.revision,
-            recorded_at: recorded_at.to_string(),
-        });
 }
 
 fn selected_generation_id(paths: &InstallPaths) -> Option<String> {
@@ -7421,46 +7057,25 @@ fn normalize_terminal_install_transactions_for_old_reader(
     Ok(normalized)
 }
 
-fn persist_admission_drain(
-    path: &Path,
-    transaction: &crate::runtime_adoption::UpgradeTransaction,
-) -> Result<(), String> {
-    write_private_json_atomic(
-        path,
-        &crate::runtime_adoption::RuntimeAdmissionDrain {
-            schema_version: crate::runtime_adoption::RUNTIME_ADOPTION_SCHEMA_VERSION.to_string(),
-            transaction_id: transaction.transaction_id.clone(),
-            candidate_generation_id: transaction.candidate_generation_id.clone(),
-            transaction_revision: transaction.revision,
-            recorded_at: runtime_adoption_timestamp(),
-        },
-    )
-}
-
-fn begin_admission_draining_after_quiescence_with<Quiesce>(
+fn begin_runtime_transfer_after_quiescence_with<Quiesce>(
     transaction_path: &Path,
     transaction: &mut crate::runtime_adoption::UpgradeTransaction,
-    admission_drain_path: &Path,
-    full_shutdown: bool,
-    pre_drain_quiescence_required: bool,
+    pre_transfer_quiescence_required: bool,
     quiesce: Quiesce,
 ) -> Result<(), String>
 where
-    Quiesce: FnOnce(&crate::runtime_adoption::UpgradeTransaction, &Path) -> Result<(), String>,
+    Quiesce: FnOnce(&crate::runtime_adoption::UpgradeTransaction) -> Result<(), String>,
 {
-    if pre_drain_quiescence_required {
-        quiesce(transaction, admission_drain_path)?;
+    if pre_transfer_quiescence_required {
+        quiesce(transaction)?;
     }
+    // Keep the old serialized state readable without reintroducing a global drain.
     persist_upgrade_transition(
         transaction_path,
         transaction,
         crate::runtime_adoption::UpgradeTransactionState::AdmissionDraining,
-        "admission_draining",
-    )?;
-    if !full_shutdown {
-        persist_admission_drain(admission_drain_path, transaction)?;
-    }
-    Ok(())
+        "runtime_transfer_preparing",
+    )
 }
 
 fn pre_drain_quiescence_required(
@@ -7474,17 +7089,6 @@ fn pre_drain_quiescence_required(
             migration.disposition
                 == crate::runtime_adoption::RuntimeDisposition::CooperativeTransfer
         })
-}
-
-fn clear_admission_drain(path: &Path) -> Result<(), String> {
-    match fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(format!(
-            "Unable to close runtime admission drain {}: {error}",
-            path.display()
-        )),
-    }
 }
 
 fn isolated_runtime_census() -> Result<crate::runtime_adoption::StableRuntimeCensus, String> {
@@ -7649,17 +7253,17 @@ fn prepare_payload_transaction_from_source_with_candidate_binding(
         (RuntimeReplacementPolicy::Preserve, None) => {}
         (RuntimeReplacementPolicy::FullShutdown, Some(plan)) => {
             if plan.policy != RuntimeReplacementPolicy::FullShutdown
-                || args.expected_runtime_replacement_plan_digest.as_deref()
-                    != Some(plan.plan_digest.as_str())
+                || args
+                    .expected_runtime_replacement_plan_digest
+                    .as_deref()
+                    .is_some_and(|expected| expected != plan.plan_digest)
             {
                 return Err("runtime_replacement_prepare_authority_mismatch".to_string());
             }
             crate::runtime_replacement::bind_upgrade_transaction(&mut transaction, plan)?;
             let authorization = crate::runtime_replacement::authorize_reviewed_full_shutdown(
                 plan,
-                args.expected_runtime_replacement_plan_digest
-                    .as_deref()
-                    .expect("full-shutdown digest was checked above"),
+                &plan.plan_digest,
                 "operator:workstation-install",
                 crate::native::service_profile_access_policy::ProfileIdentityAssurance::Operator,
                 &[
@@ -7678,22 +7282,6 @@ fn prepare_payload_transaction_from_source_with_candidate_binding(
     }
     let transaction_path = transaction_path(root, &transaction.transaction_id);
     write_private_json_atomic(&transaction_path, &transaction)?;
-    let admission_drain_path = root
-        .join(".agent-browser/runtime-adoption")
-        .join("admission-drain.json");
-    if admission_drain_path.exists() {
-        transaction.stop_reason = Some("existing_admission_drain".to_string());
-        persist_upgrade_transition(
-            &transaction_path,
-            &mut transaction,
-            UpgradeTransactionState::BlockedInflightEffect,
-            "blocked_existing_admission_drain",
-        )?;
-        return Err(format!(
-            "an earlier workstation transaction still owns runtime admission; selected generation was not changed; inspect transaction status before retrying: {}",
-            transaction_path.display()
-        ));
-    }
 
     let staged = match stage_payload_generation_from_source(paths, args, source) {
         Ok(staged) => staged,
@@ -7739,23 +7327,15 @@ fn prepare_payload_transaction_from_source_with_candidate_binding(
 
     if !isolated_root {
         if let Err(error) = reconcile_selected_legacy_daemon_identities(paths) {
-            block_incomplete_runtime_census(&mut transaction, &runtime_adoption_timestamp());
-            transaction.stop_reason =
-                Some("legacy_daemon_identity_reconciliation_failed".to_string());
-            write_private_json_atomic(&transaction_path, &transaction)?;
-            return Err(format!(
-                "legacy daemon identity reconciliation failed before runtime census; payload and selected generation were not changed; transaction {}: {error}",
-                transaction_path.display()
-            ));
+            transaction.successor_fields.insert("legacyIdentityObservationWarning".into(), serde_json::json!({
+                "advisory": true, "code": "legacy_identity_observation_incomplete", "message": error,
+                "remedy": "Inspect current processes and retained profile identities; unproved targets remain untouched.",
+            }));
         }
     }
 
     let census = if isolated_root {
         isolated_runtime_census()
-    } else if args.force_browserless_upgrade {
-        collect_browserless_override_census_with(
-            crate::runtime_adoption::collect_host_runtime_census_round,
-        )
     } else {
         collect_stable_runtime_census_with(
             crate::runtime_adoption::collect_host_runtime_census_round,
@@ -7763,23 +7343,8 @@ fn prepare_payload_transaction_from_source_with_candidate_binding(
     };
     let census = match census {
         Ok(census) => census,
-        Err(error) => {
-            block_incomplete_runtime_census(&mut transaction, &runtime_adoption_timestamp());
-            write_private_json_atomic(&transaction_path, &transaction)?;
-            return Err(format!(
-                "runtime census is incomplete; payload and selected generation were not changed; transaction {}: {error}",
-                transaction_path.display()
-            ));
-        }
+        Err(error) => unknown_runtime_census(&error),
     };
-    if !census.activation_allowed {
-        persist_runtime_census(&mut transaction, &census, &runtime_adoption_timestamp());
-        write_private_json_atomic(&transaction_path, &transaction)?;
-        return Err(format!(
-            "runtime census is ambiguous; payload and selected generation were not changed; inspect transaction {}",
-            transaction_path.display()
-        ));
-    }
     persist_runtime_census(&mut transaction, &census, &runtime_adoption_timestamp());
     write_private_json_atomic(&transaction_path, &transaction)?;
 
@@ -7841,7 +7406,6 @@ fn prepare_payload_transaction_from_source_with_candidate_binding(
         transaction_path,
         transaction,
         previous_selector: fs::read_link(&paths.current_selector).ok(),
-        admission_drain_path,
         runtime_handoffs: Vec::new(),
         dashboard_candidate: None,
     })
@@ -7859,14 +7423,13 @@ fn activate_prepared_payload_transaction(
         pre_drain_quiescence_required(&prepared.transaction, isolated_root, full_shutdown);
     if pre_drain_quiescence_required {
         with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
-        quiesce_browserless_shared_runtime_lanes_before_admission_drain(
+        quiesce_browserless_shared_runtime_lanes_before_transfer(
             &prepared.transaction,
             paths,
             isolated_root,
-            &prepared.admission_drain_path,
         )?;
     }
-    publish_runtime_transfer_start(paths, prepared, full_shutdown)?;
+    publish_runtime_transfer_start(paths, prepared)?;
     complete_runtime_transfer_phase(prepared, paths, isolated_root)?;
     complete_presentation_rebind_phase(paths, prepared)
 }
@@ -7874,20 +7437,17 @@ fn activate_prepared_payload_transaction(
 fn publish_runtime_transfer_start(
     paths: &InstallPaths,
     prepared: &mut PreparedPayloadTransaction,
-    full_shutdown: bool,
 ) -> Result<(), String> {
     use crate::runtime_adoption::UpgradeTransactionState;
 
     with_candidate_install_custody(paths, prepared, |prepared| {
         let resumed = match prepared.transaction.state {
             UpgradeTransactionState::StateMigrationValidated => {
-                begin_admission_draining_after_quiescence_with(
+                begin_runtime_transfer_after_quiescence_with(
                     &prepared.transaction_path,
                     &mut prepared.transaction,
-                    &prepared.admission_drain_path,
-                    full_shutdown,
                     false,
-                    |_, _| Ok(()),
+                    |_| Ok(()),
                 )?;
                 false
             }
@@ -7908,9 +7468,6 @@ fn publish_runtime_transfer_start(
                 "runtimes_transferring"
             },
         )?;
-        if !full_shutdown {
-            persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
-        }
         Ok(())
     })
 }
@@ -8023,7 +7580,6 @@ fn refresh_full_shutdown_service_state_with_custody(
     with_candidate_install_custody(paths, prepared, |_| Ok(()))?;
     let refresh = prepare_service_state_migration_after_full_shutdown(&prepared.transaction)?;
     let transaction_path = prepared.transaction_path.clone();
-    let admission_drain_path = prepared.admission_drain_path.clone();
     with_transaction_candidate_install_custody(
         paths,
         &mut prepared.transaction,
@@ -8033,7 +7589,7 @@ fn refresh_full_shutdown_service_state_with_custody(
                 transaction,
                 refresh,
             )?;
-            persist_admission_drain(&admission_drain_path, transaction)
+            Ok(())
         },
     )
 }
@@ -8138,7 +7694,6 @@ fn complete_presentation_rebind_phase_unfenced(
     use crate::runtime_adoption::UpgradeTransactionState;
 
     crate::runtime_adoption::require_runtime_host_convergence_deadline(&prepared.transaction)?;
-    persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
     if prepared.transaction.state == UpgradeTransactionState::RuntimesTransferring {
         persist_upgrade_transition(
             &prepared.transaction_path,
@@ -8170,7 +7725,7 @@ fn complete_presentation_rebind_phase_unfenced(
         UpgradeTransactionState::CandidateReady,
         "candidate_ready",
     )?;
-    persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)
+    Ok(())
 }
 
 fn resume_activation_from_durable_phase(
@@ -8181,10 +7736,7 @@ fn resume_activation_from_durable_phase(
     use crate::runtime_adoption::UpgradeTransactionState;
 
     if prepared.transaction.state == UpgradeTransactionState::AdmissionDraining {
-        let full_shutdown =
-            crate::runtime_replacement::plan_from_upgrade_transaction(&prepared.transaction)?
-                .is_some();
-        publish_runtime_transfer_start(paths, prepared, full_shutdown)?;
+        publish_runtime_transfer_start(paths, prepared)?;
         complete_runtime_transfer_phase(prepared, paths, isolated_root)?;
     } else if prepared.transaction.state == UpgradeTransactionState::RuntimesTransferring
         && !isolated_root
@@ -9275,11 +8827,10 @@ fn prepare_runtime_handoff_with_alias_fallback(
     )
 }
 
-fn quiesce_browserless_shared_runtime_lanes_before_admission_drain(
+fn quiesce_browserless_shared_runtime_lanes_before_transfer(
     transaction: &crate::runtime_adoption::UpgradeTransaction,
     paths: &InstallPaths,
     isolated_root: bool,
-    admission_drain_path: &Path,
 ) -> Result<Vec<String>, String> {
     use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
     use crate::runtime_adoption::RuntimeDisposition;
@@ -9335,7 +8886,6 @@ fn quiesce_browserless_shared_runtime_lanes_before_admission_drain(
         &paths.current_selector.join("bin/agent-browser"),
         &primary_sessions,
         &source_socket_dir,
-        admission_drain_path,
     )
 }
 
@@ -9392,11 +8942,7 @@ fn quiesce_browserless_shared_runtime_lanes(
     old_binary: &Path,
     primary_sessions: &std::collections::BTreeSet<String>,
     source_socket_dir: &Path,
-    admission_drain_path: &Path,
 ) -> Result<Vec<String>, String> {
-    if admission_drain_path.exists() {
-        return Err("runtime_host_browserless_quiesce_started_after_admission_drain".to_string());
-    }
     let lanes = crate::session_supervisor::runtime_host_supervised_lane_configs()?
         .into_iter()
         .map(|(session, _)| session)
@@ -10951,7 +10497,7 @@ fn commit_prepared_payload_transaction_unfenced(
         crate::runtime_adoption::UpgradeTransactionState::GenerationCommitted,
         "generation_and_state_committed",
     )?;
-    persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)
+    Ok(())
 }
 
 fn commit_candidate_runtime_host_ingress(
@@ -11051,7 +10597,7 @@ fn begin_post_commit_validation(
             crate::runtime_adoption::UpgradeTransactionState::PostCommitValidating,
             "post_commit_validating",
         )?;
-        persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)
+        Ok(())
     })?;
     converge_installed_mcp_clients(paths, prepared)
 }
@@ -11559,16 +11105,6 @@ fn accept_prepared_payload_transaction(
             "accepted",
         )
     })?;
-    if let Err(error) = clear_admission_drain(&prepared.admission_drain_path) {
-        prepared.transaction.stop_reason = Some("accepted_admission_drain_not_cleared".to_string());
-        persist_upgrade_transition(
-            &prepared.transaction_path,
-            &mut prepared.transaction,
-            UpgradeTransactionState::OperatorRecoveryRequired,
-            "operator_recovery_required",
-        )?;
-        return Err(error);
-    }
     Ok(())
 }
 
@@ -11937,7 +11473,6 @@ fn rollback_prepared_payload_transaction(
             UpgradeTransactionState::OperatorRecoveryRequired,
             "forward_completion_required",
         )?;
-        persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
         // Forward recovery keeps the candidate selected. End old MCP clients so
         // inspection and recovery can reconnect using that selected generation.
         if selected_generation_id(paths).as_deref()
@@ -12015,7 +11550,6 @@ fn rollback_prepared_payload_transaction(
         && dashboard_ingress_result.is_ok()
     {
         prepared.transaction.terminal_result = Some("old_generation_preserved".to_string());
-        clear_admission_drain(&prepared.admission_drain_path)?;
         persist_upgrade_transition(
             &prepared.transaction_path,
             &mut prepared.transaction,
@@ -12397,15 +11931,6 @@ fn parse_workstation_install_args(args: &[String]) -> Result<WorkstationInstallA
     if args.iter().any(|arg| arg == "--progress-json") && (mode != InstallMode::Apply || !json) {
         return Err("--progress-json requires --apply and --json".to_string());
     }
-    if runtime_replacement_policy == RuntimeReplacementPolicy::FullShutdown
-        && mode == InstallMode::Apply
-        && expected_runtime_replacement_plan_digest.is_none()
-    {
-        return Err(
-            "full-shutdown apply requires --expected-runtime-replacement-plan-digest from a current dry run"
-                .to_string(),
-        );
-    }
     if runtime_replacement_policy == RuntimeReplacementPolicy::Preserve
         && expected_runtime_replacement_plan_digest.is_some()
     {
@@ -12474,7 +11999,7 @@ fn parse_port(value: Option<&String>, flag: &str) -> Result<u16, String> {
 }
 
 fn workstation_usage() -> &'static str {
-    "Usage: agent-browser install workstation <--dry-run|--apply> [--json] [--progress-json] [--force-browserless-upgrade] [--runtime-replacement-policy <preserve|full-shutdown>] [--expected-runtime-replacement-plan-digest <sha256>] [--dashboard-port <port>] [--guacamole-port <port>]\n       agent-browser install workstation status [--json]\n       agent-browser install workstation recover --transaction-id <id> [--json]\n       agent-browser install workstation finalize [--json]\n       agent-browser install workstation gc <--dry-run|--apply> [--json]\n       agent-browser install transactions list [--json]\n       agent-browser install transactions inspect --transaction-id <id> [--json]\n       agent-browser install transactions <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]"
+    "Usage: agent-browser install workstation <--dry-run|--apply> [--json] [--progress-json] [--force-browserless-upgrade] [--runtime-replacement-policy <preserve|full-shutdown>] [--expected-runtime-replacement-plan-digest <sha256>] [--dashboard-port <port>] [--guacamole-port <port>]\n       agent-browser install workstation status [--json]\n       agent-browser install workstation live [--json]\n       agent-browser install workstation recover --transaction-id <id> [--json]\n       agent-browser install workstation finalize [--json]\n       agent-browser install workstation gc <--dry-run|--apply> [--json]\n       agent-browser install transactions list [--json]\n       agent-browser install transactions inspect --transaction-id <id> [--json]\n       agent-browser install transactions <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]"
 }
 
 #[derive(Debug)]
@@ -12644,7 +12169,6 @@ struct PreparedPayloadTransaction {
     transaction_path: PathBuf,
     transaction: crate::runtime_adoption::UpgradeTransaction,
     previous_selector: Option<PathBuf>,
-    admission_drain_path: PathBuf,
     runtime_handoffs: Vec<PreparedRuntimeHandoff>,
     dashboard_candidate: Option<PreparedDashboardCandidate>,
 }
@@ -14184,6 +13708,23 @@ fn fail(message: &str, json: bool) -> ! {
 }
 
 #[cfg(test)]
+fn seed_legacy_upgrade_marker(
+    path: &Path,
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> Result<(), String> {
+    write_private_json_atomic(
+        path,
+        &serde_json::json!({
+            "schemaVersion": crate::runtime_adoption::RUNTIME_ADOPTION_SCHEMA_VERSION,
+            "transactionId": transaction.transaction_id,
+            "candidateGenerationId": transaction.candidate_generation_id,
+            "transactionRevision": transaction.revision,
+            "recordedAt": runtime_adoption_timestamp(),
+        }),
+    )
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;
@@ -14732,7 +14273,7 @@ mod tests {
     }
 
     #[test]
-    fn active_admission_drain_owner_governs_status_over_newer_zero_effect_history() {
+    fn legacy_marker_does_not_choose_the_observed_upgrade_transaction() {
         let root = env::temp_dir().join(format!(
             "agent-browser-transaction-drain-owner-{}",
             uuid::Uuid::new_v4()
@@ -14783,10 +14324,10 @@ mod tests {
         )
         .unwrap();
 
-        let governing = governing_upgrade_transaction(&root, &transaction_dir)
+        let governing = latest_upgrade_transaction(&transaction_dir)
             .unwrap()
             .unwrap();
-        assert_eq!(governing.transaction_id, "upgrade-owner");
+        assert_eq!(governing.transaction_id, "upgrade-newer");
 
         fs::remove_dir_all(root).unwrap();
     }
@@ -15843,7 +15384,7 @@ mod tests {
     }
 
     #[test]
-    fn full_shutdown_apply_requires_reviewed_plan_digest() {
+    fn explicit_full_shutdown_apply_does_not_require_prior_observation() {
         let args = vec![
             "install".to_string(),
             "workstation".to_string(),
@@ -15851,8 +15392,12 @@ mod tests {
             "--runtime-replacement-policy".to_string(),
             "full-shutdown".to_string(),
         ];
-        let error = parse_workstation_install_args(&args).unwrap_err();
-        assert!(error.contains("--expected-runtime-replacement-plan-digest"));
+        let parsed = parse_workstation_install_args(&args).unwrap();
+        assert_eq!(
+            parsed.runtime_replacement_policy,
+            RuntimeReplacementPolicy::FullShutdown
+        );
+        assert!(parsed.expected_runtime_replacement_plan_digest.is_none());
     }
 
     #[test]
@@ -16554,7 +16099,7 @@ mod tests {
         write_private_json_atomic(&transaction_path, &transaction).unwrap();
         let admission_drain_path =
             root.join(".agent-browser/runtime-adoption/admission-drain.json");
-        persist_admission_drain(&admission_drain_path, &transaction).unwrap();
+        seed_legacy_upgrade_marker(&admission_drain_path, &transaction).unwrap();
         let transaction_before = fs::read(&transaction_path).unwrap();
         let drain_before = fs::read(&admission_drain_path).unwrap();
         let mut prepared = PreparedPayloadTransaction {
@@ -16568,7 +16113,6 @@ mod tests {
             transaction_path: transaction_path.clone(),
             transaction,
             previous_selector: None,
-            admission_drain_path: admission_drain_path.clone(),
             runtime_handoffs: Vec::new(),
             dashboard_candidate: None,
         };
@@ -16628,7 +16172,7 @@ mod tests {
         write_private_json_atomic(&transaction_path, &transaction).unwrap();
         let admission_drain_path =
             root.join(".agent-browser/runtime-adoption/admission-drain.json");
-        persist_admission_drain(&admission_drain_path, &transaction).unwrap();
+        seed_legacy_upgrade_marker(&admission_drain_path, &transaction).unwrap();
         let transaction_before = fs::read(&transaction_path).unwrap();
         let drain_before = fs::read(&admission_drain_path).unwrap();
         let mut prepared = PreparedPayloadTransaction {
@@ -16642,7 +16186,6 @@ mod tests {
             transaction_path: transaction_path.clone(),
             transaction,
             previous_selector: None,
-            admission_drain_path: admission_drain_path.clone(),
             runtime_handoffs: Vec::new(),
             dashboard_candidate: None,
         };
@@ -16702,7 +16245,7 @@ mod tests {
         write_private_json_atomic(&transaction_path, &transaction).unwrap();
         let admission_drain_path =
             root.join(".agent-browser/runtime-adoption/admission-drain.json");
-        persist_admission_drain(&admission_drain_path, &transaction).unwrap();
+        seed_legacy_upgrade_marker(&admission_drain_path, &transaction).unwrap();
         let transaction_before = fs::read(&transaction_path).unwrap();
         let drain_before = fs::read(&admission_drain_path).unwrap();
         let mut prepared = PreparedPayloadTransaction {
@@ -16716,7 +16259,6 @@ mod tests {
             transaction_path: transaction_path.clone(),
             transaction,
             previous_selector: None,
-            admission_drain_path: admission_drain_path.clone(),
             runtime_handoffs: Vec::new(),
             dashboard_candidate: None,
         };
@@ -16785,7 +16327,7 @@ mod tests {
         write_private_json_atomic(&transaction_path, &transaction).unwrap();
         let admission_drain_path =
             root.join(".agent-browser/runtime-adoption/admission-drain.json");
-        persist_admission_drain(&admission_drain_path, &transaction).unwrap();
+        seed_legacy_upgrade_marker(&admission_drain_path, &transaction).unwrap();
         let mut prepared = PreparedPayloadTransaction {
             staged: StagedWorkstationGeneration {
                 generation_id: "candidate-a".to_string(),
@@ -16797,7 +16339,6 @@ mod tests {
             transaction_path: transaction_path.clone(),
             transaction,
             previous_selector: None,
-            admission_drain_path: admission_drain_path.clone(),
             runtime_handoffs: Vec::new(),
             dashboard_candidate: None,
         };
@@ -16822,7 +16363,7 @@ mod tests {
             prepared.transaction.state,
             UpgradeTransactionState::Accepted
         );
-        assert!(!admission_drain_path.exists());
+        assert!(admission_drain_path.exists());
         let ledger = coordination.read().unwrap();
         assert!(ledger.active().is_none());
         assert_eq!(
@@ -16877,7 +16418,6 @@ mod tests {
             transaction_path: transaction_path.clone(),
             transaction,
             previous_selector: None,
-            admission_drain_path: admission_drain_path.clone(),
             runtime_handoffs: Vec::new(),
             dashboard_candidate: None,
         };
@@ -16896,7 +16436,7 @@ mod tests {
             })
             .unwrap();
 
-        let error = publish_runtime_transfer_start(&paths, &mut prepared, false).unwrap_err();
+        let error = publish_runtime_transfer_start(&paths, &mut prepared).unwrap_err();
 
         assert!(error.contains("candidate_install_custody_lost"));
         assert_eq!(
@@ -16948,12 +16488,11 @@ mod tests {
             transaction_path: transaction_path.clone(),
             transaction,
             previous_selector: None,
-            admission_drain_path: admission_drain_path.clone(),
             runtime_handoffs: Vec::new(),
             dashboard_candidate: None,
         };
 
-        publish_runtime_transfer_start(&paths, &mut prepared, false).unwrap();
+        publish_runtime_transfer_start(&paths, &mut prepared).unwrap();
 
         assert_eq!(
             prepared.transaction.state,
@@ -16962,10 +16501,7 @@ mod tests {
         let persisted: crate::runtime_adoption::UpgradeTransaction =
             serde_json::from_slice(&fs::read(&transaction_path).unwrap()).unwrap();
         assert_eq!(persisted, prepared.transaction);
-        let drain: crate::runtime_adoption::RuntimeAdmissionDrain =
-            serde_json::from_slice(&fs::read(&admission_drain_path).unwrap()).unwrap();
-        assert_eq!(drain.transaction_id, prepared.transaction.transaction_id);
-        assert_eq!(drain.transaction_revision, prepared.transaction.revision);
+        assert!(!admission_drain_path.exists());
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -16998,7 +16534,7 @@ mod tests {
         write_private_json_atomic(&transaction_path, &transaction).unwrap();
         let admission_drain_path =
             root.join(".agent-browser/runtime-adoption/admission-drain.json");
-        persist_admission_drain(&admission_drain_path, &transaction).unwrap();
+        seed_legacy_upgrade_marker(&admission_drain_path, &transaction).unwrap();
         let mut prepared = PreparedPayloadTransaction {
             staged: StagedWorkstationGeneration {
                 generation_id: "candidate-a".to_string(),
@@ -17010,12 +16546,11 @@ mod tests {
             transaction_path: transaction_path.clone(),
             transaction,
             previous_selector: None,
-            admission_drain_path: admission_drain_path.clone(),
             runtime_handoffs: Vec::new(),
             dashboard_candidate: None,
         };
 
-        publish_runtime_transfer_start(&paths, &mut prepared, false).unwrap();
+        publish_runtime_transfer_start(&paths, &mut prepared).unwrap();
 
         assert_eq!(
             prepared.transaction.state,
@@ -17024,9 +16559,9 @@ mod tests {
         let persisted: crate::runtime_adoption::UpgradeTransaction =
             serde_json::from_slice(&fs::read(&transaction_path).unwrap()).unwrap();
         assert_eq!(persisted, prepared.transaction);
-        let drain: crate::runtime_adoption::RuntimeAdmissionDrain =
+        let legacy: serde_json::Value =
             serde_json::from_slice(&fs::read(&admission_drain_path).unwrap()).unwrap();
-        assert_eq!(drain.transaction_revision, prepared.transaction.revision);
+        assert!(legacy["transactionRevision"].as_u64().unwrap() < prepared.transaction.revision);
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -17069,7 +16604,6 @@ mod tests {
             transaction_path: transaction_path.clone(),
             transaction,
             previous_selector: None,
-            admission_drain_path: root.join(".agent-browser/runtime-adoption/admission-drain.json"),
             runtime_handoffs: Vec::new(),
             dashboard_candidate: None,
         };
@@ -17166,6 +16700,7 @@ mod tests {
             closed_sessions: Vec::new(),
             forced_browser_ids: Vec::new(),
             final_census_digest: None,
+            observation_warning: None,
             source_exit_proven: false,
             profiles_preserved: true,
         };
@@ -17242,7 +16777,6 @@ mod tests {
             transaction_path: transaction_path.clone(),
             transaction,
             previous_selector: None,
-            admission_drain_path: admission_drain_path.clone(),
             runtime_handoffs: Vec::new(),
             dashboard_candidate: None,
         };
@@ -17326,69 +16860,6 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn next_install_automatically_recovers_a_verified_matching_drain() {
-        let root = env::temp_dir().join(format!(
-            "agent-browser-operator-recovery-{}",
-            uuid::Uuid::new_v4()
-        ));
-        let paths = install_paths(&root);
-        fs::create_dir_all(paths.binary.parent().unwrap()).unwrap();
-        fs::create_dir_all(&paths.legacy_support_dir).unwrap();
-        fs::create_dir_all(&paths.unit_dir).unwrap();
-        fs::write(&paths.binary, b"legacy-binary").unwrap();
-        set_executable(&paths.binary).unwrap();
-        fs::write(paths.legacy_support_dir.join("manifest.json"), b"{}\n").unwrap();
-        for unit in WORKSTATION_GENERATION_UNITS {
-            if unit != "agent-browser-dashboard-backend.service" {
-                fs::write(paths.unit_dir.join(unit), format!("legacy {unit}\n")).unwrap();
-            }
-        }
-        let old_generation_id = migrate_legacy_payload_to_generation(&paths).unwrap();
-        let mut transaction = new_upgrade_transaction(
-            &paths,
-            "generation-candidate".to_string(),
-            "a".repeat(64),
-            "b".repeat(64),
-        );
-        transaction.old_generation_id = Some(old_generation_id.clone());
-        transaction.state =
-            crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired;
-        transaction.revision = 7;
-        transaction.stop_reason = Some("candidate_dashboard_presentation_unproven".to_string());
-        transaction.terminal_result = Some("operator_recovery_required".to_string());
-        let transaction_path = transaction_path(&root, &transaction.transaction_id);
-        write_private_json_atomic(&transaction_path, &transaction).unwrap();
-        let drain_path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
-        persist_admission_drain(&drain_path, &transaction).unwrap();
-
-        let report = converge_prior_install_before_new_apply(&root, true)
-            .unwrap()
-            .expect("prior transaction should be converged");
-
-        assert_eq!(report["changed"], true);
-        assert_eq!(report["selectedGenerationId"], old_generation_id);
-        assert!(!drain_path.exists());
-        let recovered: crate::runtime_adoption::UpgradeTransaction =
-            serde_json::from_slice(&fs::read(transaction_path).unwrap()).unwrap();
-        assert_eq!(
-            recovered.state,
-            crate::runtime_adoption::UpgradeTransactionState::FailedPreservedOldGeneration
-        );
-        assert_eq!(
-            recovered.terminal_result.as_deref(),
-            Some("old_generation_preserved")
-        );
-        assert!(recovered
-            .checkpoints
-            .iter()
-            .any(|checkpoint| checkpoint.name == "operator_recovery_verified_old_generation"));
-
-        remove_generation_tree(&paths.generations_dir.join(old_generation_id)).unwrap();
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[cfg(unix)]
-    #[test]
     fn operator_recovery_accepts_a_preserved_same_generation_selection() {
         let root = env::temp_dir().join(format!(
             "agent-browser-same-generation-recovery-{}",
@@ -17422,7 +16893,7 @@ mod tests {
         let transaction_path = transaction_path(&root, &transaction.transaction_id);
         write_private_json_atomic(&transaction_path, &transaction).unwrap();
         let drain_path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
-        persist_admission_drain(&drain_path, &transaction).unwrap();
+        seed_legacy_upgrade_marker(&drain_path, &transaction).unwrap();
 
         let report =
             recover_operator_required_upgrade_for_root(&root, &transaction.transaction_id, true)
@@ -17431,7 +16902,7 @@ mod tests {
         assert_eq!(report["changed"], true);
         assert_eq!(report["selectedGenerationId"], old_generation_id);
         assert_eq!(report["candidateGenerationEqualsPreservedGeneration"], true);
-        assert!(!drain_path.exists());
+        assert!(drain_path.exists());
         let recovered: crate::runtime_adoption::UpgradeTransaction =
             serde_json::from_slice(&fs::read(transaction_path).unwrap()).unwrap();
         assert_eq!(
@@ -17440,58 +16911,6 @@ mod tests {
         );
 
         remove_generation_tree(&paths.generations_dir.join(old_generation_id)).unwrap();
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn next_install_clears_an_exact_drain_left_after_acceptance() {
-        use crate::runtime_adoption::UpgradeTransactionState;
-
-        let root = env::temp_dir().join(format!(
-            "agent-browser-accepted-drain-recovery-{}",
-            uuid::Uuid::new_v4()
-        ));
-        let paths = install_paths(&root);
-        fs::create_dir_all(paths.binary.parent().unwrap()).unwrap();
-        fs::create_dir_all(&paths.legacy_support_dir).unwrap();
-        fs::create_dir_all(&paths.unit_dir).unwrap();
-        fs::write(&paths.binary, b"legacy-binary").unwrap();
-        set_executable(&paths.binary).unwrap();
-        fs::write(paths.legacy_support_dir.join("manifest.json"), b"{}\n").unwrap();
-        for unit in WORKSTATION_GENERATION_UNITS {
-            if unit != "agent-browser-dashboard-backend.service" {
-                fs::write(paths.unit_dir.join(unit), format!("legacy {unit}\n")).unwrap();
-            }
-        }
-        let selected_generation = migrate_legacy_payload_to_generation(&paths).unwrap();
-        let mut transaction = new_upgrade_transaction(
-            &paths,
-            selected_generation.clone(),
-            "a".repeat(64),
-            "b".repeat(64),
-        );
-        transaction.old_generation_id = Some(selected_generation.clone());
-        transaction.state = UpgradeTransactionState::Accepted;
-        transaction.revision = 11;
-        transaction.terminal_result = Some("accepted".to_string());
-        let transaction_path = transaction_path(&root, &transaction.transaction_id);
-        write_private_json_atomic(&transaction_path, &transaction).unwrap();
-        let drain_path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
-        persist_admission_drain(&drain_path, &transaction).unwrap();
-
-        let report = converge_prior_install_before_new_apply(&root, true)
-            .unwrap()
-            .expect("accepted transaction drain should be converged");
-
-        assert_eq!(report["state"], "accepted");
-        assert_eq!(report["selectedGenerationId"], selected_generation);
-        assert!(!drain_path.exists());
-        let recovered: crate::runtime_adoption::UpgradeTransaction =
-            serde_json::from_slice(&fs::read(transaction_path).unwrap()).unwrap();
-        assert_eq!(recovered.state, UpgradeTransactionState::Accepted);
-
-        remove_generation_tree(&paths.generations_dir.join(selected_generation)).unwrap();
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -17693,7 +17112,7 @@ mod tests {
 
         assert_eq!(report["changed"], true);
         assert_eq!(report["selectedGenerationId"], old_generation_id);
-        assert_eq!(report["admissionDrainPresent"], false);
+        assert!(report.get("admissionDrainPresent").is_none());
         let recovered: crate::runtime_adoption::UpgradeTransaction =
             serde_json::from_slice(&fs::read(transaction_path).unwrap()).unwrap();
         assert_eq!(
@@ -18164,68 +17583,6 @@ mod tests {
     }
 
     #[test]
-    fn browserless_override_ignores_only_external_observation_churn() {
-        fn external_round(
-            registry_revision: u64,
-            observation_digest: char,
-        ) -> crate::runtime_adoption::RuntimeCensusRound {
-            use crate::runtime_adoption::{
-                RuntimeCensusCandidate, RuntimeCensusSourceSnapshot, RuntimeEvidenceSummary,
-            };
-
-            let runtime_id = "external-browser".to_string();
-            crate::runtime_adoption::collect_runtime_census_round(
-                registry_revision,
-                crate::runtime_adoption::runtime_census_sources()
-                    .into_iter()
-                    .map(|source| RuntimeCensusSourceSnapshot {
-                        source,
-                        source_revision: format!("{source:?}-{registry_revision}"),
-                        logical_browser_ids: vec![runtime_id.clone()],
-                    })
-                    .collect(),
-                vec![RuntimeCensusCandidate {
-                    logical_browser_id: runtime_id,
-                    session_names: Vec::new(),
-                    profile_identity_digest: "a".repeat(64),
-                    observation_digest: observation_digest.to_string().repeat(64),
-                    observed_sources: crate::runtime_adoption::runtime_census_sources().to_vec(),
-                    evidence: RuntimeEvidenceSummary {
-                        observation_rounds_agree: true,
-                        registry_revision_stable: true,
-                        browser_live: true,
-                        externally_owned: true,
-                        metadata_present: true,
-                        ..RuntimeEvidenceSummary::default()
-                    },
-                }],
-            )
-            .unwrap()
-        }
-
-        let first = external_round(41, 'b');
-        let second = external_round(42, 'c');
-        let ordinary = crate::runtime_adoption::build_stable_runtime_census(&first, &second)
-            .expect("ordinary census builds");
-        assert!(!ordinary.activation_allowed);
-
-        let mut rounds = std::collections::VecDeque::from([first, second]);
-        let overridden = collect_browserless_override_census_with(|| {
-            rounds
-                .pop_front()
-                .ok_or_else(|| "test census exhausted".to_string())
-        })
-        .expect("external-only churn remains preservable");
-        assert!(browserless_override_census_is_safe(&overridden));
-        assert_eq!(overridden.records.len(), 1);
-        assert_eq!(
-            overridden.records[0].classification,
-            crate::runtime_adoption::RuntimeClassification::ExternalObserved
-        );
-        assert!(rounds.is_empty());
-    }
-
-    #[test]
     fn blocked_precondition_records_one_transaction_without_staging_payload() {
         let root = env::temp_dir().join(format!(
             "agent-browser-blocked-upgrade-{}",
@@ -18532,7 +17889,6 @@ mod tests {
             &paths,
             Some(generation_id),
             Some(&transaction),
-            true,
             &ingress,
         );
         for axis in [
@@ -18557,7 +17913,6 @@ mod tests {
             &paths,
             Some(generation_id),
             Some(&transaction),
-            false,
             &ingress,
         );
         assert_eq!(accepted["operatorJourneyReady"], false);
@@ -18570,7 +17925,6 @@ mod tests {
             &paths,
             Some(generation_id),
             Some(&transaction),
-            false,
             &ingress,
         );
         assert_eq!(finalized["rollbackReady"], true);
@@ -18631,7 +17985,7 @@ mod tests {
         let admission_drain_path = root
             .join(".agent-browser/runtime-adoption")
             .join("admission-drain.json");
-        persist_admission_drain(&admission_drain_path, &transaction).unwrap();
+        seed_legacy_upgrade_marker(&admission_drain_path, &transaction).unwrap();
         fs::remove_file(&paths.current_selector).unwrap();
         symlink(
             PathBuf::from("generations").join(candidate_generation),
@@ -18692,7 +18046,6 @@ mod tests {
             transaction_path,
             transaction,
             previous_selector: Some(PathBuf::from("generations").join(old_generation)),
-            admission_drain_path,
             runtime_handoffs: Vec::new(),
             dashboard_candidate: None,
         };
@@ -18818,7 +18171,6 @@ mod tests {
             transaction_path: transaction_path(&root, &transaction.transaction_id),
             transaction,
             previous_selector: None,
-            admission_drain_path: root.join("admission-drain.json"),
             runtime_handoffs: Vec::new(),
             dashboard_candidate: Some(PreparedDashboardCandidate {
                 child: None,
@@ -18892,7 +18244,6 @@ mod tests {
             transaction_path: transaction_path(&root, &transaction.transaction_id),
             transaction,
             previous_selector: None,
-            admission_drain_path: root.join("admission-drain.json"),
             runtime_handoffs: Vec::new(),
             dashboard_candidate: Some(PreparedDashboardCandidate {
                 child: None,
@@ -18976,7 +18327,6 @@ mod tests {
             transaction_path: transaction_path(&root, &transaction.transaction_id),
             transaction,
             previous_selector: None,
-            admission_drain_path: root.join("admission-drain.json"),
             runtime_handoffs: Vec::new(),
             dashboard_candidate: Some(PreparedDashboardCandidate {
                 child: None,
@@ -19051,7 +18401,6 @@ mod tests {
             transaction_path: transaction_path(&root, &transaction.transaction_id),
             transaction,
             previous_selector: None,
-            admission_drain_path: root.join("admission-drain.json"),
             runtime_handoffs: Vec::new(),
             dashboard_candidate: None,
         };
@@ -19750,7 +19099,6 @@ mod tests {
                 "liveDashboardRuntime": {
                     "workstationUpgrade": {
                         "selectedGenerationId": "generation-new",
-                        "admissionDraining": true,
                         "latestTransaction": {
                             "transactionId": transaction.transaction_id.clone(),
                             "state": "post_commit_validating",
@@ -19823,7 +19171,6 @@ mod tests {
                 "liveDashboardRuntime": {
                     "workstationUpgrade": {
                         "selectedGenerationId": "generation-new",
-                        "admissionDraining": true,
                         "latestTransaction": {
                             "transactionId": transaction.transaction_id.clone(),
                             "state": "post_commit_validating",
@@ -19948,7 +19295,6 @@ mod tests {
                 "liveDashboardRuntime": {
                     "workstationUpgrade": {
                         "selectedGenerationId": "generation-new",
-                        "admissionDraining": true,
                         "latestTransaction": {
                             "transactionId": transaction.transaction_id.clone(),
                             "state": "post_commit_validating",
@@ -20388,7 +19734,6 @@ mod tests {
                 "liveDashboardRuntime": {
                     "workstationUpgrade": {
                         "selectedGenerationId": "generation-new",
-                        "admissionDraining": true,
                         "dashboardIngress": {
                             "dashboardIngressReady": true,
                             "operatorJourneyReady": true,
@@ -20667,13 +20012,11 @@ mod tests {
         let actions = std::cell::RefCell::new(Vec::new());
         let primary_sessions = std::collections::BTreeSet::from(["bill-soylei".to_string()]);
 
-        begin_admission_draining_after_quiescence_with(
+        begin_runtime_transfer_after_quiescence_with(
             &transaction_path,
             &mut transaction,
-            &admission_drain_path,
-            false,
             true,
-            |_, drain_path| {
+            |_| {
                 let closed = quiesce_browserless_shared_runtime_lanes_with(
                     &primary_sessions,
                     vec![
@@ -20681,7 +20024,7 @@ mod tests {
                         "dashboard-service-backend".to_string(),
                     ],
                     |session| {
-                        assert!(!drain_path.exists());
+                        assert!(!admission_drain_path.exists());
                         actions.borrow_mut().push(format!("status:{session}"));
                         Ok(serde_json::json!({
                             "data": {
@@ -20692,7 +20035,7 @@ mod tests {
                         }))
                     },
                     |session| {
-                        assert!(!drain_path.exists());
+                        assert!(!admission_drain_path.exists());
                         actions.borrow_mut().push(format!("close:{session}"));
                         Ok(serde_json::json!({"success": true}))
                     },
@@ -20707,7 +20050,7 @@ mod tests {
             transaction.state,
             crate::runtime_adoption::UpgradeTransactionState::AdmissionDraining
         );
-        assert!(admission_drain_path.is_file());
+        assert!(!admission_drain_path.exists());
         assert_eq!(
             *actions.borrow(),
             vec![
@@ -20739,14 +20082,12 @@ mod tests {
         let admission_drain_path = root.join("admission-drain.json");
         let close_count = std::cell::Cell::new(0_u8);
 
-        let error = begin_admission_draining_after_quiescence_with(
+        let error = begin_runtime_transfer_after_quiescence_with(
             &transaction_path,
             &mut transaction,
-            &admission_drain_path,
-            false,
             true,
-            |_, drain_path| {
-                assert!(!drain_path.exists());
+            |_| {
+                assert!(!admission_drain_path.exists());
                 close_count.set(close_count.get().saturating_add(1));
                 Err("runtime_host_service_state_writer_not_quiesced:before=91:after=92".to_string())
             },
@@ -20769,14 +20110,12 @@ mod tests {
         assert_eq!(persisted.state, transaction.state);
         assert_eq!(persisted.revision, transaction.revision);
 
-        begin_admission_draining_after_quiescence_with(
+        begin_runtime_transfer_after_quiescence_with(
             &transaction_path,
             &mut transaction,
-            &admission_drain_path,
-            false,
             true,
-            |_, drain_path| {
-                assert!(!drain_path.exists());
+            |_| {
+                assert!(!admission_drain_path.exists());
                 close_count.set(close_count.get().saturating_add(1));
                 Ok(())
             },
@@ -20786,7 +20125,7 @@ mod tests {
             transaction.state,
             crate::runtime_adoption::UpgradeTransactionState::AdmissionDraining
         );
-        assert!(admission_drain_path.is_file());
+        assert!(!admission_drain_path.exists());
         assert_eq!(close_count.get(), 2);
         fs::remove_dir_all(root).unwrap();
     }
@@ -20812,13 +20151,11 @@ mod tests {
         let admission_drain_path = root.join("admission-drain.json");
         let quiesce_called = std::cell::Cell::new(false);
 
-        begin_admission_draining_after_quiescence_with(
+        begin_runtime_transfer_after_quiescence_with(
             &transaction_path,
             &mut transaction,
-            &admission_drain_path,
-            true,
             false,
-            |_, _| {
+            |_| {
                 quiesce_called.set(true);
                 Ok(())
             },
@@ -20884,26 +20221,20 @@ mod tests {
     }
 
     #[test]
-    fn shared_runtime_host_quiesce_refuses_an_active_admission_drain() {
-        let root = env::temp_dir().join(format!(
-            "agent-browser-quiesce-active-drain-{}",
-            uuid::Uuid::new_v4()
-        ));
+    fn shared_runtime_host_quiesce_ignores_a_legacy_marker() {
+        let root = env::temp_dir().join(format!("quiesce-legacy-marker-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&root).unwrap();
-        let drain_path = root.join("admission-drain.json");
-        fs::write(&drain_path, b"active").unwrap();
-        let primary_sessions = std::collections::BTreeSet::from(["bill-soylei".to_string()]);
-        let error = quiesce_browserless_shared_runtime_lanes(
+        let path = root.join("admission-drain.json");
+        fs::write(&path, "invalid-json").unwrap();
+        let primary_sessions = std::collections::BTreeSet::new();
+        assert!(quiesce_browserless_shared_runtime_lanes(
             Path::new("/not-invoked"),
             &primary_sessions,
-            &root,
-            &drain_path,
+            &root
         )
-        .unwrap_err();
-        assert_eq!(
-            error,
-            "runtime_host_browserless_quiesce_started_after_admission_drain"
-        );
+        .unwrap()
+        .is_empty());
+        assert_eq!(fs::read_to_string(path).unwrap(), "invalid-json");
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -22483,7 +21814,11 @@ mod tests {
             "operator_recovery_required",
         )
         .unwrap();
-        persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction).unwrap();
+        seed_legacy_upgrade_marker(
+            &root.join(".agent-browser/runtime-adoption/admission-drain.json"),
+            &prepared.transaction,
+        )
+        .unwrap();
         let guard = InstallTransactionMutationGuard {
             transaction_id: prepared.transaction.transaction_id.clone(),
             expected_revision: prepared.transaction.revision,
@@ -22559,7 +21894,9 @@ mod tests {
             .checkpoints
             .iter()
             .all(|checkpoint| checkpoint.name != "rollback_before_commit"));
-        assert!(prepared.admission_drain_path.is_file());
+        assert!(!root
+            .join(".agent-browser/runtime-adoption/admission-drain.json")
+            .exists());
 
         remove_generation_tree(&root).unwrap();
     }
@@ -22631,7 +21968,11 @@ mod tests {
             "admission_draining",
         )
         .unwrap();
-        persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction).unwrap();
+        seed_legacy_upgrade_marker(
+            &root.join(".agent-browser/runtime-adoption/admission-drain.json"),
+            &prepared.transaction,
+        )
+        .unwrap();
         let guard = InstallTransactionMutationGuard {
             transaction_id: prepared.transaction.transaction_id.clone(),
             expected_revision: prepared.transaction.revision,
@@ -22761,144 +22102,6 @@ mod tests {
     }
 
     #[test]
-    fn prior_install_drain_routes_interrupted_upgrade_to_automatic_convergence() {
-        use crate::runtime_adoption::UpgradeTransactionState;
-
-        let root = env::temp_dir().join(format!(
-            "agent-browser-prior-install-convergence-{}",
-            uuid::Uuid::new_v4()
-        ));
-        let paths = install_paths(&root);
-        let mut transaction = new_upgrade_transaction(
-            &paths,
-            "generation-candidate".to_string(),
-            "a".repeat(64),
-            "b".repeat(64),
-        );
-        transaction.state = UpgradeTransactionState::PostCommitValidating;
-        transaction.revision = 9;
-        transaction.runtime_census_digest = Some("c".repeat(64));
-        let transaction_path = transaction_path(&root, &transaction.transaction_id);
-        write_private_json_atomic(&transaction_path, &transaction).unwrap();
-        persist_admission_drain(
-            &root.join(".agent-browser/runtime-adoption/admission-drain.json"),
-            &transaction,
-        )
-        .unwrap();
-
-        assert_eq!(
-            prior_install_convergence_action(&root).unwrap(),
-            Some(PriorInstallConvergenceAction::Resume(
-                InstallTransactionMutationGuard {
-                    transaction_id: transaction.transaction_id.clone(),
-                    expected_revision: 9,
-                    candidate_generation_id: "generation-candidate".to_string(),
-                    census_digest: Some("c".repeat(64)),
-                }
-            ))
-        );
-
-        transaction.state = UpgradeTransactionState::OperatorRecoveryRequired;
-        transaction.revision = 10;
-        write_private_json_atomic(&transaction_path, &transaction).unwrap();
-        assert_eq!(
-            prior_install_convergence_action(&root).unwrap(),
-            Some(PriorInstallConvergenceAction::Recover {
-                transaction_id: transaction.transaction_id.clone(),
-            })
-        );
-
-        transaction.runtime_handoffs = vec![crate::runtime_adoption::UpgradeRuntimeHandoff {
-            source_session: "retained-source".to_string(),
-            candidate_session: "handoff-candidate".to_string(),
-            source_socket_dir: Some("/run/user/1000/agent-browser/source".to_string()),
-            source_runtime_host: true,
-            source_process_identity: None,
-            mode: crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer,
-            committed: true,
-            source_finalized: false,
-            irreversible_source_revocation: false,
-        }];
-        transaction.revision = 11;
-        write_private_json_atomic(&transaction_path, &transaction).unwrap();
-        persist_admission_drain(
-            &root.join(".agent-browser/runtime-adoption/admission-drain.json"),
-            &transaction,
-        )
-        .unwrap();
-        assert_eq!(
-            prior_install_convergence_action(&root).unwrap(),
-            Some(PriorInstallConvergenceAction::Resume(
-                InstallTransactionMutationGuard {
-                    transaction_id: transaction.transaction_id.clone(),
-                    expected_revision: 11,
-                    candidate_generation_id: "generation-candidate".to_string(),
-                    census_digest: Some("c".repeat(64)),
-                }
-            ))
-        );
-
-        let replacement_plan = crate::runtime_replacement::RuntimeReplacementPlan {
-            schema_version: "agent-browser.runtime-replacement-plan.v1".to_string(),
-            plan_digest: "d".repeat(64),
-            policy: crate::runtime_replacement::RuntimeReplacementPolicy::FullShutdown,
-            disposition:
-                crate::runtime_replacement::RuntimeReplacementDisposition::ReadyForFullShutdown,
-            blockers: Vec::new(),
-            ingress_revision: 1,
-            selected_backend: crate::runtime_host_ingress::RuntimeHostBackend {
-                topology: crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
-                generation_id: "generation-old".to_string(),
-                socket_dir: root.join("runtime-host"),
-                binary_sha256: "e".repeat(64),
-                host_id: "runtime-host:41".to_string(),
-                pid: 41,
-                socket_identity: "unix:1:2".to_string(),
-            },
-            selected_process_identity: None,
-            census_digest: "c".repeat(64),
-            browsers: Vec::new(),
-            profiles_preserved: true,
-            live_state_will_end: true,
-        };
-        crate::runtime_replacement::bind_upgrade_transaction(&mut transaction, &replacement_plan)
-            .unwrap();
-        transaction.successor_fields.insert(
-            "runtimeReplacementEffectReceipt".to_string(),
-            serde_json::json!({
-                "schemaVersion": "agent-browser.runtime-replacement-effect-receipt.v1",
-                "state": "browsers_closing",
-                "planDigest": replacement_plan.plan_digest,
-                "closedSessions": [],
-                "forcedBrowserIds": [],
-                "finalCensusDigest": null,
-                "sourceExitProven": false,
-                "profilesPreserved": true
-            }),
-        );
-        transaction.revision = 11;
-        write_private_json_atomic(&transaction_path, &transaction).unwrap();
-        persist_admission_drain(
-            &root.join(".agent-browser/runtime-adoption/admission-drain.json"),
-            &transaction,
-        )
-        .unwrap();
-        assert_eq!(
-            prior_install_convergence_action(&root).unwrap(),
-            Some(PriorInstallConvergenceAction::Resume(
-                InstallTransactionMutationGuard {
-                    transaction_id: transaction.transaction_id.clone(),
-                    expected_revision: 11,
-                    candidate_generation_id: "generation-candidate".to_string(),
-                    census_digest: Some("c".repeat(64)),
-                }
-            ))
-        );
-
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
     fn accepted_upgrade_rebinds_then_supervises_when_lane_manifests_exist() {
         let takeover_calls = std::cell::Cell::new(0_u32);
         let result = complete_accepted_upgrade_supervisor_transition_with(
@@ -22978,5 +22181,75 @@ mod tests {
             "native_remote_view_prerequisite_not_ready:pool_missing"
         );
         assert!(!workstation_group_refresh_required());
+    }
+    #[test]
+    fn operator_observation_is_advisory_even_when_unavailable_or_live() {
+        let unavailable = live_work_observation(Err("synthetic observation unavailable".into()));
+        assert_eq!(unavailable["success"], true);
+        assert_eq!(unavailable["advisory"], true);
+        assert_eq!(unavailable["operatorControlsUpgrade"], true);
+        assert_eq!(unavailable["available"], false);
+        assert!(unavailable["runtimes"].is_null());
+        let census = unknown_runtime_census("synthetic incomplete observation");
+        let paths = install_paths(Path::new("/synthetic/operator-observation"));
+        let mut transaction =
+            new_upgrade_transaction(&paths, "candidate".into(), "a".repeat(64), "b".repeat(64));
+        crate::runtime_adoption::persist_runtime_census(
+            &mut transaction,
+            &census,
+            "2026-10-24T00:00:00Z",
+        );
+        assert_eq!(
+            transaction.state,
+            crate::runtime_adoption::UpgradeTransactionState::CensusStable
+        );
+        assert!(transaction.stop_reason.is_none());
+        assert_eq!(
+            transaction.runtime_migrations[0].disposition,
+            crate::runtime_adoption::RuntimeDisposition::ManualPreservation
+        );
+        assert_eq!(
+            transaction.successor_fields["runtimeObservation"]["advisory"],
+            true
+        );
+        assert_eq!(
+            transaction.successor_fields["runtimeObservation"]["complete"],
+            false
+        );
+    }
+
+    #[test]
+    fn operator_status_ignores_all_legacy_marker_shapes_without_mutating_them() {
+        for shape in 0..4 {
+            let root =
+                env::temp_dir().join(format!("operator-legacy-marker-{}", uuid::Uuid::new_v4()));
+            let path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            match shape {
+                0 => {}
+                1 => fs::write(&path, br#"{"transactionId":"upgrade-does-not-exist"}"#).unwrap(),
+                2 => fs::write(&path, "invalid-json").unwrap(),
+                _ => {
+                    fs::create_dir(&path).unwrap();
+                    fs::write(path.join("sentinel"), "preserve").unwrap();
+                }
+            }
+            let before = fs::read(&path).ok();
+            let report = workstation_upgrade_status_for_root(&root).unwrap();
+            assert_eq!(report["success"], true);
+            assert!(report["latestTransaction"].is_null());
+            assert!(report.get("admissionDraining").is_none());
+            assert_eq!(fs::read(&path).ok(), before);
+            if shape == 3 {
+                assert_eq!(
+                    fs::read_to_string(path.join("sentinel")).unwrap(),
+                    "preserve"
+                );
+            }
+            if shape == 0 {
+                assert!(!path.exists());
+            }
+            fs::remove_dir_all(root).unwrap();
+        }
     }
 }

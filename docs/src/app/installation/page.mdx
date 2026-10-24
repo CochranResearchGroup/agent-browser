@@ -1,9 +1,17 @@
 # Installation
 
-Ordinary browser work does not consult the legacy upgrade admission marker.
-Installer recovery state is diagnostic; per-browser ownership and profile fences
-still apply. Use installation status and recovery commands to resolve an
-unaccepted upgrade without treating it as a client-wide outage.
+The workstation operator decides whether to upgrade. Warnings about live work
+or incomplete observations are advisory and can suggest remedies; they never
+veto a valid operator-authorized request. Use `agent-browser install workstation
+live --json` to inspect what Agent Browser currently thinks is live. Unknown
+observations remain explicit. This read-only command creates no upgrade, marker
+or browser. Normal apply does not require a prior inspection or warning
+acknowledgement.
+
+Upgrade/drain marker files have no control-plane role. Installation, recovery,
+finalization and takeover ignore old files without parsing or rewriting them,
+and never create replacements. Durable transaction receipts and exact-process
+execution checks remain available for truthful recovery and serialized writes.
 
 ## GitHub release binary (recommended)
 
@@ -137,37 +145,32 @@ isolated development and foreign processes are preserved. Install doctor exposes
 Retirement targets and outcomes are retained in the private install transaction.
 Forward recovery also reconciles MCP clients against the selected candidate.
 
-Cooperative continuity is the default runtime replacement policy. When an old
-managed runtime cannot complete handoff, run a dry-run with
-<code>--runtime-replacement-policy full-shutdown</code> and review the returned
-<code>runtimeReplacementPlan</code>. It identifies the exact managed session
-lanes and source process, states that live browser state will end, confirms
-profile preservation, and supplies a <code>planDigest</code>. Apply requires the
-same digest through
-<code>--expected-runtime-replacement-plan-digest &lt;sha256&gt;</code>. The
-transaction closes only those reviewed lanes, preserves the profile directory
-and stored credentials, proves a stable browserless census, retires only the
-recorded source process identity, and starts the candidate generation. Open
-tabs and in-memory state are lost. After the first close receipt, recovery is
-forward-only through transaction inspect and resume or recover. External,
-manual-preservation, ambiguous, and unproven processes remain untouched.
+Cooperative continuity is the default runtime replacement policy. The operator
+can choose <code>--runtime-replacement-policy full-shutdown</code> to close owned
+sessions while preserving profile directories and credentials. A dry-run reports
+<code>runtimeReplacementPlan</code>; optionally pin its <code>planDigest</code>
+with <code>--expected-runtime-replacement-plan-digest &lt;sha256&gt;</code>.
+Neither prior inspection nor warning acknowledgment is required. Open tabs and
+in-memory state are lost. After the first close receipt, recovery moves forward
+through transaction inspect and resume or recover. External, ambiguous and
+unproved processes remain untouched.
 
 The first apply uses one <code>sudo -v</code> authorization boundary for host
 preparation. Before authorization or payload staging, real-host preflight
 requires at least 6 GiB of free disk capacity. JSON output exposes
 <code>hostPlan.availableDiskBytes</code>, <code>minimumDiskBytes</code>, and
 <code>diskSpaceReady</code>. Fresh install and upgrade share one durable
-transaction engine. Real-host apply records two matching read-only runtime
-census rounds before stopping user units or staging a candidate. The
+transaction engine. Real-host apply records read-only runtime census rounds before stopping
+user units or staging a candidate. The
 census joins service state, runtime-profile state, named supervisors, daemon
 and process-instance evidence, bounded CDP browser and target digests,
-displays, routes, streams, and durable handoffs. Missing, changing, or
-conflicting evidence fails closed without replacing the selected generation.
+displays, routes, streams, and durable handoffs. Missing, changing or conflicting observations produce advisory warnings.
+The operator decides whether to upgrade; unproved processes remain untouched.
 Successful JSON output exposes <code>runtimeCensusTransaction</code>, the private
 receipt under
 <code>~/.agent-browser/runtime-adoption/transactions/</code> that contains the
 census digest and per-runtime classifications. Host prerequisites succeed
-before admission drain or ownership transfer. On the first transactional
+before ownership transfer. On the first transactional
 upgrade from the legacy mutable layout, the installer seals the exact existing
 binary, support tree, and user units as the rollback generation before
 replacing stable entrypoints with generation-backed links. It restores the
@@ -259,7 +262,7 @@ Structured handoffs
 never fall back to stale session labels when current owner evidence is missing.
 
 On real-host apply, the installer starts the candidate dashboard backend on
-the second port after stable ingress and stages it before admission drain.
+the second port after stable ingress and stages it before runtime transfer preparation.
 The shadow remains backend-only while every old-generation cooperative lane
 completes handoff prepare. A no-browser `stream status` bootstrap starts the
 transaction runtime host only after that batch finishes, preventing cross-generation
@@ -371,22 +374,13 @@ When a live selected runtime host predates boot-epoch persistence or belongs to
 a prior boot, guarded apply re-observes its exact process, socket, generation,
 and binary and CAS-refreshes only that same selected ingress identity before
 candidate staging. Ambiguous or changed identity still blocks.
-When apply finds an interrupted transaction that still owns the admission
-drain, the installer automatically resumes or recovers that exact transaction
-before it creates a new candidate transaction. It never selects the prior
-transaction by file recency. A committed or finalized runtime handoff is a
-forward-only ownership effect. Inspect advertises <code>resume</code>, refuses
-<code>rollback</code>, and retains the candidate plus matching admission drain
-when later candidate deployment readiness fails. Missing operator presentation
-is nonblocking. Do not use workstation
-<code>recover</code> for that state. If automatic convergence refuses changed or
-ambiguous evidence, run <code>agent-browser install workstation recover
---transaction-id &lt;id&gt; --json</code> with the exact admission-owning
-transaction ID from the failure.
-Recovery fails closed unless the sealed old generation is selected, no
-candidate executable is live, no candidate dashboard route remains, and a
-fresh two-round runtime census is stable. It preserves the transaction ledger,
-appends a recovery checkpoint, and only then reopens runtime admission.
+A new operator-requested apply creates its own coordinated operation. Legacy
+markers and unrelated historical failures do not require automatic recovery.
+Use an exact durable transaction ID to request resume or recovery. A committed
+ownership transfer remains forward-only; recovery reports actual effects and
+checks the selected payload and physical targets. Live-work observations are
+advisory, and historical receipts remain preserved.
+
 Install transaction discovery is read-only:
 
 ```bash
@@ -414,7 +408,7 @@ one exact guarded <code>close</code> action to normalize the record. There
 is no inferred latest mutation or broad force unlock. A post-commit rollback
 restores the exact state snapshot and previous generation selector or records
 typed operator recovery with rollback evidence retained.
-After an unrelated failed upgrade preserved its old generation, a later selected installation can prove readiness through current evidence. On Linux, <code>currentSelectionEvidence</code> reports validation of the sealed payload hashes, stable selector, live dashboard manifest and accepted journey, and exact host boot, process, executable and socket identity. A failure retains its diagnostic reason. Active or uncertain transactions remain blocking, and historical records are preserved.
+After an unrelated failed upgrade preserved its old generation, a later selected installation can prove readiness through current evidence. On Linux, <code>currentSelectionEvidence</code> reports validation of the sealed payload hashes, stable selector, live dashboard manifest and accepted journey, and exact host boot, process, executable and socket identity. A failure retains its diagnostic reason. Active operations serialize their writes; uncertain history retains explicit recovery actions, and historical records are preserved.
 
 The <code>readiness</code> object separates
 <code>payloadReady</code>, <code>selectedGenerationReady</code>,
@@ -422,7 +416,7 @@ The <code>readiness</code> object separates
 <code>upgradeTransactionState</code>,
 <code>dashboardIngressReady</code>, <code>operatorJourneyReady</code>, and
 <code>rollbackReady</code>. Overall <code>ready</code> remains false while a
-transaction or admission drain is active or any deployment axis is unproved.
+transaction is incomplete or any deployment axis is unproved.
 <code>operatorJourneyReady</code> remains independently visible and does not
 block installation readiness. Accepted
 generations keep rollback authority for 24 hours.
@@ -495,7 +489,7 @@ private receipt when only inspecting diagnostics.
 
 During development, run <code>pnpm publish:local-dashboard</code> to rebuild
 the dashboard and candidate executable. The publisher is a thin client of the
-canonical workstation transaction: closed-world census, admission drain,
+canonical workstation transaction: advisory live-work observation, runtime transfer,
 receipt-bearing owner transfer, selector commit, rollback, and dashboard
 reconciliation remain installer-owned. It never directly replaces the stable
 binary or maintains a second socket-only handoff algorithm.

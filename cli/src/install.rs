@@ -1990,10 +1990,6 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
             .get("latestTransaction")
             .and_then(|transaction| transaction.get("state"))
             .and_then(Value::as_str);
-        let admission_draining = upgrade
-            .get("admissionDraining")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
         let transaction_stranded = state.is_some_and(|state| {
             !matches!(
                 state,
@@ -2005,19 +2001,19 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
                     | "closed_zero_effect"
             )
         });
-        if admission_draining || transaction_stranded {
+        if transaction_stranded {
             issues.push(json!({
                 "code": "workstation_upgrade_transaction_not_terminal",
+                "severity": "warning",
                 "message": "the workstation upgrade transaction is still active, blocked, or requires recovery",
                 "state": state,
-                "admissionDraining": admission_draining,
                 "nextAction": "inspect_workstation_upgrade_status",
                 "remedy": {
                     "kind": "operator_command",
                     "command": "agent-browser install workstation status --json",
                     "argv": ["agent-browser", "install", "workstation", "status", "--json"],
                     "requiresInteractiveSudo": false,
-                    "why": "Review the redacted transaction, blocker, runtime dispositions, and rollback state before retrying."
+                    "why": "Inspect the retained transaction and choose a recovery action if needed."
                 }
             }));
         }
@@ -2443,7 +2439,6 @@ pub(crate) fn runtime_health_json() -> serde_json::Value {
             "schemaVersion": "agent-browser.workstation-upgrade-status.v1",
             "success": true,
             "selectedGenerationId": null,
-            "admissionDraining": false,
             "latestTransaction": null,
             "readiness": {
                 "selectedGenerationReady": true,
@@ -5316,7 +5311,6 @@ mod tests {
             },
             "workstationUpgrade": {
                 "selectedGenerationId": "generation-new",
-                "admissionDraining": false,
                 "latestTransaction": {"state": "accepted"},
                 "readiness": {
                     "payloadReady": true,
@@ -5360,6 +5354,9 @@ mod tests {
             Value::Bool(true);
         presentation_deferred["workstationUpgrade"]["readiness"]["operatorJourneyReady"] =
             Value::Bool(false);
+        presentation_deferred["workstationUpgrade"]["admissionDraining"] = Value::Bool(true);
+        presentation_deferred["workstationUpgrade"]["latestTransaction"]["state"] =
+            Value::String("operator_recovery_required".into());
         let issues = install_doctor_issues(InstallDoctorIssueInputs {
             current_executable: &current_executable,
             path_command: &path_command,
@@ -5376,6 +5373,13 @@ mod tests {
         assert!(issues
             .iter()
             .all(|issue| issue["code"] != "workstation_upgrade_readiness_not_ready"));
+        let pending = issues
+            .iter()
+            .find(|issue| issue["code"] == "workstation_upgrade_transaction_not_terminal")
+            .unwrap();
+        assert_eq!(pending["severity"], "warning");
+        assert!(pending.get("admissionDraining").is_none());
+        assert!(install_doctor_issues_allow_success(&issues));
     }
 
     #[test]

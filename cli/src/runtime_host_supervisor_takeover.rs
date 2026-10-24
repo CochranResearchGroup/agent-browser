@@ -1,4 +1,4 @@
-//! Transactional transfer of one browserless runtime host into systemd custody.
+//! Transactional transfer of one selected runtime host into systemd custody.
 //!
 //! This module owns the recovery decision and effects. Callers provide only an
 //! exact plan digest; they never choose a PID, port, socket, signal, or browser.
@@ -50,6 +50,7 @@ pub(crate) struct SupervisorTakeoverPlan {
     pub(crate) plan_digest: String,
     pub(crate) disposition: SupervisorTakeoverDisposition,
     pub(crate) blockers: Vec<SupervisorTakeoverBlocker>,
+    pub(crate) warnings: Vec<SupervisorTakeoverBlocker>,
     pub(crate) ingress_revision: u64,
     pub(crate) boot_epoch_status: String,
     pub(crate) selected_backend: RuntimeHostBackend,
@@ -76,12 +77,6 @@ enum SupervisorTakeoverState {
     OperatorRecoveryRequired,
 }
 
-impl SupervisorTakeoverState {
-    fn is_terminal(self) -> bool {
-        matches!(self, Self::Accepted | Self::ClosedZeroEffect)
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SupervisorTakeoverTransaction {
@@ -99,7 +94,8 @@ struct SupervisorTakeoverTransaction {
     accepted_ingress_revision: Option<u64>,
     failure: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    parent_admission_transaction_id: Option<String>,
+    #[serde(alias = "parentAdmissionTransactionId")]
+    parent_transaction_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -117,18 +113,18 @@ pub(crate) struct SupervisorTakeoverOutcome {
 }
 
 pub(crate) fn plan_supervisor_takeover() -> Result<SupervisorTakeoverPlan, String> {
-    plan_supervisor_takeover_with_admission(None)
+    plan_supervisor_takeover_for_transaction(None)
 }
 
-fn plan_supervisor_takeover_with_admission(
-    parent_admission_transaction_id: Option<&str>,
+fn plan_supervisor_takeover_for_transaction(
+    parent_transaction_id: Option<&str>,
 ) -> Result<SupervisorTakeoverPlan, String> {
     let repository =
         RuntimeHostIngressRepository::new(RuntimeHostIngressRepository::default_path());
     let registry = repository.load()?;
     let selected = registry.selected_backend().clone();
     let supervisor = crate::session_supervisor::runtime_host_supervisor_observation()?;
-    let census = crate::workstation_install::collect_stable_host_runtime_census()?;
+    let census = crate::workstation_install::observe_host_runtime_census();
     let identity = read_selected_process_identity(&selected).ok();
     let listener_ports = listener_ports_for_pid(selected.pid).unwrap_or_default();
     let mut blockers = Vec::new();
@@ -175,7 +171,7 @@ fn plan_supervisor_takeover_with_admission(
         &census,
         &listener_ports,
         already_supervised,
-        parent_admission_transaction_id.is_some(),
+        parent_transaction_id.is_some(),
         &mut blockers,
     );
     if let Some(identity) = identity.as_ref() {
@@ -184,19 +180,12 @@ fn plan_supervisor_takeover_with_admission(
         validate_authoritative_listener_inventory(&selected, &listener_inventory, &mut blockers);
     }
 
-    if let Some(blocker) = active_coordination_blocker(parent_admission_transaction_id)? {
+    if let Some(blocker) = active_coordination_blocker(parent_transaction_id)? {
         blockers.push(blocker);
     }
 
-    let p147_capability_ready = parent_admission_transaction_id.is_some()
+    let p147_capability_ready = parent_transaction_id.is_some()
         || current_executable_sha256().is_ok_and(|digest| digest == selected.binary_sha256);
-    if !p147_capability_ready {
-        push_blocker(
-            &mut blockers,
-            "blocked_p147_capability_missing",
-            "The invoking executable does not match the selected P147-capable generation.",
-        );
-    }
 
     let disposition = if !blockers.is_empty() {
         SupervisorTakeoverDisposition::Blocked
@@ -210,6 +199,11 @@ fn plan_supervisor_takeover_with_admission(
         plan_digest: String::new(),
         disposition,
         blockers,
+        warnings: if !browserless_census_is_safe(&census) {
+            vec![SupervisorTakeoverBlocker {code: "live_work_or_uncertainty_observed".into(), message: "Live work or incomplete observations may be interrupted. This is advisory; the operator decides whether to proceed.".into()}]
+        } else {
+            Vec::new()
+        },
         ingress_revision: registry.revision,
         boot_epoch_status: boot_epoch_label(registry.boot_epoch_status()).to_string(),
         selected_backend: selected,
@@ -219,7 +213,7 @@ fn plan_supervisor_takeover_with_admission(
         selected_listener_ports: listener_ports.into_iter().collect(),
         p147_capability_ready,
     };
-    plan.plan_digest = digest_json(&plan)?;
+    plan.plan_digest = digest_takeover_targets(&plan)?;
     Ok(plan)
 }
 
@@ -233,7 +227,7 @@ pub(crate) fn apply_supervisor_takeover(
 fn apply_supervisor_takeover_from_plan(
     initial: SupervisorTakeoverPlan,
     expected_plan_digest: &str,
-    parent_admission_transaction_id: Option<&str>,
+    parent_transaction_id: Option<&str>,
 ) -> Result<SupervisorTakeoverOutcome, String> {
     require_plan_digest(&initial, expected_plan_digest)?;
     if initial.disposition == SupervisorTakeoverDisposition::AlreadySupervised {
@@ -242,7 +236,7 @@ fn apply_supervisor_takeover_from_plan(
     require_ready_plan(&initial)?;
 
     let _lock = acquire_takeover_lock()?;
-    let plan = plan_supervisor_takeover_with_admission(parent_admission_transaction_id)?;
+    let plan = plan_supervisor_takeover_for_transaction(parent_transaction_id)?;
     require_plan_digest(&plan, expected_plan_digest)?;
     require_ready_plan(&plan)?;
     let source_identity = plan
@@ -263,7 +257,7 @@ fn apply_supervisor_takeover_from_plan(
         replacement_pid: None,
         accepted_ingress_revision: None,
         failure: None,
-        parent_admission_transaction_id: parent_admission_transaction_id.map(str::to_string),
+        parent_transaction_id: parent_transaction_id.map(str::to_string),
     };
     write_transaction(&transaction)?;
 
@@ -280,13 +274,11 @@ fn apply_supervisor_takeover_from_plan(
             transaction.revision = transaction.revision.saturating_add(1);
             transaction.updated_at = current_timestamp();
             write_transaction(&transaction)?;
-            clear_takeover_admission_drain(&transaction)?;
         } else {
             transaction.state = SupervisorTakeoverState::OperatorRecoveryRequired;
             transaction.revision = transaction.revision.saturating_add(1);
             transaction.updated_at = current_timestamp();
             write_transaction(&transaction)?;
-            write_admission_drain(&transaction)?;
         }
         return Err(format!(
             "runtime_host_supervisor_takeover_failed:{}:{}",
@@ -313,28 +305,24 @@ fn apply_supervisor_takeover_from_plan(
 /// host under the rewritten user supervisor, then prove the resulting
 /// supervisor and runtime topology from a fresh census.
 pub(crate) fn ensure_selected_runtime_host_supervised_with_admission(
-    parent_admission_transaction_id: Option<&str>,
+    parent_transaction_id: Option<&str>,
 ) -> Result<SupervisorTakeoverOutcome, String> {
-    if let Some(parent_id) = parent_admission_transaction_id {
+    if let Some(parent_id) = parent_transaction_id {
         retire_superseded_runtime_hosts_for_accepted_upgrade(parent_id)?;
     }
-    let plan = plan_supervisor_takeover_with_admission(parent_admission_transaction_id)?;
+    let plan = plan_supervisor_takeover_for_transaction(parent_transaction_id)?;
     let outcome = match plan.disposition {
         SupervisorTakeoverDisposition::AlreadySupervised => outcome_without_transaction(&plan),
         SupervisorTakeoverDisposition::ReadyForTakeover => {
             let plan_digest = plan.plan_digest.clone();
-            apply_supervisor_takeover_from_plan(
-                plan,
-                &plan_digest,
-                parent_admission_transaction_id,
-            )?
+            apply_supervisor_takeover_from_plan(plan, &plan_digest, parent_transaction_id)?
         }
         SupervisorTakeoverDisposition::Blocked => {
             require_ready_plan(&plan)?;
             unreachable!("blocked supervisor takeover plan was accepted")
         }
     };
-    let verified = plan_supervisor_takeover_with_admission(parent_admission_transaction_id)?;
+    let verified = plan_supervisor_takeover_for_transaction(parent_transaction_id)?;
     if verified.disposition != SupervisorTakeoverDisposition::AlreadySupervised {
         return Err(format!(
             "runtime_host_supervisor_post_upgrade_verification_failed:{:?}",
@@ -349,17 +337,7 @@ pub(crate) fn ensure_selected_runtime_host_supervised_with_admission(
 /// retained browser processes alive; the selected host re-adopts their
 /// Service State routes after the supervisor restart.
 #[cfg(target_os = "linux")]
-fn retire_superseded_runtime_hosts_for_accepted_upgrade(parent_id: &str) -> Result<(), String> {
-    let drain_path = crate::runtime_adoption::runtime_admission_drain_path()?;
-    let drain: crate::runtime_adoption::RuntimeAdmissionDrain = serde_json::from_slice(
-        &fs::read(&drain_path)
-            .map_err(|error| format!("runtime_admission_drain_unreadable:{error}"))?,
-    )
-    .map_err(|error| format!("runtime_admission_drain_invalid:{error}"))?;
-    if drain.transaction_id != parent_id {
-        return Err("superseded_runtime_retirement_admission_owner_changed".to_string());
-    }
-
+fn retire_superseded_runtime_hosts_for_accepted_upgrade(_parent_id: &str) -> Result<(), String> {
     let repository =
         RuntimeHostIngressRepository::new(RuntimeHostIngressRepository::default_path());
     let registry = repository.load()?;
@@ -660,16 +638,6 @@ pub(crate) fn resume_supervisor_takeover(
     if digest_json(&supervisor.manifests)? != transaction.supervisor_manifest_digest {
         return Err("runtime_host_supervisor_takeover_manifest_changed".to_string());
     }
-    let drain_path = crate::runtime_adoption::runtime_admission_drain_path()?;
-    let drain: crate::runtime_adoption::RuntimeAdmissionDrain = serde_json::from_slice(
-        &fs::read(&drain_path)
-            .map_err(|error| format!("runtime_admission_drain_unreadable:{error}"))?,
-    )
-    .map_err(|error| format!("runtime_admission_drain_invalid:{error}"))?;
-    if drain.transaction_id != takeover_admission_owner_id(&transaction) {
-        return Err("runtime_admission_drain_owner_changed".to_string());
-    }
-
     let recovery = (|| -> Result<(u32, u64), String> {
         if supervisor.active_state != "active" || supervisor.main_pid.is_none() {
             crate::session_supervisor::start_runtime_host_supervisor_once()?;
@@ -682,7 +650,6 @@ pub(crate) fn resume_supervisor_takeover(
             advance_transaction(&mut transaction, SupervisorTakeoverState::ReplacementReady)?;
             transaction.accepted_ingress_revision = Some(ingress_revision);
             advance_transaction(&mut transaction, SupervisorTakeoverState::IngressAdopted)?;
-            clear_takeover_admission_drain(&transaction)?;
             advance_transaction(&mut transaction, SupervisorTakeoverState::Accepted)?;
             Ok(outcome_from_transaction(&transaction))
         }
@@ -691,7 +658,6 @@ pub(crate) fn resume_supervisor_takeover(
             transaction.revision = transaction.revision.saturating_add(1);
             transaction.updated_at = current_timestamp();
             write_transaction(&transaction)?;
-            write_admission_drain(&transaction)?;
             Err(format!(
                 "runtime_host_supervisor_takeover_resume_failed:{}:{error}",
                 transaction.transaction_id
@@ -706,22 +672,21 @@ fn execute_takeover(
     transaction: &mut SupervisorTakeoverTransaction,
 ) -> Result<(), String> {
     advance_transaction(transaction, SupervisorTakeoverState::CensusStable)?;
-    write_admission_drain(transaction)?;
     advance_transaction(transaction, SupervisorTakeoverState::AdmissionDraining)?;
 
     revalidate_source(
         plan,
         source_identity,
-        takeover_admission_owner_id(transaction),
-        transaction.parent_admission_transaction_id.is_some(),
+        transaction.transaction_id.as_str(),
+        transaction.parent_transaction_id.is_some(),
     )?;
     let process = VerifiedProcessTermination::open(source_identity)?
         .ok_or_else(|| "blocked_selected_process_missing_before_signal".to_string())?;
     revalidate_source(
         plan,
         source_identity,
-        takeover_admission_owner_id(transaction),
-        transaction.parent_admission_transaction_id.is_some(),
+        transaction.transaction_id.as_str(),
+        transaction.parent_transaction_id.is_some(),
     )?;
     advance_transaction(transaction, SupervisorTakeoverState::SourceRetiring)?;
 
@@ -743,7 +708,6 @@ fn execute_takeover(
     advance_transaction(transaction, SupervisorTakeoverState::ReplacementReady)?;
     transaction.accepted_ingress_revision = Some(ingress_revision);
     advance_transaction(transaction, SupervisorTakeoverState::IngressAdopted)?;
-    clear_takeover_admission_drain(transaction)?;
     advance_transaction(transaction, SupervisorTakeoverState::Accepted)
 }
 
@@ -846,34 +810,12 @@ fn validate_supervisor(
 fn validate_runtime_conflicts(
     selected: &RuntimeHostBackend,
     supervisor: &RuntimeHostSupervisorObservation,
-    census: &StableRuntimeCensus,
+    _census: &StableRuntimeCensus,
     listener_ports: &BTreeSet<u16>,
-    already_supervised: bool,
-    accepted_upgrade_transition: bool,
+    _already_supervised: bool,
+    _accepted_upgrade_transition: bool,
     blockers: &mut Vec<SupervisorTakeoverBlocker>,
 ) {
-    if !already_supervised && !accepted_upgrade_transition && !browserless_census_is_safe(census) {
-        let live = census
-            .records
-            .iter()
-            .filter(|record| {
-                !matches!(
-                    record.classification,
-                    RuntimeClassification::IdleDaemon
-                        | RuntimeClassification::StaleMetadata
-                        | RuntimeClassification::ExternalObserved
-                        | RuntimeClassification::ManualPreserveOnly
-                )
-            })
-            .map(|record| record.logical_browser_id.as_str())
-            .collect::<Vec<_>>()
-            .join(",");
-        push_blocker(
-            blockers,
-            "blocked_live_owned_browser",
-            &format!("Runtime census did not prove browserless ownership: {live}"),
-        );
-    }
     for manifest in &supervisor.manifests {
         if supervisor
             .reachable_stream_ports
@@ -914,22 +856,22 @@ fn validate_authoritative_listener_inventory(
         .and_then(serde_json::Value::as_array)
         .map(Vec::as_slice)
         .unwrap_or_default();
-    let exact = listeners.len() == 1
-        && listeners[0].get("pid").and_then(serde_json::Value::as_u64)
-            == Some(u64::from(selected.pid))
-        && listeners[0]
-            .get("socketPath")
-            .and_then(serde_json::Value::as_str)
-            .is_some_and(|path| path.ends_with("/runtime-host.sock"))
-        && listeners[0]
-            .get("socketIdentity")
-            .and_then(serde_json::Value::as_str)
-            == Some(selected.socket_identity.as_str());
+    let exact = listeners.iter().any(|listener| {
+        listener.get("pid").and_then(serde_json::Value::as_u64) == Some(u64::from(selected.pid))
+            && listener
+                .get("socketPath")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|path| path.ends_with("/runtime-host.sock"))
+            && listener
+                .get("socketIdentity")
+                .and_then(serde_json::Value::as_str)
+                == Some(selected.socket_identity.as_str())
+    });
     if !exact {
         push_blocker(
             blockers,
             "blocked_runtime_listener_multiplicity",
-            "Production must have exactly one authoritative runtime-host listener bound to the selected process and socket identity.",
+            "The selected runtime-host listener must match its process and socket identity.",
         );
     }
 }
@@ -950,8 +892,8 @@ fn browserless_census_is_safe(census: &StableRuntimeCensus) -> bool {
 fn revalidate_source(
     plan: &SupervisorTakeoverPlan,
     source_identity: &RecordedProcessIdentity,
-    transaction_id: &str,
-    accepted_upgrade_transition: bool,
+    _transaction_id: &str,
+    _accepted_upgrade_transition: bool,
 ) -> Result<(), String> {
     let registry =
         RuntimeHostIngressRepository::new(RuntimeHostIngressRepository::default_path()).load()?;
@@ -969,12 +911,6 @@ fn revalidate_source(
     {
         return Err("blocked_identity_changed_before_signal".to_string());
     }
-    let census = crate::workstation_install::collect_stable_host_runtime_census()?;
-    if !census.activation_allowed
-        || (!accepted_upgrade_transition && !browserless_census_is_safe(&census))
-    {
-        return Err("blocked_runtime_census_changed_before_signal".to_string());
-    }
     let ports = listener_ports_for_pid(plan.selected_backend.pid)?;
     let supervisor = crate::session_supervisor::runtime_host_supervisor_observation()?;
     if digest_json(&supervisor.manifests)? != digest_json(&plan.supervisor.manifests)? {
@@ -987,14 +923,6 @@ fn revalidate_source(
             && !ports.contains(&manifest.stream_port)
     }) {
         return Err("blocked_listener_identity_changed_before_signal".to_string());
-    }
-    let drain: crate::runtime_adoption::RuntimeAdmissionDrain = serde_json::from_slice(
-        &fs::read(crate::runtime_adoption::runtime_admission_drain_path()?)
-            .map_err(|error| format!("runtime_admission_drain_unreadable:{error}"))?,
-    )
-    .map_err(|error| format!("runtime_admission_drain_invalid:{error}"))?;
-    if drain.transaction_id != transaction_id {
-        return Err("blocked_admission_drain_changed_before_signal".to_string());
     }
     Ok(())
 }
@@ -1038,56 +966,18 @@ fn wait_for_replacement(source_backend: &RuntimeHostBackend) -> Result<(u32, u64
 }
 
 fn active_coordination_blocker(
-    parent_admission_transaction_id: Option<&str>,
+    _parent_transaction_id: Option<&str>,
 ) -> Result<Option<SupervisorTakeoverBlocker>, String> {
-    let drain_path = crate::runtime_adoption::runtime_admission_drain_path()?;
-    if drain_path.exists() {
-        let drain: crate::runtime_adoption::RuntimeAdmissionDrain = serde_json::from_slice(
-            &fs::read(&drain_path)
-                .map_err(|error| format!("runtime_admission_drain_unreadable:{error}"))?,
-        )
-        .map_err(|error| format!("runtime_admission_drain_invalid:{error}"))?;
-        if admission_drain_conflicts(&drain, parent_admission_transaction_id) {
-            return Ok(Some(SupervisorTakeoverBlocker {
-                code: "blocked_active_admission_drain".to_string(),
-                message: "Another runtime transaction owns the admission drain.".to_string(),
-            }));
-        }
-    }
     if let Some(home) = dirs::home_dir() {
         let workstation_lock = home.join(".agent-browser/convergence/workstation.lock");
         if workstation_transaction_is_foreign(&workstation_lock, std::process::id()) {
             return Ok(Some(SupervisorTakeoverBlocker {
-                code: "blocked_active_workstation_transaction".to_string(),
-                message: "A workstation convergence transaction is active.".to_string(),
-            }));
-        }
-    }
-    let path = transaction_path()?;
-    if path.exists() {
-        let transaction: SupervisorTakeoverTransaction = serde_json::from_slice(
-            &fs::read(&path)
-                .map_err(|error| format!("supervisor_takeover_transaction_unreadable:{error}"))?,
-        )
-        .map_err(|error| format!("supervisor_takeover_transaction_invalid:{error}"))?;
-        if !transaction.state.is_terminal() {
-            return Ok(Some(SupervisorTakeoverBlocker {
-                code: "blocked_active_takeover_transaction".to_string(),
-                message: format!(
-                    "Supervisor takeover {} requires recovery at revision {}.",
-                    transaction.transaction_id, transaction.revision
-                ),
+                code: "workstation_transaction_busy".to_string(),
+                message: "A workstation transaction is executing. Wait for it or use its explicit recovery action.".to_string(),
             }));
         }
     }
     Ok(None)
-}
-
-fn admission_drain_conflicts(
-    drain: &crate::runtime_adoption::RuntimeAdmissionDrain,
-    parent_admission_transaction_id: Option<&str>,
-) -> bool {
-    parent_admission_transaction_id != Some(drain.transaction_id.as_str())
 }
 
 fn workstation_transaction_is_foreign(path: &Path, current_pid: u32) -> bool {
@@ -1097,7 +987,13 @@ fn workstation_transaction_is_foreign(path: &Path, current_pid: u32) -> bool {
     fs::read_to_string(path)
         .ok()
         .and_then(|value| value.trim().parse::<u32>().ok())
-        != Some(current_pid)
+        .is_some_and(|pid| {
+            pid != current_pid
+                && matches!(
+                    crate::process_identity::observe_process(pid),
+                    ProcessObservation::Observed(_)
+                )
+        })
 }
 
 fn listener_ports_for_pid(pid: u32) -> Result<BTreeSet<u16>, String> {
@@ -1184,6 +1080,19 @@ fn digest_json(value: &impl Serialize) -> Result<String, String> {
     let body = serde_json::to_vec(value)
         .map_err(|error| format!("supervisor_takeover_digest_encoding_failed:{error}"))?;
     Ok(format!("{:x}", Sha256::digest(body)))
+}
+
+/// Pin the requested host effect, never advisory census or warning churn.
+fn digest_takeover_targets(plan: &SupervisorTakeoverPlan) -> Result<String, String> {
+    digest_json(&serde_json::json!({
+        "schemaVersion": plan.schema_version,
+        "ingressRevision": plan.ingress_revision,
+        "bootEpochStatus": plan.boot_epoch_status,
+        "selectedBackend": plan.selected_backend,
+        "selectedProcessIdentity": plan.selected_process_identity,
+        "supervisorManifests": plan.supervisor.manifests,
+        "selectedListenerPorts": plan.selected_listener_ports,
+    }))
 }
 
 fn require_plan_digest(
@@ -1296,7 +1205,56 @@ fn acquire_takeover_lock() -> Result<File, String> {
 }
 
 fn write_transaction(transaction: &SupervisorTakeoverTransaction) -> Result<(), String> {
-    write_private_json_atomic(&transaction_path()?, transaction)
+    let path = transaction_path()?;
+    preserve_previous_takeover_record(&path, &transaction.transaction_id)?;
+    write_private_json_atomic(&path, transaction)
+}
+
+/// A past recovery record is evidence, not permission to veto a fresh request.
+/// Preserve it byte-for-byte before publishing a different operation.
+fn preserve_previous_takeover_record(path: &Path, next_id: &str) -> Result<(), String> {
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(format!("takeover_history_read_failed:{error}; repair the transaction directory permissions and retry")),
+    };
+    let same_operation = serde_json::from_slice::<serde_json::Value>(&bytes)
+        .ok()
+        .is_some_and(|value| value["transactionId"].as_str() == Some(next_id));
+    if same_operation {
+        return Ok(());
+    }
+    let directory = path.with_extension("history");
+    fs::create_dir_all(&directory)
+        .map_err(|error| format!("takeover_history_directory_failed:{error}"))?;
+    set_private_directory(&directory)?;
+    let digest = Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let archive = directory.join(format!("{digest}.record"));
+    match OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&archive)
+    {
+        Ok(mut file) => {
+            set_private_file(&archive)?;
+            file.write_all(&bytes)
+                .and_then(|_| file.sync_all())
+                .map_err(|error| format!("takeover_history_write_failed:{error}"))?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            if fs::read(&archive)
+                .map_err(|error| format!("takeover_history_verify_failed:{error}"))?
+                != bytes
+            {
+                return Err("takeover_history_content_changed: preserve the existing archive and repair its integrity before retrying".into());
+            }
+        }
+        Err(error) => return Err(format!("takeover_history_create_failed:{error}")),
+    }
+    Ok(())
 }
 
 fn read_transaction() -> Result<SupervisorTakeoverTransaction, String> {
@@ -1323,71 +1281,7 @@ fn advance_transaction(
     transaction.state = state;
     transaction.updated_at = current_timestamp();
     write_transaction(transaction)?;
-    let drain_path = crate::runtime_adoption::runtime_admission_drain_path()?;
-    if drain_path.exists() {
-        write_admission_drain(transaction)?;
-    }
     Ok(())
-}
-
-fn write_admission_drain(transaction: &SupervisorTakeoverTransaction) -> Result<(), String> {
-    let path = crate::runtime_adoption::runtime_admission_drain_path()?;
-    if path.exists() {
-        let existing: crate::runtime_adoption::RuntimeAdmissionDrain = serde_json::from_slice(
-            &fs::read(&path)
-                .map_err(|error| format!("runtime_admission_drain_unreadable:{error}"))?,
-        )
-        .map_err(|error| format!("runtime_admission_drain_invalid:{error}"))?;
-        if existing.transaction_id != takeover_admission_owner_id(transaction) {
-            return Err("blocked_active_admission_drain".to_string());
-        }
-        if transaction.parent_admission_transaction_id.is_some() {
-            return Ok(());
-        }
-    } else if transaction.parent_admission_transaction_id.is_some() {
-        return Err("parent_admission_drain_missing".to_string());
-    }
-    write_private_json_atomic(
-        &path,
-        &crate::runtime_adoption::RuntimeAdmissionDrain {
-            schema_version: crate::runtime_adoption::RUNTIME_ADOPTION_SCHEMA_VERSION.to_string(),
-            transaction_id: transaction.transaction_id.clone(),
-            candidate_generation_id: transaction.source_backend.generation_id.clone(),
-            transaction_revision: transaction.revision,
-            recorded_at: current_timestamp(),
-        },
-    )
-}
-
-fn takeover_admission_owner_id(transaction: &SupervisorTakeoverTransaction) -> &str {
-    transaction
-        .parent_admission_transaction_id
-        .as_deref()
-        .unwrap_or(transaction.transaction_id.as_str())
-}
-
-fn clear_takeover_admission_drain(
-    transaction: &SupervisorTakeoverTransaction,
-) -> Result<(), String> {
-    if transaction.parent_admission_transaction_id.is_some() {
-        return Ok(());
-    }
-    clear_owned_admission_drain(&transaction.transaction_id)
-}
-
-fn clear_owned_admission_drain(transaction_id: &str) -> Result<(), String> {
-    let path = crate::runtime_adoption::runtime_admission_drain_path()?;
-    if !path.exists() {
-        return Ok(());
-    }
-    let existing: crate::runtime_adoption::RuntimeAdmissionDrain = serde_json::from_slice(
-        &fs::read(&path).map_err(|error| format!("runtime_admission_drain_unreadable:{error}"))?,
-    )
-    .map_err(|error| format!("runtime_admission_drain_invalid:{error}"))?;
-    if existing.transaction_id != transaction_id {
-        return Err("runtime_admission_drain_owner_changed".to_string());
-    }
-    fs::remove_file(&path).map_err(|error| format!("runtime_admission_drain_clear_failed:{error}"))
 }
 
 fn write_private_json_atomic(path: &Path, value: &impl Serialize) -> Result<(), String> {
@@ -1621,7 +1515,7 @@ mod tests {
     }
 
     #[test]
-    fn authoritative_listener_validation_rejects_multiple_runtime_hosts() {
+    fn authoritative_listener_validation_targets_selected_host_among_peers() {
         let selected = selected_backend(PathBuf::from("/tmp/runtime-host"));
         let exact = serde_json::json!({
             "available": true,
@@ -1651,7 +1545,9 @@ mod tests {
             ]
         });
         validate_authoritative_listener_inventory(&selected, &multiple, &mut blockers);
-        assert_eq!(blockers.len(), 1);
+        assert!(blockers.is_empty(), "unrelated listeners are not a veto");
+        let missing = serde_json::json!({"available":true,"listeners":[]});
+        validate_authoritative_listener_inventory(&selected, &missing, &mut blockers);
         assert_eq!(blockers[0].code, "blocked_runtime_listener_multiplicity");
     }
 
@@ -1707,27 +1603,6 @@ mod tests {
         assert!(selected.join("runtime-host.identity.json").is_file());
 
         fs::remove_dir_all(namespace).unwrap();
-    }
-
-    #[test]
-    fn nested_takeover_accepts_only_its_parent_admission_drain() {
-        let drain = crate::runtime_adoption::RuntimeAdmissionDrain {
-            schema_version: crate::runtime_adoption::RUNTIME_ADOPTION_SCHEMA_VERSION.to_string(),
-            transaction_id: "workstation-parent".to_string(),
-            candidate_generation_id: "candidate".to_string(),
-            transaction_revision: 12,
-            recorded_at: "2026-09-09T00:00:00Z".to_string(),
-        };
-
-        assert!(!admission_drain_conflicts(
-            &drain,
-            Some("workstation-parent")
-        ));
-        assert!(admission_drain_conflicts(
-            &drain,
-            Some("another-transaction")
-        ));
-        assert!(admission_drain_conflicts(&drain, None));
     }
 
     #[test]
@@ -1791,11 +1666,59 @@ mod tests {
             std::process::id().saturating_add(1)
         ));
         fs::write(&lock, "unknown-owner\n").unwrap();
-        assert!(workstation_transaction_is_foreign(
+        assert!(!workstation_transaction_is_foreign(
+            &lock,
+            std::process::id()
+        ));
+        fs::write(&lock, format!("{}\n", u32::MAX)).unwrap();
+        assert!(!workstation_transaction_is_foreign(
             &lock,
             std::process::id()
         ));
 
         fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn historical_takeover_evidence_is_preserved_without_vetoing_new_operation() {
+        let root = std::env::temp_dir().join(format!("takeover-history-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("takeover.json");
+        for bytes in [
+            b"malformed historical record".as_slice(),
+            br#"{"transactionId":"old","state":"operator_recovery_required"}"#,
+        ] {
+            fs::write(&path, bytes).unwrap();
+            preserve_previous_takeover_record(&path, "new").unwrap();
+            preserve_previous_takeover_record(&path, "new").unwrap();
+            assert_eq!(fs::read(&path).unwrap(), bytes);
+            let archives = fs::read_dir(path.with_extension("history"))
+                .unwrap()
+                .map(|entry| fs::read(entry.unwrap().path()).unwrap())
+                .collect::<Vec<_>>();
+            assert!(archives.contains(&bytes.to_vec()));
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn live_or_uncertain_work_never_vetoes_selected_host_transfer() {
+        let selected = selected_backend(PathBuf::from("/tmp/runtime-host"));
+        for classification in [
+            RuntimeClassification::CooperativeLiveOwner,
+            RuntimeClassification::ConflictingOwner,
+            RuntimeClassification::InsufficientEvidence,
+        ] {
+            let mut blockers = Vec::new();
+            validate_runtime_conflicts(
+                &selected,
+                &supervisor(Vec::new()),
+                &census(&[classification]),
+                &BTreeSet::new(),
+                false,
+                false,
+                &mut blockers,
+            );
+            assert!(blockers.is_empty());
+        }
     }
 }
