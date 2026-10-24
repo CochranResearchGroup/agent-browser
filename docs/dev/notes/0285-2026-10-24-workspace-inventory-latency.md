@@ -22,10 +22,12 @@ Five fresh development UI contexts populate the rail on their first owner respon
 
 All253 stream tests pass with two existing ignored cases; the regression was captured failing first. Workspace strict Clippy, format, API/MCP parity, handoff guidance and docs build pass. All five required user guidance surfaces are updated; the agent entry remains9,998 bytes. The selector's unrelated workstation/provider harness and shared-skill synchronization suggestions are not claimed: no installer/provider code changes in this slice and experimental guidance stays isolated.
 
-The synthetic browser's original PID is independently absent, as are all16 observed UI-probe process generations. Development publication preserves production identity. Private timing/process receipts remain user-scoped. Development namespace shutdown and source integration remain closeout obligations. Source qualification does not claim installed production acceptance.
+The synthetic browser's original PID is independently absent, as are all16 observed UI-probe process generations. Development publication preserves production identity. Private timing/process receipts remain user-scoped. The temporary namespace is stopped/disabled and an independent scan finds zero remaining namespace processes. Source integration remains a closeout obligation. Source qualification does not claim installed production acceptance.
 
 ## Integration boundary
 
 P284/PR406 merged as442c3387d during qualification. Reconcile its installer and policy changes without changing the P285 routing hunk; preserve P283's active profile/store/observation ownership and retained candidates. The standing dashboard implementation/deployment instruction covers the next qualified preserve-mode publication. Recheck current policy and custody, build one production-shaped combined artifact after integration, and verify exact installed/public behavior. No formal release, private-account operation, raw binary replacement or Native provider/ingress reconfiguration is part of publication.
 
 P284 integration retains both catalog intents. Rust routing hunks are unchanged; only the entry-point wording is shortened to keep the merged guidance at9,994 bytes. Combined validation reuses the unchanged253-case stream packet and P284's222-case workstation packet, with integrated strict Rust and focused workspace checks plus the exact combined installer fixture before publication.
+
+Integrated checks after P284 reconciliation pass: strict workspace Clippy, format, both actual workspace route tests, docs build and guidance. The two workspace tests finish in0.04s and prove neither listener enters diagnostic transport. The merged entry guidance is9,994 bytes.
