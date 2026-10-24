@@ -65,10 +65,10 @@ export function isInspectionReviewEvent(event: ActivityEvent): event is Inspecti
   const source = data?.source;
   return !!source && data?.version === 'inspection-review.v1' && ['accepted', 'rejected'].includes(data.verdict)
     && id(data.actor) && id(source.activitySession) && id(source.runId) && id(source.contextPacketHash)
-    && id(source.provider) && !!source.selection && Object.values(source.selection).length === 5
-    && Object.values(source.selection).every(id) && date(source.packetCreatedAt) && date(source.observedAt)
+    && id(source.provider) && !!source.selection && Object.keys(source.selection).length === 5
+    && ['workspaceId', 'browserId', 'sessionId', 'tabId', 'profileId'].every(key => id(source.selection[key as keyof InspectionSelection])) && date(source.packetCreatedAt) && date(source.observedAt)
     && Array.isArray(source.evidenceRefs) && source.evidenceRefs.length <= 32 && source.evidenceRefs.every(id)
-    && typeof event.id === 'string' && event.id.startsWith('inspection-review:') && Number.isFinite(event.timestamp);
+    && typeof event.id === 'string' && event.id.startsWith('inspection-review:') && typeof event.timestamp === 'number' && Number.isFinite(new Date(event.timestamp).getTime());
 }
 export function latestInspectionReview(events: ActivityEvent[], source: InspectionReviewSource, actor: string): InspectionReviewEvent | undefined {
   const key = inspectionReviewKey(source, actor);
