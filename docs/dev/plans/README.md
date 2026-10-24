@@ -1,5 +1,7 @@
 # Active plan index
 
+[P285 inventory latency](0285-2026-10-24-workspace-inventory-latency.md), #393, owns the measured workspace-read repair under PL-BUGFIX.
+
 [P282 recovery dashboard identity](0282-2026-10-24-recovery-dashboard-manifest.md), #405, closes with exact recovery and accepted combined deployment. P280/P281 repairs are installed;393 and399 remain open.
 
 [P281 upgrade client drain retirement](0281-2026-10-24-retire-client-upgrade-drain.md) owns issue #394 under PL-BUGFIX.

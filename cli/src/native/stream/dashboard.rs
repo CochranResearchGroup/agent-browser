@@ -812,6 +812,21 @@ async fn handle_service_api_request(
     authenticated_dashboard_user: &str,
     revalidate: bool,
 ) {
+    // Authentication has succeeded in the dashboard request handler. Keep the
+    // requested owner-only inventory out of diagnostic discovery and fallback.
+    let (route, query) = split_path_query(path);
+    if method == "GET"
+        && route == "/api/service/status"
+        && query_params(query)
+            .iter()
+            .any(|(key, value)| key == "projection" && value == "workspace")
+    {
+        match super::http::workspace_status_response().await {
+            Ok(value) => write_json_value(stream, "200 OK", value).await,
+            Err(error) => write_json_error(stream, "503 Service Unavailable", &error).await,
+        }
+        return;
+    }
     // Dashboard authentication has already succeeded. This bounded operator
     // endpoint never dispatches a browser command or accepts profile paths.
     if method == "PATCH" && path == "/api/dashboard/profile-properties" {
@@ -4949,6 +4964,57 @@ mod tests {
         assert_eq!(reads.load(Ordering::SeqCst), 2);
         server.abort();
         assert!(server.await.unwrap_err().is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn dashboard_workspace_status_reads_owner_without_diagnostic_transport() {
+        let backend = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = backend.local_addr().unwrap().port();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
+        let backend_task = tokio::spawn(async move {
+            let (mut socket, _) = backend.accept().await.unwrap();
+            seen.fetch_add(1, Ordering::SeqCst);
+            let mut request = [0; 4096];
+            socket.read(&mut request).await.unwrap();
+            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 47\r\nConnection: close\r\n\r\n{\"success\":true,\"data\":{\"runtimeLifecycle\":{}}}").await.unwrap();
+        });
+        let env = EnvGuard::new(&["AGENT_BROWSER_DASHBOARD_BACKEND_PORT"]);
+        env.set("AGENT_BROWSER_DASHBOARD_BACKEND_PORT", &port.to_string());
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            handle_service_api_request(
+                &mut socket,
+                "GET",
+                "/api/service/status?projection=workspace",
+                "",
+                "synthetic-operator",
+                true,
+            )
+            .await;
+        });
+        let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
+        let mut response = Vec::new();
+        tokio::time::timeout(Duration::from_secs(2), client.read_to_end(&mut response))
+            .await
+            .unwrap()
+            .unwrap();
+        server.await.unwrap();
+        backend_task.abort();
+        let value: Value = serde_json::from_slice(http_response_body(&response).unwrap()).unwrap();
+        assert_eq!(value["success"], true);
+        assert!(
+            value["data"]["browserRuntime"]["workspace"].is_object(),
+            "{value}"
+        );
+        assert!(value["data"].get("runtimeLifecycle").is_none());
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "workspace read entered diagnostic transport"
+        );
     }
 
     #[tokio::test]
