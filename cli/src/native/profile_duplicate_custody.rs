@@ -6,7 +6,7 @@ use agent_browser_service_model::{
     BROWSER_SESSION_STATE_SCHEMA_V1,
 };
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -43,6 +43,74 @@ struct LaunchLedger {
     #[serde(default)]
     reconciled_absent: BTreeSet<String>,
 }
+/// Private pre-close attachment provenance captured from the browser owner.
+/// Public commands cannot supply process identities or deserialize this value;
+/// only the private operation journal retains it across owner restart.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BorrowedSourceAnchor {
+    operation_id: String,
+    source_profile_id: String,
+    source_generation: u64,
+    source_directory: std::path::PathBuf,
+    original: RecordedProcessIdentity,
+}
+impl BorrowedSourceAnchor {
+    pub fn capture(
+        operation_id: &str,
+        source: &SourceProfile,
+        state: &BrowserSessionState,
+        browser_id: &str,
+    ) -> Result<Self, String> {
+        let browser = state
+            .browsers
+            .get(browser_id)
+            .ok_or("profile_duplicate_source_browser_missing")?;
+        let attachment = state
+            .app_browser_attachments
+            .get(browser_id)
+            .ok_or("profile_duplicate_borrowed_anchor_missing")?;
+        attachment
+            .request
+            .validate()
+            .map_err(|_| "profile_duplicate_borrowed_anchor_invalid")?;
+        let source_directory = fs::canonicalize(&source.user_data_dir)
+            .map_err(|_| "profile_duplicate_source_unavailable")?;
+        if operation_id.trim().is_empty()
+            || browser.profile_id != source.id
+            || attachment.profile_id != source.id
+            || browser.pid != attachment.request.process.pid
+            || browser.cdp_endpoint != attachment.request.cdp_endpoint
+            || browser.desktop.as_ref() != Some(&attachment.desktop)
+            || attachment.desktop.generation != source.generation
+            || fs::canonicalize(&attachment.request.profile_path)
+                .ok()
+                .as_ref()
+                != Some(&source_directory)
+        {
+            return Err("profile_duplicate_borrowed_anchor_changed".into());
+        }
+        Ok(Self {
+            operation_id: operation_id.into(),
+            source_profile_id: source.id.clone(),
+            source_generation: source.generation,
+            source_directory,
+            original: attachment.request.process.clone(),
+        })
+    }
+    fn matches(
+        &self,
+        source: &SourceProfile,
+        evidence: &BackendGracefulCloseEvidence,
+        state: &BrowserSessionState,
+    ) -> bool {
+        self.operation_id == evidence.owner_operation_id
+            && self.source_profile_id == source.id
+            && self.source_generation == source.generation
+            && self.original == evidence.original
+            && fs::canonicalize(&source.user_data_dir).ok().as_ref() == Some(&self.source_directory)
+            && state.profile_operation_ids.get(&source.id) == Some(&self.operation_id)
+    }
+}
 pub struct SourceCustody {
     connection: Connection,
     source: SourceProfile,
@@ -58,6 +126,26 @@ impl SourceCustody {
         database: &Path,
         source: &SourceProfile,
         evidence: &BackendGracefulCloseEvidence,
+        observe_original: impl FnMut(u32) -> OriginalProcessState,
+    ) -> Result<Self, String> {
+        Self::acquire_qualified(database, source, evidence, None, observe_original)
+    }
+    /// A confirmed workstation-owner close may retire an app-provided original.
+    /// Retain its exact pre-close provenance instead of inventing a managed launch.
+    pub fn acquire_with_borrowed_anchor(
+        database: &Path,
+        source: &SourceProfile,
+        evidence: &BackendGracefulCloseEvidence,
+        anchor: &BorrowedSourceAnchor,
+        observe_original: impl FnMut(u32) -> OriginalProcessState,
+    ) -> Result<Self, String> {
+        Self::acquire_qualified(database, source, evidence, Some(anchor), observe_original)
+    }
+    fn acquire_qualified(
+        database: &Path,
+        source: &SourceProfile,
+        evidence: &BackendGracefulCloseEvidence,
+        anchor: Option<&BorrowedSourceAnchor>,
         mut observe_original: impl FnMut(u32) -> OriginalProcessState,
     ) -> Result<Self, String> {
         if evidence.owner_operation_id.trim().is_empty()
@@ -140,12 +228,28 @@ impl SourceCustody {
         {
             return Err("profile_duplicate_source_binding_changed".into());
         }
-        let ledger: LaunchLedger = load_document(
-            &connection,
-            "browser_launch_custody",
-            "agent-browser.browser-launch-custody.v1",
-        )?;
-        let mut original_joined = false;
+        let borrowed_qualified =
+            anchor.is_some_and(|anchor| anchor.matches(source, evidence, &state));
+        if anchor.is_some() && !borrowed_qualified {
+            return Err("profile_duplicate_borrowed_anchor_changed".into());
+        }
+        let has_ledger: bool = connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM state_documents WHERE kind='browser_launch_custody')",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|_| "profile_duplicate_runtime_document_unavailable")?;
+        let ledger: LaunchLedger = if borrowed_qualified && !has_ledger {
+            LaunchLedger::default()
+        } else {
+            load_document(
+                &connection,
+                "browser_launch_custody",
+                "agent-browser.browser-launch-custody.v1",
+            )?
+        };
+        let mut original_joined = borrowed_qualified;
         for (id, record) in &ledger.records {
             if record.validate().is_err() || record.intent.intent_id != *id {
                 return Err("profile_duplicate_launch_custody_invalid".into());
