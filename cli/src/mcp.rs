@@ -5516,6 +5516,14 @@ fn call_service_mcp_tool(
             return playbooks::call(arguments, session);
         }
         validate_browser_command_action(arguments)?;
+        if matches!(arguments["action"].as_str(), Some("native_input" | "native_capture")) {
+            let mut command=Value::Object(optional_object_argument(arguments,"params")?.cloned().unwrap_or_default());
+            command["action"]=arguments["action"].clone();command["id"]=json!(uuid::Uuid::new_v4().to_string());
+            let task_id=required_string_argument(arguments,"taskId")?;
+            let name=workflow::address_task_command(&mut command,task_id).map_err(|error|JsonRpcError::invalid_params(&error))?;
+            let data=workflow::execute(command,&name)?;
+            return Ok(tool_response_from_payload("browser_command",session,json!({}),data,false));
+        }
         if arguments["action"] == "profile_duplicate" {
             return profile_duplicate::call(arguments, session);
         }
