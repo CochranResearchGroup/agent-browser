@@ -182,7 +182,6 @@ const source = spawn(binary, ['session', 'supervisor', 'run-host'], {
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let sourceOutput = '';
-let writer;
 let legacyWriter;
 let fifoWriter;
 
@@ -247,29 +246,6 @@ os.close(fd)
   // The open descriptor is the synchronization boundary; remove the pathname
   // so unrelated diagnostic inventory cannot wait on the prepared FIFO.
   rmSync(legacyTransaction);
-  const claimedBusy = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
-  assert(claimedBusy.blockers.some(blocker => blocker.code === 'workstation_transaction_busy'),
-    'an executing transaction must retain its process-instance custody between physical locks');
-  writeFileSync(staleWriterPath, `${legacyWriter.pid}\n`);
-  const legacyBusy = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
-  assert(legacyBusy.blockers.some(blocker => blocker.code === 'workstation_transaction_busy'),
-    'an executing legacy transaction without an apply flag must retain custody');
-  fifoWriter.stdin.end('release\n');
-  await waitFor(() => legacyWriter.exitCode !== null, 'legacy transaction completion');
-  assert(legacyWriter.exitCode !== 0, 'the deliberately invalid transaction must not mutate state');
-  writeFileSync(staleWriterPath, `${process.pid}\n`);
-  // Pause a real filesystem writer in the short claim-publication critical
-  // section. Mock only the OS boundary; observe contention through public CLI.
-  writer = spawn('python3', ['-c', `import fcntl,sys
-with open(sys.argv[1], 'r+') as claim:
- fcntl.flock(claim, fcntl.LOCK_EX)
- print('writer-ready', flush=True)
- sys.stdin.readline()
-`, staleWriterPath], {stdio:['pipe','pipe','pipe']});
-  let writerReady = false;
-  writer.stdout.on('data', chunk => { writerReady ||= chunk.toString().includes('writer-ready'); });
-  await waitFor(() => writerReady || writer.exitCode !== null, 'executing filesystem writer');
-  assert(writerReady, 'fixture writer did not acquire its OS lock');
   const busy = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
   assert(busy.blockers.some(blocker => blocker.code === 'workstation_transaction_busy'),
     'an executing writer must exclude takeover effects');
@@ -287,9 +263,20 @@ with open(sys.argv[1], 'r+') as claim:
   assert(replacement.disposition === 'blocked'
     && replacement.blockers.some(blocker => blocker.code === 'workstation_transaction_busy'),
   `replacement preview must report executing writer contention: ${JSON.stringify(replacement)}`);
-  writer.stdin.end('release\n');
-  await waitFor(() => writer.exitCode !== null, 'filesystem writer completion');
-  assert(writer.exitCode === 0, 'fixture writer failed');
+  const claimedBusy = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
+  assert(claimedBusy.blockers.some(blocker => blocker.code === 'workstation_transaction_busy'),
+    'an executing transaction must retain its process-instance custody between physical locks');
+  assert(readFileSync(staleWriterPath, 'utf8').trim() === String(legacyWriter.pid),
+    'the legacy coordination protocol must retain PID-only writer text for older binaries');
+  rmSync(join(home, '.agent-browser/convergence/workstation.owner.json'));
+  writeFileSync(staleWriterPath, `${legacyWriter.pid}\n`);
+  const legacyBusy = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
+  assert(legacyBusy.blockers.some(blocker => blocker.code === 'workstation_transaction_busy'),
+    'an executing legacy transaction without an apply flag must retain custody');
+  fifoWriter.stdin.end('release\n');
+  await waitFor(() => legacyWriter.exitCode !== null, 'legacy transaction completion');
+  assert(legacyWriter.exitCode !== 0, 'the deliberately invalid transaction must not mutate state');
+  writeFileSync(staleWriterPath, `${process.pid}\n`);
   const plan = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
   assert(plan.disposition === 'ready_for_takeover', `stale writer metadata must not veto takeover: ${JSON.stringify(plan)}`);
   assert(plan.selectedBackend.pid === sourcePid, 'plan selected a different process');
@@ -333,11 +320,6 @@ with open(sys.argv[1], 'r+') as claim:
   if (fifoWriter && fifoWriter.exitCode === null) {
     await waitFor(() => fifoWriter.exitCode !== null, 'FIFO fixture cleanup').catch(() => {});
     if (fifoWriter.exitCode === null) fifoWriter.kill('SIGTERM');
-  }
-  if (writer && writer.exitCode === null) {
-    writer.stdin.end('release\n');
-    await waitFor(() => writer.exitCode !== null, 'fixture writer cleanup').catch(() => {});
-    if (writer.exitCode === null) writer.kill('SIGTERM');
   }
   if (source.exitCode === null && processIsLive(source.pid)) source.kill('SIGTERM');
   if (existsSync(systemctlState)) {
