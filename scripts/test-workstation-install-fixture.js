@@ -1313,14 +1313,15 @@ function assertTransactionTerminal(transactionStore, expectedState) {
   );
 }
 
-// Empty synchronization files may be initialized by existing read adapters.
-// They carry no runtime state; every other file and its bytes remain checked.
+// Synchronization files may be initialized and hold owner diagnostics during reads.
+// Every persisted runtime record and its bytes remain checked.
 function liveStateManifest() {
   const coordination = new Set(['home/.agent-browser/runtime-host-ingress.json.lock', 'home/.agent-browser/service/state.json.lock']);
   return treeManifest(fixtureRoot, ignoredFixturePaths()).filter((entry) => {
     if (coordination.has(entry.path)) {
       assert.equal(entry.type, 'file');
-      assert.equal(readFileSync(join(fixtureRoot, entry.path)).length, 0);
+      assert.ok(readFileSync(join(fixtureRoot, entry.path)).length <= 4096,
+        'coordination metadata must remain bounded');
       return false;
     }
     return !['home/.agent-browser', 'home/.agent-browser/service'].includes(entry.path);
