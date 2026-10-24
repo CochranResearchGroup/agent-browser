@@ -4149,7 +4149,7 @@ framing; preserve native CSP and exact Host/Origin validation.
 
 Dashboard summary status omits detailed runtime resource inventories and reconciliation receipts while retaining health flags and resource totals. Its projection metadata reports omitted counts and points to complete `/api/service/status` diagnostics. Summary delivery failure is not evidence that browsers or tabs have ended.
 
-Both HTTP listeners serve `projection=workspace` directly from the current owner snapshot, without diagnostic transport, CLI fallback or the status cache. Polling remains three seconds after each completed read; observation age and expiry remain independent.
+Both HTTP listeners serve `projection=workspace` directly from the current owner snapshot, without diagnostic transport, CLI fallback or the status cache. Polling normally waits three seconds after each completed read. Startup with wholly unknown candidate tabs gets at most three cache-revalidated catch-up reads 250 milliseconds apart, ending on known or failed evidence. Observation age and expiry remain independent.
 
 The native rail also reads Remote View's authenticated
 `/api/v1/desktops/browser-windows?include_hidden=true` projection. Current browser

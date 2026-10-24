@@ -73,7 +73,7 @@ Return, store, and reopen only `handoffUrl`: standalone `/remote-view/<handoff-i
 
 ## Operator workspace
 
-Read [Workspace](references/cli-and-service.md#operator-workspace) for tabs, sharing and handoffs. Focus needs an owned tab; acceptance is not focus. Reviews: opt-in Activity. Rail HTTP reads owner state. Remote View owns view/auth.
+Read [Workspace](references/cli-and-service.md#operator-workspace) for tabs, sharing and handoffs. Focus needs an owned tab; acceptance is not focus. Reviews: opt-in Activity. Rail catches up once. Remote View owns view/auth.
 
 ## Sharing a profile between tasks
 

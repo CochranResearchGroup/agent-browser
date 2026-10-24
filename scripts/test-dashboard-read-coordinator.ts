@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 
 import {
+  createWorkspacePollInterval,
   DashboardReadCoordinator,
   DashboardReadPausedError,
   createSessionTabPollPlanner,
@@ -303,4 +304,43 @@ const keepAlive = setTimeout(() => {}, 1000);
 await assert.rejects(timed.read('/held'));
 clearTimeout(keepAlive);
 assert.equal(await (await timed.read('/held')).text(), 'recovered', 'a timed-out flight cannot pin all later reads');
+
+// Cold owner observations can finish between the first response and normal poll.
+// Exercise the interval policy used by the actual completion-driven scheduler.
+const unknownWorkspace = { tabs: { candidate: { presence: { state: "unknown" } } } };
+const liveWorkspace = { tabs: { candidate: { presence: { state: "live" } } } };
+const startupInterval = createWorkspacePollInterval();
+assert.equal(startupInterval(unknownWorkspace), 250);
+assert.equal(startupInterval(unknownWorkspace), 250);
+assert.equal(startupInterval(liveWorkspace), 3000);
+assert.equal(startupInterval(unknownWorkspace), 3000, "settled startup must never restart rapid polling");
+const exhaustedInterval = createWorkspacePollInterval();
+assert.deepEqual(Array.from({ length: 6 }, () => exhaustedInterval(unknownWorkspace)), [250, 250, 250, 3000, 3000, 3000]);
+for (const settled of [undefined, { tabs: {} }, { tabs: { candidate: { presence: { state: "absent" } } } }]) {
+  const interval = createWorkspacePollInterval();
+  assert.equal(interval(settled), 3000);
+  assert.equal(interval(unknownWorkspace), 3000, "empty, failed and absent reads end startup catch-up");
+}
+let coldRead = 0;
+let scheduledDelay = 3000;
+const coldTimers: Timer[] = [];
+const coldInterval = createWorkspacePollInterval();
+const stopCold = startCompletionDrivenDashboardPoll(async () => {
+  coldRead += 1;
+  scheduledDelay = coldInterval(coldRead === 1 ? unknownWorkspace : liveWorkspace);
+}, () => scheduledDelay, {
+  isVisible: () => true,
+  setTimeout: (callback, delay) => { coldTimers.push({ callback, delay }); return coldTimers.length; },
+  clearTimeout: () => { coldTimers.length = 0; },
+  subscribeVisibility: () => () => undefined,
+});
+await new Promise(resolve => setImmediate(resolve));
+assert.equal(coldTimers[0].delay, 250, "unknown first response must not wait three seconds");
+coldTimers.shift()!.callback();
+await new Promise(resolve => setImmediate(resolve));
+assert.equal(coldRead, 2);
+assert.equal(coldTimers[0].delay, 3000, "live follow-up restores ordinary cadence immediately");
+stopCold();
+assert.equal(coldTimers.length, 0, "unmount cancels the startup follow-up");
+
 console.log("dashboard read coordinator tests passed");
