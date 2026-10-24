@@ -24,3 +24,5 @@ Validation: decoding equality and Content-Length; q=0 and wildcard negotiation; 
 Source and isolated production-shaped candidate acceptance pass; see the owning [note](../notes/0280-2026-10-24-dashboard-static-delivery.md). Gzip reduces JS/CSS wire bytes by62.77%. All252 stream tests pass with2 existing ignored; format, strict Clippy, docs and guidance gates qualify this source. The sealed c2b6103dd candidate retains exact executable-input identity across evidence-only changes.
 
 Production publication remains blocked by an already-active foreign forward-recovery operation. No competing install or takeover is attempted. Issue393 owns the independently reproduced2.4 to3.1s backend workspace-read delay; this packet does not claim that delay or Native first pixels fixed. The source issue391 stays open for public installed acceptance. The primary checkout and pinned candidate are retained; the owned temporary namespace is stopped.
+
+PR392 is merged as ecd2950a3. Fresh canonical source/562-input equivalence passes. Source custody is integrated;391 remains open for installed acceptance, with no production effect performed by this lane.

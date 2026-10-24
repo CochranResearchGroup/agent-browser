@@ -10,10 +10,10 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#391]
     plan_state: IN_PROGRESS
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     dependencies: []
     overlaps: [P279]
-    reconciled_overlaps: ["Shared dashboard primary reused; P279 sealed deployed candidate retained; foreign auth, profile-proof and enrollment work preserved"]
+    reconciled_overlaps: ["PR392 merged ecd2950a3; primary and sealed8532c10293f1 retained for pending installed acceptance; temporary s391 stopped; foreign work preserved"]
     validation_status: Sealed8532c10293f1 isolated acceptance; JS/CSS wire bytes reduced62.77%;252 stream tests pass with2 ignored; strict Clippy, format, docs and three browser cycles pass;16 probe generations absent
     limitations: ["Production publication awaits existing forward-recovery operation; no competing effect", "Issue393 owns producer-side inventory wait; Native first pixels unqualified", "Temporary namespace stopped; candidate and primary retained", "No ingress changes"]
     updated_at: 2026-10-24
