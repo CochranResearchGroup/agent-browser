@@ -43,7 +43,6 @@ try {
       'browser_handoff',
       'browser_continue',
       'browser_close',
-      'browser_control',
       'browser_command',
       'browser_discover',
     ].sort(),

@@ -7354,14 +7354,14 @@ Default workflow tools (16):
 
 Rules:
   Use taskId on actions. Reuse taskKey on open; taskPolicy overrides app defaults.
-  browser_open requires serviceName/agentName/taskName.
-  mode=manual_login: no-CDP sign-in; normal close before automation.
+  Open requires serviceName/agentName/taskName.
+  mode=manual_login: no-CDP; close before automation.
   profileMode: persistent (default), existing or disposable.
   Hosted open: hostBinding v1, required/preferred placement; never silent fallback.
   Attachment: existing profile, exact app process/profile/page; omit url.
   Preserve borrowed pages/process; sharing requires sharedWith.
   AGENT_BROWSER_HOSTS_FILE sets app origin/providerApplication/policyDefaults.
-  App owns routing/capacity; Remote View owns desktop/viewer/auth.
+  App: routing/capacity. Remote View: desktop/viewer/auth.
   Standalone handoff: AGENT_BROWSER_PUBLIC_ORIGIN in env or ~/.agent-browser/.env.
   Reconnect clients after startup config changes.
   Control: expectedEpoch, actor/reason; fresh observation on return; no auto-resume.
@@ -7377,7 +7377,7 @@ Rules:
   Watch DB/WAL every 250 ms, not provider polling; events have watchId/sequence.
   SiteGuide: prepare_login/validate_plan, verify_login, collect_posts.
   Keep secrets private; inspect unknown delivery.
-  AGENT_BROWSER_SITEGUIDE_DIRECTORY selects guides. Retired authority tools are absent.
+  AGENT_BROWSER_SITEGUIDE_DIRECTORY selects guides.
 
 Full schemas: tools/list or browser_discover. Operating contract:
   agent-browser mcp read agent-browser://operating-guide
