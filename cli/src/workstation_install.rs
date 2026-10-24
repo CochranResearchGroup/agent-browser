@@ -1705,20 +1705,12 @@ fn recover_operator_required_upgrade_for_root(
             transaction.state
         ));
     }
-    let accepted_forward_recovery = transaction.state == UpgradeTransactionState::Accepted
-        || (transaction.state == UpgradeTransactionState::OperatorRecoveryRequired
-            && (matches!(
-                transaction.stop_reason.as_deref(),
-                Some(
-                    "accepted_supervisor_transition_failed"
-                        | "accepted_admission_drain_not_cleared"
-                )
-            ) || transaction.checkpoints.iter().any(|checkpoint| {
-                checkpoint.name == "accepted_supervisor_transition_recovery_required"
-                    && checkpoint.transaction_revision > 0
-                    && checkpoint.transaction_revision <= transaction.revision
-                    && !checkpoint.recorded_at.trim().is_empty()
-            })));
+    // Current selected-payload and process proof below determines recovery.
+    // Historical checkpoint labels are diagnostic evidence, not permission.
+    let accepted_forward_recovery = matches!(
+        transaction.state,
+        UpgradeTransactionState::Accepted | UpgradeTransactionState::OperatorRecoveryRequired
+    );
     if accepted_forward_recovery
         && selected_generation_id(&paths).as_deref()
             == Some(transaction.candidate_generation_id.as_str())
@@ -21917,9 +21909,9 @@ mod tests {
             .checkpoints
             .iter()
             .all(|checkpoint| checkpoint.name != "rollback_before_commit"));
-        assert!(root
+        assert!(!root
             .join(".agent-browser/runtime-adoption/admission-drain.json")
-            .is_file());
+            .exists());
 
         remove_generation_tree(&root).unwrap();
     }
