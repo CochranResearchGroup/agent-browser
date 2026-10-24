@@ -685,7 +685,10 @@ fn qualified_graceful_source_custody_fences_launch_writes_and_publishes_on_its_c
         .unwrap();
     let catalog: serde_json::Value = serde_json::from_str(&catalog).unwrap();
     assert_eq!(catalog["profiles"]["source"]["name"], "Source");
-    assert_eq!(catalog["profiles"]["duplicate"]["manualLoginUrl"], "https://synthetic.invalid/login");
+    assert_eq!(
+        catalog["profiles"]["duplicate"]["manualLoginUrl"],
+        "https://synthetic.invalid/login"
+    );
     assert_eq!(
         catalog["profiles"]["duplicate"]["userDataDir"],
         serde_json::json!(root.join("duplicate"))
