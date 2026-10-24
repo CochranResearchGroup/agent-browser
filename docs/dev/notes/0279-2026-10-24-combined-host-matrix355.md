@@ -10,7 +10,9 @@ target/peer Native installation. Matrix6 reports ACCEPT with qualified child and
 Native cleanup, no ambiguous effect and no adapter error. The workload completed
 in148.30seconds; total time including Native cleanup was151.77seconds, within the
 declared1,200-second workload and180-second cleanup budgets. This closes the
-remaining combined acceptance gate, subject to ordinary source integration.
+remaining combined acceptance gate. [PR388](https://github.com/CochranResearchGroup/agent-browser/pull/388)
+entered canonical main as `2ae94c2a3a91cbb7ed4b27181ac44e1078deb968`; #355
+and parent #347 are closed under the previously approved relocation deferral.
 Preparation and diagnosis span about110minutes from the first P279 custody
 commit to accepted final readback, including retained fixture failures; this is
 wall time, not a measurement of aggregate parallel-worker effort.
