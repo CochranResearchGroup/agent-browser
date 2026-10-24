@@ -38,3 +38,15 @@ Focused Cargo qualification (four tests), candidate build, synthetic profile pro
 and three public process-namespace cases passed. Independent review found no
 blocker. A broader selection hit an untouched test stack overflow of unqualified
 cause; no full-suite pass is claimed. Installed public acceptance remains pending.
+
+## Follow-up: accepted recovery continuity
+
+Branch: fix/accepted-upgrade-recovery. Reuse this admitted parent-lane checkout.
+Preserve the exact prior supervisor acceptance checkpoint when a later resume
+replaces the stop reason. The supported recovery command must requalify the
+selected sealed candidate and current live host/dashboard identity and preserve
+owned-drain compare checks. Permit an entirely absent presentation receipt only
+in this recovery mode, matching ordinary post-commit acceptance; reject partial,
+stale or invalid receipts. The ordinary unrelated-history readiness contract
+remains strict. Source tests and an optimized controller candidate are required;
+only the parent operator may perform production recovery or installation.

@@ -25,6 +25,15 @@ The exact production marker was archived outside Git under workstation and
 coordination locks after selected-binary and supervisor checks. Its failed
 upgrade transaction is preserved and remains unaccepted.
 
+## Concurrent integration
+
+Main advanced through PR392/395 dashboard static delivery and PR396 accepted
+upgrade recovery. P280 belongs to static delivery; this lane is renumbered P281.
+Merge preserves both guidance/catalog additions, the dashboard dependency and
+both recovery validators. Client gate removal changes no installer recovery
+fence. Requalify merged source before readiness; retain earlier consumer proof
+only for its unchanged module and exact fixture scope.
+
 ## Validation
 
 Replace old blocking assertions with valid and malformed-marker workflows for

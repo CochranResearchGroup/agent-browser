@@ -39,9 +39,9 @@ use super::dashboard_auth;
 use super::discovery::{discover_sessions, owned_session_port};
 use super::foreign_cdp_control;
 use super::http::{
-    ensure_service_daemon_session, load_service_state, relay_command_to_daemon,
-    runtime_manifest_json, serve_embedded_file, service_request_command_with_dashboard_generation,
-    service_request_relay_session, CORS_HEADERS,
+    dashboard_asset_response, ensure_service_daemon_session, load_service_state,
+    relay_command_to_daemon, runtime_manifest_json,
+    service_request_command_with_dashboard_generation, service_request_relay_session, CORS_HEADERS,
 };
 
 const DASHBOARD_SERVICE_BACKEND_SESSION: &str = "dashboard-service-backend";
@@ -777,7 +777,10 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
             }
         }
     } else {
-        serve_embedded_file(path)
+        let _ = stream
+            .write_all(&dashboard_asset_response(path, &headers))
+            .await;
+        return;
     };
 
     let response = format!(
@@ -4070,6 +4073,67 @@ pub(super) async fn spawn_session(body: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn dashboard_static_delivery_both_listener_http_contracts() {
+        async fn exchange(per_session: bool, path: &str) -> Vec<u8> {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.unwrap();
+                if per_session {
+                    let mut peeked = vec![0; 8192];
+                    let n = stream.peek(&mut peeked).await.unwrap();
+                    super::super::http::handle_http_request(
+                        stream,
+                        &peeked[..n],
+                        &Arc::new(tokio::sync::RwLock::new(Vec::new())),
+                        &Arc::new(tokio::sync::RwLock::new("chrome".into())),
+                        "static-delivery-fixture",
+                    )
+                    .await;
+                } else {
+                    handle_dashboard_connection(stream).await;
+                }
+            });
+            let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
+            client.write_all(format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nAccept-Encoding: gzip\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+            let mut bytes = Vec::new();
+            timeout(Duration::from_secs(10), client.read_to_end(&mut bytes))
+                .await
+                .unwrap()
+                .unwrap();
+            server.await.unwrap();
+            bytes
+        }
+        let (_, _, index) = super::super::http::serve_embedded_file("/");
+        let index = String::from_utf8(index).unwrap();
+        let asset = index
+            .split("src=\"")
+            .filter_map(|part| part.split('"').next())
+            .find(|path| path.starts_with("/_next/static/") && path.ends_with(".js"));
+        for per_session in [false, true] {
+            if let Some(asset) = asset {
+                let encoded = exchange(per_session, asset).await;
+                let end = encoded.windows(4).position(|w| w == b"\r\n\r\n").unwrap();
+                let headers = std::str::from_utf8(&encoded[..end]).unwrap();
+                assert!(headers.starts_with("HTTP/1.1 200 OK"));
+                assert!(headers.contains("Content-Encoding: gzip"));
+                assert!(headers.contains("Cache-Control: public, max-age=31536000, immutable"));
+            }
+            for path in [
+                "/",
+                "/api/dashboard-auth/status",
+                "/_next/static/chunks/missing-deadbeef01234567.js",
+            ] {
+                let response = exchange(per_session, path).await;
+                let end = response.windows(4).position(|w| w == b"\r\n\r\n").unwrap();
+                let headers = std::str::from_utf8(&response[..end]).unwrap();
+                assert!(!headers.contains("Content-Encoding:"), "{path}");
+                assert!(!headers.contains("immutable"), "{path}");
+            }
+        }
+    }
+
     use super::*;
     use crate::test_utils::EnvGuard;
     use serde_json::json;

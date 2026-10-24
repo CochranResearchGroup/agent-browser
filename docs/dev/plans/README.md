@@ -5,6 +5,7 @@ Ordinary clients must ignore persistent installer drain metadata. Production
 marker mitigation passed disposable open and scoped close; the upgrade remains
 unaccepted. Source validation is in progress.
 
+[P280 dashboard static delivery](0280-2026-10-24-dashboard-static-delivery.md), #391; negotiate gzip and cache only positively hashed assets.
 
 [P279 combined hosted matrix](0279-2026-10-23-combined-host-matrix355.md), #355; complete same-pair actual Native matrix accepted, including five cold contexts, strict warm targets, human input, managed loss and generation-changing rebind/reopen. Source integration only.
 

@@ -27,6 +27,7 @@ ring = "0.17"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync", "signal", "process"] }
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
+flate2 = "1.1"
 url = "2"
 uuid = { version = "1", features = ["v4"] }
 image = "0.25"

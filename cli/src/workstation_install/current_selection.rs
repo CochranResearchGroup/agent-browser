@@ -23,6 +23,23 @@ pub(super) fn validate(
         paths,
         generation_id,
         ingress,
+        false,
+        crate::dashboard_ingress::validate_dashboard_backend,
+    )
+}
+
+/// Recovery observes the same exact installation proof. Ordinary readiness
+/// keeps its strict presentation policy.
+pub(super) fn validate_forward_recovery(
+    paths: &InstallPaths,
+    generation_id: &str,
+    ingress: &Value,
+) -> Result<(), String> {
+    validate_with_dashboard_probe(
+        paths,
+        generation_id,
+        ingress,
+        true,
         crate::dashboard_ingress::validate_dashboard_backend,
     )
 }
@@ -32,6 +49,7 @@ fn validate_with_dashboard_probe(
     _paths: &InstallPaths,
     _generation_id: &str,
     _ingress: &Value,
+    _forward_recovery: bool,
     _probe: impl FnOnce(&DashboardBackend) -> Result<(), String>,
 ) -> Result<(), String> {
     Err("current_selection_platform_proof_unavailable".to_string())
@@ -42,6 +60,7 @@ fn validate_with_dashboard_probe(
     paths: &InstallPaths,
     generation_id: &str,
     ingress: &Value,
+    forward_recovery: bool,
     probe: impl FnOnce(&DashboardBackend) -> Result<(), String>,
 ) -> Result<(), String> {
     use std::os::unix::fs::{FileTypeExt, MetadataExt};
@@ -74,16 +93,23 @@ fn validate_with_dashboard_probe(
         .map_err(|_| "current_selection_dashboard_missing".to_string())?;
     // Ordinary dashboards may retain a package-level label. Bind the actual
     // executable manifest rather than equating that label with the install ID.
+    let presentation_absent = ingress
+        .get("presentationReceipt")
+        .is_none_or(Value::is_null);
+    let presentation_ready = ingress["operatorJourneyReady"] == true
+        && ingress["presentationReceipt"]["state"] == "ready"
+        && ingress["presentationReceipt"]["dashboardDeploymentGeneration"]
+            == dashboard.generation_id
+        && ingress["presentationReceipt"]["receiptId"]
+            .as_str()
+            .is_some_and(|id| !id.trim().is_empty())
+        && (!forward_recovery
+            || ingress["presentationReceipt"]["coordinatorGeneration"] == generation_id);
     if dashboard.runtime_manifest_sha256
         != crate::dashboard_ingress::dashboard_runtime_manifest_sha256_for_executable(&binary)
             .map_err(|_| "current_selection_dashboard_manifest_unavailable".to_string())?
-        || ingress["operatorJourneyReady"] != true
-        || ingress["presentationReceipt"]["state"] != "ready"
-        || ingress["presentationReceipt"]["dashboardDeploymentGeneration"]
-            != dashboard.generation_id
-        || ingress["presentationReceipt"]["receiptId"]
-            .as_str()
-            .is_none_or(|id| id.trim().is_empty())
+        || (forward_recovery && dashboard.generation_id != generation_id)
+        || !(presentation_ready || (forward_recovery && presentation_absent))
     {
         return Err("current_selection_dashboard_identity_unproven".to_string());
     }
@@ -282,6 +308,147 @@ mod tests {
             server: Some(server),
             ingress,
         }
+    }
+
+    #[test]
+    fn accepted_upgrade_recovery_survives_resume_stop_reason_replacement() {
+        use crate::runtime_adoption::{UpgradeCheckpoint, UpgradeTransactionState};
+        let fixture = fixture();
+        let paths = super::super::install_paths(&fixture.root);
+        let mut transaction = super::super::new_upgrade_transaction(
+            &paths,
+            "generation-current".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.old_generation_id = Some("historical-old".into());
+        transaction.state = UpgradeTransactionState::OperatorRecoveryRequired;
+        transaction.stop_reason = Some("resume_post_commit_reconciliation_failed".into());
+        transaction.terminal_result = Some("forward_completion_required".into());
+        transaction.revision = 18;
+        transaction.checkpoints.push(UpgradeCheckpoint {
+            name: "accepted_supervisor_transition_recovery_required".into(),
+            transaction_revision: 14,
+            recorded_at: "2026-10-24T00:00:00Z".into(),
+        });
+        let path = super::super::transaction_path(&fixture.root, &transaction.transaction_id);
+        super::super::write_private_json_atomic(&path, &transaction).unwrap();
+        let drain = fixture
+            .root
+            .join(".agent-browser/runtime-adoption/admission-drain.json");
+        super::super::persist_admission_drain(&drain, &transaction).unwrap();
+        for invalid in ["missing", "future", "undated"] {
+            let mut rejected = transaction.clone();
+            match invalid {
+                "missing" => rejected.checkpoints.clear(),
+                "future" => {
+                    rejected
+                        .checkpoints
+                        .last_mut()
+                        .unwrap()
+                        .transaction_revision = 19
+                }
+                "undated" => rejected.checkpoints.last_mut().unwrap().recorded_at.clear(),
+                _ => unreachable!(),
+            }
+            super::super::write_private_json_atomic(&path, &rejected).unwrap();
+            assert_eq!(
+                super::super::recover_operator_required_upgrade_for_root(
+                    &fixture.root,
+                    &rejected.transaction_id,
+                    true
+                )
+                .unwrap_err(),
+                "workstation_recovery_old_generation_not_selected",
+                "{invalid}"
+            );
+            assert!(drain.exists());
+        }
+        super::super::write_private_json_atomic(&path, &transaction).unwrap();
+        let mut foreign_drain: Value = serde_json::from_slice(&fs::read(&drain).unwrap()).unwrap();
+        foreign_drain["transactionId"] = Value::String("upgrade-another-owner".into());
+        super::super::write_private_json_atomic(&drain, &foreign_drain).unwrap();
+        assert_eq!(
+            super::super::recover_operator_required_upgrade_for_root(
+                &fixture.root,
+                &transaction.transaction_id,
+                true
+            )
+            .unwrap_err(),
+            "workstation_recovery_transaction_does_not_own_admission"
+        );
+        super::super::persist_admission_drain(&drain, &transaction).unwrap();
+        let report = super::super::recover_operator_required_upgrade_for_root(
+            &fixture.root,
+            &transaction.transaction_id,
+            true,
+        )
+        .unwrap();
+        assert_eq!(report["direction"], "forward");
+        assert_eq!(report["state"], "accepted");
+        assert!(!drain.exists());
+        let accepted: crate::runtime_adoption::UpgradeTransaction =
+            serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        assert!(accepted
+            .checkpoints
+            .iter()
+            .any(|row| row.name == "accepted_supervisor_transition_recovery_required"));
+    }
+
+    #[test]
+    fn accepted_upgrade_recovery_allows_absent_presentation_with_live_physical_proof() {
+        let fixture = fixture();
+        let paths = super::super::install_paths(&fixture.root);
+        let mut ingress = fixture.ingress.clone();
+        ingress["selectedBackend"]["generationId"] = Value::String("generation-current".into());
+        ingress["presentationReceipt"] = Value::Null;
+        ingress["operatorJourneyReady"] = Value::Bool(false);
+        assert!(validate_forward_recovery(&paths, "generation-current", &ingress).is_ok());
+        assert!(validate(&paths, "generation-current", &ingress).is_err());
+        ingress
+            .as_object_mut()
+            .unwrap()
+            .remove("presentationReceipt");
+        assert!(validate_forward_recovery(&paths, "generation-current", &ingress).is_ok());
+        for receipt in [
+            serde_json::json!({}),
+            serde_json::json!("ready"),
+            serde_json::json!({"state":"ready"}),
+            serde_json::json!({"state":"ready","receiptId":"r","dashboardDeploymentGeneration":"stale","coordinatorGeneration":"generation-current"}),
+            serde_json::json!({"state":"ready","receiptId":"r","dashboardDeploymentGeneration":"generation-current","coordinatorGeneration":"stale"}),
+        ] {
+            let mut partial = ingress.clone();
+            partial["presentationReceipt"] = receipt;
+            partial["operatorJourneyReady"] = Value::Bool(true);
+            assert!(validate_forward_recovery(&paths, "generation-current", &partial).is_err());
+        }
+        let mut ready = ingress.clone();
+        ready["operatorJourneyReady"] = Value::Bool(true);
+        ready["presentationReceipt"] = serde_json::json!({"state":"ready","receiptId":"r","dashboardDeploymentGeneration":"generation-current","coordinatorGeneration":"generation-current"});
+        assert!(validate_forward_recovery(&paths, "generation-current", &ready).is_ok());
+        for field in ["generationId", "runtimeManifestSha256"] {
+            let mut wrong = ingress.clone();
+            wrong["selectedBackend"][field] = Value::String("wrong".into());
+            assert!(validate_forward_recovery(&paths, "generation-current", &wrong).is_err());
+        }
+        let host_path = fixture
+            .root
+            .join(".agent-browser/runtime-host-ingress.json");
+        let registry: RuntimeHostIngressRegistry =
+            serde_json::from_slice(&fs::read(&host_path).unwrap()).unwrap();
+        let mut unsettled = registry.clone();
+        unsettled.active_transaction_id = Some("another-transaction".into());
+        fs::write(&host_path, serde_json::to_vec(&unsettled).unwrap()).unwrap();
+        assert!(validate_forward_recovery(&paths, "generation-current", &ingress).is_err());
+        fs::write(&host_path, serde_json::to_vec(&registry).unwrap()).unwrap();
+        let identity_path = fixture.root.join("sockets/runtime-host.identity.json");
+        let identity_bytes = fs::read(&identity_path).unwrap();
+        let mut wrong_identity: crate::process_identity::RecordedProcessIdentity =
+            serde_json::from_slice(&identity_bytes).unwrap();
+        wrong_identity.start_token = "linux:reused:0".into();
+        fs::write(&identity_path, serde_json::to_vec(&wrong_identity).unwrap()).unwrap();
+        assert!(validate_forward_recovery(&paths, "generation-current", &ingress).is_err());
+        fs::write(&identity_path, identity_bytes).unwrap();
     }
 
     #[test]

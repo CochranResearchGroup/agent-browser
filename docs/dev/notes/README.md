@@ -2,6 +2,8 @@
 
 [P281 upgrade client lockout retirement](0281-2026-10-24-retire-client-upgrade-drain.md): reproduced global rejection, nonblocking client repair and separate production mitigation; validation in progress.
 
+[P280 static delivery](0280-2026-10-24-dashboard-static-delivery.md): sealed candidate qualifies62.77% static wire reduction across both HTTP listeners; production awaits existing forward recovery and393 owns the remaining producer wait.
+
 [P279 combined actual-host acceptance](0279-2026-10-24-combined-host-matrix355.md): one-pair complete matrix, Native human input and generation-changing recovery, qualified warm targets, separate five-context cold distribution and independent cleanup; no deployment.
 
 [P278 reopen diagnosis](0278-2026-10-23-reopen-launch-diagnosis355.md): six bounded passes, unresolved Native8 cause, qualified phase-only diagnostics and exact cleanup; production unchanged.

@@ -5,6 +5,7 @@ Ordinary clients must ignore persistent installer drain metadata. Production
 marker mitigation passed disposable open and scoped close; the upgrade remains
 unaccepted. Source validation is in progress.
 
+[P280 dashboard static delivery](docs/dev/plans/0280-2026-10-24-dashboard-static-delivery.md), #391, reduces cold asset transfer with negotiated gzip and hashed-asset caching across both HTTP listeners. [Evidence](docs/dev/notes/0280-2026-10-24-dashboard-static-delivery.md) records62.77% wire reduction and isolated candidate acceptance. Production publication awaits an existing forward-recovery operation; #393 owns the separate producer inventory wait. Native first pixels remain unqualified.
 
 [P243 profile-proof maintenance](docs/dev/maintenance/p243-profile-proof-namespace.md) repairs existing-profile continuation when runtime user namespaces deny descriptor-link observation. Focused source and observer checks pass; installed workflow qualification remains separate.
 

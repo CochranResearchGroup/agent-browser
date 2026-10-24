@@ -1420,7 +1420,10 @@ pub(super) async fn handle_http_request(
             chat_status_json().into_bytes(),
         )
     } else {
-        serve_embedded_file(path)
+        let _ = stream
+            .write_all(&dashboard_asset_response(path, &headers))
+            .await;
+        return;
     };
 
     let response = format!(
@@ -1431,6 +1434,130 @@ pub(super) async fn handle_http_request(
     );
     let _ = stream.write_all(response.as_bytes()).await;
     let _ = stream.write_all(&body).await;
+}
+
+/// Static-only wire response shared by dashboard and per-session listeners.
+/// Only successful embedded Next assets may gain immutable caching. HTML and
+/// dynamic/auth responses never enter compression or this representation cache.
+pub(super) fn dashboard_asset_response(path: &str, headers: &[(String, String)]) -> Vec<u8> {
+    let (status, content_type, identity) = serve_embedded_file(path);
+    let key = path
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(path)
+        .trim_start_matches('/');
+    let static_asset = status == "200 OK"
+        && key.starts_with("_next/static/")
+        && content_type != "text/html; charset=utf-8";
+    let compressible = static_asset
+        && matches!(
+            key.rsplit('.').next(),
+            Some("js" | "css" | "svg" | "json" | "txt")
+        );
+    let immutable = static_asset && hashed_dashboard_asset(key);
+    let compressed = (compressible && accepts_dashboard_gzip(headers))
+        .then(|| compressed_dashboard_asset(key, &identity))
+        .flatten();
+    let body = compressed.unwrap_or(&identity);
+    let mut metadata = String::new();
+    if immutable {
+        metadata.push_str("Cache-Control: public, max-age=31536000, immutable\r\n");
+    }
+    if compressible {
+        metadata.push_str("Vary: Accept-Encoding\r\n");
+    }
+    if compressed.is_some() {
+        metadata.push_str("Content-Encoding: gzip\r\n");
+    }
+    let mut response = format!("HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n{metadata}{CORS_HEADERS}\r\n", body.len()).into_bytes();
+    response.extend_from_slice(body);
+    response
+}
+
+fn hashed_dashboard_asset(key: &str) -> bool {
+    key.rsplit('/').next().is_some_and(|name| {
+        name.split(['.', '-']).any(|part| {
+            (16..=64).contains(&part.len()) && part.bytes().all(|byte| byte.is_ascii_hexdigit())
+        })
+    })
+}
+
+/// Explicit gzip exclusions override wildcard acceptance, including repeated
+/// header fields. Malformed or ambiguous quality values fail to identity.
+fn accepts_dashboard_gzip(headers: &[(String, String)]) -> bool {
+    let mut gzip = None;
+    let mut wildcard = None;
+    for (_, value) in headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("accept-encoding"))
+    {
+        for item in value.split(',') {
+            let mut parts = item.trim().split(';');
+            let coding = parts.next().unwrap_or("").trim();
+            let target = if coding.eq_ignore_ascii_case("gzip") {
+                &mut gzip
+            } else if coding == "*" {
+                &mut wildcard
+            } else {
+                continue;
+            };
+            let mut quality = None;
+            let mut valid = true;
+            for parameter in parts {
+                let Some((name, value)) = parameter.trim().split_once('=') else {
+                    valid = false;
+                    continue;
+                };
+                if name.trim().eq_ignore_ascii_case("q") {
+                    if quality.is_some() {
+                        valid = false;
+                    }
+                    let value = value.trim();
+                    let (whole, decimals) = value.split_once('.').unwrap_or((value, ""));
+                    let legal = matches!(whole, "0" | "1")
+                        && decimals.len() <= 3
+                        && decimals.bytes().all(|b| b.is_ascii_digit())
+                        && (whole != "1" || decimals.bytes().all(|b| b == b'0'));
+                    valid &= legal;
+                    quality = Some(legal && (whole == "1" || decimals.bytes().any(|b| b != b'0')));
+                }
+            }
+            let accepted = valid && quality.unwrap_or(true);
+            *target = Some(target.unwrap_or(true) && accepted);
+        }
+    }
+    gzip.or(wildcard).unwrap_or(false)
+}
+
+/// Finite, generation-local lazy cache: request paths cannot add entries. Each
+/// embedded representation is encoded once, and identity remains the fallback
+/// on encoding failure or when gzip would increase transfer size.
+fn compressed_dashboard_asset(key: &str, identity: &[u8]) -> Option<&'static [u8]> {
+    use std::collections::BTreeMap;
+    type EncodingCache = BTreeMap<String, OnceLock<Option<Vec<u8>>>>;
+    static CACHE: OnceLock<EncodingCache> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| {
+        DashboardAssets::iter()
+            .map(|name| (name.into_owned(), OnceLock::new()))
+            .collect()
+    });
+    cache
+        .get(key)?
+        .get_or_init(|| gzip_dashboard_identity(identity))
+        .as_deref()
+}
+
+fn gzip_dashboard_identity(identity: &[u8]) -> Option<Vec<u8>> {
+    use std::io::Write;
+    if identity.len() < 512 {
+        return None;
+    }
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+    encoder.write_all(identity).ok()?;
+    encoder
+        .finish()
+        .ok()
+        .filter(|bytes| bytes.len() < identity.len())
 }
 
 fn split_path_query(raw_path: &str) -> (&str, Option<&str>) {
@@ -7276,6 +7403,124 @@ fn content_type_for_dashboard_asset(ext: &str) -> &'static str {
 
 #[cfg(test)]
 mod dashboard_asset_tests {
+    #[test]
+    fn dashboard_static_delivery_gzip_round_trip_and_immutable_cache() {
+        use std::io::Read;
+        let Some(path) = super::DashboardAssets::iter().find(|name| {
+            name.starts_with("_next/static/")
+                && name.ends_with(".js")
+                && super::DashboardAssets::get(name).is_some_and(|asset| asset.data.len() > 4096)
+        }) else {
+            // Rust-only builds may carry only the placeholder HTML. Encoding
+            // fixtures remain unconditional; candidate HTTP acceptance uses
+            // the actual built dashboard assets.
+            return;
+        };
+        let path = format!("/{path}");
+        let identity = super::dashboard_asset_response(&path, &[]);
+        let encoded = super::dashboard_asset_response(
+            &path,
+            &[("accept-encoding".into(), "br, gzip".into())],
+        );
+        let split = |bytes: &[u8]| bytes.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+        let offset = split(&encoded);
+        let headers = std::str::from_utf8(&encoded[..offset]).unwrap();
+        assert!(headers.contains("Content-Encoding: gzip\r\n"), "{headers}");
+        assert!(headers.contains("Vary: Accept-Encoding\r\n"));
+        assert!(headers.contains("Cache-Control: public, max-age=31536000, immutable\r\n"));
+        assert!(headers.contains(&format!("Content-Length: {}\r\n", encoded.len() - offset)));
+        let mut decoded = Vec::new();
+        flate2::read::GzDecoder::new(&encoded[offset..])
+            .read_to_end(&mut decoded)
+            .unwrap();
+        assert_eq!(decoded, identity[split(&identity)..]);
+        assert!(encoded.len() < identity.len() / 2);
+        let identity_headers = std::str::from_utf8(&identity[..split(&identity)]).unwrap();
+        assert!(identity_headers.contains("Vary: Accept-Encoding\r\n"));
+        assert!(!identity_headers.contains("Content-Encoding:"));
+        for value in ["br", "gzip;q=0", "*;q=1, gzip;q=0", "gzip;q=bogus"] {
+            let refused =
+                super::dashboard_asset_response(&path, &[("accept-encoding".into(), value.into())]);
+            assert_eq!(refused, identity, "{value}");
+        }
+    }
+
+    #[test]
+    fn dashboard_static_delivery_encoding_fixture_without_dashboard_build() {
+        use std::io::Read;
+        let identity = b"synthetic public JavaScript fixture;".repeat(1024);
+        let encoded = super::gzip_dashboard_identity(&identity).unwrap();
+        let mut decoded = Vec::new();
+        flate2::read::GzDecoder::new(encoded.as_slice())
+            .read_to_end(&mut decoded)
+            .unwrap();
+        assert_eq!(decoded, identity);
+        assert!(encoded.len() < identity.len() / 2);
+        assert!(super::gzip_dashboard_identity(b"small asset").is_none());
+    }
+
+    #[test]
+    fn dashboard_static_delivery_negotiation_and_hash_boundaries() {
+        for value in ["gzip", "GZIP;Q=0.5", "br, gzip;q=1.000", "*;q=0.001"] {
+            assert!(
+                super::accepts_dashboard_gzip(&[("Accept-Encoding".into(), value.into())]),
+                "{value}"
+            );
+        }
+        for value in [
+            "",
+            "br",
+            "gzip;q=0.000",
+            "gzip;q=1.001",
+            "gzip;q=1e0",
+            "gzip;q=0.0001",
+            "gzip;q=nan",
+            "gzip;q=0;q=1",
+            "*;q=1, gzip;q=0",
+        ] {
+            assert!(
+                !super::accepts_dashboard_gzip(&[("accept-encoding".into(), value.into())]),
+                "{value}"
+            );
+        }
+        assert!(!super::accepts_dashboard_gzip(&[
+            ("accept-encoding".into(), "gzip".into()),
+            ("accept-encoding".into(), "gzip;q=0".into())
+        ]));
+        for path in [
+            "_next/static/chunks/0123456789abcdef.js",
+            "_next/static/chunks/turbopack-0123456789abcdef.js",
+            "_next/static/media/0123456789abcdef-s.p.woff2",
+        ] {
+            assert!(super::hashed_dashboard_asset(path));
+        }
+        for path in [
+            "_next/static/chunks/main.js",
+            "_next/static/chunks/deadbeef.js",
+            "_next/static/chunks/deadbeef01234567z.js",
+        ] {
+            assert!(!super::hashed_dashboard_asset(path));
+        }
+    }
+
+    #[test]
+    fn dashboard_static_delivery_does_not_cache_html_errors_or_api_paths() {
+        for path in [
+            "/",
+            "/service?workspace=jobs",
+            "/_next/static/chunks/missing.js",
+            "/api/status",
+            "/_next/static/chunks/missing-deadbeef01234567.js",
+        ] {
+            let bytes =
+                super::dashboard_asset_response(path, &[("accept-encoding".into(), "gzip".into())]);
+            let end = bytes.windows(4).position(|w| w == b"\r\n\r\n").unwrap();
+            let headers = std::str::from_utf8(&bytes[..end]).unwrap();
+            assert!(!headers.contains("immutable"), "{path}");
+            assert!(!headers.contains("Content-Encoding:"), "{path}");
+        }
+    }
+
     use super::{
         content_type_for_dashboard_asset, runtime_environment_label, runtime_manifest_json,
         runtime_manifest_json_for_executable, serve_embedded_file,
