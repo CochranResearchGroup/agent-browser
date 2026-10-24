@@ -778,6 +778,10 @@ pub struct PendingHumanTabRetention {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserSessionState {
+    /// Profile-wide owner operations retain an actionable journal identity.
+    /// A competing client must resume or cancel that operation before opening.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub profile_operation_ids: BTreeMap<String, String>,
     /// App continuity is separate from browser control and account readiness.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub hosted_continuity: BTreeMap<String, crate::BrowserHostedContinuity>,
@@ -835,6 +839,7 @@ pub struct BrowserSessionState {
 impl Default for BrowserSessionState {
     fn default() -> Self {
         Self {
+            profile_operation_ids: BTreeMap::new(),
             hosted_continuity: BTreeMap::new(),
             host_policies: crate::BrowserHostPolicies::default(),
             schema_version: BROWSER_SESSION_STATE_SCHEMA_V1.to_string(),
@@ -1070,12 +1075,15 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .filter_map(|id| crate::resolve_remote_view_tab_handoff(state, id).ok())
             .map(|target| target.session.id)
             .collect();
-        let leave_open_session_ids = state
+        let mut leave_open_session_ids = state
             .leave_open_session_ids
             .iter()
             .filter(|id| state.sessions.contains_key(*id))
             .cloned()
             .collect::<BTreeSet<_>>();
+        leave_open_session_ids.extend(state.sessions.values()
+            .filter(|task| state.profile_operation_ids.contains_key(&task.profile_id))
+            .map(|task| task.id.clone()));
         protected_session_ids.extend(leave_open_session_ids.iter().cloned());
         Self {
             state,
@@ -1147,6 +1155,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .checked_add(self.config.session_idle_timeout_ms)
             .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
         let profile = self.resolve_profile_for_open(&request)?;
+        if let Some(operation) = self.state.profile_operation_ids.get(&profile.id) {
+            return Err(format!("browser_profile_operation_pending:{operation}:inspect or resume the owner operation"));
+        }
         if self
             .state
             .app_browser_attachments
