@@ -63,13 +63,22 @@ pub fn execute(
             )
         }
     };
-    if matches!(command["action"].as_str(), Some("native_close" | "native_focus")) {
-        let action = if command["action"] == "native_close" { "close" } else { "activate" };
+    if command["action"] == "native_focus" {
+        let action = "activate";
         let reply = owner.request("window", &json!({
             "desktopId":target.viewing_desktop_id,"expectedGeneration":target.viewing_generation,
             "windowId":window["id"],"expectedProcessIdentity":window["processIdentity"],"action":action
         }))?;
         return Ok(json!({"source":"remote_view_native","delivery":reply["delivery"].as_str().unwrap_or("unknown"),"taskCompleted":false}));
+    }
+    if command["action"] == "native_close" && window["active"] != true {
+        owner.request("window", &json!({"desktopId":target.viewing_desktop_id,
+            "expectedGeneration":target.viewing_generation,"windowId":window["id"],
+            "expectedProcessIdentity":window["processIdentity"],"action":"activate"}))?;
+        // Observe and fence again after focus. This recursion is bounded: the
+        // input action cannot take the close/focus branch a second time.
+        return execute(original,target,&json!({"action":"native_input",
+            "actions":[{"kind":"key","chord":"alt+F4"}]}),owner);
     }
     let width = snapshot
         .pointer("/geometry/current/width")
@@ -84,6 +93,11 @@ pub fn execute(
     let mut body = json!({"desktopId":target.viewing_desktop_id,"expectedGeneration":target.viewing_generation,
         "windowId":window["id"],"expectedProcessIdentity":window["processIdentity"],"expectedWidth":width,"expectedHeight":height,
         "expectedWindow":{"x":window["x"],"y":window["y"],"width":window["width"],"height":window["height"]},"actions":actions});
+    if command["action"] == "native_close" {
+        // Remote View window.close destroys the window. Normal WM close is
+        // requested through native input; exit remains independent evidence.
+        body["actions"] = json!([{"kind":"key","chord":"alt+F4"}]);
+    }
     if command["action"] == "native_capture" {
         body.as_object_mut().unwrap().remove("actions");
         body["region"] = command.get("region").cloned().unwrap_or_else(|| json!({
