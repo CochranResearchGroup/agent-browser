@@ -122,7 +122,10 @@ def main():
                     assert proof['uid'] == os.getuid() and h.birth(pid) == proof['kernelStart']
                     assert Path(f'/proc/{pid}/exe').resolve() == args.chrome.resolve()
                     assert str(args.results / 'agent') in proof['profilePath']
-                    assert ('--user-data-dir=' + proof['profilePath']).encode() in Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0')
+                    arguments = Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0')
+                    profiles = [os.fsdecode(value).removeprefix('--user-data-dir=')
+                                for value in arguments if value.startswith(b'--user-data-dir=')]
+                    assert len(profiles) == 1 and Path(profiles[0]).resolve() == Path(proof['profilePath']).resolve(), 'exact canonical profile mismatch'
                     self.app_births[1] = (pid, proof['kernelStart'])
                     backend = Backend(self)
                     fixture = seam.RestartFixture(backend, {'task': 'synthetic-restart', 'profile': proof['profilePath']})
