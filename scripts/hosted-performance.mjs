@@ -126,7 +126,8 @@ export function summarizeColdFirstPixels(samples,{runId,pairDigest,expectedSampl
  const validated=samples.filter(sample=>sample.outcome==='validated_response'&&sample.pixels?.validated===true);
  const durations=validated.map(sample=>{
   const pixels=sample.pixels;assert.equal(pixels.sampleCount,1);
-  let instant=finiteTime(pixels.startedMs);const check=createColdFirstPixelClock({now:()=>instant});instant=finiteTime(pixels.firstPixelMs);
+  assert.deepEqual(Object.keys(pixels.markerThreshold??{}).sort(),['minimumHeight','minimumMarkers','minimumWebSocketFrames','minimumWidth']);
+  let instant=finiteTime(pixels.startedMs);const check=createColdFirstPixelClock({...pixels.markerThreshold,now:()=>instant});instant=finiteTime(pixels.firstPixelMs);
   assert(check.observe({canvas:pixels.canvas,receivedWebSocketFrames:pixels.receivedWebSocketFrames}),'Cold receipt lacks validated Native frames and canvas markers');
   assert.equal(pixels.durationMs,instant-pixels.startedMs,'Cold receipt duration differs from its monotonic boundary');
   return finiteTime(pixels.durationMs);

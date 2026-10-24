@@ -87,3 +87,11 @@ test('a validated cold receipt without the Native frames required by its clock i
  assert.equal(samples[2].pixels.sampleCount,1);
  assert.throws(()=>summarizeColdFirstPixels(samples,{runId,pairDigest,expectedSamples:5}),'A success flag cannot replace the Native frame evidence required by the public clock');
 });
+
+test('a validated cold receipt must satisfy its own declared marker threshold',()=>{
+ const samples=[1000,2000,3000,4000,5000].map((duration,index)=>sample(duration,index));
+ samples[2].pixels.markerThreshold.minimumMarkers=64;
+ assert.equal(samples[2].pixels.canvas.markers,63);
+ assert.equal(samples[2].pixels.validated,true);
+ assert.throws(()=>summarizeColdFirstPixels(samples,{runId,pairDigest,expectedSamples:5}),'Default clock thresholds cannot replace stricter thresholds declared by the original receipt');
+});
