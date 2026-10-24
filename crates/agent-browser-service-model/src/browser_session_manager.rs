@@ -135,6 +135,11 @@ pub trait BrowserSessionEffects {
     }
 
     /// Select an executable for subsequent launches; existing browsers retain identity.
+    /// Pin one profile's next launches without changing another profile's build.
+    fn select_profile_browser_executable(&mut self, _profile_id: String, _path: String) -> Result<(), String> {
+        Err("browser_profile_build_selection_unsupported".into())
+    }
+
     fn select_browser_executable(&mut self, _path: String) -> Result<(), String> {
         Err("browser_build_selection_unsupported".into())
     }
@@ -1507,7 +1512,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             return Err("browser_placement_conflict:recovery selected another desktop; explicitly relocate/rebind".into());
         }
         let browser_id = browser.id.clone();
-        self.publish_recovery(browser, tabs, recovered, false)?;
+        self.publish_recovery(browser, tabs, recovered, false, false)?;
         // A positively absent replacement has fresh launch custody; prior shared attachment does not transfer.
         self.state.shared_browser_ids.remove(&browser_id);
         Ok(())
@@ -1554,11 +1559,35 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     .effects
                     .pending_launch_intent()
                     .is_some_and(|intent| intent.profile_id == profile.id));
-        self.publish_recovery(browser.clone(), tabs, recovered, true)?;
+        self.publish_recovery(browser.clone(), tabs, recovered, true, false)?;
         if !managed {
             self.state.shared_browser_ids.insert(browser.id.clone());
         }
         Ok(true)
+    }
+
+    /// Publish a qualified owner-directed physical replacement. The lifecycle
+    /// adapter owns exact exit and launch proof; this seam retains logical IDs.
+    /// The operation fence remains until its durable journal is terminal.
+    pub fn publish_owner_replacement(
+        &mut self,
+        browser_id: &str,
+        operation_id: &str,
+        recovered: BrowserRecovery,
+    ) -> Result<(), String> {
+        let browser = self.state.browsers.get(browser_id).cloned()
+            .ok_or("browser_owner_replacement_browser_missing")?;
+        if self.state.profile_operation_ids.get(&browser.profile_id).map(String::as_str) != Some(operation_id)
+            || recovered.launch.process_identity.as_ref().is_none_or(|identity|
+                identity.pid != recovered.launch.pid || identity.start_token.is_empty()
+                    || identity.executable_path.as_deref().is_none_or(str::is_empty)) {
+            return Err("browser_owner_replacement_identity_unverified".into());
+        }
+        let tabs = self.state.tabs.values().filter(|tab| tab.browser_id == browser.id).cloned().collect();
+        self.publish_recovery(browser, tabs, recovered, false, true)?;
+        self.state.app_browser_attachments.remove(browser_id);
+        self.state.shared_browser_ids.remove(browser_id);
+        Ok(())
     }
 
     fn publish_recovery(
@@ -1567,11 +1596,12 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         tabs: Vec<ManagedBrowserTab>,
         recovered: BrowserRecovery,
         current_desktop_rebind: bool,
+        owner_replacement: bool,
     ) -> Result<(), String> {
         let targets = recovered.target_ids.values().collect::<BTreeSet<_>>();
         if recovered.launch.browser_id != browser.id
             || recovered.launch.pid == 0
-            || recovered.launch.cdp_endpoint.is_empty()
+            || (recovered.launch.cdp_endpoint.is_empty() && !owner_replacement)
             || (!current_desktop_rebind
                 && !self.state.shared_browser_ids.contains(&browser.id)
                 && browser.desktop.is_some()
