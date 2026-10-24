@@ -477,13 +477,16 @@ try{
  for(let index=0;index<coldCount;index++){
   if(viewerContext)await viewerContext.close();
   const sample={id:randomUUID(),contextId:randomUUID(),runId:workloadPlan?.runId??'single-cold-sample',pairDigest:workloadPlan?.pairDigest??null,outcome:'failed_or_unknown',contextCreated:false};
-  let sampleFrames=0;
+  let sampleFrames=0;const transportDiagnostics=[];
+  const recordTransport=(url,detail)=>{const address=new URL(url);if(address.origin===nativeOrigin&&transportDiagnostics.length<64)transportDiagnostics.push({pathKind:address.pathname.split('/')[1]||'root',...detail});};
  coldPixels=null;
   try{
    viewerContext=await viewer.newContext({...(authState?{storageState:authState}:{}),viewport:{width:1440,height:1000},ignoreHTTPSErrors:fixtureTls});
    if(fixtureNativeConnectOrigin)await viewerContext.grantPermissions(['local-network-access'],{origin:appOrigin});
    assert(!coldContexts.has(viewerContext));coldContexts.add(viewerContext);assert.equal(viewer.contexts().length,1,'Cold contexts must not overlap');sample.contextCreated=true;
    page=await viewerContext.newPage();page.on('websocket',ws=>{if(new URL(ws.url()).origin===nativeOrigin.replace('https:','wss:'))ws.on('framereceived',()=>sampleFrames++);});
+   page.on('requestfailed',request=>recordTransport(request.url(),{event:'request_failed',resourceType:request.resourceType(),code:request.failure()?.errorText}));
+   page.on('response',response=>{if(response.status()>=400)recordTransport(response.url(),{event:'http_refusal',status:response.status()});});
    // Only the app origin reaches the local actual consumer. Native frames and
    // WebSocket traffic still reach the live, independently owned producer.
    await page.route(appOrigin+'/**',async route=>{const request=route.request(),url=new URL(request.url()),headers={...request.headers(),host:new URL(service.url).host};if(headers.origin===appOrigin)headers.origin=service.url;const response=await route.fetch({url:service.url+url.pathname+url.search,headers});await route.fulfill({response});});
@@ -510,7 +513,7 @@ try{
    sample.outcome='validated_response';
   }catch(error){sample.failureCode=errorCode(error);throw error;}
   finally{
-   sample.pixels=coldPixels?.receipt()??null;coldSamples.push(sample);
+   sample.pixels=coldPixels?.receipt()??null;sample.transportDiagnostics=transportDiagnostics;coldSamples.push(sample);
    await save(`cold-context-${index+1}.json`,sample);
    if(workloadPlan)await save('cold-first-pixels-distribution.json',summarizeColdFirstPixels(coldSamples,{runId:workloadPlan.runId,pairDigest:workloadPlan.pairDigest,expectedSamples:workloadPlan.coldContexts}));
   }
