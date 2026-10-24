@@ -8,10 +8,11 @@ lanes:
     branch: platform/browser-mode-401
     target: main
     accountable_owner: ecochran76
-    work_items: [CochranResearchGroup/agent-browser#401]
+    work_items: [CochranResearchGroup/agent-browser#401, CochranResearchGroup/agent-browser#402, CochranResearchGroup/agent-browser#403]
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
     dependencies: []
+    validation_status: "401 validated at ba1c60ea9 in draft PR408; 402/403 partial checkpoints retained separately, green/format unverified after user time cutoff"
     overlaps: [P269, P282]
     reconciled_overlaps: ["401 owns read-only mode projection, MCP adapter, schema/client and rail; preserve P269 manual launch and P282 upgrade source, coordinate shared docs at integration"]
     updated_at: 2026-10-24
