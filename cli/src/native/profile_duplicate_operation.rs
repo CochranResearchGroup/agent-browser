@@ -21,7 +21,11 @@ pub enum DuplicatePhase {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum DuplicateChoice { FocusSource, CloseAndDuplicate, Cancel }
+pub enum DuplicateChoice {
+    FocusSource,
+    CloseAndDuplicate,
+    Cancel,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProfileDuplicateOperation {
@@ -32,7 +36,14 @@ pub struct ProfileDuplicateOperation {
 
 impl ProfileDuplicateOperation {
     /// Captures reviewable intent only. Peer occupancy is a warning, not a veto.
-    pub fn prepare(intent: DuplicateIntent, affected_task_ids: Vec<String>) -> Result<Self, &'static str> {
-        Ok(Self { intent, phase: DuplicatePhase::AwaitingOwnerChoice, affected_task_ids })
+    pub fn prepare(
+        intent: DuplicateIntent,
+        affected_task_ids: Vec<String>,
+    ) -> Result<Self, &'static str> {
+        Ok(Self {
+            intent,
+            phase: DuplicatePhase::AwaitingOwnerChoice,
+            affected_task_ids,
+        })
     }
 }
