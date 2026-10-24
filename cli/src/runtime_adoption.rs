@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
 
 pub(crate) use agent_browser_lease_authority::BrowserAdoptionMode;
 
@@ -463,27 +462,6 @@ pub(crate) struct UpgradeServiceStateMigration {
     /// Preserve additive candidate bookkeeping through mixed-version reads.
     #[serde(default, flatten)]
     pub(crate) successor_fields: BTreeMap<String, Value>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct RuntimeAdmissionDrain {
-    pub(crate) schema_version: String,
-    pub(crate) transaction_id: String,
-    pub(crate) candidate_generation_id: String,
-    pub(crate) transaction_revision: u64,
-    pub(crate) recorded_at: String,
-}
-
-/// Legacy installer coordination metadata. Ordinary browser clients must never
-/// use this persistent file as an availability or effect-admission gate.
-pub(crate) fn runtime_admission_drain_path() -> Result<PathBuf, String> {
-    dirs::home_dir()
-        .map(|home| {
-            home.join(".agent-browser/runtime-adoption")
-                .join("admission-drain.json")
-        })
-        .ok_or_else(|| "runtime_admission_home_unavailable".to_string())
 }
 
 pub(crate) fn runtime_admission_claim_action_allowed(
@@ -1190,12 +1168,17 @@ fn sha256_text(value: &str) -> String {
 /// Collect one read-only host census round from the ten frozen Plan 0116
 /// sources. The adapters retain only opaque join keys and digests. A caller
 /// must collect a second round and pass both to `build_stable_runtime_census`
-/// before admission drain or payload mutation.
+/// before runtime transfer or payload mutation.
 pub(crate) fn collect_host_runtime_census_round() -> Result<RuntimeCensusRound, String> {
     use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
 
     let service_path = JsonServiceStateStore::default_path()?;
-    let service_state = JsonServiceStateStore::new(service_path).load()?;
+    let service_store = JsonServiceStateStore::new(service_path);
+    // Observation must never repair a pending durable state transaction.
+    if service_store.recovery_required() {
+        return Err("runtime_observation_pending_service_state_transaction: inspect or explicitly reconcile the pending state transaction".into());
+    }
+    let service_state = service_store.load_without_recovery()?;
     let runtime_profiles = crate::runtime_profile::list_runtime_profiles(&[], None)?;
     let supervisor_health = crate::session_supervisor::session_supervisor_health_json();
     let daemon_inventory = crate::install::active_runtime_inventory(None);
@@ -2473,7 +2456,11 @@ pub(crate) fn persist_runtime_census(
             session_names: record.session_names.clone(),
             profile_identity_digest: record.profile_identity_digest.clone(),
             classification: record.classification,
-            disposition: record.disposition,
+            disposition: if record.disposition == RuntimeDisposition::RejectedAmbiguity {
+                RuntimeDisposition::ManualPreservation
+            } else {
+                record.disposition
+            },
             adoption_receipt_id: None,
             reason_codes: record.reason_codes.clone(),
         })
@@ -2508,18 +2495,23 @@ pub(crate) fn persist_runtime_census(
             .collect();
     }
     transaction.revision = transaction.revision.saturating_add(1);
-    transaction.state = if census.activation_allowed {
-        UpgradeTransactionState::CensusStable
-    } else {
-        UpgradeTransactionState::BlockedAmbiguousRuntime
-    };
-    transaction.stop_reason =
-        (!census.activation_allowed).then(|| "runtime_census_ambiguous".to_string());
+    transaction.state = UpgradeTransactionState::CensusStable;
+    transaction.stop_reason = None;
+    transaction.successor_fields.insert("runtimeObservation".into(), serde_json::json!({
+        "advisory": true,
+        "operatorControlsUpgrade": true,
+        "complete": census.activation_allowed,
+        "warnings": census.records.iter().filter(|record| !record.reason_codes.is_empty()).map(|record| serde_json::json!({
+            "logicalBrowserId": record.logical_browser_id,
+            "classification": record.classification,
+            "reasonCodes": record.reason_codes,
+        })).collect::<Vec<_>>(),
+    }));
     transaction.checkpoints.push(UpgradeCheckpoint {
         name: if census.activation_allowed {
             "census_stable"
         } else {
-            "census_blocked_ambiguous_runtime"
+            "census_observed_with_warnings"
         }
         .to_string(),
         transaction_revision: transaction.revision,
@@ -2848,13 +2840,15 @@ mod tests {
         persist_runtime_census(&mut transaction, &census, "2026-08-15T14:00:00Z");
         assert_eq!(transaction.runtime_census_digest, Some(census.digest));
         assert_eq!(transaction.runtime_migrations.len(), 13);
+        assert_eq!(transaction.state, UpgradeTransactionState::CensusStable);
+        assert!(transaction.stop_reason.is_none());
         assert_eq!(
-            transaction.state,
-            UpgradeTransactionState::BlockedAmbiguousRuntime
+            transaction.successor_fields["runtimeObservation"]["advisory"],
+            true
         );
         assert_eq!(
-            transaction.stop_reason.as_deref(),
-            Some("runtime_census_ambiguous")
+            transaction.successor_fields["runtimeObservation"]["complete"],
+            false
         );
     }
 

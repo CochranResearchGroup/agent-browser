@@ -58,6 +58,28 @@ installCommandShim('sudo');
 
 try {
   assertWorkstationInterface();
+  const beforeLive = liveStateManifest();
+  const live = runInstaller(installRoot, ['live', '--json']);
+  assert.equal(live.status, 0, live.stderr);
+  const observation = assertJsonSuccess(live.stdout, 'live observation');
+  assert.equal(observation.advisory, true);
+  assert.equal(observation.operatorControlsUpgrade, true);
+  assert.equal(typeof observation.complete, 'boolean');
+  assert.deepEqual(liveStateManifest(), beforeLive,
+    'live-work observation must not mutate persisted runtime state or launch a browser');
+  const pendingState = join(home, '.agent-browser/service/state.json.transaction.json');
+  mkdirSync(dirname(pendingState), { recursive: true });
+  writeFileSync(pendingState, 'retained pending transaction');
+  const beforePending = liveStateManifest();
+  const pendingObservation = runInstaller(installRoot, ['live', '--json']);
+  assert.equal(pendingObservation.status, 0, pendingObservation.stderr);
+  const unavailable = assertJsonSuccess(pendingObservation.stdout, 'pending state observation');
+  assert.equal(unavailable.available, false);
+  assert.equal(unavailable.runtimes, null);
+  assert.match(unavailable.warnings[0].message, /runtime_observation_pending_service_state_transaction/);
+  assert.deepEqual(liveStateManifest(), beforePending,
+    'observation must leave pending state recovery to an explicit request');
+  rmSync(pendingState);
   const beforeDryRun = treeManifest(fixtureRoot, ignoredFixturePaths());
   const dryRun = runInstaller(installRoot, ['--dry-run', '--json']);
   assert.equal(
@@ -244,6 +266,8 @@ try {
     0,
     'the installed agent-browser payload must be executable',
   );
+  assert.equal(existsSync(join(installRoot, '.agent-browser/runtime-adoption/admission-drain.json')), false,
+    'installation must not create an upgrade marker');
   const admissionRoot = join(home, '.agent-browser', 'runtime-adoption');
   mkdirSync(admissionRoot, { recursive: true });
   writeFileSync(
@@ -977,24 +1001,12 @@ try {
   );
   mkdirSync(dirname(staleDrainPath), { recursive: true });
   writeFileSync(staleDrainPath, '{}');
-  const drainBlockedApply = runInstaller(drainBlockedRoot, ['--apply', '--json']);
-  assert.notEqual(drainBlockedApply.status, 0);
-  assert.match(
-    `${drainBlockedApply.stdout}${drainBlockedApply.stderr}`,
-    /prior workstation transaction did not converge automatically: Prior runtime admission drain is invalid/,
-  );
-  assert.equal(
-    existsSync(join(drainBlockedRoot, '.local', 'lib', 'agent-browser', 'generations')),
-    false,
-    'an existing admission drain must block before candidate staging',
-  );
-  assert.equal(
-    existsSync(
-      join(drainBlockedRoot, '.agent-browser', 'runtime-adoption', 'transactions'),
-    ),
-    false,
-    'an invalid prior drain must not cause a second install transaction',
-  );
+  const legacyMarkerApply = runInstaller(drainBlockedRoot, ['--apply', '--json']);
+  assert.equal(legacyMarkerApply.status, 0, legacyMarkerApply.stderr);
+  assert.equal(JSON.parse(legacyMarkerApply.stdout).workstationReady, true);
+  assert.equal(readFileSync(staleDrainPath, 'utf8'), '{}',
+    'a malformed legacy marker must neither block nor be rewritten');
+  assert.ok(existsSync(join(drainBlockedRoot, '.local', 'lib', 'agent-browser', 'generations')));
 
   const lockDir = join(lockedInstallRoot, '.agent-browser', 'convergence');
   mkdirSync(lockDir, { recursive: true });
@@ -1299,6 +1311,20 @@ function assertTransactionTerminal(transactionStore, expectedState) {
       transactions[0].payload.checkpoints.length > 0,
     'latest transaction must retain checkpoint history',
   );
+}
+
+// Empty synchronization files may be initialized by existing read adapters.
+// They carry no runtime state; every other file and its bytes remain checked.
+function liveStateManifest() {
+  const coordination = new Set(['home/.agent-browser/runtime-host-ingress.json.lock', 'home/.agent-browser/service/state.json.lock']);
+  return treeManifest(fixtureRoot, ignoredFixturePaths()).filter((entry) => {
+    if (coordination.has(entry.path)) {
+      assert.equal(entry.type, 'file');
+      assert.equal(readFileSync(join(fixtureRoot, entry.path)).length, 0);
+      return false;
+    }
+    return !['home/.agent-browser', 'home/.agent-browser/service'].includes(entry.path);
+  });
 }
 
 function ignoredFixturePaths() {

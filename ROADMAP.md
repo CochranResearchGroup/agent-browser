@@ -1,5 +1,7 @@
 # Roadmap
 
+[P282 operator-led upgrades](docs/dev/plans/0282-2026-10-24-operator-led-upgrades.md), #399, removes persistent upgrade markers and warning-based upgrade vetoes. The operator controls their workstation; optional live-work inspection is advisory. Source qualification is in progress; publication remains a separate evidence boundary.
+
 [P281 upgrade client drain retirement](docs/dev/plans/0281-2026-10-24-retire-client-upgrade-drain.md) owns issue #394 under PL-BUGFIX.
 Ordinary clients must ignore persistent installer drain metadata. Production
 marker mitigation passed disposable open and scoped close; the upgrade remains

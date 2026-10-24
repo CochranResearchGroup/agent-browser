@@ -336,7 +336,7 @@ mod tests {
         let drain = fixture
             .root
             .join(".agent-browser/runtime-adoption/admission-drain.json");
-        super::super::persist_admission_drain(&drain, &transaction).unwrap();
+        super::super::seed_legacy_upgrade_marker(&drain, &transaction).unwrap();
         for invalid in ["missing", "future", "undated"] {
             let mut rejected = transaction.clone();
             match invalid {
@@ -377,7 +377,7 @@ mod tests {
             .unwrap_err(),
             "workstation_recovery_transaction_does_not_own_admission"
         );
-        super::super::persist_admission_drain(&drain, &transaction).unwrap();
+        super::super::seed_legacy_upgrade_marker(&drain, &transaction).unwrap();
         let report = super::super::recover_operator_required_upgrade_for_root(
             &fixture.root,
             &transaction.transaction_id,
@@ -386,7 +386,7 @@ mod tests {
         .unwrap();
         assert_eq!(report["direction"], "forward");
         assert_eq!(report["state"], "accepted");
-        assert!(!drain.exists());
+        assert!(drain.exists());
         let accepted: crate::runtime_adoption::UpgradeTransaction =
             serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
         assert!(accepted
@@ -470,12 +470,11 @@ mod tests {
         let original_transaction = serde_json::to_value(&transaction).unwrap();
         let readiness = |transaction: &crate::runtime_adoption::UpgradeTransaction,
                          ingress: &Value,
-                         draining| {
+                         _legacy_draining: bool| {
             super::super::workstation_upgrade_readiness(
                 &paths,
                 Some("generation-current"),
                 Some(transaction),
-                draining,
                 ingress,
             )
         };
@@ -492,7 +491,7 @@ mod tests {
         );
         assert_eq!(
             readiness(&transaction, &fixture.ingress, true)["ready"],
-            false
+            true
         );
         transaction.state = crate::runtime_adoption::UpgradeTransactionState::FailedEffectUncertain;
         assert_eq!(

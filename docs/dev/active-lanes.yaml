@@ -1,6 +1,20 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P282
+    product_lane: PL-PLATFORM
+    objective: Remove upgrade markers and make operator warnings advisory
+    plan: docs/dev/plans/0282-2026-10-24-operator-led-upgrades.md
+    branch: platform/operator-led-upgrades
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#399]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [P281]
+    overlaps: [P280]
+    reconciled_overlaps: ["Own installer/takeover marker removal and operator contract; preserve static-delivery candidate and all foreign checkouts"]
+    updated_at: 2026-10-24
   - id: P281
     product_lane: PL-BUGFIX
     objective: Retire persistent upgrade client lockout

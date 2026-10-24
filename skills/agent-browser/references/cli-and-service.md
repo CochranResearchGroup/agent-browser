@@ -1,5 +1,19 @@
 # Advanced CLI and service reference
 
+The workstation operator decides whether to upgrade. Warnings about live work
+or incomplete observations are advisory and can suggest remedies; they never
+veto a valid operator-authorized request. Use `agent-browser install workstation
+live --json` to inspect what Agent Browser currently thinks is live. Unknown
+observations remain explicit. This read-only command creates no upgrade, marker
+or browser. Normal apply does not require a prior inspection or warning
+acknowledgement.
+
+Upgrade/drain marker files have no control-plane role. Installation, recovery,
+finalization and takeover ignore old files without parsing or rewriting them,
+and never create replacements. Durable transaction receipts and exact-process
+execution checks remain available for truthful recovery and serialized writes.
+
+
 ## Host resource settings and completed history
 
 At host startup, `AGENT_BROWSER_HOST_MEMORY_RESERVE_BYTES` overrides the adaptive
@@ -87,28 +101,23 @@ isolated development and foreign processes are preserved. Install doctor exposes
 Retirement targets and outcomes are retained in the private install transaction.
 Forward recovery also reconciles MCP clients against the selected candidate.
 
-Cooperative runtime preservation is the workstation default. When that path
-cannot converge, run a dry-run with `--runtime-replacement-policy
-full-shutdown`, inspect `runtimeReplacementPlan`, and use its exact
-`planDigest` only if the operator accepts the listed close targets and loss of
-live tabs. Apply also requires
-`--expected-runtime-replacement-plan-digest <sha256>`. The installer preserves
-managed profile directories and stored credentials, closes only the reviewed
-session lanes, proves a browserless census, and retires only the recorded
-source process. After the first receipted close, treat the transaction as
-forward-only and use inspect plus resume or recover. Never infer authority to
-run full shutdown from a warning or from a previously observed digest.
-Fresh install and upgrade share one durable transaction engine. Before
-stopping user units or staging a candidate, real-host apply requires two
-matching read-only runtime census rounds. It joins service state,
-runtime-profile state, supervisor and daemon metadata, process-instance
-identity, bounded CDP identity and target digests, and presentation records.
-Treat an incomplete, changing, or ambiguous census as a hard stop and do not
-retry by killing or detaching a browser. Successful JSON output includes
-`runtimeCensusTransaction`, a private receipt under
-`~/.agent-browser/runtime-adoption/transactions/` with the census digest and
-per-runtime classifications. Host prerequisites must succeed before admission
-drain or owner transfer. Inspect `serviceStateMigrationPreview` on every
+Cooperative runtime preservation is the workstation default. The operator can
+explicitly choose `--runtime-replacement-policy full-shutdown` to close owned
+runtime sessions while preserving profile directories and credentials. A dry-run
+and `--expected-runtime-replacement-plan-digest <sha256>` are optional tools for
+inspecting and pinning the intended targets. A warning does not select this
+policy for the operator. After the first receipted close, recovery moves forward
+through the recorded transaction. Foreign and unproved processes remain untouched.
+
+Fresh install and upgrade share a durable transaction engine. Read-only census
+rounds join available service state, profiles, process identity and presentation
+records. Incomplete, changing or ambiguous observations produce advisory warnings;
+they do not veto the upgrade. Inspect current work with
+`install workstation live --json` when useful. The installer keeps exact target
+identity checks and transaction serialization so it can report actual execution
+failures with remedies. Successful JSON includes `runtimeCensusTransaction` with
+retained observations and per-runtime classifications. Host prerequisites must
+succeed before runtime transfer. Inspect `serviceStateMigrationPreview` on every
 dry-run. It is a no-write, source-free classification of exact record IDs,
 candidate-led browser contamination, unknown successor fields, and recovery
 artifact compatibility. It creates neither a backup nor a receipt. Apply
@@ -284,13 +293,13 @@ Each final validation doctor has a 45-second command timeout and at most four
 attempts separated by two seconds. A command timeout returns immediately with
 `post_commit_validation_command_timeout` rather than retrying a stalled command.
 
-After an unrelated failed upgrade preserved its old generation, a later selected installation can prove readiness through current evidence. On Linux, `currentSelectionEvidence` reports validation of the sealed payload hashes, stable selector, live dashboard manifest and accepted journey, and exact host boot, process, executable and socket identity. A failure retains its diagnostic reason. Active or uncertain transactions remain blocking, and historical records are preserved.
+After an unrelated failed upgrade preserved its old generation, a later selected installation can prove readiness through current evidence. On Linux, `currentSelectionEvidence` reports validation of the sealed payload hashes, stable selector, live dashboard manifest and accepted journey, and exact host boot, process, executable and socket identity. A failure retains its diagnostic reason. Active operations serialize their writes; uncertain history retains explicit recovery actions, and historical records are preserved.
 
 The axes are `payloadReady`,
 `selectedGenerationReady`, `runtimeConvergenceReady`,
 `upgradeTransactionState`, `dashboardIngressReady`, `operatorJourneyReady`,
 and `rollbackReady`; overall `ready` stays false until all axes agree and the
-admission drain is closed. Upgrade dry-run also reports
+operation is completed. Upgrade dry-run also reports
 `candidatePresentationPrerequisite` with `proofPhase=bootstrap`. It is ready
 when one opaque durable handoff identifies an exact healthy browser process,
 target, and unique current owner session that a staged candidate can adopt.
@@ -338,24 +347,11 @@ selected generation, runs cleanup, or attests health or upgrade acceptance.
 GC rechecks held payloads under the workstation lock before effects and refuses
 changed or malformed retention evidence. Released receipts remain available.
 
-This branch remains a release no-go
-until the disposable Ubuntu and release gates
-pass.
-
-If apply finds an interrupted transaction that still owns the admission drain,
-it automatically resumes or recovers that exact transaction before creating a
-new candidate transaction. It does not choose by file recency. If automatic
-convergence finds a committed or finalized runtime handoff, the transaction is
-forward-only: use its guarded `resume` action and never workstation `recover`
-or guarded `rollback`. Candidate deployment readiness failure retains the
-candidate and matching drain for that exact resume. Missing operator
-presentation is nonblocking. If automatic convergence
-refuses changed or ambiguous evidence before a forward effect, use only the exact
-transaction reported as the drain owner:
-
-```bash
-agent-browser install workstation recover --transaction-id <id> --json
-```
+A new operator-requested apply creates its own coordinated operation. Legacy
+markers and unrelated historical failures cannot veto it. To continue a specific
+unfinished operation, inspect its exact receipt and request resume or recovery
+by transaction ID. A committed ownership transfer remains forward-only; receipts
+and physical-target checks support truthful recovery without a global lockout.
 
 Use `agent-browser install transactions list --json` and `inspect
 --transaction-id <id> --json` for read-only transaction discovery. Mutation is
@@ -459,7 +455,7 @@ prior selector when commit already occurred.
 Recovery is not a generic retry. It fails closed unless the sealed old
 generation is selected, the candidate executable and dashboard route are
 absent, and a fresh stable runtime census permits activation. It preserves the
-ledger, appends a recovery checkpoint, and closes only the matching drain.
+ledger, appends a recovery checkpoint, and leaves legacy marker files untouched.
 
 After apply, use `agent-browser install doctor --json` to verify the installed
 binary, controller assets, Guacamole manifest, and Guacamole files against the
