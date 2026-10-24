@@ -125,6 +125,16 @@ try {
       assert(req.method === 'POST' && req.url === '/v1/consumer'); let text = '';
       for await (const part of req) { text += part; assert(text.length < 65536); }
       const envelope = JSON.parse(text), request = envelope.request; operation = request.operation; assert.equal(envelope.application, 'agent-browser');
+      // Managed maintenance may ask for spare capacity. This fixture admits
+      // exactly its pre-acquired assignment; a typed refusal is expected and
+      // never forwarded to the real producer. Unknown operations still fail.
+      if (request.operation === 'acquire') {
+        assert.equal(request.pool_name, 'main'); assert.equal(typeof request.idempotency_key, 'string');
+        requests.push({ operation, denied: true, forwarded: false, reason: 'fixture_capacity_bound' });
+        await save('broker-requests.json', requests);
+        res.writeHead(409, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ schemaVersion: 1, code: 'pool_assignment_capacity', message: 'Fixture admits one owned assignment', retryable: false })); return;
+      }
       if (request.operation !== 'inventory' && request.operation !== 'observe_native_handoff_use') {
         assert(allowed.has(request.operation)); assert.equal(request.assignment_id, assignment.assignmentId); assert.equal(request.expected_generation, assignment.generation);
         if ('expected_viewing_generation' in request) assert.equal(request.expected_viewing_generation, observation.target.viewingGeneration);
@@ -190,7 +200,7 @@ try {
   }
   const after = await Promise.all(pages.map(async page => ({ title: await page.title(), draft: await page.locator('#draft').count() ? await page.locator('#draft').inputValue() : null })));
   assert.deepEqual(after, before); assert.equal((await identity(browser.pid)).start, browserProof.start); assert.deepEqual(errors, []);
-  await save('qualification.json', { passed: true, scenes, peersPreserved: true, browserGenerationPreserved: true, before, after });
+  await save('qualification.json', { passed: true, scenes, peersPreserved: true, browserGenerationPreserved: true, capacityGrowthRequestsRefused: requests.filter(item => item.denied).length, before, after });
   passed = true;
 } catch (error) { await save('failure.json', { step, message: error.message, uncertain }); process.exitCode = 1; }
 finally {
