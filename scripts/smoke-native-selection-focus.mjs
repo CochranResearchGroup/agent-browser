@@ -140,7 +140,8 @@ try {
   await new Promise(resolve => broker.listen(0, '127.0.0.1', resolve)); env.AGENT_BROWSER_REMOTE_VIEW_ORIGIN = `http://127.0.0.1:${broker.address().port}`;
   step = 'start-isolated-host';
   host = spawn(binary, [], { env: { ...env, AGENT_BROWSER_RUNTIME_HOST_PROCESS: '1', AGENT_BROWSER_DAEMON_AUTH_TOKEN: token }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
-  host.stdout.on('data', data => writeFile(join(evidence, 'host.log'), data, { flag: 'a', mode: 0o600 })); host.stderr.on('data', data => writeFile(join(evidence, 'host.log'), data, { flag: 'a', mode: 0o600 }));
+  const hostLog = data => { void writeFile(join(evidence, 'host.log'), data, { flag: 'a', mode: 0o600 }).catch(error => { cleanup.errors.push({ step: 'host-log', code: error.code }); }); };
+  host.stdout.on('data', hostLog); host.stderr.on('data', hostLog);
   hostProof = await identity(host.pid); assert(hostProof); retain(hostProof); await census();
   await until(async () => { assert(host.exitCode === null); try { return JSON.parse(await readFile(join(sockets, 'runtime-host.json'))).pid === host.pid; } catch { return false; } }, 'Host did not publish');
   step = 'open-owned-tabs';
@@ -189,7 +190,7 @@ try {
   passed = true;
 } catch (error) { await save('failure.json', { step, message: error.message, uncertain }); process.exitCode = 1; }
 finally {
-  async function clean(name, action) { try { await action(); } catch (error) { cleanup.errors.push({ step: name, message: error.message }); process.exitCode = 1; } }
+  async function clean(name, action) { let timer; try { await Promise.race([action(), new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Bounded cleanup deadline')), 50000); })]); } catch (error) { cleanup.errors.push({ step: name, message: error.message }); process.exitCode = 1; } finally { clearTimeout(timer); } }
   await clean('capture-processes', census);
   await clean('close-ui-client', async () => { await viewer?.close(); });
   await clean('close-ui-server', async () => { await viewerServer?.close(); });
