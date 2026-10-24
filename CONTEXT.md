@@ -255,6 +255,10 @@ _Avoid_: Access-plan helper, recovery policy, launch policy
 The Rust module that owns desired workstation state, observed state, the sealed convergence plan, and the terminal receipt. Privileged shell code is an effect adapter and the dashboard consumes the owner's typed readiness result.
 _Avoid_: Installer script, doctor warning, dashboard health heuristic
 
+**Workstation writer custody**:
+Evidence that one currently executing workstation mutation owns its coordinated operation. Process-start and PID-file identity distinguish that writer from retained diagnostics. Short physical locks protect claim transitions; warnings and historical PID text do not grant or withhold operator authority.
+_Avoid_: Live PID alone, upgrade marker, permission grant
+
 **Semantic contract oracle**:
 Canonical acquisition and convergence scenarios plus invariants used to prove that HTTP, MCP, generated clients, dashboard projections, and execution admission all represent the same decision.
 _Avoid_: Shape smoke, snapshot test, transport fixture

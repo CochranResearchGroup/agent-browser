@@ -970,7 +970,10 @@ fn active_coordination_blocker(
 ) -> Result<Option<SupervisorTakeoverBlocker>, String> {
     if let Some(home) = dirs::home_dir() {
         let workstation_lock = home.join(".agent-browser/convergence/workstation.lock");
-        if workstation_transaction_is_foreign(&workstation_lock, std::process::id()) {
+        if crate::workstation_install::workstation_transaction_is_foreign(
+            &workstation_lock,
+            std::process::id(),
+        )? {
             return Ok(Some(SupervisorTakeoverBlocker {
                 code: "workstation_transaction_busy".to_string(),
                 message: "A workstation transaction is executing. Wait for it or use its explicit recovery action.".to_string(),
@@ -978,22 +981,6 @@ fn active_coordination_blocker(
         }
     }
     Ok(None)
-}
-
-fn workstation_transaction_is_foreign(path: &Path, current_pid: u32) -> bool {
-    if !path.exists() {
-        return false;
-    }
-    fs::read_to_string(path)
-        .ok()
-        .and_then(|value| value.trim().parse::<u32>().ok())
-        .is_some_and(|pid| {
-            pid != current_pid
-                && matches!(
-                    crate::process_identity::observe_process(pid),
-                    ProcessObservation::Observed(_)
-                )
-        })
 }
 
 fn listener_ports_for_pid(pid: u32) -> Result<BTreeSet<u16>, String> {
@@ -1647,37 +1634,6 @@ mod tests {
         assert_ne!(first, second);
     }
 
-    #[test]
-    fn workstation_lock_owned_by_this_installer_allows_supervisor_completion() {
-        let root = std::env::temp_dir().join(format!(
-            "agent-browser-takeover-workstation-lock-{}",
-            uuid::Uuid::new_v4()
-        ));
-        fs::create_dir_all(&root).unwrap();
-        let lock = root.join("workstation.lock");
-        fs::write(&lock, format!("{}\n", std::process::id())).unwrap();
-
-        assert!(!workstation_transaction_is_foreign(
-            &lock,
-            std::process::id()
-        ));
-        assert!(workstation_transaction_is_foreign(
-            &lock,
-            std::process::id().saturating_add(1)
-        ));
-        fs::write(&lock, "unknown-owner\n").unwrap();
-        assert!(!workstation_transaction_is_foreign(
-            &lock,
-            std::process::id()
-        ));
-        fs::write(&lock, format!("{}\n", u32::MAX)).unwrap();
-        assert!(!workstation_transaction_is_foreign(
-            &lock,
-            std::process::id()
-        ));
-
-        fs::remove_dir_all(root).unwrap();
-    }
     #[test]
     fn historical_takeover_evidence_is_preserved_without_vetoing_new_operation() {
         let root = std::env::temp_dir().join(format!("takeover-history-{}", uuid::Uuid::new_v4()));
