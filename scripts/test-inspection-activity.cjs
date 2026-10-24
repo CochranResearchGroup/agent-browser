@@ -123,6 +123,29 @@ function identity(pid) {
     assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
     fs.writeFileSync(path.join(artifacts, 'corrections.json'), JSON.stringify({ passed: true, accepted: 2, rejected: 1, repeatedVerdictsDeduplicated: true }));
     console.log('corrections-and-repeated-intent: passed');
+
+    // Recording must not silently enable the existing opt-in persistence switch.
+    await page.close(); page = await browser.newPage(); page.setDefaultTimeout(5000);
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/*', intercept); await page.goto(origin);
+    await page.getByLabel('Active session').getByText('fixture-session-A', { exact: true }).waitFor();
+    const volatileFeed = page.getByRole('region', { name: 'Activity feed', exact: true });
+    const volatileChat = page.getByRole('region', { name: 'Inspection Chat', exact: true });
+    await volatileFeed.getByRole('button', { name: 'Off', exact: true }).waitFor();
+    await volatileChat.getByRole('button', { name: 'Inspect selected workspace', exact: true }).click();
+    await volatileChat.getByText('SYNTHETIC-PRIVATE-OBSERVATION-PROSE', { exact: true }).waitFor();
+    await volatileChat.getByRole('button', { name: 'Record as accepted', exact: true }).click();
+    await volatileFeed.getByRole('button', { name: /accepted/i }).waitFor();
+    await volatileChat.getByText('Recorded in Activity for this session. Persistence is off.', { exact: true }).waitFor();
+    assert.equal(await volatileFeed.getByRole('button', { name: 'Off', exact: true }).count(), 1);
+    await page.reload();
+    await page.getByLabel('Active session').getByText('fixture-session-A', { exact: true }).waitFor();
+    await volatileFeed.getByText('Waiting for events...', { exact: true }).waitFor();
+    assert.equal(await volatileFeed.getByRole('button', { name: /accepted/i }).count(), 0, 'Persistence-off review is not restored');
+    assert.equal(await volatileFeed.getByRole('button', { name: 'Off', exact: true }).count(), 1);
+    assert.equal(inspections.length, 3); assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
+    fs.writeFileSync(path.join(artifacts, 'persist-off.json'), JSON.stringify({ passed: true, recordedInSession: true, restoredReviews: 0, persistRemainsOff: true }));
+    console.log('persist-off-remains-off: passed');
   } finally {
     if (page && !page.isClosed()) fs.writeFileSync(path.join(artifacts, 'final-dom.txt'), await page.locator('body').innerText().catch(() => 'unavailable'));
     fs.writeFileSync(path.join(artifacts, 'requests.json'), JSON.stringify({ inspections, unexpected, errors }, null, 2));
