@@ -1,6 +1,6 @@
 # Runbook
 
-[P283 browser modes and profiles](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md) owns spec #400. Draft PR #408 retains validated #401 and partial #402/#403 source, including Native task controls and duplication owner adapters. Third-window checkpoint is 21:35:13 UTC. Full in-place conversion and actual Native/cookie duplication acceptance remain open; #404 stays blocked. No runtime publication. The plan records source SHAs, tests, known gaps and worker custody.
+[P283 browser modes and profiles](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md) owns spec #400. Draft PR #408 retains source-validated #401 and partial #402/#403. Fourth-window deadline is 23:23:20 UTC. Public owner conversion, rail actions, Native image/input adapters and duplication recovery are under qualification; full recovery and actual Native workflows remain open. #404 stays blocked. No runtime publication. The plan records exact source custody, tests and remaining gates.
 
 [P288 writer custody](docs/dev/plans/0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. PR415 carries the qualified source;221 workstation cases, strict Rust, fixtures and docs pass. Installed production is unchanged.
 
