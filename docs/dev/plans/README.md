@@ -1,5 +1,7 @@
 # Active plan index
 
+[P288 writer custody](0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. Source work only.
+
 [P285 inventory latency](0285-2026-10-24-workspace-inventory-latency.md), #393, owns the measured workspace-read repair under PL-BUGFIX.
 
 [P284 operator-led upgrades](0284-2026-10-24-operator-led-upgrades.md), #399, removes persistent upgrade markers and warning-based upgrade vetoes. The operator controls their workstation; optional live-work inspection is advisory. PR406 is integrated and exact candidate417d5886c68e is installed and accepted. Doctor and same-tab unsaved-work continuity pass.

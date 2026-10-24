@@ -50,6 +50,9 @@ mod current_selection;
 pub(crate) mod mcp_clients;
 mod progress;
 mod retention_hold;
+mod writer;
+pub(crate) use writer::workstation_transaction_is_foreign;
+use writer::WorkstationLock;
 
 const INSTALL_SCHEMA_VERSION: &str = "agent-browser.workstation-install.v1";
 const DEFAULT_DASHBOARD_PORT: u16 = 4848;
@@ -11782,60 +11785,6 @@ fn rollback_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Resul
         Ok(())
     } else {
         Err(failures.join("; "))
-    }
-}
-
-struct WorkstationLock {
-    path: PathBuf,
-}
-
-impl WorkstationLock {
-    fn acquire(root: &Path) -> Result<Self, String> {
-        let path = root.join(".agent-browser/convergence/workstation.lock");
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(display_io("create convergence lock directory", parent))?;
-        }
-        if path.exists() {
-            let stale = fs::read_to_string(&path)
-                .ok()
-                .and_then(|value| value.trim().parse::<i32>().ok())
-                .map(workstation_lock_pid_is_stale)
-                .unwrap_or(false);
-            if stale {
-                fs::remove_file(&path)
-                    .map_err(display_io("remove stale convergence lock", &path))?;
-            } else {
-                return Err(format!(
-                    "workstation reconciliation is already active: {}",
-                    path.display()
-                ));
-            }
-        }
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-            .map_err(display_io("acquire workstation convergence lock", &path))?;
-        writeln!(file, "{}", std::process::id())
-            .map_err(|error| format!("Unable to write workstation lock: {error}"))?;
-        Ok(Self { path })
-    }
-}
-
-#[cfg(unix)]
-fn workstation_lock_pid_is_stale(pid: i32) -> bool {
-    unsafe { libc::kill(pid, 0) != 0 }
-}
-
-#[cfg(not(unix))]
-fn workstation_lock_pid_is_stale(_pid: i32) -> bool {
-    false
-}
-
-impl Drop for WorkstationLock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
     }
 }
 

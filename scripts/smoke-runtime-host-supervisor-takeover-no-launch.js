@@ -201,8 +201,13 @@ try {
   const legacyMarker = join(home, '.agent-browser', 'runtime-adoption', 'admission-drain.json');
   mkdirSync(join(home, '.agent-browser', 'runtime-adoption'), { recursive: true });
   writeFileSync(legacyMarker, 'malformed retained upgrade metadata');
+  // A crashed writer's PID may now belong to an unrelated live process.
+  // Its retained diagnostics must not veto the operator's host transfer.
+  const staleWriterPath = join(home, '.agent-browser/convergence/workstation.lock');
+  mkdirSync(join(home, '.agent-browser/convergence'), { recursive: true });
+  writeFileSync(staleWriterPath, `${process.pid}\n`);
   const plan = runJson(['session', 'supervisor', 'recover-host', '--dry-run']);
-  assert(plan.disposition === 'ready_for_takeover', `unexpected disposition: ${JSON.stringify(plan)}`);
+  assert(plan.disposition === 'ready_for_takeover', `stale writer metadata must not veto takeover: ${JSON.stringify(plan)}`);
   assert(plan.selectedBackend.pid === sourcePid, 'plan selected a different process');
   assert(plan.selectedListenerPorts.includes(streamPort), 'plan did not prove the fixed port owner');
   assert(plan.p147CapabilityReady === true, 'P147 capability evidence was not ready');
