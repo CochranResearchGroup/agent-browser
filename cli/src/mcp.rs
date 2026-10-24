@@ -5449,7 +5449,8 @@ fn call_service_mcp_tool(
             }
         }
     }
-    if name.starts_with("browser_") && !matches!(name, "browser_open" | "browser_discover") {
+    if name.starts_with("browser_") && !matches!(name, "browser_open" | "browser_discover")
+        && !(name == "browser_command" && arguments["action"] == "profile_duplicate") {
         required_string_argument(arguments, "taskId")?;
     }
     if name == "browser_reconnect" {
