@@ -5091,6 +5091,7 @@ mod profile_cleanup_guard_tests {
     fn disposable_quota_group_allows_exact_retiring_browser_and_blocks_foreign_profile_use() {
         let allocation = ManagedDisposableProfile {
             profile: BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: "profile".into(),
                 name: "synthetic".into(),
                 user_data_dir: "/owned/root/profile".into(),
@@ -5213,6 +5214,7 @@ mod profile_cleanup_guard_tests {
     fn profile_cleanup_qualifies_identity_activity_and_process_absence() {
         let allocation = ManagedDisposableProfile {
             profile: BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: "orphan".into(),
                 name: "orphan".into(),
                 user_data_dir: "/owned/root/profile".into(),
@@ -5300,6 +5302,7 @@ mod profile_cleanup_guard_tests {
         let profile = "/owned/root/profile";
         let allocation = ManagedDisposableProfile {
             profile: BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: "owned".into(),
                 name: "owned".into(),
                 user_data_dir: profile.into(),

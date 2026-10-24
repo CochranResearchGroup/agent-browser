@@ -7355,6 +7355,7 @@ Default workflow tools (16):
 Rules:
   Use taskId on actions. Reuse taskKey on open; taskPolicy overrides app defaults.
   browser_open requires serviceName/agentName/taskName.
+  mode=manual_login: no-CDP sign-in; normal close before automation.
   profileMode: persistent (default), existing or disposable.
   Hosted open: hostBinding v1, required/preferred placement; never silent fallback.
   Attachment: existing profile, exact app process/profile/page; omit url.

@@ -1065,6 +1065,33 @@ fn apply_private_launch_environment(command: &mut Command, options: &LaunchOptio
     }
 }
 
+/// Managed manual login owns the process and lifecycle exactly as automation
+/// does, but never creates a debugging listener or connects a CDP client.
+pub(crate) fn launch_chrome_manual_owned(options: &LaunchOptions) -> Result<ChromeProcess, String> {
+    if !options.manual_login || options.headless || options.attachable {
+        return Err("manual_login_launch_posture_invalid".into());
+    }
+    if options
+        .args
+        .iter()
+        .any(|arg| arg.contains("--remote-debugging"))
+    {
+        return Err("manual_login_debugging_argument_forbidden".into());
+    }
+    let executable = options
+        .executable_path
+        .as_ref()
+        .map(PathBuf::from)
+        .or_else(find_chrome)
+        .ok_or("manual_login_browser_unavailable")?;
+    validate_profile_browser_family(options, &executable)?;
+    let profile = build_chrome_args(options, false)?.user_data_dir;
+    cleanup_stale_profile_lock(&profile);
+    ensure_profile_not_in_use(&profile)?;
+    // Private provider inputs are consumed once. No retry after spawn uncertainty.
+    try_launch_chrome(&executable, options, &HashMap::new(), false)
+}
+
 pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
     let chrome_path = match &options.executable_path {
         Some(p) => PathBuf::from(p),

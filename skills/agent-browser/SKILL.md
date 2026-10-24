@@ -10,7 +10,7 @@ Read [Remote View setup](references/cli-and-service.md) for native credentials.
 
 ## Handoff creator context
 
-Supply `serviceName`, `agentName` and a concrete `taskName` on `browser_open`. The CLI equivalents are `--service-name`, `--agent-name` and `--task-name`; for `remote-view open` creation, also supply `--origin-kind agent`. Missing or blank labels are rejected before task creation. MCP records origin `agent` without a caller field. For service requests, pass originKind in params; an authenticated or local principal is not a substitute for the creator labels. Do not fill `humanName` from the person requesting automation. Descriptive labels are not authenticated identities.
+Supply `serviceName`, `agentName` and concrete `taskName` on `browser_open`. CLI flags: `--service-name`, `--agent-name`, `--task-name`; `remote-view open` also requires `--origin-kind agent`. Blank labels fail before creation. MCP sets origin `agent`. Service requests set originKind in params. Principal identity does not replace creator labels. Do not infer `humanName` from the requester; labels are not authenticated identities.
 
 Creation context is immutable. Cards omit missing identity; polling, Share and job IDs never replace creator labels.
 
@@ -74,6 +74,8 @@ Return, store, and reopen only `handoffUrl`: standalone `/remote-view/<handoff-i
 ## Operator workspace
 
 Read [Operator workspace](references/cli-and-service.md#operator-workspace) before tab, sharing or handoff-policy work. Focus requires an owned tab; acceptance is not focus. Reviews: opt-in Activity storage. Remote View owns view/auth.
+
+For non-CDP human sign-in, use [manual login](references/cli-and-service.md#manual-login) with `browser_open` mode `manual_login`.
 
 ## Sharing a profile between tasks
 

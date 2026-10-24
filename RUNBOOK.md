@@ -82,6 +82,14 @@ existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 
 ## Current execution
 
+### 2026-10-22 manual non-CDP MCP login
+
+[P269](docs/dev/plans/0269-2026-10-22-manual-login.md), #357, source-qualifies
+one-call manual login after integrating PR361 attachment/control. Final executable
+`f7c982787` passes the complete real-Chrome synthetic-provider lifecycle, persistent
+cookie preservation and thirteen-tool catalog consistency. The plan holds the
+acceptance matrix. PR362 awaits review; no production or Google account run.
+
 ### 2026-10-19 stale session host repair
 
 [P249](docs/dev/plans/0249-2026-10-19-stale-session-host.md), #320, repairs valid

@@ -184,10 +184,13 @@ pub(crate) async fn execute_shared_remote_view_open(
             return host.prepare_existing_task_handoff(&name, &command).map(Some);
         }
         validate_handoff_ttl(&command, current_unix_ms(), &agent_browser_service_model::BrowserRetentionPolicy::default())?;
+        if command["browserBuild"] == "cdp_free_headed" {
+            command["manualLogin"] = serde_json::json!(true);
+        }
         let selected_build = optional_string(&command, "browserBuild");
         let selected_executable = match selected_build {
             None => None,
-            Some("stock_chrome") => {
+            Some("stock_chrome" | "cdp_free_headed") => {
                 let launcher = super::cdp::chrome::find_chrome()
                     .ok_or("browser_build_executable_unavailable:stock_chrome")?
                     .canonicalize()
@@ -2127,6 +2130,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 self.catalog.profiles.insert(
                     id.into(),
                     agent_browser_service_model::BrowserProfileCatalogEntry {
+                        manual_login_url: None,
                         id: id.into(),
                         name: id.into(),
                         user_data_dir: path,
@@ -2140,11 +2144,103 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         Ok(())
     }
 
+    /// Launch posture belongs to the profile's current process. Never change
+    /// it underneath another task or silently attach a debugging client.
+    fn configure_profile_login(&mut self, command: &serde_json::Value) -> Result<(), String> {
+        let manual = match command.get("manualLogin") {
+            Some(serde_json::Value::Bool(value)) => *value,
+            Some(_) => return Err("browser_login_mode_invalid".into()),
+            None => false,
+        };
+        if manual && command.get("attachment").is_some() {
+            return Err("manual_login_requires_owned_browser".into());
+        }
+        if manual && !self.effects.admits_ordinary_sessions() {
+            return Err("manual_login_requires_native_remote_desktop".into());
+        }
+        if manual {
+            // The initial location is passed to Chrome at launch, rather than
+            // through CDP navigation. Never interpret a relative value as a flag.
+            reqwest::Url::parse(required_string(command, "url")?)
+                .map_err(|_| "manual_login_url_invalid")?;
+        }
+        let id = optional_string(command, "profileId")
+            .or_else(|| optional_string(command, "runtimeProfile"));
+        let Some(id) = id else {
+            return if manual {
+                Err("manual_login_requires_persistent_profile".into())
+            } else {
+                Ok(())
+            };
+        };
+        let profile = self
+            .catalog
+            .profiles
+            .get(id)
+            .ok_or("browser_session_profile_selector_unknown")?;
+        let session_name = required_string(command, "sessionName")?;
+        for browser in self
+            .state
+            .browsers
+            .values()
+            .filter(|browser| browser.profile_id == id)
+        {
+            if browser.cdp_endpoint.is_empty() != manual {
+                return Err("browser_login_mode_conflict: close the current profile task before changing login mode".into());
+            }
+            if manual
+                && browser.active_session_ids.iter().any(|sid| {
+                    self.state
+                        .sessions
+                        .get(sid)
+                        .is_some_and(|session| session.name != session_name)
+                })
+            {
+                return Err("manual_login_profile_in_use: reuse the original task key or close that login task".into());
+            }
+        }
+        let url = if manual {
+            // Replays retain the initial requested URL, not a claim about the
+            // human's current location. They must not navigate the login again.
+            profile
+                .manual_login_url
+                .clone()
+                .filter(|_| {
+                    self.state
+                        .browsers
+                        .values()
+                        .any(|browser| browser.profile_id == id)
+                })
+                .or(Some(required_string(command, "url")?.to_owned()))
+        } else {
+            None
+        };
+        if profile.manual_login_url == url {
+            return Ok(());
+        }
+        let expected = self.catalog.clone();
+        let mut next = expected.clone();
+        next.profiles
+            .get_mut(id)
+            .ok_or("browser_session_profile_selector_unknown")?
+            .manual_login_url = url;
+        self.persistence.publish_profile_catalog(&expected, &next)?;
+        self.catalog = next;
+        Ok(())
+    }
+
     fn open_request_from_command(
         &mut self,
         command: &serde_json::Value,
         activity_at_ms: u64,
     ) -> Result<OpenBrowserSessionResult, String> {
+        if command.get("attachment").is_some()
+            && command
+                .get("manualLogin")
+                .is_some_and(|value| value != false)
+        {
+            return Err("manual_login_requires_owned_browser".into());
+        }
         let hosted = command
             .get("hostBinding")
             .map(|value| {
@@ -2191,12 +2287,13 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     "browser_attachment_profile_conflict: reuse the registered profile name".into(),
                 );
             }
-            let profile = self
+            let mut profile = self
                 .catalog
                 .profiles
                 .get(profile_id)
                 .cloned()
                 .unwrap_or_else(|| agent_browser_service_model::BrowserProfileCatalogEntry {
+                    manual_login_url: None,
                     id: profile_id.into(),
                     name: profile_id.into(),
                     user_data_dir: request.profile_path.clone(),
@@ -2207,6 +2304,10 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     "browser_attachment_profile_conflict: retain the existing profile path".into(),
                 );
             }
+            // A successfully observed CDP attachment is explicit automation.
+            // Clear any prior, closed manual process's launch posture only in
+            // the existing atomic attachment/catalog publication below.
+            profile.manual_login_url = None;
             self.effects.begin_operation(&self.persisted_state)?;
             let result = agent_browser_service_model::attach_app_browser_task(
                 &mut self.state,
@@ -2243,10 +2344,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             }
             capture_task_policy(&mut self.state, &result.session_id, command)?;
             let mut next_catalog = self.catalog.clone();
-            next_catalog
-                .profiles
-                .entry(profile.id.clone())
-                .or_insert(profile);
+            next_catalog.profiles.insert(profile.id.clone(), profile);
             // Publication must not expose an app profile before its borrowed
             // lifecycle fence. A failed transaction leaves both unchanged.
             if let Err(error) = self.persistence.publish_app_attachment(
@@ -2265,6 +2363,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             return Ok(result);
         }
         self.register_explicit_profile(command)?;
+        self.configure_profile_login(command)?;
         let session_name = required_string(command, "sessionName")?;
         if let Some(binding) = &hosted {
             for session in self
@@ -2645,6 +2744,16 @@ where
             })
             .map(|session| session.id.clone())
             .collect::<Vec<_>>();
+        if matching_ids.is_empty()
+            || (command.get("manualLogin").is_some() && command["action"] == "navigate")
+        {
+            let mut posture = command.clone();
+            posture["sessionName"] = serde_json::json!(session_name);
+            if let Some(profile_id) = profile_id {
+                posture["profileId"] = serde_json::json!(profile_id);
+            }
+            self.configure_profile_login(&posture)?;
+        }
         let session_id = match matching_ids.as_slice() {
             [] if automatic && exact_task_id.is_none() => {
                 if self.state.managed_tab_requests.values().any(|request| {
@@ -2685,6 +2794,29 @@ where
             .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?
             .browser_id
             .clone();
+        if self
+            .state
+            .browsers
+            .get(&browser_id)
+            .is_some_and(|browser| browser.cdp_endpoint.is_empty())
+        {
+            let allowed = command["observeChildTabs"] != true
+                && match command["action"].as_str() {
+                    Some("url") => true,
+                    Some("navigate") => self
+                        .catalog
+                        .profiles
+                        .get(&self.state.sessions[&session_id].profile_id)
+                        .and_then(|profile| profile.manual_login_url.as_deref())
+                        .is_some_and(|url| command["url"] == url),
+                    _ => false,
+                };
+            if !allowed {
+                // This is a known preflight refusal, not an attempted physical
+                // command. Do not leave unknown activity that fences close.
+                return Err("manual_login_automation_unavailable: finish login, close this task, then reopen the preserved profile for automation".into());
+            }
+        }
         self.recover_browser_for_command(&browser_id, command)?;
         self.apply_leave_open_choice(&session_id, command)?;
         let tab = self.tab_for_navigation(&session_id, now_ms)?;
@@ -2964,6 +3096,20 @@ where
             return Ok(response);
         }
         let profile = self.ordinary_profile_selector(command)?;
+        if self
+            .state
+            .sessions
+            .values()
+            .filter(|session| session.name == session_name)
+            .any(|session| {
+                self.state
+                    .browsers
+                    .get(&session.browser_id)
+                    .is_some_and(|browser| browser.cdp_endpoint.is_empty())
+            })
+        {
+            return Err("manual_login_additional_tabs_unavailable".into());
+        }
         if command.get("url").is_some() {
             required_string(command, "url")?;
         }
@@ -3777,6 +3923,7 @@ mod tests {
                 friendly_route_label: "app".into(),
             };
             let profile = BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: "work".into(),
                 name: "work".into(),
                 user_data_dir: "/synthetic/work".into(),

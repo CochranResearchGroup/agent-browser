@@ -4195,3 +4195,24 @@ omit private paths and arguments; unavailable version, native input, viewer
 readiness and account authentication remain unverified. A mode-only read does
 not establish session conversion or native input support; those are tracked by
 #402. Refresh inventory to reobserve without changing the browser.
+
+## Manual login
+
+For human sign-in, call `browser_open` with `mode: "manual_login"`, a named
+persistent profile, and the login URL. For example:
+
+```json
+{"profile":"canvacli","profileMode":"persistent","mode":"manual_login","taskKey":"google-login","url":"https://accounts.google.com/","serviceName":"canvacli","agentName":"codex","taskName":"Google sign-in"}
+```
+
+This opens a headed window on the configured native Remote View desktop without
+CDP, a debugging port, or a debugging pipe. The same call returns `handoffUrl`
+and requires `operatorVisible.state: "ready"`. Reuse the task key to retain the
+login window. DOM/page automation and additional agent tabs are unavailable in
+this mode. The reported URL is the initial requested location (`urlObserved:
+false`); desktop readiness and profile continuity do not verify authentication.
+Use `browser_close` after sign-in, then reopen that same profile in the default
+`automation` mode. An active browser in the other mode produces an explicit
+conflict; it is never closed, replaced, or attached automatically.
+If closure reports a pending browser prompt, finish it on the desktop and repeat
+`browser_close` before reopening the profile.

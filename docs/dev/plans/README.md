@@ -29,6 +29,8 @@ Ordinary clients ignore persistent installer drain metadata. PR397 is integrated
 
 [P270 hosted continuity](0270-2026-10-22-hosted-continuity.md) continues #351/#355 after merged PR364. Root owns the relocation provider boundary; parallel tracks repair exact fixture cleanup and measure warm control/cold pixels. The portable-launch backend decision is pending; no production effects.
 
+[P269 manual non-CDP login](0269-2026-10-22-manual-login.md), #357; source-qualified in PR362 on the attachment/control frontier, with persistent-cookie and catalog proof; no deployment.
+
 [P268 attachment](0268-2026-10-22-hosted-attachment.md), #349, and [P267/#350 takeover](0267-2026-10-22-hosted-takeover.md) are closed integrated source outcomes with actual Native04 acceptance and corrected cleanup. Native05 cookie continuity and independent cleanup also pass; no deployment; wider #347 remains open.
 
 
