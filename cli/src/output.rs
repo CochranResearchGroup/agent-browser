@@ -7325,12 +7325,12 @@ Usage:
 
 Commands:
   serve             Run the MCP server
-  resources/read    Read diagnostic resources; no browser launch
+  resources/read    Diagnostic reads; no launch
   host-task         Read compact app task metadata
   browser-mode      Read CDP/no-CDP posture; no effects
-  watch-host-task   Initial/changed NDJSON; reconnect gets a fresh snapshot
-  host-control      Status/view/takeover/return/override/reconcile
-                    Failed pre-commit keeps human/epoch; inspect status before fresh return.
+  browser-native    <task-id> <native_capture|native_input> <params-json>
+  watch-host-task   Initial/changed NDJSON; fresh reconnect
+  host-control      Status/view/takeover/return/override/reconcile; inspect failed return.
   host-reconnect    Status/disconnect/reconnect/rebind/configure/reopen
   host-policy       Optional app/task rules and attributable scoped override
 
@@ -7355,7 +7355,7 @@ Default workflow tools (16):
 Rules:
   Use taskId on actions. Reuse taskKey on open; taskPolicy overrides app defaults.
   Open requires serviceName/agentName/taskName.
-  mode=manual_login: no-CDP; close before automation.
+  mode=manual_login: no-CDP; native_capture/native_input work.
   profileMode: persistent (default), existing or disposable.
   Hosted open: hostBinding v1, required/preferred placement; never silent fallback.
   Attachment: existing profile, exact app process/profile/page; omit url.

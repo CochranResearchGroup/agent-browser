@@ -2027,3 +2027,16 @@ arguments. Browser version remains unknown until separately observed. Debugging
 posture does not prove native input, viewer readiness or authentication. This
 inspection does not relaunch the browser or attach a debugger. Mode conversion
 and agentic CDP-free desktop input are separate delivery work.
+
+
+Native task observation and input use the existing Remote View owner. MCP
+`browser_command` supports `native_capture` and `native_input`; discover their
+arguments with `browser_discover`. CLI equivalent:
+`agent-browser --json mcp browser-native TASK native_input '{"actions":[{"kind":"key","chord":"Tab"}]}'`.
+HTTP clients send the same action, exact `sessionId` and `sessionName` to
+`POST /api/command`. Capture returns a fresh, process-fenced window region;
+input reports delivery separately from completed page effects. Observe after
+an uncertain reply before deciding another input is appropriate. These actions
+never attach CDP, acquire another task, or return explicit human takeover.
+An unavailable Native owner or changed process/window returns remediation.
+Mode conversion remains a separate operation under development.

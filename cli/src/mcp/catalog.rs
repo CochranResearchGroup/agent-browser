@@ -205,6 +205,8 @@ fn operation_schema(category: &str, operation: &str) -> Result<Value, super::Jso
                 Some(json!({"type":"object",
                 "additionalProperties":false,"properties":{},"required":[]}))
             }
+            "native_capture" => Some(json!({"type":"object","additionalProperties":false,"properties":{"region":{"type":"object","properties":{"x":{"type":"integer"},"y":{"type":"integer"},"width":{"type":"integer","minimum":1},"height":{"type":"integer","minimum":1}},"required":["x","y","width","height"],"additionalProperties":false}},"required":[]})),
+            "native_input" => Some(json!({"type":"object","additionalProperties":false,"properties":{"actions":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"object"}},"controlEpoch":{"type":"integer","minimum":0}},"required":["actions"]})),
             "evaluate" => Some(json!({"type":"object","additionalProperties":false,
                 "properties":{"script":{"type":"string"}},"required":["script"]})),
             _ => None,

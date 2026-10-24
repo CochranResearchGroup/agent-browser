@@ -31,7 +31,7 @@ pub(super) fn tools() -> Vec<Value> {
                 "properties": {
                     "profile":{"type":"string","description":"Named profile for persistent or existing mode."},
                     "profileMode":{"type":"string","enum":["persistent","existing","disposable"],"default":"persistent"},
-                    "mode":{"type":"string","enum":["automation","manual_login"],"default":"automation","description":"manual_login opens one human-only native remote window without CDP and returns its ready handoff. Close it before reopening the preserved profile for automation."},
+                    "mode":{"type":"string","enum":["automation","manual_login"],"default":"automation","description":"manual_login opens one native window without CDP. Use native_capture/native_input for agent control; DOM actions need automation mode."},
                     "taskKey":{"type":"string","description":"Stable task key. Distinct keys receive independent tabs; reuse the key to continue this task."},
                 "url":{"type":"string","description":"Initial URL for a new task. Replaying a task returns its current page without navigating again."},
                     "serviceName":{"type":"string"},"agentName":{"type":"string"},"taskName":{"type":"string"},

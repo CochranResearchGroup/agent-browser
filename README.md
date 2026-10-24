@@ -7177,3 +7177,16 @@ upgrade does not guess a missing historical choice from profile contents.
 Retained browser recovery reconciles an unobserved launch claim after proving the exact profile has no live process. The original claim remains in history. Provider environment checks run before process admission, so unavailable desktops do not create new launch claims.
 
 Configure the native Remote View origin, pool, application and public origin in `~/.agent-browser/.env` or the process environment. When native Remote View settings are present, workstation installation and reconciliation verify the native application inventory, admitted pool, and existing protected lease authority. They do not provision RDP users, the RDP privileged helper, XRDP, Docker, or Guacamole. Partial native settings fail validation. Missing authority readiness requires a separate authority repair; a native upgrade does not install or replace that service. Live-browser upgrades prepare retained source owners before verifying that source writers are quiet. Candidate startup remains blocked until that stability check passes.
+
+
+Native task observation and input use the existing Remote View owner. MCP
+`browser_command` supports `native_capture` and `native_input`; discover their
+arguments with `browser_discover`. CLI equivalent:
+`agent-browser --json mcp browser-native TASK native_input '{"actions":[{"kind":"key","chord":"Tab"}]}'`.
+HTTP clients send the same action, exact `sessionId` and `sessionName` to
+`POST /api/command`. Capture returns a fresh, process-fenced window region;
+input reports delivery separately from completed page effects. Observe after
+an uncertain reply before deciding another input is appropriate. These actions
+never attach CDP, acquire another task, or return explicit human takeover.
+An unavailable Native owner or changed process/window returns remediation.
+Mode conversion remains a separate operation under development.

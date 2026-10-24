@@ -4207,3 +4207,16 @@ Use `browser_close` after sign-in, then reopen that same profile in the default
 conflict; it is never closed, replaced, or attached automatically.
 If closure reports a pending browser prompt, finish it on the desktop and repeat
 `browser_close` before reopening the profile.
+
+
+Native task observation and input use the existing Remote View owner. MCP
+`browser_command` supports `native_capture` and `native_input`; discover their
+arguments with `browser_discover`. CLI equivalent:
+`agent-browser --json mcp browser-native TASK native_input '{"actions":[{"kind":"key","chord":"Tab"}]}'`.
+HTTP clients send the same action, exact `sessionId` and `sessionName` to
+`POST /api/command`. Capture returns a fresh, process-fenced window region;
+input reports delivery separately from completed page effects. Observe after
+an uncertain reply before deciding another input is appropriate. These actions
+never attach CDP, acquire another task, or return explicit human takeover.
+An unavailable Native owner or changed process/window returns remediation.
+Mode conversion remains a separate operation under development.
