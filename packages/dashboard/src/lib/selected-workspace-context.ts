@@ -204,7 +204,8 @@ export function selectWorkspaceNode(
   nodes: WorkspaceNode[],
   tabs: WorkspaceServiceTab[] = [],
 ): WorkspaceNode | null {
-  const directBrowserId = bareId(selection.browserId, "browser");
+  // Browser IDs are opaque. Only workspaceId carries a removable type envelope.
+  const directBrowserId = selection.browserId || null;
   const workspaceBrowserId = prefixedId(selection.workspaceId, "browser");
   const browserId = directBrowserId || workspaceBrowserId;
   if (browserId) {
