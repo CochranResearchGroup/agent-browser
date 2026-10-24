@@ -30,6 +30,7 @@ function identity(pid) {
   let browserServer, browser, page;
   const retained = new Map();
   const errors = [], unexpected = [], inspections = [];
+  let holdNextInspection = false, heldInspection = null;
   async function retainBrowserProcesses() {
     const cdp = await browser.newBrowserCDPSession(); const { processInfo } = await cdp.send('SystemInfo.getProcessInfo'); await cdp.detach();
     for (const p of processInfo) { const observed = identity(p.id); if (observed) retained.set(p.id, observed); }
@@ -52,8 +53,11 @@ function identity(pid) {
       if (url.pathname === '/api/models') return route.fulfill({ json: { data: [] } });
       if (url.pathname === '/api/app-intelligence/inspect-workspace') {
         const input = request.postDataJSON(); inspections.push(input);
-        const observation = { version: 'codex-workspace-observation.v1', provider: 'codex-app-server', runId: 'inspection-run-A', threadId: 'synthetic-thread-A', createdAt: new Date().toISOString(), workspaceId: input.packet.workspace.id, summary: 'SYNTHETIC-PRIVATE-OBSERVATION-PROSE', detectedState: 'ready', confidence: 'high', blockers: [{ severity: 'info', summary: 'SYNTHETIC-PRIVATE-BLOCKER-PROSE', evidenceIds: ['workspace.summary'] }], risks: [], suggestedNextInspections: [], unsupportedActions: [] };
-        return route.fulfill({ json: { success: true, data: { observation, ledger: { runId: observation.runId, contextPacketHash: packetHash, observationPath: '/private/synthetic-observation.json', eventLogPath: '/private/synthetic-events.json' } } } });
+        const scope = input.packet.selection.browserId === 'browser-B' ? 'B' : 'A';
+        const observation = { version: 'codex-workspace-observation.v1', provider: 'codex-app-server', runId: `inspection-run-${scope}`, threadId: `synthetic-thread-${scope}`, createdAt: new Date(Date.now() - (holdNextInspection ? 86_400_000 : 0)).toISOString(), workspaceId: input.packet.workspace.id, summary: 'SYNTHETIC-PRIVATE-OBSERVATION-PROSE', detectedState: 'ready', confidence: 'high', blockers: [{ severity: 'info', summary: 'SYNTHETIC-PRIVATE-BLOCKER-PROSE', evidenceIds: ['workspace.summary'] }], risks: [], suggestedNextInspections: [], unsupportedActions: [] };
+        const reply = { success: true, data: { observation, ledger: { runId: observation.runId, contextPacketHash: scope === 'A' ? packetHash : 'b'.repeat(64), observationPath: '/private/synthetic-observation.json', eventLogPath: '/private/synthetic-events.json' } } };
+        if (holdNextInspection) { holdNextInspection = false; heldInspection = { route, input, reply }; return; }
+        return route.fulfill({ json: reply });
       }
       unexpected.push(url.pathname); return route.abort();
     };
@@ -170,6 +174,63 @@ function identity(pid) {
     assert.equal(inspections.length, 4); assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
     fs.writeFileSync(path.join(artifacts, 'storage-failure.json'), JSON.stringify({ passed: true, memoryRecord: true, durabilityClaim: false, restoredReviews: 0 }));
     console.log('storage-failure-is-truthful: passed');
+
+    // A response may arrive after the operator has selected a different task.
+    // Return to exact A to record its historical judgment, then isolate B/Clear.
+    await page.close(); page = await browser.newPage(); page.setDefaultTimeout(5000);
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/*', intercept); await page.goto(origin);
+    await page.getByLabel('Active session').getByText('fixture-session-A', { exact: true }).waitFor();
+    const scopedFeed = page.getByRole('region', { name: 'Activity feed', exact: true });
+    const scopedChat = page.getByRole('region', { name: 'Inspection Chat', exact: true });
+    await scopedFeed.getByRole('button', { name: 'Off', exact: true }).click();
+    holdNextInspection = true;
+    await scopedChat.getByRole('button', { name: 'Inspect selected workspace', exact: true }).click();
+    const deadline = Date.now() + 5000;
+    while (!heldInspection && Date.now() < deadline) await page.waitForTimeout(20);
+    assert(heldInspection, 'A inspection is held at the external HTTP boundary');
+    await page.getByRole('button', { name: 'Select workspace B', exact: true }).click();
+    await page.getByLabel('Active session').getByText('fixture-session-B', { exact: true }).waitFor();
+    const originalObservedAt = heldInspection.reply.data.observation.createdAt;
+    await heldInspection.route.fulfill({ json: heldInspection.reply });
+    await scopedChat.getByText('SYNTHETIC-PRIVATE-OBSERVATION-PROSE', { exact: true }).waitFor();
+    const aAccept = scopedChat.getByRole('button', { name: 'Record as accepted', exact: true }).first();
+    assert(await aAccept.isDisabled(), 'Late A response cannot be reviewed against B');
+    assert(!(await scopedFeed.innerText()).includes('inspection-run-A'), 'Late A never auto-attaches to B Activity');
+    await page.getByRole('button', { name: 'Select workspace A', exact: true }).click();
+    await page.getByLabel('Active session').getByText('fixture-session-A', { exact: true }).waitFor();
+    await aAccept.click();
+    const aReview = scopedFeed.getByRole('button', { name: /accepted/i });
+    await aReview.waitFor(); await aReview.click();
+    let scopedText = await scopedFeed.innerText();
+    for (const expected of ['inspection-run-A', 'browser:browser-A', 'session-A', 'tab-A', 'profile-A', originalObservedAt]) assert(scopedText.includes(expected), `Historical A retains ${expected}`);
+    assert(!(scopedText.includes('browser:browser-B')), 'A review has no B scope');
+    await page.getByRole('button', { name: 'Select workspace B', exact: true }).click();
+    await page.getByLabel('Active session').getByText('fixture-session-B', { exact: true }).waitFor();
+    await scopedFeed.getByText('Waiting for events...', { exact: true }).waitFor();
+    await scopedChat.getByRole('button', { name: 'Inspect selected workspace', exact: true }).click();
+    await scopedChat.getByRole('button', { name: 'Record as accepted', exact: true }).last().click();
+    const bReview = scopedFeed.getByRole('button', { name: /accepted/i });
+    await bReview.waitFor(); assert.equal(await bReview.count(), 1, 'Only B review appears in B session');
+    await bReview.click(); scopedText = await scopedFeed.innerText();
+    for (const expected of ['inspection-run-B', 'browser:browser-B', 'session-B', 'tab-B', 'profile-B']) assert(scopedText.includes(expected), `B retains ${expected}`);
+    assert(!scopedText.includes('inspection-run-A'), 'A review stays isolated');
+    await scopedFeed.getByRole('button', { name: 'Clear activity', exact: true }).click();
+    await scopedFeed.getByText('Waiting for events...', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Select workspace A', exact: true }).click();
+    await page.getByLabel('Active session').getByText('fixture-session-A', { exact: true }).waitFor();
+    await scopedFeed.getByRole('button', { name: /accepted/i }).waitFor();
+    assert.equal(await scopedFeed.getByRole('button', { name: /accepted/i }).count(), 1, 'Clear B preserves A');
+    await page.reload();
+    await page.getByLabel('Active session').getByText('fixture-session-A', { exact: true }).waitFor();
+    await scopedFeed.getByRole('button', { name: /accepted/i }).waitFor();
+    assert.equal(await scopedFeed.getByRole('button', { name: /accepted/i }).count(), 1, 'A survives reload after clearing B');
+    await page.getByRole('button', { name: 'Select workspace B', exact: true }).click();
+    await page.getByLabel('Active session').getByText('fixture-session-B', { exact: true }).waitFor();
+    await scopedFeed.getByText('Waiting for events...', { exact: true }).waitFor();
+    assert.equal(inspections.length, 6); assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
+    fs.writeFileSync(path.join(artifacts, 'late-scope-and-clear.json'), JSON.stringify({ passed: true, historicalAObservedAt: originalObservedAt, lateARecordedOnlyOnA: true, bClearPreservesA: true }));
+    console.log('late-A-session-isolation-and-clear: passed');
   } finally {
     if (page && !page.isClosed()) fs.writeFileSync(path.join(artifacts, 'final-dom.txt'), await page.locator('body').innerText().catch(() => 'unavailable'));
     fs.writeFileSync(path.join(artifacts, 'requests.json'), JSON.stringify({ inspections, unexpected, errors }, null, 2));
