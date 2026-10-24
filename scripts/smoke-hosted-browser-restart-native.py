@@ -13,6 +13,7 @@ import select
 import subprocess
 import sys
 import time
+import traceback
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import Request, urlopen
@@ -101,6 +102,7 @@ def main():
                                       str(args.results / 'bridge-config.json')], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=(args.results / 'agent.log').open('w'), text=True)
             self.apps.append(child)
+            self.agent_child = child
             backend = None
             deadline = time.monotonic() + 300
             while time.monotonic() < deadline:
@@ -115,6 +117,7 @@ def main():
                     assert h.birth(peer.pid) == self.app_births[2][1]
                 elif request['operation'] == 'restart':
                     assert backend is None, 'Restart is single-use'
+                    h.private_json(args.results / 'restart-request.json', request)
                     proof = request['proof']; pid = proof['pid']
                     assert proof['uid'] == os.getuid() and h.birth(pid) == proof['kernelStart']
                     assert Path(f'/proc/{pid}/exe').resolve() == args.chrome.resolve()
@@ -146,6 +149,14 @@ def main():
         f.setup()
     except Exception as error:
         failure = {'type': type(error).__name__, 'stage': f.stage, 'message': str(error)[:500]}
+        h.private_json(args.results / 'failure-trace.json', {'trace': traceback.format_exc()})
+        child = getattr(f, 'agent_child', None)
+        if child and child.poll() is None:
+            try:
+                child.stdin.write(json.dumps({'ok': False, 'value': None}) + '\n'); child.stdin.flush()
+                child.wait(timeout=30)
+            except (BrokenPipeError, subprocess.TimeoutExpired):
+                pass
     finally:
         try: f.cleanup()
         except Exception as error: cleanup = {'type': type(error).__name__, 'message': str(error)[:500]}
