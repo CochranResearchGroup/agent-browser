@@ -19,6 +19,9 @@ use super::browser_session_runtime::{
 use super::browser_session_store::BrowserSessionJsonStore;
 use super::browser_session_store::{BrowserProfileCatalogLoad, BrowserSessionSqliteStore};
 
+#[path = "browser_native_host.rs"]
+mod browser_native_host;
+
 const DEFAULT_SESSION_IDLE_TIMEOUT_MS: u64 = 300_000;
 const DEFAULT_DISPOSABLE_CLEANUP_DELAY_MS: u64 = 300_000;
 const DEFAULT_DISPOSABLE_POLICY_ID: &str = "default";
@@ -535,6 +538,10 @@ fn configured_u64(name: &str, default: u64) -> Result<u64, String> {
 }
 
 pub(crate) trait BrowserSessionPersistence {
+    fn runtime_database_path(&self) -> Result<PathBuf, String> {
+        Err("browser_runtime_database_path_unavailable".into())
+    }
+
     /// A new borrowed profile and its lifecycle fence must become visible in
     /// the same transaction. Legacy stores refuse rather than leak admission.
     fn publish_app_attachment(
@@ -604,6 +611,8 @@ pub(crate) trait BrowserSessionPersistence {
 }
 
 impl BrowserSessionPersistence for BrowserSessionSqliteStore {
+    fn runtime_database_path(&self) -> Result<PathBuf, String> { self.database_path() }
+
     fn publish_app_attachment(
         &mut self,
         expected: &BrowserSessionState,
@@ -2679,6 +2688,9 @@ where
         super::browser_host_control::check_state(&self.state, session_name, command)?;
         super::browser_host_reconnect::check_state(&self.state, session_name, command)?;
         super::browser_host_policy::check_state(&self.state, session_name, command)?;
+        if matches!(command["action"].as_str(), Some("native_input" | "native_capture")) {
+            return self.execute_native_task(session_name, command);
+        }
         let pending_human_ttl = pending_human_retention(command)?;
         if command
             .get("leaveOpen")

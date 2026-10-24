@@ -1098,7 +1098,7 @@ impl BrowserSessionSqliteStore {
         }
     }
 
-    fn database_path(&self) -> Result<PathBuf, String> {
+    pub(crate) fn database_path(&self) -> Result<PathBuf, String> {
         self.connection
             .path()
             .map(PathBuf::from)
