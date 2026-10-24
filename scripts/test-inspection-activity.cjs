@@ -62,6 +62,7 @@ function identity(pid) {
       unexpected.push(url.pathname); return route.abort();
     };
     await page.route('**/*', intercept);
+    if (!args.includes('--restored-only')) {
     await page.goto(origin);
     await page.getByLabel('Active session').getByText('fixture-session-A', { exact: true }).waitFor();
     const feed = page.getByRole('region', { name: 'Activity feed', exact: true });
@@ -272,6 +273,49 @@ function identity(pid) {
     assert.equal(inspections.length, 7); assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
     fs.writeFileSync(path.join(artifacts, 'stream-replacement.json'), JSON.stringify({ passed: true, actualStreamHook: true, interceptedWebSockets: 1, preservedReviews: 1 }));
     console.log('websocket-stream-replacement-preserves-review: passed');
+    }
+
+    // Persisted browser data is untrusted display input. Corrupt one authentic
+    // UI-created review at the browser storage boundary, then reload normally.
+    for (const variant of ['invalid-timestamp', 'wrong-selection-keys']) {
+      await page.close(); page = await browser.newPage(); page.setDefaultTimeout(5000);
+      page.on('pageerror', error => errors.push(error.message));
+      await page.route('**/*', intercept); await page.goto(origin);
+      await page.getByLabel('Active session').getByText('fixture-session-A', { exact: true }).waitFor();
+      const restoredFeed = page.getByRole('region', { name: 'Activity feed', exact: true });
+      const restoredChat = page.getByRole('region', { name: 'Inspection Chat', exact: true });
+      await restoredFeed.getByRole('button', { name: 'Off', exact: true }).click();
+      await restoredChat.getByRole('button', { name: 'Inspect selected workspace', exact: true }).click();
+      await restoredChat.getByText('SYNTHETIC-PRIVATE-OBSERVATION-PROSE', { exact: true }).waitFor();
+      await restoredChat.getByRole('button', { name: 'Record as accepted', exact: true }).click();
+      await restoredFeed.getByRole('button', { name: /accepted/i }).waitFor();
+      const seeded = await page.evaluate(mode => {
+        for (const key of Object.keys(localStorage)) {
+          let values;
+          try { values = JSON.parse(localStorage.getItem(key)); } catch { continue; }
+          if (!Array.isArray(values)) continue;
+          const review = values.find(value => value?.action === 'inspection_review');
+          if (!review) continue;
+          if (mode === 'invalid-timestamp') review.timestamp = 1e20;
+          else review.data.source.selection = { wrong1: 'a', wrong2: 'b', wrong3: 'c', wrong4: 'd', wrong5: 'e' };
+          localStorage.setItem(key, JSON.stringify(values)); return true;
+        }
+        return false;
+      }, variant);
+      assert(seeded, 'An authentic UI-persisted review was modified at the storage boundary');
+      const errorStart = errors.length;
+      await page.reload();
+      // Storage loading is synchronous inside the ordinary Activity effect;
+      // settle two browser paints to observe its actual render outcome.
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.deepEqual(errors.slice(errorStart), [], `${variant}: restored metadata must not crash Activity`);
+      await page.getByLabel('Active session').getByText('fixture-session-A', { exact: true }).waitFor();
+      assert.equal(await restoredFeed.getByRole('button', { name: /accepted/i }).count(), 0, `${variant}: invalid restored review is hidden`);
+      await restoredFeed.getByText('Waiting for events...', { exact: true }).waitFor();
+      fs.writeFileSync(path.join(artifacts, variant + '.json'), JSON.stringify({ passed: true, invalidReviewHidden: true, pageErrors: errors.slice(errorStart) }));
+      console.log(`${variant}: passed`);
+    }
+    assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
   } finally {
     if (page && !page.isClosed()) fs.writeFileSync(path.join(artifacts, 'final-dom.txt'), await page.locator('body').innerText().catch(() => 'unavailable'));
     fs.writeFileSync(path.join(artifacts, 'requests.json'), JSON.stringify({ inspections, unexpected, errors }, null, 2));
