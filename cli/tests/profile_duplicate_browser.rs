@@ -7,7 +7,7 @@ mod profile_duplicate_copy;
 #[path = "../src/native/profile_duplicate_custody.rs"]
 #[allow(dead_code)]
 mod profile_duplicate_custody;
-use futures_util::{SinkExt, StreamExt};
+use agent_browser_cdp::client::CdpClient;
 use profile_duplicate_copy as copy;
 use profile_duplicate_custody as custody;
 use rusqlite::{params, Connection};
@@ -24,14 +24,11 @@ use std::{
     },
     time::{Duration, Instant},
 };
-use tokio_tungstenite::{connect_async, tungstenite::Message};
 
-type Socket =
-    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 struct Chrome {
     child: Child,
     websocket: String,
-    socket: tokio::sync::Mutex<Option<Socket>>,
+    socket: tokio::sync::Mutex<Option<CdpClient>>,
 }
 impl Chrome {
     fn launch(executable: &Path, profile: &Path) -> Self {
@@ -92,38 +89,19 @@ impl Chrome {
         self.command_session(method, params, None).await
     }
     async fn command_session(&self, method: &str, params: Value, session: Option<&str>) -> Value {
+        // Reuse the product transport: monotonic command IDs and a continuously
+        // draining reader are required for flattened page sessions. The earlier
+        // ad-hoc fixture transport reused ID1 and is not acceptance evidence.
         let mut connection = self.socket.lock().await;
         if connection.is_none() {
-            *connection = Some(connect_async(&self.websocket).await.unwrap().0);
+            *connection = Some(CdpClient::connect(&self.websocket).await.unwrap());
         }
-        let socket = connection.as_mut().unwrap();
-        let mut command = json!({"id":1,"method":method,"params":params});
-        if let Some(session) = session {
-            command["sessionId"] = json!(session);
-        }
-        socket
-            .send(Message::Text(command.to_string().into()))
+        connection
+            .as_ref()
+            .unwrap()
+            .send_command_with_timeout(method, Some(params), session, Duration::from_secs(10))
             .await
-            .unwrap();
-        tokio::time::timeout(Duration::from_secs(10), async {
-            while let Some(message) = socket.next().await {
-                let message = message.unwrap();
-                if let Ok(text) = message.to_text() {
-                    let value: Value = serde_json::from_str(text).unwrap();
-                    if value["id"] == 1 {
-                        assert!(
-                            value.get("error").is_none(),
-                            "CDP fixture command failed: {}",
-                            value["error"]
-                        );
-                        return value["result"].clone();
-                    }
-                }
-            }
-            panic!("fixture command reply lost")
-        })
-        .await
-        .unwrap_or_else(|_| panic!("fixture command timed out: {method}"))
+            .unwrap_or_else(|error| panic!("fixture command failed {method}: {error}"))
     }
     async fn close(&mut self) {
         self.command("Browser.close", json!({})).await;
