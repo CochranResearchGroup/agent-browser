@@ -14,8 +14,8 @@ lanes:
     dependencies: []
     overlaps: [P279]
     reconciled_overlaps: ["Shared dashboard primary reused; P279 sealed deployed candidate retained; foreign auth, profile-proof and enrollment work preserved"]
-    validation_status: Cold-open red reproduced; final252 stream tests pass with2 ignored; format, strict Clippy, docs and policy gates pass; candidate pending
-    limitations: ["Second-poll tail and Native first pixels remain separate", "No ingress changes"]
+    validation_status: Sealed8532c10293f1 isolated acceptance; JS/CSS wire bytes reduced62.77%;252 stream tests pass with2 ignored; strict Clippy, format, docs and three browser cycles pass;16 probe generations absent
+    limitations: ["Production publication awaits existing forward-recovery operation; no competing effect", "Issue393 owns producer-side inventory wait; Native first pixels unqualified", "Temporary namespace stopped; candidate and primary retained", "No ingress changes"]
     updated_at: 2026-10-24
 
   - id: P279

@@ -1,6 +1,6 @@
 # Agent Browser Notes Index
 
-[P280 static delivery](0280-2026-10-24-dashboard-static-delivery.md): reproduced public cold-open delay, negotiated gzip and hashed-asset caching across both HTTP listeners; candidate/public qualification pending.
+[P280 static delivery](0280-2026-10-24-dashboard-static-delivery.md): sealed candidate qualifies62.77% static wire reduction across both HTTP listeners; production awaits existing forward recovery and393 owns the remaining producer wait.
 
 [P279 combined actual-host acceptance](0279-2026-10-24-combined-host-matrix355.md): one-pair complete matrix, Native human input and generation-changing recovery, qualified warm targets, separate five-context cold distribution and independent cleanup; no deployment.
 

@@ -1,6 +1,6 @@
 # Runbook
 
-[P280 dashboard static delivery](docs/dev/plans/0280-2026-10-24-dashboard-static-delivery.md), #391, reduces cold asset transfer with negotiated gzip and hashed-asset caching across both HTTP listeners. [Evidence](docs/dev/notes/0280-2026-10-24-dashboard-static-delivery.md) separates reproduced public startup delays, source gates and pending candidate/public qualification. The second-poll tail and Native first pixels remain separate.
+[P280 dashboard static delivery](docs/dev/plans/0280-2026-10-24-dashboard-static-delivery.md), #391, reduces cold asset transfer with negotiated gzip and hashed-asset caching across both HTTP listeners. [Evidence](docs/dev/notes/0280-2026-10-24-dashboard-static-delivery.md) records62.77% wire reduction and isolated candidate acceptance. Production publication awaits an existing forward-recovery operation; #393 owns the separate producer inventory wait. Native first pixels remain unqualified.
 
 [P279 combined hosted acceptance](docs/dev/plans/0279-2026-10-23-combined-host-matrix355.md) is integrated through [PR388](https://github.com/CochranResearchGroup/agent-browser/pull/388), merge2ae94c2a3. #355 and parent #347 are closed under the approved relocation deferral. [Evidence](docs/dev/notes/0279-2026-10-24-combined-host-matrix355.md) records the complete same-pair matrix, warm p9532.57ms/169.85ms, cold median4.44s/tail11.06s,47absent kernel generations and exact cleanup. No production deployment or cold-latency fix is claimed. Earlier failures remain retained; Native578 stays deferred.
 
