@@ -78,6 +78,7 @@ pub(crate) fn runtime_manifest_json() -> Value {
         .clone()
 }
 
+#[cfg(test)]
 pub(crate) fn runtime_manifest_json_for_executable(path: &Path) -> Result<Value, String> {
     let bytes = std::fs::read(path).map_err(|error| {
         format!(
