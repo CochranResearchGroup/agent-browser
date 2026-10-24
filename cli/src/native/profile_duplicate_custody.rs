@@ -193,6 +193,9 @@ impl SourceCustody {
             return Err("profile_duplicate_paths_overlap".into());
         }
         self.connection.execute_batch("CREATE TABLE IF NOT EXISTS browser_profile_duplication_lineage (profile_id TEXT PRIMARY KEY, source_profile_id TEXT NOT NULL, operation_id TEXT NOT NULL, browser_build TEXT NOT NULL);").map_err(|_| "profile_duplicate_lineage_unavailable")?;
+        // Mode metadata is profile behavior, not process or task ownership.
+        // Retain a configured no-CDP login posture on the independent profile.
+        let manual_login_url = self.catalog.get("profiles").and_then(|profiles|profiles.get(&self.source.id)).and_then(|profile|profile.get("manualLoginUrl")).cloned();
         let profiles = self
             .catalog
             .get_mut("profiles")
@@ -219,7 +222,9 @@ impl SourceCustody {
             if lineage.is_some() {
                 return Err("profile_duplicate_lineage_conflict".into());
             }
-            profiles.insert(profile.destination.id.clone(),json!({"id":profile.destination.id,"name":profile.destination.name,"userDataDir":profile.destination.user_data_dir,"kind":"named"}));
+            let mut entry=json!({"id":profile.destination.id,"name":profile.destination.name,"userDataDir":profile.destination.user_data_dir,"kind":"named"});
+            if let Some(url)=manual_login_url {entry["manualLoginUrl"]=url;}
+            profiles.insert(profile.destination.id.clone(),entry);
             self.connection.execute("UPDATE state_documents SET json=?1 WHERE kind='browser_profile_catalog' AND schema_version='agent-browser.browser-profile-catalog.v1'",[self.catalog.to_string()]).map_err(|_| "profile_duplicate_catalog_write_failed")?;
             self.connection
                 .execute(
