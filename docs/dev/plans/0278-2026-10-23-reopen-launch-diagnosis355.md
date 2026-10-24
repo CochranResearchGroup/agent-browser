@@ -49,3 +49,15 @@ before the repair. Phase-only journal labels are implemented without changing
 unknown-outcome or no-replay semantics; green, broad affected checks and exact
 candidate qualification remain pending. This fixes an observed diagnostic gap,
 not the still-unexplained Native8 failure. No cause is claimed.
+
+## Instrumented Native diagnostic batch
+
+The minimal loop did not reproduce the original failure. The phase-only repair
+passes real pre-endpoint and post-endpoint failure/redaction tests. Return to the
+actual Native provider with one clean fast_iteration candidate, in at most three
+new installations, stopping when a browser-launch failure yields a fixed phase.
+Skip the unrelated warm-performance workload explicitly; these receipts are
+DIAGNOSTIC_ACCEPT on success and cannot close355. Keep the original Native image,
+reviewed Chrome and task/profile/no-replay oracle pinned. No uncertain operation
+is retried. Build targets are disposable; preserve only a qualified candidate and
+compact receipts. A passing batch still cannot establish the old failure's cause.

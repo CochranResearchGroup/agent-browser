@@ -3188,6 +3188,35 @@ mod tests {
     use tokio_tungstenite::tungstenite::Message;
 
     #[cfg(unix)]
+    fn private_launch_record_at(root: &Path) -> ServiceFailureRecord {
+        // The process-wide projector retains its original home. Each test has
+        // fresh durable custody, which may still be pending under its own home.
+        let readback = super::super::service_failure_journal::read_service_failures(10).unwrap();
+        if let Some(record) = readback
+            .records
+            .into_iter()
+            .find(|r| r.source == "browser_manager")
+        {
+            return record;
+        }
+        let pending = root.join(".agent-browser/service/failure-journal.pending");
+        for entry in std::fs::read_dir(pending).unwrap() {
+            let path = entry.unwrap().path();
+            if path
+                .extension()
+                .is_some_and(|extension| extension == "json")
+            {
+                let record: ServiceFailureRecord =
+                    serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+                if record.source == "browser_manager" {
+                    return record;
+                }
+            }
+        }
+        panic!("private launch failure has neither projected nor pending custody");
+    }
+
+    #[cfg(unix)]
     #[tokio::test]
     async fn private_launch_failure_journals_phase_without_private_values() {
         use std::os::unix::fs::PermissionsExt;
@@ -3234,19 +3263,93 @@ mod tests {
             result.err().unwrap(),
             "browser_private_launch_outcome_unknown"
         );
-        let readback = super::super::service_failure_journal::read_service_failures(10).unwrap();
-        let record = readback
-            .records
-            .iter()
-            .find(|r| r.source == "browser_manager")
-            .unwrap();
+        let record = private_launch_record_at(&root);
         assert_eq!(
             record.details.as_ref().unwrap()["phase"],
             "process_endpoint"
         );
-        let serialized = serde_json::to_string(record).unwrap();
+        let serialized = serde_json::to_string(&record).unwrap();
         assert!(!serialized.contains("synthetic-secret-value"));
         assert!(!serialized.contains("/synthetic/private-authority"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn private_launch_target_failure_journals_phase_without_remote_error() {
+        use std::os::unix::fs::PermissionsExt;
+        let root =
+            std::env::temp_dir().join(format!("ab-private-target-phase-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        struct Cleanup(std::path::PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _cleanup = Cleanup(root.clone());
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_HOME"]);
+        guard.set("HOME", root.to_str().unwrap());
+        guard.set(
+            "AGENT_BROWSER_HOME",
+            root.join(".agent-browser").to_str().unwrap(),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!(
+            "ws://{}/devtools/browser/fixture",
+            listener.local_addr().unwrap()
+        );
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
+            while let Some(Ok(Message::Text(text))) = socket.next().await {
+                let request: Value = serde_json::from_str(&text).unwrap();
+                let response = if request["method"] == "Target.getTargets" {
+                    json!({"id":request["id"],"error":{"code":-32000,"message":"synthetic-private-remote-error"}})
+                } else {
+                    json!({"id":request["id"],"result":{}})
+                };
+                if socket
+                    .send(Message::Text(response.to_string().into()))
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
+        let executable = root.join("fixture-chrome");
+        std::fs::write(
+            &executable,
+            format!(
+                "#!/bin/sh\nprintf 'DevTools listening on {endpoint}\\n' >&2\nexec /bin/sleep 2\n"
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let result = BrowserManager::launch(
+            LaunchOptions {
+                executable_path: Some(executable.to_string_lossy().into_owned()),
+                profile: Some(root.join("profile").to_string_lossy().into_owned()),
+                private_launch_environment: Some(std::collections::BTreeMap::new()),
+                ..LaunchOptions::default()
+            },
+            Some("chrome"),
+        )
+        .await;
+        server.abort();
+        let _ = server.await;
+        assert_eq!(
+            result.err().unwrap(),
+            "browser_private_launch_outcome_unknown"
+        );
+        let record = private_launch_record_at(&root);
+        assert_eq!(
+            record.details.as_ref().unwrap()["phase"],
+            "target_discovery"
+        );
+        assert!(!serde_json::to_string(&record)
+            .unwrap()
+            .contains("synthetic-private-remote-error"));
     }
 
     /// Opt-in physical oracle on a fresh task-owned Xvfb/Openbox desktop.
