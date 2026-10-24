@@ -14,10 +14,24 @@ import subprocess
 import sys
 import time
 import traceback
+import shlex
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
+
+
+
+def exact_profile_argument(raw, expected):
+    # Reviewed Chromium rewrites argv as a flattened process title. Preserve
+    # exact flag/path comparison for either representation, rather than treating
+    # the whole title as one argument or accepting a path-prefix match.
+    parts = [os.fsdecode(value) for value in raw.split(b'\0') if value]
+    if len(parts) == 1:
+        parts = shlex.split(parts[0])
+    profiles = [value.removeprefix('--user-data-dir=') for value in parts
+                if value.startswith('--user-data-dir=')]
+    return len(profiles) == 1 and Path(profiles[0]).resolve() == Path(expected).resolve()
 
 
 def main():
@@ -122,10 +136,7 @@ def main():
                     assert proof['uid'] == os.getuid() and h.birth(pid) == proof['kernelStart']
                     assert Path(f'/proc/{pid}/exe').resolve() == args.chrome.resolve()
                     assert str(args.results / 'agent') in proof['profilePath']
-                    arguments = Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0')
-                    profiles = [os.fsdecode(value).removeprefix('--user-data-dir=')
-                                for value in arguments if value.startswith(b'--user-data-dir=')]
-                    assert len(profiles) == 1 and Path(profiles[0]).resolve() == Path(proof['profilePath']).resolve(), 'exact canonical profile mismatch'
+                    assert exact_profile_argument(Path(f'/proc/{pid}/cmdline').read_bytes(), proof['profilePath']), 'exact canonical profile mismatch'
                     self.app_births[1] = (pid, proof['kernelStart'])
                     backend = Backend(self)
                     fixture = seam.RestartFixture(backend, {'task': 'synthetic-restart', 'profile': proof['profilePath']})
