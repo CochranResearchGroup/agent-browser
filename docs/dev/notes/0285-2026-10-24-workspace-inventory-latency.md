@@ -27,3 +27,5 @@ The synthetic browser's original PID is independently absent, as are all16 obser
 ## Integration boundary
 
 P284/PR406 merged as442c3387d during qualification. Reconcile its installer and policy changes without changing the P285 routing hunk; preserve P283's active profile/store/observation ownership and retained candidates. The standing dashboard implementation/deployment instruction covers the next qualified preserve-mode publication. Recheck current policy and custody, build one production-shaped combined artifact after integration, and verify exact installed/public behavior. No formal release, private-account operation, raw binary replacement or Native provider/ingress reconfiguration is part of publication.
+
+P284 integration retains both catalog intents. Rust routing hunks are unchanged; only the entry-point wording is shortened to keep the merged guidance at9,994 bytes. Combined validation reuses the unchanged253-case stream packet and P284's222-case workstation packet, with integrated strict Rust and focused workspace checks plus the exact combined installer fixture before publication.
