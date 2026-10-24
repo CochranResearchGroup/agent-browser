@@ -1,8 +1,8 @@
-# Operator-led upgrades, P282 / issue399
+# Operator-led upgrades, P284 / issue399
 
 Product lane: PL-PLATFORM
 Disposition: accepted-evidence
-Owning plan or work item: P282 / CochranResearchGroup/agent-browser#399
+Owning plan or work item: P284 / CochranResearchGroup/agent-browser#399
 Related lanes: P281, P280
 
 Clients could remain locked out after an upgrade because persistent drain

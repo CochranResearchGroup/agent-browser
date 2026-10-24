@@ -1,6 +1,6 @@
 # Agent Browser Notes Index
 
-[P282 operator-led upgrades](0282-2026-10-24-operator-led-upgrades.md): retire upgrade marker producers and recovery vetoes; optional advisory live-work inspection and operator authority. Qualification is in progress.
+[P284 operator-led upgrades](0284-2026-10-24-operator-led-upgrades.md): retire upgrade marker producers and recovery vetoes; optional advisory live-work inspection and operator authority. Qualification is in progress.
 
 [P281 upgrade client lockout retirement](0281-2026-10-24-retire-client-upgrade-drain.md): nonblocking client repair qualified by selected Rust, real-browser and installer fixtures; production marker mitigated, original upgrade unaccepted.
 
