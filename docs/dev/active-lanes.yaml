@@ -10,7 +10,7 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#355]
     plan_state: CLOSED
-    custody_state: INTEGRATION_READY
+    custody_state: INTEGRATED
     dependencies: [P270]
     overlaps: [P270]
     reconciled_overlaps: ["Primary owns new restart fixture/oracle and P277 metadata only; preserve all foreign MCP, dashboard, enrollment and manual-login work; Native source auxiliary is read-only"]

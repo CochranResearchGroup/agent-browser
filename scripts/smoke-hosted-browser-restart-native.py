@@ -38,6 +38,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('native-source', 'native-binary', 'agent-binary', 'chrome', 'vnc-binary', 'vnc-lib', 'results'):
         parser.add_argument('--' + name, type=Path, required=True)
+    parser.add_argument('--skip-warm', action='store_true', help='Diagnosis only: omit the previously qualified warm-control workload')
     parser.add_argument('--chrome-launcher', type=Path, help='Optional reviewed synthetic diagnostic exec shim; not acceptance of ordinary launch')
     parser.add_argument('--display', type=int, required=True)
     parser.add_argument('--vnc-port', type=int, required=True)
@@ -110,7 +111,7 @@ def main():
             threading.Thread(target=broker.serve_forever, daemon=True).start()
             config = {'binary': str(args.agent_binary.resolve()), 'chrome': str(args.chrome.resolve()),
                       'launchExecutable': str(args.chrome_launcher.resolve()) if args.chrome_launcher else str(args.chrome.resolve()),
-                      'diagnosticOnly': bool(args.chrome_launcher),
+                      'diagnosticOnly': bool(args.chrome_launcher) or args.skip_warm, 'skipWarm': args.skip_warm,
                       'results': str(args.results), 'target': target, 'publicOrigin': self.public,
                       'controlOrigin': f'http://127.0.0.1:{broker.server_port}',
                       'tokenFile': str(self.home / 'secrets/control.token')}
@@ -172,7 +173,7 @@ def main():
     f = Acceptance(args); failure = cleanup = None
     h.private_json(args.results / 'pair.json', {'agentBinarySha256': h.sha(args.agent_binary),
                                               'nativeBinarySha256': h.sha(args.native_binary),
-                                              'diagnosticOnly': bool(args.chrome_launcher),
+                                              'diagnosticOnly': bool(args.chrome_launcher) or args.skip_warm,
                                               'launcherSha256': h.sha(args.chrome_launcher) if args.chrome_launcher else None,
                                               'fixtureSource': h.run('git', '-C', repo, 'rev-parse', 'HEAD').strip(),
                                               'nativeSource': h.run('git', '-C', args.native_source, 'rev-parse', 'HEAD').strip()})
@@ -191,8 +192,8 @@ def main():
     finally:
         try: f.cleanup()
         except Exception as error: cleanup = {'type': type(error).__name__, 'message': str(error)[:500]}
-    value = {'verdict': ('DIAGNOSTIC_ACCEPT' if args.chrome_launcher else 'ACCEPT') if f.complete and not failure and not cleanup else 'INCOMPLETE',
-             'diagnosticOnly': bool(args.chrome_launcher),
+    value = {'verdict': ('DIAGNOSTIC_ACCEPT' if args.chrome_launcher or args.skip_warm else 'ACCEPT') if f.complete and not failure and not cleanup else 'INCOMPLETE',
+             'diagnosticOnly': bool(args.chrome_launcher) or args.skip_warm,
              'failure': failure, 'cleanupFailure': cleanup, 'installationId': f.installation_id}
     h.private_json(args.results / 'combined-receipt.json', value)
     print(json.dumps(value))
