@@ -8164,7 +8164,7 @@ Environment:
   AGENT_BROWSER_REMOTE_VIEW_ORIGIN Loopback HTTP origin for managed-session Remote View
                                  Configured remote-view open uses managed placement; explicit runtime-profile/profile binds a persistent directory.
                                  Conflicting profile bindings fail. Open reports converging until operator presentation is proved.
-  AGENT_BROWSER_REMOTE_VIEW_POOL   Application pool name (required with origin; interrupted acquisitions reuse their key)
+  AGENT_BROWSER_REMOTE_VIEW_POOL   Application pool name (required with origin; same-key terminal acquisition readback preserves history)
   AGENT_BROWSER_REMOTE_VIEW_APPLICATION Application selector (default: agent-browser)
   AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT Warm desktop minimum (default: 1; demand grows to pool limit)
   AGENT_BROWSER_DURABLE_HANDOFF_TTL_MS Durable handoff TTL; 0 means unlimited (default: 0)

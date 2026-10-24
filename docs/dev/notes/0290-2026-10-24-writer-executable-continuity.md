@@ -20,10 +20,15 @@ Formatting, strict workspace Clippy, docs build and policy wiring pass. The sele
 
 ## Final integration qualification
 
-PR419 carries the repair for issue417. Final executable source is frozen at99db70da3; later changes qualify documentation only. Independent post-run OS environment and executable readback finds no matching task fixture processes. Foreign unreadable or raced entries remain unclaimed. The validation binary and raw commands/receipts are retained privately outside Git; the ordinary CI artifact is not production-promotable. No candidate seal or installed-runtime claim is made.
+PR419 carries the repair for issue417. The validated pre-merge executable source is frozen at99db70da3; later P290 changes qualify documentation only. Current-main reconciliation below separately records imported executable inputs. Independent post-run OS environment and executable readback finds no matching task fixture processes. Foreign unreadable or raced entries remain unclaimed. The validation binary and raw commands/receipts are retained privately outside Git; the ordinary CI artifact is not production-promotable. No candidate seal or installed-runtime claim is made.
 
 The changed-surface selector selects a broad lane because installer help shares output source; no service schema, model, generated client, action contract, provisioning, browser, Native/Guacamole route or VM behavior changed. Qualification covers writer custody through the public CLI, workstation cases, strict Rust quality and documentation checks. CI remains disabled and was not dispatched.
 
 Self-review confirms claimed PID-file identity and boot/start token preserve executing custody across executable unlink; absent or different process instances remain recoverable. Legacy PID-only classification retains the executing installer/mutation requirements. No generic browser identity rule changed. Scope remains one red-green slice and one owned CI iteration build.
 
 Memory disposition: forbidden. New repair-outcome memory writes lack explicit user authorization; preserve a user-scoped machine-readable non-write receipt without a memory cloud effect.
+
+
+## Current-main reconciliation
+
+Main advanced to PR418 / d058f8df8 during qualification. Merge conflicts are additive entries in the lane catalog and two planning indexes; preserve both P289 and P290 entries. Imported P289 code exactly matches its qualified main source, including its387 model and95 CLI pool results (one existing ignored case). P290's writer source, process identity, installer, takeover, replacement, CLI parsing and dependency files are unchanged by that merge. Reuse P290's public fixture, full installer and221-test receipts for those unchanged behaviors under policy0042; do not call the pre-merge executable a current-main or installed artifact. Rerun format, strict workspace Clippy, docs build, policy wiring, selected planning and changed links on the combined source and help text. No additional runtime candidate or production effect is required for source integration.
