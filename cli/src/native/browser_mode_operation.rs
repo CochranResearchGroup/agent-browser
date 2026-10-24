@@ -1,4 +1,4 @@
-//! Preparatory, unexposed mode-conversion coordinator checkpoint.
+//! Durable mode-conversion coordinator used by the browser-session owner.
 //! Provider-free durable mode-conversion coordination. This core does not launch,
 //! close, attach, or operate a desktop. A lifecycle adapter must supply exact
 //! process evidence before it can execute a returned action.

@@ -1586,6 +1586,18 @@ impl<
         restored_browser.cdp_endpoint = launch.cdp_endpoint.clone();
         restored_browser.desktop = launch.desktop.clone();
         let mut target_ids = BTreeMap::new();
+        if launch.cdp_endpoint.is_empty() {
+            // Native routing handles denote the common browser context, never
+            // invented CDP pages. No old website navigation is replayed.
+            for tab in tabs {
+                target_ids.insert(
+                    tab.id.clone(),
+                    format!("native-context:{}:{}", browser.id, tab.id),
+                );
+            }
+            self.pending = Some((intent, true));
+            return Ok(BrowserRecovery { launch, target_ids });
+        }
         // Custody remains unpublished throughout restoration. A crash or failed
         // restoration cannot authorize another process or duplicate tab replay.
         for (index, tab) in tabs.iter().enumerate() {

@@ -7212,3 +7212,13 @@ HTTP: send these fields and `action: "browser_session_profile_duplicate"` to
 set `ownerConfirmed: true` only for the explicitly selected consequential
 choice. After a lost reply, reconcile that operation before attempting another
 effect. Cancelling a request does not reopen a source already stopped.
+
+### Convert an existing task
+
+The browser mode menu offers **Relaunch with CDP** and **Relaunch without CDP** for managed tasks. Review the affected tasks before selecting relaunch. Unsaved page state and downloads may be lost; unknown URLs and uncertain website submissions are never replayed.
+
+MCP uses `browser_command` with `taskId`, action `mode_convert`, and params containing `operationId`, `mode` (`cdp` or `cdp_free`) and `choice`. Start with `prepare`, then select an offered action. CLI accepts `agent-browser --json mcp mode-convert '{"taskId":"TASK","operationId":"mode-one","mode":"cdp_free","choice":"prepare"}'`. HTTP uses `POST /api/command` with action `browser_session_mode_convert`, the exact `sessionId` and owner `sessionName`, and the same operation fields.
+
+Keep the operation ID after an uncertain reply and select `reconcile`; do not issue another close/open sequence. Close prompts offer focus, graceful retry and consequentially confirmed force close. Native screenshots and input remain separate from authentication proof. Conversion currently has incomplete recovery and installed Native qualification; do not treat the source implementation as accepted installed behavior.
+
+Native capture returns PNG image content to MCP agents. Its default tile is bounded to one million pixels. Read `region`, `windowBounds` and `partialWindow`; request an explicit region for remaining pixels. A tile is not represented as a full-window screenshot.

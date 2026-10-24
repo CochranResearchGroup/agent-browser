@@ -15,6 +15,14 @@ pub(super) struct ManualBrowsers {
 }
 
 impl ManualBrowsers {
+    /// Reap only retained owned children during idle runtime polling. A zombie
+    /// must not survive because no later task command happens to verify it.
+    pub(super) fn poll_owned_exits(&mut self) {
+        for (child, _) in self.owned.values_mut() {
+            let _ = child.poll_exit();
+        }
+    }
+
     pub(super) fn launch(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
@@ -50,6 +58,19 @@ impl ManualBrowsers {
         };
         self.owned.insert(id, (process, identity));
         Ok(launch)
+    }
+
+    pub(super) fn retain_logical_identity(
+        &mut self,
+        physical_id: &str,
+        logical_id: &str,
+    ) -> Result<(), String> {
+        let child = self
+            .owned
+            .remove(physical_id)
+            .ok_or("mode_operation_launched_child_missing")?;
+        self.owned.insert(logical_id.into(), child);
+        Ok(())
     }
 
     /// Verify the immutable original process before reads, focus or close. A
@@ -245,4 +266,69 @@ mod tests {
             "manual_login_debugging_argument_forbidden"
         );
     }
+}
+
+/// Rejoin an observed, unpublished mode replacement without opening debugging.
+pub(super) fn reconcile_mode(
+    profile: &BrowserProfileCatalogEntry,
+    browser: &ManagedBrowserInstance,
+    tabs: &[ManagedBrowserTab],
+) -> Result<Option<agent_browser_service_model::BrowserRecovery>, String> {
+    let path =
+        super::super::browser_session_store::BrowserSessionSqliteStore::default_sqlite_path()?;
+    let mut store =
+        super::super::browser_session_store::BrowserSessionSqliteStore::open_read_only(&path)?;
+    let records = store
+        .unpublished_launch_records()
+        .map_err(|_| "mode_operation_launch_readback_required")?;
+    let candidates = records
+        .into_iter()
+        .filter(|record| {
+            record.intent.profile_id == profile.id
+                && record.observed_browser_id.as_deref() == Some(&browser.id)
+                && record.observed_process_identity.is_some()
+        })
+        .collect::<Vec<_>>();
+    let [record] = candidates.as_slice() else {
+        return if candidates.is_empty() {
+            Ok(None)
+        } else {
+            Err("mode_operation_launch_ambiguous".into())
+        };
+    };
+    let original = record
+        .observed_process_identity
+        .as_ref()
+        .ok_or("mode_operation_launch_identity_missing")?;
+    let current = match crate::process_identity::observe_process(original.pid) {
+        crate::process_identity::ProcessObservation::Observed(current) => current,
+        _ => return Ok(None),
+    };
+    if current.start_token.as_deref() != Some(original.start_token.as_str())
+        || current.executable_path != original.executable_path
+        || current
+            .command_line
+            .as_ref()
+            .is_none_or(|args| args.iter().any(|arg| arg.starts_with("--remote-debugging")))
+    {
+        return Err("mode_operation_launch_posture_changed".into());
+    }
+    Ok(Some(agent_browser_service_model::BrowserRecovery {
+        launch: BrowserLaunch {
+            process_identity: Some(original.clone()),
+            browser_id: browser.id.clone(),
+            pid: original.pid,
+            cdp_endpoint: String::new(),
+            desktop: browser.desktop.clone(),
+        },
+        target_ids: tabs
+            .iter()
+            .map(|tab| {
+                (
+                    tab.id.clone(),
+                    format!("native-context:{}:{}", browser.id, tab.id),
+                )
+            })
+            .collect(),
+    }))
 }

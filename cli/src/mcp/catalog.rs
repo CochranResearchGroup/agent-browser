@@ -205,6 +205,10 @@ fn operation_schema(category: &str, operation: &str) -> Result<Value, super::Jso
                 Some(json!({"type":"object",
                 "additionalProperties":false,"properties":{},"required":[]}))
             }
+            "mode_convert" => Some(json!({"type":"object","additionalProperties":false,"properties":{
+                "operationId":{"type":"string","minLength":1},"mode":{"enum":["cdp","cdp_free"]},
+                "choice":{"enum":["prepare","relaunch","reconcile","retry_graceful_close","force_close","focus","cancel"]},"ownerConfirmed":{"type":"boolean"}
+            },"required":["operationId","mode"]})),
             "profile_duplicate" => Some(json!({"type":"object","additionalProperties":false,"properties":{
                 "operationId":{"type":"string","minLength":1},"sourceProfileId":{"type":"string","minLength":1},"destinationName":{"type":"string","minLength":1},
                 "choice":{"enum":["prepare","reconcile","open_source","focus_source","close_and_duplicate","cancel"]},"ownerConfirmed":{"type":"boolean"},"launch":{"type":"boolean"}

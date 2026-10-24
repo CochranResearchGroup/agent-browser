@@ -42,7 +42,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         original: &agent_browser_service_model::RecordedProcessIdentity,
         assignment: &agent_browser_service_model::RemoteViewApplicationTarget,
         command: &Value,
-    )->Result<Value,String> {
+    ) -> Result<Value, String> {
         let origin = std::env::var("AGENT_BROWSER_REMOTE_VIEW_ORIGIN")
             .map_err(|_| "browser_native_owner_unconfigured")?;
         let http = super::super::remote_view_application_http::RemoteViewApplicationHttp::new(

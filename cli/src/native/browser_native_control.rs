@@ -73,7 +73,9 @@ pub fn execute(
         }
     };
     if command["action"] == "native_ready" {
-        return Ok(json!({"source":"remote_view_native","ready":true,"windowId":window["id"],"nativeContextScope":"browser","taskCompleted":false}));
+        return Ok(
+            json!({"source":"remote_view_native","ready":true,"windowId":window["id"],"window":{"x":window["x"],"y":window["y"],"width":window["width"],"height":window["height"],"active":window["active"]},"nativeContextScope":"browser","taskCompleted":false}),
+        );
     }
     if command["action"] == "native_focus" {
         let action = "activate";
@@ -122,13 +124,25 @@ pub fn execute(
     }
     if command["action"] == "native_capture" {
         body.as_object_mut().unwrap().remove("actions");
+        let full_width = window["width"]
+            .as_u64()
+            .ok_or("browser_native_geometry_unverified")?;
+        let full_height = window["height"]
+            .as_u64()
+            .ok_or("browser_native_geometry_unverified")?;
+        // Native capture_region admits at most one million pixels. Return an
+        // explicitly bounded tile, with geometry for requesting the remainder.
+        let tile_width = full_width.min(1_000_000);
+        let tile_height = full_height.min(1_000_000 / tile_width);
         body["region"] = command.get("region").cloned().unwrap_or_else(|| {
             json!({
-                "x":window["x"],"y":window["y"],"width":window["width"],"height":window["height"]
+                "x":window["x"],"y":window["y"],"width":tile_width,"height":tile_height
             })
         });
         let capture = owner.request("capture_region", &body)?;
-        return Ok(json!({"source":"remote_view_native","capture":capture,"taskCompleted":false}));
+        return Ok(
+            json!({"source":"remote_view_native","capture":capture,"region":body["region"],"windowBounds":{"x":window["x"],"y":window["y"],"width":full_width,"height":full_height},"partialWindow":body["region"]!=json!({"x":window["x"],"y":window["y"],"width":full_width,"height":full_height}),"taskCompleted":false}),
+        );
     }
     if let Some(epoch) = command.get("controlEpoch") {
         body["controlEpoch"] = epoch.clone();

@@ -7326,11 +7326,12 @@ Usage:
 
 Commands:
   serve             Run the MCP server
-  resources/read    Diagnostic reads; no launch
+  resources/read    Diagnostics
   host-task         Read compact app task metadata
-  browser-mode TASK Read mode; no effects
-  browser-native TASK ACTION JSON  Native input/capture
-  profile-duplicate JSON  Owner profile duplication
+  browser-mode TASK Inspect mode
+  browser-native TASK ACTION JSON Input/capture <=1Mpx
+  profile-duplicate JSON Copy profile
+  mode-convert JSON Convert task mode
   watch-host-task   Initial/changed NDJSON; fresh reconnect
   host-control      Status/view/takeover/return/override/reconcile; inspect failed return.
   host-reconnect    Status/disconnect/reconnect/rebind/configure/reopen

@@ -4,7 +4,7 @@ use crate::process_identity::{ProcessObservation, RecordedProcessIdentity};
 use agent_browser_service_model::ManagedBrowserInstance;
 use serde_json::{json, Value};
 
-pub(super) fn inspect(
+pub(crate) fn inspect(
     browser: &ManagedBrowserInstance,
     original: Option<&RecordedProcessIdentity>,
     ownership: &str,

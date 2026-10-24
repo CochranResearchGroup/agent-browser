@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Public MCP + real Chrome/X11; synthetic r3 provider, no live accounts/viewer."""
 import argparse
+import base64
 import copy
 import hashlib
 import json
@@ -20,6 +21,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary', required=True)
     parser.add_argument('--chrome', required=True)
+    parser.add_argument('--mode-conversion', action='store_true')
     parser.add_argument('--namespace-worker', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--parent-proof-fd', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -32,7 +34,7 @@ def main():
             result = subprocess.run(['unshare', '--user', '--map-current-user', '--keep-caps', '--mount', '--net',
                 '--propagation', 'private', 'python3', str(Path(__file__).resolve()),
                 '--binary', str(Path(args.binary).resolve()), '--chrome', str(Path(args.chrome).resolve()),
-                '--namespace-worker', '--parent-proof-fd', str(read_fd)], pass_fds=(read_fd,)).returncode
+                '--namespace-worker', '--parent-proof-fd', str(read_fd), *(['--mode-conversion'] if args.mode_conversion else [])], pass_fds=(read_fd,)).returncode
         finally:
             os.close(read_fd)
         raise SystemExit(result)
@@ -94,6 +96,9 @@ def main():
                 except (OSError, UnicodeError):
                     pass
             return found
+        def process_identity(pid):
+            fields=Path('/proc/'+str(pid)+'/stat').read_text().rsplit(')',1)[1].split()
+            return dict(pid=pid,start_token=fields[19],boot_id=Path('/proc/sys/kernel/random/boot_id').read_text().strip(),executable=os.readlink('/proc/'+str(pid)+'/exe'))
         def windows():
             result = []
             active = run(['xdotool', 'getactivewindow']).stdout.strip()
@@ -105,7 +110,7 @@ def main():
                         result.append(dict(id=int(window), title=run(['xdotool', 'getwindowname', window]).stdout.strip(), **{'class': 'chrome'},
                                            pid=pid, x=int(values['X']), y=int(values['Y']),
                                            width=int(values['WIDTH']), height=int(values['HEIGHT']),
-                                           active=window == active, maximized=False))
+                                           active=window == active, maximized=False, processIdentity=process_identity(pid)))
             return result
         class Provider(BaseHTTPRequestHandler):
             def log_message(self, *_):
@@ -131,6 +136,37 @@ def main():
                 self.wfile.write(b"<!doctype html><title>Manual login fixture</title><script>fetch('/cookie-check')</script>")
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                if self.path.startswith('/v1/agent-desktop/'):
+                    operation=self.path.rsplit('/',1)[1]
+                    assert body['desktopId']==wire['assignmentObservation']['target']['viewingDesktopId'] and body['expectedGeneration']==19
+                    current=windows()
+                    if operation=='observe':
+                        value=dict(desktopId=body['desktopId'],generation=19,geometry=dict(current=dict(width=1280,height=800)),windows=dict(windows=current))
+                    else:
+                        window=next(w for w in current if w['id']==body['windowId'])
+                        assert window['processIdentity']==body['expectedProcessIdentity'], 'Native process fence changed'
+                        if operation=='window':
+                            assert body['action']=='activate'; result=run(['xdotool','windowactivate','--sync',str(window['id'])]); assert result.returncode==0,result.stderr
+                        elif operation=='input':
+                            assert window['active'], 'Native input target must be active'
+                            assert body['expectedWidth']==1280 and body['expectedHeight']==800
+                            assert body['expectedWindow']=={key:window[key] for key in ['x','y','width','height']}
+                            for action in body['actions']:
+                                if action['kind']=='key': result=run(['xdotool','key','--clearmodifiers',action['chord']])
+                                elif action['kind']=='text': result=run(['xdotool','type','--clearmodifiers','--delay','0','--',action['text']])
+                                elif action['kind']=='move': result=run(['xdotool','mousemove',str(action['x']),str(action['y'])])
+                                else: raise AssertionError('unsupported synthetic input')
+                                assert result.returncode==0,result.stderr
+                        elif operation=='capture_region':
+                            assert window['active'] and body['expectedWindow']=={key:window[key] for key in ['x','y','width','height']}
+                            region=body['region'];assert region['width']*region['height']<=1000000
+                            captured=subprocess.run(['import','-window','root','-crop',f"{region['width']}x{region['height']}+{region['x']}+{region['y']}",'png:-'],env=env,capture_output=True,timeout=5)
+                            assert captured.returncode==0 and captured.stdout.startswith(b'\x89PNG\r\n\x1a\n')
+                            value=dict(image=dict(mimeType='image/png',data=base64.b64encode(captured.stdout).decode()),capture=dict(width=region['width'],height=region['height']),taskCompleted=False)
+                        else: raise AssertionError('unsupported synthetic Native operation')
+                        operations.append('native.'+operation)
+                        if operation!='capture_region': value=dict(delivery='dispatched',taskCompleted=False)
+                    self.send_response(200);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(json.dumps(value).encode());return
                 request = body['request']
                 operation = request['operation']
                 operations.append(operation)
@@ -146,7 +182,7 @@ def main():
                                             'REMOTE_VIEW_SLOT_GENERATION': str(wire['assignmentObservation']['target']['viewingGeneration'])}
                 elif operation == 'windows':
                     value = copy.deepcopy(wire['windows'])
-                    value['windows'] = windows()
+                    value['windows'] = [{key:value for key,value in window.items() if key!='processIdentity'} for window in windows()]
                 elif operation == 'register_native_handoff_observation':
                     key = request['idempotencyKey']
                     application = body['application'].encode()
@@ -232,46 +268,84 @@ def main():
                 mcp = spawn([str(Path(args.binary).resolve()), 'mcp', 'serve'], stdin=subprocess.PIPE,
                             stdout=subprocess.PIPE, stderr=diagnostics, text=True)
             rpc('initialize', dict(protocolVersion='2024-11-05', capabilities={}, clientInfo=dict(name='ab357-fixture', version='1')))
+            catalog=rpc('tools/list',{})['tools']
+            assert len(catalog)==16 and sum(len(json.dumps(tool['inputSchema'],separators=(',',':'))) for tool in catalog)<15000, 'bounded public MCP catalog'
             mcp.stdin.write(json.dumps(dict(jsonrpc='2.0', method='notifications/initialized')) + '\n')
             mcp.stdin.flush()
-            request = dict(profile='manual-fixture', profileMode='persistent', mode='manual_login', taskKey='google-login',
-                           url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN'] + '/login-fixture',
-                           serviceName='fixture', agentName='fixture', taskName='Manual login')
-            task = call('browser_open', request)
-            assert task['mode'] == 'manual_login' and task['urlObserved'] is False
-            assert task['operatorVisible']['state'] == 'ready'
-            assert task['handoffUrl'].startswith('https://browser.fixture.invalid/remote-view/')
-            physical = browsers()
-            assert len(physical) == 1, 'one exact browser process'
-            pid, argv = physical[0]
-            assert '--remote-debugging' not in argv, 'manual login must have no debugging port or pipe'
-            assert '--headless' not in argv, 'manual login must be headed'
-            replay = call('browser_open', request)
-            assert (replay['taskId'], replay['browserId'], replay['handoffUrl']) == (task['taskId'], task['browserId'], task['handoffUrl'])
-            assert browsers()[0][0] == pid, 'replay preserves the process'
-            try:
-                call('browser_snapshot', dict(taskId=task['taskId']))
-                raise AssertionError('manual login accepted DOM automation')
-            except AssertionError as error:
-                assert 'manual_login_automation_unavailable' in str(error), str(error)
-            assert cookie_seeded.wait(10), 'manual browser must accept the synthetic persistent cookie'
-            call('browser_close', dict(taskId=task['taskId']))
-            task = None
-            assert not browsers(), 'explicit close must remove the exact browser'
-            cookie_after_close.set()
-            profiles = list(root.rglob('manual-fixture/user-data'))
-            assert len(profiles) == 1, 'persistent profile survives close'
-            marker = profiles[0] / 'ab357-preservation-marker'
-            marker.write_text('synthetic profile continuity')
-            automation = dict(request, mode='automation', taskKey='automation')
-            task = call('browser_open', automation)
-            assert len(browsers()) == 1 and '--remote-debugging-port=' in browsers()[0][1]
-            assert marker.read_text() == 'synthetic profile continuity'
-            assert cookie_restored.wait(10), 'persistent cookie must survive manual close and automation reopen'
-            call('browser_close', dict(taskId=task['taskId']))
-            task = None
-            assert not browsers(), 'automation close must remove the exact browser'
-
+            if args.mode_conversion:
+                request = dict(profile='manual-fixture',profileMode='persistent',mode='automation',taskKey='mode-roundtrip',
+                    url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/login-fixture',serviceName='fixture',agentName='fixture',taskName='Mode roundtrip')
+                task=call('browser_open',request)
+                assert cookie_seeded.wait(10), 'seeded browser cookie'
+                link=call('browser_handoff',dict(taskId=task['taskId']))
+                original=(task['taskId'],task['browserId'],task['profileId'],link['handoffUrl'])
+                prepared=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-one',mode='cdp_free',choice='prepare')))
+                assert prepared['phase']=='prepared',prepared
+                changed=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-one',mode='cdp_free',choice='relaunch')))
+                for _ in range(30):
+                    if changed['phase']=='completed': break
+                    time.sleep(.1)
+                    changed=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-one',mode='cdp_free',choice='reconcile')))
+                assert changed['phase']=='completed',changed
+                physical=browsers();assert len(physical)==1 and '--remote-debugging' not in physical[0][1], 'no-CDP replacement proof'
+                assert changed['taskId']==original[0] and changed['browserId']==original[1] and changed['profileId']==original[2]
+                cookie_after_close.set()
+                call('browser_command',dict(taskId=task['taskId'],action='native_input',params=dict(actions=[dict(kind='key',chord='ctrl+l'),dict(kind='text',text=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/login-fixture',method='keys'),dict(kind='key',chord='Return')])))
+                assert cookie_restored.wait(10),'native navigation independently delivers preserved cookie'
+                captured=rpc('tools/call',dict(name='browser_command',arguments=dict(taskId=task['taskId'],action='native_capture',params={})))
+                assert any(block.get('type')=='image' and block.get('mimeType')=='image/png' for block in captured.get('content',[])), 'native screenshot must be agent-visible image content'
+                back=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-back',mode='cdp',choice='relaunch')))
+                for _ in range(30):
+                    if back['phase']=='completed': break
+                    time.sleep(.1)
+                    back=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-back',mode='cdp',choice='reconcile')))
+                assert back['phase']=='completed',back
+                observed=call('browser_command',dict(taskId=task['taskId'],action='mode'))
+                assert observed['mode']=='cdp'
+                final_link=call('browser_handoff',dict(taskId=task['taskId']))
+                assert final_link['handoffUrl']==original[3], 'same durable handoff'
+                call('browser_navigate',dict(taskId=task['taskId'],url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/login-fixture'))
+                assert cookie_restored.is_set()
+                call('browser_close',dict(taskId=task['taskId']))
+                task=None
+            else:
+                request = dict(profile='manual-fixture', profileMode='persistent', mode='manual_login', taskKey='google-login',
+                               url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN'] + '/login-fixture',
+                               serviceName='fixture', agentName='fixture', taskName='Manual login')
+                task = call('browser_open', request)
+                assert task['mode'] == 'manual_login' and task['urlObserved'] is False
+                assert task['operatorVisible']['state'] == 'ready'
+                assert task['handoffUrl'].startswith('https://browser.fixture.invalid/remote-view/')
+                physical = browsers()
+                assert len(physical) == 1, 'one exact browser process'
+                pid, argv = physical[0]
+                assert '--remote-debugging' not in argv, 'manual login must have no debugging port or pipe'
+                assert '--headless' not in argv, 'manual login must be headed'
+                replay = call('browser_open', request)
+                assert (replay['taskId'], replay['browserId'], replay['handoffUrl']) == (task['taskId'], task['browserId'], task['handoffUrl'])
+                assert browsers()[0][0] == pid, 'replay preserves the process'
+                try:
+                    call('browser_snapshot', dict(taskId=task['taskId']))
+                    raise AssertionError('manual login accepted DOM automation')
+                except AssertionError as error:
+                    assert 'manual_login_automation_unavailable' in str(error), str(error)
+                assert cookie_seeded.wait(10), 'manual browser must accept the synthetic persistent cookie'
+                call('browser_close', dict(taskId=task['taskId']))
+                task = None
+                assert not browsers(), 'explicit close must remove the exact browser'
+                cookie_after_close.set()
+                profiles = list(root.rglob('manual-fixture/user-data'))
+                assert len(profiles) == 1, 'persistent profile survives close'
+                marker = profiles[0] / 'ab357-preservation-marker'
+                marker.write_text('synthetic profile continuity')
+                automation = dict(request, mode='automation', taskKey='automation')
+                task = call('browser_open', automation)
+                assert len(browsers()) == 1 and '--remote-debugging-port=' in browsers()[0][1]
+                assert marker.read_text() == 'synthetic profile continuity'
+                assert cookie_restored.wait(10), 'persistent cookie must survive manual close and automation reopen'
+                call('browser_close', dict(taskId=task['taskId']))
+                task = None
+                assert not browsers(), 'automation close must remove the exact browser'
         except BaseException:
             # This namespace contains synthetic data only. Keep bounded failure
             # evidence before its disposable filesystem is removed.
@@ -319,10 +393,14 @@ def main():
                     break
                 assert time.monotonic() < deadline, 'fixture process residue: ' + str(residue)
                 time.sleep(.02)
-        print(json.dumps(dict(passed=True, scope='public MCP, real Chrome/X11, synthetic r3 provider; no live Google or viewer',
-                              noCdp=True, headed=True, readyHandoff=True, replayPreserved=True, domRefused=True,
-                              closed=True, profilePreserved=True, persistentCookiePreserved=True,
-                              automationTransition=True, cleanupVerified=True)))
+        if args.mode_conversion:
+            print(json.dumps(dict(passed=True,scope='public MCP, real Chrome and synthetic Native/X11; actual installed Native not qualified',modeRoundTrip=True,persistentCookiePreserved=True,cleanupVerified=True)))
+        else:
+            print(json.dumps(dict(passed=True, scope='public MCP, real Chrome/X11, synthetic r3 provider; no live Google or viewer',
+                                  noCdp=True, headed=True, readyHandoff=True, replayPreserved=True, domRefused=True,
+                                  closed=True, profilePreserved=True, persistentCookiePreserved=True,
+                                  automationTransition=True, cleanupVerified=True)))
+
 
 
 if __name__ == '__main__':

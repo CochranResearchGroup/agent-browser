@@ -3,14 +3,16 @@
 import { useEffect, useState } from "react";
 import { CircleHelp, Code2, MousePointer2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { BrowserModeDialog } from "@/components/browser-mode-dialog";
 import { ProfileDuplicateDialog } from "@/components/profile-duplicate-dialog";
 import type { ServiceBrowserModeInspection } from "@agent-browser/client/service-observability";
 
 /** Inspect owner evidence without focusing a browser, opening a viewer or changing mode. */
-export function BrowserModeButton({ label, inspection, profileId, observed = false, onRefresh }: {
-  label: string; profileId?: string | null; observed?: boolean; inspection?: ServiceBrowserModeInspection | null; onRefresh: () => Promise<void>;
+export function BrowserModeButton({ label, inspection, profileId, taskId, sessionName, observed = false, onRefresh }: {
+  label: string; taskId?: string | null; sessionName?: string | null; profileId?: string | null; observed?: boolean; inspection?: ServiceBrowserModeInspection | null; onRefresh: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  const [conversion, setConversion] = useState<"cdp" | "cdp_free" | null>(null);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const sourceProfileId = profileId ?? inspection?.profileId;
   const [, expireEvidence] = useState(0);
@@ -47,9 +49,10 @@ export function BrowserModeButton({ label, inspection, profileId, observed = fal
       <DropdownMenuLabel>Native input: Unverified</DropdownMenuLabel>
       {name === "Unverified" && <DropdownMenuLabel>Refresh inventory to observe this browser again.</DropdownMenuLabel>}
       <DropdownMenuSeparator />
+      {taskId && sessionName && <><DropdownMenuItem onSelect={() => { setOpen(false); setConversion("cdp"); }}>Relaunch with CDP</DropdownMenuItem><DropdownMenuItem onSelect={() => { setOpen(false); setConversion("cdp_free"); }}>Relaunch without CDP</DropdownMenuItem></>}
       {sourceProfileId && <DropdownMenuItem onSelect={() => { setOpen(false); setDuplicateOpen(true); }}>Duplicate profile</DropdownMenuItem>}
       <DropdownMenuItem disabled={refreshing} onSelect={event => { event.preventDefault(); void refresh(); }}>{refreshing ? "Refreshing inventory…" : "Refresh inventory"}</DropdownMenuItem>
       {error && <DropdownMenuLabel role="alert">Inventory refresh failed. Try again.</DropdownMenuLabel>}
     </DropdownMenuContent>
-  </DropdownMenu>{sourceProfileId && <ProfileDuplicateDialog open={duplicateOpen} onOpenChange={setDuplicateOpen} profileId={sourceProfileId} onRefresh={onRefresh} />}</>;
+  </DropdownMenu>{taskId && sessionName && (["cdp", "cdp_free"] as const).map(mode => <BrowserModeDialog key={`${taskId}:${mode}`} open={conversion === mode} onOpenChange={value => { if (!value) setConversion(null); }} taskId={taskId} sessionName={sessionName} mode={mode} onRefresh={onRefresh} />)}{sourceProfileId && <ProfileDuplicateDialog open={duplicateOpen} onOpenChange={setDuplicateOpen} profileId={sourceProfileId} onRefresh={onRefresh} />}</>;
 }

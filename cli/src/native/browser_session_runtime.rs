@@ -1208,6 +1208,7 @@ fn run_browser_worker(
     let mut reconciled_targets = HashMap::<(String, String), String>::new();
     let mut next_browser_sequence = 0_u64;
     while let Ok(command) = receive_runtime_command(&receiver, || {
+        manual.poll_owned_exits();
         for state in browsers.values_mut() {
             if let Some(manager) = state.browser.as_mut() {
                 if manager.owns_launched_browser_process() {
@@ -1222,8 +1223,17 @@ fn run_browser_worker(
                 profile,
                 browser,
                 reply,
+                tabs,
                 ..
             } if profile.manual_login_url.is_some() => {
+                if let Some(browser) = browser.as_ref().filter(|browser| {
+                    super::browser_session_host::browser_mode_host::recovery_authorized(
+                        &profile, browser,
+                    )
+                }) {
+                    let _ = reply.send(manual::reconcile_mode(&profile, browser, &tabs));
+                    continue;
+                }
                 let result = browser
                     .as_ref()
                     .map_or(Ok(()), |browser| {
@@ -1250,7 +1260,11 @@ fn run_browser_worker(
                 reply,
             } if profile.manual_login_url.is_some() => {
                 let result = (|| {
-                    if recovery_browser.is_some() {
+                    if recovery_browser.as_ref().is_some_and(|browser| {
+                        !super::browser_session_host::browser_mode_host::recovery_authorized(
+                            &profile, browser,
+                        )
+                    }) {
                         return Err("manual_login_recovery_requires_explicit_reopen".into());
                     }
                     let private =
@@ -1283,7 +1297,12 @@ fn run_browser_worker(
                         private_launch_environment: Some(private),
                         ..LaunchOptions::default()
                     };
-                    manual.launch(&profile, desktop, options)
+                    let mut launch = manual.launch(&profile, desktop, options)?;
+                    if let Some(browser) = recovery_browser {
+                        manual.retain_logical_identity(&launch.browser_id, &browser.id)?;
+                        launch.browser_id = browser.id;
+                    }
+                    Ok(launch)
                 })();
                 let _ = reply.send(result);
             }

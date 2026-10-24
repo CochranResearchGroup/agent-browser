@@ -93,6 +93,7 @@ const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = &[
     "native_capture",
     "native_input",
     "profile_duplicate",
+    "mode_convert",
     "navigate",
     "evaluate",
     "back",
@@ -235,6 +236,32 @@ fn mcp_command_response_with_config(
         Some("host-control") => host_control::cli(args),
         Some("host-reconnect") => host_reconnect::cli(args),
         Some("host-policy") => host_policy::cli(args),
+        Some("mode-convert") => {
+            if args.len() != 3 {
+                return Err("Usage: agent-browser --json mcp mode-convert '<JSON request>'".into());
+            }
+            let mut params: Value =
+                serde_json::from_str(&args[2]).map_err(|_| "mode_operation_request_invalid")?;
+            let task_id = params["taskId"]
+                .as_str()
+                .ok_or("mode_operation_task_required")?
+                .to_string();
+            params
+                .as_object_mut()
+                .ok_or("mode_operation_request_invalid")?
+                .remove("taskId");
+            let response = mode_convert_call(
+                &json!({"taskId":task_id,"action":"mode_convert","params":params}),
+                "default",
+            )
+            .map_err(|error| error.message)?;
+            serde_json::from_str(
+                response["content"][0]["text"]
+                    .as_str()
+                    .ok_or("mode_operation_response_invalid")?,
+            )
+            .map_err(|_| "mode_operation_response_invalid".into())
+        }
         Some("profile-duplicate") => profile_duplicate::cli(args),
         Some("browser-native") => {
             if args.len() != 5 || !matches!(args[3].as_str(), "native_capture" | "native_input") {
@@ -5449,8 +5476,10 @@ fn call_service_mcp_tool(
             }
         }
     }
-    if name.starts_with("browser_") && !matches!(name, "browser_open" | "browser_discover")
-        && !(name == "browser_command" && arguments["action"] == "profile_duplicate") {
+    if name.starts_with("browser_")
+        && !matches!(name, "browser_open" | "browser_discover")
+        && !(name == "browser_command" && arguments["action"] == "profile_duplicate")
+    {
         required_string_argument(arguments, "taskId")?;
     }
     if name == "browser_reconnect" {
@@ -5516,13 +5545,53 @@ fn call_service_mcp_tool(
             return playbooks::call(arguments, session);
         }
         validate_browser_command_action(arguments)?;
-        if matches!(arguments["action"].as_str(), Some("native_input" | "native_capture")) {
-            let mut command=Value::Object(optional_object_argument(arguments,"params")?.cloned().unwrap_or_default());
-            command["action"]=arguments["action"].clone();command["id"]=json!(uuid::Uuid::new_v4().to_string());
-            let task_id=required_string_argument(arguments,"taskId")?;
-            let name=workflow::address_task_command(&mut command,task_id).map_err(|error|JsonRpcError::invalid_params(&error))?;
-            let data=workflow::execute(command,&name)?;
-            return Ok(tool_response_from_payload("browser_command",session,json!({}),data,false));
+        if matches!(
+            arguments["action"].as_str(),
+            Some("native_input" | "native_capture")
+        ) {
+            let mut command = Value::Object(
+                optional_object_argument(arguments, "params")?
+                    .cloned()
+                    .unwrap_or_default(),
+            );
+            command["action"] = arguments["action"].clone();
+            command["id"] = json!(uuid::Uuid::new_v4().to_string());
+            let task_id = required_string_argument(arguments, "taskId")?;
+            let name = workflow::address_task_command(&mut command, task_id)
+                .map_err(|error| JsonRpcError::invalid_params(&error))?;
+            let mut data = workflow::execute(command, &name)?;
+            let image = if arguments["action"] == "native_capture" {
+                use base64::Engine;
+                let image = data.pointer("/capture/image").cloned().ok_or_else(|| {
+                    JsonRpcError::invalid_params("native_capture_image_unavailable")
+                })?;
+                let encoded = image["data"]
+                    .as_str()
+                    .filter(|value| value.len() <= 5_592_408)
+                    .ok_or_else(|| JsonRpcError::invalid_params("native_capture_image_invalid"))?;
+                let decoded = base64::engine::general_purpose::STANDARD
+                    .decode(encoded)
+                    .map_err(|_| JsonRpcError::invalid_params("native_capture_image_invalid"))?;
+                if image["mimeType"] != "image/png"
+                    || decoded.len() > 4_194_304
+                    || !decoded.starts_with(b"\x89PNG\r\n\x1a\n")
+                {
+                    return Err(JsonRpcError::invalid_params("native_capture_image_invalid"));
+                }
+                data["capture"]["image"] = json!({"mimeType":"image/png","imageContent":true});
+                Some(json!({"type":"image","mimeType":"image/png","data":encoded}))
+            } else {
+                None
+            };
+            let mut response =
+                tool_response_from_payload("browser_command", session, json!({}), data, false);
+            if let Some(image) = image {
+                response["content"].as_array_mut().unwrap().push(image);
+            }
+            return Ok(response);
+        }
+        if arguments["action"] == "mode_convert" {
+            return mode_convert_call(arguments, session);
         }
         if arguments["action"] == "profile_duplicate" {
             return profile_duplicate::call(arguments, session);
@@ -6337,6 +6406,27 @@ fn validate_browser_command_action(arguments: &Value) -> Result<&str, JsonRpcErr
         }
     }
     Ok(action)
+}
+
+fn mode_convert_call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcError> {
+    let mut command = Value::Object(
+        optional_object_argument(arguments, "params")?
+            .cloned()
+            .unwrap_or_default(),
+    );
+    let task = required_string_argument(arguments, "taskId")?;
+    let session = workflow::address_task_command(&mut command, task)
+        .map_err(|error| JsonRpcError::invalid_params(&error))?;
+    command["action"] = json!("browser_session_mode_convert");
+    command["id"] = json!(uuid::Uuid::new_v4().to_string());
+    let data = workflow::execute(command, &session)?;
+    Ok(tool_response_from_payload(
+        "browser_command",
+        transport,
+        json!({}),
+        data,
+        false,
+    ))
 }
 
 fn call_browser_command(

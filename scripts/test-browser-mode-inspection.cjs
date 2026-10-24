@@ -23,6 +23,8 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.getByRole('button', { name: 'Browser mode for Synthetic browser: No CDP', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Browser mode for Synthetic browser: No CDP', exact: true }).hover();
     assert.match(await page.getByRole('menu').innerText(), /Ownership: Managed/);
+    await page.getByRole('menuitem', {name:'Relaunch without CDP',exact:true}).waitFor({timeout:750});
+    await page.getByRole('menuitem', {name:'Relaunch with CDP',exact:true}).waitFor({timeout:750});
     await page.keyboard.press('Escape');
     const commands=[];
     await page.route('**/api/command',async route=>{
@@ -52,6 +54,37 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.getByText('task-two',{exact:true}).waitFor();
     assert.equal(commands[2].operationId,operationId);
     assert.equal(commands[2].choice,'reconcile');
+    await page.getByRole('button',{name:'Close',exact:true}).click();
+    const modeCommands=[];
+    await page.unroute('**/api/command');
+    await page.route('**/api/command', async route => {
+      const command=route.request().postDataJSON();modeCommands.push(command);
+      if(modeCommands.length===2){await route.abort('failed');return;}
+      await route.fulfill({json:{success:true,data:{schemaVersion:'agent-browser.mode-operation.v1',operationId:command.operationId,phase:'prepared',affectedTaskIds:['task-one','task-two'],actions:[{action:'relaunch',requiresConfirmation:true},{action:'cancel',requiresConfirmation:false}]}}});
+    });
+    await page.getByRole('button',{name:'Browser mode for Synthetic browser: No CDP',exact:true}).click();
+    await page.getByRole('menuitem',{name:'Relaunch without CDP',exact:true}).click();
+    await page.getByRole('dialog',{name:'Change browser mode',exact:true}).waitFor();
+    assert.equal(modeCommands.length,0,'opening mode dialog has no relaunch effect');
+    await page.getByRole('button',{name:'Review relaunch',exact:true}).click();
+    await page.getByText('task-two',{exact:true}).waitFor();
+    assert.equal(modeCommands[0].sessionId,'task-one');
+    assert.equal(modeCommands[0].sessionName,'synthetic-owner');
+    assert.equal(modeCommands[0].mode,'cdp_free');
+    assert.equal(await page.getByRole('button',{name:'Relaunch now',exact:true}).isEnabled(),false);
+    await page.getByRole('checkbox',{name:'Confirm the selected browser action'}).check();
+    await page.getByRole('button',{name:'Relaunch now',exact:true}).click();
+    await page.getByRole('button',{name:'Reconcile operation',exact:true}).waitFor();
+    assert.equal(await page.getByRole('button',{name:'Relaunch now',exact:true}).count(),0);
+    await page.getByRole('button',{name:'Reconcile operation',exact:true}).click();
+    await page.getByText('task-two',{exact:true}).waitFor();
+    assert.equal(modeCommands[2].operationId,modeCommands[0].operationId);
+    assert.equal(modeCommands[2].choice,'reconcile');
+    await page.getByRole('button',{name:'Close',exact:true}).click();
+    await page.getByRole('button',{name:'Browser mode for Synthetic browser: No CDP',exact:true}).click();
+    await page.getByRole('menuitem',{name:'Relaunch without CDP',exact:true}).click();
+    await page.getByText('task-two',{exact:true}).waitFor({timeout:750});
+    assert.equal(modeCommands.length,3,'closing and reopening retains the operation without a new effect');
     await page.getByRole('button',{name:'Close',exact:true}).click();
     // A stopped or failed inventory poll must not leave a verified mode forever.
     await page.clock.fastForward(31_000);

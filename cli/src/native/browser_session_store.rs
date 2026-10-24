@@ -25,7 +25,7 @@ use sha2::{Digest, Sha256};
 use super::service_store::default_service_state_path;
 
 #[path = "browser_mode_inspection.rs"]
-mod mode_inspection;
+pub(crate) mod mode_inspection;
 #[path = "browser_terminal_history.rs"]
 mod terminal_history;
 #[path = "browser_workspace_observation.rs"]
