@@ -63,9 +63,19 @@ if(process.env.HOSTED_SMOKE_WORKLOAD_PLAN){
  assert.equal(workloadPlan.sourcePair.agentBinarySha256,createHash('sha256').update(await readFile(binary)).digest('hex'));
  assert.equal(workloadPlan.pairDigest,createHash('sha256').update(JSON.stringify(workloadPlan.sourcePair)).digest('hex'));
 }
+let fixtureNativeConnectOrigin;
+if(process.env.HOSTED_SMOKE_FIXTURE_NATIVE_CONNECT_ORIGIN){
+ assert(workloadPlan&&application==='fixture');
+ assert.equal(new URL(nativeOrigin).hostname,'native.p279.example.invalid');
+ assert.equal(new URL(appOrigin).hostname,'app.p279.example.invalid');
+ fixtureNativeConnectOrigin=process.env.HOSTED_SMOKE_FIXTURE_NATIVE_CONNECT_ORIGIN;
+ const connect=new URL(fixtureNativeConnectOrigin);
+ assert.equal(connect.origin,fixtureNativeConnectOrigin);assert.equal(connect.protocol,'https:');assert.equal(connect.hostname,'127.0.0.1');
+ assert.equal(connect.port,new URL(nativeOrigin).port);
+}
 let restartBridge,restartAuthorization;
 if(process.env.HOSTED_SMOKE_RESTART_BRIDGE){
- assert(workloadPlan&&application==='fixture');assert.equal(new URL(nativeOrigin).hostname,'127.0.0.1');
+ assert(workloadPlan&&application==='fixture');assert(fixtureNativeConnectOrigin||new URL(nativeOrigin).hostname==='127.0.0.1');
  restartBridge=process.env.HOSTED_SMOKE_RESTART_BRIDGE;const address=new URL(restartBridge);
  assert.equal(address.origin,restartBridge);assert.equal(address.protocol,'http:');assert.equal(address.hostname,'127.0.0.1');
  const file=await absolute('HOSTED_SMOKE_RESTART_TOKEN_FILE'),info=await stat(file);assert.equal(info.uid,process.getuid());assert.equal(info.mode&0o077,0);
@@ -338,7 +348,7 @@ try{
    return domainMatch&&cookie.path==='/'&&(cookie.expires===-1||cookie.expires>now)&&typeof cookie.name==='string'&&typeof cookie.value==='string'&&!/[\r\n;]/.test(cookie.name+cookie.value);
   }).map(cookie=>cookie.name+'='+cookie.value).join('; ');
   let result;
-  try{result=await fetch(nativeOrigin+'/',{method:'GET',headers:cookies?{cookie:cookies}:{},redirect:'manual',signal:AbortSignal.timeout(10000)});}
+  try{result=await fetch((fixtureNativeConnectOrigin??nativeOrigin)+'/',{method:'GET',headers:cookies?{cookie:cookies}:{},redirect:'manual',signal:AbortSignal.timeout(10000)});}
   catch{throw Object.assign(Error('Native authentication preflight requires operator readback'),{code:'fixture_auth_preflight_required'});}
   await result.body?.cancel();
   let accepted=result.status>=200&&result.status<300;
@@ -449,7 +459,8 @@ try{
  await qualifyHostedBrowserControl({send,runCli:args=>runCli(context,args),task:opened,sessionName,readTask,save,syntheticOnly:true,
   serviceRequest:async body=>{const response=await httpJsonResult(servicePort,'POST','/api/service/request',body);assert.equal(response.statusCode,200);assert.equal(response.body?.success,false);return response.body;}});
  await continuity('after-human-control');
- step='native-viewer';viewerServer=await chromium.launchServer({executablePath:chrome,headless:true,env:{...env,AGENT_BROWSER_HOME:agentHome}});
+ step='native-viewer';viewerServer=await chromium.launchServer({executablePath:chrome,headless:true,
+  ...(fixtureNativeConnectOrigin?{args:['--no-proxy-server','--host-resolver-rules=MAP native.p279.example.invalid 127.0.0.1']}:{}),env:{...env,AGENT_BROWSER_HOME:agentHome}});
  const viewerProcess=viewerServer.process();assert(viewerProcess?.pid,'Viewer server must expose its owned process');
  viewerRootProof=await cleanupProcessIdentity(viewerProcess.pid);assert(viewerRootProof,'Viewer root must be live');
  observedOwnedProcesses.set(viewerRootProof.pid,viewerRootProof);
@@ -461,7 +472,7 @@ try{
  let viewerContext,page,frames=0,canvas=null;
  const coldSamples=[],coldContexts=new Set(),coldCount=workloadPlan?.coldContexts??1;
  const fixtureTls=process.env.HOSTED_SMOKE_FIXTURE_TLS==='1';
- if(fixtureTls){assert(workloadPlan,'Private TLS mode requires the declared isolated workload');assert.equal(new URL(nativeOrigin).hostname,'127.0.0.1');}
+ if(fixtureTls){assert(workloadPlan,'Private TLS mode requires the declared isolated workload');assert(fixtureNativeConnectOrigin||new URL(nativeOrigin).hostname==='127.0.0.1');}
  uiHandoffId=new URL(opened.handoffUrl).pathname.split('/').at(-1);
  for(let index=0;index<coldCount;index++){
   if(viewerContext)await viewerContext.close();

@@ -112,7 +112,11 @@ def main():
                    'chromeSha256': h.sha(args.chrome), 'consumerSourceCommit': h.run('git', '-C', args.consumer_root, 'rev-parse', 'HEAD').strip(),
                    'nativeFixtureSourceCommit': h.run('git', '-C', args.native_source, 'rev-parse', 'HEAD').strip(),
                    'harnessSourceCommit': h.run('git', '-C', repo, 'rev-parse', 'HEAD').strip(),
-                   'fixtureFiles': {name: h.sha(repo / name) for name in fixture_files}}
+                   'fixtureFiles': {name: h.sha(repo / name) for name in fixture_files},
+                   'fixtureTransport': {'nativePublicHost': 'native.p279.example.invalid',
+                                        'appPublicHost': 'app.p279.example.invalid',
+                                        'nativeConnectHost': '127.0.0.1', 'scheme': 'https',
+                                        'scope': 'Private fixture mapping only; no shared DNS or hosts edits'}}
     pair_digest = hashlib.sha256(json.dumps(source_pair, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
     plan = {'version': 1, 'runId': secrets.token_hex(16), 'pairDigest': pair_digest, 'sourcePair': source_pair,
             'coldContexts': 5, 'publicControlPairs': 10, 'nativeControlPairs': 3, 'warmTargetMs': 250,
@@ -143,8 +147,13 @@ def main():
 
         def __init__(self, parsed):
             super().__init__(parsed)
-            self.public = f'https://127.0.0.1:{self.listener.server_port}'
-            self.app_origin = f'https://127.0.0.1:{h.free_port()}'
+            self.public = f'https://native.p279.example.invalid:{self.listener.server_port}'
+            self.app_origin = f'https://app.p279.example.invalid:{h.free_port()}'
+            self.native_connect_origin = f'https://127.0.0.1:{self.listener.server_port}'
+            h.private_json(parsed.results / 'fixture-origin-transport.json',
+                           {'nativePublicOrigin': self.public, 'appPublicOrigin': self.app_origin,
+                            'nativeConnectOrigin': self.native_connect_origin,
+                            'scope': 'Private fixture transport; no shared DNS, hosts, authentication or ingress changes'})
             self.rpc = None
             self.extra_servers = []
             self.agent_child = None
@@ -155,7 +164,7 @@ def main():
             try:
                 h.run('openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
                       '-keyout', key, '-out', certificate, '-subj', '/CN=127.0.0.1',
-                      '-addext', 'subjectAltName=IP:127.0.0.1', timeout=20)
+                      '-addext', 'subjectAltName=IP:127.0.0.1,DNS:native.p279.example.invalid', timeout=20)
                 key.chmod(0o600)
                 context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
                 context.load_cert_chain(certificate, key)
@@ -344,7 +353,7 @@ def main():
             bridge = ThreadingHTTPServer(('127.0.0.1', 0), BridgeRequest)
             self.extra_servers.append(bridge)
             threading.Thread(target=bridge.serve_forever, daemon=True).start()
-            auth = {'cookies': [{'name': 'rv283', 'value': self.cookie, 'domain': '127.0.0.1',
+            auth = {'cookies': [{'name': 'rv283', 'value': self.cookie, 'domain': 'native.p279.example.invalid',
                                 'path': '/', 'expires': -1, 'httpOnly': True, 'secure': True, 'sameSite': 'Strict'}], 'origins': []}
             h.private_json(args.results / 'auth-state.json', auth)
             environment = {key: value for key, value in os.environ.items()
@@ -358,6 +367,7 @@ def main():
                  'HOSTED_SMOKE_RESTART_BRIDGE': f'http://127.0.0.1:{bridge.server_port}',
                  'HOSTED_SMOKE_RESTART_TOKEN_FILE': str(bridge_token_path), 'HOSTED_SMOKE_AUTH_STATE': str(args.results / 'auth-state.json'),
                  'HOSTED_SMOKE_WORKLOAD_PLAN': str(args.results / 'workload-plan.json'), 'HOSTED_SMOKE_FIXTURE_TLS': '1',
+                 'HOSTED_SMOKE_FIXTURE_NATIVE_CONNECT_ORIGIN': self.native_connect_origin,
                  'HOSTED_SMOKE_CONTINUITY_REQUIRED': '1', 'HOSTED_SMOKE_LOSS_REQUIRED': '1',
                  'HOSTED_SMOKE_EVIDENCE_DIR': str(args.results / 'agent'), 'NODE_EXTRA_CA_CERTS': str(self.certificate)})
             if args.browser_manifest:
