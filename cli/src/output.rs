@@ -5796,6 +5796,7 @@ Development install doctor binds the selected generation, exact launcher bytes
 and configured dashboard port. Republish that development installation when its
 binding is missing or changed. A native Remote View binding uses read-only
 provider inventory readiness; visible pixels and input require workflow checks.
+Dashboard static text assets negotiate gzip; successful hashed Next assets use immutable browser caching. HTML and dynamic APIs keep their existing freshness and authentication behavior.
 Headless development doctor does not require legacy RDP helpers. Required legacy
 presentation remains an explicit development publication choice.
 Workstation status reports recorded phase start, elapsed milliseconds, last

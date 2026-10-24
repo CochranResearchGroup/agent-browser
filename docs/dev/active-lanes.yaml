@@ -1,6 +1,23 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P280
+    product_lane: PL-BUGFIX
+    objective: Reduce cold dashboard static asset transfer
+    plan: docs/dev/plans/0280-2026-10-24-dashboard-static-delivery.md
+    branch: fix/dashboard-static-delivery
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#391]
+    plan_state: IN_PROGRESS
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [P279]
+    reconciled_overlaps: ["Shared dashboard primary reused; P279 sealed deployed candidate retained; foreign auth, profile-proof and enrollment work preserved"]
+    validation_status: Sealed8532c10293f1 isolated acceptance; JS/CSS wire bytes reduced62.77%;252 stream tests pass with2 ignored; strict Clippy, format, docs and three browser cycles pass;16 probe generations absent
+    limitations: ["Production publication awaits existing forward-recovery operation; no competing effect", "Issue393 owns producer-side inventory wait; Native first pixels unqualified", "Temporary namespace stopped; candidate and primary retained", "No ingress changes"]
+    updated_at: 2026-10-24
+
   - id: P279
     product_lane: PL-PLATFORM
     objective: Qualify the remaining combined hosted matrix on one pinned pair
