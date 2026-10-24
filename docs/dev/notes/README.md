@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P290 writer executable continuity](0290-2026-10-24-writer-executable-continuity.md) records the public unlink regression and bounded source repair under PL-BUGFIX.
+
 [P289 terminal acquisition](0289-2026-10-24-terminal-acquisition-recovery.md): exact provider-released replay unblocks interrupted acquisition without resurrecting capacity.
 [P288 writer custody](0288-2026-10-24-workstation-writer-custody.md): public CLI red/green repair of stale writer refusal and contention projection.
 

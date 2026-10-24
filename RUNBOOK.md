@@ -1,5 +1,7 @@
 # Runbook
 
+[P290 writer executable continuity](docs/dev/plans/0290-2026-10-24-writer-executable-continuity.md), #417, repairs PR415 live-writer custody loss after executable unlink through public CLI TDD. PR419 carries the qualified source;221 workstation tests, public fixtures, strict Rust quality and docs pass. Production is unchanged.
+
 [P288 writer custody](docs/dev/plans/0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. PR415 carries the qualified source;221 workstation cases, strict Rust, fixtures and docs pass. Installed production is unchanged.
 
 P285/#393 routing repair is merged (PR410) and installed as sealed candidate4c8131146eb9, preserving all11 existing browser process generations. Paired workspace median improves487.841ms to32.755ms. Public rail is usually subsecond, but one4.98s first-context tail remains unexplained; #393 stays open. Production synthetic open fails on pending Native acquisition readback; #412 owns that distinct recovery. See [P285 evidence](docs/dev/notes/0285-2026-10-24-workspace-inventory-latency.md).

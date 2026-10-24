@@ -1,5 +1,7 @@
 # Active plan index
 
+[P290 writer executable continuity](0290-2026-10-24-writer-executable-continuity.md), #417, owns the PR415 live-writer unlink regression under PL-BUGFIX.
+
 [P289 terminal acquisition recovery](0289-2026-10-24-terminal-acquisition-recovery.md), #412, reconciles exact provider-released interrupted acquisition before combined installed acceptance.
 
 [P288 writer custody](0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. PR415 carries the qualified source;221 workstation cases, strict Rust, fixtures and docs pass. Installed production is unchanged.

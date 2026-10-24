@@ -1,5 +1,7 @@
 # Roadmap
 
+[P290 writer executable continuity](docs/dev/plans/0290-2026-10-24-writer-executable-continuity.md), #417, repairs PR415 live-writer custody loss after executable unlink through public CLI TDD. PR419 carries the qualified source;221 workstation tests, public fixtures, strict Rust quality and docs pass. Production is unchanged.
+
 [P288 writer custody](docs/dev/plans/0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. PR415 carries the qualified source;221 workstation cases, strict Rust, fixtures and docs pass. Installed production is unchanged.
 
 [P284 operator-led upgrades](docs/dev/plans/0284-2026-10-24-operator-led-upgrades.md), #399, removes persistent upgrade markers and warning-based upgrade vetoes. The operator controls their workstation; optional live-work inspection is advisory. PR406 is integrated and exact candidate417d5886c68e is installed and accepted. Doctor and same-tab unsaved-work continuity pass.
