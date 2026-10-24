@@ -6168,7 +6168,8 @@ Copy URL, Share and scoped Close Tab. Handoffs opens retained links and their
 independent policies on demand.
 Tab descriptions use live page titles, then supplied task labels. Opaque data
 URLs use readable document labels; Properties and Copy URL keep the original URL.
-Inventory reads do not select tabs.
+Inventory reads do not select tabs. Both HTTP listeners read current owner
+workspace inventory directly, without diagnostic transport or a status cache.
 Diagnostics at /service retains Service inspection, Selection, Activity, Chat,
 Console, Network, Storage, Extensions and runtime health. /activity opens its
 Activity tool. Viewing controls return to the same browser workspace.

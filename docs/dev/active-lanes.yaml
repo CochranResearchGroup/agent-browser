@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P285
+    product_lane: PL-BUGFIX
+    objective: Diagnose and repair workspace inventory latency
+    plan: docs/dev/plans/0285-2026-10-24-workspace-inventory-latency.md
+    branch: fix/workspace-inventory-latency-393
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#393]
+    plan_state: IN_PROGRESS
+    custody_state: ACTIVE
+    overlaps: [P283, P284]
+    reconciled_overlaps: ["Own dashboard/http routing and rail freshness prose only; P283/P284 retain profile/store/observation and installer source; reuse primary and retain pinned artifacts"]
+    validation_status: Real-handler red-green;253 stream passes with2 ignored; strict Rust/docs/parity gates; exact development empty median3.358ms and one-browser12.867ms
+    limitations: ["Production-shaped publication pending after P284 reconciliation", "No stale-data substitution, provider/ingress change or private-account activity", "Cold shell tail remains distinct"]
+    updated_at: 2026-10-24
+
   - id: P284
     product_lane: PL-PLATFORM
     objective: Remove upgrade markers and make operator warnings advisory
