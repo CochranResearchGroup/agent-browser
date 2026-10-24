@@ -343,3 +343,22 @@ and the failure remains preserved. This does not claim a full-suite pass.
 Candidate binary is staged immutably; actual existing-profile proof is positive.
 Production adoption and original public MCP workflow qualification remain pending.
 No existing browser, authentication state or provider object was changed.
+
+## P243/P232 maintenance: accepted upgrade recovery continuity
+
+A supervisor-transition failure can be followed by an exact transaction resume
+that overwrites its stop reason. Forward recovery must retain the durable prior
+acceptance checkpoint and requalify the exact selected sealed candidate, live
+host, dashboard manifest and owned drain. The original nonblocking absence of
+an operator presentation must stay nonblocking; partial or invalid presentation
+receipts must still reject. This bounded slice owns the recovery controller and
+its focused fixtures on fix/accepted-upgrade-recovery. No selector edits, timeout
+changes, fabricated receipts, production effects or broad runtime supersession.
+Validation and optimized candidate qualification are pending.
+
+Recovery regression checkpoint: both public recovery-history and physical-proof
+presentation tests failed before the repair and passed afterward. The expanded
+closed-scope receipt/history/identity counterexample table is pending at this
+checkpoint. The recovery-only mode reuses the existing live physical validator;
+ordinary readiness keeps its strict presentation requirement. No production
+controller invocation or runtime adoption has occurred in this source lane.

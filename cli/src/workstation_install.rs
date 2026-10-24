@@ -1795,13 +1795,18 @@ fn recover_operator_required_upgrade_for_root(
     }
     let accepted_forward_recovery = transaction.state == UpgradeTransactionState::Accepted
         || (transaction.state == UpgradeTransactionState::OperatorRecoveryRequired
-            && matches!(
+            && (matches!(
                 transaction.stop_reason.as_deref(),
                 Some(
                     "accepted_supervisor_transition_failed"
                         | "accepted_admission_drain_not_cleared"
                 )
-            ));
+            ) || transaction.checkpoints.iter().any(|checkpoint| {
+                checkpoint.name == "accepted_supervisor_transition_recovery_required"
+                    && checkpoint.transaction_revision > 0
+                    && checkpoint.transaction_revision <= transaction.revision
+                    && !checkpoint.recorded_at.trim().is_empty()
+            })));
     if accepted_forward_recovery
         && selected_generation_id(&paths).as_deref()
             == Some(transaction.candidate_generation_id.as_str())
@@ -1815,6 +1820,11 @@ fn recover_operator_required_upgrade_for_root(
                 .generations_dir
                 .join(&transaction.candidate_generation_id),
         )?;
+        if !isolated_root
+            && !crate::runtime_adoption::upgrade_runtime_preservation_proven(&transaction)
+        {
+            return Err("workstation_forward_recovery_runtime_preservation_unproven".into());
+        }
         let supervisor = if isolated_root {
             serde_json::json!({"state": "isolated_not_configured"})
         } else {
@@ -1828,23 +1838,28 @@ fn recover_operator_required_upgrade_for_root(
             .unwrap_or_else(|| root.join(".agent-browser/dashboard-ingress.json"));
         let dashboard =
             crate::dashboard_ingress::dashboard_ingress_status_for_path(&dashboard_ingress_path);
-        let dashboard_ready = dashboard
-            .pointer("/selectedBackend/generationId")
-            .and_then(Value::as_str)
-            == Some(transaction.candidate_generation_id.as_str())
-            && dashboard
-                .pointer("/presentationReceipt/coordinatorGeneration")
-                .and_then(Value::as_str)
-                == Some(transaction.candidate_generation_id.as_str())
-            && dashboard
-                .pointer("/presentationReceipt/state")
-                .and_then(Value::as_str)
-                == Some("ready");
-        if !isolated_root && !dashboard_ready {
-            return Err("workstation_forward_recovery_dashboard_evidence_not_ready".to_string());
+        if !isolated_root {
+            current_selection::validate_forward_recovery(
+                &paths,
+                &transaction.candidate_generation_id,
+                &dashboard,
+            )?;
         }
-        transaction.dashboard_validation_summary =
-            Some("authenticated_candidate_dashboard_and_operator_journey_ready".to_string());
+        let presentation_absent = dashboard
+            .get("presentationReceipt")
+            .is_none_or(Value::is_null);
+        transaction.dashboard_validation_summary = Some(if isolated_root {
+            "isolated_candidate_payload_validated".into()
+        } else {
+            "candidate_dashboard_generation_health_validated".into()
+        });
+        transaction.presentation_validation_summary = Some(if isolated_root {
+            "isolated_source_fixture_has_no_live_presentations".into()
+        } else if presentation_absent {
+            "operator_journey_deferred_nonblocking".into()
+        } else {
+            "authenticated_candidate_dashboard_and_operator_journey_ready".into()
+        });
         transaction.terminal_result = Some("accepted".to_string());
         transaction.stop_reason = None;
         if transaction.state != UpgradeTransactionState::Accepted {
