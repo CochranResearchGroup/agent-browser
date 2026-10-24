@@ -2,6 +2,48 @@
 //! service-owned browser process. Native window handles remain private to this
 //! module and never enter service contracts, receipts, logs, or durable state.
 
+/// X11 protocol races (for example a window vanishing between census and
+/// property reads) are handled by each checked query result, never process exit.
+/// Keep one library reference and this allocation-free handler for process life;
+/// restoring a global handler between calls would race other Xlib connections.
+#[cfg(target_os = "linux")]
+pub(crate) fn initialize_x11_error_policy() -> Result<(), String> {
+    static POLICY: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
+    POLICY
+        .get_or_init(|| unsafe {
+            let mut handle = std::ptr::null_mut();
+            for name in [c"libX11.so.6", c"libX11.so"] {
+                handle = libc::dlopen(name.as_ptr(), libc::RTLD_NOW | libc::RTLD_LOCAL);
+                if !handle.is_null() {
+                    break;
+                }
+            }
+            if handle.is_null() {
+                return Err("X11 error policy requires libX11".into());
+            }
+            type Handler =
+                unsafe extern "C" fn(*mut libc::c_void, *mut libc::c_void) -> libc::c_int;
+            type SetHandler = unsafe extern "C" fn(Option<Handler>) -> Option<Handler>;
+            unsafe extern "C" fn nonfatal(
+                _display: *mut libc::c_void,
+                _event: *mut libc::c_void,
+            ) -> libc::c_int {
+                0
+            }
+            let symbol = libc::dlsym(handle, c"XSetErrorHandler".as_ptr());
+            if symbol.is_null() {
+                libc::dlclose(handle);
+                return Err("X11 error handler symbol unavailable".into());
+            }
+            let install: SetHandler = std::mem::transmute(symbol);
+            install(Some(nonfatal));
+            // Intentionally pin the library: the process-global policy must survive
+            // individual scene/browser display connections being closed.
+            Ok(())
+        })
+        .clone()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct X11SceneEvidence {
     pub(crate) active_window_owned: bool,
@@ -317,6 +359,7 @@ mod linux {
 
     impl X11 {
         fn load() -> Result<Self, String> {
+            super::initialize_x11_error_policy()?;
             let mut last_error = None;
             for name in ["libX11.so.6", "libX11.so"] {
                 let library_name = CString::new(name).expect("static library name");

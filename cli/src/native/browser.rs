@@ -2956,6 +2956,7 @@ mod x11_focus {
 
     impl X11 {
         fn load() -> Result<Self, String> {
+            crate::native::x11_scene::initialize_x11_error_policy()?;
             let mut last_error = None;
             for name in ["libX11.so.6", "libX11.so"] {
                 let library_name = CString::new(name).expect("static library name");
