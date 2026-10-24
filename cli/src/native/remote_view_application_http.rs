@@ -50,8 +50,6 @@ impl RemoteViewApplicationHttp {
 impl RemoteViewApplicationHttp {
     /// Existing Remote View agent-desktop API. No browser/CDP attachment or
     /// controller takeover is performed by this transport.
-    // Staged #402 adapter: not advertised until task-owner workflow qualification.
-    #[allow(dead_code)]
     pub(crate) fn native_request(&mut self, operation: &str, body: &Value) -> Result<Value, Error> {
         if !matches!(
             operation,

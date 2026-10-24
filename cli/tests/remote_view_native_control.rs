@@ -95,3 +95,42 @@ fn native_task_input_never_dispatches_to_a_replaced_process() {
     );
     assert_eq!(owner.calls[0].0, "observe");
 }
+
+#[test]
+fn native_task_capture_is_fenced_to_the_browser_window_without_input() {
+    let original = agent_browser_service_model::RecordedProcessIdentity {
+        pid:42, start_token:"linux:boot:11".into(),
+        executable_path:Some("/synthetic/chrome".into()), browser_family:Some("chrome".into()),
+    };
+    let target = agent_browser_service_model::RemoteViewApplicationTarget {
+        assignment_id:"assignment".into(), registration_id:"registration".into(),
+        desktop_id:"lifecycle".into(), lifecycle_generation:2,
+        viewing_desktop_id:"viewing".into(), viewing_generation:9,
+    };
+    let mut owner = NativeFixture {calls:vec![]};
+    let reply = browser_native_control::execute(&original,&target,
+        &serde_json::json!({"action":"native_capture"}), &mut owner).unwrap();
+    assert_eq!(reply["source"], "remote_view_native");
+    assert_eq!(owner.calls[1].0,"capture_region");
+    assert_eq!(owner.calls[1].1["windowId"],7);
+    assert!(owner.calls[1].1.get("actions").is_none());
+    assert_eq!(owner.calls[1].1["region"],serde_json::json!({"x":0,"y":0,"width":1024,"height":768}));
+}
+
+#[test]
+fn native_task_window_remediation_uses_only_the_verified_window() {
+    let original = agent_browser_service_model::RecordedProcessIdentity {
+        pid:42,start_token:"linux:boot:11".into(),executable_path:Some("/synthetic/chrome".into()),browser_family:Some("chrome".into()),
+    };
+    let target = agent_browser_service_model::RemoteViewApplicationTarget {
+        assignment_id:"assignment".into(),registration_id:"registration".into(),desktop_id:"lifecycle".into(),lifecycle_generation:2,viewing_desktop_id:"viewing".into(),viewing_generation:9,
+    };
+    for (action, expected) in [("native_close","close"),("native_focus","activate")] {
+        let mut owner=NativeFixture{calls:vec![]};
+        let result=browser_native_control::execute(&original,&target,&serde_json::json!({"action":action}),&mut owner).unwrap();
+        assert_eq!(result["taskCompleted"],false);
+        assert_eq!(owner.calls[1].0,"window");
+        assert_eq!(owner.calls[1].1,serde_json::json!({"desktopId":"viewing","expectedGeneration":9,"windowId":7,"expectedProcessIdentity":{"pid":42,"boot_id":"boot","start_token":"11","executable":"/synthetic/chrome","uid":1000,"cgroup":"fixture"},"action":expected}));
+        assert!(result.get("processExited").is_none(),"dispatch does not prove exit");
+    }
+}
