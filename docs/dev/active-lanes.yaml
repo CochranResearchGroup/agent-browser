@@ -25,13 +25,14 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#399]
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    plan_state: CLOSED
+    custody_state: INTEGRATED
     dependencies: [P281, P282]
     overlaps: [P280, P282]
-    reconciled_overlaps: ["Own marker retirement and advisory operator contract; retain P282 selected-dashboard proof and P280 static delivery; preserve all foreign checkouts"]
-    validation_status: Combined222 workstation cases, focused regressions, strict Rust gates, docs and exact417d5886c68e installer, supervisor and Chrome fixtures pass
-    limitations: ["Installed publication pending", "CI disabled; no formal release or cross-platform claim"]
+    reconciled_overlaps: [P280, P282]
+    validation_status: PR406 integrated; exact417d5886c68e installed and accepted; doctor, same-tab unsaved continuity and fresh disposable open pass
+    limitations: ["Slow browser operations remain separate; exact test cleanup passes", "CI disabled; no formal release or cross-platform claim"]
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/406
     updated_at: 2026-10-24
 
   - id: P282
