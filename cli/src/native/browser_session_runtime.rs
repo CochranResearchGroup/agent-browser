@@ -2102,6 +2102,41 @@ async fn attach_requested_app_browser(
     Ok((observation, manager))
 }
 
+/// Resolve endpoint metadata only after this exact process/profile is qualified.
+#[cfg(target_os = "linux")]
+fn current_profile_debug_endpoint(
+    expected: &Path,
+    before: &crate::process_identity::ObservedProcessIdentity,
+) -> Result<String, String> {
+    match fs::symlink_metadata(expected.join("DevToolsActivePort")) {
+        Ok(_) => {
+            let (port, browser_path) = super::cdp::chrome::read_devtools_active_port(expected)
+                .filter(|(port, path)| *port != 0 && path.starts_with("/devtools/browser/"))
+                .ok_or("browser_session_profile_debug_endpoint_unavailable")?;
+            Ok(format!("ws://127.0.0.1:{port}{browser_path}"))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            // The snapshot belongs to the process whose exact profile was just
+            // proved. Discovery stays on that explicit loopback port; the
+            // existing attach fence still proves CDP PID and kernel continuity.
+            let port = before
+                .command_line
+                .as_ref()
+                .and_then(|arguments| {
+                    crate::process_identity::command_line_option_value(
+                        arguments,
+                        "--remote-debugging-port",
+                    )
+                })
+                .and_then(|value| value.parse::<u16>().ok())
+                .filter(|port| *port != 0)
+                .ok_or("browser_session_profile_debug_endpoint_unavailable")?;
+            Ok(format!("http://127.0.0.1:{port}"))
+        }
+        Err(_) => Err("browser_session_profile_debug_endpoint_unavailable".into()),
+    }
+}
+
 /// Current OS and CDP evidence, rather than saved inventory, qualifies reuse.
 #[cfg(target_os = "linux")]
 async fn attach_current_profile_browser(
@@ -2119,10 +2154,7 @@ async fn attach_current_profile_browser(
     let expected = path
         .canonicalize()
         .map_err(|_| "browser_session_profile_unavailable")?;
-    let (port, browser_path) = super::cdp::chrome::read_devtools_active_port(&expected)
-        .filter(|(port, path)| *port != 0 && path.starts_with("/devtools/browser/"))
-        .ok_or("browser_session_profile_debug_endpoint_unavailable")?;
-    let endpoint = format!("ws://127.0.0.1:{port}{browser_path}");
+    let endpoint = current_profile_debug_endpoint(&expected, &before)?;
     let process_identity = before
         .start_token
         .clone()
@@ -2899,6 +2931,102 @@ mod tests {
             runtime.launch_browser(&profile, None).unwrap_err(),
             "browser_attachment_launch_requires_app_authority"
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    fn endpoint_observation(
+        command_line: Option<Vec<String>>,
+    ) -> crate::process_identity::ObservedProcessIdentity {
+        crate::process_identity::ObservedProcessIdentity {
+            pid: 42,
+            start_token: Some("linux:boot:123".into()),
+            executable_path: Some("/opt/chrome".into()),
+            browser_family: Some("chrome".into()),
+            command_line,
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn existing_profile_endpoint_uses_same_observed_process_explicit_port_when_file_absent() {
+        let root = std::env::temp_dir().join(format!("ab-endpoint-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        let observed = endpoint_observation(Some(vec![format!(
+            "/opt/chrome --user-data-dir={} --remote-debugging-port=45015",
+            root.display()
+        )]));
+        let result = current_profile_debug_endpoint(&root, &observed);
+        fs::remove_dir_all(&root).unwrap();
+        assert_eq!(result, Ok("http://127.0.0.1:45015".into()));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn existing_profile_endpoint_preserves_port_file_and_rejects_present_bad_metadata() {
+        let root = std::env::temp_dir().join(format!("ab-endpoint-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        let path = root.join("DevToolsActivePort");
+        let observed = endpoint_observation(Some(vec![
+            "/opt/chrome --remote-debugging-port=45015".into(),
+        ]));
+        for (contents, endpoint) in [
+            (
+                "43123\n/devtools/browser/kept\n",
+                Some("ws://127.0.0.1:43123/devtools/browser/kept"),
+            ),
+            ("not-a-port\n/devtools/browser/kept\n", None),
+            ("0\n/devtools/browser/kept\n", None),
+            ("43123\n/devtools/page/wrong\n", None),
+            ("43123\n", None),
+        ] {
+            fs::write(&path, contents).unwrap();
+            let result = current_profile_debug_endpoint(&root, &observed);
+            assert_eq!(result.ok().as_deref(), endpoint, "{contents:?}");
+            assert_eq!(fs::read_to_string(&path).unwrap(), contents);
+        }
+        fs::remove_file(&path).unwrap();
+        std::os::unix::fs::symlink(root.join("missing-port-file"), &path).unwrap();
+        assert!(current_profile_debug_endpoint(&root, &observed).is_err());
+        assert!(fs::symlink_metadata(&path)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        fs::remove_file(&path).unwrap();
+        fs::create_dir(&path).unwrap();
+        assert!(current_profile_debug_endpoint(&root, &observed).is_err());
+        assert!(path.is_dir());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn existing_profile_endpoint_rejects_unavailable_zero_or_invalid_process_port() {
+        let root = std::env::temp_dir().join(format!("ab-endpoint-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        for arguments in [
+            None,
+            Some(vec![]),
+            Some(vec!["/opt/chrome".into()]),
+            Some(vec!["--remote-debugging-port=0".into()]),
+            Some(vec!["--remote-debugging-port=".into()]),
+            Some(vec!["--remote-debugging-port=invalid".into()]),
+            Some(vec!["--remote-debugging-port=65536".into()]),
+        ] {
+            assert!(
+                current_profile_debug_endpoint(&root, &endpoint_observation(arguments)).is_err()
+            );
+        }
+        let conventional = endpoint_observation(Some(vec![
+            "/opt/chrome".into(),
+            "--remote-debugging-port".into(),
+            "45015".into(),
+        ]));
+        assert_eq!(
+            current_profile_debug_endpoint(&root, &conventional),
+            Ok("http://127.0.0.1:45015".into())
+        );
+        assert!(!root.join("DevToolsActivePort").exists());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[tokio::test]
