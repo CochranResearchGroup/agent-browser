@@ -1,4 +1,4 @@
-# P278: Combined hosted acceptance matrix
+# P279: Combined hosted acceptance matrix
 
 Status: OPEN
 Product lane: PL-PLATFORM
@@ -9,7 +9,7 @@ Baseline: 9d0d18caef57d5a961c2e7646b335f6651ed8761
 
 ## Outcome and coordination
 
-Complete the remaining #355 same-pair synthetic host matrix using the delivered Native624 producer fixture and P277 restart oracle. PR386 already qualifies ordinary explicit rebind/reopen after actual Native viewing-generation change; its Native8 uncertain launch remains unresolved. Another active checkout on fix/reopen-launch-diagnosis-355 owns cli/src/native/browser.rs, private launch diagnosis and its associated guidance. This lane does not edit those surfaces or replay its preserved intent. Root owns combined workload/oracle, test-only isolated integration adapters, this plan and P278 metadata. No additional worktree is admitted. Preserve foreign enrollment, dashboard/manual-login source, candidates and the active reopen checkout. Integrate its fix before pinning any new full acceptance pair.
+Complete the remaining #355 same-pair synthetic host matrix using the delivered Native624 producer fixture and P277 restart oracle. PR386 already qualifies ordinary explicit rebind/reopen after actual Native viewing-generation change; its Native8 uncertain launch remains unresolved. Another active checkout on fix/reopen-launch-diagnosis-355 owns cli/src/native/browser.rs, private launch diagnosis and its associated guidance. This lane does not edit those surfaces or replay its preserved intent. Root owns combined workload/oracle, test-only isolated integration adapters, this plan and P279 metadata. No additional worktree is admitted. Preserve foreign enrollment, dashboard/manual-login source, candidates and the active reopen checkout. Integrate its fix before pinning any new full acceptance pair.
 
 ## Frozen workload and effects
 
@@ -24,3 +24,5 @@ The combined run must also qualify launch/attachment/sharing, human control/retu
 Existing hosted-performance owns clocks, quantiles and warm/cold boundary semantics. Extend its cold summary at the public receipt seam rather than create another timing engine. Tests catch missing, failed, mixed-source and reused-context samples; they do not prove pixels or provider effects. The live harness must supply actual canvas/WebSocket observations while its fixture is alive. Existing control, reconnect, policy, loss and restart helpers own their respective semantic checks. A final receipt admits completion only when every required axis and owned cleanup qualifies on the frozen pair; transport success alone is insufficient.
 
 Keep raw private fixture roots, launch bindings, auth material, process census and failed receipts outside Git. Retain all failures. A saved binding from a cleaned fixture is historical evidence only. Use exact owned shutdown and independent kernel/container/network/volume readback; never broad process cleanup, pool expansion or global image pruning.
+
+Plan-number admission reconciliation: concurrent private-launch diagnosis claimed P278 after this packet began. This matrix packet moves to P279 without changing scope or source ownership. Earlier P278-prefixed private cold-test logs retain their original names as diagnostic provenance.
