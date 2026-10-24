@@ -14,6 +14,8 @@ use sha2::{Digest, Sha256};
 
 use super::browser::BrowserManager;
 use crate::process_identity::{observe_process, ObservedProcessIdentity, ProcessObservation};
+mod profile_file_proof;
+use profile_file_proof::qualify_profile_files;
 
 /// Qualify the current lock holder from kernel and exact open-profile evidence.
 /// Stale locks referring to dead or positively unrelated processes confer no custody.
@@ -60,7 +62,7 @@ pub(crate) fn current_profile_browser_identity(
         .flatten()
         .filter_map(|entry| fs::read_link(entry.path()).ok())
         .collect::<Vec<_>>();
-    if files.is_empty() || observe_process(pid) != ProcessObservation::Observed(before.clone()) {
+    if observe_process(pid) != ProcessObservation::Observed(before.clone()) {
         return Err("browser_session_profile_process_identity_unavailable".into());
     }
     if let Some(actual) = before.command_line.as_ref().and_then(|arguments| {
@@ -70,21 +72,17 @@ pub(crate) fn current_profile_browser_identity(
             return Ok(None);
         }
     }
-    // A descendant path alone is insufficient: a parent directory or an upload
-    // can contain another profile's files. Require this root's Chrome databases.
-    let profile_files = [
-        "Default/History",
-        "Default/Web Data",
-        "Default/Network/Cookies",
-    ];
-    Ok(files
-        .iter()
-        .any(|file| {
-            profile_files
-                .iter()
-                .any(|relative| file == &expected.join(relative))
-        })
-        .then_some(before))
+    let matched = qualify_profile_files(&expected, files, || {
+        #[cfg(target_os = "linux")]
+        {
+            crate::process_identity::observe_profile_files(&before, &expected)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            Err("browser_session_profile_process_identity_unavailable".into())
+        }
+    })?;
+    Ok(matched.then_some(before))
 }
 
 #[derive(Clone, Serialize, Deserialize)]
