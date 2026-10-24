@@ -1,6 +1,6 @@
 # Operator-led workstation upgrades
 
-State: OPEN
+State: CLOSED
 Product lane: PL-PLATFORM
 Owner: ecochran76
 Work item: CochranResearchGroup/agent-browser#399
@@ -42,13 +42,13 @@ installer and browser workflows, focused Rust gates, workspace fmt and strict
 Clippy, help/README/skill/docs parity and changed links. Reuse unchanged PR397
 consumer evidence within its exact scope; no comprehensive or platform-CI claim.
 
-## Qualified checkpoint and next effect
+## Integrated and installed checkpoint
 
 [Evidence](../notes/0284-2026-10-24-operator-led-upgrades.md) records combined
 222-case workstation qualification, focused regressions, strict Rust gates and
 exact production-candidate fixtures. PR407's selected-dashboard proof is retained.
-The operator's request to repair the installed lockout authorizes preserve-mode
-publication of this qualified repair. Source readiness alone is not authority
-for full shutdown, profile resets or unrelated cleanup. Integrate PR406, publish
-the exact sealed bytes, verify fresh MCP use and the prepared canary, then record
-installed identity and close this bounded work.
+The requested preserve-mode repair is installed and accepted. Doctor and
+same-tab unsaved-work continuity pass on the exact qualified bytes. Fresh-task
+open, page inspection and scoped closure pass. Independent process and durable
+task readback find no matching test resources. No full shutdown, profile reset or unrelated cleanup is included. Detailed installed
+identity, retained warnings and evidence boundaries live in the linked note.

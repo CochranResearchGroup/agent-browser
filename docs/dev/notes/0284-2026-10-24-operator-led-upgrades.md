@@ -55,11 +55,36 @@ interrupted tests and cancelled pre-freeze builds are not acceptance evidence.
 
 ## Installed boundary
 
-The candidate is qualified for the requested preserve-mode repair. PR406 source
-integration and installed qualification remain pending. An owned disposable
-canary contains a verified unsaved edit for the installed continuity check.
-Its task identity and runtime receipts remain private and outside Git. No
-Native Remote View or cross-platform acceptance is claimed by these fixtures.
+PR406 integrates as `442c3387d`. All 562 executable inputs remain equivalent to
+the sealed candidate after canonical-main readback. The exact sealed bytes are
+installed as generation `0.28.0-417d5886c68e-532c27f0f62d` through the default
+preserve-mode transaction, accepted at revision 13 with no stop reason.
+Installation reports success and ready. Installed doctor exits 0; its remaining
+workspace-candidate, operator-journey and unrelated profile-lease warnings are
+advisory. Selected executable bytes match the qualified SHA256 above. No
+legacy drain marker is created, and no stale installed MCP clients remain in
+the acceptance readback.
+
+A fresh public MCP connection resumes the original disposable task with the
+same browser and tab identities. Its snapshot confirms the unsaved input value
+survived the binary-generation upgrade; an exact-target read-only CDP check
+independently confirms that value. The original Chrome process remained alive across the upgrade.
+A fresh disposable browser open and public page snapshot also succeed after
+reconnecting and reusing its exact task key. The short test-client deadline expired before that result;
+readback and same-key continuation prevent a duplicate browser. A second short
+client attempt is retained as failed qualification, not counted as accepted.
+The initial pre-upgrade snapshot timed out, and browser operations remain slow;
+this repair does not claim to resolve the separate latency work. Private task
+identities, runtime receipts and browser observations remain outside Git.
+Both test tasks close through public MCP. A fresh OS/process and read-only
+durable-task check find no matching browser or client processes and no
+remaining task records. Original browser PIDs are absent. Closed test-client
+workers needed exact task-owned termination after their MCP children exited;
+no shared client or foreign browser was terminated for cleanup. The abandoned
+short-client attempt has no published task in final readback. Failed build
+claims and qualification logs remain private; the sealed candidate is selected
+for governed archival before checkout removal.
+No Native Remote View or cross-platform acceptance is claimed.
 
 The explicit operator rule is saved in user-scoped memory. Memory disposition:
 queued; terminal processing and grouped visibility are verified. Private memory

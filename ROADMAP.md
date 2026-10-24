@@ -1,6 +1,6 @@
 # Roadmap
 
-[P284 operator-led upgrades](docs/dev/plans/0284-2026-10-24-operator-led-upgrades.md), #399, removes persistent upgrade markers and warning-based upgrade vetoes. The operator controls their workstation; optional live-work inspection is advisory. Source and exact-candidate qualification pass; installed publication is pending.
+[P284 operator-led upgrades](docs/dev/plans/0284-2026-10-24-operator-led-upgrades.md), #399, removes persistent upgrade markers and warning-based upgrade vetoes. The operator controls their workstation; optional live-work inspection is advisory. PR406 is integrated and exact candidate417d5886c68e is installed and accepted. Doctor and same-tab unsaved-work continuity pass.
 
 [P281 upgrade client drain retirement](docs/dev/plans/0281-2026-10-24-retire-client-upgrade-drain.md) owns issue #394 under PL-BUGFIX.
 Ordinary clients ignore persistent installer drain metadata. PR397 is integrated and installed in the accepted combined generation bf263f69342b. Source, full installer and ordinary disposable workflow qualification pass. Broader marker retirement remains separate under #399 / PR406.
