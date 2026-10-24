@@ -5891,7 +5891,8 @@ status for a redacted selected-generation, migration, blocker, terminal, and
 seven-axis readiness projection without private paths or endpoint evidence.
 currentSelectionEvidence reports whether a later selected Linux installation
 proves its payload, dashboard and live host identity despite unrelated failed
-upgrade history. Active and uncertain transactions remain blocking.
+upgrade history. Executing writers serialize conflicting changes; stale
+PID diagnostics and uncertain history do not veto valid operator requests.
 The workstation operator decides whether to upgrade. Run install workstation
 live --json for a read-only observation of what Agent Browser currently thinks
 is live. Incomplete observations and interruption warnings are advisory, with

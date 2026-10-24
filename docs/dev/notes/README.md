@@ -1,6 +1,8 @@
 # Agent Browser Notes Index
 
-[P285 inventory latency](0285-2026-10-24-workspace-inventory-latency.md): generation dashboard bypasses diagnostic fallback; empty/one-browser reads measured in milliseconds; installed acceptance remains separate.
+[P288 writer custody](0288-2026-10-24-workstation-writer-custody.md): public CLI red/green repair of stale writer refusal and contention projection.
+
+[P285 inventory latency](0285-2026-10-24-workspace-inventory-latency.md): generation dashboard bypasses diagnostic fallback; installed workspace reads measured in milliseconds; intermittent cold rail tail and Native acquisition acceptance remain open.
 
 [P284 operator-led upgrades](0284-2026-10-24-operator-led-upgrades.md): retire upgrade marker producers and recovery vetoes; optional advisory live-work inspection and operator authority. PR406 is integrated and exact candidate417d5886c68e is installed and accepted. Doctor and same-tab unsaved-work continuity pass.
 

@@ -2,7 +2,9 @@
 
 [P283 browser modes and profiles](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md) owns spec #400. Draft PR #408 retains validated #401 and partial #402/#403 source, including Native task controls and duplication owner adapters. Third-window checkpoint is 21:35:13 UTC. Full in-place conversion and actual Native/cookie duplication acceptance remain open; #404 stays blocked. No runtime publication. The plan records source SHAs, tests, known gaps and worker custody.
 
-P285/#393 repairs the generation-dashboard workspace route: both listeners read the owner snapshot before diagnostic discovery/fallback. Real-handler regression,253 stream cases, strict Rust/docs/parity gates and exact development empty/one-browser measurements pass. P284 is reconciled; integrated and installed qualification remain separate. See [P285 evidence](docs/dev/notes/0285-2026-10-24-workspace-inventory-latency.md).
+[P288 writer custody](docs/dev/plans/0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. PR415 carries the qualified source;221 workstation cases, strict Rust, fixtures and docs pass. Installed production is unchanged.
+
+P285/#393 routing repair is merged (PR410) and installed as sealed candidate4c8131146eb9, preserving all11 existing browser process generations. Paired workspace median improves487.841ms to32.755ms. Public rail is usually subsecond, but one4.98s first-context tail remains unexplained; #393 stays open. Production synthetic open fails on pending Native acquisition readback; #412 owns that distinct recovery. See [P285 evidence](docs/dev/notes/0285-2026-10-24-workspace-inventory-latency.md).
 
 [P284 operator-led upgrades](docs/dev/plans/0284-2026-10-24-operator-led-upgrades.md), #399, removes persistent upgrade markers and warning-based upgrade vetoes. The operator controls their workstation; optional live-work inspection is advisory. PR406 is integrated and exact candidate417d5886c68e is installed and accepted. Doctor and same-tab unsaved-work continuity pass.
 

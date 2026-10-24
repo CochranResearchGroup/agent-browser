@@ -16,7 +16,7 @@ Creation context is immutable. Cards omit missing identity; polling, Share and j
 
 ## MCP task workflow
 
-Warnings stay advisory: `install workstation live --json`.
+Warnings are advisory; executing writers serialize.
 
 Use `browser_open` with `{"serviceName":"my-app","agentName":"editor","taskName":"Edit draft","profile":"editorial","profileMode":"persistent","taskKey":"editing","url":"https://example.com"}`. Read `data.taskId`, `profileId`, `browserId`, `tabId`, `url`. Address actions with `taskId`. Reuse `taskKey` to preserve the page/edits without navigation; distinct keys separate tasks. `browser_close` ends only the addressed task.
 
