@@ -20,7 +20,7 @@ const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.st
 Object.assign(env,{HOME:root,AGENT_BROWSER_HOME:agentHome,AGENT_BROWSER_SOCKET_DIR:socketDir,AGENT_BROWSER_RUNTIME_HOST:'1',AGENT_BROWSER_EXECUTABLE_PATH:cfg.chrome,AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD:cfg.binary,AGENT_BROWSER_REMOTE_VIEW_APPLICATION:'fixture',AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN:cfg.publicOrigin,AGENT_BROWSER_REMOTE_VIEW_ORIGIN:cfg.controlOrigin,AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE:cfg.tokenFile,AGENT_BROWSER_REMOTE_VIEW_POOL:'main',AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT:'2',AGENT_BROWSER_HOSTS_FILE:join(root,'hosts.json'),XDG_RUNTIME_DIR:join(root,'runtime'),XDG_CONFIG_HOME:join(root,'config'),XDG_CACHE_HOME:join(root,'cache'),XDG_DATA_HOME:join(root,'data')});
 await writeFile(env.AGENT_BROWSER_HOSTS_FILE,JSON.stringify({version:1,hosts:{fixture:{origin:'https://synthetic.example.invalid',providerApplication:'fixture'}}}),{mode:0o600});
 const context={env,agentHome,socketDir,tempHome:root,session:'restart-'+randomUUID()};
-const known=new Map();let client,task,stage='initialize',failure,cleanupFailure;
+const known=new Map();let client,task,closeDispatched=false,stage='initialize',failure,cleanupFailure;
 async function kernelIdentity(pid){
  const raw=await readFile('/proc/'+pid+'/stat','utf8'),fields=raw.slice(raw.lastIndexOf(')')+2).trim().split(/\s+/);
  return {pid,start:fields[19],uid:(await stat('/proc/'+pid)).uid};
@@ -64,11 +64,11 @@ try{
  await save('task-before.json',task);
  stage='warm';await qualifyHostedBrowserReconnect({workflow,task,save,syntheticOnly:true,controlPairs:10,requirePerformanceTargets:false});
  stage='restart';await qualifyHostedBrowserRestart({workflow,task,observeProcess,save,syntheticOnly:true,restartNative:proof=>bridge('restart',{proof}),observePeers:()=>bridge('peers')});
- stage='close';await workflow('browser_close',{taskId:task.taskId});task=null;
+ stage='close';closeDispatched=true;await workflow('browser_close',{taskId:task.taskId});task=null;
 }catch(error){failure={stage,code:error.code??error.name,message:String(error.message).slice(0,600)};await save('failure.json',failure);}
 finally{
  try{
-  if(task)await workflow('browser_close',{taskId:task.taskId});
+  if(task&&!closeDispatched){closeDispatched=true;await workflow('browser_close',{taskId:task.taskId});}
   await census();await client?.close();
   const receipt={};const result=await cleanupExactOwnedProcesses({known,census,readIdentity,signal:(pid,signal)=>process.kill(pid,signal),sleep:ms=>new Promise(resolve=>setTimeout(resolve,ms)),allowSigkill:true,graceMs:3000,killMs:3000,pollMs:100,receipt,record:()=>save('agent-cleanup.json',receipt)});
   assert.equal(result.qualified,true);await save('agent-cleanup.json',{...receipt,qualified:result.qualified,owned:result.owned,remaining:result.remaining});

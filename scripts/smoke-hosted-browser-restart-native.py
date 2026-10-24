@@ -47,6 +47,7 @@ def main():
                     'reopenRequired': True, 'automaticReplay': False}
 
     class Acceptance(h.Fixture):
+        consumer_capabilities = (*h.Fixture.consumer_capabilities, "windows")
         def configure_fixture(self, config):
             return config.replace('[tools]', '[tools]\nwindow_inventory = { adapter = "native_x11", fallback_to_xdotool = false }\ndesktop_control = { adapter = "native_x11", fallback_to_xdotool = false }')
 
