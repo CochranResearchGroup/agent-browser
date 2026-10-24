@@ -13,13 +13,13 @@ pub fn execute(
     command: &Value,
     owner: &mut impl NativeOwner,
 ) -> Result<Value, String> {
-    if command["action"] != "native_input" {
+    if !matches!(command["action"].as_str(), Some("native_input" | "native_capture" | "native_close" | "native_focus")) {
         return Err("browser_native_action_unavailable".into());
     }
-    let actions = command["actions"]
-        .as_array()
-        .filter(|a| !a.is_empty() && a.len() <= 16)
-        .ok_or("browser_native_actions_required")?;
+    let actions = if command["action"] == "native_input" {
+        Some(command["actions"].as_array().filter(|a| !a.is_empty() && a.len() <= 16)
+            .ok_or("browser_native_actions_required")?)
+    } else { None };
     let snapshot = owner.request("observe", &json!({"desktopId":target.viewing_desktop_id,"expectedGeneration":target.viewing_generation}))?;
     if snapshot["desktopId"] != target.viewing_desktop_id
         || snapshot["generation"] != target.viewing_generation
@@ -63,6 +63,14 @@ pub fn execute(
             )
         }
     };
+    if matches!(command["action"].as_str(), Some("native_close" | "native_focus")) {
+        let action = if command["action"] == "native_close" { "close" } else { "activate" };
+        let reply = owner.request("window", &json!({
+            "desktopId":target.viewing_desktop_id,"expectedGeneration":target.viewing_generation,
+            "windowId":window["id"],"expectedProcessIdentity":window["processIdentity"],"action":action
+        }))?;
+        return Ok(json!({"source":"remote_view_native","delivery":reply["delivery"].as_str().unwrap_or("unknown"),"taskCompleted":false}));
+    }
     let width = snapshot
         .pointer("/geometry/current/width")
         .and_then(Value::as_u64)
@@ -76,6 +84,14 @@ pub fn execute(
     let mut body = json!({"desktopId":target.viewing_desktop_id,"expectedGeneration":target.viewing_generation,
         "windowId":window["id"],"expectedProcessIdentity":window["processIdentity"],"expectedWidth":width,"expectedHeight":height,
         "expectedWindow":{"x":window["x"],"y":window["y"],"width":window["width"],"height":window["height"]},"actions":actions});
+    if command["action"] == "native_capture" {
+        body.as_object_mut().unwrap().remove("actions");
+        body["region"] = command.get("region").cloned().unwrap_or_else(|| json!({
+            "x":window["x"],"y":window["y"],"width":window["width"],"height":window["height"]
+        }));
+        let capture = owner.request("capture_region", &body)?;
+        return Ok(json!({"source":"remote_view_native","capture":capture,"taskCompleted":false}));
+    }
     if let Some(epoch) = command.get("controlEpoch") {
         body["controlEpoch"] = epoch.clone();
     }
