@@ -1,6 +1,7 @@
 # P278: Diagnose the retained unknown reopen launch
 
 Status: OPEN
+Lane: P270
 Product lane: PL-BUGFIX
 Work item: CochranResearchGroup/agent-browser#355
 Branch: fix/reopen-launch-diagnosis-355
@@ -36,3 +37,15 @@ the failure, record that limit and improve bounded nonsecret stage observability
 do not invent a cause or claim reliability from passing samples. Keep existing
 unknown receipts and exact process/resource cleanup. Closeout memory is one
 source-qualified disposition. Wider355 matrix remains separate.
+
+## Diagnostic checkpoint
+
+Three fixed-source reduced Xvfb/provider instances pass; initial setup refusal
+was repaired by isolating X authority and bounding display probes. Their exact
+process markers and display are absent, with2.35MB compact private profiles.
+The original source suppresses every private launch error into one generic code.
+A real failed-launch regression reports Null for the required fixed phase field
+before the repair. Phase-only journal labels are implemented without changing
+unknown-outcome or no-replay semantics; green, broad affected checks and exact
+candidate qualification remain pending. This fixes an observed diagnostic gap,
+not the still-unexplained Native8 failure. No cause is claimed.

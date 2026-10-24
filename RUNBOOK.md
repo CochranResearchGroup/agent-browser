@@ -1,5 +1,7 @@
 # Runbook
 
+[P278 reopen diagnosis](docs/dev/plans/0278-2026-10-23-reopen-launch-diagnosis355.md) records three passing minimal restart/reopen probes and an unresolved Native8 cause. A real failed-launch regression exposes missing phase evidence; fixed secret-free phase labels are undergoing validation. Production and relocation578 remain excluded.
+
 [P277 Native restart acceptance](docs/dev/plans/0277-2026-10-23-native-restart-acceptance355.md) records ordinary Native10 functional recovery across viewing1 to2, stable assignment lifecycle1, same task/profile blank reopen, independently observed Native window and exact cleanup. Public warm20/20 p9547.20ms passes. [Evidence](docs/dev/notes/0277-2026-10-23-native-restart-acceptance355.md) retains Native8 unknown reopen; #355 remains open for that disposition and the combined coordination/cold matrix. No production effects; relocation578 remains deferred.
 
 [P273 development supervision recovery](docs/dev/plans/0273-2026-10-22-development-host-startup.md), #356, qualifies the original development host under its dedicated unit without restarting it. Host 1331 and selected 9c8edd62 generation, four browser roots and original sessions are preserved; host/backend/ingress units are active. Doctor passes 33/34 checks with preexisting development guidance drift. PR371 prevents the boot race; no production or account effects.

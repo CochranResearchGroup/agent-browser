@@ -551,19 +551,22 @@ impl BrowserManager {
     pub(crate) fn owns_launched_browser_process(&self) -> bool {
         self.browser_process.is_some()
     }
-    /// Launch a browser and durably journal any failure before returning it.
+    /// Journal a fixed launch phase on failure; private error text stays redacted.
     pub async fn launch(options: LaunchOptions, engine: Option<&str>) -> Result<Self, String> {
         let engine_name = engine.unwrap_or("chrome").to_string();
         let profile_configured = options.profile.is_some();
         let headed = !options.headless;
         let private_launch = options.private_launch_environment.is_some();
-        let result = Self::launch_inner(options, engine).await.map_err(|error| {
-            if private_launch {
-                "browser_private_launch_outcome_unknown".to_string()
-            } else {
-                error
-            }
-        });
+        let phase = std::sync::Mutex::new("validation");
+        let result = Self::launch_inner(options, engine, &phase)
+            .await
+            .map_err(|error| {
+                if private_launch {
+                    "browser_private_launch_outcome_unknown".to_string()
+                } else {
+                    error
+                }
+            });
         if let Err(error) = result.as_ref() {
             let record = ServiceFailureRecord::new(
                 ServiceFailureCategory::BrowserLaunch,
@@ -575,6 +578,7 @@ impl BrowserManager {
             .with_action("open")
             .with_details(json!({
                 "engine": engine_name,
+                "phase": *phase.lock().expect("launch phase lock poisoned"),
                 "profileConfigured": profile_configured,
                 "headed": headed,
             }));
@@ -583,7 +587,11 @@ impl BrowserManager {
         result
     }
 
-    async fn launch_inner(options: LaunchOptions, engine: Option<&str>) -> Result<Self, String> {
+    async fn launch_inner(
+        options: LaunchOptions,
+        engine: Option<&str>,
+        phase: &std::sync::Mutex<&'static str>,
+    ) -> Result<Self, String> {
         let engine = engine.unwrap_or("chrome");
         let bootstrap_mode = if engine == "chrome" {
             CdpBootstrapMode::for_local_launch()?
@@ -618,6 +626,7 @@ impl BrowserManager {
         let color_scheme = options.color_scheme.clone();
         let download_path = options.download_path.clone();
 
+        *phase.lock().expect("launch phase lock poisoned") = "process_endpoint";
         let (ws_url, process) = match engine {
             "lightpanda" => {
                 let lp_options = LightpandaLaunchOptions {
@@ -638,9 +647,11 @@ impl BrowserManager {
             }
         };
 
+        *phase.lock().expect("launch phase lock poisoned") = "protocol_initialization";
         let mut manager = if engine == "lightpanda" {
             initialize_lightpanda_manager(ws_url, process).await?
         } else {
+            *phase.lock().expect("launch phase lock poisoned") = "cdp_connect";
             let client = Arc::new(CdpClient::connect(&ws_url).await?);
             let mut manager = Self {
                 client,
@@ -657,10 +668,12 @@ impl BrowserManager {
                 bootstrap_mode,
                 eager_session_ids: HashSet::new(),
             };
+            *phase.lock().expect("launch phase lock poisoned") = "target_discovery";
             manager.discover_and_attach_targets().await?;
             manager
         };
 
+        *phase.lock().expect("launch phase lock poisoned") = "active_session";
         let session_id = manager.active_session_id()?.to_string();
 
         if ignore_https_errors {
@@ -699,6 +712,7 @@ impl BrowserManager {
         // Establish a stable download destination before exposing a newly owned
         // Chrome to clients. Individual captures must preserve the context policy.
         if engine != "lightpanda" {
+            *phase.lock().expect("launch phase lock poisoned") = "download_policy";
             let path = download_path
                 .map(std::path::PathBuf::from)
                 .or_else(|| {
@@ -3172,6 +3186,68 @@ mod tests {
     use tokio::net::TcpListener;
     use tokio::time::sleep;
     use tokio_tungstenite::tungstenite::Message;
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn private_launch_failure_journals_phase_without_private_values() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!("ab-private-phase-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        struct Cleanup(std::path::PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _cleanup = Cleanup(root.clone());
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_HOME"]);
+        guard.set("HOME", root.to_str().unwrap());
+        guard.set(
+            "AGENT_BROWSER_HOME",
+            root.join(".agent-browser").to_str().unwrap(),
+        );
+        let executable = root.join("fixture-chrome");
+        std::fs::write(
+            &executable,
+            "#!/bin/sh\nprintf '%s' \"$PRIVATE_FIXTURE_INPUT\" >&2\nexit 1\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let result = BrowserManager::launch(
+            LaunchOptions {
+                executable_path: Some(executable.to_string_lossy().into_owned()),
+                profile: Some(root.join("profile").to_string_lossy().into_owned()),
+                private_launch_environment: Some(std::collections::BTreeMap::from([
+                    ("DISPLAY".into(), ":41".into()),
+                    ("XAUTHORITY".into(), "/synthetic/private-authority".into()),
+                    (
+                        "PRIVATE_FIXTURE_INPUT".into(),
+                        "synthetic-secret-value".into(),
+                    ),
+                ])),
+                ..LaunchOptions::default()
+            },
+            Some("chrome"),
+        )
+        .await;
+        assert_eq!(
+            result.err().unwrap(),
+            "browser_private_launch_outcome_unknown"
+        );
+        let readback = super::super::service_failure_journal::read_service_failures(10).unwrap();
+        let record = readback
+            .records
+            .iter()
+            .find(|r| r.source == "browser_manager")
+            .unwrap();
+        assert_eq!(
+            record.details.as_ref().unwrap()["phase"],
+            "process_endpoint"
+        );
+        let serialized = serde_json::to_string(record).unwrap();
+        assert!(!serialized.contains("synthetic-secret-value"));
+        assert!(!serialized.contains("/synthetic/private-authority"));
+    }
 
     /// Opt-in physical oracle on a fresh task-owned Xvfb/Openbox desktop.
     /// The private namespace driver owns the display and process cleanup.

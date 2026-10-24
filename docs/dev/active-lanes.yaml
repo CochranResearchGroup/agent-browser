@@ -1,6 +1,23 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P278
+    product_lane: PL-BUGFIX
+    objective: Diagnose unknown reopen launch with a minimal probe and secret-free phase evidence
+    plan: docs/dev/plans/0278-2026-10-23-reopen-launch-diagnosis355.md
+    branch: fix/reopen-launch-diagnosis-355
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#355]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [P277]
+    overlaps: [P277, P270]
+    reconciled_overlaps: ["Primary owns browser launch phase diagnostics and synthetic probe only; preserve all foreign dashboard, enrollment and manual-login work; no production effects"]
+    validation_status: Three minimal X11 restart/reopen instances pass; original Native8 cause unproven; missing-phase regression fails on original journal; phase implementation gates pending
+    limitations: ["Not Native acceptance", "No reliability or root cause claim", "Relocation578 remains deferred"]
+    updated_at: 2026-10-23
+
   - id: P277
     product_lane: PL-PLATFORM
     objective: Qualify explicit rebind after an isolated real Native restart
@@ -10,7 +27,7 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#355]
     plan_state: CLOSED
-    custody_state: INTEGRATION_READY
+    custody_state: INTEGRATED
     dependencies: [P270]
     overlaps: [P270]
     reconciled_overlaps: ["Primary owns new restart fixture/oracle and P277 metadata only; preserve all foreign MCP, dashboard, enrollment and manual-login work; Native source auxiliary is read-only"]
