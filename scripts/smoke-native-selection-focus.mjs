@@ -156,14 +156,15 @@ try {
   const browser = Object.values(state.browsers)[0]; assert(browser);
   step = 'owner-observer'; cdp = await chromium.connectOverCDP(browser.cdpEndpoint);
   const pages = cdp.contexts().flatMap(context => context.pages());
-  const before = await Promise.all(pages.map(async page => ({ title: await page.title(), draft: await page.locator('#draft').inputValue() })));
+  const before = await Promise.all(pages.map(async page => ({ title: await page.title(), draft: await page.locator('#draft').count() ? await page.locator('#draft').inputValue() : null })));
+  for (const lane of ['A', 'B']) assert(before.some(item => item.title === `P276 Focus ${lane}` && item.draft === `kept-${lane}`), 'Synthetic task missing');
   const browserProof = await identity(browser.pid); assert(browserProof); retain(browserProof); await census();
   backendPort = Number((await readFile(join(sockets, 'default.stream'), 'utf8')).trim());
   const backend = `http://127.0.0.1:${backendPort}`;
-  step = 'private-dashboard-login'; await fetch(backend + '/api/dashboard-auth/status');
+  step = 'private-dashboard-login'; await fetch(backend + '/api/dashboard-auth/status', { signal: AbortSignal.timeout(10000) });
   const credentials = await readFile(join(env.AGENT_BROWSER_DASHBOARD_AUTH_DIR, 'dashboard-auth.env'), 'utf8');
   const password = credentials.split('\n').find(line => line.startsWith('AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD=')).split('=').slice(1).join('=').replace(/^"|"$/g, '');
-  const logged = await fetch(backend + '/api/dashboard-auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'admin', password }) });
+  const logged = await fetch(backend + '/api/dashboard-auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'admin', password }), signal: AbortSignal.timeout(10000) });
   assert.equal(logged.status, 200); cookie = logged.headers.get('set-cookie').split(';')[0];
   server = createServer(async (req, res) => {
     if (req.url === '/' || req.url === '/bundle.js') { res.writeHead(200, { 'content-type': req.url === '/' ? 'text/html' : 'application/javascript' }); res.end(req.url === '/' ? '<div id="root"></div><script src="/bundle.js"></script>' : await readFile(join(evidence, 'bundle.js'))); return; }
@@ -186,7 +187,7 @@ try {
     const scene = foreground(); assert(scene.title.includes(`P276 Focus ${lane}`), 'Independent native title mismatch'); assert.equal(scene.pid, browser.pid);
     scenes.push({ lane, scene }); await save('focus-scenes.json', scenes); await census();
   }
-  const after = await Promise.all(pages.map(async page => ({ title: await page.title(), draft: await page.locator('#draft').inputValue() })));
+  const after = await Promise.all(pages.map(async page => ({ title: await page.title(), draft: await page.locator('#draft').count() ? await page.locator('#draft').inputValue() : null })));
   assert.deepEqual(after, before); assert.equal((await identity(browser.pid)).start, browserProof.start); assert.deepEqual(errors, []);
   await save('qualification.json', { passed: true, scenes, peersPreserved: true, browserGenerationPreserved: true, before, after });
   passed = true;
