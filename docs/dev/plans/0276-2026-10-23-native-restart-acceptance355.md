@@ -1,20 +1,21 @@
 # P276: Actual Native generation rebind acceptance
 
-Status: OPEN
+Status: CLOSED
 Product lane: PL-PLATFORM
 Work item: CochranResearchGroup/agent-browser#355
 Branch: platform/restart-acceptance-355
 Owner: ecochran76
 Target: main
-Integration: scoped PR
+Integration: scoped PR pending
 
 ## Current State
 
-Native624 producer is merged at e3cf45d and passes its isolated restart trial.
-P270 Native14 warm/function evidence remains accepted, with loss/cold evidence
-separate. This slice consumes the new producer inside a live isolated harness.
-The user explicitly selected the recommended continuation. Existing-browser
-relocation578 remains deferred. No production or private-account effects.
+Executed the bounded physical-generation/rebind trial. Ordinary Native10 passes
+same-task/profile blank reopen across viewing1 to2, independently observed Native
+window and cleanup; public warm20/20 p9547.20ms. Assignment lifecycle remains1.
+Native8's ordinary unknown reopen remains unresolved; diagnostic9 and confirmation10
+do not erase it. Full355 remains OPEN for combined coordination/cold evidence.
+See [results and retained failures](../notes/0276-2026-10-23-native-restart-acceptance355.md).
 
 ## Bounded outcome and custody
 

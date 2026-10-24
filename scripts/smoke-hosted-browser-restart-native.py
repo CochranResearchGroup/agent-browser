@@ -172,6 +172,8 @@ def main():
     f = Acceptance(args); failure = cleanup = None
     h.private_json(args.results / 'pair.json', {'agentBinarySha256': h.sha(args.agent_binary),
                                               'nativeBinarySha256': h.sha(args.native_binary),
+                                              'diagnosticOnly': bool(args.chrome_launcher),
+                                              'launcherSha256': h.sha(args.chrome_launcher) if args.chrome_launcher else None,
                                               'fixtureSource': h.run('git', '-C', repo, 'rev-parse', 'HEAD').strip(),
                                               'nativeSource': h.run('git', '-C', args.native_source, 'rev-parse', 'HEAD').strip()})
     try:
@@ -189,11 +191,12 @@ def main():
     finally:
         try: f.cleanup()
         except Exception as error: cleanup = {'type': type(error).__name__, 'message': str(error)[:500]}
-    value = {'verdict': 'ACCEPT' if f.complete and not failure and not cleanup else 'INCOMPLETE',
+    value = {'verdict': ('DIAGNOSTIC_ACCEPT' if args.chrome_launcher else 'ACCEPT') if f.complete and not failure and not cleanup else 'INCOMPLETE',
+             'diagnosticOnly': bool(args.chrome_launcher),
              'failure': failure, 'cleanupFailure': cleanup, 'installationId': f.installation_id}
     h.private_json(args.results / 'combined-receipt.json', value)
     print(json.dumps(value))
-    return 0 if value['verdict'] == 'ACCEPT' else 1
+    return 0 if value['verdict'] in ('ACCEPT', 'DIAGNOSTIC_ACCEPT') else 1
 
 
 if __name__ == '__main__':

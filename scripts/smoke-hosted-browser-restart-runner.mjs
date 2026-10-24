@@ -36,6 +36,7 @@ async function census(){
    const identity=await readIdentity(pid);if(identity)known.set(pid,identity);
   }catch(error){if(!['ENOENT','ESRCH','EACCES','EPERM'].includes(error.code))throw error;}
  }
+ await save("known-processes.json",[...known.values()]);
  return [...known.values()];
 }
 const send=async(method,params)=>{
@@ -67,12 +68,16 @@ try{
  stage='close';closeDispatched=true;await workflow('browser_close',{taskId:task.taskId});task=null;
 }catch(error){failure={stage,code:error.code??error.name,message:String(error.message).slice(0,600)};await save('failure.json',failure);}
 finally{
- try{
-  if(task&&!closeDispatched){closeDispatched=true;await workflow('browser_close',{taskId:task.taskId});}
-  await census();await client?.close();
+ const failures=[];
+ const clean=async operation=>{try{await operation();}catch(error){failures.push({code:error.code??error.name,message:String(error.message).slice(0,300)});}};
+ await clean(async()=>{if(task&&!closeDispatched){closeDispatched=true;await workflow('browser_close',{taskId:task.taskId});}});
+ await clean(census);
+ await clean(async()=>client?.close());
+ await clean(async()=>{
   const receipt={};const result=await cleanupExactOwnedProcesses({known,census,readIdentity,signal:(pid,signal)=>process.kill(pid,signal),sleep:ms=>new Promise(resolve=>setTimeout(resolve,ms)),allowSigkill:true,graceMs:3000,killMs:3000,pollMs:100,receipt,record:()=>save('agent-cleanup.json',receipt)});
   assert.equal(result.qualified,true);await save('agent-cleanup.json',{...receipt,qualified:result.qualified,owned:result.owned,remaining:result.remaining});
- }catch(error){cleanupFailure={code:error.code??error.name,message:String(error.message).slice(0,300)};}
+ });
+ if(failures.length)cleanupFailure=failures;
  await save('agent-receipt.json',{verdict:!failure&&!cleanupFailure?'ACCEPT':'INCOMPLETE',failure,cleanupFailure});
  process.stdout.write(JSON.stringify({operation:'complete',passed:!failure&&!cleanupFailure})+'\n');
  process.exitCode=failure||cleanupFailure?1:0;process.stdin.destroy();
