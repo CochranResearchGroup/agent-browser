@@ -69,7 +69,10 @@ async function native(request) {
   try {
     const response = await fetch('http://127.0.0.1:19096/v1/consumer', { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ application: 'agent-browser', request }), redirect: 'error', signal: AbortSignal.timeout(45000) });
-    const body = await response.json(); assert(response.ok, `Native ${request.operation} returned ${response.status}`); return body;
+    const body = await response.json(); assert(response.ok, `Native ${request.operation} returned ${response.status}`);
+    assert(body && typeof body === 'object');
+    if (request.operation === 'acquire') assert(typeof body.assignmentId === 'string' && typeof body.desktopId === 'string' && Number.isSafeInteger(body.generation) && body.state === 'active', 'Unqualified acquisition response');
+    return body;
   } catch (error) { if (mutates) { uncertain = true; await save('uncertain-native-effect.json', { request, providerProof, code: error.code ?? error.name }); } throw error; }
 }
 const exact = operation => ({ operation, assignment_id: assignment.assignmentId, expected_generation: assignment.generation,
