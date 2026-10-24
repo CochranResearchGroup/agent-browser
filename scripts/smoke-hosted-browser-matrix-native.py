@@ -394,6 +394,10 @@ def main():
             cleanup = json.loads((args.results / 'agent/cleanup.json').read_text())
             assert cleanup['cleanupQualified'] and not cleanup['errors'] and not cleanup['ambiguous']
             with lock:
+                # Assignment retirement may revoke grants inside Native. Confirm
+                # each exact tracked route through its authoritative retirement
+                # operation before interpreting the local tracking projection.
+                self.rpc.retire_grants()
                 self.rpc.assert_restart_clear()
                 self.assert_viewing_clear()
             self.peer()
