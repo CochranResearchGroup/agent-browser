@@ -331,4 +331,21 @@ for (const selected of [
 }
 assert.equal(context({ profileId: 'default' }).node.browserId, 'browser-live');
 
+// Service browser IDs are opaque, including their canonical browser: prefix.
+// A similarly named peer must not acquire selection when the exact ID is absent.
+const canonicalBrowserId = 'browser:profile:synthetic-id';
+const strippedPeerId = 'profile:synthetic-id';
+const canonicalFixture = {
+  serviceBrowsers: [canonicalBrowserId, strippedPeerId].map(id => ({ ...fixture.serviceBrowsers[0], id })),
+};
+const canonicalContext = selection => buildSelectedWorkspaceContext({ ...canonicalFixture,
+  selection: { ...emptySelection, ...selection } });
+assert.equal(canonicalContext({ browserId: canonicalBrowserId }).browser?.id, canonicalBrowserId,
+  'Exact canonical browser ID must resolve without stripping its prefix');
+assert.equal(canonicalContext({ workspaceId: `browser:${canonicalBrowserId}` }).browser?.id, canonicalBrowserId,
+  'Only the workspace envelope removes one type prefix');
+assert.equal(buildSelectedWorkspaceContext({ serviceBrowsers: [canonicalFixture.serviceBrowsers[1]],
+  selection: { ...emptySelection, browserId: canonicalBrowserId, profileId: 'default' } }).node, null,
+  'A missing canonical browser must never select the stripped peer');
+
 console.log('dashboard selected workspace context tests passed');

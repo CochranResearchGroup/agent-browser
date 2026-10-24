@@ -1,10 +1,10 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
-  - id: P276
+  - id: P277
     product_lane: PL-PLATFORM
     objective: Qualify explicit rebind after an isolated real Native restart
-    plan: docs/dev/plans/0276-2026-10-23-native-restart-acceptance355.md
+    plan: docs/dev/plans/0277-2026-10-23-native-restart-acceptance355.md
     branch: platform/restart-acceptance-355
     target: main
     accountable_owner: ecochran76
@@ -13,9 +13,26 @@ lanes:
     custody_state: INTEGRATION_READY
     dependencies: [P270]
     overlaps: [P270]
-    reconciled_overlaps: ["Primary owns new restart fixture/oracle and P276 metadata only; preserve all foreign MCP, dashboard, enrollment and manual-login work; Native source auxiliary is read-only"]
+    reconciled_overlaps: ["Primary owns new restart fixture/oracle and P277 metadata only; preserve all foreign MCP, dashboard, enrollment and manual-login work; Native source auxiliary is read-only"]
     validation_status: 33Node and2Python checks pass; ordinary Native10 recovery functional pass and warm20of20 p9547.20ms; Native8 unknown reopen remains unresolved
     limitations: ["No production effects or relocation578", "Full355 matrix remains separate"]
+    updated_at: 2026-10-23
+
+  - id: P276
+    product_lane: PL-BUGFIX
+    objective: Qualify exact Selection Focus on an owned synthetic Native desktop
+    plan: docs/dev/plans/0276-2026-10-23-native-focus-acceptance.md
+    branch: fix/native-focus-acceptance-68
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#68]
+    plan_state: COMPLETED
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [P274, P275]
+    reconciled_overlaps: ["Root owns isolated fixture and acceptance; preserve occupied runtimes and foreign source lanes"]
+    validation_status: Actual Native A/B/A Focus, peer data and process continuity, exact cleanup, canonical ID regression, adjacent checks and dashboard build pass
+    limitations: ["No production deployment or private-account effects", "Existing development provider unconfigured"]
     updated_at: 2026-10-23
 
   - id: P275

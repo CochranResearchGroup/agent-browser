@@ -1,6 +1,8 @@
 # Active plan index
 
-[P276 Native restart acceptance](0276-2026-10-23-native-restart-acceptance355.md) executes the bounded actual generation/reopen trial; retained unknown launch and wider355 gates remain explicit.
+[P277 Native restart acceptance](0277-2026-10-23-native-restart-acceptance355.md) records ordinary functional recovery, the lifecycle/viewing distinction and unresolved launch/cold/coordination gates for355.
+
+[P276 Native Focus acceptance](0276-2026-10-23-native-focus-acceptance.md), #68; actual Native A/B/A Focus qualified, canonical browser identity repaired, peers preserved and 25 process generations independently absent.
 
 [P275 inspection reviews](0275-2026-10-23-inspection-activity.md), #68; metadata-only accepted/rejected judgments in existing Activity with opt-in persistence and original-run scope. Native Focus and wider #68 remain separate.
 

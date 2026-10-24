@@ -1,6 +1,6 @@
 # Actual Native restart and explicit reopen (#355)
 
-P276 executes the Native624 producer inside a live Agent Browser fixture. The
+P277 executes the Native624 producer inside a live Agent Browser fixture. The
 ordinary confirmation succeeds; the overall #355 matrix remains OPEN. An earlier
 ordinary reopen returned an unknown launch outcome and is unresolved. This is
 functional evidence with retained failure, not clean reliability qualification.
