@@ -13,8 +13,8 @@ lanes:
     custody_state: ACTIVE
     overlaps: [P283, P284]
     reconciled_overlaps: ["Own dashboard/http routing and rail freshness prose only; P283/P284 retain profile/store/observation and installer source; reuse primary and retain pinned artifacts"]
-    validation_status: Real-handler red-green;253 stream passes with2 ignored; strict Rust/docs/parity gates; exact development empty median3.358ms and one-browser12.867ms
-    limitations: ["Production-shaped publication pending after P284 reconciliation", "No stale-data substitution, provider/ingress change or private-account activity", "Cold shell tail remains distinct"]
+    validation_status: PR410 merged; sealed preserve install accepted;11 browser generations preserved; paired installed workspace median32.755ms; Rust/docs/parity and exact installer fixture pass
+    limitations: ["Installed; one4.98s public cold rail tail remains unexplained", "No stale-data substitution, provider/ingress change or private-account activity", "Production synthetic open blocked by pending Native acquisition; tracked separately in #412"]
     updated_at: 2026-10-24
 
   - id: P284
