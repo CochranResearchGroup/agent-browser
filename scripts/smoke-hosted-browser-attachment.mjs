@@ -554,19 +554,18 @@ try{workload:{
    step='native-human-input-unlocked';await nativeFrame.waitForFunction(()=>['active','released'].includes(document.querySelector('#input-status')?.dataset.state),null,{timeout:15000});
   }finally{await readiness('after');}
   step='native-human-text-edit';
-  const surface=await nativeFrame.evaluate(()=>{
-   const candidates=[...document.querySelectorAll('canvas')].filter(c=>c.width>=100&&c.height>=100).sort((a,b)=>b.width*b.height-a.width*a.height);
-   const canvas=candidates[0];if(!canvas)return null;canvas.dataset.hostedInputSurface='true';return {width:canvas.clientWidth,height:canvas.clientHeight};
-  });
+  const inputSurface=nativeFrame.locator('#desktop-surface'),surface=await inputSurface.boundingBox();
   assert(surface&&surface.width>100&&surface.height>100);
-  await nativeFrame.locator('canvas[data-hosted-input-surface="true"]').click({position:{x:surface.width/2,y:surface.height/3},timeout:15000});
-  await nativeFrame.locator('#desktop-surface').focus();
+  step='native-human-surface-focus';
+  await inputSurface.click({position:{x:surface.width/2,y:surface.height/2},timeout:15000});
+  await inputSurface.focus();
   assert.equal(await nativeFrame.evaluate(()=>document.activeElement.id),'desktop-surface');
   const focusState=async phase=>save('native-human-focus-'+phase+'.json',{viewer:await nativeFrame.evaluate(()=>({activeId:document.activeElement.id,connection:document.querySelector('#connection-status')?.dataset.state,input:document.querySelector('#input-status')?.dataset.state})),app:await primary.evaluate(()=>({activeId:document.activeElement.id,draft:document.querySelector('#draft').value,control:document.querySelector('#control').value}))});
-  await focusState('before-tab');await page.keyboard.press('Tab');await focusState('first-tab');
-  await primary.waitForFunction(()=>document.activeElement.id==='draft',null,{timeout:5000});
-  await page.keyboard.press('Tab');await focusState('second-tab');
-  await primary.waitForFunction(()=>document.activeElement.id==='control',null,{timeout:5000});
+  await focusState('before-tab');step='native-human-first-tab';await page.keyboard.press('Tab');
+  try{await primary.waitForFunction(()=>document.activeElement.id==='draft',null,{timeout:5000});}finally{await focusState('first-tab');}
+  step='native-human-second-tab';await page.keyboard.press('Tab');
+  try{await primary.waitForFunction(()=>document.activeElement.id==='control',null,{timeout:5000});}finally{await focusState('second-tab');}
+  step='native-human-text-edit';
   await page.keyboard.press('Control+A');
   // Dispatch exactly once; independent CDP reads may observe completion, never
   // repeat keyboard input after an uncertain response.
