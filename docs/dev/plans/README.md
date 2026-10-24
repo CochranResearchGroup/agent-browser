@@ -1,5 +1,7 @@
 # Active plan index
 
+[P276 Native Focus acceptance](0276-2026-10-23-native-focus-acceptance.md), #68; isolated synthetic actual-provider workflow, preserving occupied runtime and peers.
+
 [P275 inspection reviews](0275-2026-10-23-inspection-activity.md), #68; metadata-only accepted/rejected judgments in existing Activity with opt-in persistence and original-run scope. Native Focus and wider #68 remain separate.
 
 [P274 selected-workspace Focus](0274-2026-10-23-selection-focus.md), #68; exact owned-tab source repair with mounted refusal/race qualification. Actual Native focus and broader inspector outcomes remain open.

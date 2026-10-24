@@ -1,6 +1,23 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P276
+    product_lane: PL-BUGFIX
+    objective: Qualify exact Selection Focus on an owned synthetic Native desktop
+    plan: docs/dev/plans/0276-2026-10-23-native-focus-acceptance.md
+    branch: fix/native-focus-acceptance-68
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#68]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [P274, P275]
+    reconciled_overlaps: ["Root owns isolated fixture and acceptance; preserve occupied runtimes and foreign source lanes"]
+    validation_status: Native provider and isolated candidate preflight pending
+    limitations: ["No production deployment or private-account effects", "Existing development provider unconfigured"]
+    updated_at: 2026-10-23
+
   - id: P275
     product_lane: PL-BUGFIX
     objective: Record scoped inspection judgments in existing Activity
