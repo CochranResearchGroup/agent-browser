@@ -146,6 +146,30 @@ function identity(pid) {
     assert.equal(inspections.length, 3); assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
     fs.writeFileSync(path.join(artifacts, 'persist-off.json'), JSON.stringify({ passed: true, recordedInSession: true, restoredReviews: 0, persistRemainsOff: true }));
     console.log('persist-off-remains-off: passed');
+
+    // Fail the real browser storage boundary after opt-in, without replacing
+    // Activity's store or persistence collaborators.
+    await page.close(); page = await browser.newPage(); page.setDefaultTimeout(5000);
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/*', intercept); await page.goto(origin);
+    await page.getByLabel('Active session').getByText('fixture-session-A', { exact: true }).waitFor();
+    const failedFeed = page.getByRole('region', { name: 'Activity feed', exact: true });
+    const failedChat = page.getByRole('region', { name: 'Inspection Chat', exact: true });
+    await failedFeed.getByRole('button', { name: 'Off', exact: true }).click();
+    await page.evaluate(() => { Storage.prototype.setItem = function () { throw new DOMException('Synthetic storage write failure', 'QuotaExceededError'); }; });
+    await failedChat.getByRole('button', { name: 'Inspect selected workspace', exact: true }).click();
+    await failedChat.getByText('SYNTHETIC-PRIVATE-OBSERVATION-PROSE', { exact: true }).waitFor();
+    await failedChat.getByRole('button', { name: 'Record as accepted', exact: true }).click();
+    await failedFeed.getByRole('button', { name: /accepted/i }).waitFor();
+    await failedChat.getByText('Recorded in Activity, but browser storage is unavailable. It may be lost on reload.', { exact: true }).waitFor();
+    assert(!(await failedChat.innerText()).includes('Recorded in Activity and saved for reload.'));
+    await page.reload();
+    await page.getByLabel('Active session').getByText('fixture-session-A', { exact: true }).waitFor();
+    await failedFeed.getByText('Waiting for events...', { exact: true }).waitFor();
+    assert.equal(await failedFeed.getByRole('button', { name: /accepted/i }).count(), 0, 'Failed storage does not restore the memory-only review');
+    assert.equal(inspections.length, 4); assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
+    fs.writeFileSync(path.join(artifacts, 'storage-failure.json'), JSON.stringify({ passed: true, memoryRecord: true, durabilityClaim: false, restoredReviews: 0 }));
+    console.log('storage-failure-is-truthful: passed');
   } finally {
     if (page && !page.isClosed()) fs.writeFileSync(path.join(artifacts, 'final-dom.txt'), await page.locator('body').innerText().catch(() => 'unavailable'));
     fs.writeFileSync(path.join(artifacts, 'requests.json'), JSON.stringify({ inspections, unexpected, errors }, null, 2));
