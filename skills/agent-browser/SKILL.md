@@ -71,7 +71,7 @@ Return, store, and reopen only `handoffUrl`: standalone `/remote-view/<handoff-i
 
 ## Operator workspace
 
-Read [Operator workspace](references/cli-and-service.md#operator-workspace) before tab, sharing or handoff-policy work. Focus needs a current owned tab; acceptance is not observed focus. Remote View owns viewing/authentication.
+Read [Operator workspace](references/cli-and-service.md#operator-workspace) before tab, sharing or handoff-policy work. Focus requires an owned tab; acceptance is not focus. Reviews: opt-in Activity storage. Remote View owns view/auth.
 
 ## Sharing a profile between tasks
 

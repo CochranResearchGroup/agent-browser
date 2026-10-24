@@ -4055,6 +4055,8 @@ records and durable revocation remain server authority.
 
 ## Operator workspace
 
+After a successful Chat inspection, choose **Record as accepted** or **Record as rejected** to add your judgment to Activity. The entry retains the original workspace, browser, task, tab, profile, run, packet hash, evidence references and reviewer; observation prose and ledger paths stay out of Activity. Recording executes no suggested action and does not establish readiness or authority. Return to the original selection to review its result. An opposite verdict appends a correction; repeating the current verdict adds nothing. Activity keeps its existing 500-event bound, session-scoped Clear and opt-in Persist setting. With Persist off, reviews last only for the current page; unavailable browser storage is reported rather than described as saved.
+
 Selecting a current owned task can verify its native handoff immediately while
 background presence is still unknown. The rail does not label it live until the
 census confirms it. Handoff preparation focuses and maximizes the exact task

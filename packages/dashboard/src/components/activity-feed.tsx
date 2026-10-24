@@ -1,5 +1,6 @@
 "use client";
 
+import { isInspectionReviewEvent, type InspectionReviewEvent } from '@/lib/inspection-review';
 import { useEffect, useRef, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai/react";
 import type { ActivityEvent } from "@/types";
@@ -86,6 +87,25 @@ function CommandEntry({
       <Separator />
     </Collapsible>
   );
+}
+
+/** Review metadata is operator judgment, not a second observation or action. */
+function InspectionReviewEntry({ event }: { event: InspectionReviewEvent }) {
+  const [expanded, setExpanded] = useState(false);
+  const { source, verdict, actor } = event.data;
+  const values = [['Reviewer', actor], ['Run', source.runId], ['Workspace', source.selection.workspaceId],
+    ['Browser', source.selection.browserId], ['Task', source.selection.sessionId], ['Tab', source.selection.tabId],
+    ['Profile', source.selection.profileId], ['Packet', source.contextPacketHash],
+    ['Evidence references', source.evidenceRefs.join(', ') || 'None cited'], ['Observed', source.observedAt],
+    ['Reviewed', new Date(event.timestamp).toISOString()]];
+  return <><div className="px-3 py-1.5 text-xs">
+    <button type="button" className="flex w-full items-center gap-2 text-left" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}
+      title="Show the original inspection references and the operator's review judgment">
+      <span className="font-mono text-muted-foreground">{formatTime(event.timestamp)}</span>
+      <span>{verdict === 'accepted' ? 'Accepted' : 'Rejected'} inspection review</span>
+    </button>
+    {expanded && <dl className="mt-2 space-y-1 break-all">{values.map(([label, value]) => <div key={label}><dt className="inline font-semibold">{label}: </dt><dd className="inline">{value}</dd></div>)}</dl>}
+  </div><Separator /></>;
 }
 
 function ResultEntry({
@@ -243,7 +263,9 @@ export function ActivityFeed({
               case "command":
                 return <CommandEntry key={key} event={event} />;
               case "result":
-                return <ResultEntry key={key} event={event} />;
+                return isInspectionReviewEvent(event)
+                  ? <InspectionReviewEntry key={key} event={event} />
+                  : event.action === "inspection_review" ? null : <ResultEntry key={key} event={event} />;
               case "console":
                 return <ConsoleEntry key={key} event={event} />;
             }

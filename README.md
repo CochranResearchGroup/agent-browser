@@ -1009,6 +1009,8 @@ agent-browser find role button click --name "Submit"
 
 In Diagnostics → Selection, Focus requests native focus for the exact current owned tab. Missing, foreign or stale targets require a workspace refresh. Requests on one desktop stay ordered; feedback reports pending, accepted or unconfirmed requests, not independently observed physical focus.
 
+After a successful Chat inspection, choose **Record as accepted** or **Record as rejected** to add your judgment to Activity. The entry retains the original workspace, browser, task, tab, profile, run, packet hash, evidence references and reviewer; observation prose and ledger paths stay out of Activity. Recording executes no suggested action and does not establish readiness or authority. Return to the original selection to review its result. An opposite verdict appends a correction; repeating the current verdict adds nothing. Activity keeps its existing 500-event bound, session-scoped Clear and opt-in Persist setting. With Persist off, reviews last only for the current page; unavailable browser storage is reported rather than described as saved.
+
 In the default browser workspace, open a tab’s SVG overflow menu or use its
 context menu (Shift+F10) for Properties and Copy URL. Properties shows supplied
 origin and purpose alongside current browser, profile, desktop, URL, title and
