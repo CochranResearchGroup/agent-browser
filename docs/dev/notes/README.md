@@ -1,6 +1,6 @@
 # Agent Browser Notes Index
 
-[P282 recovery manifest identity](0282-2026-10-24-recovery-dashboard-manifest.md): differing-assets red-green and five proof cases; installed acceptance pending.
+[P282 recovery manifest identity](0282-2026-10-24-recovery-dashboard-manifest.md): differing-assets red-green, five proof cases and accepted combined production deployment; public workflow, timing and preservation limits recorded.
 
 [P281 upgrade client lockout retirement](0281-2026-10-24-retire-client-upgrade-drain.md): nonblocking client repair qualified by selected Rust, real-browser and installer fixtures; production marker mitigated, original upgrade unaccepted.
 

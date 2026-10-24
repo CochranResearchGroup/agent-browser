@@ -1,6 +1,6 @@
 # Active plan index
 
-[P282 recovery dashboard identity](0282-2026-10-24-recovery-dashboard-manifest.md), #405, owns selected-dashboard proof across different controller assets under PL-BUGFIX.
+[P282 recovery dashboard identity](0282-2026-10-24-recovery-dashboard-manifest.md), #405, closes with exact recovery and accepted combined deployment. P280/P281 repairs are installed;393 and399 remain open.
 
 [P281 upgrade client drain retirement](0281-2026-10-24-retire-client-upgrade-drain.md) owns issue #394 under PL-BUGFIX.
 Ordinary clients must ignore persistent installer drain metadata. Production

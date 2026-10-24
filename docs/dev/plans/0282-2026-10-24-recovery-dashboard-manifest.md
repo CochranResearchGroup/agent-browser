@@ -1,6 +1,6 @@
 # P282: Recovery dashboard identity across controller builds
 
-Status: IN_PROGRESS
+Status: CLOSED
 Product lane: PL-BUGFIX
 Work item: CochranResearchGroup/agent-browser#405
 Branch: fix/recovery-dashboard-manifest-405
@@ -13,3 +13,7 @@ Reuse the clean dashboard primary. Own current_selection.rs and remove its now-u
 ## Source qualification
 
 Differing-assets regression reproduced the production error before repair; all five current-selection cases pass afterward. Strict workspace Clippy passes. See the [evidence note](../notes/0282-2026-10-24-recovery-dashboard-manifest.md). Installed acceptance remains pending.
+
+## Installed closeout
+
+Combined generation bf263f69342b is accepted. [Installed evidence](../notes/0282-2026-10-24-recovery-dashboard-manifest.md#combined-installed-acceptance-2026-10-24) separates passing public/workflow gates from advisory warnings, concurrent process changes and open393/399 work. Primary and sealed candidates are retained.
