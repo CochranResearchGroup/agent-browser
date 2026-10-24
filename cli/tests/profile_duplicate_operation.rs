@@ -617,7 +617,7 @@ fn qualified_graceful_source_custody_fences_launch_writes_and_publishes_on_its_c
     record.observed_pid = Some(42);
     record.observed_process_identity = Some(original.clone());
     record.published = true;
-    let catalog = serde_json::json!({"schemaVersion":"agent-browser.browser-profile-catalog.v1","profiles":{"source":{"id":"source","name":"Source","userDataDir":source.user_data_dir,"kind":"named"}},"disposablePolicies":{}});
+    let catalog = serde_json::json!({"schemaVersion":"agent-browser.browser-profile-catalog.v1","profiles":{"source":{"id":"source","name":"Source","userDataDir":source.user_data_dir,"kind":"named","manualLoginUrl":"https://synthetic.invalid/login"}},"disposablePolicies":{}});
     for (kind, schema, value) in [
         (
             "browser_profile_catalog",
@@ -685,6 +685,7 @@ fn qualified_graceful_source_custody_fences_launch_writes_and_publishes_on_its_c
         .unwrap();
     let catalog: serde_json::Value = serde_json::from_str(&catalog).unwrap();
     assert_eq!(catalog["profiles"]["source"]["name"], "Source");
+    assert_eq!(catalog["profiles"]["duplicate"]["manualLoginUrl"], "https://synthetic.invalid/login");
     assert_eq!(
         catalog["profiles"]["duplicate"]["userDataDir"],
         serde_json::json!(root.join("duplicate"))
