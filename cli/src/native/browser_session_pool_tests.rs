@@ -823,6 +823,56 @@ fn pool_demand_lost_acquire_reply_recovers_same_assignment_after_restart() {
 }
 
 #[test]
+fn pool_demand_reconciles_lost_then_released_acquisition_before_launch() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider {
+        lose_reply: true,
+        ..Provider::default()
+    }));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    assert_eq!(
+        consumer
+            .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+            .unwrap_err(),
+        "remote_view_pool_acquisition_readback_required"
+    );
+    assert_eq!(calls.get(), 0);
+    drop(consumer);
+    let original = fixture
+        .store(false)
+        .pending_pool_acquisitions("agent-browser", "main")
+        .unwrap()
+        .remove(0);
+    provider.borrow_mut().assignments[0].state = RemoteViewAssignmentState::Released;
+    provider.borrow_mut().lose_reply = false;
+    let mut restarted = host(&fixture, provider.clone(), calls.clone());
+    restarted
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 101))
+        .unwrap();
+    assert_eq!(provider.borrow().acquisitions.len(), 2);
+    assert_ne!(
+        provider.borrow().acquisitions[0],
+        provider.borrow().acquisitions[1]
+    );
+    assert_eq!(
+        calls.get(),
+        1,
+        "only the new active assignment may launch a browser"
+    );
+    let mut store = fixture.store(false);
+    assert!(store
+        .pending_pool_acquisitions("agent-browser", "main")
+        .unwrap()
+        .is_empty());
+    let terminal = store.read(&original.envelope).unwrap().unwrap();
+    assert_eq!(terminal.envelope, original.envelope);
+    assert!(
+        matches!(terminal.outcome, Some(RemoteViewApplicationMutationOutcome::Acquire(assignment)) if assignment == provider.borrow().assignments[0] && assignment.state == RemoteViewAssignmentState::Released)
+    );
+}
+
+#[test]
 fn pool_demand_policy_bounds_growth_and_completed_absence_requires_release_proof() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));
