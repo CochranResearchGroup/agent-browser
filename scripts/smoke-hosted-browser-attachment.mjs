@@ -53,12 +53,14 @@ if(process.env.HOSTED_SMOKE_NATIVE_CONTROL_TOKEN_FILE){
  const file=await absolute('HOSTED_SMOKE_NATIVE_CONTROL_TOKEN_FILE'),info=await stat(file);assert.equal(info.uid,process.getuid());assert.equal(info.mode&0o077,0);
  const token=(await readFile(file,'utf8')).trim();assert(token&&!/[\r\n]/.test(token));controlAuthorization='Bearer '+token;
 }
-let workloadPlan;
+let workloadPlan,inputDiagnostic=false;
 if(process.env.HOSTED_SMOKE_WORKLOAD_PLAN){
  const file=await absolute('HOSTED_SMOKE_WORKLOAD_PLAN'),info=await stat(file);assert.equal(info.uid,process.getuid());assert.equal(info.mode&0o077,0);
- workloadPlan=JSON.parse(await readFile(file,'utf8'));assert.equal(workloadPlan.version,1);assert.equal(workloadPlan.coldContexts,5);
- assert.equal(workloadPlan.publicControlPairs,10);assert.equal(workloadPlan.nativeControlPairs,3);assert.equal(workloadPlan.warmTargetMs,250);
- assert.equal(workloadPlan.functionalUiPairs,1);assert.equal(workloadPlan.nativeTextEdits,1);assert.equal(workloadPlan.deadlineSeconds,1200);
+ workloadPlan=JSON.parse(await readFile(file,'utf8'));assert.equal(workloadPlan.version,1);
+ inputDiagnostic=workloadPlan.mode==='native_input_diagnostic';assert(inputDiagnostic||workloadPlan.mode===undefined);
+ assert.equal(workloadPlan.coldContexts,inputDiagnostic?1:5);
+ assert.equal(workloadPlan.publicControlPairs,inputDiagnostic?0:10);assert.equal(workloadPlan.nativeControlPairs,inputDiagnostic?0:3);assert.equal(workloadPlan.warmTargetMs,250);
+ assert.equal(workloadPlan.functionalUiPairs,1);assert.equal(workloadPlan.nativeTextEdits,1);assert.equal(workloadPlan.deadlineSeconds,inputDiagnostic?300:1200);
  assert(/^[a-f0-9]{64}$/.test(workloadPlan.pairDigest));assert.equal(typeof workloadPlan.runId,'string');
  assert.equal(workloadPlan.sourcePair.agentBinarySha256,createHash('sha256').update(await readFile(binary)).digest('hex'));
  assert.equal(workloadPlan.pairDigest,createHash('sha256').update(JSON.stringify(workloadPlan.sourcePair)).digest('hex'));
@@ -332,7 +334,7 @@ function startWatch(id){
  }};
 }
 
-try{
+try{workload:{
  step='baseline-process-census';
  for(let current=await processIdentity(process.pid),depth=0;current.parentPid>1&&depth<64;depth++){harnessAncestors.add(current.parentPid);current=await processIdentity(current.parentPid);}
  await census({captureDeniedBaseline:true});await save('baseline-denied-processes.json',[...baselineDeniedProcesses.values()]);await save('baseline-readable-processes.json',[...baselineReadableProcesses.values()]);
@@ -515,7 +517,7 @@ try{
   finally{
    sample.pixels=coldPixels?.receipt()??null;sample.transportDiagnostics=transportDiagnostics;coldSamples.push(sample);
    await save(`cold-context-${index+1}.json`,sample);
-   if(workloadPlan)await save('cold-first-pixels-distribution.json',summarizeColdFirstPixels(coldSamples,{runId:workloadPlan.runId,pairDigest:workloadPlan.pairDigest,expectedSamples:workloadPlan.coldContexts}));
+   if(workloadPlan&&!inputDiagnostic)await save('cold-first-pixels-distribution.json',summarizeColdFirstPixels(coldSamples,{runId:workloadPlan.runId,pairDigest:workloadPlan.pairDigest,expectedSamples:workloadPlan.coldContexts}));
   }
  }
  await page.screenshot({path:join(evidence,'hosted-native.png')});await import('node:fs/promises').then(fs=>fs.chmod(join(evidence,'hosted-native.png'),0o600));
@@ -525,6 +527,13 @@ try{
  async function consumerControl(){const response=await fetch(service.url+`/api/agent-browser/handoffs/${uiHandoffId}/control`,{signal:AbortSignal.timeout(15000)});assert.equal(response.status,200);return response.json();}
  const controlReceipt=value=>({control:Object.fromEntries(['owner','epoch','pauseReads','pendingOutcomeCount'].filter(key=>key in value.control).map(key=>[key,value.control[key]])),native:Object.fromEntries(['owner','state','epoch','hostedOperationId'].filter(key=>key in value.native).map(key=>[key,value.native[key]]))});
  const beforeUi=await consumerControl();assert.equal(beforeUi.control.owner,'agent');assert.equal(beforeUi.native.owner,'agent');
+ if(workloadPlan){
+  const desktop=await remote.observation(binding),windows=desktop.windows.windows.filter(window=>window.pid===original.pid);
+  assert.equal(windows.length,1,'The owned browser requires one positively observed Native window');
+  const window=windows[0];assert.equal(window.processIdentity.start_token,original.start);assert.equal(window.processIdentity.executable,original.executablePath);
+  const activated=await remote.activateWindow(binding,{windowId:window.id,expectedProcessIdentity:window.processIdentity});
+  await save('native-human-window-focus.json',{windowId:window.id,processId:original.pid,activated});
+ }
  await page.getByText('Browser control options',{exact:true}).click();await page.locator('#hosted-pause-reads').check();
  step='native-toolbar-takeover';uiTakeoverDispatched=true;uiControlSettled=false;
  await page.frameLocator('#desktop-frame').getByRole('button',{name:'Take control',exact:true}).click({timeout:15000});
@@ -538,13 +547,22 @@ try{
   await save('native-human-edit-intent.json',{syntheticOnly:true,dispatchCount:1,expectedValue:edit,through:'Native canvas keyboard'});
   const nativeFrame=page.frames().find(frame=>frame.url().startsWith(nativeOrigin+'/'));
   assert(nativeFrame,'The actual Native frame must remain attached');
+  await nativeFrame.locator('#connection-status[data-state="connected"]').waitFor({timeout:15000});
+  await nativeFrame.waitForFunction(()=>['active','released'].includes(document.querySelector('#input-status')?.dataset.state),null,{timeout:15000});
   const surface=await nativeFrame.evaluate(()=>{
    const candidates=[...document.querySelectorAll('canvas')].filter(c=>c.width>=100&&c.height>=100).sort((a,b)=>b.width*b.height-a.width*a.height);
    const canvas=candidates[0];if(!canvas)return null;canvas.dataset.hostedInputSurface='true';return {width:canvas.clientWidth,height:canvas.clientHeight};
   });
   assert(surface&&surface.width>100&&surface.height>100);
   await nativeFrame.locator('canvas[data-hosted-input-surface="true"]').click({position:{x:surface.width/2,y:surface.height/3},timeout:15000});
-  await page.keyboard.press('Tab');await page.keyboard.press('Tab');await page.keyboard.press('Control+A');
+  await nativeFrame.locator('#desktop-surface').focus();
+  assert.equal(await nativeFrame.evaluate(()=>document.activeElement.id),'desktop-surface');
+  const focusState=async phase=>save('native-human-focus-'+phase+'.json',{viewer:await nativeFrame.evaluate(()=>({activeId:document.activeElement.id,connection:document.querySelector('#connection-status')?.dataset.state,input:document.querySelector('#input-status')?.dataset.state})),app:await primary.evaluate(()=>({activeId:document.activeElement.id,draft:document.querySelector('#draft').value,control:document.querySelector('#control').value}))});
+  await focusState('before-tab');await page.keyboard.press('Tab');await focusState('first-tab');
+  await primary.waitForFunction(()=>document.activeElement.id==='draft',null,{timeout:5000});
+  await page.keyboard.press('Tab');await focusState('second-tab');
+  await primary.waitForFunction(()=>document.activeElement.id==='control',null,{timeout:5000});
+  await page.keyboard.press('Control+A');
   // Dispatch exactly once; independent CDP reads may observe completion, never
   // repeat keyboard input after an uncertain response.
   await page.keyboard.type(edit);
@@ -558,6 +576,7 @@ try{
  const returned=await consumerControl();assert.equal(returned.control.owner,'agent');assert.equal(returned.control.epoch,human.control.epoch+1);assert.equal(returned.native.owner,'agent');assert.equal(returned.native.state,'ready');uiControlSettled=true;
  assert.equal((await readTask(opened.taskId)).controllerState.owner,'agent');await continuity('after-native-toolbar-control');
  await save('bots-native-control.json',{before:controlReceipt(beforeUi),human:controlReceipt(human),returned:controlReceipt(returned),passed:true});
+ if(inputDiagnostic){await save('native-input-diagnostic.json',{passed:true,fullMatrix:false,scope:'One Native text edit and return with independent app observation'});break workload;}
  // Start after all control transitions so the remaining event is scoped detach.
  if(process.env.HOSTED_SMOKE_CONTINUITY_REQUIRED==='1'){
   step='explicit-host-reconnect';const reconnection=await qualifyHostedBrowserReconnect({workflow:publicWorkflow,task:opened,save,syntheticOnly:true,requirePerformanceTargets:false,nativeControl:{status:consumerControl,change:async body=>{
@@ -670,7 +689,7 @@ try{
  assert(!brokerOperations.some(entry=>['acquire','release','release_idle'].includes(entry.operation)), 'Hosted runtime must never request app pool growth or retirement');
  await save('qualification-summary.json',{functionalPassed:true,performancePassed:performanceTargetsMet,passed:performanceTargetsMet});
  passed=performanceTargetsMet;if(!passed)process.exitCode=1;
-}catch(error){if(!uiControlSettled)ambiguous=true;await save('failure.json',{...safeError(error),ambiguous});process.exitCode=1;}
+}}catch(error){if(!uiControlSettled)ambiguous=true;await save('failure.json',{...safeError(error),ambiguous});process.exitCode=1;}
 finally{
  async function clean(name,action){try{await boundedTeardown(name,action);}catch(error){cleanup.errors.push({...safeError(error),step:name});process.exitCode=1;}}
  await clean('record-stage-timings',()=>save('stage-timings.json',{clock:'performance.now monotonic milliseconds',samples:stageTimings}));

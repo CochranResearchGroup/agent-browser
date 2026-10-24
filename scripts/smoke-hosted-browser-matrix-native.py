@@ -54,6 +54,7 @@ def main():
     parser.add_argument('--browser-manifest', type=Path)
     parser.add_argument('--agent-source-commit', required=True)
     parser.add_argument('--native-binary-source-commit')
+    parser.add_argument('--input-diagnostic', action='store_true', help='Bounded Native input diagnosis only; never full-matrix acceptance')
     parser.add_argument('--display', type=int, required=True)
     parser.add_argument('--vnc-port', type=int, required=True)
     parser.add_argument('--subnet', required=True)
@@ -78,7 +79,8 @@ def main():
     args.results.mkdir(mode=0o700, parents=True, exist_ok=False)
     assert args.results.stat().st_uid == os.getuid() and args.results.stat().st_mode & 0o077 == 0
     started = time.monotonic()
-    workload_deadline = started + 1200
+    workload_seconds = 300 if args.input_diagnostic else 1200
+    workload_deadline = started + workload_seconds
     final_deadline = workload_deadline + 180
     phase_deadline = [workload_deadline]
     sys.path.insert(0, str(args.native_source / 'tests'))
@@ -121,6 +123,9 @@ def main():
     plan = {'version': 1, 'runId': secrets.token_hex(16), 'pairDigest': pair_digest, 'sourcePair': source_pair,
             'coldContexts': 5, 'publicControlPairs': 10, 'nativeControlPairs': 3, 'warmTargetMs': 250,
             'functionalUiPairs': 1, 'nativeTextEdits': 1, 'deadlineSeconds': 1200, 'cleanupDeadlineSeconds': 180}
+    if args.input_diagnostic:
+        plan.update(mode='native_input_diagnostic', coldContexts=1, publicControlPairs=0,
+                    nativeControlPairs=0, deadlineSeconds=300)
     # Frozen before the creating Native Fixture can install or start anything.
     h.private_json(args.results / 'workload-plan.json', plan)
     lock = threading.RLock()
@@ -376,13 +381,17 @@ def main():
                                                 cwd=repo, env=environment, stdin=subprocess.DEVNULL,
                                                 stdout=(args.results / 'agent.stdout').open('w'), stderr=(args.results / 'agent.stderr').open('w'))
             self.apps.append(self.agent_child)
-            self.agent_child.wait(timeout=remaining(1200))
-            assert self.agent_child.returncode == 0, 'Combined Agent Browser matrix failed; retain every receipt'
-            assert self.restart_backend is not None and self.restart_admitted
+            self.agent_child.wait(timeout=remaining(workload_seconds))
+            assert self.agent_child.returncode == (1 if args.input_diagnostic else 0), 'Unexpected child outcome; retain every receipt'
+            if args.input_diagnostic:
+                diagnostic = json.loads((args.results / 'agent/native-input-diagnostic.json').read_text())
+                assert diagnostic['passed'] is True and diagnostic['fullMatrix'] is False
+            else:
+                assert self.restart_backend is not None and self.restart_admitted
+                summary = json.loads((args.results / 'agent/qualification-summary.json').read_text())
+                assert summary['passed'] and summary['functionalPassed'] and summary['performancePassed']
             assert not adapter_errors, 'Scoped Native adapter has failures'
-            summary = json.loads((args.results / 'agent/qualification-summary.json').read_text())
             cleanup = json.loads((args.results / 'agent/cleanup.json').read_text())
-            assert summary['passed'] and summary['functionalPassed'] and summary['performancePassed']
             assert cleanup['cleanupQualified'] and not cleanup['errors'] and not cleanup['ambiguous']
             with lock:
                 self.rpc.assert_restart_clear()
@@ -479,13 +488,16 @@ def main():
         socket_root.rmdir()
     elapsed = time.monotonic() - started
     accepted = bool(fixture and fixture.complete and not failure and not cleanup_failure and not adapter_errors
-                    and workload_elapsed < 1200 and elapsed < 1380)
-    result = {'verdict': 'ACCEPT' if accepted else 'INCOMPLETE', 'failure': failure, 'cleanupFailure': cleanup_failure,
+                    and workload_elapsed < workload_seconds and elapsed < workload_seconds + 180)
+    result = {'verdict': ('DIAGNOSTIC_ACCEPT' if args.input_diagnostic else 'ACCEPT') if accepted else 'INCOMPLETE',
+              'fullMatrix': bool(accepted and not args.input_diagnostic), 'diagnosticOnly': args.input_diagnostic,
+              'failure': failure, 'cleanupFailure': cleanup_failure,
               'adapterErrors': adapter_errors, 'workloadSeconds': workload_elapsed, 'elapsedSeconds': elapsed,
-              'deadlineSeconds': 1200, 'cleanupDeadlineSeconds': 180,
+              'deadlineSeconds': workload_seconds, 'cleanupDeadlineSeconds': 180,
               'installationId': fixture.installation_id if fixture else None,
               'fixtureImageDisposition': 'Native fixture retains uniquely tagged build images as artifacts; no image-absence claim',
-              'scope': 'One same-pair synthetic matrix on isolated Native resources; no production/account/relocation acceptance'}
+              'scope': ('Native input diagnosis only; no full-matrix acceptance' if args.input_diagnostic else
+                        'One same-pair synthetic matrix on isolated Native resources; no production/account/relocation acceptance')}
     h.private_json(args.results / 'combined-matrix-receipt.json', result)
     print(json.dumps(result))
     return 0 if accepted else 1
