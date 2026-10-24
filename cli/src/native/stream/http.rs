@@ -1757,16 +1757,22 @@ where
         .iter()
         .any(|(key, value)| key == "projection" && value == "workspace")
     {
-        let browser_runtime = crate::native::browser_session_store::BrowserSessionSqliteStore::default_observed_workspace_status().await?;
-        return Ok(
-            json!({"success": true, "data": {"browserRuntime": browser_runtime}}).to_string(),
-        );
+        return workspace_status_response()
+            .await
+            .map(|response| response.to_string());
     }
     relay(
         session_name.to_string(),
         service_status_command(query).await,
     )
     .await
+}
+
+/// Read the owner workspace directly for both HTTP listeners. Inventory must
+/// not enter diagnostic transport discovery or a full Service CLI fallback.
+pub(super) async fn workspace_status_response() -> Result<Value, String> {
+    let browser_runtime = crate::native::browser_session_store::BrowserSessionSqliteStore::default_observed_workspace_status().await?;
+    Ok(json!({"success": true, "data": {"browserRuntime": browser_runtime}}))
 }
 
 fn service_reconcile_command() -> Value {

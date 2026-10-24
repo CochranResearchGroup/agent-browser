@@ -1061,8 +1061,9 @@ confined to diagnostics rather than treated as native browser presence. Empty de
 are excluded. Failed or stale observations preserve selection and retained links;
 a later successful refresh can restore the same tab without recreating it.
 The native rail reads the dedicated workspace projection and polls three seconds
-after each completed read, with a one-second cache. Service reconciliation and
-workstation diagnostics run only on diagnostic surfaces. Observation freshness expires
+after each completed read. Both HTTP listeners read the current owner snapshot
+directly, without the diagnostic transport, CLI fallback or one-second status cache.
+Service reconciliation and workstation diagnostics run only on diagnostic surfaces. Observation freshness expires
 independently after 30 seconds using elapsed time, even if the next read stalls.
 Search matches displayed tab labels and URLs, excluding embedded document payloads.
 Native window reads refresh in one background worker. Initial reads can remain

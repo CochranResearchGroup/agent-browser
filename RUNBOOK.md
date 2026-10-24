@@ -1,5 +1,7 @@
 # Runbook
 
+P285/#393 repairs the generation-dashboard workspace route: both listeners read the owner snapshot before diagnostic discovery/fallback. Real-handler regression,253 stream cases, strict Rust/docs/parity gates and exact development empty/one-browser measurements pass. P284 is reconciled; integrated and installed qualification remain separate. See [P285 evidence](docs/dev/notes/0285-2026-10-24-workspace-inventory-latency.md).
+
 [P284 operator-led upgrades](docs/dev/plans/0284-2026-10-24-operator-led-upgrades.md), #399, removes persistent upgrade markers and warning-based upgrade vetoes. The operator controls their workstation; optional live-work inspection is advisory. Source and exact-candidate qualification pass; installed publication is pending.
 
 P280/P281/P282 combined deployment accepted on source5cce1577d, installed generation bf263f69342b. Exact recovery, preserve-mode installation, public assets/auth/rail and disposable browser workflow pass. Settled doctor exits0 with advisory warnings; #393 latency and #399 operator-led upgrade work remain open. See [installed evidence](docs/dev/notes/0282-2026-10-24-recovery-dashboard-manifest.md#combined-installed-acceptance-2026-10-24).
