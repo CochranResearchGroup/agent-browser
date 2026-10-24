@@ -9,12 +9,12 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#68]
-    plan_state: OPEN
+    plan_state: COMPLETED
     custody_state: ACTIVE_WORKTREE
     dependencies: []
     overlaps: [P274, P237, P260]
     reconciled_overlaps: ["Root owns Activity, Chat, docs and integration; test auxiliary owns only inspection fixture and runner; preserve foreign enrollment and manual-login work"]
-    validation_status: Mounted accept/reload, corrections, persistence-off and failed-storage slices pass; isolation and integration gates pending
+    validation_status: Eight mounted workflows, exact cleanup, adjacent checks, TypeScript, builds, strict Clippy, format and documentation links pass
     limitations: ["No actual model or Native effects", "No production publication", "Broader issue68 remains open"]
     updated_at: 2026-10-23
 
