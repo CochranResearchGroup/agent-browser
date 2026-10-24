@@ -1,5 +1,7 @@
 # Active plan index
 
+[P278 combined hosted matrix](0278-2026-10-23-combined-host-matrix355.md), #355; same-pair warm/cold and full isolated matrix preparation, disjoint from active private-launch diagnosis.
+
 [P277 Native restart acceptance](0277-2026-10-23-native-restart-acceptance355.md) records ordinary functional recovery, the lifecycle/viewing distinction and unresolved launch/cold/coordination gates for355.
 
 [P276 Native Focus acceptance](0276-2026-10-23-native-focus-acceptance.md), #68; actual Native A/B/A Focus qualified, canonical browser identity repaired, peers preserved and 25 process generations independently absent.

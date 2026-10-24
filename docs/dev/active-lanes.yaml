@@ -1,6 +1,23 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P278
+    product_lane: PL-PLATFORM
+    objective: Qualify the remaining combined hosted matrix on one pinned pair
+    plan: docs/dev/plans/0278-2026-10-23-combined-host-matrix355.md
+    branch: platform/combined-host-matrix-355
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#355]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [P277]
+    overlaps: [P270, P277]
+    reconciled_overlaps: ["Foreign fix/reopen-launch-diagnosis-355 owns browser.rs and private launch diagnosis/guidance; this lane owns combined workload, cold summary and test-only matrix adapters; preserve all foreign work and candidates"]
+    validation_status: Provider-free workload qualification and isolated integration preparation pending
+    limitations: ["Actual pair pin waits for Native8 launch-failure disposition", "No production or existing desktop effects", "Relocation578 remains deferred"]
+    updated_at: 2026-10-23
+
   - id: P277
     product_lane: PL-PLATFORM
     objective: Qualify explicit rebind after an isolated real Native restart
