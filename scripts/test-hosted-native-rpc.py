@@ -363,6 +363,53 @@ class ScopedNativeRpcHttpTests(unittest.TestCase):
             }})
         self.assertEqual(self.upstream_calls, [])
 
+    def issue_owned_observe_grant(self):
+        rpc = native_rpc.ScopedNativeRpc(self.origin, "fixturetoken", self.assignment, "owned-view",
+                                        application="fixture", embed_origin="https://fixture.example.test")
+        self.delegate_owned_through_public_acquire(rpc)
+        issued_at = int(time.time() * 1000)
+        grant = {"schemaVersion": 1, "routeId": "owned-observe-route", "request": {
+            "idempotencyKey": "fixture:observe-key", "target": self.owned_view_target(),
+            "application": "fixture", "audience": "https://fixture.example.test", "capability": "observe",
+            "policyRevision": "fixture-policy-v1", "lifetimeSeconds": 60},
+            "issuedAt": issued_at, "expiresAt": issued_at + 60_000, "revoked": False}
+        self.operation_responses["issue_view"] = {"schemaVersion": 1, "grant": grant,
+            "path": "/embed/owned-observe-route", "presentationState": "grant_issued", "readinessScope": "live_resource"}
+        rpc.handle_consumer({"operation": "issue_view", "assignment_id": "owned-assignment", "expected_generation": 1,
+            "expected_viewing_generation": 1, "audience": "https://fixture.example.test", "capability": "observe",
+            "lifetime_seconds": 60, "idempotency_key": "observe-key"})
+        return rpc, grant
+
+    def test_observe_grant_retirement_uses_exact_revoke_view(self):
+        rpc, _grant = self.issue_owned_observe_grant()
+        self.operation_responses["revoke_view"] = {"schemaVersion": 1, "routeId": "owned-observe-route", "state": "revoked"}
+        self.assertTrue(rpc.retire_grants()["clear"])
+        operations = [call["body"]["params"]["arguments"]["request"]["operation"] for call in self.upstream_calls]
+        self.assertEqual(operations, ["inventory", "issue_view", "revoke_view"])
+
+    def test_reconcile_authoritatively_retired_exact_grant_clears_projection(self):
+        rpc, grant = self.issue_owned_observe_grant()
+        viewing = {"consumerGrants": {grant["routeId"]: {**grant, "revoked": True}}, "routes": {}, "sessions": {}}
+        rpc.reconcile_retired_grants(viewing)
+        self.assertEqual(rpc.assert_restart_clear()["revokedRouteIds"], [grant["routeId"]])
+        self.assertEqual(len(self.upstream_calls), 2, "Read-only reconciliation dispatches no revocation")
+
+    def test_reconcile_refuses_foreign_binding_or_still_admitted_route(self):
+        rpc, grant = self.issue_owned_observe_grant()
+        retired = {**grant, "revoked": True}
+        foreign = copy.deepcopy(retired)
+        foreign["request"]["target"]["assignmentId"] = "peer-assignment"
+        for viewing in (
+            {"consumerGrants": {grant["routeId"]: foreign}, "routes": {}, "sessions": {}},
+            {"consumerGrants": {grant["routeId"]: retired},
+             "routes": {grant["routeId"]: {"desktopId": "owned-desktop"}}, "sessions": {}},
+        ):
+            with self.subTest(viewing=viewing), self.assertRaises(ValueError):
+                rpc.reconcile_retired_grants(viewing)
+            with self.assertRaises(ValueError):
+                rpc.assert_restart_clear()
+        self.assertEqual(len(self.upstream_calls), 2)
+
     def test_issued_native_grant_blocks_restart_until_exact_authoritative_revocation(self):
         rpc = native_rpc.ScopedNativeRpc(self.origin, "fixturetoken", self.assignment, "owned-view", application="fixture", embed_origin="https://fixture.example.test")
         self.delegate_owned_through_public_acquire(rpc)

@@ -76,7 +76,13 @@ class ScopedNativeRpc:
             raise
         finally:
             self.active_rpc_count -= 1
-        self.record({'method': message.get('method'), 'id': message.get('id'), 'forwarded': True})
+        metadata = {'method': message.get('method'), 'id': message.get('id'), 'forwarded': True}
+        params = message.get('params', {})
+        if params.get('name') == 'remote_view_consumer':
+            metadata['consumerOperation'] = params.get('arguments', {}).get('request', {}).get('operation')
+            if response.get('result', {}).get('isError'):
+                metadata['refusalCode'] = response['result'].get('structuredContent', {}).get('code')
+        self.record(metadata)
         return response
 
     def handle_consumer(self, request):
@@ -117,12 +123,42 @@ class ScopedNativeRpc:
         # A refused or ambiguous revocation stops; never replay a previous intent.
         for route, grant in self.issued_grants.items():
             if not grant['revoked']:
-                value = self.handle_consumer({'operation': 'revoke_inactive_view',
-                                             'route_id': route, 'audience': grant['audience'],
-                                             'idle_seconds': 5})
+                request = {'operation': 'revoke_view' if grant['capability'] == 'observe' else 'revoke_inactive_view',
+                           'route_id': route, 'audience': grant['audience']}
+                if grant['capability'] == 'control':
+                    request['idle_seconds'] = 5
+                value = self.handle_consumer(request)
                 if value.get('state') != 'revoked':
                     raise ValueError('Native grant remains active')
         return self.assert_restart_clear()
+
+    def reconcile_retired_grants(self, viewing):
+        """Creating fixture supplies a fresh authoritative Native store read."""
+        confirmed = []
+        for route, tracked in self.issued_grants.items():
+            grant = viewing['consumerGrants'].get(route)
+            if grant is None:
+                continue
+            request, target = grant['request'], grant['request']['target']
+            if (grant['routeId'] != route or request['application'] != self.application or
+                    request['audience'] != tracked['audience'] or request['capability'] != tracked['capability'] or
+                    target['assignmentId'] != self.assignment['assignmentId'] or
+                    target['desktopId'] != self.assignment['desktopId'] or
+                    target['lifecycleGeneration'] != self.assignment['generation'] or
+                    target['viewingDesktopId'] != self.viewing_desktop_id or
+                    target['viewingGeneration'] != tracked['viewingGeneration']):
+                raise ValueError('Native retired grant differs from its delegated owner')
+            if tracked['revoked'] and grant['revoked'] is not True:
+                raise ValueError('Native revoked grant cannot regain authority')
+            if grant['revoked'] is True:
+                if route in viewing['routes'] or any(
+                        session.get('routeId') == route and session['state'] == 'admitted'
+                        for session in viewing['sessions'].values()):
+                    raise ValueError('Native retired grant retains a route or admitted session')
+                confirmed.append(route)
+        for route in confirmed:
+            self.issued_grants[route]['revoked'] = True
+        return {'confirmedRevokedRouteIds': sorted(confirmed)}
 
     def handle(self, message):
         before, failures = self.forwarded_count, len(self.failures)
@@ -209,7 +245,10 @@ class ScopedNativeRpc:
                 value = result.get('structuredContent', {})
                 if request['operation'] == 'issue_view':
                     route = value['grant']['routeId']
-                    self.issued_grants[route] = {'audience': request['audience'], 'revoked': False}
+                    self.issued_grants[route] = {'audience': request['audience'],
+                                                 'capability': request['capability'],
+                                                 'viewingGeneration': request['expected_viewing_generation'],
+                                                 'revoked': value['grant']['revoked'] is True}
                 elif request['operation'] in ('revoke_view', 'revoke_inactive_view') and value.get('state') == 'revoked':
                     if value.get('routeId') != request['route_id']:
                         raise ValueError('Native revoke response target changed')

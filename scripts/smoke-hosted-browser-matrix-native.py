@@ -245,6 +245,7 @@ def main():
                 h.wait(lambda: not websocket_connections, 20)
                 # Retirement is exact, one-shot and uses only grants tracked by
                 # the existing scoped Native adapter; no arbitrary route IDs.
+                self.rpc.reconcile_retired_grants(json.loads((self.home / 'control/viewing.json').read_text()))
                 self.rpc.retire_grants()
                 scope = self.rpc.assert_restart_clear()
                 independent = self.assert_viewing_clear()
@@ -397,6 +398,7 @@ def main():
                 # Assignment retirement may revoke grants inside Native. Confirm
                 # each exact tracked route through its authoritative retirement
                 # operation before interpreting the local tracking projection.
+                self.rpc.reconcile_retired_grants(json.loads((self.home / 'control/viewing.json').read_text()))
                 self.rpc.retire_grants()
                 self.rpc.assert_restart_clear()
                 self.assert_viewing_clear()
