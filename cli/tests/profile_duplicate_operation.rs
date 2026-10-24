@@ -771,3 +771,153 @@ fn qualified_graceful_source_custody_fences_launch_writes_and_publishes_on_its_c
     drop(db);
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn owner_confirmed_borrowed_source_preserves_exact_preclose_anchor_under_copy_custody() {
+    use agent_browser_service_model::*;
+    use rusqlite::{params, Connection};
+    let root = std::env::temp_dir().join(format!("duplicate-borrowed-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(root.join("source")).unwrap();
+    let source = copy::SourceProfile {
+        id: "borrowed-source".into(),
+        name: "Borrowed source".into(),
+        user_data_dir: root.join("source"),
+        browser_build: "same-build".into(),
+        generation: 1,
+    };
+    let original = RecordedProcessIdentity {
+        pid: 42,
+        start_token: "synthetic-original-instance".into(),
+        executable_path: Some("/synthetic/chrome".into()),
+        browser_family: Some("chrome".into()),
+    };
+    let desktop = RemoteViewFixedDesktop {
+        desktop_id: "owned-desktop".into(),
+        friendly_route_label: "fixture".into(),
+        generation: 1,
+    };
+    let mut active = BrowserSessionState::default();
+    active.browsers.insert(
+        "borrowed-browser".into(),
+        ManagedBrowserInstance {
+            id: "borrowed-browser".into(),
+            profile_id: source.id.clone(),
+            pid: 42,
+            cdp_endpoint: "ws://127.0.0.1:9222/devtools/browser/synthetic".into(),
+            desktop: Some(desktop.clone()),
+            active_session_ids: vec![],
+        },
+    );
+    active.app_browser_attachments.insert(
+        "borrowed-browser".into(),
+        BrowserAppAttachment {
+            request: BrowserAttachmentRequest {
+                version: 1,
+                process: original.clone(),
+                profile_path: source.user_data_dir.to_string_lossy().into_owned(),
+                cdp_endpoint: "ws://127.0.0.1:9222/devtools/browser/synthetic".into(),
+                target_id: "app-target".into(),
+                shared_with: vec![],
+            },
+            owner: BrowserHostIdentity {
+                host_id: "app".into(),
+                participant_id: "agent".into(),
+                session_id: "session".into(),
+            },
+            borrowed_tab_ids: ["app-target".into()].into_iter().collect(),
+            profile_id: source.id.clone(),
+            desktop,
+            assignment: None,
+        },
+    );
+    let anchor =
+        custody::BorrowedSourceAnchor::capture("owner-copy", &source, &active, "borrowed-browser")
+            .unwrap();
+    let database = root.join("runtime.sqlite3");
+    let db = Connection::open(&database).unwrap();
+    db.execute_batch("CREATE TABLE state_documents(kind TEXT PRIMARY KEY,schema_version TEXT NOT NULL,json TEXT NOT NULL);PRAGMA user_version=2;").unwrap();
+    let mut stopped = BrowserSessionState::default();
+    stopped
+        .profile_operation_ids
+        .insert(source.id.clone(), "owner-copy".into());
+    for (kind, schema, value) in [
+        (
+            "browser_session_state",
+            "agent-browser.browser-session-state.v1",
+            serde_json::to_value(&stopped).unwrap(),
+        ),
+        (
+            "browser_profile_catalog",
+            "agent-browser.browser-profile-catalog.v1",
+            serde_json::json!({"schemaVersion":"agent-browser.browser-profile-catalog.v1","profiles":{source.id.clone():{"id":source.id,"name":source.name,"userDataDir":source.user_data_dir,"kind":"named"}},"disposablePolicies":{}}),
+        ),
+    ] {
+        db.execute(
+            "INSERT INTO state_documents VALUES(?1,?2,?3)",
+            params![kind, schema, value.to_string()],
+        )
+        .unwrap();
+    }
+    let evidence = custody::BackendGracefulCloseEvidence {
+        owner_operation_id: "owner-copy".into(),
+        source_profile_id: source.id.clone(),
+        source_generation: 1,
+        original: original.clone(),
+        polite_close_attempted: true,
+        polite_close_succeeded: true,
+        polite_close_failed: false,
+        exact_process_exited: true,
+        profile_lock_released: true,
+        force_kill_attempted: false,
+    };
+    // Borrowed originals are not fabricated as historical managed launches.
+    assert!(
+        custody::SourceCustody::acquire(&database, &source, &evidence, |_| {
+            custody::OriginalProcessState::Absent
+        })
+        .is_err()
+    );
+    let guard = custody::SourceCustody::acquire_with_borrowed_anchor(
+        &database,
+        &source,
+        &evidence,
+        &anchor,
+        |_| custody::OriginalProcessState::Absent,
+    )
+    .unwrap();
+    db.busy_timeout(std::time::Duration::ZERO).unwrap();
+    assert!(db.execute_batch("BEGIN IMMEDIATE").is_err());
+    drop(guard);
+    let mut wrong = evidence.clone();
+    wrong.owner_operation_id = "another-operation".into();
+    assert!(custody::SourceCustody::acquire_with_borrowed_anchor(
+        &database,
+        &source,
+        &wrong,
+        &anchor,
+        |_| custody::OriginalProcessState::Absent
+    )
+    .is_err());
+    let mut forced = evidence.clone();
+    forced.force_kill_attempted = true;
+    assert!(custody::SourceCustody::acquire_with_borrowed_anchor(
+        &database,
+        &source,
+        &forced,
+        &anchor,
+        |_| custody::OriginalProcessState::Absent
+    )
+    .is_err());
+    let mut reused = evidence;
+    reused.original.start_token = "replacement-instance".into();
+    assert!(custody::SourceCustody::acquire_with_borrowed_anchor(
+        &database,
+        &source,
+        &reused,
+        &anchor,
+        |_| custody::OriginalProcessState::Absent
+    )
+    .is_err());
+    drop(db);
+    std::fs::remove_dir_all(root).unwrap();
+}
