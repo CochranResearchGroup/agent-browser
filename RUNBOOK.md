@@ -2,6 +2,8 @@
 
 [P283 browser mode inspection](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md), #401 under #400, implements read-only original-process posture through workspace status, task-scoped MCP/CLI and the rail. Validated source checkpoint `ba1c60ea9` is in draft PR #408. TDD, touched-surface gates and the single review/remediation pass are recorded in the plan. #402/#403 retain separate incomplete checkpoint branches after the one-hour stop; their temporary trees were removed through governed closeout. #404 remains blocked. No runtime publication.
 
+P280/P281/P282 combined deployment accepted on source5cce1577d, installed generation bf263f69342b. Exact recovery, preserve-mode installation, public assets/auth/rail and disposable browser workflow pass. Settled doctor exits0 with advisory warnings; #393 latency and #399 operator-led upgrade work remain open. See [installed evidence](docs/dev/notes/0282-2026-10-24-recovery-dashboard-manifest.md#combined-installed-acceptance-2026-10-24).
+
 [P281 upgrade client drain retirement](docs/dev/plans/0281-2026-10-24-retire-client-upgrade-drain.md) owns issue #394 under PL-BUGFIX.
 Ordinary clients must ignore persistent installer drain metadata. Production
 marker mitigation passed disposable open and scoped close; the upgrade remains

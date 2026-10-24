@@ -2,11 +2,10 @@
 
 [P283 browser mode inspection](0283-2026-10-24-browser-mode-inspection.md) owns #401 under spec #400; TDD source work, no runtime publication.
 
+[P282 recovery dashboard identity](0282-2026-10-24-recovery-dashboard-manifest.md), #405, closes with exact recovery and accepted combined deployment. P280/P281 repairs are installed;393 and399 remain open.
+
 [P281 upgrade client drain retirement](0281-2026-10-24-retire-client-upgrade-drain.md) owns issue #394 under PL-BUGFIX.
-Ordinary clients must ignore persistent installer drain metadata. Production
-marker mitigation passed disposable open and scoped close; the upgrade remains
-unaccepted. Source qualification passes 203 selected Rust cases, the real browser
-and full installer fixtures. [PR397](https://github.com/CochranResearchGroup/agent-browser/pull/397) owns integration; runtime publication remains separate.
+Ordinary clients ignore persistent installer drain metadata. PR397 is integrated and installed in the accepted combined generation bf263f69342b. Source, full installer and ordinary disposable workflow qualification pass. Broader marker retirement remains separate under #399 / PR406.
 
 [P280 dashboard static delivery](0280-2026-10-24-dashboard-static-delivery.md), #391; negotiate gzip and cache only positively hashed assets.
 

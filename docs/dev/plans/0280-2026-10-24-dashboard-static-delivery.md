@@ -1,6 +1,6 @@
 # P280: Dashboard static delivery
 
-Status: IN_PROGRESS
+Status: CLOSED
 Product lane: PL-BUGFIX
 Work item: CochranResearchGroup/agent-browser#391
 Branch: fix/dashboard-static-delivery
@@ -26,3 +26,7 @@ Source and isolated production-shaped candidate acceptance pass; see the owning 
 Production publication remains blocked by an already-active foreign forward-recovery operation. No competing install or takeover is attempted. Issue393 owns the independently reproduced2.4 to3.1s backend workspace-read delay; this packet does not claim that delay or Native first pixels fixed. The source issue391 stays open for public installed acceptance. The primary checkout and pinned candidate are retained; the owned temporary namespace is stopped.
 
 PR392 is merged as ecd2950a3. Fresh canonical source/562-input equivalence passes. Source custody is integrated;391 remains open for installed acceptance, with no production effect performed by this lane.
+
+## Installed closeout
+
+Combined generation bf263f69342b is accepted. [Installed evidence](../notes/0282-2026-10-24-recovery-dashboard-manifest.md#combined-installed-acceptance-2026-10-24) separates passing public/workflow gates from advisory warnings, concurrent process changes and open393/399 work. Primary and sealed candidates are retained.

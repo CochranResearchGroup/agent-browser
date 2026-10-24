@@ -32,10 +32,9 @@ pub(crate) use dashboard::{
 pub(crate) use dashboard::{
     native_handoff_http_fixture_credentials, run_native_handoff_http_fixture,
 };
-pub(crate) use http::{
-    runtime_manifest_json, runtime_manifest_json_for_executable,
-    service_profile_lookup_response_for_state,
-};
+#[cfg(test)]
+pub(crate) use http::runtime_manifest_json_for_executable;
+pub(crate) use http::{runtime_manifest_json, service_profile_lookup_response_for_state};
 #[cfg(test)]
 pub(crate) use http::{
     service_request_adapter_fixture, service_status_http_fixture, service_status_http_with_relay,
