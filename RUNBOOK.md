@@ -321,3 +321,23 @@ acceptance are unverified. P237's separate dirty lifecycle/UI work is preserved.
 ### 2026-10-17 P247 selected planning completeness
 
 [P247](docs/dev/plans/0247-2026-10-17-planning-completeness.md) completes bounded selected-lane documentation checks. The [evidence](docs/dev/notes/0247-2026-10-17-planning-completeness.md) records 67 tests, selected P245/P247, policy/docs gates and corrected legacy-header failure. PR300 owns canonical integration; no runtime effects.
+
+## P243 maintenance | Existing profile proof across namespaces (2026-10-24)
+
+The original public MCP open failed with process identity unavailable even though
+the existing browser held its exact profile databases. Runtime namespace probes
+proved descriptor enumeration succeeds but every descriptor readlink is denied.
+The collector discarded those errors and lost the profile proof. Extend the
+existing bounded host observer with an exact requested-profile match, retaining
+same-user, PID, boot/start, executable and canonical-profile continuity checks.
+No command-line arguments or descriptor targets leave the helper.
+
+Source127f79850 captures the real failing decision seam and minimal GREEN.
+Two profile tests and two observer tests passed; synthetic exact/wrong-profile
+helper checks and three public process-namespace cases passed with owned cleanup.
+Independent closed-scope review found no blocker. The broader profile_ selection
+hit an untouched service-inventory test stack overflow; its cause is unqualified
+and the failure remains preserved. This does not claim a full-suite pass.
+Candidate binary is staged immutably; actual existing-profile proof is positive.
+Production adoption and original public MCP workflow qualification remain pending.
+No existing browser, authentication state or provider object was changed.

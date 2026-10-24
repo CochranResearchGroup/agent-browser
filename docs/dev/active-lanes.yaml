@@ -946,3 +946,19 @@ lanes:
     validation_status: Source and isolated installed archive/pressure/peer-continuation checks pass; Rust and client gates pass; p240 soft budget observed; own units stopped and disabled; wider 105 remains open
     limitations: ["CI-profile candidate is not production-promotable", "Local web ingress unpublished and standalone doctor checked after intentional unit stop", "Longer workload soak, revision-churn convergence and other record categories unqualified"]
     updated_at: 2026-10-13
+
+  - id: P243-profile-proof-namespace
+    product_lane: PL-BUGFIX
+    objective: Restore exact existing-profile proof across runtime user namespaces
+    plan: docs/dev/maintenance/p243-profile-proof-namespace.md
+    branch: fix/profile-proof-namespace
+    target: main
+    accountable_owner: ecochran76
+    plan_state: OPEN
+    custody_state: INTEGRATION_READY
+    work_items: []
+    dependencies: []
+    overlaps: [P243]
+    reconciled_overlaps: ["Bounded profile reuse maintenance only; preserve unrelated authentication edits and existing production browsers"]
+    checkpoint: 127f798502bd8ce507a98b31069e382753f0a7b6
+    limitations: ["Original installed MCP acceptance and preserved-runtime adoption pending", "Broader untouched-test stack overflow retained with unqualified cause"]

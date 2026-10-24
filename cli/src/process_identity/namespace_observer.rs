@@ -10,12 +10,17 @@ use std::time::{Duration, Instant};
 
 const ENTRY: &str = "--internal-process-observation";
 const MAX_BYTES: u64 = 8192;
+mod profile;
+pub(crate) use profile::observe_profile_files;
 
 pub(super) fn run_entry(args: &[String]) -> Option<Result<(), String>> {
     if args.get(1).map(String::as_str) != Some(ENTRY) {
         return None;
     }
     Some((|| {
+        if args.len() == 4 {
+            return profile::run_profile_entry(args);
+        }
         let pid = args
             .get(2)
             .filter(|_| args.len() == 3)
@@ -70,6 +75,20 @@ fn observe_once(pid: u32, before_start: Option<&str>) -> Result<ProcessObservati
     if before_start.is_none() {
         return Err("process_observer_start_identity_missing".into());
     }
+    let bytes = transport(pid, None)?;
+    let observation: ProcessObservation =
+        serde_json::from_slice(&bytes).map_err(|_| "process_observer_response_invalid")?;
+    // Re-read local process identity without invoking another helper. Even when
+    // exe remains denied, boot/start are separately available through proc stat.
+    let after_start = std::fs::read_to_string(format!("/proc/{pid}/stat"))
+        .ok()
+        .and_then(|stat| super::linux_start_ticks(&stat).map(ToString::to_string))
+        .zip(super::current_boot_epoch())
+        .map(|(ticks, boot)| format!("{boot}:{ticks}"));
+    validate_observation(pid, before_start, after_start.as_deref(), observation)
+}
+
+fn transport(pid: u32, profile: Option<&std::path::Path>) -> Result<Vec<u8>, String> {
     // Unit tests must never create host services implicitly. The opt-in installed
     // namespace smoke exercises this transport with the real executable.
     if cfg!(test) {
@@ -78,7 +97,8 @@ fn observe_once(pid: u32, before_start: Option<&str>) -> Result<ProcessObservati
     let executable =
         std::env::current_exe().map_err(|_| "process_observer_executable_unavailable")?;
     let unit = format!("agent-browser-process-observe-{}", uuid::Uuid::new_v4());
-    let mut child = Command::new("/usr/bin/systemd-run")
+    let mut command = Command::new("/usr/bin/systemd-run");
+    command
         .args([
             "--user",
             "--quiet",
@@ -94,7 +114,11 @@ fn observe_once(pid: u32, before_start: Option<&str>) -> Result<ProcessObservati
         ])
         .arg(executable)
         .arg(ENTRY)
-        .arg(pid.to_string())
+        .arg(pid.to_string());
+    if let Some(profile) = profile {
+        command.arg(profile);
+    }
+    let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -131,16 +155,7 @@ fn observe_once(pid: u32, before_start: Option<&str>) -> Result<ProcessObservati
     if bytes.len() as u64 >= MAX_BYTES {
         return Err("process_observer_response_too_large".into());
     }
-    let observation: ProcessObservation =
-        serde_json::from_slice(&bytes).map_err(|_| "process_observer_response_invalid")?;
-    // Re-read local process identity without invoking another helper. Even when
-    // exe remains denied, boot/start are separately available through proc stat.
-    let after_start = std::fs::read_to_string(format!("/proc/{pid}/stat"))
-        .ok()
-        .and_then(|stat| super::linux_start_ticks(&stat).map(ToString::to_string))
-        .zip(super::current_boot_epoch())
-        .map(|(ticks, boot)| format!("{boot}:{ticks}"));
-    validate_observation(pid, before_start, after_start.as_deref(), observation)
+    Ok(bytes)
 }
 
 fn validate_observation(
