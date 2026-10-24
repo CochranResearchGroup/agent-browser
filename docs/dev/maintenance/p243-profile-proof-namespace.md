@@ -34,5 +34,7 @@ a captured failing test before enabling fallback and passes afterward. The
 profile observer now uses the existing bounded user-manager transport and returns
 only the requested canonical-profile match with exact process identity. The
 consumer checks process and canonical-profile continuity after the response.
-Focused Cargo qualification and candidate build remain pending at this custody
-checkpoint; do not infer installed acceptance from it.
+Focused Cargo qualification (four tests), candidate build, synthetic profile proof
+and three public process-namespace cases passed. Independent review found no
+blocker. A broader selection hit an untouched test stack overflow of unqualified
+cause; no full-suite pass is claimed. Installed public acceptance remains pending.
