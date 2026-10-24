@@ -105,9 +105,17 @@ fn validate_with_dashboard_probe(
             .is_some_and(|id| !id.trim().is_empty())
         && (!forward_recovery
             || ingress["presentationReceipt"]["coordinatorGeneration"] == generation_id);
-    if dashboard.runtime_manifest_sha256
-        != crate::dashboard_ingress::dashboard_runtime_manifest_sha256_for_executable(&binary)
-            .map_err(|_| "current_selection_dashboard_manifest_unavailable".to_string())?
+    // Observe the selected dashboard's own assets. A recovery controller may
+    // embed a different bundle; synthesizing its manifest for `binary` would
+    // reject a valid older generation. Keep both executable and registry proof.
+    let observed = crate::dashboard_ingress::observe_dashboard_backend(
+        dashboard.port,
+        &dashboard.generation_id,
+        &binary,
+        &binary_sha,
+    )
+    .map_err(|_| "current_selection_dashboard_manifest_unavailable".to_string())?;
+    if dashboard.runtime_manifest_sha256 != observed.runtime_manifest_sha256
         || (forward_recovery && dashboard.generation_id != generation_id)
         || !(presentation_ready || (forward_recovery && presentation_absent))
     {
@@ -213,6 +221,11 @@ mod tests {
     }
 
     fn fixture() -> Fixture {
+        fixture_with_manifest(|_| {})
+    }
+
+    fn fixture_with_manifest(change: impl FnOnce(&mut Value)) -> Fixture {
+        use sha2::Digest;
         let root = std::env::temp_dir().join(format!("ab-current-{}", uuid::Uuid::new_v4()));
         let paths = super::super::install_paths(&root);
         let generation = paths.generations_dir.join("generation-current");
@@ -268,8 +281,13 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        let manifest =
+        let mut manifest =
             crate::native::stream::runtime_manifest_json_for_executable(&binary).unwrap();
+        change(&mut manifest);
+        let manifest_sha = format!(
+            "{:x}",
+            sha2::Sha256::digest(manifest.to_string().as_bytes())
+        );
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let port = listener.local_addr().unwrap().port();
         let stop = Arc::new(AtomicBool::new(false));
@@ -296,7 +314,7 @@ mod tests {
         });
         let ingress = serde_json::json!({
             "dashboardIngressReady": true, "operatorJourneyReady": true,
-            "selectedBackend": DashboardBackend::new("dashboard-package-label", port, crate::dashboard_ingress::dashboard_runtime_manifest_sha256_for_executable(&binary).unwrap()),
+            "selectedBackend": DashboardBackend::new("dashboard-package-label", port, manifest_sha),
             "presentationReceipt": {"state":"ready", "receiptId":"fixture-authenticated", "dashboardDeploymentGeneration":"dashboard-package-label"},
         });
         Fixture {
@@ -307,6 +325,35 @@ mod tests {
             port,
             server: Some(server),
             ingress,
+        }
+    }
+
+    #[test]
+    fn recovery_observes_selected_dashboard_assets_not_controller_assets() {
+        let fixture = fixture_with_manifest(|manifest| {
+            manifest["dashboard"]["sha256"] = Value::String("older-selected-assets".into());
+        });
+        let paths = super::super::install_paths(&fixture.root);
+        let mut ingress = fixture.ingress.clone();
+        ingress["selectedBackend"]["generationId"] = Value::String("generation-current".into());
+        ingress["presentationReceipt"] = Value::Null;
+        ingress["operatorJourneyReady"] = Value::Bool(false);
+        validate_forward_recovery(&paths, "generation-current", &ingress).unwrap();
+        ingress["selectedBackend"]["runtimeManifestSha256"] = Value::String("stale".into());
+        assert!(validate_forward_recovery(&paths, "generation-current", &ingress).is_err());
+    }
+
+    #[test]
+    fn recovery_rejects_dashboard_claiming_another_executable() {
+        for field in ["path", "sha256"] {
+            let fixture = fixture_with_manifest(|manifest| {
+                manifest["executable"][field] = Value::String("foreign".into());
+            });
+            let paths = super::super::install_paths(&fixture.root);
+            let mut ingress = fixture.ingress.clone();
+            ingress["selectedBackend"]["generationId"] = Value::String("generation-current".into());
+            ingress["presentationReceipt"] = Value::Null;
+            assert!(validate_forward_recovery(&paths, "generation-current", &ingress).is_err());
         }
     }
 

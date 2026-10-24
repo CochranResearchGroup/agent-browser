@@ -15,6 +15,23 @@ lanes:
     overlaps: [P280, P282]
     reconciled_overlaps: ["Own marker retirement and advisory operator contract; retain P282 selected-dashboard proof and P280 static delivery; preserve all foreign checkouts"]
     updated_at: 2026-10-24
+
+  - id: P282
+    product_lane: PL-BUGFIX
+    objective: Repair recovery proof across dashboard builds
+    plan: docs/dev/plans/0282-2026-10-24-recovery-dashboard-manifest.md
+    branch: fix/recovery-dashboard-manifest-405
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#405]
+    plan_state: IN_PROGRESS
+    custody_state: ACTIVE
+    overlaps: [P280]
+    reconciled_overlaps: ["Same primary owner; only current_selection.rs; preserve peer upgrade and mode work"]
+    validation_status: Exact red-green regression; five current-selection tests and strict workspace Clippy pass; publication pending
+    limitations: ["Production deployment blocked; no ingress or provider changes"]
+    updated_at: 2026-10-24
+
   - id: P281
     product_lane: PL-BUGFIX
     objective: Retire persistent upgrade client lockout
