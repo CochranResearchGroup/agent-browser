@@ -233,10 +233,29 @@ function browserPollEnvironment(): DashboardPollEnvironment {
   };
 }
 
+type WorkspacePresenceRead = {
+  tabs?: Record<string, { presence?: { state?: string } | null }>;
+};
+
+/** Select a bounded startup catch-up without changing ordinary refresh cadence. */
+export function createWorkspacePollInterval() {
+  let remaining = 3;
+  return (workspace?: WorkspacePresenceRead | null): number => {
+    const tabs = Object.values(workspace?.tabs ?? {});
+    if (remaining > 0 && tabs.some(tab => tab.presence?.state === "unknown")
+        && !tabs.some(tab => tab.presence?.state === "live")) {
+      remaining -= 1;
+      return 250;
+    }
+    remaining = 0;
+    return 3000;
+  };
+}
+
 /** Start one visibility-aware poll loop whose delay begins after completion. */
 export function startCompletionDrivenDashboardPoll(
   task: () => void | Promise<void>,
-  intervalMs: number,
+  intervalMs: number | (() => number),
   overrides: Partial<DashboardPollEnvironment> = {},
 ): () => void {
   const environment = { ...browserPollEnvironment(), ...overrides };
@@ -254,7 +273,7 @@ export function startCompletionDrivenDashboardPoll(
     timer = environment.setTimeout(() => {
       timer = null;
       void run();
-    }, Math.max(0, intervalMs));
+    }, Math.max(0, typeof intervalMs === "function" ? intervalMs() : intervalMs));
   };
   const run = async () => {
     if (stopped || running || !environment.isVisible()) return;
