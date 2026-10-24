@@ -10,10 +10,10 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#355]
     plan_state: COMPLETED
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     dependencies: [P277]
     overlaps: [P270, P277]
-    reconciled_overlaps: ["P278 diagnostics integrated before pinning; root owns combined fixture/evidence; consumer read-only auxiliary completed governed closeout; foreign source and candidates preserved"]
+    reconciled_overlaps: ["P278 diagnostics integrated before pinning; PR388 merged2ae94c2a3; consumer auxiliary completed governed closeout; primary checkout retained for continuation; foreign source and candidates preserved"]
     validation_status: Matrix6 ACCEPT; warm20/20 p9532.57ms and6/6 p95169.85ms; five cold contexts; real human input and Native restart/reopen; independent47-generation and Native resource cleanup;53Node and19Python cases pass
     limitations: ["No production deployment or existing desktop effects", "Cold median4.44s and p9511.06s remain separate latency evidence", "Original Native8 cause remains unexplained; failures retained", "Relocation578 remains deferred"]
     updated_at: 2026-10-24
