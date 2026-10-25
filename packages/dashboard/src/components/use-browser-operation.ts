@@ -20,6 +20,7 @@ export function useBrowserOperation(open: boolean, scope: Scope, onRefresh: () =
   const [loading, setLoading] = useState(true);
   const [unknown, setUnknown] = useState(false);
   const [readable, setReadable] = useState(false);
+  const [historyTruncated, setHistoryTruncated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pending = useRef(false);
   const version = useRef(0);
@@ -28,7 +29,7 @@ export function useBrowserOperation(open: boolean, scope: Scope, onRefresh: () =
     setOperation(next); setOperationId(next.operationId); setCandidates([]); setConfirmed(false); setUnknown(false);
   }, []);
   const inspect = useCallback(async () => {
-    const current = ++version.current; setLoading(true); setReadable(false); setError(null);
+    const current = ++version.current; setLoading(true); setReadable(false); setHistoryTruncated(false); setError(null);
     try {
       const response = await fetch("/api/command", { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(15000), body: JSON.stringify({ ...JSON.parse(key), choice: "inspect" }) });
       const reply = await response.json();
@@ -39,7 +40,7 @@ export function useBrowserOperation(open: boolean, scope: Scope, onRefresh: () =
       const found = reply.data.operations as BrowserOperation[];
       if (found.some(next => next.schemaVersion !== scope.schemaVersion || !next.operationId)) throw new Error();
       if (current !== version.current) return;
-      setReadable(true);
+      setReadable(true); setHistoryTruncated(reply.data.historyTruncated === true);
       if (found.length === 1) accept(found[0]);
       else { setCandidates(found); setOperation(null); setUnknown(false); if (!found.length) setOperationId(crypto.randomUUID()); }
     } catch { if (current === version.current) setError("Existing operations could not be read. Retry inspection before starting another browser operation."); }
@@ -69,5 +70,5 @@ export function useBrowserOperation(open: boolean, scope: Scope, onRefresh: () =
     } catch { setUnknown(true); setError("The result could not be confirmed. Reconcile this operation before selecting another browser action."); }
     finally { pending.current = false; setBusy(false); }
   };
-  return { operation, candidates, operationId, confirmed, setConfirmed, busy, loading, readable, unknown, error, inspect, run, select: accept, startAnother: () => { setOperationId(crypto.randomUUID()); setOperation(null); setConfirmed(false); setUnknown(false); setError(null); } };
+  return { operation, candidates, operationId, confirmed, setConfirmed, busy, loading, readable, historyTruncated, unknown, error, inspect, run, select: accept, startAnother: () => { setOperationId(crypto.randomUUID()); setOperation(null); setConfirmed(false); setUnknown(false); setError(null); } };
 }
