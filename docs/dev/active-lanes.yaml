@@ -12,7 +12,7 @@ lanes:
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
     dependencies: []
-    validation_status: "PR408/435 merged,424-429 closed; root reconciles401, one worker each completes402 and403 after dependency closure;404 gated; synthetic effects only"
+    validation_status: "401 and424-429 closed;402/403 fullyqualified candidate0837b9d9, PR436 closesboth; childauxiliaries removed;404 next after dependencyreadback; no production"
     overlaps: [P269, P282]
     reconciled_overlaps: ["401 owns read-only mode projection, MCP adapter, schema/client and rail; preserve P269 manual launch and P282 upgrade source, coordinate shared docs at integration"]
     updated_at: 2026-10-25

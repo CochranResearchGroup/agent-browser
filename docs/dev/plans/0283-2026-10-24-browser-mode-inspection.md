@@ -11,21 +11,20 @@ Historical fourth-window deadline: 2026-10-24T23:23:20Z. The later repair contin
 
 ## Current State
 
-The six approved repairs #424–429 are closed through merged PR408 and PR435
-(main `b43833e9a`). The single post-repair review recorded zero Standards
-findings and two Spec findings, both fixed in one bounded TDD pass.
+#401 is closed with merged inspection provenance and fresh mounted acceptance.
+Repairs #424–429 are closed through PR408/435. One worker each completed #402
+and #403; [PR436](https://github.com/CochranResearchGroup/agent-browser/pull/436)
+now carries their fully qualified conversion and independent-copy outcomes.
+Root owns integration and tracker closure. #404 remains gated until their
+merged closure is observed, then root takes that next ticket. Parent #400 stays
+open until all four children are complete.
 
-#401 is closed with merged inspection provenance and a fresh mounted
-mode-button/independent-expiry pass on current main. Root owns this acceptance
-reconciliation. Its closure removes the native dependency gate for #402/#403;
-workers `complete402` and `complete403` own one ticket each in the admitted
-auxiliaries below. #404 remains blocked until both are complete and integrated.
-Root then takes that newly unblocked executable-selection ticket. No parked
-portfolio work or production effect is resumed.
-
-[The qualification note](../notes/0283-2026-10-25-spec400-repairs.md) retains
-the initial repair evidence and failures. Parent #400 remains open. The excluded
-duplicate403 Xlib candidate and all foreign checkouts remain untouched.
+[The qualification note](../notes/0283-2026-10-25-spec400-repairs.md) records
+the exact candidate, all criteria, actual Native/X11 workflows, observed
+force-close login loss, retained failed fixtures and evidence reuse limits.
+Both temporary child auxiliaries are closed through governed operations; the
+primary remains for #404. Foreign dirty work and excluded Xlib work remain
+untouched. There is no installed, private-account or production claim.
 
 ## Packet and seams
 
@@ -352,3 +351,15 @@ protocol regression, replaces only `x11_focus` with Linux checked replies and
 retains `x11_scene`. A Linux-only dependency/lock change is explicitly owned by
 that worker. Xvfb readiness failure is retained separately. Actual concurrent
 copy/source and disk-exhaustion acceptance remain pending.
+
+## Child qualification closeout
+
+Candidate0837b9d9 from executable source46cc199f6 passes the final selected
+Rust/contract/quality lane, three actual two-task mode workflows and the full
+concurrent copy/source workflow. Both task/handoff identities and selected
+executables remain exact. Forced close explicitly loses the original cookie;
+fresh Native authentication subsequently survives graceful return. Ordinary
+paths retain strict continuity. Two fixture-only corrections after freeze
+select the exact original tab and report positive force loss honestly. No
+production source changed after the frozen candidate. PR436 closes402/403;
+401 is already closed. Next bounded outcome is404 after native graph readback.
