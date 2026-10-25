@@ -449,4 +449,11 @@ fn mode_binding_uses_actual_borrowed_process_posture_instead_of_catalog_intent()
             .contains_key(&opened.browser_id),
         "inspection retains app ownership metadata"
     );
+    let paused = host.mode_convert(&json!({"sessionId":opened.session_id,"operationId":"observed-mode","mode":"cdp_free","choice":"pause_and_relaunch","ownerConfirmed":true})).unwrap();
+    assert_eq!(paused["phase"], "paused", "borrowed metadata must not veto the owner's explicit operation");
+    let cancelled = host.mode_convert(&json!({"sessionId":opened.session_id,"operationId":"observed-mode","mode":"cdp_free","choice":"cancel","ownerConfirmed":true})).unwrap();
+    assert_eq!(cancelled["phase"], "cancelled");
+    assert!(!host.state().profile_operation_ids.contains_key("profile-a"));
+    assert!(host.state().app_browser_attachments.contains_key(&opened.browser_id));
+    assert_eq!((calls.get(), requests.get()), effect_counts, "pause/cancel does not take lifecycle custody from the app");
 }
