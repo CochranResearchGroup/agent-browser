@@ -2943,6 +2943,37 @@ mod tests {
             BrowserSessionState, OpenBrowserSession,
         };
         use std::os::unix::fs::PermissionsExt;
+        struct Peer(std::process::Child);
+        impl Drop for Peer {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let mut peer = Peer(
+            std::process::Command::new("/bin/sleep")
+                .arg("300")
+                .spawn()
+                .unwrap(),
+        );
+        let observe_peer = |pid| match crate::process_identity::observe_process(pid) {
+            crate::process_identity::ProcessObservation::Observed(observed) => (
+                observed.pid,
+                observed.start_token.expect("peer kernel start is required"),
+                observed
+                    .executable_path
+                    .expect("peer executable is required"),
+            ),
+            observation => panic!("owned live peer must remain observable: {observation:?}"),
+        };
+        let original_peer = observe_peer(peer.0.id());
+        assert_eq!(
+            original_peer.2,
+            fs::canonicalize("/bin/sleep")
+                .unwrap()
+                .to_string_lossy()
+                .as_ref()
+        );
         let root = TempDirectory::new();
         let mut catalog = BrowserProfileCatalog::default();
         for id in ["pinned", "unrelated"] {
@@ -2965,10 +2996,7 @@ mod tests {
             let path = root.0.join(format!("{name}-chrome"));
             fs::write(
                 &path,
-                format!(
-                    "#!/bin/sh\nprintf '%s\\n' \"$$\" >> '{}'\nexit 71\n",
-                    root.0.join(format!("{name}-launches")).display()
-                ),
+                "#!/bin/sh\nprofile=\nfor argument in \"$@\"; do\n  case \"$argument\" in --user-data-dir=*) profile=${argument#--user-data-dir=} ;; esac\ndone\nprintf '%s\\n' \"$profile\" >> \"$0.launches\"\nexit 71\n",
             )
             .unwrap();
             fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
@@ -2981,49 +3009,61 @@ mod tests {
                 .to_string_lossy()
                 .into_owned(),
         );
-        let mut expected = 0;
+        let mut previous_launches = [0; 2];
         for order in [["pinned", "unrelated"], ["unrelated", "pinned"]] {
-            for _restart in 0..2 {
-                state = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
-                let runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
-                    headless: true,
-                    executable_path: Some(
-                        root.0.join("default-chrome").to_string_lossy().into_owned(),
-                    ),
-                    ..Default::default()
-                })
-                .unwrap();
-                let mut effects = BrowserSessionEffectAdapter::new(runtime);
-                for id in order {
-                    let result = BrowserSessionManager::new(
-                        &mut state,
-                        &catalog,
-                        &mut effects,
-                        BrowserSessionManagerConfig::default(),
-                    )
-                    .open(OpenBrowserSession::exact_profile(id, id, 100));
-                    assert!(
-                        result.is_err(),
-                        "synthetic launcher deliberately exits before readiness"
-                    );
-                }
-                drop(effects);
-                expected += 1;
-                for name in ["selected", "default"] {
-                    let pids = fs::read_to_string(root.0.join(format!("{name}-launches")))
-                        .unwrap_or_default();
-                    assert_eq!(
-                        pids.lines().count(),
-                        expected,
-                        "{name} executable must launch once per owner generation"
-                    );
-                }
+            // The second generation restores persisted pins and reverses launch order.
+            state = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+            let runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
+                headless: true,
+                executable_path: Some(root.0.join("default-chrome").to_string_lossy().into_owned()),
+                ..Default::default()
+            })
+            .unwrap();
+            let mut effects = BrowserSessionEffectAdapter::new(runtime);
+            for id in order {
+                let result = BrowserSessionManager::new(
+                    &mut state,
+                    &catalog,
+                    &mut effects,
+                    BrowserSessionManagerConfig::default(),
+                )
+                .open(OpenBrowserSession::exact_profile(id, id, 100));
+                assert!(
+                    result.is_err(),
+                    "synthetic launcher deliberately exits before readiness"
+                );
             }
+            drop(effects);
+            for (index, (name, profile_id)) in [("selected", "pinned"), ("default", "unrelated")]
+                .into_iter()
+                .enumerate()
+            {
+                let attempts = fs::read_to_string(root.0.join(format!("{name}-chrome.launches")))
+                    .unwrap_or_default();
+                let profiles = attempts.lines().collect::<Vec<_>>();
+                assert!(
+                    profiles.len() > previous_launches[index],
+                    "each generation must exercise the {name} executable"
+                );
+                let expected_profile = root.0.join(profile_id);
+                for actual_profile in &profiles[previous_launches[index]..] {
+                    assert_eq!(
+                        *actual_profile,
+                        expected_profile.to_string_lossy(),
+                        "every startup attempt must use its own profile's executable"
+                    );
+                }
+                previous_launches[index] = profiles.len();
+            }
+            assert!(peer.0.try_wait().unwrap().is_none());
+            assert_eq!(observe_peer(peer.0.id()), original_peer);
         }
         assert!(
             state.browsers.is_empty(),
             "failed synthetic launches publish no ready browser"
         );
+        peer.0.kill().unwrap();
+        peer.0.wait().unwrap();
     }
 
     #[cfg(target_os = "linux")]
