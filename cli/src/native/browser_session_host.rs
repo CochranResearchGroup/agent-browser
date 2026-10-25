@@ -19,12 +19,15 @@ use super::browser_session_runtime::{
 use super::browser_session_store::BrowserSessionJsonStore;
 use super::browser_session_store::{BrowserProfileCatalogLoad, BrowserSessionSqliteStore};
 
+#[path = "browser_build_selection.rs"]
+mod browser_build_selection;
 #[path = "browser_mode_host.rs"]
 pub(crate) mod browser_mode_host;
 #[path = "browser_native_host.rs"]
 mod browser_native_host;
 #[path = "browser_operation_lookup.rs"]
 mod browser_operation_lookup;
+
 #[path = "profile_duplicate_host.rs"]
 mod profile_duplicate_host;
 
@@ -1513,6 +1516,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .is_some_and(|action| action.starts_with("browser_session_"))
             && command["action"] != "browser_session_profile_duplicate"
             && command["action"] != "browser_session_mode_convert"
+            && command["action"] != "browser_session_build_select"
             && !(command["action"] == "browser_session_close" && command["scope"] == "browser")
         {
             super::browser_host_control::admit_command(None, None, command, false)
@@ -1548,6 +1552,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .ok_or_else(|| "browser_session_action_missing".to_string())?;
         if let Some(readback) = self.operation_request_readback(command)? {
             return Ok(readback);
+        }
+        if action == "browser_session_build_select" {
+            return self.browser_build_select(command);
         }
         if action == "browser_session_mode_convert" {
             self.refresh_before_ordinary_command()?;
