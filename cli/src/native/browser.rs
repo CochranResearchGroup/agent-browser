@@ -2827,490 +2827,198 @@ pub(crate) fn close_x11_browser_windows(pid: u32, display_name: &str) -> Result<
 
 #[cfg(target_os = "linux")]
 mod x11_focus {
-    use libc::{c_char, c_int, c_long, c_uchar, c_uint, c_ulong, c_void};
     use serde_json::{json, Value};
-    use std::ffi::CString;
-    use std::ptr;
+    use x11rb::connection::Connection;
+    use x11rb::protocol::xproto::{
+        Atom, AtomEnum, ClientMessageEvent, ConfigureWindowAux, ConnectionExt as _, EventMask,
+        InputFocus, MapState, PropMode, StackMode, Window, WindowClass,
+    };
+    use x11rb::rust_connection::RustConnection;
+    use x11rb::wrapper::ConnectionExt as _;
+    use x11rb::CURRENT_TIME;
 
-    type Display = c_void;
-    type Window = c_ulong;
-    type Atom = c_ulong;
+    // Every request is bound to this connection. A vanished XID returns checked
+    // protocol readback instead of invoking Xlib's process-wide fatal handler.
+    fn connect(display: &str) -> Result<(RustConnection, Window), String> {
+        let (connection, screen) = x11rb::connect(Some(display))
+            .map_err(|_| "X11 browser display unavailable".to_string())?;
+        let root = connection.setup().roots[screen].root;
+        Ok((connection, root))
+    }
 
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct ClientMessageEvent {
-        event_type: c_int,
-        serial: c_ulong,
-        send_event: c_int,
-        display: *mut Display,
+    fn atom(connection: &RustConnection, name: &[u8]) -> Result<Atom, String> {
+        connection
+            .intern_atom(false, name)
+            .map_err(|_| "X11 browser atom readback required")?
+            .reply()
+            .map(|reply| reply.atom)
+            .map_err(|_| "X11 browser atom readback required".to_string())
+    }
+
+    fn property(
+        connection: &RustConnection,
         window: Window,
-        message_type: Atom,
-        format: c_int,
-        data: [c_long; 5],
-    }
-
-    #[repr(C)]
-    union Event {
-        client_message: ClientMessageEvent,
-        pad: [c_long; 24],
-    }
-
-    // Xlib.h XWindowAttributes, including its platform-sized XIDs and pointers.
-    #[repr(C)]
-    struct WindowAttributes {
-        x: c_int,
-        y: c_int,
-        width: c_int,
-        height: c_int,
-        border_width: c_int,
-        depth: c_int,
-        visual: *mut c_void,
-        root: Window,
-        class: c_int,
-        bit_gravity: c_int,
-        win_gravity: c_int,
-        backing_store: c_int,
-        backing_planes: c_ulong,
-        backing_pixel: c_ulong,
-        save_under: c_int,
-        colormap: c_ulong,
-        map_installed: c_int,
-        map_state: c_int,
-        all_event_masks: c_long,
-        your_event_mask: c_long,
-        do_not_propagate_mask: c_long,
-        override_redirect: c_int,
-        screen: *mut c_void,
-    }
-
-    const FALSE: c_int = 0;
-    const ANY_PROPERTY_TYPE: Atom = 0;
-    const XA_WINDOW: Atom = 33;
-    const PROP_MODE_REPLACE: c_int = 0;
-    const REVERT_TO_PARENT: c_int = 2;
-    const CURRENT_TIME: c_ulong = 0;
-
-    type XOpenDisplayFn = unsafe extern "C" fn(*const c_char) -> *mut Display;
-    type XCloseDisplayFn = unsafe extern "C" fn(*mut Display) -> c_int;
-    type XDefaultRootWindowFn = unsafe extern "C" fn(*mut Display) -> Window;
-    type XInternAtomFn = unsafe extern "C" fn(*mut Display, *const c_char, c_int) -> Atom;
-    type XGetWindowPropertyFn = unsafe extern "C" fn(
-        *mut Display,
-        Window,
-        Atom,
-        c_long,
-        c_long,
-        c_int,
-        Atom,
-        *mut Atom,
-        *mut c_int,
-        *mut c_ulong,
-        *mut c_ulong,
-        *mut *mut c_uchar,
-    ) -> c_int;
-    type XQueryTreeFn = unsafe extern "C" fn(
-        *mut Display,
-        Window,
-        *mut Window,
-        *mut Window,
-        *mut *mut Window,
-        *mut c_uint,
-    ) -> c_int;
-    type XFreeFn = unsafe extern "C" fn(*mut c_void) -> c_int;
-    type XSendEventFn =
-        unsafe extern "C" fn(*mut Display, Window, c_int, c_long, *mut Event) -> c_int;
-    type XGetWindowAttributesFn =
-        unsafe extern "C" fn(*mut Display, Window, *mut WindowAttributes) -> c_int;
-    type XMapRaisedFn = unsafe extern "C" fn(*mut Display, Window) -> c_int;
-    type XRaiseWindowFn = unsafe extern "C" fn(*mut Display, Window) -> c_int;
-    type XSetInputFocusFn = unsafe extern "C" fn(*mut Display, Window, c_int, c_ulong) -> c_int;
-    type XChangePropertyFn = unsafe extern "C" fn(
-        *mut Display,
-        Window,
-        Atom,
-        Atom,
-        c_int,
-        c_int,
-        *const c_uchar,
-        c_int,
-    ) -> c_int;
-    type XFlushFn = unsafe extern "C" fn(*mut Display) -> c_int;
-
-    struct X11 {
-        handle: *mut c_void,
-        open_display: XOpenDisplayFn,
-        close_display: XCloseDisplayFn,
-        default_root_window: XDefaultRootWindowFn,
-        intern_atom: XInternAtomFn,
-        get_window_property: XGetWindowPropertyFn,
-        query_tree: XQueryTreeFn,
-        free: XFreeFn,
-        send_event: XSendEventFn,
-        get_window_attributes: XGetWindowAttributesFn,
-        map_raised: XMapRaisedFn,
-        raise_window: XRaiseWindowFn,
-        set_input_focus: XSetInputFocusFn,
-        change_property: XChangePropertyFn,
-        flush: XFlushFn,
-    }
-
-    impl X11 {
-        fn load() -> Result<Self, String> {
-            let mut last_error = None;
-            for name in ["libX11.so.6", "libX11.so"] {
-                let library_name = CString::new(name).expect("static library name");
-                let handle = unsafe {
-                    libc::dlopen(library_name.as_ptr(), libc::RTLD_NOW | libc::RTLD_LOCAL)
-                };
-                if handle.is_null() {
-                    last_error = Some(dl_error());
-                    continue;
-                }
-
-                return unsafe {
-                    Ok(Self {
-                        handle,
-                        open_display: symbol(handle, "XOpenDisplay")?,
-                        close_display: symbol(handle, "XCloseDisplay")?,
-                        default_root_window: symbol(handle, "XDefaultRootWindow")?,
-                        intern_atom: symbol(handle, "XInternAtom")?,
-                        get_window_property: symbol(handle, "XGetWindowProperty")?,
-                        query_tree: symbol(handle, "XQueryTree")?,
-                        free: symbol(handle, "XFree")?,
-                        send_event: symbol(handle, "XSendEvent")?,
-                        get_window_attributes: symbol(handle, "XGetWindowAttributes")?,
-                        map_raised: symbol(handle, "XMapRaised")?,
-                        raise_window: symbol(handle, "XRaiseWindow")?,
-                        set_input_focus: symbol(handle, "XSetInputFocus")?,
-                        change_property: symbol(handle, "XChangeProperty")?,
-                        flush: symbol(handle, "XFlush")?,
-                    })
-                };
-            }
-
-            Err(format!(
-                "X11 focus support requires libX11 at runtime{}",
-                last_error
-                    .map(|error| format!(": {}", error))
-                    .unwrap_or_default()
-            ))
+        atom: Atom,
+        kind: AtomEnum,
+    ) -> Result<Option<Vec<u32>>, String> {
+        let reply = connection
+            .get_property(false, window, atom, kind, 0, 4096)
+            .map_err(|_| "X11 browser property readback required")?
+            .reply()
+            .map_err(|_| "X11 browser property readback required")?;
+        if reply.type_ == u32::from(AtomEnum::NONE) {
+            return Ok(None);
         }
+        reply
+            .value32()
+            .map(|values| Some(values.collect()))
+            .ok_or_else(|| "X11 browser property format changed".to_string())
     }
 
-    impl Drop for X11 {
-        fn drop(&mut self) {
-            unsafe {
-                libc::dlclose(self.handle);
-            }
-        }
+    fn clients(connection: &RustConnection, root: Window) -> Result<Vec<Window>, String> {
+        let stacking = atom(connection, b"_NET_CLIENT_LIST_STACKING")?;
+        let clients = atom(connection, b"_NET_CLIENT_LIST")?;
+        let windows = property(connection, root, stacking, AtomEnum::WINDOW)?
+            .filter(|windows| !windows.is_empty());
+        Ok(windows
+            .or(property(connection, root, clients, AtomEnum::WINDOW)?)
+            .unwrap_or_default())
     }
 
-    unsafe fn symbol<T: Copy>(handle: *mut c_void, name: &str) -> Result<T, String> {
-        let symbol_name = CString::new(name).expect("static symbol name");
-        let ptr = libc::dlsym(handle, symbol_name.as_ptr());
-        if ptr.is_null() {
-            return Err(format!("libX11 symbol {} is unavailable", name));
-        }
-        Ok(std::mem::transmute_copy(&ptr))
-    }
-
-    fn dl_error() -> String {
-        let error = unsafe { libc::dlerror() };
-        if error.is_null() {
-            return "unknown dlopen error".to_string();
-        }
-        unsafe { std::ffi::CStr::from_ptr(error) }
-            .to_string_lossy()
-            .to_string()
+    fn window_pid(
+        connection: &RustConnection,
+        window: Window,
+        pid_atom: Atom,
+    ) -> Result<Option<u32>, String> {
+        Ok(property(connection, window, pid_atom, AtomEnum::CARDINAL)?
+            .and_then(|values| values.first().copied()))
     }
 
     /// Request normal application closure, allowing Chrome's cookie store to
     /// flush. Only this process's WM-managed top-level windows receive it.
-    pub(super) fn close_windows_for_pid(pid: u32, display_name: &str) -> Result<(), String> {
-        let name = CString::new(display_name).map_err(|_| "Invalid X11 display")?;
-        let x11 = X11::load()?;
-        unsafe {
-            let display = (x11.open_display)(name.as_ptr());
-            if display.is_null() {
-                return Err("Failed to open X11 display for browser close".into());
+    pub(super) fn close_windows_for_pid(pid: u32, display: &str) -> Result<(), String> {
+        let (connection, root) = connect(display)?;
+        let pid_atom = atom(&connection, b"_NET_WM_PID")?;
+        let protocols = atom(&connection, b"WM_PROTOCOLS")?;
+        let delete = atom(&connection, b"WM_DELETE_WINDOW")?;
+        let mut windows = Vec::new();
+        for window in clients(&connection, root)? {
+            if window_pid(&connection, window, pid_atom)? == Some(pid) {
+                windows.push(window);
             }
-            let result = (|| {
-                let root = (x11.default_root_window)(display);
-                let pid_atom = intern_atom(&x11, display, "_NET_WM_PID")?;
-                let stacking = intern_atom(&x11, display, "_NET_CLIENT_LIST_STACKING")?;
-                let clients = intern_atom(&x11, display, "_NET_CLIENT_LIST")?;
-                let protocols = intern_atom(&x11, display, "WM_PROTOCOLS")?;
-                let delete = intern_atom(&x11, display, "WM_DELETE_WINDOW")?;
-                let windows = window_list_property(&x11, display, root, stacking)
-                    .filter(|windows| !windows.is_empty())
-                    .or_else(|| window_list_property(&x11, display, root, clients))
-                    .unwrap_or_default()
-                    .into_iter()
-                    .filter(|window| window_pid(&x11, display, *window, pid_atom) == Some(pid))
-                    .collect::<Vec<_>>();
-                if windows.is_empty() {
-                    return Err("No managed X11 window found for browser close".into());
-                }
-                for window in windows {
-                    let mut event = Event { pad: [0; 24] };
-                    event.client_message = ClientMessageEvent {
-                        event_type: 33, // ClientMessage
-                        serial: 0,
-                        send_event: 1,
-                        display,
-                        window,
-                        message_type: protocols,
-                        format: 32,
-                        data: [delete as c_long, CURRENT_TIME as c_long, 0, 0, 0],
-                    };
-                    if (x11.send_event)(display, window, FALSE, 0, &mut event) == 0 {
-                        return Err("X11 browser close request failed".into());
-                    }
-                }
-                (x11.flush)(display);
-                Ok(())
-            })();
-            (x11.close_display)(display);
-            result
         }
+        if windows.is_empty() {
+            return Err("No managed X11 window found for browser close".into());
+        }
+        for window in windows {
+            let event =
+                ClientMessageEvent::new(32, window, protocols, [delete, CURRENT_TIME, 0, 0, 0]);
+            connection
+                .send_event(false, window, EventMask::NO_EVENT, event)
+                .map_err(|_| "X11 browser close readback required")?
+                .check()
+                .map_err(|_| "X11 browser close readback required")?;
+        }
+        connection
+            .flush()
+            .map_err(|_| "X11 browser close readback required".into())
     }
 
     pub(super) fn focus_window_for_pid(
         pid: u32,
-        display_name: &str,
+        display: &str,
         viewable_only: bool,
     ) -> Result<Value, String> {
-        let display_c = CString::new(display_name)
-            .map_err(|_| "X11 display contains an interior NUL byte".to_string())?;
-        let x11 = X11::load()?;
-
-        unsafe {
-            let display = (x11.open_display)(display_c.as_ptr());
-            if display.is_null() {
-                return Err(format!("Failed to open X11 display {}", display_name));
-            }
-
-            let outcome =
-                focus_window_for_pid_on_display(&x11, display, pid, display_name, viewable_only);
-            (x11.close_display)(display);
-            outcome
-        }
-    }
-
-    unsafe fn focus_window_for_pid_on_display(
-        x11: &X11,
-        display: *mut Display,
-        pid: u32,
-        display_name: &str,
-        viewable_only: bool,
-    ) -> Result<Value, String> {
-        let root = (x11.default_root_window)(display);
-        let pid_atom = intern_atom(x11, display, "_NET_WM_PID")?;
-        let stacking_atom = intern_atom(x11, display, "_NET_CLIENT_LIST_STACKING")?;
-        let client_list_atom = intern_atom(x11, display, "_NET_CLIENT_LIST")?;
-        let active_atom = intern_atom(x11, display, "_NET_ACTIVE_WINDOW")?;
-
-        let mut candidates = window_list_property(x11, display, root, stacking_atom)
-            .or_else(|| window_list_property(x11, display, root, client_list_atom))
-            .unwrap_or_default();
+        let (connection, root) = connect(display)?;
+        let unavailable =
+            || format!("No X11 window found for browser PID {pid}: read current window state");
+        let pid_atom = atom(&connection, b"_NET_WM_PID")?;
+        let active_atom = atom(&connection, b"_NET_ACTIVE_WINDOW")?;
+        let mut candidates = clients(&connection, root)?;
         if candidates.is_empty() {
-            candidates = collect_window_tree(x11, display, root);
+            // A display without EWMH may still have a browser. Each tree reply
+            // remains checked because children can disappear after enumeration.
+            let mut pending = vec![root];
+            while let Some(parent) = pending.pop() {
+                let children = connection
+                    .query_tree(parent)
+                    .map_err(|_| unavailable())?
+                    .reply()
+                    .map_err(|_| unavailable())?
+                    .children;
+                pending.extend(children.iter().copied());
+                candidates.extend(children);
+            }
         }
-
-        let Some(target_window) = candidates.iter().rev().copied().find(|window| {
-            if window_pid(x11, display, *window, pid_atom) != Some(pid) {
-                return false;
+        let mut target = None;
+        for window in candidates.into_iter().rev() {
+            if window_pid(&connection, window, pid_atom).map_err(|_| unavailable())? != Some(pid) {
+                continue;
             }
-            if !viewable_only {
-                return true;
+            if viewable_only {
+                let attributes = connection
+                    .get_window_attributes(window)
+                    .map_err(|_| unavailable())?
+                    .reply()
+                    .map_err(|_| unavailable())?;
+                if attributes.map_state != MapState::VIEWABLE
+                    || attributes.class != WindowClass::INPUT_OUTPUT
+                    || attributes.override_redirect
+                {
+                    continue;
+                }
             }
-            let mut attributes = std::mem::MaybeUninit::<WindowAttributes>::uninit();
-            if (x11.get_window_attributes)(display, *window, attributes.as_mut_ptr()) == 0 {
-                return false;
-            }
-            let attributes = attributes.assume_init();
-            // Chrome publishes helper/startup windows before its real
-            // window is mapped. Focusing those raises fatal X BadMatch.
-            attributes.map_state == 2 // IsViewable (all ancestors mapped)
-                    && attributes.class == 1 // InputOutput
-                    && attributes.override_redirect == 0
-        }) else {
-            return Err(format!("No X11 window found for browser PID {}", pid));
-        };
-
-        let parent_window = direct_parent_window(x11, display, target_window)
-            .filter(|window| *window != 0 && *window != root)
-            .unwrap_or(target_window);
-
-        (x11.map_raised)(display, parent_window);
-        (x11.raise_window)(display, parent_window);
-        (x11.map_raised)(display, target_window);
-        (x11.raise_window)(display, target_window);
-        (x11.set_input_focus)(display, target_window, REVERT_TO_PARENT, CURRENT_TIME);
-        (x11.change_property)(
-            display,
-            root,
-            active_atom,
-            XA_WINDOW,
-            32,
-            PROP_MODE_REPLACE,
-            &target_window as *const Window as *const c_uchar,
-            1,
-        );
-        (x11.flush)(display);
-
-        Ok(json!({
-            "attempted": true,
-            "focused": true,
-            "display": display_name,
-            "pid": pid,
-            "window": format!("0x{:x}", target_window),
-            "parentWindow": format!("0x{:x}", parent_window),
-        }))
-    }
-
-    unsafe fn intern_atom(x11: &X11, display: *mut Display, name: &str) -> Result<Atom, String> {
-        let c_name = CString::new(name).map_err(|_| format!("Invalid X11 atom name {}", name))?;
-        let atom = (x11.intern_atom)(display, c_name.as_ptr(), FALSE);
-        if atom == 0 {
-            Err(format!("X11 atom {} is unavailable", name))
+            target = Some(window);
+            break;
+        }
+        let target = target.ok_or_else(unavailable)?;
+        let parent = connection
+            .query_tree(target)
+            .map_err(|_| unavailable())?
+            .reply()
+            .map_err(|_| unavailable())?
+            .parent;
+        let parent = if parent != 0 && parent != root {
+            parent
         } else {
-            Ok(atom)
+            target
+        };
+        for window in [parent, target] {
+            connection
+                .map_window(window)
+                .map_err(|_| unavailable())?
+                .check()
+                .map_err(|_| unavailable())?;
+            connection
+                .configure_window(
+                    window,
+                    &ConfigureWindowAux::new().stack_mode(StackMode::ABOVE),
+                )
+                .map_err(|_| unavailable())?
+                .check()
+                .map_err(|_| unavailable())?;
         }
-    }
-
-    unsafe fn window_list_property(
-        x11: &X11,
-        display: *mut Display,
-        window: Window,
-        property: Atom,
-    ) -> Option<Vec<Window>> {
-        let mut actual_type: Atom = 0;
-        let mut actual_format: c_int = 0;
-        let mut nitems: c_ulong = 0;
-        let mut bytes_after: c_ulong = 0;
-        let mut prop: *mut c_uchar = ptr::null_mut();
-        let status = (x11.get_window_property)(
-            display,
-            window,
-            property,
-            0,
-            4096,
-            FALSE,
-            ANY_PROPERTY_TYPE,
-            &mut actual_type,
-            &mut actual_format,
-            &mut nitems,
-            &mut bytes_after,
-            &mut prop,
-        );
-        if status != 0 || prop.is_null() || actual_format != 32 || nitems == 0 {
-            if !prop.is_null() {
-                (x11.free)(prop as *mut c_void);
-            }
-            return None;
-        }
-
-        let values = std::slice::from_raw_parts(prop as *const c_ulong, nitems as usize);
-        let windows = values.to_vec();
-        (x11.free)(prop as *mut c_void);
-        Some(windows)
-    }
-
-    unsafe fn window_pid(
-        x11: &X11,
-        display: *mut Display,
-        window: Window,
-        pid_atom: Atom,
-    ) -> Option<u32> {
-        let mut actual_type: Atom = 0;
-        let mut actual_format: c_int = 0;
-        let mut nitems: c_ulong = 0;
-        let mut bytes_after: c_ulong = 0;
-        let mut prop: *mut c_uchar = ptr::null_mut();
-        let status = (x11.get_window_property)(
-            display,
-            window,
-            pid_atom,
-            0,
-            1,
-            FALSE,
-            ANY_PROPERTY_TYPE,
-            &mut actual_type,
-            &mut actual_format,
-            &mut nitems,
-            &mut bytes_after,
-            &mut prop,
-        );
-        if status != 0 || prop.is_null() || actual_format != 32 || nitems == 0 {
-            if !prop.is_null() {
-                (x11.free)(prop as *mut c_void);
-            }
-            return None;
-        }
-
-        let value = *(prop as *const c_ulong) as u32;
-        (x11.free)(prop as *mut c_void);
-        Some(value)
-    }
-
-    unsafe fn direct_parent_window(
-        x11: &X11,
-        display: *mut Display,
-        window: Window,
-    ) -> Option<Window> {
-        let mut root: Window = 0;
-        let mut parent: Window = 0;
-        let mut children: *mut Window = ptr::null_mut();
-        let mut nchildren: c_uint = 0;
-        let ok = (x11.query_tree)(
-            display,
-            window,
-            &mut root,
-            &mut parent,
-            &mut children,
-            &mut nchildren,
-        );
-        if !children.is_null() {
-            (x11.free)(children as *mut c_void);
-        }
-        (ok != 0).then_some(parent)
-    }
-
-    unsafe fn collect_window_tree(x11: &X11, display: *mut Display, root: Window) -> Vec<Window> {
-        let mut windows = Vec::new();
-        collect_window_tree_into(x11, display, root, &mut windows);
-        windows
-    }
-
-    unsafe fn collect_window_tree_into(
-        x11: &X11,
-        display: *mut Display,
-        window: Window,
-        windows: &mut Vec<Window>,
-    ) {
-        let mut root_return: Window = 0;
-        let mut parent_return: Window = 0;
-        let mut children: *mut Window = ptr::null_mut();
-        let mut nchildren: c_uint = 0;
-        let ok = (x11.query_tree)(
-            display,
-            window,
-            &mut root_return,
-            &mut parent_return,
-            &mut children,
-            &mut nchildren,
-        );
-        if ok == 0 || children.is_null() {
-            return;
-        }
-
-        let child_slice = std::slice::from_raw_parts(children, nchildren as usize);
-        for child in child_slice {
-            windows.push(*child);
-            collect_window_tree_into(x11, display, *child, windows);
-        }
-        (x11.free)(children as *mut c_void);
+        connection
+            .set_input_focus(InputFocus::PARENT, target, CURRENT_TIME)
+            .map_err(|_| unavailable())?
+            .check()
+            .map_err(|_| unavailable())?;
+        connection
+            .change_property32(
+                PropMode::REPLACE,
+                root,
+                active_atom,
+                AtomEnum::WINDOW,
+                &[target],
+            )
+            .map_err(|_| unavailable())?
+            .check()
+            .map_err(|_| unavailable())?;
+        connection.flush().map_err(|_| unavailable())?;
+        Ok(
+            json!({"attempted":true,"focused":true,"display":display,"pid":pid,
+            "window":format!("0x{target:x}"),"parentWindow":format!("0x{parent:x}")}),
+        )
     }
     #[cfg(test)]
     mod protocol_tests {
@@ -3328,46 +3036,173 @@ mod x11_focus {
             if let Ok(display) = std::env::var(CHILD) {
                 let (connection, screen) = x11rb::connect(Some(&display)).unwrap();
                 let root = connection.setup().roots[screen].root;
-                let atom = |name: &[u8]| connection.intern_atom(false, name).unwrap().reply().unwrap().atom;
+                let atom = |name: &[u8]| {
+                    connection
+                        .intern_atom(false, name)
+                        .unwrap()
+                        .reply()
+                        .unwrap()
+                        .atom
+                };
                 let clients = atom(b"_NET_CLIENT_LIST_STACKING");
                 let window = connection.generate_id().unwrap();
-                connection.create_window(0, window, root, 0, 0, 100, 100, 0,
-                    WindowClass::INPUT_OUTPUT, 0, &CreateWindowAux::new()).unwrap().check().unwrap();
+                connection
+                    .create_window(
+                        0,
+                        window,
+                        root,
+                        0,
+                        0,
+                        100,
+                        100,
+                        0,
+                        WindowClass::INPUT_OUTPUT,
+                        0,
+                        &CreateWindowAux::new(),
+                    )
+                    .unwrap()
+                    .check()
+                    .unwrap();
                 connection.destroy_window(window).unwrap().check().unwrap();
-                connection.change_property32(PropMode::REPLACE, root, clients, AtomEnum::WINDOW, &[window]).unwrap().check().unwrap();
+                connection
+                    .change_property32(
+                        PropMode::REPLACE,
+                        root,
+                        clients,
+                        AtomEnum::WINDOW,
+                        &[window],
+                    )
+                    .unwrap()
+                    .check()
+                    .unwrap();
                 // The WM list is a snapshot: the selected window may disappear
                 // before its PID/geometry read. X protocol errors are readback,
                 // never permission to terminate the owner or claim focus.
                 assert!(focus_window_for_pid(std::process::id(), &display, true).is_err());
                 // The same owner must remain usable for a subsequent live target.
                 let live = connection.generate_id().unwrap();
-                connection.create_window(0, live, root, 0, 0, 100, 100, 0,
-                    WindowClass::INPUT_OUTPUT, 0, &CreateWindowAux::new()).unwrap().check().unwrap();
-                connection.change_property32(PropMode::REPLACE, live, atom(b"_NET_WM_PID"), AtomEnum::CARDINAL, &[std::process::id()]).unwrap().check().unwrap();
+                connection
+                    .create_window(
+                        0,
+                        live,
+                        root,
+                        0,
+                        0,
+                        100,
+                        100,
+                        0,
+                        WindowClass::INPUT_OUTPUT,
+                        0,
+                        &CreateWindowAux::new(),
+                    )
+                    .unwrap()
+                    .check()
+                    .unwrap();
+                connection
+                    .change_property32(
+                        PropMode::REPLACE,
+                        live,
+                        atom(b"_NET_WM_PID"),
+                        AtomEnum::CARDINAL,
+                        &[std::process::id()],
+                    )
+                    .unwrap()
+                    .check()
+                    .unwrap();
                 connection.map_window(live).unwrap().check().unwrap();
-                connection.change_property32(PropMode::REPLACE, root, clients, AtomEnum::WINDOW, &[live]).unwrap().check().unwrap();
-                assert_eq!(focus_window_for_pid(std::process::id(), &display, true).unwrap()["focused"], true);
+                connection
+                    .change_property32(PropMode::REPLACE, root, clients, AtomEnum::WINDOW, &[live])
+                    .unwrap()
+                    .check()
+                    .unwrap();
+                assert_eq!(
+                    focus_window_for_pid(std::process::id(), &display, true).unwrap()["focused"],
+                    true
+                );
                 close_windows_for_pid(std::process::id(), &display).unwrap();
                 let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
                 loop {
-                    if let Some(x11rb::protocol::Event::ClientMessage(event)) = connection.poll_for_event().unwrap() {
+                    if let Some(x11rb::protocol::Event::ClientMessage(event)) =
+                        connection.poll_for_event().unwrap()
+                    {
                         assert_eq!(event.window, live);
                         assert_eq!(event.type_, atom(b"WM_PROTOCOLS"));
                         assert_eq!(event.data.as_data32()[0], atom(b"WM_DELETE_WINDOW"));
                         break;
                     }
-                    assert!(std::time::Instant::now() < deadline, "polite close was not delivered");
+                    assert!(
+                        std::time::Instant::now() < deadline,
+                        "polite close was not delivered"
+                    );
                     std::thread::sleep(std::time::Duration::from_millis(5));
                 }
                 return;
             }
-            let mut server = Command::new("Xvfb").args(["-displayfd", "1", "-screen", "0", "320x240x24", "-nolisten", "tcp", "-ac"])
-                .stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
+            const PRIVATE: &str = "AGENT_BROWSER_X11_RACE_FIXTURE_NAMESPACES";
+            let namespace_names = ["user", "mnt", "net"];
+            if std::env::var(PRIVATE).is_err() {
+                let proof = namespace_names
+                    .into_iter()
+                    .map(|name| {
+                        (
+                            name,
+                            std::fs::read_link(format!("/proc/self/ns/{name}"))
+                                .unwrap()
+                                .to_string_lossy()
+                                .into_owned(),
+                        )
+                    })
+                    .collect::<std::collections::BTreeMap<_, _>>();
+                let outcome = Command::new("unshare").args(["--user", "--map-current-user", "--keep-caps", "--mount", "--net", "--propagation", "private"])
+                    .arg(std::env::current_exe().unwrap()).args(["--exact", "native::browser::x11_focus::protocol_tests::vanished_window_does_not_terminate_browser_owner", "--ignored", "--nocapture", "--test-threads=1"])
+                    .env(PRIVATE, serde_json::to_string(&proof).unwrap()).status().unwrap();
+                assert!(outcome.success());
+                return;
+            }
+            let previous: std::collections::BTreeMap<String, String> =
+                serde_json::from_str(&std::env::var(PRIVATE).unwrap()).unwrap();
+            for name in namespace_names {
+                assert_ne!(
+                    std::fs::read_link(format!("/proc/self/ns/{name}"))
+                        .unwrap()
+                        .to_string_lossy(),
+                    previous[name]
+                );
+            }
+            let fixture =
+                std::env::temp_dir().join(format!("x11-owner-race-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir(&fixture).unwrap();
+            assert!(Command::new("mount")
+                .args(["--bind"])
+                .arg(&fixture)
+                .arg("/tmp/.X11-unix")
+                .status()
+                .unwrap()
+                .success());
+            let diagnostics = std::fs::File::create(fixture.join("xvfb.log")).unwrap();
+            let mut server = Command::new("Xvfb")
+                .args([
+                    "-displayfd",
+                    "1",
+                    "-screen",
+                    "0",
+                    "320x240x24",
+                    "-nolisten",
+                    "tcp",
+                    "-ac",
+                ])
+                .stdout(Stdio::piped())
+                .stderr(diagnostics)
+                .env_remove("XAUTHORITY")
+                .spawn()
+                .unwrap();
             let (sender, receiver) = std::sync::mpsc::channel();
             let stdout = server.stdout.take().unwrap();
             let reader = std::thread::spawn(move || {
                 let mut number = String::new();
-                let result = BufReader::new(stdout).read_line(&mut number).map(|_| number);
+                let result = BufReader::new(stdout)
+                    .read_line(&mut number)
+                    .map(|_| number);
                 let _ = sender.send(result);
             });
             let number = receiver.recv_timeout(std::time::Duration::from_secs(10));
@@ -3375,17 +3210,29 @@ mod x11_focus {
                 Command::new(std::env::current_exe().unwrap()).args([
                     "--exact", "native::browser::x11_focus::protocol_tests::vanished_window_does_not_terminate_browser_owner",
                     "--ignored", "--nocapture", "--test-threads=1"])
-                    .env(CHILD, format!(":{}", number.trim())).status()
+                    .env(CHILD, format!(":{}", number.trim())).env("HOME", &fixture).env_remove("XAUTHORITY").status()
             } else {
-                Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "Xvfb readiness deadline"))
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "Xvfb readiness deadline",
+                ))
             };
             let _ = server.kill();
             let _ = server.wait();
             reader.join().unwrap();
-            assert!(outcome.unwrap().success(), "stale X window killed owner instead of returning readback");
+            let diagnostics = std::fs::read_to_string(fixture.join("xvfb.log")).unwrap();
+            assert!(Command::new("umount")
+                .arg("/tmp/.X11-unix")
+                .status()
+                .unwrap()
+                .success());
+            std::fs::remove_dir_all(fixture).unwrap();
+            assert!(
+                outcome.unwrap().success(),
+                "stale X window killed owner instead of returning readback: {diagnostics}"
+            );
         }
     }
-
 }
 
 #[cfg(test)]
