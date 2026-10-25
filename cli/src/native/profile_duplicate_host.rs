@@ -28,6 +28,8 @@ struct PublicIntent {
     #[serde(default)]
     target_mode: Option<String>,
     #[serde(default)]
+    profile_data_version: Option<String>,
+    #[serde(default)]
     cancelled: bool,
 }
 impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserCommandEffects>
@@ -88,6 +90,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                     .get("launch")
                     .and_then(Value::as_bool)
                     .unwrap_or(true),
+                profile_data_version: super::browser_build_selection::profile_data_version(source),
                 target_build: requested_build(command)?,
                 target_mode: match command.get("mode") {
                     None => None,
@@ -205,6 +208,8 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
 fn build_view(mut view: Value, intent: &PublicIntent) -> Value {
     if let Some(build) = &intent.target_build {
         view["selectedBuild"] = build.public();
+        view["profileDataVersion"] = json!(intent.profile_data_version);
+        view["compatibilityEvidenceSource"] = json!("prepare_snapshot");
         view["profileDataReadable"] = json!("unverified");
         view["credentialStorage"] = json!("unverified");
         view["buildWarning"]=json!("Only the independent destination uses the selected build. Copying may not preserve login; verify authentication independently and sign in again if needed. Credential encryption is unchanged.");
@@ -557,28 +562,31 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             .get(&browser_id)
             .cloned()
             .ok_or("profile_duplicate_destination_browser_missing")?;
-        if let Some(build) = &self.binding.target_build {
+        if self.binding.target_build.is_some() || self.binding.target_mode.is_some() {
             let identity = BrowserSessionSqliteStore::open_read_only(&self.database)?
                 .published_launch_process_identity(&browser)
                 .map_err(|_| "browser_build_destination_identity_unavailable")?
                 .ok_or("browser_build_destination_identity_unavailable")?;
-            if identity.executable_path.as_deref() != Some(build.path.as_str()) {
-                return Err("browser_build_loaded_path_mismatch".into());
-            }
-            #[cfg(target_os = "linux")]
-            if Some(executable_digest(Path::new(&format!(
-                "/proc/{}/exe",
-                identity.pid
-            )))?)
-                != build.sha256
-            {
-                return Err("browser_build_loaded_bytes_mismatch".into());
-            }
-            #[cfg(not(target_os = "linux"))]
-            {
-                return Err(
-                    "browser_build_loaded_bytes_unverified:platform qualification required".into(),
-                );
+            if let Some(build) = &self.binding.target_build {
+                if identity.executable_path.as_deref() != Some(build.path.as_str()) {
+                    return Err("browser_build_loaded_path_mismatch".into());
+                }
+                #[cfg(target_os = "linux")]
+                if Some(executable_digest(Path::new(&format!(
+                    "/proc/{}/exe",
+                    identity.pid
+                )))?)
+                    != build.sha256
+                {
+                    return Err("browser_build_loaded_bytes_mismatch".into());
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    return Err(
+                        "browser_build_loaded_bytes_unverified:platform qualification required"
+                            .into(),
+                    );
+                }
             }
             if let Some(mode) = &self.binding.target_mode {
                 let proof = super::super::browser_session_store::mode_inspection::inspect(

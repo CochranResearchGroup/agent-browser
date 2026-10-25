@@ -348,13 +348,19 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
 
 fn decorate_build_view(view: &mut Value, binding: &Binding) {
     if let Some(build) = &binding.selected_build {
-        view["selectedBuild"] = build.public();
+        view["requestedBuild"] = build.public();
+        view["selectedBuild"] = if view["effectiveBuild"].is_object() {
+            view["effectiveBuild"].clone()
+        } else {
+            build.public()
+        };
         view["previousBuild"] = binding
             .previous_build
             .as_ref()
             .map(ExecutableEvidence::public)
             .unwrap_or(Value::Null);
         view["profileDataVersion"] = json!(binding.profile_data_version);
+        view["compatibilityEvidenceSource"] = json!("prepare_snapshot");
         view["credentialStorage"] = json!("unverified");
         view["authenticationContinuity"] = json!("unverified");
         view["profileDataReadable"] = json!("unverified");
@@ -408,13 +414,23 @@ pub(super) fn public_operation_view(
     let phase = phase_name(&state.phase);
     let actions = match state.phase {
         Phase::Prepared => vec![
-            ("relaunch", state.request.task_ids.len() > 1),
+            (
+                "relaunch",
+                state.request.task_ids.len() > 1
+                    || state.request.executable_sha256.is_some()
+                    || state.effective_executable_sha256.is_some(),
+            ),
             ("pause_and_relaunch", false),
             ("select_build", true),
             ("cancel", false),
         ],
         Phase::Paused => vec![
-            ("relaunch", state.request.task_ids.len() > 1),
+            (
+                "relaunch",
+                state.request.task_ids.len() > 1
+                    || state.request.executable_sha256.is_some()
+                    || state.effective_executable_sha256.is_some(),
+            ),
             ("select_build", true),
             ("cancel", false),
         ],
