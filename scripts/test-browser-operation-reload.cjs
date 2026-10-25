@@ -3,15 +3,23 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
+const { createRequire } = require('node:module');
 const { chromium } = require('playwright');
 const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-browser-fixture.cjs');
 (async () => {
   const root = path.resolve(__dirname, '..');
   const artifacts = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-operation-reload-'));
   await buildWorkspaceViewportFixture(root, path.join(root, 'scripts/fixtures/browser-mode-inspection.tsx'), artifacts);
+  // Geometry qualification uses the same product stylesheet and PostCSS plugin as the dashboard.
+  const dashboard=path.join(root,'packages/dashboard');
+  const dashboardRequire=createRequire(path.join(dashboard,'package.json'));
+  const postcss=createRequire(dashboardRequire.resolve('next/package.json'))('postcss');
+  const cssPath=path.join(dashboard,'src/app/globals.css');
+  const css=await postcss([dashboardRequire('@tailwindcss/postcss')({base:dashboard})]).process(fs.readFileSync(cssPath,'utf8'),{from:cssPath,to:path.join(artifacts,'dashboard.css')});
+  fs.writeFileSync(path.join(artifacts,'dashboard.css'),css.css);
   const server = http.createServer((req,res) => {
-    res.setHeader('Content-Type',req.url==='/bundle.js'?'application/javascript':'text/html');
-    res.end(req.url==='/bundle.js'?fs.readFileSync(path.join(artifacts,'bundle.js')):'<div id="root"></div><script src="/bundle.js"></script>');
+    res.setHeader('Content-Type',req.url==='/bundle.js'?'application/javascript':req.url==='/dashboard.css'?'text/css':'text/html');
+    res.end(req.url==='/bundle.js'?fs.readFileSync(path.join(artifacts,'bundle.js')):req.url==='/dashboard.css'?fs.readFileSync(path.join(artifacts,'dashboard.css')):'<link rel="stylesheet" href="/dashboard.css"><div id="root"></div><script src="/bundle.js"></script>');
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   let browser;
@@ -125,7 +133,8 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
       const last=page.getByRole('button',{name:resumeName(records.at(-1)),exact:true});
       await current.hover();await page.mouse.wheel(0,100000);
       const lastElement=await last.elementHandle();
-      await page.waitForFunction(element=>{const box=element.getBoundingClientRect();return box.top>=0&&box.bottom<=innerHeight;},lastElement,{timeout:2500});
+      try { await page.waitForFunction(element=>{const box=element.getBoundingClientRect();return box.top>=0&&box.bottom<=innerHeight;},lastElement,{timeout:2500}); }
+      catch(error) { const region=page.getByRole('region',{name:'Existing browser operations'}); console.error(JSON.stringify({kind,artifacts,current:await current.boundingBox(),last:await last.boundingBox(),region:await region.boundingBox(),dialog:await page.getByRole('dialog').boundingBox(),scroll:await region.evaluate(element=>({top:element.scrollTop,height:element.scrollHeight,visible:element.clientHeight}))}));await page.screenshot({path:path.join(artifacts,`truncated-${kind}-failure.png`)});throw error; }
       await visible(last,'Retained history stays reachable by scrolling');
       await page.mouse.wheel(0,-100000);
       const currentElement=await current.elementHandle();
