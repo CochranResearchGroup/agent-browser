@@ -726,7 +726,7 @@ pub(crate) fn recovery_authorized(
     serde_json::from_str::<Operation>(&value).is_ok_and(|operation| {
         matches!(
             operation.phase,
-            Phase::LaunchDispatched | Phase::ReplacementPending
+            Phase::LaunchDispatched | Phase::LaunchAbsent | Phase::ReplacementPending
         ) && operation.request.browser_id == browser.id
             && operation.request.profile_id == profile.id
             && operation
