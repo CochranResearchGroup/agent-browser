@@ -115,3 +115,51 @@ fn operation_lookup_recovers_multiple_offline_copy_intents_without_effects() {
     assert_eq!(selected["data"]["operations"].as_array().unwrap().len(), 1);
     assert_eq!(selected["data"]["operations"][0]["operationId"], "copy-two");
 }
+
+#[test]
+fn operation_lookup_keeps_current_mode_discoverable_after_long_scoped_history() {
+    let fixture = Fixture::new();
+    let calls = Rc::new(Cell::new(0));
+    let requests = Rc::new(Cell::new(0));
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
+    let opened = host.open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100)).unwrap();
+    let path = fixture.root.join("runtime.sqlite3").with_extension("mode.sqlite3");
+    let mut store = crate::native::browser_mode_operation::OperationStore::open(&path).unwrap();
+    let current = store.request(crate::native::browser_mode_operation::Request {
+        operation_id: "zz-current-mode".into(), browser_id: opened.browser_id.clone(),
+        profile_id: "profile-a".into(), original_process: "private-process-evidence".into(),
+        executable: "/private/profile/chrome".into(), task_ids: vec![opened.session_id.clone()],
+        requested_mode: crate::native::browser_mode_operation::Mode::CdpFree,
+    }).unwrap();
+    // A journal fixture supplies retained history; assertions stay at the owner command seam.
+    let mut journal = rusqlite::Connection::open(&path).unwrap();
+    let transaction = journal.transaction().unwrap();
+    for index in 0..300 {
+        for wrong_scope in [false, true] {
+            let mut historical = current.clone();
+            historical.request.operation_id = format!("history-{wrong_scope}-{index:04}");
+            historical.phase = crate::native::browser_mode_operation::Phase::Cancelled;
+            if wrong_scope { historical.request.task_ids = vec!["unrelated-task".into()]; }
+            transaction.execute("INSERT INTO browser_mode_operations(id,browser_id,terminal,state) VALUES(?1,?2,1,?3)", rusqlite::params![historical.request.operation_id, historical.request.browser_id, serde_json::to_string(&historical).unwrap()]).unwrap();
+        }
+    }
+    transaction.commit().unwrap();
+    drop(host);
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
+    let before = host.state().clone();
+    let effects_before = (calls.get(), requests.get());
+    let response = host.handle_command(&json!({"action":"browser_session_mode_convert","sessionId":opened.session_id,"sessionName":"Alice","choice":"inspect"}));
+    assert_eq!(response["success"], true, "Long history must not hide the operation: {response}");
+    let operations = response["data"]["operations"].as_array().unwrap();
+    assert_eq!(operations[0]["operationId"], "zz-current-mode");
+    assert!(operations.len() <= 256);
+    assert!(operations.iter().all(|operation| !operation["operationId"].as_str().unwrap().contains("true")));
+    assert!(operations.iter().all(|operation| operation["taskId"] == opened.session_id));
+    assert!(!response.to_string().contains("private"));
+    assert_eq!(host.state(), &before);
+    assert_eq!((calls.get(), requests.get()), effects_before);
+    let busy = host.handle_command(&json!({"action":"browser_session_mode_convert","sessionId":opened.session_id,"sessionName":"Alice","operationId":"new-after-reload","mode":"cdp_free","choice":"prepare"}));
+    assert_eq!(busy["data"]["activeOperation"]["operationId"], "zz-current-mode", "{busy}");
+    assert_eq!(host.state(), &before);
+    assert_eq!((calls.get(), requests.get()), effects_before);
+}
