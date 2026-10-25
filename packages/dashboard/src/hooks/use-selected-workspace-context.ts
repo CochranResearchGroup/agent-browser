@@ -181,7 +181,8 @@ export function useSelectedWorkspaceContext(
     startupInterval.current = createWorkspacePollInterval();
     nextPollInterval.current = 3000;
     return startCompletionDrivenDashboardPoll(
-      () => load(nextPollInterval.current === 250),
+      // Every startup retry must bypass the shared response cache.
+      () => load(nextPollInterval.current < 3000),
       () => nextPollInterval.current,
     );
   }, [enabled, load]);
