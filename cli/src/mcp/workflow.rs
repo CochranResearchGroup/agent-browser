@@ -411,7 +411,10 @@ fn open_attachment(arguments: &Value, transport_session: &str) -> Result<Value, 
     ))
 }
 
-fn forward_policy_override(arguments: &Value, command: &mut Value) -> Result<(), JsonRpcError> {
+pub(super) fn forward_policy_override(
+    arguments: &Value,
+    command: &mut Value,
+) -> Result<(), JsonRpcError> {
     if let Some(token) = optional_string_argument(arguments, "policyOverrideId")? {
         command["policyOverrideId"] = json!(token);
         command["id"] = json!(required_string_argument(arguments, "requestId")?);

@@ -7,6 +7,8 @@ mod host_control;
 mod host_policy;
 mod host_reconnect;
 mod hosted;
+#[cfg(all(test, unix))]
+mod native_policy_tests;
 mod playbooks;
 mod profile_duplicate;
 mod workflow;
@@ -269,19 +271,30 @@ fn mcp_command_response_with_config(
             }
             let params: Value =
                 serde_json::from_str(&args[4]).map_err(|_| "browser_native_params_invalid")?;
-            let arguments = json!({"taskId":args[2],"action":args[3],"params":params});
+            let mut arguments = json!({"taskId":args[2],"action":args[3],"params":params});
+            // CLI JSON carries the same request context as top-level MCP arguments.
+            for field in ["policyOverrideId", "requestId"] {
+                if let Some(value) = arguments["params"]
+                    .as_object_mut()
+                    .and_then(|params| params.remove(field))
+                {
+                    arguments[field] = value;
+                }
+            }
             validate_browser_command_action(&arguments).map_err(|error| error.message)?;
             let mut command = browser_command_command(BrowserCommandArgs {
                 action: &args[3],
-                params: params.as_object(),
+                params: arguments["params"].as_object(),
                 job_timeout_ms: None,
                 service_name: None,
                 agent_name: None,
                 task_name: None,
             });
+            forward_native_request_context(&arguments, &mut command)
+                .map_err(native_request_error)?;
             let session = workflow::address_task_command(&mut command, &args[2])?;
             Ok(
-                json!({"success":true,"data":workflow::execute(command, &session).map_err(|error| error.message)?}),
+                json!({"success":true,"data":workflow::execute(command, &session).map_err(native_request_error)?}),
             )
         }
         Some("browser-mode") => {
@@ -5556,6 +5569,9 @@ fn call_service_mcp_tool(
             );
             command["action"] = arguments["action"].clone();
             command["id"] = json!(uuid::Uuid::new_v4().to_string());
+            // Existing owner grants bind to the exact task/action/request. This
+            // transports that context without granting authority or retrying input.
+            forward_native_request_context(arguments, &mut command)?;
             let task_id = required_string_argument(arguments, "taskId")?;
             let name = workflow::address_task_command(&mut command, task_id)
                 .map_err(|error| JsonRpcError::invalid_params(&error))?;
@@ -6406,6 +6422,25 @@ fn validate_browser_command_action(arguments: &Value) -> Result<&str, JsonRpcErr
         }
     }
     Ok(action)
+}
+
+/// Preserve request identity independently of an optional existing scoped grant.
+/// The owner still validates the grant and retains effect-admission semantics.
+fn forward_native_request_context(
+    arguments: &Value,
+    command: &mut Value,
+) -> Result<(), JsonRpcError> {
+    if let Some(request_id) = optional_string_argument(arguments, "requestId")? {
+        command["id"] = json!(request_id);
+    }
+    workflow::forward_policy_override(arguments, command)
+}
+
+fn native_request_error(error: JsonRpcError) -> String {
+    error
+        .data
+        .and_then(|data| data["message"].as_str().map(str::to_owned))
+        .unwrap_or_else(|| error.message.to_owned())
 }
 
 fn mode_convert_call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcError> {
@@ -12100,6 +12135,30 @@ mod tests {
         .unwrap();
         assert_eq!(missing_provider["id"], "provider");
         assert_eq!(missing_provider["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn native_policy_override_requires_request_identity_before_owner_or_transport() {
+        let root =
+            std::env::temp_dir().join(format!("native-policy-public-{}", uuid::Uuid::new_v4()));
+        let guard = crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_HOME"]);
+        guard.set("AGENT_BROWSER_HOME", root.to_str().unwrap());
+        for action in ["native_input", "native_capture"] {
+            let request = json!({"jsonrpc":"2.0","id":"native-policy","method":"tools/call",
+                "params":{"name":"browser_command","arguments":{"taskId":"task-not-opened",
+                    "action":action,"policyOverrideId":"synthetic-grant","params":{}}}});
+            let response = handle_jsonrpc_line(&request.to_string(), "unused-transport").unwrap();
+            assert_eq!(response["error"]["code"], -32602, "{response}");
+            assert_eq!(
+                response["error"]["data"]["message"], "requestId is required",
+                "{response}"
+            );
+            assert!(!response.to_string().contains("synthetic-grant"));
+        }
+        assert!(
+            !root.exists(),
+            "invalid requests must not initialize owner state"
+        );
     }
 
     #[test]
