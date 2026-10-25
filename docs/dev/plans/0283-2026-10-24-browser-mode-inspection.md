@@ -5,26 +5,26 @@ Product lane: PL-PLATFORM
 Accountable owner: ecochran76
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/400
 Work items: #401, #402 and #403 under spec #400; #404 remains blocked
-Integration branch: platform/spec400-post-review
+Integration branch: platform/spec400-children-closeout
 Base: 07fb4c9cb020bb6349d3faf1efcd152cc34fd9ee
 Historical fourth-window deadline: 2026-10-24T23:23:20Z. The later repair continuation has no newly specified fixed allowance.
 
 ## Current State
 
-The six approved repairs #424–429 entered main through
-[PR408](https://github.com/CochranResearchGroup/agent-browser/pull/408), merge
-`081fbbce4e779d23874b372cbcef55d3cfeeb782`. The single post-repair review
-accepted zero Standards findings and two Spec findings. Both have been repaired
-in the single bounded TDD pass on `platform/spec400-post-review`; follow-up
-merge and final tracker readback remain the closeout gate. #424/#426 were
-reopened for that pass; the other four repairs remain closed.
+#401 is closed with merged inspection provenance and fresh mounted acceptance.
+Repairs #424–429 are closed through PR408/435. One worker each completed #402
+and #403; [PR436](https://github.com/CochranResearchGroup/agent-browser/pull/436)
+now carries their fully qualified conversion and independent-copy outcomes.
+Root owns integration and tracker closure. #404 remains gated until their
+merged closure is observed, then root takes that next ticket. Parent #400 stays
+open until all four children are complete.
 
 [The qualification note](../notes/0283-2026-10-25-spec400-repairs.md) records
-scenarios, failed receipts and evidence reuse limits. #401 retains its inspection
-qualification. #402/#403 remain broader incomplete outcomes and #404 stays
-blocked. There is no installed or production publication. Root owns #424;
-dedicated workers own the other tickets one at a time. The retained duplicate403
-Xlib candidate and foreign checkouts remain excluded.
+the exact candidate, all criteria, actual Native/X11 workflows, observed
+force-close login loss, retained failed fixtures and evidence reuse limits.
+Both temporary child auxiliaries are closed through governed operations; the
+primary remains for #404. Foreign dirty work and excluded Xlib work remain
+untouched. There is no installed, private-account or production claim.
 
 ## Packet and seams
 
@@ -312,3 +312,54 @@ styled regression. Shared dialog primitives are unchanged.
 One Standards/Spec review and one bounded findings pass have now been consumed.
 No second broad review is planned. Follow-up gates and candidate identity are
 recorded in the owning qualification note.
+
+## Child-ticket closure continuation, 2026-10-25
+
+The user renewed implementation direction after the six repair tickets closed.
+Root owns #401 acceptance and tracker reconciliation, then the next newly
+unblocked child. #402 and #403 each receive one implementation worker after
+#401 closure. #404 remains gated by their native dependency edges. No parked,
+needs-triage, private-account or live-gated portfolio item is resumed.
+
+The current primary branch is `platform/spec400-children-closeout` from freshly
+fetched main `b43833e9ac96f687d4bf60c731de5572a08ddd52`. Six registered
+primaries were inspected. Only canonical auth/receipts is dirty and remains
+untouched. The clean retained duplicate403 tree contains excluded Xlib work
+and is not reassigned. Two temporary auxiliaries are necessary for simultaneous
+one-ticket workers: `/tmp/agent-browser-spec400-child402` and
+`/tmp/agent-browser-spec400-child403`, branches `platform/spec400-complete-402`
+and `platform/spec400-complete-403`. Both bind to P283, start at current main,
+return scoped commits to root and require governed removal after integration.
+No new primary lane is created.
+
+Root owns shared plans/catalog/README/help/skills/docs and final integration.
+Worker402 owns mode lifecycle/host and mode acceptance; worker403 owns copy
+lifecycle/host and copy acceptance. Shared browser-session owner, Native
+transport, schema/client and public fixture changes require explicit writer
+coordination before editing; copy worker owns its dedicated fixture, mode
+worker the manual-login fixture. Preserve prior repairs and failed receipts.
+No production publication, shared provider effects or CI dispatch.
+
+### In-flight child gap audit
+
+402 worker adds a genuine durable `paused` stage before any close, later explicit
+relaunch/cancel, and positively observed cancellation of a live close prompt.
+Actual multi-task/prompt/force acceptance remains pending. One initial public
+fixture startup timeout is retained as setup failure, not a behavioral red.
+403 worker isolates stale/destroyed-window X11 owner termination with a checked
+protocol regression, replaces only `x11_focus` with Linux checked replies and
+retains `x11_scene`. A Linux-only dependency/lock change is explicitly owned by
+that worker. Xvfb readiness failure is retained separately. Actual concurrent
+copy/source and disk-exhaustion acceptance remain pending.
+
+## Child qualification closeout
+
+Candidate0837b9d9 from executable source46cc199f6 passes the final selected
+Rust/contract/quality lane, three actual two-task mode workflows and the full
+concurrent copy/source workflow. Both task/handoff identities and selected
+executables remain exact. Forced close explicitly loses the original cookie;
+fresh Native authentication subsequently survives graceful return. Ordinary
+paths retain strict continuity. Two fixture-only corrections after freeze
+select the exact original tab and report positive force loss honestly. No
+production source changed after the frozen candidate. PR436 closes402/403;
+401 is already closed. Next bounded outcome is404 after native graph readback.

@@ -22,7 +22,7 @@ fn close_prompt_is_durable_and_offers_owner_remediation_without_replacing_identi
     let initial = store.request(request()).unwrap();
     assert_eq!(
         initial.actions(),
-        vec![Action::GracefulClose, Action::Cancel]
+        vec![Action::GracefulClose, Action::Pause, Action::Cancel]
     );
     store
         .observe("convert-1", "boot:pid:start", Observation::ClosePrompt)
@@ -78,6 +78,11 @@ impl ModeRuntime for SyntheticRuntime {
             return Ok(CloseOutcome::Uncertain);
         }
         Ok(CloseOutcome::Exited)
+    }
+    fn cancel_graceful_close(&mut self, _: &Request) -> Result<bool, String> {
+        let was_prompt = self.prompt;
+        self.prompt = false;
+        Ok(was_prompt && self.process == "boot:pid:start")
     }
     fn force_close(&mut self, _: &Request) -> Result<CloseOutcome, String> {
         self.forces += 1;
@@ -719,4 +724,124 @@ fn native_unready_replacement_and_lost_restore_reply_recover_original_configurat
     assert!(runtime.published);
     drop(store);
     std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn cancelling_an_observed_close_prompt_keeps_original_and_never_launches() {
+    let directory =
+        std::env::temp_dir().join(format!("mode-cancel-prompt-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&directory).unwrap();
+    let mut store = OperationStore::open(&directory.join("operations.sqlite3")).unwrap();
+    store.request(request()).unwrap();
+    let mut runtime = SyntheticRuntime {
+        process: "boot:pid:start".into(),
+        mode: Mode::Cdp,
+        closes: 0,
+        launches: 0,
+        published: false,
+        fail_before_launch: false,
+        native_unready: false,
+        lose_restore_reply: false,
+        lose_launch_reply: false,
+        prompt: true,
+        uncertain_close: false,
+        forces: 0,
+        focuses: 0,
+    };
+    assert_eq!(
+        store
+            .advance(
+                "convert-1",
+                Choice::Relaunch { confirmed: true },
+                &mut runtime
+            )
+            .unwrap()
+            .phase,
+        Phase::ClosePrompt
+    );
+    runtime.prompt = false; // A lost/unproven dismissal must retain custody.
+    assert!(store
+        .advance("convert-1", Choice::Cancel, &mut runtime)
+        .unwrap_err()
+        .contains("cancel_unproven"));
+    assert_eq!(
+        store.read("convert-1").unwrap().unwrap().phase,
+        Phase::ClosePrompt
+    );
+    runtime.prompt = true;
+    let cancelled = store
+        .advance("convert-1", Choice::Cancel, &mut runtime)
+        .unwrap();
+    assert_eq!(cancelled.phase, Phase::Cancelled);
+    assert_eq!(runtime.process, "boot:pid:start");
+    assert_eq!(
+        (runtime.closes, runtime.forces, runtime.launches),
+        (1, 0, 0)
+    );
+    drop(store);
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn pause_is_durable_until_explicit_relaunch_or_cancel_without_implicit_effects() {
+    for cancel in [false, true] {
+        let directory = std::env::temp_dir().join(format!("mode-paused-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&directory).unwrap();
+        let path = directory.join("operations.sqlite3");
+        let mut store = OperationStore::open(&path).unwrap();
+        store.request(request()).unwrap();
+        let mut runtime = SyntheticRuntime {
+            process: "boot:pid:start".into(),
+            mode: Mode::Cdp,
+            closes: 0,
+            launches: 0,
+            published: false,
+            fail_before_launch: false,
+            native_unready: false,
+            lose_restore_reply: false,
+            lose_launch_reply: false,
+            prompt: false,
+            uncertain_close: false,
+            forces: 0,
+            focuses: 0,
+        };
+        assert_eq!(
+            store
+                .advance("convert-1", Choice::Pause, &mut runtime)
+                .unwrap()
+                .phase,
+            Phase::Paused
+        );
+        assert_eq!((runtime.closes, runtime.launches), (0, 0));
+        drop(store);
+        let mut reopened = OperationStore::open(&path).unwrap();
+        assert_eq!(
+            reopened
+                .advance("convert-1", Choice::Resume, &mut runtime)
+                .unwrap()
+                .phase,
+            Phase::Paused
+        );
+        assert_eq!((runtime.closes, runtime.launches), (0, 0));
+        let choice = if cancel {
+            Choice::Cancel
+        } else {
+            Choice::Relaunch { confirmed: true }
+        };
+        let outcome = reopened.advance("convert-1", choice, &mut runtime).unwrap();
+        assert_eq!(
+            outcome.phase,
+            if cancel {
+                Phase::Cancelled
+            } else {
+                Phase::Completed
+            }
+        );
+        assert_eq!(
+            (runtime.closes, runtime.launches),
+            if cancel { (0, 0) } else { (1, 1) }
+        );
+        drop(reopened);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 }

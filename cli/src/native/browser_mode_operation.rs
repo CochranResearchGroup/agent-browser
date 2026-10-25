@@ -25,6 +25,7 @@ pub struct Request {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Phase {
     Prepared,
+    Paused,
     Closing,
     ClosePrompt,
     OriginalExited,
@@ -54,6 +55,7 @@ pub struct Operation {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Action {
     GracefulClose,
+    Pause,
     ReturnToBrowser,
     RetryGracefulClose,
     ConfirmForceClose,
@@ -209,7 +211,8 @@ impl OperationStore {
 impl Operation {
     pub fn actions(&self) -> Vec<Action> {
         match self.phase {
-            Phase::Prepared => vec![Action::GracefulClose, Action::Cancel],
+            Phase::Prepared => vec![Action::GracefulClose, Action::Pause, Action::Cancel],
+            Phase::Paused => vec![Action::GracefulClose, Action::Cancel],
             Phase::Closing | Phase::ClosePrompt => vec![
                 Action::ReturnToBrowser,
                 Action::RetryGracefulClose,
@@ -244,6 +247,7 @@ pub enum CloseOutcome {
     Uncertain,
 }
 pub enum Choice {
+    Pause,
     Relaunch { confirmed: bool },
     Resume,
     RestorePrevious { confirmed: bool },
@@ -257,6 +261,11 @@ pub enum Choice {
 pub trait ModeRuntime {
     fn original_status(&mut self, request: &Request) -> Result<OriginalStatus, String>;
     fn graceful_close(&mut self, request: &Request) -> Result<CloseOutcome, String>;
+    /// Dismiss only the exact live original's pending close and positively
+    /// observe it still live. Failure keeps the operation fenced for readback.
+    fn cancel_graceful_close(&mut self, _request: &Request) -> Result<bool, String> {
+        Ok(false)
+    }
     fn force_close(&mut self, request: &Request) -> Result<CloseOutcome, String>;
     fn focus(&mut self, request: &Request) -> Result<(), String>;
     fn launch(&mut self, request: &Request) -> Result<Replacement, String>;
@@ -386,7 +395,18 @@ impl OperationStore {
             effect_request.requested_mode = mode;
         }
         if matches!(choice, Choice::Cancel) {
-            if operation.phase != Phase::Prepared {
+            if operation.phase == Phase::ClosePrompt {
+                if !runtime.cancel_graceful_close(&effect_request)?
+                    || !matches!(
+                        runtime.original_status(&effect_request)?,
+                        OriginalStatus::Live
+                    )
+                {
+                    return Err(
+                        "mode_operation_cancel_unproven:inspect or reconcile original close".into(),
+                    );
+                }
+            } else if !matches!(operation.phase, Phase::Prepared | Phase::Paused) {
                 return Err(
                     "mode_operation_cancel_after_dispatch:inspect and reconcile current effect"
                         .into(),
@@ -458,7 +478,24 @@ impl OperationStore {
         {
             self.transition(&mut operation, Phase::OriginalExited)?;
         }
-        if operation.phase == Phase::Prepared {
+        if matches!(choice, Choice::Pause) {
+            if operation.phase != Phase::Prepared && operation.phase != Phase::Paused {
+                return Err("mode_operation_phase_conflict:read current operation".into());
+            }
+            if !matches!(
+                runtime.original_status(&effect_request)?,
+                OriginalStatus::Live
+            ) {
+                return Err(
+                    "mode_operation_original_exit_observed:reconcile current target".into(),
+                );
+            }
+            // The owner profile fence blocks all affected tasks. No implicit
+            // close, timed retry or background relaunch follows this durable pause.
+            self.transition(&mut operation, Phase::Paused)?;
+            return Ok(operation);
+        }
+        if matches!(operation.phase, Phase::Prepared | Phase::Paused) {
             let Choice::Relaunch { confirmed } = choice else {
                 return Ok(operation);
             };

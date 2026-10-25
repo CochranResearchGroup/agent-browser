@@ -111,10 +111,22 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 })
                 .cloned()
                 .ok_or("mode_operation_profile_missing")?;
-            let original_mode = if profile.manual_login_url.is_some() {
-                Mode::CdpFree
-            } else {
-                Mode::Cdp
+            // Recovery restores the verified original process posture, not the
+            // profile's next-launch intent (which can differ for app browsers).
+            let observed = super::super::browser_session_store::mode_inspection::inspect(
+                &browser,
+                Some(&original),
+                if self.state.app_browser_attachments.contains_key(&browser.id) {
+                    "app"
+                } else {
+                    "managed"
+                },
+                crate::process_identity::observe_process,
+            );
+            let original_mode = match observed["mode"].as_str() {
+                Some("cdp") => Mode::Cdp,
+                Some("cdp_free") => Mode::CdpFree,
+                _ => return Err("mode_operation_original_posture_unverified:refresh the current browser before conversion".into()),
             };
             let binding = Binding {
                 profile,
@@ -223,6 +235,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 }
                 let selected = match choice {
                     "relaunch" => Choice::Relaunch { confirmed },
+                    "pause_and_relaunch" => Choice::Pause,
                     "reconcile" => Choice::Resume,
                     "restore_previous" => Choice::RestorePrevious { confirmed },
                     "retry_graceful_close" => Choice::RetryGracefulClose,
@@ -278,9 +291,21 @@ pub(super) fn public_operation_view(
     let actions = match state.phase {
         Phase::Prepared => vec![
             ("relaunch", state.request.task_ids.len() > 1),
+            ("pause_and_relaunch", false),
             ("cancel", false),
         ],
-        Phase::Closing | Phase::ClosePrompt => vec![
+        Phase::Paused => vec![
+            ("relaunch", state.request.task_ids.len() > 1),
+            ("cancel", false),
+        ],
+        Phase::Closing => vec![
+            ("focus", false),
+            ("retry_graceful_close", false),
+            ("force_close", true),
+            ("reconcile", false),
+        ],
+        Phase::ClosePrompt => vec![
+            ("cancel", false),
             ("focus", false),
             ("retry_graceful_close", false),
             ("force_close", true),
@@ -302,6 +327,7 @@ pub(super) fn public_operation_view(
 fn phase_name(phase: &Phase) -> &'static str {
     match phase {
         Phase::Prepared => "prepared",
+        Phase::Paused => "paused",
         Phase::Closing => "closing",
         Phase::ClosePrompt => "close_prompt",
         Phase::OriginalExited => "original_exited",
@@ -453,6 +479,26 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
         Ok(CloseOutcome::Prompt)
+    }
+    fn cancel_graceful_close(&mut self, request: &Request) -> Result<bool, String> {
+        if !matches!(self.original_status(request)?, OriginalStatus::Live) {
+            return Ok(false);
+        }
+        let reply = self.host.native_browser_command(
+            &self.binding.target(),
+            &json!({"action":"native_input","actions":[{"kind":"key","chord":"Escape"}]}),
+        )?;
+        if reply["delivery"] != "dispatched" {
+            return Err("mode_operation_cancel_unproven:inspect original browser".into());
+        }
+        // Read current exact-process Native window evidence after Escape. A lost
+        // input response or exited original never releases the profile fence.
+        self.host
+            .native_browser_command(&self.binding.target(), &json!({"action":"native_ready"}))?;
+        Ok(matches!(
+            self.original_status(request)?,
+            OriginalStatus::Live
+        ))
     }
     fn force_close(&mut self, request: &Request) -> Result<CloseOutcome, String> {
         #[cfg(target_os = "linux")]

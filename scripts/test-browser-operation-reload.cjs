@@ -97,6 +97,38 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
       await page.waitForFunction(()=>!document.querySelector('[role=alert]'));
       assert.equal(commands.at(-1).choice,'inspect');checks.push('known-refusal-readback');await page.close();
     }
+    {
+      const page=await browser.newPage();const commands=[];const id='pause-original';
+      let retained={...operation('mode_convert',id,'prepared'),affectedTaskIds:['task-one','task-two'],actions:[{action:'pause_and_relaunch',requiresConfirmation:false},{action:'relaunch',requiresConfirmation:true},{action:'cancel',requiresConfirmation:false}]};
+      await page.route('**/api/command',async route=>{
+        const command=route.request().postDataJSON();commands.push(command);
+        if(command.choice==='pause_and_relaunch')retained={...retained,phase:'paused',actions:[{action:'relaunch',requiresConfirmation:true},{action:'cancel',requiresConfirmation:false}]};
+        if(command.choice==='cancel')retained={...retained,phase:'cancelled',actions:[]};
+        await route.fulfill({json:{success:true,data:command.choice==='inspect'?lookup('mode_convert',[retained]):retained}});
+      });
+      await page.goto(origin);await open(page,'mode_convert');
+      await page.getByRole('button',{name:'Pause before relaunch',exact:true}).click({timeout:2500});
+      await page.getByRole('status').filter({hasText:/^paused$/}).waitFor();
+      assert.deepEqual(commands.filter(c=>c.choice!=='inspect').map(c=>c.choice),['pause_and_relaunch'],'Pause never dispatches an immediate relaunch');
+      await page.reload();await open(page,'mode_convert');
+      await page.getByText('Operation: '+id,{exact:true}).waitFor();
+      assert.equal(await page.getByRole('button',{name:'Relaunch now',exact:true}).isDisabled(),true,'Paused relaunch still needs fresh confirmation');
+      await page.getByRole('button',{name:'Cancel operation',exact:true}).click();
+      await page.getByRole('button',{name:'Prepare another relaunch',exact:true}).waitFor();
+      assert.deepEqual(commands.filter(c=>c.choice!=='inspect').map(c=>[c.choice,c.operationId]),[['pause_and_relaunch',id],['cancel',id]],'Reload resumes the original paused operation without automatic effects');
+      checks.push('mode_convert:pause-reload-cancel');await page.close();
+    }
+    {
+      const page=await browser.newPage();const commands=[];const id='prompt-original';
+      let retained={...operation('mode_convert',id,'close_prompt'),actions:[{action:'cancel',requiresConfirmation:false},{action:'force_close',requiresConfirmation:true},{action:'focus',requiresConfirmation:false}]};
+      await page.route('**/api/command',async route=>{const command=route.request().postDataJSON();commands.push(command);if(command.choice==='cancel')retained={...retained,phase:'cancelled',actions:[]};await route.fulfill({json:{success:true,data:command.choice==='inspect'?lookup('mode_convert',[retained]):retained}});});
+      await page.goto(origin);await open(page,'mode_convert');
+      assert.equal(await page.getByRole('button',{name:'Force close',exact:true}).isDisabled(),true);
+      await page.getByRole('button',{name:'Cancel operation',exact:true}).click();
+      await page.getByRole('button',{name:'Prepare another relaunch',exact:true}).waitFor();
+      assert.deepEqual(commands.filter(c=>c.choice!=='inspect').map(c=>[c.choice,c.operationId]),[['cancel',id]],'Cancelling the close prompt never dispatches force or relaunch');
+      checks.push('mode_convert:close-prompt-cancel');await page.close();
+    }
     for (const [kind, phase, action, label] of [
       ['mode_convert', 'launch_absent', 'relaunch', 'Relaunch now'],
       ['mode_convert', 'launch_absent', 'restore_previous', 'Restore previous mode'],

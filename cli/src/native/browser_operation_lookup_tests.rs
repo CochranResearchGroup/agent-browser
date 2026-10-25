@@ -330,3 +330,144 @@ fn operation_lookup_keeps_current_copies_discoverable_after_long_scoped_history(
     assert_eq!(host.state(), &before);
     assert_eq!((calls.get(), requests.get()), effects_before);
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn mode_binding_uses_actual_borrowed_process_posture_instead_of_catalog_intent() {
+    use std::process::{Child, Command};
+    struct ProcessGuard(Child);
+    impl Drop for ProcessGuard {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let fixture = Fixture::new();
+    // This is a provider-free process identity oracle, not a real Chrome claim.
+    // Its complete argv has an explicit debugging flag and its copied ELF name
+    // exercises the same OS observer used by owner binding.
+    let executable = fixture.root.join("chrome");
+    std::fs::copy("/usr/bin/python3", &executable).unwrap();
+    let process = ProcessGuard(
+        Command::new(&executable)
+            .args([
+                "-c",
+                "import time; time.sleep(60)",
+                "--remote-debugging-port=0",
+            ])
+            .spawn()
+            .unwrap(),
+    );
+    let crate::process_identity::ProcessObservation::Observed(observed) =
+        crate::process_identity::observe_process(process.0.id())
+    else {
+        panic!("exact fixture process unavailable")
+    };
+    let original = RecordedProcessIdentity {
+        pid: process.0.id(),
+        start_token: observed.start_token.unwrap(),
+        executable_path: observed.executable_path,
+        browser_family: observed.browser_family,
+    };
+    assert_eq!(original.browser_family.as_deref(), Some("chrome"));
+    let calls = Rc::new(Cell::new(0));
+    let requests = Rc::new(Cell::new(0));
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
+    let opened = host
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    host.navigate(&opened.session_id, "https://synthetic.example/", 101)
+        .unwrap();
+    let mut state = host.state().clone();
+    let tab_id = state.sessions[&opened.session_id]
+        .current_tab_id
+        .clone()
+        .unwrap();
+    let target_id = state.tabs[&tab_id].target_id.clone();
+    state.shared_browser_ids.insert(opened.browser_id.clone());
+    let browser = state.browsers.get_mut(&opened.browser_id).unwrap();
+    browser.pid = original.pid;
+    browser.cdp_endpoint = "ws://127.0.0.1:9222/devtools/browser/synthetic".into();
+    state.app_browser_attachments.insert(
+        browser.id.clone(),
+        BrowserAppAttachment {
+            request: BrowserAttachmentRequest {
+                version: 1,
+                process: original,
+                profile_path: fixture
+                    .root
+                    .join("profile-a")
+                    .to_string_lossy()
+                    .into_owned(),
+                cdp_endpoint: browser.cdp_endpoint.clone(),
+                target_id: target_id.clone(),
+                shared_with: vec![],
+            },
+            owner: BrowserHostIdentity {
+                host_id: "app".into(),
+                participant_id: "app-owner".into(),
+                session_id: "app-session".into(),
+            },
+            borrowed_tab_ids: std::collections::BTreeSet::from([target_id]),
+            profile_id: "profile-a".into(),
+            desktop: browser.desktop.clone().unwrap(),
+            assignment: None,
+        },
+    );
+    drop(host);
+    let store = fixture.store(false);
+    store.save_session_state(&state).unwrap();
+    let mut catalog = store.load_profile_catalog().unwrap().catalog;
+    // Opposite launch intent must not rewrite observed original process mode.
+    catalog
+        .profiles
+        .get_mut("profile-a")
+        .unwrap()
+        .manual_login_url = Some("about:blank".into());
+    store.save_profile_catalog(&catalog).unwrap();
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
+    let effect_counts = (calls.get(), requests.get());
+    let prepared = host.mode_convert(&json!({"sessionId":opened.session_id,"operationId":"observed-mode","mode":"cdp_free","choice":"prepare"})).unwrap();
+    assert_eq!(prepared["phase"], "prepared");
+    assert_eq!(
+        (calls.get(), requests.get()),
+        effect_counts,
+        "binding is effect-free"
+    );
+    let connection = rusqlite::Connection::open(fixture.root.join("runtime.mode.sqlite3")).unwrap();
+    let binding: String = connection
+        .query_row(
+            "SELECT binding FROM browser_mode_owner_bindings WHERE id='observed-mode'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let binding: Value = serde_json::from_str(&binding).unwrap();
+    assert_eq!(
+        binding["original_mode"], "Cdp",
+        "recovery must bind verified original posture, not catalog intent"
+    );
+    assert!(
+        host.state()
+            .app_browser_attachments
+            .contains_key(&opened.browser_id),
+        "inspection retains app ownership metadata"
+    );
+    let paused = host.mode_convert(&json!({"sessionId":opened.session_id,"operationId":"observed-mode","mode":"cdp_free","choice":"pause_and_relaunch","ownerConfirmed":true})).unwrap();
+    assert_eq!(
+        paused["phase"], "paused",
+        "borrowed metadata must not veto the owner's explicit operation"
+    );
+    let cancelled = host.mode_convert(&json!({"sessionId":opened.session_id,"operationId":"observed-mode","mode":"cdp_free","choice":"cancel","ownerConfirmed":true})).unwrap();
+    assert_eq!(cancelled["phase"], "cancelled");
+    assert!(!host.state().profile_operation_ids.contains_key("profile-a"));
+    assert!(host
+        .state()
+        .app_browser_attachments
+        .contains_key(&opened.browser_id));
+    assert_eq!(
+        (calls.get(), requests.get()),
+        effect_counts,
+        "pause/cancel does not take lifecycle custody from the app"
+    );
+}
