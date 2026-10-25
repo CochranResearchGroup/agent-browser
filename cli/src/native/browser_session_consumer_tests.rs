@@ -399,6 +399,21 @@ impl BrowserSessionEffects for Process {
         scope: &BrowserIdleRetirementScope,
         tab: Option<&ManagedBrowserTab>,
     ) -> Result<bool, String> {
+        let count_path = self.root.join("activity-observation-count");
+        if count_path.exists() {
+            let count = std::fs::read_to_string(&count_path)
+                .unwrap()
+                .parse::<u32>()
+                .unwrap();
+            std::fs::write(count_path, (count + 1).to_string()).unwrap();
+            if self
+                .root
+                .join("activity-count-readback-unavailable")
+                .exists()
+            {
+                return Err("synthetic_activity_observation_unavailable".into());
+            }
+        }
         if self.root.join("activity-original-readback").exists() {
             assert!(
                 tab.is_none(),

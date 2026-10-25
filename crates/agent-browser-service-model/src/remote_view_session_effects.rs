@@ -859,6 +859,11 @@ impl<
                 .iter()
                 .any(|record| &record.id == id && !record.original_ended)
         });
+        // Several interrupted commands can retain the same original process.
+        // Share its observation only inside this operation and only for an
+        // exactly equal scope. Unknown evidence still retains every obligation;
+        // positive original exit settles each durable activity independently.
+        let mut observations: Vec<(BrowserIdleRetirementScope, bool)> = Vec::new();
         for activity in activities
             .into_iter()
             .filter(|activity| !activity.original_ended)
@@ -870,7 +875,16 @@ impl<
             };
             // No target inventory, attachment or effect. Unavailable evidence
             // retains the veto; only positive original exit settles resources.
-            if self.effects.observe_idle_retirement_effect(&scope, None) == Ok(true) {
+            let original_ended = match observations.iter().find(|(seen, _)| seen == &scope) {
+                Some((_, ended)) => *ended,
+                None => {
+                    let ended =
+                        self.effects.observe_idle_retirement_effect(&scope, None) == Ok(true);
+                    observations.push((scope, ended));
+                    ended
+                }
+            };
+            if original_ended {
                 match self.store.settle_browser_activity_resource(&activity) {
                     Ok(()) | Err(BrowserIdleRetirementStoreError::Conflict) => (),
                     Err(_) => return Err("browser_session_activity_readback_unavailable".into()),

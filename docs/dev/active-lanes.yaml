@@ -31,8 +31,8 @@ lanes:
     custody_state: ACTIVE
     dependencies: [P285, P288]
     overlaps: [P283]
-    reconciled_overlaps: ["Own mutation reconciliation and focused tests only; preserve P283 mode/profile/store/observation and Native provider ownership; reuse retained primary serially after PR416"]
-    validation_status: PR418 installed; exact Released history saved, zero pending acquisitions, synthetic open/continue pass; owned handoff POST aborts and pixels remain unaccepted
+    reconciled_overlaps: ["Own mutation reconciliation and exact-scope begin_operation observation deduplication plus focused tests; preserve P283 mode/profile/store/observer implementation and Native ownership; reuse retained primary serially"]
+    validation_status: PR421 activity readback source and sealed9cbf948ef4af qualified;96 pool and387 model cases, strict Rust and exact installer fixtures pass; installed Native acceptance pending
     limitations: ["No terminal inference from missing records", "No provider or ingress reconfiguration", "Installed acceptance remains separate"]
     updated_at: 2026-10-24
 

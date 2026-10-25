@@ -18,8 +18,12 @@ Current Native canonical source rejects same-key Released replay in complete_acq
 
 ## Current State
 
-Terminal acquisition recovery is merged, installed and accepted: old Released history is retained, fresh synthetic open/continue succeeds after exact failed-reservation recovery, and zero acquisitions remain pending. Full Native viewport acceptance fails because the exact owned handoff POST aborts at the component deadline. Follow the evidence note; do not claim pixels or an authentication cause. Retain the primary/candidates.
+Terminal acquisition recovery is merged, installed and accepted: old Released history is retained, fresh synthetic open/continue succeeds after exact failed-reservation recovery, and zero acquisitions remain pending. The exact owned handoff POST still fails on installed e0d5525e92cc. PR421 qualifies operation-local exact-scope observation sharing: full96-case pool plus387 model gates, strict Rust quality and exact sealed candidate installer fixtures pass. Install candidate9cbf948ef4af through the supported preserve path, then prove Native iframe pixels and cleanup. Retain the primary/candidates.
 
 ## Next bounded packet
 
 Own only measurement of the existing-task handoff HTTP producer/preparation/relay and exact original outcome. Up to three targeted diagnostic experiments, one real-boundary regression and one semantic repair. Do not mask a stalled producer by raising the15s UI deadline. Existing deployment authority applies after touched-surface qualification; native viewer ownership and all peer processes remain preserved. Recheck scope and overlap before editing a new source seam.
+
+## Activity observation hypothesis
+
+Current retained custody has165 active activity rows for only three exact browser/process scopes. Every begin_operation repeats the same OS observer for every row while the shared owner is serialized. Qualify deduplication only within this operation and only for completely equal BrowserIdleRetirementScope values. Cache positive original exit or retained uncertainty locally; settle each distinct durable row separately. Do not cache across operations, merge changed identities, change the observer/store or remove activity history. Primary writer extends only to this begin_operation block and its model regression; P283 keeps profile/store/observation implementation ownership. Require repeated scopes, changed browser/kernel identities, positive exit, uncertainty, failed settlement and next-operation refresh.
