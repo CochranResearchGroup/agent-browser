@@ -32,6 +32,15 @@ try {
   assert.equal(modeMetadata.execution.action, 'mode');
   assert.deepEqual(modeMetadata.inputSchema.properties, {});
 
+  const conversionDiscovery = await client.send('tools/call', {
+    name: 'browser_discover', arguments: { category: 'browser', operation: 'mode_convert' },
+  });
+  const conversionMetadata = JSON.parse(conversionDiscovery.content[0].text).data;
+  assert.equal(conversionMetadata.execution.action, 'mode_convert');
+  assert(conversionMetadata.inputSchema.properties.choice.enum.includes('pause_and_relaunch'));
+  assert(Buffer.byteLength(JSON.stringify(conversionMetadata)) <= 15000,
+    'conversion selection stays bounded while exposing executable pause choices');
+
   const bytes = Buffer.byteLength(JSON.stringify(tools));
   console.log(JSON.stringify({ toolCount: tools.length, schemaBytes: bytes }));
   assert.deepEqual(
