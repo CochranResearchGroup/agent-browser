@@ -31,7 +31,8 @@ pub(super) fn tools() -> Vec<Value> {
                 "properties": {
                     "profile":{"type":"string","description":"Named profile for persistent or existing mode."},
                     "profileMode":{"type":"string","enum":["persistent","existing","disposable"],"default":"persistent"},
-                    "mode":{"type":"string","enum":["automation","manual_login"],"default":"automation","description":"manual_login opens one native window without CDP. Use native_capture/native_input for agent control; DOM actions need automation mode."},
+                    "mode":{"type":"string","enum":["automation","manual_login"],"description":"Omit to retain profile mode; new profiles use automation. manual_login has no CDP: use native_capture/native_input; DOM needs automation."},
+                    "buildSelectionOperationId":{"type":"string","description":"Bind an earlier build selection."},
                     "taskKey":{"type":"string","description":"Stable task key. Distinct keys receive independent tabs; reuse the key to continue this task."},
                 "url":{"type":"string","description":"Initial URL for a new task. Replaying a task returns its current page without navigating again."},
                     "serviceName":{"type":"string"},"agentName":{"type":"string"},"taskName":{"type":"string"},
@@ -208,7 +209,8 @@ pub(super) fn open(
     let url = required_string_argument(arguments, "url")?;
     let mode = optional_string_argument(arguments, "profileMode")?.unwrap_or("persistent");
     let profile = optional_string_argument(arguments, "profile")?;
-    let control_mode = optional_string_argument(arguments, "mode")?.unwrap_or("automation");
+    let explicit_control_mode = optional_string_argument(arguments, "mode")?;
+    let control_mode = explicit_control_mode.unwrap_or("automation");
     if !matches!(control_mode, "automation" | "manual_login") {
         return Err(issue("browser_login_mode_invalid"));
     }
@@ -238,7 +240,7 @@ pub(super) fn open(
         .map(profile_catalog_for_open)
         .transpose()?
         .unwrap_or((None, None));
-    if arguments.get("mode").is_none() {
+    if explicit_control_mode.is_none() {
         manual = catalog_profile
             .as_ref()
             .is_some_and(|profile| profile.manual_login_url.is_some());
@@ -287,6 +289,9 @@ pub(super) fn open(
         "action":"browser_session_open","sessionName":session_name,
         "url":url,"serviceName":service,"agentName":agent,"taskName":task,"originKind":"agent"});
     command["manualLogin"] = json!(manual);
+    if let Some(receipt) = optional_string_argument(arguments, "buildSelectionOperationId")? {
+        command["buildSelectionOperationId"] = json!(receipt);
+    }
     if let Some(binding) = &hosted {
         command["hostBinding"] = json!(binding);
     }

@@ -19,6 +19,8 @@ use super::browser_session_runtime::{
 use super::browser_session_store::BrowserSessionJsonStore;
 use super::browser_session_store::{BrowserProfileCatalogLoad, BrowserSessionSqliteStore};
 
+#[path = "browser_build_open.rs"]
+mod browser_build_open;
 #[path = "browser_build_selection.rs"]
 mod browser_build_selection;
 #[path = "browser_mode_host.rs"]
@@ -1553,6 +1555,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         if let Some(readback) = self.operation_request_readback(command)? {
             return Ok(readback);
         }
+        if action == "browser_session_open" {
+            self.verify_build_open_selection(command, false)?;
+        }
         if action == "browser_session_build_select" {
             return self.browser_build_select(command);
         }
@@ -2298,6 +2303,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         command: &serde_json::Value,
         activity_at_ms: u64,
     ) -> Result<OpenBrowserSessionResult, String> {
+        self.verify_build_open_selection(command, false)?;
         if command.get("attachment").is_some()
             && command
                 .get("manualLogin")
@@ -2461,6 +2467,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         let opened =
             self.open_with_host_binding_policy(request, hosted, command.get("taskPolicy"))?;
         self.apply_leave_open_choice(&opened.session_id, command)?;
+        self.verify_build_open_selection(command, true)?;
         Ok(opened)
     }
 

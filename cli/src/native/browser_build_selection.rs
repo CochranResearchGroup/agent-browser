@@ -212,6 +212,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
 {
     pub(crate) fn browser_build_select(&mut self, command: &Value) -> Result<Value, String> {
         let choice = optional_string(command, "choice").unwrap_or("inspect");
+        if choice == "open_selected" {
+            return self.open_selected_build(command);
+        }
         if choice == "select_for_next_launch" {
             return self.select_offline_build(command);
         }

@@ -151,7 +151,7 @@ fn future_build_selection_mode_survives_unspecified_open_and_explicit_mode_still
     use sha2::{Digest, Sha256};
     for explicit in [None, Some(false)] {
         let fixture = Fixture::new();
-        std::fs::write(fixture.root.join("automatic-pool"),"enabled").unwrap();
+        std::fs::write(fixture.root.join("automatic-pool"), "enabled").unwrap();
         std::fs::create_dir(fixture.root.join("profile-a")).unwrap();
         let mut host = fixture.host(Mode::Success, Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
         let sha = format!(
@@ -206,22 +206,47 @@ fn build_selection_existing_copy_requires_published_lineage_and_exact_directory(
 
 #[test]
 fn build_selection_receipt_cannot_open_changed_build_or_different_profile() {
-    use sha2::{Digest,Sha256};
-    for changed in ["pin","bytes","profile"] {
-        let fixture=Fixture::new();
-        for profile in ["profile-a","profile-b"] {std::fs::create_dir(fixture.root.join(profile)).unwrap();}
-        let executable=fixture.root.join("reviewed-browser");
-        std::fs::copy("/usr/bin/python3",&executable).unwrap();
-        let sha=format!("{:x}",Sha256::digest(std::fs::read(&executable).unwrap()));
-        let calls=Rc::new(Cell::new(0));let requests=Rc::new(Cell::new(0));
-        let mut host=fixture.host(Mode::Success,calls.clone(),requests.clone());
+    use sha2::{Digest, Sha256};
+    for changed in ["pin", "bytes", "profile"] {
+        let fixture = Fixture::new();
+        for profile in ["profile-a", "profile-b"] {
+            std::fs::create_dir(fixture.root.join(profile)).unwrap();
+        }
+        let executable = fixture.root.join("reviewed-browser");
+        std::fs::copy("/usr/bin/python3", &executable).unwrap();
+        let sha = format!("{:x}", Sha256::digest(std::fs::read(&executable).unwrap()));
+        let calls = Rc::new(Cell::new(0));
+        let requests = Rc::new(Cell::new(0));
+        let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
         let selected=host.handle_command(&json!({"action":"browser_session_build_select","profileId":"profile-a","choice":"select_for_next_launch","operationId":"bound-open","executablePath":executable,"expectedSha256":sha,"mode":"cdp","ownerConfirmed":true}));
-        assert_eq!(selected["success"],true,"{selected}");
-        if changed=="pin" {let store=fixture.store(false);let mut state=store.load_session_state().unwrap();state.profile_executables.insert("profile-a".into(),"/owner/later-choice".into());store.save_session_state(&state).unwrap();}
-        if changed=="bytes" {std::fs::write(&executable,b"changed after confirmation").unwrap();}
+        assert_eq!(selected["success"], true, "{selected}");
+        if changed == "pin" {
+            let store = fixture.store(false);
+            let mut state = store.load_session_state().unwrap();
+            state
+                .profile_executables
+                .insert("profile-a".into(), "/owner/later-choice".into());
+            store.save_session_state(&state).unwrap();
+        }
+        if changed == "bytes" {
+            std::fs::write(&executable, b"changed after confirmation").unwrap();
+        }
         let opened=host.handle_command(&json!({"action":"browser_session_open","profileId":if changed=="profile" {"profile-b"} else {"profile-a"},"sessionName":"Bound build open","url":"about:blank","buildSelectionOperationId":"bound-open"}));
-        assert_eq!(opened["success"],false,"A stale build selection must be refused before launch ({changed}): {opened}");
-        assert!(opened["error"].as_str().unwrap().starts_with("browser_build_"),"{opened}");
-        assert_eq!((calls.get(),requests.get()),(0,0),"A stale selection cannot launch or operate any browser");
+        assert_eq!(
+            opened["success"], false,
+            "A stale build selection must be refused before launch ({changed}): {opened}"
+        );
+        assert!(
+            opened["error"]
+                .as_str()
+                .unwrap()
+                .starts_with("browser_build_"),
+            "{opened}"
+        );
+        assert_eq!(
+            (calls.get(), requests.get()),
+            (0, 0),
+            "A stale selection cannot launch or operate any browser"
+        );
     }
 }

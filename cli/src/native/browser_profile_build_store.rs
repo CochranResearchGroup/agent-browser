@@ -40,6 +40,34 @@ impl BrowserSessionSqliteStore {
     ) -> Result<Option<Value>, String> {
         retained(&self.connection, id, intent)
     }
+    pub(crate) fn profile_build_selection_by_id(
+        &self,
+        id: &str,
+        profile_id: &str,
+    ) -> Result<Option<Value>, String> {
+        let exists:bool=self.connection.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='browser_profile_build_selections')",[],|row|row.get(0)).map_err(|_|"browser_build_receipt_unavailable")?;
+        if !exists {
+            return Ok(None);
+        }
+        let raw: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT receipt FROM browser_profile_build_selections WHERE id=?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|_| "browser_build_receipt_unavailable")?;
+        raw.map(|raw| {
+            let receipt: Value =
+                serde_json::from_str(&raw).map_err(|_| "browser_build_receipt_invalid")?;
+            if receipt["profileId"] != profile_id {
+                return Err("browser_build_receipt_profile_conflict".into());
+            }
+            Ok(receipt)
+        })
+        .transpose()
+    }
     /// Pin only future explicit launches. Profile bytes and physical browsers are untouched.
     /// The pin, independent mode intent, and replay receipt commit together.
     pub(crate) fn select_profile_build(
@@ -106,7 +134,7 @@ impl BrowserSessionSqliteStore {
         if catalog.profiles.contains_key(id) {
             catalog.profiles.insert(id.clone(), profile);
         }
-        let receipt = json!({"schemaVersion":"agent-browser.build-selection.v1","operationId":selection.operation_id,"profileId":id,"phase":"selected_for_next_launch","requestedMode":selection.mode,"observedMode":null,"selectedBuild":selection.public_build,"authenticationContinuity":"unverified","profileDataReadable":"unverified","warning":"Build selection applies to a future explicit launch. It may migrate profile data or lose login. Selecting the previous executable does not restore profile bytes."});
+        let receipt = json!({"schemaVersion":"agent-browser.build-selection.v1","operationId":selection.operation_id,"profileId":id,"phase":"selected_for_next_launch","profileDirectoryExisted":Path::new(&selection.profile.user_data_dir).is_dir(),"requestedMode":selection.mode,"observedMode":null,"selectedBuild":selection.public_build,"authenticationContinuity":"unverified","profileDataReadable":"unverified","warning":"Build selection applies to a future explicit launch. It may migrate profile data or lose login. Selecting the previous executable does not restore profile bytes."});
         transaction.execute_batch("CREATE TABLE IF NOT EXISTS browser_profile_build_selections(id TEXT PRIMARY KEY,intent TEXT NOT NULL,receipt TEXT NOT NULL)").map_err(|_|"browser_build_receipt_unavailable")?;
         save_document(
             &transaction,

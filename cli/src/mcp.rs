@@ -2,9 +2,10 @@ use std::io::{self, BufRead, Write};
 
 use serde_json::{json, Map, Value};
 
-mod catalog;
+mod browser_build;
 #[cfg(test)]
 mod browser_build_tests;
+mod catalog;
 mod host_control;
 mod host_policy;
 mod host_reconnect;
@@ -97,6 +98,7 @@ const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = &[
     "native_capture",
     "native_input",
     "profile_duplicate",
+    "browser_build",
     "mode_convert",
     "navigate",
     "evaluate",
@@ -266,6 +268,7 @@ fn mcp_command_response_with_config(
             )
             .map_err(|_| "mode_operation_response_invalid".into())
         }
+        Some("browser-build") => browser_build::cli(args),
         Some("profile-duplicate") => profile_duplicate::cli(args),
         Some("browser-native") => {
             if args.len() != 5 || !matches!(args[3].as_str(), "native_capture" | "native_input") {
@@ -5493,7 +5496,11 @@ fn call_service_mcp_tool(
     }
     if name.starts_with("browser_")
         && !matches!(name, "browser_open" | "browser_discover")
-        && !(name == "browser_command" && arguments["action"] == "profile_duplicate")
+        && !(name == "browser_command"
+            && matches!(
+                arguments["action"].as_str(),
+                Some("profile_duplicate" | "browser_build")
+            ))
     {
         required_string_argument(arguments, "taskId")?;
     }
@@ -5610,6 +5617,9 @@ fn call_service_mcp_tool(
         }
         if arguments["action"] == "mode_convert" {
             return mode_convert_call(arguments, session);
+        }
+        if arguments["action"] == "browser_build" {
+            return browser_build::call(arguments, session);
         }
         if arguments["action"] == "profile_duplicate" {
             return profile_duplicate::call(arguments, session);
