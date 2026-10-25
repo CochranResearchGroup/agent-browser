@@ -341,6 +341,7 @@ def main():
             assert created.returncode == 0, created.stderr
             profile = Path(json.loads(created.stdout)['userDataDir'])
             profile.mkdir(parents=True, exist_ok=True)
+            (profile / 'fixture-source-original-marker').write_bytes(b'source-original')
             # Model a human's completed browser first-run setup, not a login.
             # The real cookie is then seeded over HTTP without CDP or DB edits.
             (profile / 'First Run').touch()
@@ -417,6 +418,7 @@ def main():
                 assert len(directories) == 1, 'exact independent destination directory required'
                 independent_marker = directories[0] / 'fixture-independent-marker'
                 independent_marker.write_bytes(b'destination-retained-across-recovery')
+                source_bytes = {str(path.relative_to(profile)): hashlib.sha256(path.read_bytes()).hexdigest() for path in profile.rglob('*') if path.is_file() and not path.is_symlink()}
                 if args.restart_owner:
                     restart_owner()
                 readback = duplicate('reconcile')
@@ -431,13 +433,19 @@ def main():
                     time.sleep(.1);copied = duplicate('reconcile')
                 assert copied['destination']['id'] == original_destination, copied
                 assert independent_marker.read_bytes() == b'destination-retained-across-recovery', 'recovery repeated or overwrote the copy'
+                assert {str(path.relative_to(profile)): hashlib.sha256(path.read_bytes()).hexdigest() for path in profile.rglob('*') if path.is_file() and not path.is_symlink()} == source_bytes, 'destination recovery changed source bytes'
             if args.restart_owner and not args.launch_failure:
+                destination_directories = list(root.rglob('profile-duplication/profiles/' + copied['destination']['id'].replace(':', '-')))
+                assert len(destination_directories) == 1
+                (destination_directories[0] / 'fixture-independent-marker').write_bytes(b'destination-retained-across-recovery')
                 retained_launch = copied.get('launch')
                 old_owner = restart_owner()
                 copied = duplicate('reconcile')
                 assert copied.get('launch') == retained_launch, 'owner restart replaced destination identity'
+                assert (destination_directories[0] / 'fixture-independent-marker').read_bytes() == b'destination-retained-across-recovery', 'owner restart repeated the copy'
                 assert json.loads((Path(env['AGENT_BROWSER_SOCKET_DIR']) / 'runtime-host.json').read_text())['pid'] != old_owner
             assert copied['copyComplete'] and copied['profilePublished'],copied
+            assert (profile / 'fixture-source-original-marker').read_bytes() == b'source-original', 'copy recovery changed the original source marker'
             # Private synthetic fixture readback proves the copied executable
             # pin came from this public owner workflow, including after restart.
             pin_states = []
@@ -462,6 +470,7 @@ def main():
                 receipt=copied['launch'];assert receipt['taskId']!=source_task['taskId'] and receipt['browserId']!=source_task['browserId'],copied
                 duplicate_task=receipt['taskId']
                 assert len(browsers())==1,'copy should launch only destination; source must reopen only when selected'
+                assert os.readlink('/proc/'+str(browsers()[0][0])+'/exe') == private_chrome, 'destination must execute its original exact pinned build'
                 assert browsers()[0][0] in native_observed_pids,'completed launch lacks qualified Native window readiness'
                 def native_visit(task_id,path):
                     call('browser_command',dict(taskId=task_id,action='native_input',params=dict(actions=[dict(kind='key',chord='ctrl+l'),dict(kind='text',text=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+path),dict(kind='key',chord='Return')])))
@@ -470,23 +479,31 @@ def main():
                         assert time.monotonic()<deadline,'native navigation missing: '+path;time.sleep(.02)
                     return next(record['cookie'] for record in get_requests if record['path']==path)
                 assert native_visit(duplicate_task,'/check-copy')=='initial','duplicate lost the synthetic authenticated cookie'
-                source_reopened=call('browser_open',dict(request,taskKey='source-reopened',url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/write-source'))
-                assert len(browsers())==2,'source and independent duplicate must coexist'
-                deadline=time.monotonic()+10
-                while not any(record['path']=='/write-source' for record in get_requests):
-                    assert time.monotonic()<deadline,'source write navigation missing';time.sleep(.02)
-                assert native_visit(source_reopened['taskId'],'/check-source')=='source-diverged','source write did not persist'
-                # Native focus is explicit because the reopened source owns focus.
-                destination_pid=next(pid for pid,_ in browsers() if pid!=next(pid for pid,argv in browsers() if '--user-data-dir='+str(profile) in argv))
-                destination_window=next(window for window in windows() if window['pid']==destination_pid)
-                assert run(['xdotool','windowactivate','--sync',str(destination_window['id'])]).returncode==0
-                assert native_visit(duplicate_task,'/check-independent')=='initial','source mutation leaked into the copied profile'
-                paths=[re.search(r'--user-data-dir=([^ ]+)',argv).group(1) for _,argv in browsers()]
-                assert len(set(paths))==2,'two browsers shared a writable profile directory'
-                assert len({os.stat(path).st_ino for path in paths})==2,'profile directories are not independent'
-                replay=duplicate('reconcile');assert replay['launch']==receipt and len(browsers())==2,'operation replay launched another browser'
-                call('browser_close',dict(taskId=source_reopened['taskId']));call('browser_close',dict(taskId=duplicate_task));task=None
-                assert not browsers(),'closed synthetic browsers left owned process residue'
+                if args.launch_failure or args.lost_launch_reply:
+                    replay = duplicate('reconcile')
+                    assert replay['launch'] == receipt and len(browsers()) == 1, 'recovery replay launched or reopened a browser'
+                    assert not any('--user-data-dir='+str(profile) in argv for _, argv in browsers()), 'recovery automatically reopened source'
+                    call('browser_close', dict(taskId=duplicate_task)); task=None
+                    assert not browsers(), 'closed destination left owned process residue'
+                else:
+                    source_reopened=call('browser_open',dict(request,taskKey='source-reopened',url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/write-source'))
+                    assert len(browsers())==2,'source and independent duplicate must coexist'
+                    deadline=time.monotonic()+10
+                    while not any(record['path']=='/write-source' for record in get_requests):
+                        assert time.monotonic()<deadline,'source write navigation missing';time.sleep(.02)
+                    assert native_visit(source_reopened['taskId'],'/check-source')=='source-diverged','source write did not persist'
+                    # Native focus is explicit because the reopened source owns focus.
+                    destination_pid=next(pid for pid,_ in browsers() if pid!=next(pid for pid,argv in browsers() if '--user-data-dir='+str(profile) in argv))
+                    destination_window=next(window for window in windows() if window['pid']==destination_pid)
+                    assert run(['xdotool','windowactivate','--sync',str(destination_window['id'])]).returncode==0
+                    assert native_visit(duplicate_task,'/check-independent')=='initial','source mutation leaked into the copied profile'
+                    paths=[re.search(r'--user-data-dir=([^ ]+)',argv).group(1) for _,argv in browsers()]
+                    assert len(set(paths))==2,'two browsers shared a writable profile directory'
+                    assert len({os.stat(path).st_ino for path in paths})==2,'profile directories are not independent'
+                    replay=duplicate('reconcile');assert replay['launch']==receipt and len(browsers())==2,'operation replay launched another browser'
+                    call('browser_close',dict(taskId=source_reopened['taskId']));call('browser_close',dict(taskId=duplicate_task));task=None
+                    assert not browsers(),'closed synthetic browsers left owned process residue'
+
 
         except BaseException:
             # This namespace contains synthetic data only. Keep bounded failure
@@ -494,8 +511,9 @@ def main():
             logs = {str(path.relative_to(root)): path.read_text(errors='replace')[-6000:]
                     for path in [root / 'mcp.log', root / 'xvfb.log', root / 's/runtime-host.log',
                                  root / 'xdg_cache_home/openbox/openbox.log'] if path.is_file()}
+            logs.update({str(path.relative_to(root)): path.read_text(errors='replace')[-6000:] for path in root.glob('.agent-browser/tmp/chrome-launches/*.log')})
             print(json.dumps(dict(fixtureFailure=True, operations=operations, getRequests=get_requests,
-                                  windows=windows(), logs=logs)), flush=True)
+                                  browsers=browsers(), windows=windows(), logs=logs)), flush=True)
             raise
         finally:
             if failure_injected.is_set():
@@ -538,8 +556,8 @@ def main():
                 assert time.monotonic() < deadline, 'fixture process residue: ' + str(residue)
                 time.sleep(.02)
         print(json.dumps(dict(passed=True,scope='public MCP profile_duplicate, real Chrome/X11, synthetic Native owner',
-            nativeGracefulClose=True,independentProfiles=True,concurrentBrowsers=args.launch_failure!='finish',sourcePreserved=True,
-            syntheticCookieContinuity=args.launch_failure!='finish',divergentWrites=args.launch_failure!='finish',replayPreserved=True,cleanupVerified=True,
+            nativeGracefulClose=True,independentProfiles=True,concurrentBrowsers=not args.launch_failure and not args.lost_launch_reply,sourcePreserved=True,
+            syntheticCookieContinuity=args.launch_failure!='finish',divergentWrites=not args.launch_failure and not args.lost_launch_reply,replayPreserved=True,cleanupVerified=True,
             launchFailureRecovery=args.launch_failure,ownerRestart=args.restart_owner,lostLaunchReply=args.lost_launch_reply)))
 
 
