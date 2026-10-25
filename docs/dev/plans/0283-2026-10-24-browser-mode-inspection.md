@@ -480,3 +480,15 @@ focused unit red are retained. Root is narrowing the reserved-field guard only
 for the build adapter's declared profile target and open-selected agent metadata;
 route and principal reservations remain covered. A replacement candidate must
 qualify the copy and public selection/open paths before ticket closure.
+
+### Ticket #404 qualified for integration
+
+All nine #404 criteria are source-qualified. Eight actual versioned Chrome/Chromium
+workflows, independent namespace cleanup, 149 MCP tests, 15 mode contracts, 13 copy
+contracts, rail/reload, dashboard/docs/client/parity, workspace format and strict
+Clippy pass. Final optimized candidate 283a5a768f13cc3956f85a9863882bb5f1cc33596613fc1b749204bd55bb2b02
+retains 16 tools, 14871 schema bytes and 3991 help bytes. The exact static-help-only
+diff from the runtime-qualified candidate 40fcbc7b is recorded for policy 0042
+reuse. See the qualification note for pair versions, hashes, first failures and
+limits. PR439 integrates #404; parent #400 remains pending aggregate verification
+after child merge. No production or shared runtime publication occurred.

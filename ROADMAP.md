@@ -1,6 +1,6 @@
 # Roadmap
 
-[P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): #401–403 and repairs #424–429 are closed; PR436 merged as ba5cda65c. Root owns newly unblocked #404 browser-build selection in the retained primary. Actual conversion/copy evidence and force-close login loss are recorded in the qualification note. No runtime publication.
+[P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): #401–403 and repairs #424–429 are closed. #404 build selection is source-qualified through eight actual Chrome/Chromium workflows and final scoped gates, awaiting PR439 integration. Parent #400 remains open for aggregate verification. No runtime publication.
 
 [P291 corrected cold rail](docs/dev/plans/0291-2026-10-24-cold-rail-retry-spacing.md), #430, is installed accepted oncf65dd76422b: cold median3.36s to2.11s, warm1.00s to1.02s,18 browser roots and137 Native provider/persistent unit generations preserved. [Evidence](docs/dev/notes/0291-2026-10-24-cold-rail-retry-spacing.md) retains the failed first comparison, mounted cache-caller correction, finite sample limits and three doctor advisories.422 asset intermittence and Remote View667 MCP-client restart loops remain separate. Retain the primary checkout and pinned candidates.
 

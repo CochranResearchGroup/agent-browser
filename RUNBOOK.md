@@ -1,6 +1,6 @@
 # Runbook
 
-[P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): #401–403 and repairs #424–429 are closed; PR436 merged as ba5cda65c. Root owns newly unblocked #404 browser-build selection in the retained primary. Actual conversion/copy evidence and force-close login loss are recorded in the qualification note. No runtime publication.
+[P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): #401–403 and repairs #424–429 are closed. #404 build selection is source-qualified through eight actual Chrome/Chromium workflows and final scoped gates, awaiting PR439 integration. Parent #400 remains open for aggregate verification. No runtime publication.
 
 [P288 writer custody](docs/dev/plans/0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. PR415 carries the qualified source;221 workstation cases, strict Rust, fixtures and docs pass. Installed production is unchanged.
 
