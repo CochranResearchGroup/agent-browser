@@ -19,6 +19,8 @@ pub struct Request {
     pub profile_id: String,
     pub original_process: String,
     pub executable: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executable_sha256: Option<String>,
     pub task_ids: Vec<String>,
     pub requested_mode: Mode,
 }
@@ -45,6 +47,10 @@ pub struct Operation {
     pub close_method: Option<CloseMethod>,
     #[serde(default)]
     pub effective_mode: Option<Mode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effective_executable: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effective_executable_sha256: Option<String>,
     #[serde(default)]
     pub failure: Option<String>,
     #[serde(default)]
@@ -161,6 +167,8 @@ impl OperationStore {
             replacement: None,
             close_method: None,
             effective_mode: None,
+            effective_executable: None,
+            effective_executable_sha256: None,
             failure: None,
             launch_attempts: 0,
             restoring_previous: false,
@@ -248,11 +256,22 @@ pub enum CloseOutcome {
 }
 pub enum Choice {
     Pause,
-    Relaunch { confirmed: bool },
+    SelectExecutable {
+        executable: String,
+        sha256: String,
+        confirmed: bool,
+    },
+    Relaunch {
+        confirmed: bool,
+    },
     Resume,
-    RestorePrevious { confirmed: bool },
+    RestorePrevious {
+        confirmed: bool,
+    },
     RetryGracefulClose,
-    ForceClose { confirmed: bool },
+    ForceClose {
+        confirmed: bool,
+    },
     ReturnToBrowser,
     Cancel,
 }
@@ -260,6 +279,9 @@ pub enum Choice {
 /// a dispatch acknowledgement is not an exit, launch or publication receipt.
 pub trait ModeRuntime {
     fn original_status(&mut self, request: &Request) -> Result<OriginalStatus, String>;
+    fn validate_executable(&mut self, _request: &Request) -> Result<(), String> {
+        Ok(())
+    }
     fn graceful_close(&mut self, request: &Request) -> Result<CloseOutcome, String>;
     /// Dismiss only the exact live original's pending close and positively
     /// observe it still live. Failure keeps the operation fenced for readback.
@@ -278,6 +300,13 @@ pub trait ModeRuntime {
     /// absence before selecting its retained prior configuration.
     fn restore_previous(&mut self, _request: &Request) -> Result<Mode, String> {
         Err("mode_operation_restore_unavailable".into())
+    }
+    /// Retained previous executable configuration, independent of profile bytes.
+    fn previous_executable(&self, _request: &Request) -> Option<String> {
+        None
+    }
+    fn previous_executable_sha256(&self, _request: &Request) -> Option<String> {
+        None
     }
     /// Positive exact publication proof permits sealing a lost terminal write.
     /// Missing evidence never authorizes another close or replacement launch.
@@ -347,8 +376,55 @@ impl OperationStore {
             return Ok(operation);
         }
         let mut effect_request = operation.request.clone();
+        if let Some(executable) = &operation.effective_executable {
+            effect_request.executable = executable.clone();
+            effect_request.executable_sha256 = operation.effective_executable_sha256.clone();
+        }
         if let Some(mode) = &operation.effective_mode {
             effect_request.requested_mode = mode.clone();
+        }
+        if let Choice::SelectExecutable {
+            executable,
+            sha256,
+            confirmed,
+        } = choice
+        {
+            if !confirmed {
+                return Err("browser_build_owner_confirmation_required".into());
+            }
+            if !matches!(
+                operation.phase,
+                Phase::Prepared | Phase::Paused | Phase::OriginalExited | Phase::LaunchAbsent
+            ) {
+                return Err("mode_operation_phase_conflict:reconcile existing launch before choosing another build".into());
+            }
+            if !std::path::Path::new(&executable).is_absolute() || sha256.is_empty() {
+                return Err("browser_build_selection_invalid".into());
+            }
+            if matches!(operation.phase, Phase::OriginalExited | Phase::LaunchAbsent)
+                && (runtime.reconcile_replacement(&effect_request)?.is_some()
+                    || !runtime.replacement_absent(&effect_request)?)
+            {
+                return Err(
+                    "mode_operation_launch_absence_unproven:reconcile existing launch".into(),
+                );
+            }
+            let mut selected = effect_request.clone();
+            selected.executable = executable.clone();
+            selected.executable_sha256 = Some(sha256.clone());
+            runtime.validate_executable(&selected)?;
+            let mut next = operation.clone();
+            next.effective_executable = Some(executable);
+            next.effective_executable_sha256 = Some(sha256);
+            next.failure = None;
+            self.save_transition(&operation, &next)?;
+            return Ok(next);
+        }
+        if matches!(
+            choice,
+            Choice::Relaunch { .. } | Choice::RetryGracefulClose | Choice::ForceClose { .. }
+        ) {
+            runtime.validate_executable(&effect_request)?;
         }
         if let Choice::RestorePrevious { confirmed } = choice {
             if !confirmed {
@@ -356,7 +432,10 @@ impl OperationStore {
             }
             if !matches!(
                 operation.phase,
-                Phase::LaunchDispatched | Phase::LaunchAbsent | Phase::ReplacementPending
+                Phase::OriginalExited
+                    | Phase::LaunchDispatched
+                    | Phase::LaunchAbsent
+                    | Phase::ReplacementPending
             ) {
                 return Err("mode_operation_phase_conflict:read current operation".into());
             }
@@ -387,12 +466,21 @@ impl OperationStore {
             let mode = runtime.restore_previous(&effect_request)?;
             let mut next = operation.clone();
             next.effective_mode = Some(mode.clone());
+            next.effective_executable_sha256 = runtime.previous_executable_sha256(&effect_request);
+            next.effective_executable = runtime
+                .previous_executable(&effect_request)
+                .or_else(|| Some(operation.request.executable.clone()));
             next.restoring_previous = false;
             next.replacement = None;
             next.phase = Phase::OriginalExited;
             self.save_transition(&operation, &next)?;
             operation = next;
             effect_request.requested_mode = mode;
+            effect_request.executable_sha256 = operation.effective_executable_sha256.clone();
+            effect_request.executable = operation
+                .effective_executable
+                .clone()
+                .unwrap_or_else(|| operation.request.executable.clone());
         }
         if matches!(choice, Choice::Cancel) {
             if operation.phase == Phase::ClosePrompt {
@@ -555,6 +643,7 @@ impl OperationStore {
             }
         }
         if operation.phase == Phase::OriginalExited {
+            runtime.validate_executable(&effect_request)?;
             if !matches!(
                 runtime.original_status(&effect_request)?,
                 OriginalStatus::Exited

@@ -1,5 +1,6 @@
 //! Hosted profile duplication joins the existing browser owner and private copy
 //! journal. Public requests carry intent, never process identity or profile paths.
+use super::browser_build_selection::{verify_build, ExecutableEvidence};
 use super::*;
 #[path = "profile_duplicate_copy.rs"]
 pub(super) mod profile_duplicate_copy;
@@ -22,6 +23,12 @@ struct PublicIntent {
     destination_profile_id: String,
     destination_name: String,
     launch: bool,
+    #[serde(default)]
+    target_build: Option<ExecutableEvidence>,
+    #[serde(default)]
+    target_mode: Option<String>,
+    #[serde(default)]
+    profile_data_version: Option<String>,
     #[serde(default)]
     cancelled: bool,
 }
@@ -72,6 +79,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                     "profile_duplicate_named_source_required:promote this profile first".into(),
                 );
             }
+            let target_build = self.requested_profile_build(command, &source_profile_id)?;
             let intent = PublicIntent {
                 operation_id: operation_id.to_owned(),
                 source_profile_id,
@@ -83,6 +91,15 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                     .get("launch")
                     .and_then(Value::as_bool)
                     .unwrap_or(true),
+                profile_data_version: super::browser_build_selection::profile_data_version(source),
+                target_build,
+                target_mode: match command.get("mode") {
+                    None => None,
+                    Some(Value::String(mode)) if matches!(mode.as_str(), "cdp" | "cdp_free") => {
+                        Some(mode.clone())
+                    }
+                    _ => return Err("browser_build_mode_invalid".into()),
+                },
                 cancelled: false,
             };
             connection
@@ -104,6 +121,33 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         {
             return Err("profile_duplicate_operation_id_conflict".into());
         }
+        if let Some(path) = optional_string(command, "executablePath") {
+            let canonical = Path::new(path).canonicalize().ok();
+            if intent.target_build.as_ref().is_none_or(|build| {
+                canonical
+                    .as_ref()
+                    .is_some_and(|path| path != Path::new(&build.path))
+                    || optional_string(command, "expectedSha256") != build.sha256.as_deref()
+            }) {
+                return Err(
+                    "profile_duplicate_operation_id_conflict:retain the original selected build"
+                        .into(),
+                );
+            }
+        }
+        if optional_string(command, "mode")
+            .is_some_and(|mode| Some(mode) != intent.target_mode.as_deref())
+        {
+            return Err("profile_duplicate_operation_id_conflict".into());
+        }
+        if optional_string(command, "buildId").is_some_and(|id| {
+            intent
+                .target_build
+                .as_ref()
+                .is_none_or(|build| build.id != id)
+        }) {
+            return Err("profile_duplicate_operation_id_conflict".into());
+        }
         let choice = optional_string(command, "choice").unwrap_or("prepare");
         connection.execute_batch("CREATE TABLE IF NOT EXISTS profile_duplicate_owner_bindings(id TEXT PRIMARY KEY,binding TEXT NOT NULL)").map_err(|_|"profile_duplicate_journal_unavailable")?;
         let binding_exists: bool = connection
@@ -114,12 +158,15 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             )
             .map_err(|_| "profile_duplicate_binding_read_failed")?;
         if intent.cancelled {
-            return Ok(
+            return Ok(build_view(
                 json!({"schemaVersion":"agent-browser.profile-duplication.v1","operationId":operation_id,"state":"cancelled","phase":"cancelled","actions":[]}),
-            );
+                &intent,
+            ));
         }
         if binding_exists {
-            return self.advance_profile_duplicate(command, &intent, &directory, &database);
+            return self
+                .advance_profile_duplicate(command, &intent, &directory, &database)
+                .map(|view| build_view(view, &intent));
         }
         if choice == "cancel" {
             intent.cancelled = true;
@@ -133,9 +180,10 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                     ],
                 )
                 .map_err(|_| "profile_duplicate_intent_write_failed")?;
-            return Ok(
+            return Ok(build_view(
                 json!({"schemaVersion":"agent-browser.profile-duplication.v1","operationId":operation_id,"state":"cancelled","phase":"cancelled","actions":[]}),
-            );
+                &intent,
+            ));
         }
         if !self
             .state
@@ -156,12 +204,39 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 next["choice"] = json!("prepare");
                 return self.profile_duplicate(&next);
             }
-            return Ok(
-                json!({"schemaVersion":"agent-browser.profile-duplication.v1","operationId":operation_id,"state":"source_preparation_required","phase":"source_preparation_required","source":{"id":intent.source_profile_id},"destination":{"id":intent.destination_profile_id,"name":intent.destination_name},"authenticationContinuity":"unverified","actions":[{"action":"open_source","requiresConfirmation":true},{"action":"cancel","requiresConfirmation":false}],"warning":"Open the source with the selected build to establish current clean-close custody before copying."}),
-            );
+            return Ok(build_view(
+                json!({"schemaVersion":"agent-browser.profile-duplication.v1","operationId":operation_id,"state":"source_preparation_required","phase":"source_preparation_required","source":{"id":intent.source_profile_id},"destination":{"id":intent.destination_profile_id,"name":intent.destination_name},"authenticationContinuity":"unverified","actions":[{"action":"open_source","requiresConfirmation":true},{"action":"cancel","requiresConfirmation":false}],"warning":"Open the source with its retained build for clean-close custody. The selected destination build is tested only on the independent copy."}),
+                &intent,
+            ));
         }
         self.advance_profile_duplicate(command, &intent, &directory, &database)
+            .map(|view| build_view(view, &intent))
     }
+}
+
+fn build_view(mut view: Value, intent: &PublicIntent) -> Value {
+    if let Some(build) = &intent.target_build {
+        view["selectedBuild"] = build.public();
+        view["compatibility"] = super::browser_build_selection::compatibility(
+            intent.profile_data_version.as_deref(),
+            None,
+            build,
+        );
+        view["profileDataVersion"] = json!(intent.profile_data_version);
+        view["compatibilityEvidenceSource"] = json!("prepare_snapshot");
+        view["profileDataReadable"] = json!("unverified");
+        view["credentialStorage"] = json!("unverified");
+        view["buildWarning"]=json!("Only the independent destination uses the selected build. Copying may not preserve login; verify authentication independently and sign in again if needed. Credential encryption is unchanged.");
+    }
+    if let Some(mode) = &intent.target_mode {
+        view["requestedMode"] = json!(mode);
+    }
+    view
+}
+pub(super) fn decorate_retained_build(view: Value, raw: &str) -> Result<Value, String> {
+    let intent: PublicIntent =
+        serde_json::from_str(raw).map_err(|_| "browser_build_copy_readback_invalid")?;
+    Ok(build_view(view, &intent))
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -174,6 +249,10 @@ struct OwnerBinding {
     tab: agent_browser_service_model::ManagedBrowserTab,
     executable: String,
     digest: String,
+    #[serde(default)]
+    target_build: Option<ExecutableEvidence>,
+    #[serde(default)]
+    target_mode: Option<String>,
     close_dispatched: bool,
     clean_close: bool,
     reviewed_tasks: Vec<String>,
@@ -339,6 +418,8 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 tab,
                 executable,
                 digest,
+                target_build: intent.target_build.clone(),
+                target_mode: intent.target_mode.clone(),
                 close_dispatched: false,
                 clean_close: false,
                 reviewed_tasks,
@@ -495,6 +576,44 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             .get(&browser_id)
             .cloned()
             .ok_or("profile_duplicate_destination_browser_missing")?;
+        if self.binding.target_build.is_some() || self.binding.target_mode.is_some() {
+            let identity = BrowserSessionSqliteStore::open_read_only(&self.database)?
+                .published_launch_process_identity(&browser)
+                .map_err(|_| "browser_build_destination_identity_unavailable")?
+                .ok_or("browser_build_destination_identity_unavailable")?;
+            if let Some(build) = &self.binding.target_build {
+                if identity.executable_path.as_deref() != Some(build.path.as_str()) {
+                    return Err("browser_build_loaded_path_mismatch".into());
+                }
+                #[cfg(target_os = "linux")]
+                if Some(executable_digest(Path::new(&format!(
+                    "/proc/{}/exe",
+                    identity.pid
+                )))?)
+                    != build.sha256
+                {
+                    return Err("browser_build_loaded_bytes_mismatch".into());
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    return Err(
+                        "browser_build_loaded_bytes_unverified:platform qualification required"
+                            .into(),
+                    );
+                }
+            }
+            if let Some(mode) = &self.binding.target_mode {
+                let proof = super::super::browser_session_store::mode_inspection::inspect(
+                    &browser,
+                    Some(&identity),
+                    "managed",
+                    crate::process_identity::observe_process,
+                );
+                if proof["mode"] != mode.as_str() {
+                    return Err("browser_build_destination_mode_unverified".into());
+                }
+            }
+        }
         let target = RemoteViewTabHandoffTarget {
             session,
             tab,
@@ -705,8 +824,20 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         Ok(CloseOutcome::Pending)
     }
     fn publish_profile(&mut self, profile: &DuplicateProfile) -> Result<(), String> {
+        let configured = self.binding.target_build.is_some() || self.binding.target_mode.is_some();
+        let executable = self
+            .binding
+            .target_build
+            .as_ref()
+            .map(|build| build.path.as_str())
+            .unwrap_or(&self.binding.executable);
+        let configuration =
+            configured.then_some(profile_duplicate_custody::DestinationLaunchConfiguration {
+                executable,
+                mode: self.binding.target_mode.as_deref(),
+            });
         if let Some(guard) = self.guard.borrow_mut().as_mut() {
-            guard.publish_and_release(profile)?;
+            guard.publish_and_release(profile, configuration)?;
         } else {
             let journal = DuplicationStore::open(
                 &self
@@ -718,7 +849,11 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             let operation = journal
                 .read(&profile.operation_id)?
                 .ok_or("profile_duplicate_not_found")?;
-            profile_duplicate_custody::publish_recovered_copy(&self.database, &operation)?;
+            profile_duplicate_custody::publish_recovered_copy(
+                &self.database,
+                &operation,
+                configuration,
+            )?;
         }
         self.host.catalog = self
             .host
@@ -731,21 +866,37 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             .state
             .profile_operation_ids
             .remove(&profile.source_profile_id);
-        self.host.state.profile_executables.insert(
-            profile.destination.id.clone(),
-            self.binding.executable.clone(),
-        );
+        if !configured {
+            self.host.state.profile_executables.insert(
+                profile.destination.id.clone(),
+                self.binding.executable.clone(),
+            );
+        }
         self.host.commit_state()?;
         Ok(())
     }
     fn launch_duplicate(&mut self, profile: &DuplicateProfile) -> Result<LaunchReceipt, String> {
-        if executable_digest(Path::new(&self.binding.executable))? != self.binding.digest {
-            return Err("profile_duplicate_build_changed".into());
-        }
-        self.host.effects.select_profile_browser_executable(
-            profile.destination.id.clone(),
-            self.binding.executable.clone(),
-        )?;
+        let executable = if let Some(build) = &self.binding.target_build {
+            verify_build(&build.path, build.sha256.as_deref())?;
+            if self
+                .host
+                .state
+                .profile_executables
+                .get(&profile.destination.id)
+                != Some(&build.path)
+            {
+                return Err("browser_build_destination_configuration_changed:inspect the copy or finish without opening".into());
+            }
+            build.path.clone()
+        } else {
+            if executable_digest(Path::new(&self.binding.executable))? != self.binding.digest {
+                return Err("profile_duplicate_build_changed".into());
+            }
+            self.binding.executable.clone()
+        };
+        self.host
+            .effects
+            .select_profile_browser_executable(profile.destination.id.clone(), executable)?;
         let task = self.host.open(OpenBrowserSession::exact_profile(
             duplicate_session_name(&profile.operation_id, false),
             &profile.destination.id,
@@ -1106,6 +1257,8 @@ mod tests {
             tab,
             executable: "/synthetic/build".into(),
             digest: "review-only".into(),
+            target_build: None,
+            target_mode: None,
             close_dispatched: false,
             clean_close: false,
             reviewed_tasks: vec!["task".into()],

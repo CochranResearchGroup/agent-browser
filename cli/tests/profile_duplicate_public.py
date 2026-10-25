@@ -16,6 +16,7 @@ import tempfile
 import threading
 import time
 import urllib.request
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
@@ -23,6 +24,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary', required=True)
     parser.add_argument('--chrome', required=True)
+    parser.add_argument('--public-build-adapters',action='store_true')
+    parser.add_argument('--build-target')
+    parser.add_argument('--target-mode', choices=['cdp','cdp_free'], default='cdp_free')
     parser.add_argument('--delayed-close', action='store_true')
     parser.add_argument('--borrowed-source', action='store_true')
     parser.add_argument('--launch-failure', choices=['retry', 'finish'], help='Inject permission failure on the fixture-owned Chrome executable copy')
@@ -40,7 +44,7 @@ def main():
             result = subprocess.run(['unshare', '--user', '--map-current-user', '--keep-caps', '--mount', '--net',
                 '--propagation', 'private', 'python3', str(Path(__file__).resolve()),
                 '--binary', str(Path(args.binary).resolve()), '--chrome', str(Path(args.chrome).resolve()),
-                '--namespace-worker', '--parent-proof-fd', str(read_fd), *(['--delayed-close'] if args.delayed_close else []), *(['--borrowed-source'] if args.borrowed_source else []), *(['--launch-failure', args.launch_failure] if args.launch_failure else []), *(['--restart-owner'] if args.restart_owner else []), *(['--lost-launch-reply'] if args.lost_launch_reply else [])], pass_fds=(read_fd,)).returncode
+                '--namespace-worker', '--parent-proof-fd', str(read_fd), *(['--public-build-adapters'] if args.public_build_adapters else []), *(['--build-target',str(Path(args.build_target).resolve()),'--target-mode',args.target_mode] if args.build_target else []), *(['--delayed-close'] if args.delayed_close else []), *(['--borrowed-source'] if args.borrowed_source else []), *(['--launch-failure', args.launch_failure] if args.launch_failure else []), *(['--restart-owner'] if args.restart_owner else []), *(['--lost-launch-reply'] if args.lost_launch_reply else [])], pass_fds=(read_fd,)).returncode
         finally:
             os.close(read_fd)
         raise SystemExit(result)
@@ -67,6 +71,20 @@ def main():
             else:
                 target.symlink_to(resource, target_is_directory=resource.is_dir())
         args.chrome = str(private_bundle / original_chrome.name)
+        if args.build_target:
+            original_target=Path(args.build_target).resolve()
+            target_bundle=root/'target-build';target_bundle.mkdir()
+            for resource in original_target.parent.iterdir():
+                target=target_bundle/resource.name
+                if resource==original_target:shutil.copy2(resource,target)
+                else:target.symlink_to(resource,target_is_directory=resource.is_dir())
+            args.build_target=str(target_bundle/original_target.name)
+        expected_destination=args.build_target or args.chrome
+        failure_executable=expected_destination
+        build_pair=None
+        copy_cookie_preserved=None
+        copy_auth_remediated=False
+
         sockets = root / 'x11-sockets'
         sockets.mkdir(mode=0o1777)
         sockets.chmod(0o1777)
@@ -143,7 +161,11 @@ def main():
             def log_message(self, *_):
                 pass
             def do_GET(self):
-                if self.path not in ['/seed', '/check-copy', '/write-source', '/check-source', '/check-independent']:
+                if self.path=='/copy-login':
+                    get_requests.append(dict(path=self.path,cookie=''))
+                    self.send_response(200);self.send_header('Content-Type','text/html');self.end_headers()
+                    self.wfile.write(b"<!doctype html><form method='POST' action='/copy-submit'><input name='proof'><button>Sign in</button></form>");return
+                if self.path not in ['/seed', '/check-copy', '/write-source', '/check-source', '/check-independent','/copy-auth']:
                     self.send_response(404); self.end_headers(); return
                 cookie = next((part.split('=',1)[1] for part in self.headers.get('Cookie','').split('; ') if part.startswith('ab403_session=')), '')
                 get_requests.append(dict(path=self.path, cookie=cookie))
@@ -153,6 +175,9 @@ def main():
                 self.send_header('Content-Type','text/html'); self.end_headers()
                 self.wfile.write(b'<!doctype html><title>Synthetic profile duplication</title>')
             def do_POST(self):
+                if self.path=='/copy-submit':
+                    assert self.rfile.read(int(self.headers['Content-Length']))==b'proof=synthetic-proof'
+                    self.send_response(303);self.send_header('Set-Cookie','ab403_session=fresh-copy; Max-Age=3600; Path=/; HttpOnly; SameSite=Lax');self.send_header('Location','/copy-auth');self.end_headers();return
                 body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 if self.path.startswith('/v1/agent-desktop/'):
                     operation=self.path.rsplit('/',1)[1]
@@ -177,7 +202,7 @@ def main():
                                     if action['chord'].lower()=='alt+f4':
                                         close_dispatches.append(window['pid'])
                                         if args.launch_failure and len(close_dispatches) == 1:
-                                            Path(private_chrome).chmod(0o600)
+                                            Path(failure_executable).chmod(0o600)
                                             failure_injected.set()
                                         if args.delayed_close and len(close_dispatches)==1:
                                             # Failure injection pauses ONLY this exact synthetic Chrome.
@@ -386,8 +411,18 @@ def main():
                 assert time.monotonic()<deadline,'synthetic cookie seed navigation missing';time.sleep(.02)
             source_browser=browsers()[0][0]
             operation_id='synthetic-duplicate-one'
+            target_selection={}
+            if args.build_target:
+                build_pair={}
+                for role,path in [('source',args.chrome),('target',args.build_target)]:
+                    discovered=call('browser_command',dict(action='browser_build',params=dict(profileId=source_task['profileId'],choice='inspect',executablePath=path)))
+                    digest=hashlib.file_digest(open(path,'rb'),'sha256').hexdigest()
+                    row=next(row for row in discovered['availableBuilds'] if row['sha256']==digest)
+                    assert row['available'] and row['nativeBinary'] is True and row['version'], row
+                    build_pair[role]=dict(sha256=digest,version=row['version'],family=row['family'],profileDataVersion=discovered['profileDataVersion'],credentialStorage='unverified')
+                target_selection=dict(executablePath=args.build_target,expectedSha256=build_pair['target']['sha256'],mode=args.target_mode)
             def duplicate(choice='prepare',owner=False):
-                return call('browser_command',dict(action='profile_duplicate',params=dict(operationId=operation_id,sourceProfileId=source_task['profileId'],destinationName='Independent fixture',choice=choice,ownerConfirmed=owner,launch=True)))
+                return call('browser_command',dict(action='profile_duplicate',params=dict(operationId=operation_id,sourceProfileId=source_task['profileId'],destinationName='Independent fixture',choice=choice,ownerConfirmed=owner,launch=True,**(target_selection if choice=='prepare' else {}))))
             prepared=duplicate()
             assert prepared['phase']=='awaiting_owner_choice',prepared
             assert source_task['taskId'] in prepared['affectedTaskIds'],prepared
@@ -430,7 +465,7 @@ def main():
                 assert readback['operationId'] == operation_id and readback['destination']['id'] == original_destination, readback
                 assert readback['phase'] == 'launch_absent' and not browsers(), 'inspection/restart must not launch'
                 assert failure_injected.is_set(), 'private executable failure injection must have occurred'
-                Path(private_chrome).chmod(0o755);failure_injected.clear()
+                Path(failure_executable).chmod(0o755);failure_injected.clear()
                 copied = duplicate('retry_launch' if args.launch_failure == 'retry' else 'finish_without_opening', True)
                 deadline = time.monotonic() + 15
                 while copied['phase'] != 'completed':
@@ -462,7 +497,7 @@ def main():
                         pin_states.append(json.loads(row[0]).get('profileExecutables', {}))
                 except sqlite3.Error:
                     continue
-            assert any(pins.get(copied['destination']['id']) == private_chrome for pins in pin_states), 'copied profile must retain its original exact executable pin'
+            assert any(pins.get(copied['destination']['id']) == expected_destination for pins in pin_states), 'copied profile must retain its original exact executable pin'
             assert len(close_dispatches)==1,'operation reconciliation replayed Native close'
             assert copied['source']['id']!=copied['destination']['id'],copied
             assert not Path('/proc/'+str(source_browser)).exists(),'original source process still exists'
@@ -470,6 +505,35 @@ def main():
                 assert copied['launch'] is None and not browsers(), 'finish must retain only the independent profile'
                 replay = duplicate('reconcile')
                 assert replay['phase'] == 'completed' and replay['launch'] is None and not browsers(), replay
+                if args.build_target:
+                    # The completed copy is reused through its published lineage,
+                    # rather than copied again or replaced by an empty directory.
+                    copied_id=copied['destination']['id']
+                    evidence=call('browser_command',dict(action='browser_build',params=dict(profileId=copied_id,choice='inspect',executablePath=private_chrome)))
+                    selected=next(row for row in evidence['availableBuilds'] if row['sha256']==build_pair['source']['sha256'])
+                    selection_request=dict(profileId=copied_id,operationId='copy-alternate-build',choice='select_for_next_launch',mode='cdp_free',ownerConfirmed=True,**selected['selection'])
+                    if args.public_build_adapters:
+                        cli_reply=subprocess.run([str(Path(args.binary).resolve()),'--json','mcp','browser-build',json.dumps(selection_request)],env=env,capture_output=True,text=True,timeout=30)
+                        assert cli_reply.returncode==0,cli_reply.stdout+cli_reply.stderr
+                        selected_receipt=json.loads(cli_reply.stdout)['data']
+                    else:selected_receipt=call('browser_command',dict(action='browser_build',params=selection_request))
+                    assert selected_receipt['phase']=='selected_for_next_launch'
+                    opening_request=dict(profileId=copied_id,operationId='copy-alternate-build',choice='open_selected',serviceName='fixture',agentName='fixture',taskName='Retained independent copy')
+                    if args.public_build_adapters:
+                        stream_reply=subprocess.run([str(Path(args.binary).resolve()),'--json','stream','enable'],env=env,capture_output=True,text=True,timeout=30)
+                        assert stream_reply.returncode==0,stream_reply.stdout+stream_reply.stderr
+                        port=json.loads(stream_reply.stdout)['data']['port']
+                        wire_request=urllib.request.Request('http://127.0.0.1:'+str(port)+'/api/command',data=json.dumps(dict(opening_request,action='browser_session_build_select')).encode(),headers={'Content-Type':'application/json'})
+                        with urllib.request.urlopen(wire_request,timeout=30) as response:payload=json.load(response)
+                        assert payload['success'],payload
+                        opened_copy=payload['data']
+                    else:opened_copy=call('browser_command',dict(action='browser_build',params=opening_request))
+                    assert opened_copy['phase']=='opened',opened_copy
+                    assert len(browsers())==1 and os.readlink('/proc/'+str(browsers()[0][0])+'/exe')==private_chrome
+                    assert independent_marker.read_bytes()==b'destination-retained-across-recovery'
+                    assert {str(path.relative_to(profile)):hashlib.sha256(path.read_bytes()).hexdigest() for path in profile.rglob('*') if path.is_file() and not path.is_symlink()}==source_bytes,'opening retained copy changed original source'
+                    call('browser_close',dict(taskId=opened_copy['taskId']))
+                    assert not browsers()
                 task = None
             else:
                 receipt=copied['launch'];assert receipt['taskId']!=source_task['taskId'] and receipt['browserId']!=source_task['browserId'],copied
@@ -477,7 +541,7 @@ def main():
                     assert receipt['handoffId'] != source_task['handoffUrl'].rsplit('/', 1)[-1], 'copy cloned the original handoff'
                 duplicate_task=receipt['taskId']
                 assert len(browsers())==1,'copy should launch only destination; source must reopen only when selected'
-                assert os.readlink('/proc/'+str(browsers()[0][0])+'/exe') == private_chrome, 'destination must execute its original exact pinned build'
+                assert os.readlink('/proc/'+str(browsers()[0][0])+'/exe') == expected_destination, 'destination must execute its original exact pinned build'
                 assert browsers()[0][0] in native_observed_pids,'completed launch lacks qualified Native window readiness'
                 def native_visit(task_id,path):
                     call('browser_command',dict(taskId=task_id,action='native_input',params=dict(actions=[dict(kind='key',chord='ctrl+l'),dict(kind='text',text=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+path),dict(kind='key',chord='Return')])))
@@ -485,7 +549,21 @@ def main():
                     while not any(record['path']==path for record in get_requests):
                         assert time.monotonic()<deadline,'native navigation missing: '+path;time.sleep(.02)
                     return next(record['cookie'] for record in get_requests if record['path']==path)
-                assert native_visit(duplicate_task,'/check-copy')=='initial','duplicate lost the synthetic authenticated cookie'
+                copy_cookie_preserved=native_visit(duplicate_task,'/check-copy')=='initial'
+                if args.build_target:
+                    observed=call('browser_command',dict(taskId=duplicate_task,action='mode'))
+                    assert observed['mode']==args.target_mode, observed
+                    assert hashlib.file_digest(open('/proc/'+str(browsers()[0][0])+'/exe','rb'),'sha256').hexdigest()==build_pair['target']['sha256']
+                    if not copy_cookie_preserved:
+                        native_visit(duplicate_task,'/copy-login')
+                        time.sleep(.3)
+                        call('browser_command',dict(taskId=duplicate_task,action='native_input',params=dict(actions=[dict(kind='key',chord='ctrl+Home'),dict(kind='key',chord='Tab'),dict(kind='text',text='synthetic-proof'),dict(kind='key',chord='Return')])))
+                        deadline=time.monotonic()+10
+                        while not any(record['path']=='/copy-auth' for record in get_requests):
+                            assert time.monotonic()<deadline,'fresh copy login not independently observed';time.sleep(.02)
+                        assert next(record['cookie'] for record in get_requests if record['path']=='/copy-auth')=='fresh-copy'
+                        copy_auth_remediated=True
+                else:assert copy_cookie_preserved,'duplicate lost the synthetic authenticated cookie'
                 if args.launch_failure or args.lost_launch_reply:
                     replay = duplicate('reconcile')
                     assert replay['launch'] == receipt and len(browsers()) == 1, 'recovery replay launched or reopened a browser'
@@ -495,7 +573,7 @@ def main():
                 else:
                     source_reopened=call('browser_open',dict(request,taskKey='source-reopened',url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/write-source'))
                     assert len(browsers())==2,'source and independent duplicate must coexist'
-                    assert all(os.readlink('/proc/'+str(pid)+'/exe') == private_chrome for pid, _ in browsers()), 'concurrent source and duplicate must use the exact same pinned build'
+                    assert all(os.readlink('/proc/'+str(pid)+'/exe') == (private_chrome if '--user-data-dir='+str(profile) in argv else expected_destination) for pid,argv in browsers()), 'concurrent source and copy must retain their independent selected builds'
                     deadline=time.monotonic()+10
                     while not any(record['path']=='/write-source' for record in get_requests):
                         assert time.monotonic()<deadline,'source write navigation missing';time.sleep(.02)
@@ -505,7 +583,7 @@ def main():
                     destination_pid=next(pid for pid,_ in browsers() if pid!=next(pid for pid,argv in browsers() if '--user-data-dir='+str(profile) in argv))
                     destination_window=next(window for window in windows() if window['pid']==destination_pid)
                     assert run(['xdotool','windowactivate','--sync',str(destination_window['id'])]).returncode==0
-                    assert native_visit(duplicate_task,'/check-independent')=='initial','source mutation leaked into the copied profile'
+                    assert native_visit(duplicate_task,'/check-independent')==('fresh-copy' if copy_auth_remediated else 'initial'),'source mutation leaked into the copied profile'
                     paths=[re.search(r'--user-data-dir=([^ ]+)',argv).group(1) for _,argv in browsers()]
                     assert len(set(paths))==2,'two browsers shared a writable profile directory'
                     assert len({os.stat(path).st_ino for path in paths})==2,'profile directories are not independent'
@@ -526,7 +604,7 @@ def main():
             raise
         finally:
             if failure_injected.is_set():
-                Path(private_chrome).chmod(0o755);failure_injected.clear()
+                Path(failure_executable).chmod(0o755);failure_injected.clear()
             # Only children and processes carrying this exact disposable namespace.
             if mcp and mcp.poll() is None:
                 mcp.terminate()
@@ -566,8 +644,8 @@ def main():
                 time.sleep(.02)
         print(json.dumps(dict(passed=True,scope='public MCP profile_duplicate, real Chrome/X11, synthetic Native owner',
             nativeGracefulClose=True,independentProfiles=True,concurrentBrowsers=not args.launch_failure and not args.lost_launch_reply,sourcePreserved=True,
-            syntheticCookieContinuity=args.launch_failure!='finish',divergentWrites=not args.launch_failure and not args.lost_launch_reply,replayPreserved=True,cleanupVerified=True,
-            launchFailureRecovery=args.launch_failure,ownerRestart=args.restart_owner,lostLaunchReply=args.lost_launch_reply)))
+            syntheticCookieContinuity=copy_cookie_preserved,buildPair=build_pair,targetMode=args.target_mode if args.build_target else None,copyLoginRemediated=copy_auth_remediated,credentialEncryptionModified=False,divergentWrites=not args.launch_failure and not args.lost_launch_reply,replayPreserved=True,cleanupVerified=True,
+            publicBuildAdapters=args.public_build_adapters,launchFailureRecovery=args.launch_failure,ownerRestart=args.restart_owner,lostLaunchReply=args.lost_launch_reply)))
 
 
 if __name__ == '__main__':

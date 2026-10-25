@@ -4,27 +4,27 @@ State: OPEN
 Product lane: PL-PLATFORM
 Accountable owner: ecochran76
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/400
-Work items: #401, #402 and #403 under spec #400; #404 remains blocked
-Integration branch: platform/spec400-children-closeout
+Work items: #401–404 under spec #400; only #404 remains open
+Integration branch: platform/spec400-build-selection-404
 Base: 07fb4c9cb020bb6349d3faf1efcd152cc34fd9ee
 Historical fourth-window deadline: 2026-10-24T23:23:20Z. The later repair continuation has no newly specified fixed allowance.
 
 ## Current State
 
-#401 is closed with merged inspection provenance and fresh mounted acceptance.
-Repairs #424–429 are closed through PR408/435. One worker each completed #402
-and #403; [PR436](https://github.com/CochranResearchGroup/agent-browser/pull/436)
-now carries their fully qualified conversion and independent-copy outcomes.
-Root owns integration and tracker closure. #404 remains gated until their
-merged closure is observed, then root takes that next ticket. Parent #400 stays
-open until all four children are complete.
+#401, #402 and #403 are closed. PR436 merged as
+`ba5cda65cc47073e0b53bd6af3b4d61fecf4bf51`; fresh native dependency readback
+shows both #404 prerequisites closed. Repairs #424–429 remain closed. Root now
+owns #404 alone on `platform/spec400-build-selection-404`, reusing the clean
+primary checkout from refreshed main. Both prior one-ticket workers completed
+and their auxiliary checkouts were removed through governed operations.
 
-[The qualification note](../notes/0283-2026-10-25-spec400-repairs.md) records
-the exact candidate, all criteria, actual Native/X11 workflows, observed
-force-close login loss, retained failed fixtures and evidence reuse limits.
-Both temporary child auxiliaries are closed through governed operations; the
-primary remains for #404. Foreign dirty work and excluded Xlib work remain
-untouched. There is no installed, private-account or production claim.
+The next bounded outcome is owner-directed executable selection and compatibility
+remediation through equivalent rail/MCP/CLI/HTTP controls. Mode and independent
+copy operations remain the physical lifecycle owners. No new viewer, provider
+authority, private-account use, production installation or CI dispatch.
+[Prior qualification](../notes/0283-2026-10-25-spec400-repairs.md) preserves
+the exact candidate, actual workflows, force-close login loss and failed receipts.
+Parent #400 stays open until #404 is qualified and merged.
 
 ## Packet and seams
 
@@ -363,3 +363,132 @@ paths retain strict continuity. Two fixture-only corrections after freeze
 select the exact original tab and report positive force loss honestly. No
 production source changed after the frozen candidate. PR436 closes402/403;
 401 is already closed. Next bounded outcome is404 after native graph readback.
+
+## Executable selection child #404
+
+Product lane: PL-PLATFORM. Owner: root. Base: merged PR436
+`ba5cda65cc47073e0b53bd6af3b4d61fecf4bf51`. No new checkout or worker is
+needed because only this implementation child is unblocked.
+
+Deliver one browser-build selection contract for a named profile or exact task.
+Read-only discovery returns available Chrome/Chromium build/version evidence
+and explicit uncertainty for profile storage and credentials. Review offers an
+independent duplicate-and-test, another build, confirmed original-profile
+attempt, or cancellation. An original live-profile switch delegates its exact
+close/replacement to the existing mode operation. Independent copying delegates
+to the existing copy operation; it never shares a writable directory. Offline
+profile selection records the build for an explicit subsequent open.
+
+Family/version policy is advisory. Missing executables and changed build
+identity remain technical failures with executable remediation; confirmation
+does not invent readiness. Selected mode is independent of build. Previous
+executable recovery does not restore migrated profile bytes. Credential storage
+is never weakened, exported or replaced to make a test pass.
+
+Stable seams: owner/public request tests catch profile/build binding, warnings,
+confirmation and no-effect discovery; mode/copy contracts catch durable replay
+and replacement recovery; mounted UI proves executable choices and fresh
+confirmation; a versioned real-browser fixture proves only exact tested pairs,
+independent synthetic-cookie observations and cleanup. Local baseline readbacks
+are Chrome153.0.8010.52 and Chromium150.0.7835.0, rechecked at qualification.
+Technical or login-loss outcomes must remain explicit instead of being called
+portable authentication. Source and installed qualification remain separate.
+
+Completion requires all nine #404 criteria, matching documentation/help/client
+contracts, required Rust quality and affected tests, actual isolated workflows,
+a merged PR and fresh tracker readback. Preserve previous review budgets and
+failed evidence. No second broad review is implied by this packet.
+
+### Build selection implementation checkpoint
+
+Read-only inspection and offline future-launch selection are implemented through
+`1b8968758`. The focused owner lane passes two tests after preserved behavioral
+reds. Inspection reads a fresh owner snapshot without refresh or browser effects;
+credential storage and profile readability remain explicitly unverified. Offline
+selection requires owner confirmation and a reviewed executable SHA-256. Its pin,
+independent mode intent and idempotent receipt commit in one runtime transaction.
+A restarted replay returns the historical receipt without overwriting a later
+selection. No browser launch or Native input occurs in this path.
+
+This is an intermediate source checkpoint. Public adapters, live original-profile
+switching, selected-build duplication, UI and actual pair qualification remain
+pending. The ticket and parent remain open. The next focused invariant is that
+previous-configuration recovery launches the retained previous executable while
+preserving the selected target in the original operation history. This recovery
+must never be described as restoring migrated profile bytes.
+
+### Existing-copy remediation and launch continuity
+
+A failed copy launch already supports finishing the published copy without
+opening it. Reuse that bounded outcome for another-build remediation: complete
+the original copy operation without another launch, choose a build for the
+preserved destination profile, and explicitly open that existing profile. Do not
+recopy it or introduce another copy-execution authority. The rail must expose
+these concrete continuations and retain unknown outcomes for readback.
+
+The public open adapter must recognize a positively published independent copy
+from the Browser Runtime catalog without creating a second runtime directory or
+inventing a Service profile registration. Existing Service profiles retain their
+normal path. An unspecified open mode preserves an existing recorded profile
+posture; a new profile still defaults to CDP. Explicit automation or No-CDP
+selection remains independent of the executable. This prevents a build-only
+choice from silently enabling CDP during the next open.
+
+### Shared guidance overlap
+
+The retained P279 authentication/receipts checkout has uncommitted changes in
+README, CLI help and the primary skill. Its authentication/playbook sections
+remain with that lane. P283 is the primary writer for browser profile/build
+sections, the MCP command help section and `cli-and-service.md` profile guidance.
+These are separate section surfaces in shared files. Preserve the foreign
+checkout and reconcile additive documentation hunks at integration; do not take
+custody of its authentication code or guidance. P283 leaves package metadata
+and authentication references with P279.
+
+The build contract also exposes explicit `open_selected` as an adapter to the
+existing managed-open path. A selection receipt binds profile, current executable
+pin, reviewed SHA-256 and independent mode. The ordinary open path accepts
+`buildSelectionOperationId` for that same verification. Repeated opening uses a
+stable task name; build operations do not replay website actions. Actual loaded
+bytes and mode are checked before a selected opening can report success.
+
+### Build chooser integration checkpoint, 2026-10-25
+
+Ticket 404 now exposes opaque reviewed build choices through rail, MCP, CLI and
+HTTP adapters. Profile, build and mode choices stay independent. The rail routes
+running-profile effects through the existing mode operation, and copy effects
+through the existing duplication lifecycle. A completed preserved copy can be
+selected and explicitly opened through its published identity. Reload reads
+retained owner evidence. No client-side executable paths or profile data are
+persisted.
+
+Focused owner checks and mounted rail choices pass. Dashboard and client checks
+pass. Actual cross-build synthetic qualification and final batch gates remain
+pending. First failure logs are retained outside Git, including strict Clippy's
+unnecessary-closure finding. This checkpoint is not acceptance or runtime install
+proof. Production and the foreign authentication lane remain untouched.
+
+### Build acceptance boundary correction
+
+Candidate v1 qualified both original-profile Chrome153 and Chromium150 mode
+roundtrips, version/hash provenance, public CLI/HTTP discovery, independent
+synthetic cookie/auth checks, unrelated-process preservation and cleanup. Seven
+no-launch service checks also passed. The first copy-build case then exposed a
+public MCP guard defect: profile-only build discovery rejected its declared
+`params.profileId` before reaching the adapter. That actual failure and its
+focused unit red are retained. Root is narrowing the reserved-field guard only
+for the build adapter's declared profile target and open-selected agent metadata;
+route and principal reservations remain covered. A replacement candidate must
+qualify the copy and public selection/open paths before ticket closure.
+
+### Ticket #404 qualified for integration
+
+All nine #404 criteria are source-qualified. Eight actual versioned Chrome/Chromium
+workflows, independent namespace cleanup, 149 MCP tests, 15 mode contracts, 13 copy
+contracts, rail/reload, dashboard/docs/client/parity, workspace format and strict
+Clippy pass. Final optimized candidate 283a5a768f13cc3956f85a9863882bb5f1cc33596613fc1b749204bd55bb2b02
+retains 16 tools, 14871 schema bytes and 3991 help bytes. The exact static-help-only
+diff from the runtime-qualified candidate 40fcbc7b is recorded for policy 0042
+reuse. See the qualification note for pair versions, hashes, first failures and
+limits. PR439 integrates #404; parent #400 remains pending aggregate verification
+after child merge. No production or shared runtime publication occurred.

@@ -62,7 +62,7 @@ pub(super) fn tools() -> Vec<Value> {
             "description":"Run a supported advanced operation in this task. Use browser_discover for operation names and arguments. Retired authority operations are unavailable.",
             "inputSchema":{"type":"object","additionalProperties":false,
                 "properties":{"taskId":{"type":"string"},"action":{"type":"string"},
-                    "params":{"type":"object"},"policyOverrideId":{"type":"string"},"requestId":{"type":"string"}},"required":["action"],"anyOf":[{"required":["taskId"]},{"properties":{"action":{"const":"profile_duplicate"}},"required":["params"]}]}}),
+                    "params":{"type":"object"},"policyOverrideId":{"type":"string"},"requestId":{"type":"string"}},"required":["action"],"anyOf":[{"required":["taskId"]},{"properties":{"action":{"enum":["profile_duplicate","browser_build"]}},"required":["params"]}]}}),
         json!({"name":"browser_discover","title":"Discover advanced operations",
             "description":"Read supported browser, diagnostic or administrative operation metadata on demand. Select an operation for its argument schema and CLI/API guidance.",
             "inputSchema":{"type":"object","additionalProperties":false,
@@ -107,7 +107,7 @@ pub(super) fn discover(arguments: &Value, session: &str) -> Result<Value, super:
         let schema = operation_schema(category, operation)?;
         json!({"category":category,"operation":operation,"inputSchema":schema,
             "execution":if category == "browser" {json!({"tool":"browser_command","action":operation,
-                "arguments":if operation == "profile_duplicate" {"Supply params.sourceProfileId, or taskId to bind the source profile. Supply params.operationId except for choice inspect, which lists matching operations."} else {"Place these page arguments in params and supply taskId."}})}
+                "arguments":if operation=="browser_build" {"Supply params.profileId or taskId. inspect needs no operationId; open_selected continues a confirmed selection and requires serviceName, agentName and taskName."} else if operation == "profile_duplicate" {"Supply params.sourceProfileId, or taskId to bind the source profile. Supply params.operationId except for choice inspect, which lists matching operations."} else {"Place these page arguments in params and supply taskId."}})}
                 else {service_execution(operation)}})
     } else {
         json!({"category":category,"operations":names,"next":"Request one operation for its argument schema."})
@@ -205,13 +205,16 @@ fn operation_schema(category: &str, operation: &str) -> Result<Value, super::Jso
                 Some(json!({"type":"object",
                 "additionalProperties":false,"properties":{},"required":[]}))
             }
+            "browser_build"=>Some(json!({"type":"object","additionalProperties":false,"properties":{
+                "profileId":{"type":"string","minLength":1},"operationId":{"type":"string","minLength":1},"choice":{"enum":["inspect","select_for_next_launch","open_selected"]},"buildId":{"type":"string"},"executablePath":{"type":"string"},"expectedSha256":{"type":"string"},"mode":{"enum":["cdp","cdp_free"]},"ownerConfirmed":{"type":"boolean"},"serviceName":{"type":"string"},"agentName":{"type":"string"},"taskName":{"type":"string"}
+            }})),
             "mode_convert" => Some(json!({"type":"object","additionalProperties":false,"properties":{
                 "operationId":{"type":"string","minLength":1},"mode":{"enum":["cdp","cdp_free"]},
-                "choice":{"enum":["inspect","prepare","relaunch","pause_and_relaunch","reconcile","retry_graceful_close","force_close","focus","restore_previous","cancel"]},"ownerConfirmed":{"type":"boolean"}
+                "choice":{"enum":["inspect","prepare","relaunch","pause_and_relaunch","reconcile","retry_graceful_close","force_close","focus","restore_previous","select_build","cancel"]},"ownerConfirmed":{"type":"boolean"},"buildId":{"type":"string"},"executablePath":{"type":"string"},"expectedSha256":{"type":"string"}
             },"allOf":[{"if":{"properties":{"choice":{"const":"inspect"}},"required":["choice"]},"then":{},"else":{"required":["operationId","mode"]}}]})),
             "profile_duplicate" => Some(json!({"type":"object","additionalProperties":false,"properties":{
                 "operationId":{"type":"string","minLength":1},"sourceProfileId":{"type":"string","minLength":1},"destinationName":{"type":"string","minLength":1},
-                "choice":{"enum":["inspect","prepare","reconcile","retry_launch","finish_without_opening","open_source","focus_source","close_and_duplicate","cancel"]},"ownerConfirmed":{"type":"boolean"},"launch":{"type":"boolean"}
+                "choice":{"enum":["inspect","prepare","reconcile","retry_launch","finish_without_opening","open_source","focus_source","close_and_duplicate","cancel"]},"ownerConfirmed":{"type":"boolean"},"launch":{"type":"boolean"},"buildId":{"type":"string"},"executablePath":{"type":"string"},"expectedSha256":{"type":"string"},"mode":{"enum":["cdp","cdp_free"]}
             },"allOf":[{"if":{"properties":{"choice":{"const":"inspect"}},"required":["choice"]},"then":{},"else":{"required":["operationId"]}}]})),
             "native_capture" => Some(json!({"type":"object","additionalProperties":false,"properties":{"region":{"type":"object","properties":{"x":{"type":"integer"},"y":{"type":"integer"},"width":{"type":"integer","minimum":1},"height":{"type":"integer","minimum":1}},"required":["x","y","width","height"],"additionalProperties":false}},"required":[]})),
             "native_input" => Some(json!({"type":"object","additionalProperties":false,"properties":{"actions":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"object"}},"controlEpoch":{"type":"integer","minimum":0}},"required":["actions"]})),
@@ -224,7 +227,9 @@ fn operation_schema(category: &str, operation: &str) -> Result<Value, super::Jso
                 "Argument metadata is unavailable for this operation; use agent-browser --help",
             )
         })?;
-    if category == "browser" {
+    // The build adapter declares its own narrow profile/open context. Applying
+    // the generic page-only projection would remove fields that it requires.
+    if category == "browser" && operation != "browser_build" {
         if let Some(properties) = schema["properties"].as_object_mut() {
             properties.retain(|name, _| schema_property_is_page_argument(name));
         }

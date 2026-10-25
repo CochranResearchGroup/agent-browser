@@ -138,10 +138,8 @@ After upgrades, reconnect MCP clients; doctor checks `installedMcpClients`.
 
 Startup: [diagnostics](references/cli-and-service.md#development-host-startup).
 
-## Read browser mode
+## Browser mode and builds
 
-Use `browser_command`/`taskId` action `mode`. Native needs readiness and scoped grants. Discover `mode_convert`/`profile_duplicate`. Inspect originals after reload; `historyTruncated` marks omitted history. Completion needs a new conversion. Pause before relaunch; reconcile. [Controls](references/cli-and-service.md#browser-mode-inspection).
+Use `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build family/version and CDP mode are independent. Inspect before choosing; copy success never proves login portability. Read [controls and recovery](references/cli-and-service.md#browser-build-selection) before changing a build. Reconcile original operations after lost replies.
 
-Diagnostics retain `?view=service:<name>` and selection query fields.
-
-Rail startup revalidates at 250/500/1000 ms while presence is unknown; then polls every three seconds.
+Diagnostics retain selection query fields. Rail presence revalidates at 250/500/1000 ms, then polls every three seconds.

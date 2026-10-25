@@ -27,6 +27,9 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.getByRole('menuitem', {name:'Relaunch without CDP',exact:true}).waitFor({timeout:750});
     await page.getByRole('menuitem', {name:'Relaunch with CDP',exact:true}).waitFor({timeout:750});
     await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Browser mode for Synthetic browser: No CDP', exact: true }).click();
+    await page.getByRole('menuitem', {name:'Choose browser build',exact:true}).waitFor({timeout:750});
+    await page.keyboard.press('Escape');
     const commands=[];
     await page.route('**/api/command',async route=>{
       const command=route.request().postDataJSON();if(command.choice==='inspect'){await route.fulfill({json:{success:true,data:{schemaVersion:'agent-browser.browser-operations.v1',kind:'profile_duplicate',profileId:'profile',browserId:'browser',taskId:'task-one',operations:[]}}});return;}commands.push(command);
@@ -86,6 +89,97 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.getByRole('menuitem',{name:'Relaunch without CDP',exact:true}).click();
     await page.getByText('task-two',{exact:true}).waitFor({timeout:750});
     assert.equal(modeCommands.length,3,'closing and reopening retains the operation without a new effect');
+    await page.getByRole('button',{name:'Close',exact:true}).click();
+    // Build discovery is read-only; a family/version warning cannot veto an owner choice.
+    await page.unroute('**/api/command');
+    const buildCommands=[];
+    let selectedReceipt=null;
+    let loseSelectionReply=true;
+    let activeBuildTasks=[];
+    const choice={buildId:'build:synthetic',expectedSha256:'a'.repeat(64)};
+    const build={id:choice.buildId,name:'chromium',family:'chromium',version:'150.0.0.0',available:true,nativeBinary:true,selection:choice,compatibility:{versionRelation:'older',familyRelation:'different'}};
+    await page.route('**/api/command',async route=>{
+      const command=route.request().postDataJSON(); buildCommands.push(command);
+      if(command.action==='browser_session_build_select' && command.choice==='inspect') {
+        await route.fulfill({json:{success:true,data:{schemaVersion:'agent-browser.build-selection.v1',profileId:command.profileId,profileDataVersion:'153.0.0.0',nextLaunchMode:'cdp_free',availableBuilds:[build],activeTasks:activeBuildTasks,currentSelectionOperationId:selectedReceipt}}});return;
+      }
+      if(command.action==='browser_session_build_select') {
+        selectedReceipt=command.operationId;
+        if(command.choice==='select_for_next_launch' && loseSelectionReply){loseSelectionReply=false;await route.abort('failed');return;}
+        await route.fulfill({json:{success:true,data:{schemaVersion:'agent-browser.build-selection.v1',operationId:command.operationId,phase:command.choice==='open_selected'?'opened':'selected_for_next_launch'}}});return;
+      }
+      if(command.choice==='inspect') {
+        await route.fulfill({json:{success:true,data:{schemaVersion:'agent-browser.browser-operations.v1',kind:command.kind,profileId:command.sourceProfileId ?? 'profile',taskId:command.sessionId,browserId:command.browserId,operations:[]}}});return;
+      }
+      if(command.kind==='profile_duplicate') {
+        await route.fulfill({json:{success:true,data:{schemaVersion:'agent-browser.profile-duplication.v1',operationId:command.operationId,phase:command.choice==='close_and_duplicate'?'completed':'prepared',profilePublished:command.choice==='close_and_duplicate',destination:{id:'copy-target',name:'Independent copy'},actions:command.choice==='close_and_duplicate'?[]:[{action:'close_and_duplicate',requiresConfirmation:true},{action:'cancel',requiresConfirmation:false}]}}});return;
+      }
+      await route.fulfill({json:{success:true,data:{schemaVersion:command.kind==='mode_convert'?'agent-browser.mode-operation.v1':'agent-browser.profile-duplication.v1',operationId:command.operationId,phase:'prepared',actions:[{action:'cancel',requiresConfirmation:false}]}}});
+    });
+    const openBuild=async()=>{
+      await page.getByRole('button',{name:'Browser mode for Synthetic browser: No CDP',exact:true}).click();
+      await page.getByRole('menuitem',{name:'Choose browser build',exact:true}).click();
+      await page.getByRole('dialog',{name:'Choose browser build',exact:true}).waitFor();
+      await page.getByRole('radio',{name:'chromium 150.0.0.0',exact:true}).check();
+    };
+    await openBuild();
+    assert.equal(buildCommands.filter(command=>command.choice!=='inspect').length,0,'discovery has no browser/profile effect');
+    assert.match(await page.getByRole('dialog').innerText(),/does not restore profile bytes/);
+    assert.equal(await page.getByRole('radio',{name:'No CDP',exact:true}).isChecked(),true,'build discovery preserves independent mode intent');
+    await page.getByRole('radio',{name:'CDP',exact:true}).check();
+    await page.getByRole('checkbox',{name:'Confirm build migration and login risk'}).check();
+    await page.getByRole('button',{name:'Select for next launch',exact:true}).click();
+    await page.getByText(/Refresh browser builds to read retained selection/).waitFor();
+    assert.equal(await page.getByRole('button',{name:'Select for next launch',exact:true}).isEnabled(),false,'lost reply fences further selection effects');
+    await page.getByRole('button',{name:'Refresh browser builds',exact:true}).click();
+    await page.getByRole('button',{name:'Open saved build selection',exact:true}).waitFor();
+    const selection=buildCommands.find(command=>command.choice==='select_for_next_launch');
+    assert.deepEqual({buildId:selection.buildId,expectedSha256:selection.expectedSha256,mode:selection.mode,ownerConfirmed:selection.ownerConfirmed},{...choice,mode:'cdp',ownerConfirmed:true});
+    assert.equal(selection.executablePath,undefined,'the rail uses an opaque reviewed choice');
+    await page.getByRole('button',{name:'Close',exact:true}).click();
+    await openBuild();
+    await page.getByRole('button',{name:'Open saved build selection',exact:true}).click();
+    await page.getByText(/opened\. Login/).waitFor();
+    assert.equal(buildCommands.find(command=>command.choice==='open_selected').operationId,selectedReceipt,'reopening reads the retained selection');
+    await page.getByRole('button',{name:'Duplicate and test selected build',exact:true}).click();
+    await page.getByRole('button',{name:'Review duplication',exact:true}).click();
+    await page.getByRole('button',{name:'Cancel operation',exact:true}).waitFor();
+    const duplicateBuild=buildCommands.find(command=>command.action==='browser_session_profile_duplicate' && command.choice==='prepare');
+    assert.equal(duplicateBuild.buildId,choice.buildId); assert.equal(duplicateBuild.mode,'cdp_free');
+    await page.getByRole('checkbox',{name:'Confirm the selected browser action'}).check();
+    await page.getByRole('button',{name:'Close source and duplicate',exact:true}).click();
+    await page.getByRole('button',{name:'Choose another build for this copy',exact:true}).click();
+    await page.getByRole('radio',{name:'chromium 150.0.0.0',exact:true}).check();
+    assert.equal(buildCommands.filter(command=>command.action==='browser_session_build_select' && command.choice==='inspect').at(-1).profileId,'copy-target');
+    await page.getByRole('button',{name:'Duplicate and test selected build',exact:true}).click();
+    await page.getByRole('button',{name:'Review duplication',exact:true}).click();
+    await page.getByRole('button',{name:'Cancel operation',exact:true}).waitFor();
+    const copyFromCopy=buildCommands.filter(command=>command.action==='browser_session_profile_duplicate' && command.choice==='prepare').at(-1);
+    assert.equal(copyFromCopy.sourceProfileId,'copy-target');
+    assert.equal(copyFromCopy.browserId,undefined,'an independent copy must never inherit the source browser scope');
+
+    await page.getByRole('button',{name:'Close',exact:true}).click();
+    await page.getByRole('button',{name:'Close',exact:true}).click();
+    await openBuild();
+    // A user-entered custom path is submitted only after its own inspection;
+    // opaque installed choices still expose no path.
+    await page.getByRole('textbox',{name:'Other browser executable'}).fill('/reviewed/custom/chrome');
+    await page.getByRole('button',{name:'Inspect executable',exact:true}).click();
+    await page.getByRole('radio',{name:'chromium 150.0.0.0',exact:true}).check();
+    await page.getByRole('checkbox',{name:'Confirm build migration and login risk'}).check();
+    await page.getByRole('button',{name:'Select for next launch',exact:true}).click();
+    await page.getByText(/selected_for_next_launch\. Login/).waitFor();
+    assert.equal(buildCommands.filter(command=>command.choice==='select_for_next_launch').at(-1).executablePath,'/reviewed/custom/chrome');
+    await page.getByRole('button',{name:'Close',exact:true}).click();
+    activeBuildTasks=[{id:'task-one',name:'synthetic-owner',browserId:'browser'}];
+    await openBuild();
+    await page.getByRole('radio',{name:'No CDP',exact:true}).check();
+    await page.getByRole('button',{name:'Review original profile relaunch',exact:true}).click();
+    await page.getByRole('button',{name:'Review relaunch',exact:true}).click();
+    await page.getByRole('button',{name:'Cancel operation',exact:true}).waitFor();
+    const relaunchBuild=buildCommands.find(command=>command.action==='browser_session_mode_convert' && command.choice==='prepare');
+    assert.equal(relaunchBuild.buildId,choice.buildId); assert.equal(relaunchBuild.mode,'cdp_free');
+    await page.getByRole('button',{name:'Close',exact:true}).click();
     await page.getByRole('button',{name:'Close',exact:true}).click();
     // A stopped or failed inventory poll must not leave a verified mode forever.
     await page.clock.fastForward(31_000);

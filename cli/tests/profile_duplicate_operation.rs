@@ -643,196 +643,233 @@ mod profile_duplicate_custody;
 use profile_duplicate_custody as custody;
 #[test]
 fn qualified_graceful_source_custody_fences_launch_writes_and_publishes_on_its_connection() {
-    use rusqlite::{params, Connection};
-    let root = std::env::temp_dir().join(format!("duplicate-custody-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(root.join("source")).unwrap();
-    std::fs::create_dir(root.join("duplicate")).unwrap();
-    let database = root.join("runtime.sqlite3");
-    let db = Connection::open(&database).unwrap();
-    db.execute_batch("CREATE TABLE state_documents(kind TEXT PRIMARY KEY,schema_version TEXT NOT NULL,json TEXT NOT NULL);PRAGMA user_version=2;").unwrap();
-    let source = copy::SourceProfile {
-        id: "source".into(),
-        name: "Source".into(),
-        user_data_dir: root.join("source"),
-        browser_build: "same-build".into(),
-        generation: 1,
-    };
-    let original = agent_browser_service_model::RecordedProcessIdentity {
-        pid: 42,
-        start_token: "boot:42:original".into(),
-        executable_path: Some("/synthetic/chrome".into()),
-        browser_family: Some("chrome".into()),
-    };
-    let assignment: serde_json::Value = serde_json::from_str(include_str!(
-        "../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
-    ))
-    .unwrap();
-    let mut record = agent_browser_service_model::BrowserLaunchCustodyRecord::pending(
-        agent_browser_service_model::BrowserLaunchIntent {
-            intent_id: uuid::Uuid::new_v4().to_string(),
-            profile_id: "source".into(),
-            assignment: serde_json::from_value(assignment["assignment"].clone()).unwrap(),
-        },
-    )
-    .unwrap();
-    record.observed_browser_id = Some("original-browser".into());
-    record.observed_pid = Some(42);
-    record.observed_process_identity = Some(original.clone());
-    record.published = true;
-    let catalog = serde_json::json!({"schemaVersion":"agent-browser.browser-profile-catalog.v1","profiles":{"source":{"id":"source","name":"Source","userDataDir":source.user_data_dir,"kind":"named","manualLoginUrl":"https://synthetic.invalid/login"}},"disposablePolicies":{}});
-    for (kind, schema, value) in [
-        (
-            "browser_profile_catalog",
-            "agent-browser.browser-profile-catalog.v1",
-            catalog,
-        ),
-        (
-            "browser_session_state",
-            "agent-browser.browser-session-state.v1",
-            serde_json::to_value(agent_browser_service_model::BrowserSessionState::default())
-                .unwrap(),
-        ),
-        (
-            "browser_launch_custody",
-            "agent-browser.browser-launch-custody.v1",
-            serde_json::json!({"records":{record.intent.intent_id.clone():record},"reconciled_absent":[]}),
-        ),
-    ] {
-        db.execute(
-            "INSERT INTO state_documents VALUES(?1,?2,?3)",
-            params![kind, schema, value.to_string()],
+    for selected in [false, true] {
+        use rusqlite::{params, Connection};
+        let root = std::env::temp_dir().join(format!("duplicate-custody-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("source")).unwrap();
+        std::fs::create_dir(root.join("duplicate")).unwrap();
+        let database = root.join("runtime.sqlite3");
+        let db = Connection::open(&database).unwrap();
+        db.execute_batch("CREATE TABLE state_documents(kind TEXT PRIMARY KEY,schema_version TEXT NOT NULL,json TEXT NOT NULL);PRAGMA user_version=2;").unwrap();
+        let source = copy::SourceProfile {
+            id: "source".into(),
+            name: "Source".into(),
+            user_data_dir: root.join("source"),
+            browser_build: "same-build".into(),
+            generation: 1,
+        };
+        let original = agent_browser_service_model::RecordedProcessIdentity {
+            pid: 42,
+            start_token: "boot:42:original".into(),
+            executable_path: Some("/synthetic/chrome".into()),
+            browser_family: Some("chrome".into()),
+        };
+        let assignment: serde_json::Value = serde_json::from_str(include_str!(
+            "../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
+        ))
+        .unwrap();
+        let mut record = agent_browser_service_model::BrowserLaunchCustodyRecord::pending(
+            agent_browser_service_model::BrowserLaunchIntent {
+                intent_id: uuid::Uuid::new_v4().to_string(),
+                profile_id: "source".into(),
+                assignment: serde_json::from_value(assignment["assignment"].clone()).unwrap(),
+            },
         )
         .unwrap();
-    }
-    let evidence = custody::BackendGracefulCloseEvidence {
-        owner_operation_id: "actual-native-close-operation".into(),
-        source_profile_id: "source".into(),
-        source_generation: 1,
-        original,
-        polite_close_attempted: true,
-        polite_close_succeeded: true,
-        polite_close_failed: false,
-        exact_process_exited: true,
-        profile_lock_released: true,
-        force_kill_attempted: false,
-    };
-    let mut guard = custody::SourceCustody::acquire(&database, &source, &evidence, |pid| {
-        assert_eq!(pid, 42);
-        custody::OriginalProcessState::Absent
-    })
-    .unwrap();
-    db.busy_timeout(std::time::Duration::ZERO).unwrap();
-    assert!(
-        db.execute_batch("BEGIN IMMEDIATE").is_err(),
-        "normal launch claims must not pass the runtime writer fence"
-    );
-    let duplicate = copy::DuplicateProfile {
-        destination: copy::DestinationProfile {
-            id: "duplicate".into(),
-            name: "Duplicate".into(),
-            user_data_dir: root.join("duplicate"),
-        },
-        source_profile_id: "source".into(),
-        operation_id: "dup-op".into(),
-        browser_build: "same-build".into(),
-    };
-    guard.publish_and_release(&duplicate).unwrap();
-    db.execute_batch("BEGIN IMMEDIATE;ROLLBACK;").unwrap();
-    let catalog: String = db
-        .query_row(
-            "SELECT json FROM state_documents WHERE kind='browser_profile_catalog'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    let catalog: serde_json::Value = serde_json::from_str(&catalog).unwrap();
-    assert_eq!(catalog["profiles"]["source"]["name"], "Source");
-    assert_eq!(
-        catalog["profiles"]["duplicate"]["manualLoginUrl"],
-        "https://synthetic.invalid/login"
-    );
-    assert_eq!(
-        catalog["profiles"]["duplicate"]["userDataDir"],
-        serde_json::json!(root.join("duplicate"))
-    );
-    drop(guard);
-    let mut forced = evidence.clone();
-    forced.force_kill_attempted = true;
-    assert!(
-        custody::SourceCustody::acquire(&database, &source, &forced, |_| {
+        record.observed_browser_id = Some("original-browser".into());
+        record.observed_pid = Some(42);
+        record.observed_process_identity = Some(original.clone());
+        record.published = true;
+        let catalog = serde_json::json!({"schemaVersion":"agent-browser.browser-profile-catalog.v1","profiles":{"source":{"id":"source","name":"Source","userDataDir":source.user_data_dir,"kind":"named","manualLoginUrl":"https://synthetic.invalid/login"}},"disposablePolicies":{}});
+        for (kind, schema, value) in [
+            (
+                "browser_profile_catalog",
+                "agent-browser.browser-profile-catalog.v1",
+                catalog,
+            ),
+            (
+                "browser_session_state",
+                "agent-browser.browser-session-state.v1",
+                serde_json::to_value(agent_browser_service_model::BrowserSessionState::default())
+                    .unwrap(),
+            ),
+            (
+                "browser_launch_custody",
+                "agent-browser.browser-launch-custody.v1",
+                serde_json::json!({"records":{record.intent.intent_id.clone():record},"reconciled_absent":[]}),
+            ),
+        ] {
+            db.execute(
+                "INSERT INTO state_documents VALUES(?1,?2,?3)",
+                params![kind, schema, value.to_string()],
+            )
+            .unwrap();
+        }
+        let evidence = custody::BackendGracefulCloseEvidence {
+            owner_operation_id: "actual-native-close-operation".into(),
+            source_profile_id: "source".into(),
+            source_generation: 1,
+            original,
+            polite_close_attempted: true,
+            polite_close_succeeded: true,
+            polite_close_failed: false,
+            exact_process_exited: true,
+            profile_lock_released: true,
+            force_kill_attempted: false,
+        };
+        let mut guard = custody::SourceCustody::acquire(&database, &source, &evidence, |pid| {
+            assert_eq!(pid, 42);
             custody::OriginalProcessState::Absent
         })
-        .err()
-        .unwrap()
-        .starts_with("profile_duplicate_clean_close_evidence_required")
-    );
-    for observation in [
-        custody::OriginalProcessState::Live,
-        custody::OriginalProcessState::Unknown,
-    ] {
+        .unwrap();
+        db.busy_timeout(std::time::Duration::ZERO).unwrap();
         assert!(
-            custody::SourceCustody::acquire(&database, &source, &evidence, |_| observation)
-                .err()
-                .unwrap()
-                .starts_with("profile_duplicate_original_exit_readback_required")
+            db.execute_batch("BEGIN IMMEDIATE").is_err(),
+            "normal launch claims must not pass the runtime writer fence"
         );
-    }
-    db.execute_batch("BEGIN IMMEDIATE;ROLLBACK;").unwrap();
-    // The copy is independent now. Catalog-reply recovery must not require
-    // closing its source again or overwrite a subsequently edited label.
-    let mut catalog: serde_json::Value = serde_json::from_str(
-        &db.query_row::<String, _, _>(
-            "SELECT json FROM state_documents WHERE kind='browser_profile_catalog'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap(),
-    )
-    .unwrap();
-    catalog["profiles"]["duplicate"]["name"] = serde_json::json!("Owner edited label");
-    db.execute(
-        "UPDATE state_documents SET json=?1 WHERE kind='browser_profile_catalog'",
-        [catalog.to_string()],
-    )
-    .unwrap();
-    let mut state: serde_json::Value =
-        serde_json::to_value(agent_browser_service_model::BrowserSessionState::default()).unwrap();
-    state["browsers"]["reopened-source"] = serde_json::json!({"id":"reopened-source","profileId":"source","pid":43,"cdpEndpoint":"ws://synthetic-source","desktop":null,"activeSessionIds":[]});
-    db.execute(
-        "UPDATE state_documents SET json=?1 WHERE kind='browser_session_state'",
-        [state.to_string()],
-    )
-    .unwrap();
-    let operation = copy::Operation {
-        request: copy::DuplicateRequest {
+        let duplicate = copy::DuplicateProfile {
+            destination: copy::DestinationProfile {
+                id: "duplicate".into(),
+                name: "Duplicate".into(),
+                user_data_dir: root.join("duplicate"),
+            },
+            source_profile_id: "source".into(),
             operation_id: "dup-op".into(),
-            source: source.clone(),
-            destination: duplicate.destination.clone(),
-            launch: true,
-        },
-        phase: copy::Phase::Copied,
-        affected_task_ids: vec![],
-        duplicate: Some(duplicate),
-        launch: None,
-        destination_task: None,
-        failure: Some("profile_duplicate_catalog_readback_required".into()),
-    };
-    custody::publish_recovered_copy(&database, &operation).unwrap();
-    let catalog: serde_json::Value = serde_json::from_str(
-        &db.query_row::<String, _, _>(
-            "SELECT json FROM state_documents WHERE kind='browser_profile_catalog'",
-            [],
-            |row| row.get(0),
+            browser_build: "same-build".into(),
+        };
+        guard
+            .publish_and_release(
+                &duplicate,
+                selected.then_some(custody::DestinationLaunchConfiguration {
+                    executable: "/reviewed/chromium",
+                    mode: Some("cdp"),
+                }),
+            )
+            .unwrap();
+        db.execute_batch("BEGIN IMMEDIATE;ROLLBACK;").unwrap();
+        let catalog: String = db
+            .query_row(
+                "SELECT json FROM state_documents WHERE kind='browser_profile_catalog'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let catalog: serde_json::Value = serde_json::from_str(&catalog).unwrap();
+        assert_eq!(catalog["profiles"]["source"]["name"], "Source");
+        assert_eq!(
+            catalog["profiles"]["duplicate"]["manualLoginUrl"],
+            if selected {
+                serde_json::Value::Null
+            } else {
+                serde_json::json!("https://synthetic.invalid/login")
+            }
+        );
+        assert_eq!(
+            catalog["profiles"]["duplicate"]["userDataDir"],
+            serde_json::json!(root.join("duplicate"))
+        );
+        assert_eq!(
+            catalog["profiles"]["source"]["manualLoginUrl"], "https://synthetic.invalid/login",
+            "Destination mode must not change source mode"
+        );
+        let state: String = db
+            .query_row(
+                "SELECT json FROM state_documents WHERE kind='browser_session_state'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let state: serde_json::Value = serde_json::from_str(&state).unwrap();
+        assert_eq!(
+            state["profileExecutables"]["duplicate"],
+            if selected {
+                serde_json::json!("/reviewed/chromium")
+            } else {
+                serde_json::Value::Null
+            },
+            "Destination configuration and catalog publication must share the custody commit"
+        );
+        assert!(state["profileExecutables"]["source"].is_null());
+        drop(guard);
+        let mut forced = evidence.clone();
+        forced.force_kill_attempted = true;
+        assert!(
+            custody::SourceCustody::acquire(&database, &source, &forced, |_| {
+                custody::OriginalProcessState::Absent
+            })
+            .err()
+            .unwrap()
+            .starts_with("profile_duplicate_clean_close_evidence_required")
+        );
+        for observation in [
+            custody::OriginalProcessState::Live,
+            custody::OriginalProcessState::Unknown,
+        ] {
+            assert!(
+                custody::SourceCustody::acquire(&database, &source, &evidence, |_| observation)
+                    .err()
+                    .unwrap()
+                    .starts_with("profile_duplicate_original_exit_readback_required")
+            );
+        }
+        db.execute_batch("BEGIN IMMEDIATE;ROLLBACK;").unwrap();
+        // The copy is independent now. Catalog-reply recovery must not require
+        // closing its source again or overwrite a subsequently edited label.
+        let mut catalog: serde_json::Value = serde_json::from_str(
+            &db.query_row::<String, _, _>(
+                "SELECT json FROM state_documents WHERE kind='browser_profile_catalog'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap(),
         )
-        .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(
-        catalog["profiles"]["duplicate"]["name"],
-        "Owner edited label"
-    );
-    drop(db);
-    std::fs::remove_dir_all(root).unwrap();
+        .unwrap();
+        catalog["profiles"]["duplicate"]["name"] = serde_json::json!("Owner edited label");
+        db.execute(
+            "UPDATE state_documents SET json=?1 WHERE kind='browser_profile_catalog'",
+            [catalog.to_string()],
+        )
+        .unwrap();
+        let mut state: serde_json::Value =
+            serde_json::to_value(agent_browser_service_model::BrowserSessionState::default())
+                .unwrap();
+        state["browsers"]["reopened-source"] = serde_json::json!({"id":"reopened-source","profileId":"source","pid":43,"cdpEndpoint":"ws://synthetic-source","desktop":null,"activeSessionIds":[]});
+        db.execute(
+            "UPDATE state_documents SET json=?1 WHERE kind='browser_session_state'",
+            [state.to_string()],
+        )
+        .unwrap();
+        let operation = copy::Operation {
+            request: copy::DuplicateRequest {
+                operation_id: "dup-op".into(),
+                source: source.clone(),
+                destination: duplicate.destination.clone(),
+                launch: true,
+            },
+            phase: copy::Phase::Copied,
+            affected_task_ids: vec![],
+            duplicate: Some(duplicate),
+            launch: None,
+            destination_task: None,
+            failure: Some("profile_duplicate_catalog_readback_required".into()),
+        };
+        custody::publish_recovered_copy(&database, &operation, None).unwrap();
+        let catalog: serde_json::Value = serde_json::from_str(
+            &db.query_row::<String, _, _>(
+                "SELECT json FROM state_documents WHERE kind='browser_profile_catalog'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            catalog["profiles"]["duplicate"]["name"],
+            "Owner edited label"
+        );
+        drop(db);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
 
 #[test]

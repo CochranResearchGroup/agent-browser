@@ -330,6 +330,18 @@ struct TestRetirementGuard;
 impl BrowserIdleRetirementGuard for TestRetirementGuard {}
 
 impl BrowserSessionEffects for Process {
+    fn select_profile_browser_executable(
+        &mut self,
+        profile_id: String,
+        path: String,
+    ) -> Result<(), String> {
+        std::fs::write(
+            self.root.join("selected-profile-executable.json"),
+            serde_json::json!({"profileId":profile_id,"path":path}).to_string(),
+        )
+        .map_err(|_| "fixture_profile_pin_unavailable".to_string())
+    }
+
     fn acquire_idle_retirement_guard(
         &mut self,
         browsers: &[ManagedBrowserInstance],
@@ -1177,3 +1189,6 @@ fn consumer_retired_upgrade_drain_allows_live_navigation_and_physical_recovery()
 
 #[path = "browser_operation_lookup_tests.rs"]
 mod operation_lookup_tests;
+
+#[path = "browser_build_selection_tests.rs"]
+mod build_selection_tests;

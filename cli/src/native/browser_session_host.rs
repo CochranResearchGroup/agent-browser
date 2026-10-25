@@ -19,12 +19,17 @@ use super::browser_session_runtime::{
 use super::browser_session_store::BrowserSessionJsonStore;
 use super::browser_session_store::{BrowserProfileCatalogLoad, BrowserSessionSqliteStore};
 
+#[path = "browser_build_open.rs"]
+mod browser_build_open;
+#[path = "browser_build_selection.rs"]
+mod browser_build_selection;
 #[path = "browser_mode_host.rs"]
 pub(crate) mod browser_mode_host;
 #[path = "browser_native_host.rs"]
 mod browser_native_host;
 #[path = "browser_operation_lookup.rs"]
 mod browser_operation_lookup;
+
 #[path = "profile_duplicate_host.rs"]
 mod profile_duplicate_host;
 
@@ -1513,6 +1518,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .is_some_and(|action| action.starts_with("browser_session_"))
             && command["action"] != "browser_session_profile_duplicate"
             && command["action"] != "browser_session_mode_convert"
+            && command["action"] != "browser_session_build_select"
             && !(command["action"] == "browser_session_close" && command["scope"] == "browser")
         {
             super::browser_host_control::admit_command(None, None, command, false)
@@ -1548,6 +1554,12 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .ok_or_else(|| "browser_session_action_missing".to_string())?;
         if let Some(readback) = self.operation_request_readback(command)? {
             return Ok(readback);
+        }
+        if action == "browser_session_open" {
+            self.verify_build_open_selection(command, false)?;
+        }
+        if action == "browser_session_build_select" {
+            return self.browser_build_select(command);
         }
         if action == "browser_session_mode_convert" {
             self.refresh_before_ordinary_command()?;
@@ -2198,27 +2210,15 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     /// Launch posture belongs to the profile's current process. Never change
     /// it underneath another task or silently attach a debugging client.
     fn configure_profile_login(&mut self, command: &serde_json::Value) -> Result<(), String> {
-        let manual = match command.get("manualLogin") {
-            Some(serde_json::Value::Bool(value)) => *value,
+        let explicit_manual = match command.get("manualLogin") {
+            Some(serde_json::Value::Bool(value)) => Some(*value),
             Some(_) => return Err("browser_login_mode_invalid".into()),
-            None => false,
+            None => None,
         };
-        if manual && command.get("attachment").is_some() {
-            return Err("manual_login_requires_owned_browser".into());
-        }
-        if manual && !self.effects.admits_ordinary_sessions() {
-            return Err("manual_login_requires_native_remote_desktop".into());
-        }
-        if manual {
-            // The initial location is passed to Chrome at launch, rather than
-            // through CDP navigation. Never interpret a relative value as a flag.
-            reqwest::Url::parse(required_string(command, "url")?)
-                .map_err(|_| "manual_login_url_invalid")?;
-        }
         let id = optional_string(command, "profileId")
             .or_else(|| optional_string(command, "runtimeProfile"));
         let Some(id) = id else {
-            return if manual {
+            return if explicit_manual == Some(true) {
                 Err("manual_login_requires_persistent_profile".into())
             } else {
                 Ok(())
@@ -2229,6 +2229,24 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .profiles
             .get(id)
             .ok_or("browser_session_profile_selector_unknown")?;
+        let manual = explicit_manual.unwrap_or(profile.manual_login_url.is_some());
+        if manual && command.get("attachment").is_some() {
+            return Err("manual_login_requires_owned_browser".into());
+        }
+        if manual && !self.effects.admits_ordinary_sessions() {
+            return Err("manual_login_requires_native_remote_desktop".into());
+        }
+        let requested_url = optional_string(command, "url").or_else(|| {
+            if explicit_manual.is_none() {
+                profile.manual_login_url.as_deref()
+            } else {
+                None
+            }
+        });
+        if manual {
+            reqwest::Url::parse(requested_url.ok_or("manual_login_url_required")?)
+                .map_err(|_| "manual_login_url_invalid")?;
+        }
         let session_name = required_string(command, "sessionName")?;
         for browser in self
             .state
@@ -2262,7 +2280,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         .values()
                         .any(|browser| browser.profile_id == id)
                 })
-                .or(Some(required_string(command, "url")?.to_owned()))
+                .or_else(|| requested_url.map(str::to_owned))
         } else {
             None
         };
@@ -2285,6 +2303,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         command: &serde_json::Value,
         activity_at_ms: u64,
     ) -> Result<OpenBrowserSessionResult, String> {
+        self.verify_build_open_selection(command, false)?;
         if command.get("attachment").is_some()
             && command
                 .get("manualLogin")
@@ -2448,6 +2467,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         let opened =
             self.open_with_host_binding_policy(request, hosted, command.get("taskPolicy"))?;
         self.apply_leave_open_choice(&opened.session_id, command)?;
+        self.verify_build_open_selection(command, true)?;
         Ok(opened)
     }
 

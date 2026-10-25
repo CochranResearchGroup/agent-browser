@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CircleHelp, Code2, MousePointer2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { BrowserBuildDialog } from "@/components/browser-build-dialog";
 import { BrowserModeDialog } from "@/components/browser-mode-dialog";
 import { ProfileDuplicateDialog } from "@/components/profile-duplicate-dialog";
 import type { ServiceBrowserModeInspection } from "@agent-browser/client/service-observability";
@@ -13,6 +14,7 @@ export function BrowserModeButton({ label, inspection, profileId, taskId, sessio
 }) {
   const [open, setOpen] = useState(false);
   const [conversion, setConversion] = useState<"cdp" | "cdp_free" | null>(null);
+  const [buildProfile, setBuildProfile] = useState<string | null>(null);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const sourceProfileId = profileId ?? inspection?.profileId;
   const [, expireEvidence] = useState(0);
@@ -50,9 +52,10 @@ export function BrowserModeButton({ label, inspection, profileId, taskId, sessio
       {name === "Unverified" && <DropdownMenuLabel>Refresh inventory to observe this browser again.</DropdownMenuLabel>}
       <DropdownMenuSeparator />
       {taskId && sessionName && <><DropdownMenuItem onSelect={() => { setOpen(false); setConversion("cdp"); }}>Relaunch with CDP</DropdownMenuItem><DropdownMenuItem onSelect={() => { setOpen(false); setConversion("cdp_free"); }}>Relaunch without CDP</DropdownMenuItem></>}
+      {sourceProfileId && <DropdownMenuItem onSelect={() => { setOpen(false); setBuildProfile(sourceProfileId); }}>Choose browser build</DropdownMenuItem>}
       {sourceProfileId && <DropdownMenuItem onSelect={() => { setOpen(false); setDuplicateOpen(true); }}>Duplicate profile</DropdownMenuItem>}
       <DropdownMenuItem disabled={refreshing} onSelect={event => { event.preventDefault(); void refresh(); }}>{refreshing ? "Refreshing inventory…" : "Refresh inventory"}</DropdownMenuItem>
       {error && <DropdownMenuLabel role="alert">Inventory refresh failed. Try again.</DropdownMenuLabel>}
     </DropdownMenuContent>
-  </DropdownMenu>{taskId && sessionName && (["cdp", "cdp_free"] as const).map(mode => <BrowserModeDialog key={`${taskId}:${mode}`} open={conversion === mode} onOpenChange={value => { if (!value) setConversion(null); }} taskId={taskId} sessionName={sessionName} profileId={sourceProfileId ?? undefined} browserId={inspection?.browserId} mode={mode} onRefresh={onRefresh} />)}{sourceProfileId && <ProfileDuplicateDialog open={duplicateOpen} onOpenChange={setDuplicateOpen} profileId={sourceProfileId} taskId={taskId} sessionName={sessionName} browserId={inspection?.browserId} onRefresh={onRefresh} />}</>;
+  </DropdownMenu>{taskId && sessionName && (["cdp", "cdp_free"] as const).map(mode => <BrowserModeDialog key={`${taskId}:${mode}`} open={conversion === mode} onOpenChange={value => { if (!value) setConversion(null); }} taskId={taskId} sessionName={sessionName} profileId={sourceProfileId ?? undefined} browserId={inspection?.browserId} mode={mode} onRefresh={onRefresh} />)}{sourceProfileId && <ProfileDuplicateDialog open={duplicateOpen} onOpenChange={setDuplicateOpen} profileId={sourceProfileId} taskId={taskId} sessionName={sessionName} browserId={inspection?.browserId} onRefresh={onRefresh} onChooseCopy={setBuildProfile} />}{buildProfile && <BrowserBuildDialog key={buildProfile} open onOpenChange={value => { if (!value) setBuildProfile(null); }} profileId={buildProfile} taskId={taskId} onRefresh={onRefresh} onChooseCopy={setBuildProfile} />}</>;
 }

@@ -7329,15 +7329,16 @@ Commands:
   host-task TASK    Read app metadata
   browser-mode TASK Inspect mode
   browser-native TASK ACTION JSON Input/capture <=1Mpx
-  profile-duplicate JSON Copy/inspect; retry_launch or finish_without_opening after launch_absent
-  mode-convert JSON Convert/inspect: pause_and_relaunch, relaunch, cancel, restore_previous
-  watch-host-task TASK Initial/changed NDJSON; fresh reconnect
+  browser-build JSON Inspect/select/open profile build
+  profile-duplicate JSON Copy/inspect; retry_launch or finish_without_opening
+  mode-convert JSON Inspect/relaunch/pause/cancel/restore_previous/select_build
+  watch-host-task TASK Changed NDJSON; fresh reconnect
   host-control      Status/view/takeover/return/override/reconcile; inspect failed return.
   host-reconnect TASK OP [options-json] Status/disconnect/reconnect/rebind/configure/reopen
   host-policy JSON  App/task rules and scoped override
 
-  Lookup: <=256 scoped operations, active/pending first; historyTruncated marks omissions.
-  Completed publication needs a new conversion.
+  Lookup: <=256 operations, active/pending first; historyTruncated marks omissions.
+  Published conversion needs a new ID.
 
 Workflow tools (16):
   browser_open          Open/reuse task and profile

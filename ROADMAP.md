@@ -1,6 +1,6 @@
 # Roadmap
 
-[P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): inspection #401 and repairs #424–429 are closed. [PR436](https://github.com/CochranResearchGroup/agent-browser/pull/436) delivers fully qualified #402 conversion and #403 independent profiles on candidate0837b9d9, including actual two-task Native workflows and concurrent copy/source proof. Force-close login loss is explicit. #404 follows merged closure. Source qualification only; no runtime publication.
+[P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): #401–403 and repairs #424–429 are closed. #404 build selection is source-qualified through eight actual Chrome/Chromium workflows and final scoped gates, awaiting PR439 integration. Parent #400 remains open for aggregate verification. No runtime publication.
 
 [P291 corrected cold rail](docs/dev/plans/0291-2026-10-24-cold-rail-retry-spacing.md), #430, is installed accepted oncf65dd76422b: cold median3.36s to2.11s, warm1.00s to1.02s,18 browser roots and137 Native provider/persistent unit generations preserved. [Evidence](docs/dev/notes/0291-2026-10-24-cold-rail-retry-spacing.md) retains the failed first comparison, mounted cache-caller correction, finite sample limits and three doctor advisories.422 asset intermittence and Remote View667 MCP-client restart loops remain separate. Retain the primary checkout and pinned candidates.
 

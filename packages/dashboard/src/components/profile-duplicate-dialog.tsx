@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import type { BrowserBuildEvidence } from "@/components/browser-build-picker";
 import { useBrowserOperation } from "@/components/use-browser-operation";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -7,16 +8,18 @@ type Choice = "prepare" | "reconcile" | "open_source" | "focus_source" | "close_
 const labels: Record<Choice, string> = { prepare: "Review duplication", reconcile: "Reconcile operation", open_source: "Open source for review", focus_source: "Return to source browser", close_and_duplicate: "Close source and duplicate", retry_launch: "Retry opening copy", finish_without_opening: "Finish without opening", cancel: "Cancel operation" };
 
 /** Retain the same operation through lost replies and explicit remediation. */
-export function ProfileDuplicateDialog({ open, onOpenChange, profileId, taskId, sessionName, browserId, onRefresh }: { open: boolean; onOpenChange: (open: boolean) => void; profileId: string; taskId?: string | null; sessionName?: string | null; browserId?: string; onRefresh: () => Promise<void> }) {
+export function ProfileDuplicateDialog({ open, onOpenChange, profileId, taskId, sessionName, browserId, build, mode, onChooseCopy, onRefresh }: { open: boolean; onOpenChange: (open: boolean) => void; profileId: string; taskId?: string | null; sessionName?: string | null; browserId?: string; build?: BrowserBuildEvidence; mode?: "cdp" | "cdp_free"; onChooseCopy?: (profileId: string) => void; onRefresh: () => Promise<void> }) {
   const [name, setName] = useState("Independent copy");
   const [launch, setLaunch] = useState(true);
   const state = useBrowserOperation(open, { action: "browser_session_profile_duplicate", kind: "profile_duplicate", schemaVersion: "agent-browser.profile-duplication.v1", sourceProfileId: profileId, sessionId: taskId ?? undefined, sessionName: sessionName ?? undefined, browserId }, onRefresh);
   const { operation, confirmed, setConfirmed, busy, loading, unknown, error } = state;
   const sourceProfile = profileId;
-  const run = (choice: Choice) => { if (name.trim()) void state.run(choice, { destinationName: operation?.destination?.name ?? name.trim(), launch: operation?.launchRequested ?? launch }); };
+  const run = (choice: Choice) => { if (name.trim()) void state.run(choice, { destinationName: operation?.destination?.name ?? name.trim(), launch: operation?.launchRequested ?? launch, ...(!operation && choice === "prepare" ? { ...build?.selection, ...(mode ? { mode } : {}) } : {}) }); };
   const actions = unknown ? [{ action: "reconcile" as const, requiresConfirmation: false }] : operation?.actions ?? [{ action: "prepare" as const, requiresConfirmation: false }];
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent style={{ maxWidth: 480 }} aria-describedby="profile-duplicate-description">
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent style={{ maxWidth: 540, maxHeight: "90vh", overflowY: "auto" }} aria-describedby="profile-duplicate-description">
     <DialogHeader><DialogTitle>Duplicate browser profile</DialogTitle><DialogDescription id="profile-duplicate-description">Create an independent profile. Copies evolve separately; signing in is verified separately from copying.</DialogDescription></DialogHeader>
+    {(operation?.selectedBuild ?? build) && <p>Copy build: {(operation?.selectedBuild ?? build)?.name} {(operation?.selectedBuild ?? build)?.version}. Mode: {(operation?.requestedMode ?? mode) === "cdp_free" ? "No CDP" : "CDP"}. Source preparation uses its configured build. Review source changes before authorizing close.</p>}
+    {build && <p>Copying preserves files independently. Storage readability, credentials and login portability remain unverified. The target may migrate the copy; selecting an earlier executable does not restore profile bytes.</p>}
     <p>Source profile: {sourceProfile}</p>
     <label>Copy name<input aria-label="Copy name" value={name} disabled={busy || operation !== null || unknown} onChange={event => setName(event.target.value)} /></label>
     <label><input type="checkbox" checked={launch} disabled={busy || operation !== null || unknown} onChange={event => setLaunch(event.target.checked)} />Open the new copy</label>
@@ -27,6 +30,7 @@ export function ProfileDuplicateDialog({ open, onOpenChange, profileId, taskId, 
     {state.candidates.length > 1 && <div><p>Select an existing operation</p><div role="region" aria-label="Existing browser operations" style={{ maxHeight: "min(16rem, 40vh)", overflowY: "auto" }}>{state.candidates.map(candidate => <button type="button" key={candidate.operationId} onClick={() => state.select(candidate)}>Resume {candidate.destination?.name ?? candidate.operationId} ({candidate.operationId})</button>)}</div></div>}
     {error && <><p role="alert">{error}</p>{!unknown && <button type="button" disabled={busy || loading} onClick={() => void state.inspect()}>Inspect existing operations</button>}</>}
     {operation && ["completed", "cancelled"].includes((operation.state ?? operation.phase ?? "").toLowerCase()) && <button type="button" onClick={state.startAnother}>Prepare another copy</button>}
+    {onChooseCopy && operation?.destination?.id && operation.profilePublished && ["completed", "cancelled"].includes((operation.state ?? operation.phase ?? "").toLowerCase()) && <button type="button" disabled={busy || unknown} onClick={() => onChooseCopy(operation.destination!.id)}>Choose another build for this copy</button>}
     <div {...(busy ? { "data-profile-operation-busy": true } : {})}>{actions.filter((action): action is { action: Choice; requiresConfirmation: boolean } => Object.hasOwn(labels, action.action)).map(action => <button key={action.action} type="button" disabled={busy || loading || !state.readable || !!error && !unknown && !operation || (action.requiresConfirmation && !confirmed)} onClick={() => void run(action.action)}>{labels[action.action]}</button>)}</div>
   </DialogContent></Dialog>;
 }

@@ -111,6 +111,11 @@ impl BorrowedSourceAnchor {
             && state.profile_operation_ids.get(&source.id) == Some(&self.operation_id)
     }
 }
+#[derive(Clone, Copy)]
+pub struct DestinationLaunchConfiguration<'a> {
+    pub executable: &'a str,
+    pub mode: Option<&'a str>,
+}
 pub struct SourceCustody {
     connection: Connection,
     source: SourceProfile,
@@ -278,7 +283,11 @@ impl SourceCustody {
     /// Publish only the independent copied profile and lineage using the held
     /// connection. Commit releases acquisition fencing before normal launch.
     /// The caller must not open a second runtime writer while this guard lives.
-    pub fn publish_and_release(&mut self, profile: &DuplicateProfile) -> Result<(), String> {
+    pub fn publish_and_release(
+        &mut self,
+        profile: &DuplicateProfile,
+        configuration: Option<DestinationLaunchConfiguration<'_>>,
+    ) -> Result<(), String> {
         if !self.active {
             return Err("profile_duplicate_source_custody_released".into());
         }
@@ -335,6 +344,43 @@ impl SourceCustody {
             if let Some(url) = manual_login_url {
                 entry["manualLoginUrl"] = url;
             }
+            if let Some(configuration) = configuration {
+                if !Path::new(configuration.executable).is_absolute() {
+                    return Err("browser_build_absolute_path_required".into());
+                }
+                if let Some(mode) = configuration.mode {
+                    match mode {
+                        "cdp" => {
+                            entry
+                                .as_object_mut()
+                                .ok_or("profile_duplicate_catalog_invalid")?
+                                .remove("manualLoginUrl");
+                        }
+                        "cdp_free" => entry["manualLoginUrl"] = json!("about:blank"),
+                        _ => return Err("browser_build_mode_invalid".into()),
+                    }
+                }
+                let mut state: BrowserSessionState = load_document(
+                    &self.connection,
+                    "browser_session_state",
+                    BROWSER_SESSION_STATE_SCHEMA_V1,
+                )?;
+                if state
+                    .profile_executables
+                    .contains_key(&profile.destination.id)
+                    || state
+                        .browsers
+                        .values()
+                        .any(|browser| browser.profile_id == profile.destination.id)
+                {
+                    return Err("browser_build_destination_configuration_conflict".into());
+                }
+                state.profile_executables.insert(
+                    profile.destination.id.clone(),
+                    configuration.executable.into(),
+                );
+                self.connection.execute("UPDATE state_documents SET json=?1 WHERE kind='browser_session_state' AND schema_version=?2",params![serde_json::to_string(&state).map_err(|_|"profile_duplicate_state_encode_failed")?,BROWSER_SESSION_STATE_SCHEMA_V1]).map_err(|_|"profile_duplicate_state_write_failed")?;
+            }
             profiles.insert(profile.destination.id.clone(), entry);
             self.connection.execute("UPDATE state_documents SET json=?1 WHERE kind='browser_profile_catalog' AND schema_version='agent-browser.browser-profile-catalog.v1'",[self.catalog.to_string()]).map_err(|_| "profile_duplicate_catalog_write_failed")?;
             self.connection
@@ -387,6 +433,7 @@ fn load_document<T: serde::de::DeserializeOwned>(
 pub fn publish_recovered_copy(
     database: &Path,
     operation: &super::profile_duplicate_copy::Operation,
+    configuration: Option<DestinationLaunchConfiguration<'_>>,
 ) -> Result<(), String> {
     use super::profile_duplicate_copy::Phase;
     if operation.phase != Phase::Copied {
@@ -431,5 +478,5 @@ pub fn publish_recovered_copy(
         catalog,
         active: true,
     };
-    publication.publish_and_release(profile)
+    publication.publish_and_release(profile, configuration)
 }

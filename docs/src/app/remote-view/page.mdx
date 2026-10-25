@@ -1116,7 +1116,7 @@ The browser mode menu offers **Relaunch with CDP** and **Relaunch without CDP** 
 
 MCP uses `browser_command` with `taskId`, action `mode_convert`, and params containing `operationId`, `mode` (`cdp` or `cdp_free`) and `choice`. Start with `prepare`, then select an offered action. CLI accepts `agent-browser --json mcp mode-convert '{"taskId":"TASK","operationId":"mode-one","mode":"cdp_free","choice":"prepare"}'`. HTTP uses `POST /api/command` with action `browser_session_mode_convert`, the exact `sessionId` and owner `sessionName`, and the same operation fields.
 
-Keep the operation ID after an uncertain reply and select `reconcile`; do not issue another close/open sequence. Close prompts offer focus, graceful retry and consequentially confirmed force close. Native screenshots and input remain separate from authentication proof. Bounded launch recovery is source qualified; broader conversion and installed Native qualification remain incomplete. Do not treat source qualification as accepted installed behavior.
+Keep the operation ID after an uncertain reply and select `reconcile`; do not issue another close/open sequence. Close prompts offer focus, graceful retry and consequentially confirmed force close. Native screenshots and input remain separate from authentication proof. Conversion and bounded recovery are qualified in isolated synthetic Native workflows. Installed Native qualification remains separate; source acceptance does not prove installed behavior.
 
 Select `pause_and_relaunch` to hold the operation in `paused` before closing
 anything. Affected tasks stay fenced against page and Native automation. Later
@@ -1153,3 +1153,58 @@ reports omitted retained history. Supply a known `operationId` for exact older
 readback; inspection and selection still have no browser effects.
 
 Native capture returns PNG image content to MCP agents. Its default tile is bounded to one million pixels. Read `region`, `windowBounds` and `partialWindow`; request an explicit region for remaining pixels. A tile is not represented as a full-window screenshot.
+
+
+### Browser build selection
+
+The rail menu's **Choose browser build** reads available executable versions,
+profile-data version and compatibility uncertainty. Build family, version,
+profile and CDP mode remain independent. Family and older-version warnings are
+advisory; explicit confirmation cannot make a missing or changed executable
+usable. Select the actual native executable, rather than a shell launcher.
+
+MCP: discover `browser_build`, then call `browser_command` with action
+`browser_build` and `params: {"profileId":"PROFILE","choice":"inspect"}`.
+An optional `taskId` binds the profile to that task. CLI:
+`agent-browser --json mcp browser-build '{"profileId":"PROFILE","choice":"inspect"}'`.
+HTTP uses `POST /api/command`, action `browser_session_build_select` and the
+same fields. Discovery returns opaque `selection` fields (`buildId`,
+`expectedSha256`); copy those fields into the consequential request. To review
+another installed build, include an absolute `executablePath` in inspection.
+Inspecting does not close a browser or modify its profile.
+
+For an inactive profile, use `choice: "select_for_next_launch"`, a stable
+`operationId`, selected build fields, `mode: "cdp"` or `"cdp_free"`, and
+`ownerConfirmed: true`. This atomically records the pin, mode and receipt.
+An omitted mode on later `browser_open` inherits that profile's selected mode;
+an explicit mode wins. To open exactly that selection, use `choice:
+"open_selected"`, the same profile and selection operation ID. MCP also
+requires `serviceName`, `agentName` and `taskName`. It opens a stable task at a
+blank page. Read active tasks and `currentSelectionOperationId` through
+inspection after a lost reply or reload; do not replay a website submission.
+A changed pin, executable bytes or profile must be reviewed again. Generic
+MCP `browser_open` can bind `buildSelectionOperationId` for the same guard.
+
+For a running original, prepare the existing `mode_convert` operation with
+selected build fields and an independent mode. Confirm only after reviewing
+affected tasks and migration risk. Recovery retains that operation ID:
+`select_build` chooses another reviewed executable without launching it;
+`relaunch` launches after proven absence. `restore_previous` selects the
+previous executable and mode when available. It does not restore profile
+bytes. Unknown process state remains fenced; never run another browser
+against the same writable directory.
+
+For duplicate-and-test, prepare `profile_duplicate` with selected build fields
+and mode. Source preparation uses its configured build. The destination pin
+and mode are published with the independent copy. Failed launch retains that
+copy; reconcile, then retry or confirm `finish_without_opening`. After finishing,
+select another build for the destination profile and explicitly open that
+selection. This reuses the exact published directory without copying again.
+
+Profile readability, copied cookies, credential-store availability and usable
+authentication are separate evidence. A newer build may migrate files; an
+older or different build may fail to read them or lose login. Prefer an
+independent copy for testing. If login is lost, stop account actions and sign
+in explicitly in the chosen browser. Never weaken encryption, export keys or
+replace credential stores to manufacture portability. Inspect another build,
+use a confirmed original, keep the copy without opening, or cancel.

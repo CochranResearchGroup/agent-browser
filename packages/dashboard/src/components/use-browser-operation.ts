@@ -5,6 +5,7 @@ export type BrowserOperation = {
   schemaVersion: string; operationId: string; kind?: string; state?: string; phase?: string;
   profileId?: string; browserId?: string; taskId?: string; requestedMode?: "cdp" | "cdp_free"; effectiveMode?: "cdp" | "cdp_free";
   source?: { id: string }; destination?: { id: string; name: string }; launchRequested?: boolean;
+  selectedBuild?: { name?: string; family?: string; version?: string }; effectiveBuild?: { name?: string; version?: string }; targetBuild?: { name?: string; version?: string }; migrationWarning?: string;
   affectedTaskIds?: string[]; copyComplete?: boolean; profilePublished?: boolean; failure?: string | null;
   actions?: { action: string; requiresConfirmation: boolean }[];
 };
@@ -67,6 +68,7 @@ export function useBrowserOperation(open: boolean, scope: Scope, onRefresh: () =
       if (reply.success !== true || reply.data?.operationId !== operationId || reply.data?.schemaVersion !== scope.schemaVersion) throw new Error();
       accept(reply.data);
       if (reply.data.phase === "completed" || reply.data.profilePublished === true) await onRefresh().catch(() => setError("The operation is published, but inventory could not refresh. Refresh browsers."));
+      return reply.data as BrowserOperation;
     } catch { setUnknown(true); setError("The result could not be confirmed. Reconcile this operation before selecting another browser action."); }
     finally { pending.current = false; setBusy(false); }
   };

@@ -26,6 +26,8 @@ use super::service_store::default_service_state_path;
 
 #[path = "browser_mode_inspection.rs"]
 pub(crate) mod mode_inspection;
+#[path = "browser_profile_build_store.rs"]
+pub(crate) mod profile_build;
 #[path = "browser_terminal_history.rs"]
 mod terminal_history;
 #[path = "browser_workspace_observation.rs"]

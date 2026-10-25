@@ -2,6 +2,9 @@ use std::io::{self, BufRead, Write};
 
 use serde_json::{json, Map, Value};
 
+mod browser_build;
+#[cfg(test)]
+mod browser_build_tests;
 mod catalog;
 mod host_control;
 mod host_policy;
@@ -95,6 +98,7 @@ const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = &[
     "native_capture",
     "native_input",
     "profile_duplicate",
+    "browser_build",
     "mode_convert",
     "navigate",
     "evaluate",
@@ -264,6 +268,7 @@ fn mcp_command_response_with_config(
             )
             .map_err(|_| "mode_operation_response_invalid".into())
         }
+        Some("browser-build") => browser_build::cli(args),
         Some("profile-duplicate") => profile_duplicate::cli(args),
         Some("browser-native") => {
             if args.len() != 5 || !matches!(args[3].as_str(), "native_capture" | "native_input") {
@@ -5491,7 +5496,11 @@ fn call_service_mcp_tool(
     }
     if name.starts_with("browser_")
         && !matches!(name, "browser_open" | "browser_discover")
-        && !(name == "browser_command" && arguments["action"] == "profile_duplicate")
+        && !(name == "browser_command"
+            && matches!(
+                arguments["action"].as_str(),
+                Some("profile_duplicate" | "browser_build")
+            ))
     {
         required_string_argument(arguments, "taskId")?;
     }
@@ -5608,6 +5617,9 @@ fn call_service_mcp_tool(
         }
         if arguments["action"] == "mode_convert" {
             return mode_convert_call(arguments, session);
+        }
+        if arguments["action"] == "browser_build" {
+            return browser_build::call(arguments, session);
         }
         if arguments["action"] == "profile_duplicate" {
             return profile_duplicate::call(arguments, session);
@@ -6382,34 +6394,43 @@ fn validate_browser_command_action(arguments: &Value) -> Result<&str, JsonRpcErr
         let schema = catalog::browser_argument_schema(action)?;
         let page_arguments = schema["properties"].as_object().unwrap();
         for key in params.keys() {
-            if matches!(
-                key.as_str(),
-                "id" | "action"
-                    | "sessionName"
-                    | "sessionId"
-                    | "taskId"
-                    | "tabId"
-                    | "targetId"
-                    | "browserId"
-                    | "profile"
-                    | "profileId"
-                    | "runtimeProfile"
-                    | "profileCapability"
-                    | "serviceName"
-                    | "agentName"
-                    | "taskName"
-                    | "routeId"
-                    | "provider"
-                    | "tabHandle"
-                    | "serviceTabHandle"
-                    | "profileLeaseId"
-                    | "profileLeaseGeneration"
-                    | "connectionInstanceId"
-                    | "callerId"
-                    | "jobId"
-                    | "serviceJobId"
-                    | "requestPrincipalSource"
-            ) {
+            // Build choices are explicitly profile-scoped; opening their saved
+            // selection also requires the agent metadata declared by that adapter.
+            // Transport routes and principal fields remain reserved.
+            let build_context_argument = action == "browser_build"
+                && (key == "profileId"
+                    || (params.get("choice").and_then(Value::as_str) == Some("open_selected")
+                        && matches!(key.as_str(), "serviceName" | "agentName" | "taskName")));
+            if !build_context_argument
+                && matches!(
+                    key.as_str(),
+                    "id" | "action"
+                        | "sessionName"
+                        | "sessionId"
+                        | "taskId"
+                        | "tabId"
+                        | "targetId"
+                        | "browserId"
+                        | "profile"
+                        | "profileId"
+                        | "runtimeProfile"
+                        | "profileCapability"
+                        | "serviceName"
+                        | "agentName"
+                        | "taskName"
+                        | "routeId"
+                        | "provider"
+                        | "tabHandle"
+                        | "serviceTabHandle"
+                        | "profileLeaseId"
+                        | "profileLeaseGeneration"
+                        | "connectionInstanceId"
+                        | "callerId"
+                        | "jobId"
+                        | "serviceJobId"
+                        | "requestPrincipalSource"
+                )
+            {
                 return Err(JsonRpcError::invalid_params(&format!(
                     "browser_command params.{key} is reserved"
                 )));
@@ -12008,16 +12029,16 @@ mod tests {
         );
         for tool in tools {
             if tool["name"] == "browser_command" {
-                // Offline profile-copy operations bind their source profile
-                // without requiring an already-open task. Every other advanced
+                // Profile-copy and build choices bind a profile without an open
+                // task. Every other advanced
                 // operation still advertises an exact task requirement.
                 assert_eq!(tool["inputSchema"]["required"], json!(["action"]));
                 let alternatives = tool["inputSchema"]["anyOf"].as_array().unwrap();
                 assert_eq!(alternatives.len(), 2);
                 assert_eq!(alternatives[0]["required"], json!(["taskId"]));
                 assert_eq!(
-                    alternatives[1]["properties"]["action"]["const"],
-                    "profile_duplicate"
+                    alternatives[1]["properties"]["action"]["enum"],
+                    json!(["profile_duplicate", "browser_build"])
                 );
                 assert_eq!(alternatives[1]["required"], json!(["params"]));
             } else if !matches!(
