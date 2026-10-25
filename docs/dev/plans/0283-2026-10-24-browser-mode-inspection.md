@@ -398,3 +398,21 @@ Completion requires all nine #404 criteria, matching documentation/help/client
 contracts, required Rust quality and affected tests, actual isolated workflows,
 a merged PR and fresh tracker readback. Preserve previous review budgets and
 failed evidence. No second broad review is implied by this packet.
+
+### Build selection implementation checkpoint
+
+Read-only inspection and offline future-launch selection are implemented through
+`1b8968758`. The focused owner lane passes two tests after preserved behavioral
+reds. Inspection reads a fresh owner snapshot without refresh or browser effects;
+credential storage and profile readability remain explicitly unverified. Offline
+selection requires owner confirmation and a reviewed executable SHA-256. Its pin,
+independent mode intent and idempotent receipt commit in one runtime transaction.
+A restarted replay returns the historical receipt without overwriting a later
+selection. No browser launch or Native input occurs in this path.
+
+This is an intermediate source checkpoint. Public adapters, live original-profile
+switching, selected-build duplication, UI and actual pair qualification remain
+pending. The ticket and parent remain open. The next focused invariant is that
+previous-configuration recovery launches the retained previous executable while
+preserving the selected target in the original operation history. This recovery
+must never be described as restoring migrated profile bytes.
