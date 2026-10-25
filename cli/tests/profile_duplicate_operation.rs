@@ -1340,11 +1340,25 @@ fn existing_destination_with_pending_native_readiness_resumes_same_task_without_
 fn exhausted_destination_never_publishes_partial_profile_and_same_operation_resumes() {
     use std::process::Command;
     const CHILD: &str = "AGENT_BROWSER_DUPLICATE_QUOTA_FIXTURE";
-    if std::env::var(CHILD).as_deref() != Ok("1") {
+    let namespace_names = ["user", "mnt"];
+    if std::env::var(CHILD).is_err() {
+        let proof = namespace_names
+            .into_iter()
+            .map(|name| {
+                (
+                    name,
+                    std::fs::read_link(format!("/proc/self/ns/{name}"))
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                )
+            })
+            .collect::<std::collections::BTreeMap<_, _>>();
         let status = Command::new("unshare")
             .args([
                 "--user",
                 "--map-current-user",
+                "--keep-caps",
                 "--mount",
                 "--propagation",
                 "private",
@@ -1357,11 +1371,21 @@ fn exhausted_destination_never_publishes_partial_profile_and_same_operation_resu
                 "--nocapture",
                 "--test-threads=1",
             ])
-            .env(CHILD, "1")
+            .env(CHILD, serde_json::to_string(&proof).unwrap())
             .status()
             .unwrap();
         assert!(status.success());
         return;
+    }
+    let previous: std::collections::BTreeMap<String, String> =
+        serde_json::from_str(&std::env::var(CHILD).unwrap()).unwrap();
+    for name in namespace_names {
+        assert_ne!(
+            std::fs::read_link(format!("/proc/self/ns/{name}"))
+                .unwrap()
+                .to_string_lossy(),
+            previous[name]
+        );
     }
     let root = std::env::temp_dir().join(format!("duplicate-quota-{}", uuid::Uuid::new_v4()));
     let source = root.join("source");
