@@ -720,3 +720,24 @@ fn native_unready_replacement_and_lost_restore_reply_recover_original_configurat
     drop(store);
     std::fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn cancelling_an_observed_close_prompt_keeps_original_and_never_launches() {
+    let directory = std::env::temp_dir().join(format!("mode-cancel-prompt-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&directory).unwrap();
+    let mut store = OperationStore::open(&directory.join("operations.sqlite3")).unwrap();
+    store.request(request()).unwrap();
+    let mut runtime = SyntheticRuntime {
+        process: "boot:pid:start".into(), mode: Mode::Cdp, closes: 0, launches: 0,
+        published: false, fail_before_launch: false, native_unready: false,
+        lose_restore_reply: false, lose_launch_reply: false, prompt: true,
+        uncertain_close: false, forces: 0, focuses: 0,
+    };
+    assert_eq!(store.advance("convert-1", Choice::Relaunch { confirmed: true }, &mut runtime).unwrap().phase, Phase::ClosePrompt);
+    let cancelled = store.advance("convert-1", Choice::Cancel, &mut runtime).unwrap();
+    assert_eq!(cancelled.phase, Phase::Cancelled);
+    assert_eq!(runtime.process, "boot:pid:start");
+    assert_eq!((runtime.closes, runtime.forces, runtime.launches), (1, 0, 0));
+    drop(store);
+    std::fs::remove_dir_all(directory).unwrap();
+}
