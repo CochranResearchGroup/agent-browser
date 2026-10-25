@@ -1,6 +1,6 @@
 # Runbook
 
-[P291 cold rail retry spacing](docs/dev/plans/0291-2026-10-24-cold-rail-retry-spacing.md), #430, qualifies a source-only reduction of the measured expired-observation polling gap: actual scheduler replay improves3.750s to1.750s with the same three-follow-up budget. [Evidence](docs/dev/notes/0291-2026-10-24-cold-rail-retry-spacing.md) distinguishes this from422 asset failures and from installed acceptance. Production remains9cbf948ef4af.
+[P291 cold rail acceptance](docs/dev/plans/0291-2026-10-24-cold-rail-retry-spacing.md), #430, installed35e with17 browser roots and137 Native provider/persistent unit generations preserved, but cold median3.36s to3.26s is not accepted as a meaningful speedup. A mounted regression exposes cached unknown responses at the hook caller; corrective source is qualified and awaits its exact candidate. [Evidence](docs/dev/notes/0291-2026-10-24-cold-rail-retry-spacing.md) retains failed acceptance, separate MCP-client churn and422 asset scope.
 
 Combined source a3dbb1a97 is installed as sealed binary9cbf948ef4af through the supported preserve installer, including P285 cold catch-up, P289 terminal/activity recovery and P288/P290 writer repairs. All13 pre-install browser roots survive; public auth/workspace/assets and doctor pass with retained advisories. [P285 evidence](docs/dev/notes/0285-2026-10-24-workspace-inventory-latency.md) retains its causal cold catch-up comparison; the latest five stock Chrome156 visits have median1.168s/max1.939s.
 

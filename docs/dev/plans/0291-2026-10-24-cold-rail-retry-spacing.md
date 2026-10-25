@@ -12,7 +12,7 @@ Reduce the extra empty-rail wait when Native evidence becomes available after th
 
 ## Ownership and bound
 
-Own dashboard-read-coordinator startup retry spacing, its scheduler regression and corresponding freshness prose. P283 retains observer/store/profile source; sibling profile repairs retain their handlers and dialogs. No shared implementation writer overlap is introduced. Documentation edits affect only the rail freshness paragraph. Preserve at most three follow-up reads, completion-driven serialization, visibility suspension, early termination and ordinary three-second cadence. At most two repair cycles and one dashboard build; checkpoint if the measured replay does not improve without more requests.
+Own dashboard-read-coordinator startup retry spacing, hook retry revalidation, scheduler and mounted startup regressions, and corresponding freshness prose. P283 retains observer/store/profile source; sibling profile repairs retain their handlers and dialogs. No shared implementation writer overlap is introduced. Documentation edits affect only the rail freshness paragraph. Preserve at most three follow-up reads, completion-driven serialization, visibility suspension, early termination and ordinary three-second cadence. At most two repair cycles and one dashboard build; checkpoint if the measured replay does not improve without more requests.
 
 ## Evidence and gates
 
@@ -27,3 +27,17 @@ The actual scheduler regression fails at3750ms before repair and passes at1750ms
 ## Integration checkpoint
 
 Source commit `33b31d49dc5a4562de8526bacf4b3494711366b5` merged through [PR431](https://github.com/CochranResearchGroup/agent-browser/pull/431) as `20c5f3e1bae860dc50f9a748bebccf15a5971ebb`. Source custody is integrated. Keep the plan in progress and430 open for later exact-candidate installed cold-distribution acceptance. Retain this primary checkout and its pinned candidates; no auxiliary was created.
+
+## Installed acceptance phase
+
+The subsequent user instruction to proceed with code review and exact-candidate installed cold/warm acceptance extends the completed source packet. Standards and Spec reviews found no blocking code defect; installed performance remains an evidence gate because the fixed request budget trades sampling positions. One production-shaped candidate is built from `feee93820644fff6a77bab2839341d025818b120` and validated through the exact isolated installer and supervisor fixtures before the supported preserve-mode replacement. This is an installed roadmap checkpoint, not a formal release.
+
+Use the same pinned Chrome156 executable for three idle-setup cold visits and five warm visits before and after replacement. Classify cold evidence from the actual first response, rather than assuming a35second pause proves global inactivity. Hold measurement while compilation runs. Record rail correctness, cadence, page errors and fresh independent owned-process cleanup separately from timing. Preserve current browser roots, Native unit generations, provider configuration and dashboard authentication. Stop on installed-generation drift or an ambiguous mutating result; no provider, ingress or authentication change is included. Report an unqualified or regressing outcome honestly instead of closing430 from the single-case scheduler gain.
+
+## Installed finding and corrective cycle
+
+The first sealed candidate `35e0e3058ecc13d66f3266c458773ee8a203885217ee410fe86f725e122a4d2b` installed successfully in preserve transaction `upgrade-576cdadf-a888-4fb2-bff0-466f1130b163`. All17 browser roots,137 Native provider/persistent unit generations, configuration and dashboard authentication are preserved. Two already-restarting MCP client units are retained as a separate observed limitation. Installed-path doctor passes with three existing advisory warnings, and15 public startup files match sealed input hashes.
+
+Do not accept the latency objective: three proven-cold visits have median3357.3ms before and3257.4ms after; five warm visits have median1003.4ms before and1052.5ms after. The mounted caller still revalidates only when the interval equals250ms, allowing500/1000ms retries to consume cached unknown evidence. The policy-only regression missed this integration seam.
+
+The existing mounted startup fixture fails before correction. Strengthen it to assert the revalidation header on every retry and allow the documented1.75second bounded schedule, then fix the hook predicate to cover all startup intervals. Ready/unknown/failure/empty mounted cases pass afterward, with no observed fixture residue. This is the second semantic repair cycle. Complete one corrective sealed build and supported preserve replacement, then repeat three proven-cold and five warm visits. No additional timing-policy change or Native/auth/ingress repair is included. Preserve all failed evidence and keep430 open until the corrected installed result is qualified.

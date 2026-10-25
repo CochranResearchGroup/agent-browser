@@ -1,6 +1,6 @@
 # Roadmap
 
-[P291 cold rail retry spacing](docs/dev/plans/0291-2026-10-24-cold-rail-retry-spacing.md), #430, qualifies a source-only reduction of the measured expired-observation polling gap: actual scheduler replay improves3.750s to1.750s with the same three-follow-up budget. [Evidence](docs/dev/notes/0291-2026-10-24-cold-rail-retry-spacing.md) distinguishes this from422 asset failures and from installed acceptance. Production remains9cbf948ef4af.
+[P291 cold rail acceptance](docs/dev/plans/0291-2026-10-24-cold-rail-retry-spacing.md), #430, installed35e with17 browser roots and137 Native provider/persistent unit generations preserved, but cold median3.36s to3.26s is not accepted as a meaningful speedup. A mounted regression exposes cached unknown responses at the hook caller; corrective source is qualified and awaits its exact candidate. [Evidence](docs/dev/notes/0291-2026-10-24-cold-rail-retry-spacing.md) retains failed acceptance, separate MCP-client churn and422 asset scope.
 
 [P289 terminal acquisition and Native handoff acceptance](docs/dev/plans/0289-2026-10-24-terminal-acquisition-recovery.md), #412, is installed accepted on9cbf948ef4af with actual Native canvas/WebSocket proof and13 browser roots preserved. #422 retains the separate intermittent public asset finding.
 

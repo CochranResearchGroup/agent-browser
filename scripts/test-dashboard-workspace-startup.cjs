@@ -33,11 +33,12 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
       const context = await browser.newContext();
       try {
         const page = await context.newPage();
-        const reads = [], errors = [];
+        const reads = [], revalidations = [], errors = [];
         page.on('pageerror', error => errors.push(error.message));
         await page.route('**/api/**', async route => {
           if (!route.request().url().includes('/api/service/status')) return route.fulfill({ json: { success: true, data: {} } });
           reads.push(Date.now());
+          revalidations.push(route.request().headers()["x-agent-browser-revalidate"] ?? null);
           if (mode === 'failed') return route.fulfill({ status: 503, json: { success: false } });
           const state = mode === 'ready' && reads.length >= 3 ? 'live' : 'unknown';
           const workspace = { schemaVersion: 'agent-browser.managed-workspace.v1', source: 'managed-owner', observedAtMs: Date.now(), observationAgeMs: 0,
@@ -51,10 +52,12 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
         if (mode === 'ready') {
           await page.locator('.native-workspace-tab').waitFor({ timeout: 2000 });
           assert.equal(reads.length, 3, 'catch-up must bypass the one-second shared response cache');
+          assert.deepEqual(revalidations.slice(1), ['1', '1'], 'every startup retry must explicitly revalidate, including the500ms retry');
           assert.ok(reads[2] - reads[0] < 1500, 'live owner evidence must populate without a three-second wait');
         } else {
-          await page.waitForTimeout(1600);
+          await page.waitForTimeout(mode === 'unknown' ? 2400 : 1600);
           assert.equal(reads.length, mode === 'unknown' ? 4 : 1, 'catch-up must exhaust its bound or stop on failure/empty');
+          if (mode === 'unknown') assert.deepEqual(revalidations.slice(1), ['1', '1', '1'], 'all three retries must fetch fresh evidence before ordinary polling resumes');
           assert.equal(await page.locator('.native-workspace-tab').count(), 0, 'unknown observations never invent live rows');
         }
         capture();

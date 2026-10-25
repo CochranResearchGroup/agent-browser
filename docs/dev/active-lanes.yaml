@@ -10,11 +10,11 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#430]
     plan_state: IN_PROGRESS
-    custody_state: INTEGRATED
+    custody_state: ACTIVE
     overlaps: [P283]
-    reconciled_overlaps: ["Own retry-spacing helper, scheduler regression and rail freshness prose only; preserve P283 observer/store/profile and peer profile repairs; reuse retained primary serially"]
-    validation_status: Scheduler red3750ms to green1750ms; three-follow-up bound, dashboard checks,40 output tests, builds, strict Rust, links and independent cleanup pass
-    limitations: ["Source packet only; no production replacement or provider changes", "422 asset failures remain unexplained"]
+    reconciled_overlaps: ["Own retry-spacing helper, hook revalidation, scheduler/mounted regressions and rail freshness prose only; preserve P283 observer/store/profile and peer profile repairs; reuse retained primary serially"]
+    validation_status: First installed latency unaccepted; mounted cache-caller regression red/green qualifies correction, pending corrective candidate
+    limitations: ["35e installed correctly; first measured cold gain is not accepted; corrective candidate pending", "422 asset failures remain unexplained"]
     integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/431
     updated_at: 2026-10-24
 
