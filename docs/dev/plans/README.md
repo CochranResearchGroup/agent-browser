@@ -1,5 +1,7 @@
 # Active plan index
 
+[P293 asset delivery diagnosis](0293-2026-10-25-dashboard-asset-delivery.md), #422: five paired rounds passed; diagnostic packet closed, intermittent failure remains open.
+
 [P292 startup validation selection](0292-2026-10-25-startup-validation-selection.md), #437, closes the local selector omission found in the P291 retro with public-CLI red-green coverage.
 
 [P283 browser modes and profiles](0283-2026-10-24-browser-mode-inspection.md): inspection401 and repairs424–429 are closed; one worker each completes402/403, then404. No runtime publication.
