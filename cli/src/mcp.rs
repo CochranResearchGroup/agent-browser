@@ -3,6 +3,8 @@ use std::io::{self, BufRead, Write};
 use serde_json::{json, Map, Value};
 
 mod catalog;
+#[cfg(test)]
+mod browser_build_tests;
 mod host_control;
 mod host_policy;
 mod host_reconnect;
