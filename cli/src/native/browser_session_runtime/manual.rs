@@ -409,7 +409,7 @@ pub(super) fn reconcile_initial(
         {
             return Err("manual_login_launch_posture_changed".into());
         }
-        return Ok(Some(agent_browser_service_model::BrowserRecovery {
+        Ok(Some(agent_browser_service_model::BrowserRecovery {
             launch: BrowserLaunch {
                 process_identity: Some(original.clone()),
                 browser_id: browser_id.clone(),
@@ -422,7 +422,7 @@ pub(super) fn reconcile_initial(
                 }),
             },
             target_ids: Default::default(),
-        }));
+        }))
     }
     #[cfg(not(target_os = "linux"))]
     Err("manual_login_launch_reconciliation_unsupported".into())
