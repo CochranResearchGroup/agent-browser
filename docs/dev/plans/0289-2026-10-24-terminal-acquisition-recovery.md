@@ -1,6 +1,6 @@
 # P289: Terminal Native acquisition recovery
 
-State: OPEN
+State: CLOSED
 Lane: P289
 Product lane: PL-BUGFIX
 Work item: CochranResearchGroup/agent-browser#412
@@ -18,7 +18,7 @@ Current Native canonical source rejects same-key Released replay in complete_acq
 
 ## Current State
 
-Terminal acquisition recovery is merged, installed and accepted: old Released history is retained, fresh synthetic open/continue succeeds after exact failed-reservation recovery, and zero acquisitions remain pending. The exact owned handoff POST still fails on installed e0d5525e92cc. PR421 qualifies operation-local exact-scope observation sharing: full96-case pool plus387 model gates, strict Rust quality and exact sealed candidate installer fixtures pass. Install candidate9cbf948ef4af through the supported preserve path, then prove Native iframe pixels and cleanup. Retain the primary/candidates.
+Installed and accepted through PR421 / source a3dbb1a97, sealed binary 9cbf948ef4af and supported preserve transaction upgrade-d88f9c6c-78da-4008-8aed-2ac2a1ff0b3b. Exact Released history is retained; zero acquisitions remain pending; open/continue/close and authenticated Native iframe canvas/WebSocket acceptance pass. All 13 protected browser roots survive; the final 14-generation synthetic tree and nine-generation QA tree are absent. Retain the primary and pinned candidates. The separate intermittent public asset finding is tracked in #422, not claimed fixed here.
 
 ## Next bounded packet
 

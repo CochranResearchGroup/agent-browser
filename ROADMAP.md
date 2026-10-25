@@ -1,6 +1,6 @@
 # Roadmap
 
-[P289 terminal acquisition and Native handoff acceptance](docs/dev/plans/0289-2026-10-24-terminal-acquisition-recovery.md), #412, remains active after installed acquisition recovery; next measure the stalled owned handoff POST.
+[P289 terminal acquisition and Native handoff acceptance](docs/dev/plans/0289-2026-10-24-terminal-acquisition-recovery.md), #412, is installed accepted on9cbf948ef4af with actual Native canvas/WebSocket proof and13 browser roots preserved. #422 retains the separate intermittent public asset finding.
 
 [P290 writer executable continuity](docs/dev/plans/0290-2026-10-24-writer-executable-continuity.md), #417, repairs PR415 live-writer custody loss after executable unlink through public CLI TDD. PR419 carries the qualified source;221 workstation tests, public fixtures, strict Rust quality and docs pass. That source checkpoint left production unchanged; the later combined e0d5525e92cc install includes this repair.
 
