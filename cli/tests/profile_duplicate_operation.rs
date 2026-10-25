@@ -736,7 +736,7 @@ fn qualified_graceful_source_custody_fences_launch_writes_and_publishes_on_its_c
         operation_id: "dup-op".into(),
         browser_build: "same-build".into(),
     };
-    guard.publish_and_release(&duplicate).unwrap();
+    guard.publish_and_release(&duplicate, None).unwrap();
     db.execute_batch("BEGIN IMMEDIATE;ROLLBACK;").unwrap();
     let catalog: String = db
         .query_row(
@@ -817,7 +817,7 @@ fn qualified_graceful_source_custody_fences_launch_writes_and_publishes_on_its_c
         destination_task: None,
         failure: Some("profile_duplicate_catalog_readback_required".into()),
     };
-    custody::publish_recovered_copy(&database, &operation).unwrap();
+    custody::publish_recovered_copy(&database, &operation, None).unwrap();
     let catalog: serde_json::Value = serde_json::from_str(
         &db.query_row::<String, _, _>(
             "SELECT json FROM state_documents WHERE kind='browser_profile_catalog'",
