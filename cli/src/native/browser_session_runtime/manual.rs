@@ -83,10 +83,28 @@ impl ManualBrowsers {
             identity.clone()
         } else {
             let path = super::super::browser_session_store::BrowserSessionSqliteStore::default_sqlite_path()?;
-            super::super::browser_session_store::BrowserSessionSqliteStore::open_read_only(&path)?
-                .published_launch_process_identity(browser)
-                .map_err(|_| "manual_login_original_identity_unavailable")?
-                .ok_or("manual_login_original_identity_missing")?
+            let mut store = super::super::browser_session_store::BrowserSessionSqliteStore::open_read_only(&path)?;
+            match store.published_launch_process_identity(browser) {
+                Ok(Some(identity)) if identity.pid == browser.pid => identity,
+                _ => {
+                    let records = store.unpublished_launch_records()
+                        .map_err(|_| "manual_login_original_identity_unavailable")?;
+                    let matches = records.into_iter().filter(|record| {
+                        record.intent.profile_id == browser.profile_id
+                            && record.observed_browser_id.as_deref() == Some(browser.id.as_str())
+                            && record.observed_pid == Some(browser.pid)
+                            && browser.desktop.as_ref().is_some_and(|desktop| {
+                                desktop.desktop_id == record.intent.assignment.desktop_id
+                                    && desktop.generation == record.intent.assignment.generation
+                            })
+                    }).collect::<Vec<_>>();
+                    let [record] = matches.as_slice() else {
+                        return Err("manual_login_original_identity_missing".into());
+                    };
+                    record.observed_process_identity.clone()
+                        .ok_or("manual_login_original_identity_missing")?
+                }
+            }
         };
         match crate::process_identity::observe_process(browser.pid) {
             crate::process_identity::ProcessObservation::Missing => Ok(false),
@@ -338,31 +356,61 @@ pub(super) fn reconcile_mode(
 pub(super) fn reconcile_initial(
     profile: &BrowserProfileCatalogEntry,
 ) -> Result<Option<agent_browser_service_model::BrowserRecovery>, String> {
-    let path = super::super::browser_session_store::BrowserSessionSqliteStore::default_sqlite_path()?;
-    let mut store = super::super::browser_session_store::BrowserSessionSqliteStore::open_read_only(&path)?;
-    let records = store.unpublished_launch_records().map_err(|_| "manual_login_launch_readback_required")?;
-    let candidates = records.into_iter().filter(|record| record.intent.profile_id == profile.id).collect::<Vec<_>>();
+    let path =
+        super::super::browser_session_store::BrowserSessionSqliteStore::default_sqlite_path()?;
+    let mut store =
+        super::super::browser_session_store::BrowserSessionSqliteStore::open_read_only(&path)?;
+    let records = store
+        .unpublished_launch_records()
+        .map_err(|_| "manual_login_launch_readback_required")?;
+    let candidates = records
+        .into_iter()
+        .filter(|record| record.intent.profile_id == profile.id)
+        .collect::<Vec<_>>();
     let [record] = candidates.as_slice() else {
-        return if candidates.is_empty() { Ok(None) } else { Err("manual_login_launch_ambiguous".into()) };
+        return if candidates.is_empty() {
+            Ok(None)
+        } else {
+            Err("manual_login_launch_ambiguous".into())
+        };
     };
-    let (Some(original), Some(browser_id)) = (&record.observed_process_identity, &record.observed_browser_id) else {
+    let (Some(original), Some(browser_id)) = (
+        &record.observed_process_identity,
+        &record.observed_browser_id,
+    ) else {
         return Err("manual_login_launch_readback_required".into());
     };
     #[cfg(target_os = "linux")]
     {
-        let Some(current) = super::super::browser_session_profile_reuse::current_profile_browser_identity(Path::new(&profile.user_data_dir))? else {
-            return Ok(None);
+        let Some(current) =
+            super::super::browser_session_profile_reuse::current_profile_browser_identity(
+                Path::new(&profile.user_data_dir),
+            )?
+        else {
+            return Err("manual_login_launch_readback_required".into());
         };
         if current.pid != original.pid
             || current.start_token.as_deref() != Some(original.start_token.as_str())
             || current.executable_path != original.executable_path
-            || current.command_line.as_ref().is_none_or(|args| args.iter().any(|arg| arg.starts_with("--remote-debugging"))) {
+            || current
+                .command_line
+                .as_ref()
+                .is_none_or(|args| args.iter().any(|arg| arg.starts_with("--remote-debugging")))
+        {
             return Err("manual_login_launch_posture_changed".into());
         }
         return Ok(Some(agent_browser_service_model::BrowserRecovery {
-            launch: BrowserLaunch { process_identity: Some(original.clone()), browser_id: browser_id.clone(), pid: original.pid,
-                cdp_endpoint: String::new(), desktop: Some(RemoteViewFixedDesktop { desktop_id: record.intent.assignment.desktop_id.clone(),
-                    generation: record.intent.assignment.generation, friendly_route_label: "Recovered destination".into() }) },
+            launch: BrowserLaunch {
+                process_identity: Some(original.clone()),
+                browser_id: browser_id.clone(),
+                pid: original.pid,
+                cdp_endpoint: String::new(),
+                desktop: Some(RemoteViewFixedDesktop {
+                    desktop_id: record.intent.assignment.desktop_id.clone(),
+                    generation: record.intent.assignment.generation,
+                    friendly_route_label: "Recovered destination".into(),
+                }),
+            },
             target_ids: Default::default(),
         }));
     }
