@@ -1,5 +1,9 @@
 # Active plan index
 
+[P293 asset delivery diagnosis](0293-2026-10-25-dashboard-asset-delivery.md), #422: five paired rounds passed; diagnostic packet closed, intermittent failure remains open.
+
+[P292 startup validation selection](0292-2026-10-25-startup-validation-selection.md), #437, closes the local selector omission found in the P291 retro with public-CLI red-green coverage.
+
 [P283 browser modes and profiles](0283-2026-10-24-browser-mode-inspection.md): inspection #401, conversion #402, copying #403 and repairs #424–429 are closed; root completes #404. No runtime publication.
 
 [P291 cold rail retry spacing](0291-2026-10-24-cold-rail-retry-spacing.md), #430, is closed with corrected caller revalidation installed oncf65dd76422b; cold median3.36s to2.11s, with warm behavior preserved.

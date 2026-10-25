@@ -1,6 +1,36 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P293
+    product_lane: PL-BUGFIX
+    objective: Diagnose intermittent public dashboard asset delivery
+    plan: docs/dev/plans/0293-2026-10-25-dashboard-asset-delivery.md
+    branch: fix/dashboard-assets-422
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#422]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    overlaps: []
+    validation_status: 170 paired requests passed; original symptom not reproduced, issue422 remains open
+    limitations: ["No ingress, authentication or runtime mutation", "Retain foreign checkouts and pinned candidates"]
+    updated_at: 2026-10-25
+
+  - id: P292
+    product_lane: PL-BUGFIX
+    objective: Select mounted startup checks for polling and cache changes
+    plan: docs/dev/plans/0292-2026-10-25-startup-validation-selection.md
+    branch: fix/validation-startup-437
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#437]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    overlaps: []
+    validation_status: Public CLI red-green matrix, full selector validation, mounted startup, coordinator and selected-context checks pass
+    limitations: ["Local validation recommendations only; CI and runtime unchanged", "Retain primary and pinned candidates"]
+    updated_at: 2026-10-25
+
   - id: P283
     product_lane: PL-PLATFORM
     objective: Deliver browser mode and independent profile controls through owner workflows
