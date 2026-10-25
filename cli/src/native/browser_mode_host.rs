@@ -224,6 +224,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 let selected = match choice {
                     "relaunch" => Choice::Relaunch { confirmed },
                     "reconcile" => Choice::Resume,
+                    "restore_previous" => Choice::RestorePrevious { confirmed },
                     "retry_graceful_close" => Choice::RetryGracefulClose,
                     "force_close" => Choice::ForceClose { confirmed },
                     "focus" => Choice::ReturnToBrowser,
@@ -285,10 +286,18 @@ pub(super) fn public_operation_view(
             ("force_close", true),
             ("reconcile", false),
         ],
-        Phase::OriginalExited | Phase::LaunchDispatched => vec![("reconcile", false)],
+        Phase::OriginalExited => vec![("reconcile", false)],
+        Phase::LaunchDispatched | Phase::ReplacementPending => {
+            vec![("reconcile", false), ("restore_previous", true)]
+        }
+        Phase::LaunchAbsent => vec![
+            ("relaunch", true),
+            ("restore_previous", true),
+            ("reconcile", false),
+        ],
         _ => vec![],
     };
-    json!({"schemaVersion":"agent-browser.mode-operation.v1","operationId":state.request.operation_id,"phase":phase,"failure":failure,"browserId":state.request.browser_id,"profileId":state.request.profile_id,"taskId":task_id,"affectedTaskIds":state.request.task_ids,"requestedMode":if state.request.requested_mode==Mode::Cdp{"cdp"}else{"cdp_free"},"observedMode":if state.phase==Phase::Completed {Some(if state.request.requested_mode==Mode::Cdp{"cdp"}else{"cdp_free"})}else{None},"nativeContextScope":"browser","restoration":"logical tasks and profile retained; transient pages are not replayed","warning":"Relaunch replaces the whole browser. Unsaved forms, downloads and page state can be lost. Native controls address the current browser window; URLs are unverified until observed. Force close may lose buffered data.","closeMethod":state.close_method,"actions":actions.into_iter().map(|(action,confirmation)|json!({"action":action,"requiresConfirmation":confirmation})).collect::<Vec<_>>()})
+    json!({"schemaVersion":"agent-browser.mode-operation.v1","operationId":state.request.operation_id,"phase":phase,"failure":failure.or(state.failure.as_deref()),"launchAttempts":state.launch_attempts,"recoveryChoice":if state.restoring_previous {Some("restore_previous")}else{None},"effectiveMode":state.effective_mode.as_ref().map(|mode|if *mode==Mode::Cdp{"cdp"}else{"cdp_free"}),"browserId":state.request.browser_id,"profileId":state.request.profile_id,"taskId":task_id,"affectedTaskIds":state.request.task_ids,"requestedMode":if state.request.requested_mode==Mode::Cdp{"cdp"}else{"cdp_free"},"observedMode":if state.phase==Phase::Completed {Some(if state.effective_mode.as_ref().unwrap_or(&state.request.requested_mode)==&Mode::Cdp{"cdp"}else{"cdp_free"})}else{None},"nativeContextScope":"browser","restoration":"logical tasks and profile retained; transient pages are not replayed","warning":"Relaunch replaces the whole browser. Unsaved forms, downloads and page state can be lost. Native controls address the current browser window; URLs are unverified until observed. Force close may lose buffered data.","closeMethod":state.close_method,"actions":actions.into_iter().map(|(action,confirmation)|json!({"action":action,"requiresConfirmation":confirmation})).collect::<Vec<_>>()})
 }
 fn phase_name(phase: &Phase) -> &'static str {
     match phase {
@@ -297,6 +306,8 @@ fn phase_name(phase: &Phase) -> &'static str {
         Phase::ClosePrompt => "close_prompt",
         Phase::OriginalExited => "original_exited",
         Phase::LaunchDispatched => "launch_dispatched",
+        Phase::LaunchAbsent => "launch_absent",
+        Phase::ReplacementPending => "replacement_pending",
         Phase::Completed => "completed",
         Phase::Cancelled => "cancelled",
     }
@@ -535,7 +546,13 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             self.host
                 .effects
                 .recover_browser(&self.binding.browser, &profile, &tabs, &[])?;
-        let proof = self.qualify(request, &recovery)?;
+        let proof = self.qualify(request, &recovery).map_err(|error| {
+            if error.starts_with("mode_operation_replacement_") {
+                error
+            } else {
+                format!("mode_operation_native_unavailable:{error}")
+            }
+        })?;
         self.recovery = Some(recovery);
         Ok(proof)
     }
@@ -561,9 +578,72 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         else {
             return Ok(None);
         };
-        let proof = self.qualify(request, &recovery)?;
+        let proof = self.qualify(request, &recovery).map_err(|error| {
+            if error.starts_with("mode_operation_replacement_") {
+                error
+            } else {
+                format!("mode_operation_native_unavailable:{error}")
+            }
+        })?;
         self.recovery = Some(recovery);
         Ok(Some(proof))
+    }
+    fn replacement_absent(&mut self, request: &Request) -> Result<bool, String> {
+        let profile = self.profile(request);
+        super::super::browser_session_runtime::prove_profile_launch_absence(&profile)?;
+        let path = self.host.persistence.runtime_database_path()?;
+        BrowserSessionSqliteStore::open(path.parent().ok_or("mode_operation_store_unavailable")?)?
+            .settle_unpublished_profile_launch_absence(
+                &profile,
+                &self.host.persisted_state,
+                Some(&self.binding.browser),
+            )
+            .map_err(|_| "mode_operation_launch_custody_readback_required")?;
+        Ok(true)
+    }
+    fn restore_previous(&mut self, request: &Request) -> Result<Mode, String> {
+        let profile = self.profile(request);
+        self.host
+            .effects
+            .begin_operation(&self.host.persisted_state)?;
+        let tabs = self
+            .host
+            .state
+            .tabs
+            .values()
+            .filter(|tab| tab.browser_id == self.binding.browser.id)
+            .cloned()
+            .collect::<Vec<_>>();
+        // Reconcile custody without requiring Native readiness. An exact launched
+        // process may need closure precisely because readiness is unavailable.
+        if let Some(recovery) = self.host.effects.reconcile_profile_browser(
+            &profile,
+            Some(&self.binding.browser),
+            &tabs,
+            &[],
+        )? {
+            let identity = recovery
+                .launch
+                .process_identity
+                .as_ref()
+                .ok_or("mode_operation_replacement_identity_missing")?;
+            if identity == &self.binding.original || !original_matches(identity)? {
+                return Err("mode_operation_replacement_changed".into());
+            }
+            let mut current = self.binding.browser.clone();
+            current.pid = recovery.launch.pid;
+            current.cdp_endpoint = recovery.launch.cdp_endpoint;
+            current.desktop = recovery.launch.desktop;
+            self.host.effects.close_browser(&current)?;
+            if original_matches(identity)? {
+                return Err("mode_operation_replacement_exit_unproven".into());
+            }
+        }
+        if !self.replacement_absent(request)? {
+            return Err("mode_operation_launch_absence_unproven".into());
+        }
+        self.recovery = None;
+        Ok(self.binding.original_mode.clone())
     }
     fn publish(&mut self, request: &Request, replacement: &Replacement) -> Result<(), String> {
         if let Some(current) = self
@@ -644,9 +724,15 @@ pub(crate) fn recovery_authorized(
         return false;
     };
     serde_json::from_str::<Operation>(&value).is_ok_and(|operation| {
-        operation.phase == Phase::LaunchDispatched
-            && operation.request.browser_id == browser.id
+        matches!(
+            operation.phase,
+            Phase::LaunchDispatched | Phase::ReplacementPending
+        ) && operation.request.browser_id == browser.id
             && operation.request.profile_id == profile.id
-            && operation.request.requested_mode == Mode::CdpFree
+            && operation
+                .effective_mode
+                .as_ref()
+                .unwrap_or(&operation.request.requested_mode)
+                == &Mode::CdpFree
     })
 }

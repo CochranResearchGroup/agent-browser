@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import select
 import signal
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -22,6 +23,8 @@ def main():
     parser.add_argument('--binary', required=True)
     parser.add_argument('--chrome', required=True)
     parser.add_argument('--mode-conversion', action='store_true')
+    parser.add_argument('--recovery-case', choices=['pre-spawn-retry', 'pre-spawn-restore', 'native-restore', 'lost-reply'])
+    parser.add_argument('--restart-owner', action='store_true')
     parser.add_argument('--namespace-worker', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--parent-proof-fd', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -34,7 +37,7 @@ def main():
             result = subprocess.run(['unshare', '--user', '--map-current-user', '--keep-caps', '--mount', '--net',
                 '--propagation', 'private', 'python3', str(Path(__file__).resolve()),
                 '--binary', str(Path(args.binary).resolve()), '--chrome', str(Path(args.chrome).resolve()),
-                '--namespace-worker', '--parent-proof-fd', str(read_fd), *(['--mode-conversion'] if args.mode_conversion else [])], pass_fds=(read_fd,)).returncode
+                '--namespace-worker', '--parent-proof-fd', str(read_fd), *(['--mode-conversion'] if args.mode_conversion else []), *(['--recovery-case', args.recovery_case] if args.recovery_case else []), *(['--restart-owner'] if args.restart_owner else [])], pass_fds=(read_fd,)).returncode
         finally:
             os.close(read_fd)
         raise SystemExit(result)
@@ -48,6 +51,16 @@ def main():
     wire = json.loads((Path(__file__).resolve().parents[1] / 'docs/dev/contracts/remote-view-application-r3.v1.fixture.json').read_text())
     with tempfile.TemporaryDirectory(prefix='ab357-mcp-') as temporary:
         root = Path(temporary)
+        original_chrome = Path(args.chrome).resolve()
+        private_bundle = root / 'chrome-build'
+        private_bundle.mkdir()
+        for resource in original_chrome.parent.iterdir():
+            target = private_bundle / resource.name
+            if resource == original_chrome:
+                shutil.copy2(resource, target)
+            else:
+                target.symlink_to(resource, target_is_directory=resource.is_dir())
+        args.chrome = str(private_bundle / original_chrome.name)
         sockets = root / 'x11-sockets'
         sockets.mkdir(mode=0o1777)
         sockets.chmod(0o1777)
@@ -78,6 +91,9 @@ def main():
         cookie_after_close = threading.Event()
         cookie_restored = threading.Event()
         get_requests = []
+        inject_pre_spawn = threading.Event()
+        suppress_replacement_windows = threading.Event()
+        original_pid = None
         native_page=threading.Event(); native_mouse=threading.Event(); native_scroll=threading.Event(); native_auth=threading.Event()
         def spawn(command, **kwargs):
             child = subprocess.Popen(command, env=env, start_new_session=True, **kwargs)
@@ -155,6 +171,8 @@ def main():
                     operation=self.path.rsplit('/',1)[1]
                     assert body['desktopId']==wire['assignmentObservation']['target']['viewingDesktopId'] and body['expectedGeneration']==19
                     current=windows()
+                    if suppress_replacement_windows.is_set():
+                        current = [window for window in current if window['pid'] == original_pid]
                     if operation=='observe':
                         value=dict(desktopId=body['desktopId'],generation=19,geometry=dict(current=dict(width=1280,height=800)),windows=dict(windows=current))
                     else:
@@ -167,7 +185,11 @@ def main():
                             assert body['expectedWidth']==1280 and body['expectedHeight']==800
                             assert body['expectedWindow']=={key:window[key] for key in ['x','y','width','height']}
                             for action in body['actions']:
-                                if action['kind']=='key': result=run(['xdotool','key','--clearmodifiers',action['chord']])
+                                if action['kind']=='key':
+                                    if action['chord'].lower() == 'alt+f4' and inject_pre_spawn.is_set():
+                                        Path(args.chrome).chmod(0o600)
+                                        inject_pre_spawn.clear()
+                                    result=run(['xdotool','key','--clearmodifiers',action['chord']])
                                 elif action['kind']=='text': result=run(['xdotool','type','--clearmodifiers','--delay','0','--',action['text']])
                                 elif action['kind']=='move': result=run(['xdotool','mousemove',str(action['x']),str(action['y'])])
                                 elif action['kind'] in ['click','scroll']:
@@ -253,6 +275,29 @@ def main():
             payload = json.loads(result['content'][0]['text'])
             assert payload['success'], payload
             return payload['data']
+        def fresh_requester(restart=False):
+            nonlocal mcp
+            mcp.terminate(); mcp.wait(timeout=10)
+            if restart:
+                manifest = json.loads((Path(env['AGENT_BROWSER_SOCKET_DIR']) / 'runtime-host.json').read_text())
+                owner_pid = manifest['pid']
+                owner = Path('/proc/' + str(owner_pid))
+                owner_env = owner.joinpath('environ').read_bytes().split(bytes([0]))
+                assert ('AGENT_BROWSER_HOME=' + env['AGENT_BROWSER_HOME']).encode() in owner_env
+                assert b'AGENT_BROWSER_RUNTIME_HOST_PROCESS=1' in owner_env
+                identity = process_identity(owner_pid)
+                assert identity['executable'] == str(Path(args.binary).resolve())
+                assert process_identity(owner_pid) == identity
+                os.kill(owner_pid, signal.SIGTERM)
+                deadline = time.monotonic() + 10
+                while owner.exists() and owner.joinpath('cmdline').read_bytes():
+                    assert time.monotonic() < deadline, 'exact fixture owner did not exit'
+                    time.sleep(.02)
+            with mcp_log.open('a') as diagnostics:
+                mcp = spawn([str(Path(args.binary).resolve()), 'mcp', 'serve'], stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE, stderr=diagnostics, text=True)
+            rpc('initialize', dict(protocolVersion='2024-11-05', capabilities={}, clientInfo=dict(name='mode-recovery-fixture', version='1')))
+            mcp.stdin.write(json.dumps(dict(jsonrpc='2.0', method='notifications/initialized')) + '\n');mcp.stdin.flush()
         try:
             read_fd, write_fd = os.pipe()
             try:
@@ -301,11 +346,50 @@ def main():
                 original=(task['taskId'],task['browserId'],task['profileId'],link['handoffUrl'])
                 prepared=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-one',mode='cdp_free',choice='prepare')))
                 assert prepared['phase']=='prepared',prepared
-                changed=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-one',mode='cdp_free',choice='relaunch')))
+                original_pid = browsers()[0][0]
+                if args.recovery_case and args.recovery_case.startswith('pre-spawn'):
+                    inject_pre_spawn.set()
+                if args.recovery_case == 'native-restore':
+                    suppress_replacement_windows.set()
+                def convert(choice, confirmed=False):
+                    return call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-one',mode='cdp_free',choice=choice,ownerConfirmed=confirmed)))
+                if args.recovery_case == 'lost-reply':
+                    seq += 1
+                    mcp.stdin.write(json.dumps(dict(jsonrpc='2.0',id=seq,method='tools/call',params=dict(name='browser_command',arguments=dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-one',mode='cdp_free',choice='relaunch')))))+'\n');mcp.stdin.flush()
+                    deadline=time.monotonic()+20
+                    while not any(pid != original_pid for pid,_ in browsers()):
+                        assert time.monotonic()<deadline,'replacement not launched';time.sleep(.02)
+                    fresh_requester(args.restart_owner)
+                    changed=convert('reconcile')
+                else:
+                    changed=convert('relaunch')
+                if args.recovery_case and args.recovery_case != 'lost-reply':
+                    wanted='replacement_pending' if args.recovery_case=='native-restore' else 'launch_absent'
+                    deadline=time.monotonic()+15
+                    while changed['phase'] != wanted:
+                        assert time.monotonic()<deadline,changed
+                        changed=convert('reconcile');time.sleep(.1)
+                    assert changed['operationId']=='mode-one' and changed['failure'],changed
+                    pending_processes=browsers()
+                    assert len(pending_processes)==(1 if wanted=='replacement_pending' else 0),pending_processes
+                    if args.restart_owner: fresh_requester(True)
+                    Path(args.chrome).chmod(0o755)
+                    suppress_replacement_windows.clear()
+                    changed=convert('relaunch' if args.recovery_case=='pre-spawn-retry' else 'restore_previous',True)
+                    deadline=time.monotonic()+15
+                    while changed['phase']!='completed':
+                        assert time.monotonic()<deadline,changed
+                        changed=convert('reconcile');time.sleep(.1)
+                    assert changed['operationId']=='mode-one' and changed['requestedMode']=='cdp_free',changed
+                    assert len(browsers())==1,'recovery created concurrent processes'
+                    if args.recovery_case!='pre-spawn-retry':
+                        assert changed['effectiveMode']=='cdp' and changed['observedMode']=='cdp',changed
+                        call('browser_navigate',dict(taskId=task['taskId'],url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/login-fixture'))
+                        changed=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-after-restore',mode='cdp_free',choice='relaunch')))
                 for _ in range(30):
                     if changed['phase']=='completed': break
                     time.sleep(.1)
-                    changed=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-one',mode='cdp_free',choice='reconcile')))
+                    changed=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-after-restore' if args.recovery_case in ['pre-spawn-restore','native-restore'] else 'mode-one',mode='cdp_free',choice='reconcile')))
                 assert changed['phase']=='completed',changed
                 physical=browsers();assert len(physical)==1 and '--remote-debugging' not in physical[0][1], 'no-CDP replacement proof'
                 assert changed['taskId']==original[0] and changed['browserId']==original[1] and changed['profileId']==original[2]

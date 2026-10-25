@@ -29,6 +29,8 @@ pub enum Phase {
     ClosePrompt,
     OriginalExited,
     LaunchDispatched,
+    LaunchAbsent,
+    ReplacementPending,
     Completed,
     Cancelled,
 }
@@ -40,6 +42,14 @@ pub struct Operation {
     pub replacement: Option<Replacement>,
     #[serde(default)]
     pub close_method: Option<CloseMethod>,
+    #[serde(default)]
+    pub effective_mode: Option<Mode>,
+    #[serde(default)]
+    pub failure: Option<String>,
+    #[serde(default)]
+    pub launch_attempts: u32,
+    #[serde(default)]
+    pub restoring_previous: bool,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Action {
@@ -50,6 +60,8 @@ pub enum Action {
     Cancel,
     LaunchReplacement,
     ReconcileReplacement,
+    RetryReplacement,
+    RestorePrevious,
     Readback,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -146,6 +158,10 @@ impl OperationStore {
             phase: Phase::Prepared,
             replacement: None,
             close_method: None,
+            effective_mode: None,
+            failure: None,
+            launch_attempts: 0,
+            restoring_previous: false,
         };
         let state =
             serde_json::to_string(&operation).map_err(|_| "mode_operation_encode_failed")?;
@@ -201,7 +217,10 @@ impl Operation {
                 Action::Cancel,
             ],
             Phase::OriginalExited => vec![Action::LaunchReplacement],
-            Phase::LaunchDispatched => vec![Action::ReconcileReplacement],
+            Phase::LaunchDispatched | Phase::ReplacementPending => {
+                vec![Action::ReconcileReplacement, Action::RestorePrevious]
+            }
+            Phase::LaunchAbsent => vec![Action::RetryReplacement, Action::RestorePrevious],
             Phase::Completed | Phase::Cancelled => vec![Action::Readback],
         }
     }
@@ -227,6 +246,7 @@ pub enum CloseOutcome {
 pub enum Choice {
     Relaunch { confirmed: bool },
     Resume,
+    RestorePrevious { confirmed: bool },
     RetryGracefulClose,
     ForceClose { confirmed: bool },
     ReturnToBrowser,
@@ -241,6 +261,15 @@ pub trait ModeRuntime {
     fn focus(&mut self, request: &Request) -> Result<(), String>;
     fn launch(&mut self, request: &Request) -> Result<Replacement, String>;
     fn reconcile_replacement(&mut self, request: &Request) -> Result<Option<Replacement>, String>;
+    /// Must prove current exact-profile absence, independently of a lost reply.
+    fn replacement_absent(&mut self, _request: &Request) -> Result<bool, String> {
+        Ok(false)
+    }
+    /// Reconcile and close only the original operation replacement, then prove
+    /// absence before selecting its retained prior configuration.
+    fn restore_previous(&mut self, _request: &Request) -> Result<Mode, String> {
+        Err("mode_operation_restore_unavailable".into())
+    }
     fn publish(&mut self, request: &Request, replacement: &Replacement) -> Result<(), String>;
 }
 impl OperationStore {
@@ -267,6 +296,22 @@ impl OperationStore {
         *operation = next;
         Ok(())
     }
+    fn record_failure(&mut self, operation: &mut Operation, error: &str) -> Result<(), String> {
+        let mut next = operation.clone();
+        next.failure = Some(
+            error
+                .split(':')
+                .next()
+                .unwrap_or("mode_operation_unknown")
+                .into(),
+        );
+        if error.starts_with("mode_operation_native_") {
+            next.phase = Phase::ReplacementPending;
+        }
+        self.save_transition(operation, &next)?;
+        *operation = next;
+        Ok(())
+    }
     pub fn advance(
         &mut self,
         id: &str,
@@ -283,6 +328,36 @@ impl OperationStore {
         if matches!(operation.phase, Phase::Completed | Phase::Cancelled) {
             return Ok(operation);
         }
+        let mut effect_request = operation.request.clone();
+        if let Some(mode) = &operation.effective_mode {
+            effect_request.requested_mode = mode.clone();
+        }
+        if let Choice::RestorePrevious { confirmed } = choice {
+            if !confirmed {
+                return Err("mode_operation_restore_confirmation_required".into());
+            }
+            if !matches!(
+                operation.phase,
+                Phase::LaunchDispatched | Phase::LaunchAbsent | Phase::ReplacementPending
+            ) {
+                return Err("mode_operation_phase_conflict:read current operation".into());
+            }
+            let mut next = operation.clone();
+            next.restoring_previous = true;
+            self.save_transition(&operation, &next)?;
+            operation = next;
+        }
+        if operation.restoring_previous {
+            let mode = runtime.restore_previous(&effect_request)?;
+            let mut next = operation.clone();
+            next.effective_mode = Some(mode.clone());
+            next.restoring_previous = false;
+            next.replacement = None;
+            next.phase = Phase::OriginalExited;
+            self.save_transition(&operation, &next)?;
+            operation = next;
+            effect_request.requested_mode = mode;
+        }
         if matches!(choice, Choice::Cancel) {
             if operation.phase != Phase::Prepared {
                 return Err(
@@ -295,12 +370,12 @@ impl OperationStore {
         }
         if matches!(choice, Choice::ReturnToBrowser) {
             if !matches!(
-                runtime.original_status(&operation.request)?,
+                runtime.original_status(&effect_request)?,
                 OriginalStatus::Live
             ) {
                 return Err("mode_operation_original_exit_observed:reconcile replacement".into());
             }
-            runtime.focus(&operation.request)?;
+            runtime.focus(&effect_request)?;
             return Ok(operation);
         }
         if let Choice::ForceClose { confirmed } = choice {
@@ -315,8 +390,8 @@ impl OperationStore {
             next.close_method = Some(CloseMethod::Forced);
             self.save_transition(&operation, &next)?;
             operation = next;
-            match runtime.original_status(&operation.request)? {
-                OriginalStatus::Live => match runtime.force_close(&operation.request)? {
+            match runtime.original_status(&effect_request)? {
+                OriginalStatus::Live => match runtime.force_close(&effect_request)? {
                     CloseOutcome::Exited => {
                         self.transition(&mut operation, Phase::OriginalExited)?
                     }
@@ -334,8 +409,8 @@ impl OperationStore {
             next.close_method = Some(CloseMethod::Graceful);
             self.save_transition(&operation, &next)?;
             operation = next;
-            match runtime.original_status(&operation.request)? {
-                OriginalStatus::Live => match runtime.graceful_close(&operation.request)? {
+            match runtime.original_status(&effect_request)? {
+                OriginalStatus::Live => match runtime.graceful_close(&effect_request)? {
                     CloseOutcome::Exited => {
                         self.transition(&mut operation, Phase::OriginalExited)?
                     }
@@ -350,7 +425,7 @@ impl OperationStore {
         }
         if matches!(operation.phase, Phase::Closing | Phase::ClosePrompt)
             && matches!(
-                runtime.original_status(&operation.request)?,
+                runtime.original_status(&effect_request)?,
                 OriginalStatus::Exited
             )
         {
@@ -363,14 +438,14 @@ impl OperationStore {
             if operation.request.task_ids.len() > 1 && !confirmed {
                 return Err("mode_operation_confirmation_required:review affected tasks".into());
             }
-            match runtime.original_status(&operation.request)? {
+            match runtime.original_status(&effect_request)? {
                 OriginalStatus::Live => {
                     let mut next = operation.clone();
                     next.phase = Phase::Closing;
                     next.close_method = Some(CloseMethod::Graceful);
                     self.save_transition(&operation, &next)?;
                     operation = next;
-                    match runtime.graceful_close(&operation.request)? {
+                    match runtime.graceful_close(&effect_request)? {
                         CloseOutcome::Exited => {
                             self.transition(&mut operation, Phase::OriginalExited)?
                         }
@@ -384,25 +459,75 @@ impl OperationStore {
                 OriginalStatus::Exited => self.transition(&mut operation, Phase::OriginalExited)?,
             }
         }
+        if matches!(
+            operation.phase,
+            Phase::LaunchDispatched | Phase::LaunchAbsent | Phase::ReplacementPending
+        ) && operation.replacement.is_none()
+        {
+            // Reconcile before consulting absence: a lost reply can already own
+            // the original launch. Never interpret a missing reply as absence.
+            if let Some(replacement) = match runtime.reconcile_replacement(&effect_request) {
+                Ok(value) => value,
+                Err(error) => {
+                    self.record_failure(&mut operation, &error)?;
+                    return Err(error);
+                }
+            } {
+                let mut next = operation.clone();
+                next.phase = Phase::LaunchDispatched;
+                next.replacement = Some(replacement);
+                self.save_transition(&operation, &next)?;
+                operation = next;
+            } else if runtime.replacement_absent(&effect_request)? {
+                self.transition(&mut operation, Phase::LaunchAbsent)?;
+                if matches!(choice, Choice::Relaunch { confirmed: true }) {
+                    self.transition(&mut operation, Phase::OriginalExited)?;
+                } else {
+                    return Ok(operation);
+                }
+            } else {
+                self.transition(&mut operation, Phase::LaunchDispatched)?;
+                return Ok(operation);
+            }
+        }
         if operation.phase == Phase::OriginalExited {
             if !matches!(
-                runtime.original_status(&operation.request)?,
+                runtime.original_status(&effect_request)?,
                 OriginalStatus::Exited
             ) {
                 return Err("mode_operation_original_exit_unproven".into());
             }
-            self.transition(&mut operation, Phase::LaunchDispatched)?;
-            let replacement = runtime.launch(&operation.request)?;
+            let mut next = operation.clone();
+            next.phase = Phase::LaunchDispatched;
+            next.launch_attempts += 1;
+            self.save_transition(&operation, &next)?;
+            operation = next;
+            let replacement = match runtime.launch(&effect_request) {
+                Ok(replacement) => replacement,
+                Err(error) => {
+                    self.record_failure(&mut operation, &error)?;
+                    return Err(error);
+                }
+            };
             let mut next = operation.clone();
             next.replacement = Some(replacement);
             self.save_transition(&operation, &next)?;
             operation = next;
         }
-        if operation.phase == Phase::LaunchDispatched {
+        if matches!(
+            operation.phase,
+            Phase::LaunchDispatched | Phase::ReplacementPending
+        ) {
             if operation.replacement.is_none() {
                 // An interrupted launch is reconciled by operation identity. A
                 // missing reply never authorizes another process launch.
-                let replacement = runtime.reconcile_replacement(&operation.request)?;
+                let replacement = match runtime.reconcile_replacement(&effect_request) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        self.record_failure(&mut operation, &error)?;
+                        return Err(error);
+                    }
+                };
                 let Some(replacement) = replacement else {
                     return Ok(operation);
                 };
@@ -417,14 +542,14 @@ impl OperationStore {
                 .ok_or("mode_operation_launch_readback_required")?;
             if replacement.process_identity.is_empty()
                 || replacement.process_identity == operation.request.original_process
-                || replacement.mode != operation.request.requested_mode
+                || replacement.mode != effect_request.requested_mode
                 || replacement.debugging != (replacement.mode == Mode::Cdp)
                 || !replacement.native_observation
                 || !replacement.native_input
             {
                 return Err("mode_operation_replacement_proof_required".into());
             }
-            runtime.publish(&operation.request, replacement)?;
+            runtime.publish(&effect_request, replacement)?;
             self.transition(&mut operation, Phase::Completed)?;
         }
         Ok(operation)

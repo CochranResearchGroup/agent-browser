@@ -52,6 +52,9 @@ struct SyntheticRuntime {
     launches: usize,
     published: bool,
     lose_launch_reply: bool,
+    fail_before_launch: bool,
+    native_unready: bool,
+    lose_restore_reply: bool,
     prompt: bool,
     uncertain_close: bool,
     forces: usize,
@@ -86,12 +89,19 @@ impl ModeRuntime for SyntheticRuntime {
         Ok(())
     }
     fn launch(&mut self, request: &Request) -> Result<Replacement, String> {
+        if self.fail_before_launch {
+            self.fail_before_launch = false;
+            return Err("synthetic_pre_spawn_failure".into());
+        }
         self.launches += 1;
         self.process = "boot:replacement:start".into();
         self.mode = request.requested_mode.clone();
         if self.lose_launch_reply {
             self.lose_launch_reply = false;
             return Err("synthetic_launch_reply_lost".into());
+        }
+        if self.native_unready {
+            return Err("mode_operation_native_unavailable".into());
         }
         Ok(Replacement {
             process_identity: self.process.clone(),
@@ -102,6 +112,9 @@ impl ModeRuntime for SyntheticRuntime {
         })
     }
     fn reconcile_replacement(&mut self, _: &Request) -> Result<Option<Replacement>, String> {
+        if self.native_unready {
+            return Err("mode_operation_native_unavailable".into());
+        }
         Ok(
             (self.process == "boot:replacement:start").then(|| Replacement {
                 process_identity: self.process.clone(),
@@ -111,6 +124,21 @@ impl ModeRuntime for SyntheticRuntime {
                 native_input: true,
             }),
         )
+    }
+    fn replacement_absent(&mut self, _: &Request) -> Result<bool, String> {
+        Ok(self.process.is_empty())
+    }
+    fn restore_previous(&mut self, _: &Request) -> Result<Mode, String> {
+        if !self.process.is_empty() {
+            self.closes += 1;
+            self.process.clear();
+        }
+        self.native_unready = false;
+        if self.lose_restore_reply {
+            self.lose_restore_reply = false;
+            return Err("synthetic_restore_reply_lost".into());
+        }
+        Ok(Mode::Cdp)
     }
     fn publish(&mut self, _: &Request, _: &Replacement) -> Result<(), String> {
         self.published = true;
@@ -129,6 +157,9 @@ fn mode_conversion_completes_same_task_and_profile_after_verified_original_exit(
         closes: 0,
         launches: 0,
         published: false,
+        fail_before_launch: false,
+        native_unready: false,
+        lose_restore_reply: false,
         lose_launch_reply: false,
         prompt: false,
         uncertain_close: false,
@@ -173,6 +204,9 @@ fn lost_launch_reply_resumes_original_operation_without_launch_or_site_effect_re
         closes: 0,
         launches: 0,
         published: false,
+        fail_before_launch: false,
+        native_unready: false,
+        lose_restore_reply: false,
         lose_launch_reply: true,
         prompt: false,
         uncertain_close: false,
@@ -217,6 +251,9 @@ fn close_prompt_offers_effective_focus_and_explicit_force_with_data_loss_receipt
         closes: 0,
         launches: 0,
         published: false,
+        fail_before_launch: false,
+        native_unready: false,
+        lose_restore_reply: false,
         lose_launch_reply: false,
         prompt: true,
         uncertain_close: false,
@@ -284,6 +321,9 @@ fn retrying_graceful_close_requires_an_explicit_choice_and_can_finish_same_opera
         closes: 0,
         launches: 0,
         published: false,
+        fail_before_launch: false,
+        native_unready: false,
+        lose_restore_reply: false,
         lose_launch_reply: false,
         prompt: true,
         uncertain_close: false,
@@ -330,6 +370,9 @@ fn cancelling_before_dispatch_preserves_original_and_releases_only_operation_cus
         closes: 0,
         launches: 0,
         published: false,
+        fail_before_launch: false,
+        native_unready: false,
+        lose_restore_reply: false,
         lose_launch_reply: false,
         prompt: false,
         uncertain_close: false,
@@ -406,6 +449,9 @@ fn simultaneous_owner_choices_cannot_dispatch_two_effects_for_one_operation() {
                 closes: 0,
                 launches: 0,
                 published: false,
+                fail_before_launch: false,
+                native_unready: false,
+                lose_restore_reply: false,
                 lose_launch_reply: false,
                 prompt: false,
                 uncertain_close: false,
@@ -430,6 +476,9 @@ fn simultaneous_owner_choices_cannot_dispatch_two_effects_for_one_operation() {
         closes: 0,
         launches: 0,
         published: false,
+        fail_before_launch: false,
+        native_unready: false,
+        lose_restore_reply: false,
         lose_launch_reply: false,
         prompt: false,
         uncertain_close: false,
@@ -463,6 +512,9 @@ fn unknown_close_reply_requires_original_exit_readback_without_repeating_close()
         closes: 0,
         launches: 0,
         published: false,
+        fail_before_launch: false,
+        native_unready: false,
+        lose_restore_reply: false,
         lose_launch_reply: false,
         prompt: false,
         uncertain_close: true,
@@ -492,6 +544,179 @@ fn unknown_close_reply_requires_original_exit_readback_without_repeating_close()
         Phase::Completed
     );
     assert_eq!((runtime.closes, runtime.launches), (1, 1));
+    drop(store);
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn definitively_unstarted_replacement_retries_after_restart_using_original_operation() {
+    let directory = std::env::temp_dir().join(format!("mode-pre-spawn-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&directory).unwrap();
+    let path = directory.join("operations.sqlite3");
+    let mut store = OperationStore::open(&path).unwrap();
+    store.request(request()).unwrap();
+    let mut runtime = SyntheticRuntime {
+        process: "boot:pid:start".into(),
+        mode: Mode::Cdp,
+        closes: 0,
+        launches: 0,
+        published: false,
+        lose_launch_reply: false,
+        fail_before_launch: true,
+        native_unready: false,
+        lose_restore_reply: false,
+        prompt: false,
+        uncertain_close: false,
+        forces: 0,
+        focuses: 0,
+    };
+    assert_eq!(
+        store
+            .advance(
+                "convert-1",
+                Choice::Relaunch { confirmed: true },
+                &mut runtime
+            )
+            .unwrap_err(),
+        "synthetic_pre_spawn_failure"
+    );
+    assert_eq!(runtime.launches, 0);
+    drop(store);
+    let mut restarted = OperationStore::open(&path).unwrap();
+    let recovered = restarted
+        .advance(
+            "convert-1",
+            Choice::Relaunch { confirmed: true },
+            &mut runtime,
+        )
+        .unwrap();
+    assert_eq!(
+        recovered.phase,
+        Phase::Completed,
+        "positive absence and explicit retry must recover the original operation"
+    );
+    assert_eq!(recovered.request.operation_id, "convert-1");
+    assert_eq!((runtime.closes, runtime.launches), (1, 1));
+    assert!(runtime.published);
+    drop(restarted);
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn prior_configuration_restores_same_operation_after_unstarted_conversion() {
+    let directory = std::env::temp_dir().join(format!("mode-restore-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&directory).unwrap();
+    let path = directory.join("operations.sqlite3");
+    let mut store = OperationStore::open(&path).unwrap();
+    store.request(request()).unwrap();
+    let mut runtime = SyntheticRuntime {
+        process: "boot:pid:start".into(),
+        mode: Mode::Cdp,
+        closes: 0,
+        launches: 0,
+        published: false,
+        lose_launch_reply: false,
+        fail_before_launch: true,
+        native_unready: false,
+        lose_restore_reply: false,
+        prompt: false,
+        uncertain_close: false,
+        forces: 0,
+        focuses: 0,
+    };
+    assert!(store
+        .advance(
+            "convert-1",
+            Choice::Relaunch { confirmed: true },
+            &mut runtime
+        )
+        .is_err());
+    drop(store);
+    let mut store = OperationStore::open(&path).unwrap();
+    assert!(store
+        .advance(
+            "convert-1",
+            Choice::RestorePrevious { confirmed: false },
+            &mut runtime
+        )
+        .is_err());
+    assert_eq!(runtime.launches, 0);
+    let restored = store
+        .advance(
+            "convert-1",
+            Choice::RestorePrevious { confirmed: true },
+            &mut runtime,
+        )
+        .unwrap();
+    assert_eq!(restored.phase, Phase::Completed);
+    assert_eq!(restored.request.operation_id, "convert-1");
+    assert_eq!(restored.request.requested_mode, Mode::CdpFree);
+    assert_eq!(restored.replacement.unwrap().mode, Mode::Cdp);
+    assert_eq!((runtime.closes, runtime.launches), (1, 1));
+    assert!(runtime.published);
+    drop(store);
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn native_unready_replacement_and_lost_restore_reply_recover_original_configuration_after_restart()
+{
+    let directory =
+        std::env::temp_dir().join(format!("mode-native-restore-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&directory).unwrap();
+    let path = directory.join("operations.sqlite3");
+    let mut store = OperationStore::open(&path).unwrap();
+    store.request(request()).unwrap();
+    let mut runtime = SyntheticRuntime {
+        process: "boot:pid:start".into(),
+        mode: Mode::Cdp,
+        closes: 0,
+        launches: 0,
+        published: false,
+        lose_launch_reply: false,
+        fail_before_launch: false,
+        native_unready: true,
+        lose_restore_reply: true,
+        prompt: false,
+        uncertain_close: false,
+        forces: 0,
+        focuses: 0,
+    };
+    assert_eq!(
+        store
+            .advance(
+                "convert-1",
+                Choice::Relaunch { confirmed: true },
+                &mut runtime
+            )
+            .unwrap_err(),
+        "mode_operation_native_unavailable"
+    );
+    let pending = store.read("convert-1").unwrap().unwrap();
+    assert_eq!(pending.phase, Phase::ReplacementPending);
+    assert!(pending.actions().contains(&Action::RestorePrevious));
+    assert!(!runtime.published);
+    assert_eq!(
+        store
+            .advance(
+                "convert-1",
+                Choice::RestorePrevious { confirmed: true },
+                &mut runtime
+            )
+            .unwrap_err(),
+        "synthetic_restore_reply_lost"
+    );
+    assert!(store.read("convert-1").unwrap().unwrap().restoring_previous);
+    drop(store);
+    let mut store = OperationStore::open(&path).unwrap();
+    let restored = store
+        .advance("convert-1", Choice::Resume, &mut runtime)
+        .unwrap();
+    assert_eq!(restored.phase, Phase::Completed);
+    assert_eq!(restored.effective_mode, Some(Mode::Cdp));
+    assert_eq!(restored.launch_attempts, 2);
+    assert_eq!((runtime.closes, runtime.launches), (2, 2));
+    assert!(runtime.published);
     drop(store);
     std::fs::remove_dir_all(directory).unwrap();
 }
