@@ -332,3 +332,40 @@ pub(super) fn reconcile_mode(
             .collect(),
     }))
 }
+
+/// Rejoin one positively observed first launch after owner publication loss.
+/// Unobserved custody and ambiguous profiles remain unresolved, never relaunched.
+pub(super) fn reconcile_initial(
+    profile: &BrowserProfileCatalogEntry,
+) -> Result<Option<agent_browser_service_model::BrowserRecovery>, String> {
+    let path = super::super::browser_session_store::BrowserSessionSqliteStore::default_sqlite_path()?;
+    let mut store = super::super::browser_session_store::BrowserSessionSqliteStore::open_read_only(&path)?;
+    let records = store.unpublished_launch_records().map_err(|_| "manual_login_launch_readback_required")?;
+    let candidates = records.into_iter().filter(|record| record.intent.profile_id == profile.id).collect::<Vec<_>>();
+    let [record] = candidates.as_slice() else {
+        return if candidates.is_empty() { Ok(None) } else { Err("manual_login_launch_ambiguous".into()) };
+    };
+    let (Some(original), Some(browser_id)) = (&record.observed_process_identity, &record.observed_browser_id) else {
+        return Err("manual_login_launch_readback_required".into());
+    };
+    #[cfg(target_os = "linux")]
+    {
+        let Some(current) = super::super::browser_session_profile_reuse::current_profile_browser_identity(Path::new(&profile.user_data_dir))? else {
+            return Ok(None);
+        };
+        if current.pid != original.pid
+            || current.start_token.as_deref() != Some(original.start_token.as_str())
+            || current.executable_path != original.executable_path
+            || current.command_line.as_ref().is_none_or(|args| args.iter().any(|arg| arg.starts_with("--remote-debugging"))) {
+            return Err("manual_login_launch_posture_changed".into());
+        }
+        return Ok(Some(agent_browser_service_model::BrowserRecovery {
+            launch: BrowserLaunch { process_identity: Some(original.clone()), browser_id: browser_id.clone(), pid: original.pid,
+                cdp_endpoint: String::new(), desktop: Some(RemoteViewFixedDesktop { desktop_id: record.intent.assignment.desktop_id.clone(),
+                    generation: record.intent.assignment.generation, friendly_route_label: "Recovered destination".into() }) },
+            target_ids: Default::default(),
+        }));
+    }
+    #[cfg(not(target_os = "linux"))]
+    Err("manual_login_launch_reconciliation_unsupported".into())
+}
