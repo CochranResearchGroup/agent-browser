@@ -376,9 +376,13 @@ fn mode_binding_uses_actual_borrowed_process_posture_instead_of_catalog_intent()
     let opened = host
         .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
         .unwrap();
-    host.navigate(&opened.session_id, "https://synthetic.example/", 101).unwrap();
+    host.navigate(&opened.session_id, "https://synthetic.example/", 101)
+        .unwrap();
     let mut state = host.state().clone();
-    let tab_id = state.sessions[&opened.session_id].current_tab_id.clone().unwrap();
+    let tab_id = state.sessions[&opened.session_id]
+        .current_tab_id
+        .clone()
+        .unwrap();
     let target_id = state.tabs[&tab_id].target_id.clone();
     state.shared_browser_ids.insert(opened.browser_id.clone());
     let browser = state.browsers.get_mut(&opened.browser_id).unwrap();
@@ -450,10 +454,20 @@ fn mode_binding_uses_actual_borrowed_process_posture_instead_of_catalog_intent()
         "inspection retains app ownership metadata"
     );
     let paused = host.mode_convert(&json!({"sessionId":opened.session_id,"operationId":"observed-mode","mode":"cdp_free","choice":"pause_and_relaunch","ownerConfirmed":true})).unwrap();
-    assert_eq!(paused["phase"], "paused", "borrowed metadata must not veto the owner's explicit operation");
+    assert_eq!(
+        paused["phase"], "paused",
+        "borrowed metadata must not veto the owner's explicit operation"
+    );
     let cancelled = host.mode_convert(&json!({"sessionId":opened.session_id,"operationId":"observed-mode","mode":"cdp_free","choice":"cancel","ownerConfirmed":true})).unwrap();
     assert_eq!(cancelled["phase"], "cancelled");
     assert!(!host.state().profile_operation_ids.contains_key("profile-a"));
-    assert!(host.state().app_browser_attachments.contains_key(&opened.browser_id));
-    assert_eq!((calls.get(), requests.get()), effect_counts, "pause/cancel does not take lifecycle custody from the app");
+    assert!(host
+        .state()
+        .app_browser_attachments
+        .contains_key(&opened.browser_id));
+    assert_eq!(
+        (calls.get(), requests.get()),
+        effect_counts,
+        "pause/cancel does not take lifecycle custody from the app"
+    );
 }

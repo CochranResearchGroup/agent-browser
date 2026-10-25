@@ -111,10 +111,22 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 })
                 .cloned()
                 .ok_or("mode_operation_profile_missing")?;
-            let original_mode = if profile.manual_login_url.is_some() {
-                Mode::CdpFree
-            } else {
-                Mode::Cdp
+            // Recovery restores the verified original process posture, not the
+            // profile's next-launch intent (which can differ for app browsers).
+            let observed = super::super::browser_session_store::mode_inspection::inspect(
+                &browser,
+                Some(&original),
+                if self.state.app_browser_attachments.contains_key(&browser.id) {
+                    "app"
+                } else {
+                    "managed"
+                },
+                crate::process_identity::observe_process,
+            );
+            let original_mode = match observed["mode"].as_str() {
+                Some("cdp") => Mode::Cdp,
+                Some("cdp_free") => Mode::CdpFree,
+                _ => return Err("mode_operation_original_posture_unverified:refresh the current browser before conversion".into()),
             };
             let binding = Binding {
                 profile,
