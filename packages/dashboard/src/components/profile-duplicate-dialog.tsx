@@ -1,0 +1,31 @@
+"use client";
+import { useState } from "react";
+import { useBrowserOperation } from "@/components/use-browser-operation";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
+type Choice = "prepare" | "reconcile" | "open_source" | "focus_source" | "close_and_duplicate" | "retry_launch" | "finish_without_opening" | "cancel";
+const labels: Record<Choice, string> = { prepare: "Review duplication", reconcile: "Reconcile operation", open_source: "Open source for review", focus_source: "Return to source browser", close_and_duplicate: "Close source and duplicate", retry_launch: "Retry opening copy", finish_without_opening: "Finish without opening", cancel: "Cancel operation" };
+
+/** Retain the same operation through lost replies and explicit remediation. */
+export function ProfileDuplicateDialog({ open, onOpenChange, profileId, taskId, sessionName, browserId, onRefresh }: { open: boolean; onOpenChange: (open: boolean) => void; profileId: string; taskId?: string | null; sessionName?: string | null; browserId?: string; onRefresh: () => Promise<void> }) {
+  const [name, setName] = useState("Independent copy");
+  const [launch, setLaunch] = useState(true);
+  const state = useBrowserOperation(open, { action: "browser_session_profile_duplicate", kind: "profile_duplicate", schemaVersion: "agent-browser.profile-duplication.v1", sourceProfileId: profileId, sessionId: taskId ?? undefined, sessionName: sessionName ?? undefined, browserId }, onRefresh);
+  const { operation, confirmed, setConfirmed, busy, loading, unknown, error } = state;
+  const sourceProfile = profileId;
+  const run = (choice: Choice) => { if (name.trim()) void state.run(choice, { destinationName: operation?.destination?.name ?? name.trim(), launch: operation?.launchRequested ?? launch }); };
+  const actions = unknown ? [{ action: "reconcile" as const, requiresConfirmation: false }] : operation?.actions ?? [{ action: "prepare" as const, requiresConfirmation: false }];
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent style={{ maxWidth: 480 }} aria-describedby="profile-duplicate-description">
+    <DialogHeader><DialogTitle>Duplicate browser profile</DialogTitle><DialogDescription id="profile-duplicate-description">Create an independent profile. Copies evolve separately; signing in is verified separately from copying.</DialogDescription></DialogHeader>
+    <p>Source profile: {sourceProfile}</p>
+    <label>Copy name<input aria-label="Copy name" value={name} disabled={busy || operation !== null || unknown} onChange={event => setName(event.target.value)} /></label>
+    <label><input type="checkbox" checked={launch} disabled={busy || operation !== null || unknown} onChange={event => setLaunch(event.target.checked)} />Open the new copy</label>
+    {operation && <><p role="status">{operation.state ?? operation.phase}</p><p>Affected tasks</p><ul>{operation.affectedTaskIds?.map(id => <li key={id}>{id}</li>)}</ul><small>Operation: {operation.operationId}</small></>}
+    {actions.some(action => action.requiresConfirmation) && <label><input type="checkbox" aria-label="Confirm the selected browser action" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />Confirm the selected browser action. Finish unsaved work before closing the source.</label>}
+    {loading && <p role="status">Reading existing operations…</p>}
+    {state.candidates.length > 1 && <div><p>Select an existing operation</p>{state.candidates.map(candidate => <button type="button" key={candidate.operationId} onClick={() => state.select(candidate)}>Resume {candidate.destination?.name ?? candidate.operationId} ({candidate.operationId})</button>)}</div>}
+    {error && <><p role="alert">{error}</p>{!unknown && <button type="button" disabled={busy || loading} onClick={() => void state.inspect()}>Inspect existing operations</button>}</>}
+    {operation && ["completed", "cancelled"].includes((operation.state ?? operation.phase ?? "").toLowerCase()) && <button type="button" onClick={state.startAnother}>Prepare another copy</button>}
+    <div {...(busy ? { "data-profile-operation-busy": true } : {})}>{actions.filter((action): action is { action: Choice; requiresConfirmation: boolean } => Object.hasOwn(labels, action.action)).map(action => <button key={action.action} type="button" disabled={busy || loading || !state.readable || !!error && !unknown && !operation || (action.requiresConfirmation && !confirmed)} onClick={() => void run(action.action)}>{labels[action.action]}</button>)}</div>
+  </DialogContent></Dialog>;
+}

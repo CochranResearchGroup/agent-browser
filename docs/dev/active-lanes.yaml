@@ -1,6 +1,24 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P283
+    product_lane: PL-PLATFORM
+    objective: Deliver browser mode and independent profile controls through owner workflows
+    plan: docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md
+    branch: platform/browser-mode-401
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#401, CochranResearchGroup/agent-browser#402, CochranResearchGroup/agent-browser#403, CochranResearchGroup/agent-browser#424, CochranResearchGroup/agent-browser#425, CochranResearchGroup/agent-browser#426, CochranResearchGroup/agent-browser#427, CochranResearchGroup/agent-browser#428, CochranResearchGroup/agent-browser#429]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    validation_status: "Six Spec400 repairs source qualified with public synthetic recovery acceptance; PR408 merge/tracker closure and one post-repair review remain pending; broader402/403 incomplete"
+    overlaps: [P269, P282]
+    reconciled_overlaps: ["401 owns read-only mode projection, MCP adapter, schema/client and rail; preserve P269 manual launch and P282 upgrade source, coordinate shared docs at integration"]
+    updated_at: 2026-10-25
+
+
+
   - id: P291
     product_lane: PL-BUGFIX
     objective: Reduce cold rail wait after Native observation expires
@@ -301,6 +319,23 @@ lanes:
     reconciled_overlaps: ["Root owns flight-clear host_control, browser_host_control, browser_session_host and P270 metadata; delegated writer owns only new return-test include; preserve independent MCP routing, enrollment and manual-login work"]
     validation_status: PR379 merged; Native14 functional and warm250ms gates pass public20/20 p9545.75ms and consumer6/6 p95199.61ms; relocation deferred by operator; desktop-generation and combined-pair cold-distribution acceptance remain open, no deployment
     updated_at: 2026-10-23
+
+
+  - id: P269
+    product_lane: PL-PLATFORM
+    objective: One-call MCP manual non-CDP login on managed native desktop
+    plan: docs/dev/plans/0269-2026-10-22-manual-login.md
+    branch: fix/mcp-manual-login-357
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#357]
+    plan_state: CLOSED
+    custody_state: BRANCH_OWNED
+    dependencies: [P268, P267]
+    overlaps: [CochranResearchGroup/agent-browser#349, P240]
+    reconciled_overlaps: ["Additive manual launch posture in canonical owner/runtime and MCP; preserve app placement, hosted attach and resource policies; no foreign worktree edits"]
+    validation_status: Source-qualified PR362 at f7c982787 on main 2f7135b77; real Chrome cookie/lifecycle, full model, MCP140/control8/session172, Clippy/fmt/docs and catalog consistency pass; no deploy
+    updated_at: 2026-10-22
 
   - id: P268
     product_lane: PL-PLATFORM

@@ -22,6 +22,11 @@ pub struct BrowserProfileCatalogEntry {
     pub name: String,
     pub user_data_dir: String,
     pub kind: BrowserProfileKind,
+    /// A CDP-free Native browser starts at this requested URL. Authorized agent
+    /// screenshots/input require current Native readiness; human takeover is separate.
+    /// An explicit owner conversion can replace its process while retaining the task.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manual_login_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -153,6 +158,7 @@ impl BrowserProfileCatalog {
             };
 
             let entry = BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: id.clone(),
                 name: name.to_string(),
                 user_data_dir: user_data_dir.to_string(),

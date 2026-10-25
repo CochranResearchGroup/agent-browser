@@ -13,6 +13,21 @@ simpler or specialized task. See the [governing product contract](docs/dev/polic
 
 Implementation and acceptance status live in [RUNBOOK](RUNBOOK.md).
 
+Browser mode inspection is read-only. Use `browser_discover` with category
+`browser` and operation `mode`, then `browser_command` with the existing
+`taskId` and action `mode`. The CLI equivalent is
+`agent-browser --json mcp browser-mode <task-id>`. Service status and
+`GET /api/service/status?projection=workspace` expose the same `browserMode`
+evidence per browser. The rail SVG button opens mode details on hover, click
+or keyboard activation and offers inventory refresh without selecting a tab.
+
+CDP, No CDP and Unverified describe current original-process debugging posture.
+Missing or stale evidence remains Unverified. Executable name and family are
+reported without private paths or command-line arguments; unavailable version,
+native control and authentication evidence remain unverified. This inspection
+slice does not relaunch, duplicate, attach or transfer control. Session
+conversion and CDP-free native input are tracked separately in #402.
+
 ## Sharing a profile between tasks
 
 Use one named session and tab per task. When tasks deliberately need the same login and stored browser data, select the same durable profile so they reuse one browser. Give each task its own session name; address commands through that session rather than a global active tab.
@@ -176,6 +191,31 @@ replay cursor. Terminate the watcher process for immediate disconnect; a broken
 output pipe otherwise exits on the next emitted event. Recorded browser state,
 viewer delivery, controller state and account authentication are separate;
 metadata-only reads leave unobserved readiness explicitly unverified.
+
+For a CDP-free sign-in task, call `browser_open` with `mode: "manual_login"`, a
+named persistent profile, and the login URL. For example:
+
+```json
+{"profile":"canvacli","profileMode":"persistent","mode":"manual_login","taskKey":"google-login","url":"https://accounts.google.com/","serviceName":"canvacli","agentName":"codex","taskName":"Google sign-in"}
+```
+
+This opens a headed window on the configured native Remote View desktop without
+CDP, a debugging port, or a debugging pipe. The same call returns `handoffUrl`
+and requires `operatorVisible.state: "ready"`. Reuse the task key to retain the
+login window. DOM/CDP actions and additional agent tabs are unavailable in this
+mode. Authorized agents can instead use `native_capture` and `native_input`
+through the existing Native owner when its current capabilities are ready.
+Human takeover remains separate; these commands never return human control
+automatically. The reported URL is the initial requested location
+(`urlObserved: false`); desktop readiness and profile continuity do not verify
+authentication.
+To change debugging posture, discover `mode_convert` and review its explicit
+replacement choices. A successful replacement preserves the logical task,
+profile and original handoff while replacing the physical browser; unsaved page
+state may be lost. Alternatively, explicitly close the task and reopen the same
+profile in `automation` mode. Ordinary open never silently closes, replaces or
+attaches to a browser in the other mode. Source/synthetic checks do not establish
+installed Native readiness or authenticated site state.
 
 The default MCP catalog contains 16 workflow tools: `browser_open`, `browser_navigate`,
 `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
@@ -7151,3 +7191,80 @@ upgrade does not guess a missing historical choice from profile contents.
 Retained browser recovery reconciles an unobserved launch claim after proving the exact profile has no live process. The original claim remains in history. Provider environment checks run before process admission, so unavailable desktops do not create new launch claims.
 
 Configure the native Remote View origin, pool, application and public origin in `~/.agent-browser/.env` or the process environment. When native Remote View settings are present, workstation installation and reconciliation verify the native application inventory, admitted pool, and existing protected lease authority. They do not provision RDP users, the RDP privileged helper, XRDP, Docker, or Guacamole. Partial native settings fail validation. Missing authority readiness requires a separate authority repair; a native upgrade does not install or replace that service. Live-browser upgrades prepare retained source owners before verifying that source writers are quiet. Candidate startup remains blocked until that stability check passes.
+
+
+Native task observation and input use the existing Remote View owner. MCP
+`browser_command` supports `native_capture` and `native_input`; discover their
+arguments with `browser_discover`. CLI equivalent:
+`agent-browser --json mcp browser-native TASK native_input '{"actions":[{"kind":"key","chord":"Tab"}]}'`.
+HTTP clients send the same action, exact `sessionId` and `sessionName` to
+`POST /api/command`. Capture returns a fresh, process-fenced window region;
+input reports delivery separately from completed page effects. Observe after
+an uncertain reply before deciding another input is appropriate. These actions
+never attach CDP, acquire another task, or return explicit human takeover.
+An unavailable Native owner or changed process/window returns remediation.
+For an existing scoped `browser_policy` override, send `policyOverrideId` and
+`requestId` at the top level of `browser_command` for either Native action.
+The grant must match the exact task, action, request and current policy; a
+mismatch remains denied. Preserving request identity never authorizes replay of
+uncertain input. CLI `mcp browser-native` JSON uses the same `policyOverrideId`
+and `requestId`. Raw HTTP `POST /api/command` sends `policyOverrideId` and
+the matching request identity as `id`, together with exact `sessionId` and
+`sessionName`; it does not use a `requestId` alias.
+Mode conversion remains a separate explicit owner operation.
+
+
+The rail's browser-mode menu offers **Duplicate profile**. Enter a copy name,
+review affected tasks, and select the returned action. A running source closes
+only after the selected confirmation. A source without qualified clean-close
+history offers **Open source for review**. The copy has a new identity and
+writable directory; source and copy evolve independently. Copy success does
+not prove that stored authentication works in the copy.
+
+MCP: discover `profile_duplicate`, then use `browser_command` with
+`action: "profile_duplicate"` and `params` containing `operationId`,
+`sourceProfileId`, `destinationName`, `choice` and `launch`. An optional `taskId`
+binds the source profile to that task. CLI:
+`agent-browser --json mcp profile-duplicate '{"operationId":"copy-one","sourceProfileId":"PROFILE","destinationName":"Independent copy","choice":"prepare","launch":true}'`.
+HTTP: send these fields and `action: "browser_session_profile_duplicate"` to
+`POST /api/command`. Follow the returned actions using the same `operationId`;
+set `ownerConfirmed: true` only for the explicitly selected consequential
+choice. After a lost reply, reconcile that operation before attempting another
+effect. Cancelling a request does not reopen a source already stopped.
+
+### Convert an existing task
+
+The browser mode menu offers **Relaunch with CDP** and **Relaunch without CDP** for managed tasks. A successful explicit replacement preserves the logical task, durable profile and original handoff; it changes the physical browser process. Review the affected tasks before selecting relaunch. Unsaved page state and downloads may be lost; unknown URLs and uncertain website submissions are never replayed.
+
+MCP uses `browser_command` with `taskId`, action `mode_convert`, and params containing `operationId`, `mode` (`cdp` or `cdp_free`) and `choice`. Start with `prepare`, then select an offered action. CLI accepts `agent-browser --json mcp mode-convert '{"taskId":"TASK","operationId":"mode-one","mode":"cdp_free","choice":"prepare"}'`. HTTP uses `POST /api/command` with action `browser_session_mode_convert`, the exact `sessionId` and owner `sessionName`, and the same operation fields.
+
+Keep the operation ID after an uncertain reply and select `reconcile`; do not issue another close/open sequence. Close prompts offer focus, graceful retry and consequentially confirmed force close. Native screenshots and input remain separate from authentication proof. Conversion currently has incomplete recovery and installed Native qualification; do not treat the source implementation as accepted installed behavior.
+
+
+Inspect the original operation after a failed launch. Copy readback separates
+`copyComplete` and `profilePublished` from `launchStatus` and `destinationTask`.
+For `launch_absent`, explicitly confirm `retry_launch` or
+`finish_without_opening`; the latter retains the published independent copy.
+Mode `launch_absent` offers confirmed `relaunch` or `restore_previous`.
+A launched replacement with unavailable Native readiness reports
+`replacement_pending`; confirmed `restore_previous` selects the original mode
+through the same operation. Unknown launches and copy `launch_pending` first
+`reconcile` the original operation and exact task. Never repeat the copy or
+blindly launch again. Restoration preserves requested-mode history, reports
+its effective mode, and does not replay uncertain website submissions.
+
+To find retained work after reload, send `choice: "inspect"` through the same
+`mode_convert` or `profile_duplicate` route. Omit `operationId` to list matching
+operations, or include it for one retained operation. Mode lookup requires the
+exact task; profile-copy lookup binds the source profile and optional exact
+task. The read-only `agent-browser.browser-operations.v1` response includes safe
+operation IDs, kinds, task/profile/browser bindings and supported actions. It
+never closes, launches or copies a browser. Select the original operation before
+continuing; multiple matching copies require an explicit selection. A busy
+response identifies the active operation instead of admitting a replacement ID.
+The rail reads this owner state when reopened, without persisting profile paths
+or credentials in client storage. CLI JSON requests use `choice: "inspect"`
+with `mcp mode-convert` or `mcp profile-duplicate`; HTTP uses the same existing
+owner actions at `POST /api/command`.
+
+Native capture returns PNG image content to MCP agents. Its default tile is bounded to one million pixels. Read `region`, `windowBounds` and `partialWindow`; request an explicit region for remaining pixels. A tile is not represented as a full-window screenshot.

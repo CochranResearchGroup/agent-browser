@@ -4,6 +4,12 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Browser mode inspection**: Read-only current original-process debugging posture.
+CDP and no-CDP require complete current process evidence joined to immutable
+owner identity. Missing, changed or stale evidence is unverified. Executable
+name/family, native input readiness, viewer delivery and authentication remain
+separate observations; inspection does not acquire or mutate a browser.
+
 **Inspection review**: An explicit accepted or rejected judgment about one frozen inspection run, scoped to its original workspace, task, browser, tab and profile. Activity retains bounded identity and evidence-reference metadata. The judgment does not change observation validity, execution authority or readiness.
 
 **Exact task routing**: MCP retains task identity through page command builders
@@ -71,6 +77,28 @@ second process. Pressure handling preserves current work.
 **Terminal history projection**: The recent completed session and tab records
 kept with active browser state. Bounding this projection does not delete older
 durable history or change live tasks and valid handoffs.
+
+**Manual login mode**: A managed Native window with no CDP endpoint, debugging
+listener or DOM control. Authorized agents can observe screenshots and send
+Native input when the exact process, window and provider are ready. Human
+takeover is a separate control-authority choice. The mode owns one logical task
+and preserves its durable profile; its URL describes initial intent, not the
+current page or verified authentication.
+
+**Mode conversion**: An explicit owner operation that replaces a physical
+browser with or without CDP while preserving its logical task, profile and
+original handoff. It reviews affected tasks and consequential close choices;
+ordinary open never silently changes a running process's posture. Transient
+page state may be lost, and uncertain website submissions are never replayed.
+Source or synthetic qualification does not prove installed Native readiness or
+authenticated site state.
+
+**Browser operation lookup**: Read-only discovery of retained owner mode-conversion
+or profile-copy operations for an exact task, browser and profile scope. Reload
+and selection read the original operation ID and supported actions without
+launching, closing or copying. Multiple matching copies require selection;
+a conflicting operation returns its original locator. Private profile paths
+and credentials stay outside public summaries and client persistence.
 
 **Durable profile**: Browser data retained across tasks. Separate tasks can share its browser through distinct sessions and tabs. Profile retention is separate from process, desktop, session and handoff lifetimes.
 

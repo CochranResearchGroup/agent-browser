@@ -24,6 +24,8 @@ use sha2::{Digest, Sha256};
 
 use super::service_store::default_service_state_path;
 
+#[path = "browser_mode_inspection.rs"]
+pub(crate) mod mode_inspection;
 #[path = "browser_terminal_history.rs"]
 mod terminal_history;
 #[path = "browser_workspace_observation.rs"]
@@ -157,6 +159,112 @@ impl BrowserSessionSqliteStore {
         }
     }
 
+    /// Inspect one existing logical task without acquiring a daemon or browser.
+    /// The same per-browser evidence is exposed in CLI/HTTP workspace inventory.
+    pub(crate) fn inspect_task_mode(&self, task_id: &str) -> Result<serde_json::Value, String> {
+        self.inspect_task_mode_with(task_id, |state, browser| self.inspect_mode(state, browser))
+    }
+
+    fn inspect_task_mode_with(
+        &self,
+        task_id: &str,
+        inspect: impl FnOnce(
+            &BrowserSessionState,
+            &agent_browser_service_model::ManagedBrowserInstance,
+        ) -> serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        let state = self.load_session_state()?;
+        let task = state
+            .sessions
+            .get(task_id)
+            .ok_or("browser_task_not_found:refresh inventory")?;
+        let browser = state
+            .browsers
+            .get(&task.browser_id)
+            .filter(|browser| browser.profile_id == task.profile_id)
+            .ok_or("browser_task_owner_unavailable:refresh inventory")?;
+        let mut inspection = inspect(&state, browser);
+        let current = self.load_session_state()?;
+        if !current.sessions.get(task_id).is_some_and(|current_task| {
+            current_task.id == task.id
+                && current_task.created_at_ms == task.created_at_ms
+                && current_task.browser_id == task.browser_id
+                && current_task.profile_id == task.profile_id
+        }) || current.browsers.get(&browser.id) != Some(browser)
+        {
+            return Err("browser_task_changed_during_observation:refresh inventory".into());
+        }
+        inspection["taskId"] = serde_json::json!(task_id);
+        Ok(inspection)
+    }
+
+    fn inspect_mode(
+        &self,
+        state: &BrowserSessionState,
+        browser: &agent_browser_service_model::ManagedBrowserInstance,
+    ) -> serde_json::Value {
+        let attached = state.app_browser_attachments.get(&browser.id);
+        let original = if let Some(attached) = attached {
+            (attached.profile_id == browser.profile_id
+                && attached.request.process.pid == browser.pid
+                && attached.request.cdp_endpoint == browser.cdp_endpoint
+                && browser.desktop.as_ref() == Some(&attached.desktop))
+            .then(|| attached.request.process.clone())
+        } else {
+            super::browser_launch_custody_store::published_process_identity(
+                &self.connection,
+                browser,
+            )
+            .ok()
+            .flatten()
+        };
+        let mut result = mode_inspection::inspect(
+            browser,
+            original.as_ref(),
+            if attached.is_some() {
+                "app_provided"
+            } else {
+                "managed"
+            },
+            crate::process_identity::observe_process,
+        );
+        if self
+            .load_session_state()
+            .ok()
+            .and_then(|current| current.browsers.get(&browser.id).cloned())
+            .as_ref()
+            != Some(browser)
+        {
+            result["mode"] = serde_json::json!("unverified");
+            result["reason"] = serde_json::json!("owner_changed_during_observation");
+            result["capabilities"]["debugging"] = serde_json::json!("unverified");
+        }
+        result
+    }
+
+    fn enrich_modes(status: &mut serde_json::Value) {
+        let Some((store, state)) = Self::default_sqlite_path()
+            .ok()
+            .and_then(|path| Self::open_read_only(&path).ok())
+            .and_then(|store| store.load_session_state().ok().map(|state| (store, state)))
+        else {
+            return;
+        };
+        for browser in state.browsers.values() {
+            let Some(published) = status
+                .pointer_mut("/workspace/browsers")
+                .and_then(|browsers| browsers.get_mut(&browser.id))
+            else {
+                continue;
+            };
+            if published["pid"].as_u64() == Some(u64::from(browser.pid))
+                && published["profileId"] == browser.profile_id
+            {
+                published["browserMode"] = store.inspect_mode(&state, browser);
+            }
+        }
+    }
+
     /// Produce a redacted read-only aggregate for Service status and install
     /// doctor. Failure details collapse to stable codes so filesystem paths do
     /// not cross the public status boundary.
@@ -186,6 +294,7 @@ impl BrowserSessionSqliteStore {
             "workspace": workspace_projection(&state, &catalog)?,
         });
         workspace_observation::enrich(state, &mut status).await;
+        Self::enrich_modes(&mut status);
         Ok(status)
     }
 
@@ -200,6 +309,7 @@ impl BrowserSessionSqliteStore {
         if let Some(state) = state {
             workspace_observation::enrich(state, &mut status).await;
         }
+        Self::enrich_modes(&mut status);
         status
     }
 
@@ -988,7 +1098,7 @@ impl BrowserSessionSqliteStore {
         }
     }
 
-    fn database_path(&self) -> Result<PathBuf, String> {
+    pub(crate) fn database_path(&self) -> Result<PathBuf, String> {
         self.connection
             .path()
             .map(PathBuf::from)
@@ -1645,6 +1755,53 @@ mod tests {
     }
 
     #[test]
+    fn browser_mode_inspection_rechecks_addressed_task_after_observation() {
+        let directory = TempDirectory::new("mode-task-race");
+        let path = directory.0.join("runtime.sqlite3");
+        let connection = Connection::open(&path).unwrap();
+        initialize_runtime_schema(&connection).unwrap();
+        let writer = BrowserSessionSqliteStore { connection };
+        let mut state = BrowserSessionState::default();
+        state.sessions.insert(
+            "task".into(),
+            ManagedBrowserSession {
+                id: "task".into(),
+                name: "Task".into(),
+                profile_id: "profile".into(),
+                browser_id: "browser".into(),
+                created_at_ms: 1,
+                last_activity_at_ms: 1,
+                expires_at_ms: 99999,
+                current_tab_id: None,
+            },
+        );
+        state.browsers.insert(
+            "browser".into(),
+            ManagedBrowserInstance {
+                id: "browser".into(),
+                profile_id: "profile".into(),
+                pid: 42,
+                cdp_endpoint: String::new(),
+                desktop: None,
+                active_session_ids: vec!["task".into()],
+            },
+        );
+        writer.save_session_state(&state).unwrap();
+        let reader = BrowserSessionSqliteStore {
+            connection: Connection::open(&path).unwrap(),
+        };
+        let result = reader.inspect_task_mode_with("task", |_, _| {
+            // The original browser remains for peers while this logical task ends.
+            state.sessions.remove("task");
+            writer.save_session_state(&state).unwrap();
+            serde_json::json!({"mode":"cdp","browserId":"browser","profileId":"profile"})
+        });
+        assert!(result
+            .unwrap_err()
+            .starts_with("browser_task_changed_during_observation"));
+    }
+
+    #[test]
     fn app_attachment_publication_failure_never_exposes_an_unfenced_profile_after_restart() {
         let directory = TempDirectory::new("attachment-atomic");
         let mut store = BrowserSessionSqliteStore::open_or_migrate(
@@ -1663,6 +1820,7 @@ mod tests {
         catalog.profiles.insert(
             "app".into(),
             agent_browser_service_model::BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: "app".into(),
                 name: "App".into(),
                 user_data_dir: "/synthetic/app".into(),
@@ -1735,6 +1893,7 @@ mod tests {
             .save_session_state(&BrowserSessionState::default())
             .unwrap();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "legacy-profile".into(),
             name: "Old label".into(),
             user_data_dir: directory.0.to_string_lossy().into_owned(),
@@ -1798,6 +1957,7 @@ mod tests {
         catalog.profiles.insert(
             "unrelated-history".into(),
             agent_browser_service_model::BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: "unrelated-history".into(),
                 name: "Unused historical profile".into(),
                 user_data_dir: "/synthetic/private".into(),
@@ -1837,6 +1997,7 @@ mod tests {
         initialize_runtime_schema(&connection).unwrap();
         let mut store = BrowserSessionSqliteStore { connection };
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "stable-id".into(),
             name: "Temporary research".into(),
             user_data_dir: data.to_string_lossy().into_owned(),

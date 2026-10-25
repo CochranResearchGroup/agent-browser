@@ -428,6 +428,11 @@ pub(crate) async fn handle_remote_view_open(
             .ok_or("browser_session_host_missing")?;
         let mut navigation = cmd.clone();
         navigation["action"] = json!("navigate");
+        if cmd["manualSeeding"] == true {
+            navigation["manualLogin"] = json!(true);
+            navigation["browserBuild"] = json!("cdp_free_headed");
+        }
+
         let name = optional_command_string(cmd, "sessionName")
             .or_else(|| optional_command_string(cmd, "session"))
             .ok_or("browser_session_field_missing:sessionName")?;
@@ -509,6 +514,13 @@ pub(crate) async fn handle_service_profile_manual_seeding_acquire(
     }
     let mut command = cmd.clone();
     command["manualSeeding"] = Value::Bool(true);
+    if optional_command_string(&command, "sessionName").is_none() {
+        command["sessionName"] = Value::String(format!(
+            "manual-login-{:x}",
+            <sha2::Sha256 as sha2::Digest>::digest(format!("{profile_id}:{target_service_id}"))
+        ));
+    }
+
     command["runtimeProfile"] = Value::String(profile_id);
     command["targetServiceId"] = Value::String(target_service_id);
     if optional_command_string(&command, "remoteViewHandoffId").is_none()

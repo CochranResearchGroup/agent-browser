@@ -10,23 +10,23 @@ Read [Remote View setup](references/cli-and-service.md) for native credentials.
 
 ## Handoff creator context
 
-Supply `serviceName`, `agentName` and a concrete `taskName` on `browser_open`. The CLI equivalents are `--service-name`, `--agent-name` and `--task-name`; for `remote-view open` creation, also supply `--origin-kind agent`. Missing or blank labels are rejected before task creation. MCP records origin `agent` without a caller field. For service requests, pass originKind in params; an authenticated or local principal is not a substitute for the creator labels. Do not fill `humanName` from the person requesting automation. Descriptive labels are not authenticated identities.
+Supply `serviceName`, `agentName` and concrete `taskName` on `browser_open`. CLI flags: `--service-name`, `--agent-name`, `--task-name`; `remote-view open` also requires `--origin-kind agent`. Blank labels fail before creation. MCP sets origin `agent`. Service requests set originKind in params. Principal identity does not replace creator labels. Do not infer `humanName` from the requester; labels are not authenticated identities.
 
-Creation context is retained once; polling and Share do not replace it. Cards omit missing identity fields and use profile/session context. Job IDs never replace creator labels.
+Creation context is immutable. Cards omit missing identity; polling, Share and job IDs never replace creator labels.
 
 ## MCP task workflow
 
 Warnings advise; writer custody survives executable unlink.
 
-Use `browser_open` with `{ "serviceName": "my-app", "agentName": "editor", "taskName": "Edit draft", "profile": "editorial", "profileMode": "persistent", "taskKey": "editing", "url": "https://example.com" }`. It creates or reuses the profile and returns `data.taskId`, `profileId`, `browserId`, `tabId`, and `url` in the MCP text payload. Pass `taskId` to subsequent page actions. Replay the same `taskKey` to return its current page and preserve edits without navigating again; use distinct keys for independent tasks. End only your task with `browser_close({ "taskId": "<returned-task-id>" })`.
+Use `browser_open` with `{"serviceName":"my-app","agentName":"editor","taskName":"Edit draft","profile":"editorial","profileMode":"persistent","taskKey":"editing","url":"https://example.com"}`. Read `data.taskId`, `profileId`, `browserId`, `tabId`, `url`. Address actions with `taskId`. Reuse `taskKey` to preserve the page/edits without navigation; distinct keys separate tasks. `browser_close` ends only the addressed task.
 
-Use `profileMode: "existing"` to require an existing profile. Use `profileMode: "disposable"` without `profile` for temporary work. Profile creation, session selection, replay, and scoped closure happen inside the workflow operation.
+Use `profileMode: "existing"` for an existing profile, or `"disposable"` without `profile` for temporary work. The workflow owns selection, replay and scoped closure.
 
 For human assistance, call `browser_handoff({ "taskId": "<returned-task-id>" })`. Require `operatorVisible.state=ready` before giving the person its complete `data.handoffUrl`; continue with the same task ID. For `remote_view_public_origin_missing`, check reviewed `AGENT_BROWSER_PUBLIC_ORIGIN` configuration and stale MCP startup. Set it in `~/.agent-browser/.env` or `AGENT_BROWSER_ENV_FILE`; explicit process settings win. MCP connections pin startup configuration: reconnect after changes, preserving the task. Never assemble provider URLs.
 
 A standalone handoff resolves its current owned desktop and redirects to Native authentication without a Dashboard login. The public locator remains read-only. Native authentication precedes configured browser-owner recovery. Missing recovery configuration reports unavailability. Reuse the opaque URL; require native display confirmation.
 
-When the person finishes, call `browser_continue({ "taskId": "<same-task-id>" })` to read the current task identity and URL, then continue page actions. This preserves the current page and edits; it is separate from CLI executable-transfer handoff.
+After human input, `browser_continue` with the same `taskId` reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff.
 
 ## Hosted workflow guidance v1
 
@@ -74,6 +74,8 @@ Return, store, and reopen only `handoffUrl`: standalone `/remote-view/<handoff-i
 ## Operator workspace
 
 Read [Workspace](references/cli-and-service.md#operator-workspace) for tabs, sharing and handoffs. Focus needs an owned tab; reviews are opt-in. Rail catches up once. Remote View owns view/auth. Terminal pool replay retains history.
+
+[Manual login](references/cli-and-service.md#manual-login) is CDP-free. Native control and human takeover are separate.
 
 ## Sharing a profile between tasks
 
@@ -132,8 +134,14 @@ Use `browser_discover` for advanced MCP metadata.
 
 For health, inventory or viewer failures, read [Dashboard diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics). A prepared handoff or reachable service does not prove a connected Native display. Read [embedded-page guidance](references/cli-and-service.md#embedded-native-desktop-failure-guidance) before retrying. Static assets use gzip and hashed caching.
 
-Workstation upgrades retire older installed MCP servers. Reconnect affected MCP hosts; install doctor checks `installedMcpClients` before accepting consistent runtime operation.
+After upgrades, reconnect MCP clients; doctor checks `installedMcpClients`.
 
-Development startup ownership: [diagnostics](references/cli-and-service.md#development-host-startup).
+Startup: [diagnostics](references/cli-and-service.md#development-host-startup).
 
-Dashboard rail startup uses at most three cache-revalidated inventory retries after delays of 250, 500 and 1000 milliseconds while candidate presence is unknown. Known or failed evidence ends catch-up; normal polling remains three seconds after completion.
+## Read browser mode
+
+Use `browser_command` action `mode` with `taskId`. Native capture/input need readiness and scoped grants. Discover `mode_convert`/`profile_duplicate`; inspect original IDs after reload. Confirm retries, `restore_previous` or `finish_without_opening`; reconcile uncertainty. [Controls](references/cli-and-service.md#browser-mode-inspection).
+
+Diagnostics retain `?view=service:<name>` and selection query fields.
+
+Rail startup revalidates at 250/500/1000 ms while presence is unknown; then polls every three seconds.

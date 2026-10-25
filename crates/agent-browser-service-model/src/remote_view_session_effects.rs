@@ -597,6 +597,19 @@ impl<
             .effects
             .reconcile_profile_browser(profile, browser, tabs, navigation)?
         else {
+            if browser.is_none()
+                && self
+                    .store
+                    .unpublished_launch_records()
+                    .map_err(|_| "remote_view_session_launch_readback_required")?
+                    .iter()
+                    .any(|record| record.intent.profile_id == profile.id)
+            {
+                // A missing current attachment is not proof that an attempted
+                // initial launch had no effect. Explicit exact-absence settlement
+                // must precede a new launch through the original operation.
+                return Err("remote_view_session_launch_readback_required".into());
+            }
             return Ok(None);
         };
         // Physical reuse does not inherit an old presentation location. Join
@@ -666,6 +679,14 @@ impl<
         desktop: &RemoteViewFixedDesktop,
     ) -> Result<BrowserRecovery, String> {
         self.recover_browser_with_target(browser, profile, tabs, navigation, Some(desktop))
+    }
+    fn select_profile_browser_executable(
+        &mut self,
+        profile_id: String,
+        path: String,
+    ) -> Result<(), String> {
+        self.effects
+            .select_profile_browser_executable(profile_id, path)
     }
     fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
         self.effects.select_browser_executable(path)
@@ -1592,6 +1613,18 @@ impl<
         restored_browser.cdp_endpoint = launch.cdp_endpoint.clone();
         restored_browser.desktop = launch.desktop.clone();
         let mut target_ids = BTreeMap::new();
+        if launch.cdp_endpoint.is_empty() {
+            // Native routing handles denote the common browser context, never
+            // invented CDP pages. No old website navigation is replayed.
+            for tab in tabs {
+                target_ids.insert(
+                    tab.id.clone(),
+                    format!("native-context:{}:{}", browser.id, tab.id),
+                );
+            }
+            self.pending = Some((intent, true));
+            return Ok(BrowserRecovery { launch, target_ids });
+        }
         // Custody remains unpublished throughout restoration. A crash or failed
         // restoration cannot authorize another process or duplicate tab replay.
         for (index, tab) in tabs.iter().enumerate() {

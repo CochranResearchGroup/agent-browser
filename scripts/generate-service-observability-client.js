@@ -1071,6 +1071,18 @@ export interface ServiceManagedPresence {
   source?: 'remote-view-and-cdp' | 'cdp';
 }
 
+/** Current original-process posture, independent of viewer or account readiness. */
+export interface ServiceBrowserModeInspection {
+  schemaVersion: 'agent-browser.browser-mode.v1';
+  browserId: string; profileId: string; pid: number;
+  mode: 'cdp' | 'cdp_free' | 'unverified';
+  observedAtMs: number;
+  ownership: 'managed' | 'app_provided';
+  reason: string | null;
+  executable: { name: string | null; family: string | null; version: string | null };
+  capabilities: { debugging: 'enabled' | 'disabled' | 'unverified'; nativeObservation: 'unverified'; nativeInput: 'unverified' };
+}
+
 export interface ServiceManagedWorkspace {
   schemaVersion: 'agent-browser.managed-workspace.v1';
   source: 'managed-owner';
@@ -1086,6 +1098,7 @@ export interface ServiceManagedWorkspace {
     desktop: { desktop_id: string; generation: number; friendly_route_label: string } | null;
     activeSessionIds: string[]; state: 'reported' | 'sleeping';
     presence?: ServiceManagedPresence;
+    browserMode?: ServiceBrowserModeInspection;
   }>;
   sessions: Record<string, {
     id: string; name: string; profileId: string; browserId: string;

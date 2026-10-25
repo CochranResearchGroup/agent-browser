@@ -205,6 +205,7 @@ pub(crate) fn observation(action: &str) -> bool {
             | "title"
             | "snapshot"
             | "screenshot"
+            | "native_capture"
             | "content"
             | "gettext"
             | "inputvalue"

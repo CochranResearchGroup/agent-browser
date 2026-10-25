@@ -2809,7 +2809,20 @@ pub(crate) async fn resolve_cdp_url(input: &str) -> Result<String, String> {
 
 #[cfg(target_os = "linux")]
 fn focus_x11_browser_window(pid: u32, display_name: &str) -> Result<Value, String> {
-    x11_focus::focus_window_for_pid(pid, display_name)
+    x11_focus::focus_window_for_pid(pid, display_name, false)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn focus_viewable_x11_browser_window(
+    pid: u32,
+    display_name: &str,
+) -> Result<Value, String> {
+    x11_focus::focus_window_for_pid(pid, display_name, true)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn close_x11_browser_windows(pid: u32, display_name: &str) -> Result<(), String> {
+    x11_focus::close_windows_for_pid(pid, display_name)
 }
 
 #[cfg(target_os = "linux")]
@@ -2822,6 +2835,53 @@ mod x11_focus {
     type Display = c_void;
     type Window = c_ulong;
     type Atom = c_ulong;
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct ClientMessageEvent {
+        event_type: c_int,
+        serial: c_ulong,
+        send_event: c_int,
+        display: *mut Display,
+        window: Window,
+        message_type: Atom,
+        format: c_int,
+        data: [c_long; 5],
+    }
+
+    #[repr(C)]
+    union Event {
+        client_message: ClientMessageEvent,
+        pad: [c_long; 24],
+    }
+
+    // Xlib.h XWindowAttributes, including its platform-sized XIDs and pointers.
+    #[repr(C)]
+    struct WindowAttributes {
+        x: c_int,
+        y: c_int,
+        width: c_int,
+        height: c_int,
+        border_width: c_int,
+        depth: c_int,
+        visual: *mut c_void,
+        root: Window,
+        class: c_int,
+        bit_gravity: c_int,
+        win_gravity: c_int,
+        backing_store: c_int,
+        backing_planes: c_ulong,
+        backing_pixel: c_ulong,
+        save_under: c_int,
+        colormap: c_ulong,
+        map_installed: c_int,
+        map_state: c_int,
+        all_event_masks: c_long,
+        your_event_mask: c_long,
+        do_not_propagate_mask: c_long,
+        override_redirect: c_int,
+        screen: *mut c_void,
+    }
 
     const FALSE: c_int = 0;
     const ANY_PROPERTY_TYPE: Atom = 0;
@@ -2857,6 +2917,10 @@ mod x11_focus {
         *mut c_uint,
     ) -> c_int;
     type XFreeFn = unsafe extern "C" fn(*mut c_void) -> c_int;
+    type XSendEventFn =
+        unsafe extern "C" fn(*mut Display, Window, c_int, c_long, *mut Event) -> c_int;
+    type XGetWindowAttributesFn =
+        unsafe extern "C" fn(*mut Display, Window, *mut WindowAttributes) -> c_int;
     type XMapRaisedFn = unsafe extern "C" fn(*mut Display, Window) -> c_int;
     type XRaiseWindowFn = unsafe extern "C" fn(*mut Display, Window) -> c_int;
     type XSetInputFocusFn = unsafe extern "C" fn(*mut Display, Window, c_int, c_ulong) -> c_int;
@@ -2881,6 +2945,8 @@ mod x11_focus {
         get_window_property: XGetWindowPropertyFn,
         query_tree: XQueryTreeFn,
         free: XFreeFn,
+        send_event: XSendEventFn,
+        get_window_attributes: XGetWindowAttributesFn,
         map_raised: XMapRaisedFn,
         raise_window: XRaiseWindowFn,
         set_input_focus: XSetInputFocusFn,
@@ -2911,6 +2977,8 @@ mod x11_focus {
                         get_window_property: symbol(handle, "XGetWindowProperty")?,
                         query_tree: symbol(handle, "XQueryTree")?,
                         free: symbol(handle, "XFree")?,
+                        send_event: symbol(handle, "XSendEvent")?,
+                        get_window_attributes: symbol(handle, "XGetWindowAttributes")?,
                         map_raised: symbol(handle, "XMapRaised")?,
                         raise_window: symbol(handle, "XRaiseWindow")?,
                         set_input_focus: symbol(handle, "XSetInputFocus")?,
@@ -2956,7 +3024,62 @@ mod x11_focus {
             .to_string()
     }
 
-    pub(super) fn focus_window_for_pid(pid: u32, display_name: &str) -> Result<Value, String> {
+    /// Request normal application closure, allowing Chrome's cookie store to
+    /// flush. Only this process's WM-managed top-level windows receive it.
+    pub(super) fn close_windows_for_pid(pid: u32, display_name: &str) -> Result<(), String> {
+        let name = CString::new(display_name).map_err(|_| "Invalid X11 display")?;
+        let x11 = X11::load()?;
+        unsafe {
+            let display = (x11.open_display)(name.as_ptr());
+            if display.is_null() {
+                return Err("Failed to open X11 display for browser close".into());
+            }
+            let result = (|| {
+                let root = (x11.default_root_window)(display);
+                let pid_atom = intern_atom(&x11, display, "_NET_WM_PID")?;
+                let stacking = intern_atom(&x11, display, "_NET_CLIENT_LIST_STACKING")?;
+                let clients = intern_atom(&x11, display, "_NET_CLIENT_LIST")?;
+                let protocols = intern_atom(&x11, display, "WM_PROTOCOLS")?;
+                let delete = intern_atom(&x11, display, "WM_DELETE_WINDOW")?;
+                let windows = window_list_property(&x11, display, root, stacking)
+                    .filter(|windows| !windows.is_empty())
+                    .or_else(|| window_list_property(&x11, display, root, clients))
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|window| window_pid(&x11, display, *window, pid_atom) == Some(pid))
+                    .collect::<Vec<_>>();
+                if windows.is_empty() {
+                    return Err("No managed X11 window found for browser close".into());
+                }
+                for window in windows {
+                    let mut event = Event { pad: [0; 24] };
+                    event.client_message = ClientMessageEvent {
+                        event_type: 33, // ClientMessage
+                        serial: 0,
+                        send_event: 1,
+                        display,
+                        window,
+                        message_type: protocols,
+                        format: 32,
+                        data: [delete as c_long, CURRENT_TIME as c_long, 0, 0, 0],
+                    };
+                    if (x11.send_event)(display, window, FALSE, 0, &mut event) == 0 {
+                        return Err("X11 browser close request failed".into());
+                    }
+                }
+                (x11.flush)(display);
+                Ok(())
+            })();
+            (x11.close_display)(display);
+            result
+        }
+    }
+
+    pub(super) fn focus_window_for_pid(
+        pid: u32,
+        display_name: &str,
+        viewable_only: bool,
+    ) -> Result<Value, String> {
         let display_c = CString::new(display_name)
             .map_err(|_| "X11 display contains an interior NUL byte".to_string())?;
         let x11 = X11::load()?;
@@ -2967,7 +3090,8 @@ mod x11_focus {
                 return Err(format!("Failed to open X11 display {}", display_name));
             }
 
-            let outcome = focus_window_for_pid_on_display(&x11, display, pid, display_name);
+            let outcome =
+                focus_window_for_pid_on_display(&x11, display, pid, display_name, viewable_only);
             (x11.close_display)(display);
             outcome
         }
@@ -2978,6 +3102,7 @@ mod x11_focus {
         display: *mut Display,
         pid: u32,
         display_name: &str,
+        viewable_only: bool,
     ) -> Result<Value, String> {
         let root = (x11.default_root_window)(display);
         let pid_atom = intern_atom(x11, display, "_NET_WM_PID")?;
@@ -2992,12 +3117,24 @@ mod x11_focus {
             candidates = collect_window_tree(x11, display, root);
         }
 
-        let Some(target_window) = candidates
-            .iter()
-            .rev()
-            .copied()
-            .find(|window| window_pid(x11, display, *window, pid_atom) == Some(pid))
-        else {
+        let Some(target_window) = candidates.iter().rev().copied().find(|window| {
+            if window_pid(x11, display, *window, pid_atom) != Some(pid) {
+                return false;
+            }
+            if !viewable_only {
+                return true;
+            }
+            let mut attributes = std::mem::MaybeUninit::<WindowAttributes>::uninit();
+            if (x11.get_window_attributes)(display, *window, attributes.as_mut_ptr()) == 0 {
+                return false;
+            }
+            let attributes = attributes.assume_init();
+            // Chrome publishes helper/startup windows before its real
+            // window is mapped. Focusing those raises fatal X BadMatch.
+            attributes.map_state == 2 // IsViewable (all ancestors mapped)
+                    && attributes.class == 1 // InputOutput
+                    && attributes.override_redirect == 0
+        }) else {
             return Err(format!("No X11 window found for browser PID {}", pid));
         };
 

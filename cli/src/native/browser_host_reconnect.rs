@@ -399,7 +399,8 @@ where
                     )?;
                 }
                 if let Some(path) = state.profile_executables.get(&browser.profile_id) {
-                    effects.select_browser_executable(path.clone())?;
+                    let profile_id = browser.profile_id.clone();
+                    effects.select_profile_browser_executable(profile_id, path.clone())?;
                 }
                 None
             };
@@ -930,6 +931,7 @@ mod tests {
         catalog.profiles.insert(
             "profile".into(),
             BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: "profile".into(),
                 name: "Fixture".into(),
                 user_data_dir: directory.join("profile").to_string_lossy().into(),

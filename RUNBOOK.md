@@ -1,5 +1,9 @@
 # Runbook
 
+[P283 Spec400 repairs](docs/dev/notes/0283-2026-10-25-spec400-repairs.md) qualify six bounded repairs #424–429 through isolated real-Chrome workflows and affected source gates. PR408 carries the source; merge and tracker closure remain separate at this checkpoint. Broader #402/#403 remain incomplete and #404 remains blocked. No runtime publication.
+
+[P288 writer custody](docs/dev/plans/0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. PR415 carries the qualified source;221 workstation cases, strict Rust, fixtures and docs pass. Installed production is unchanged.
+
 [P291 corrected cold rail](docs/dev/plans/0291-2026-10-24-cold-rail-retry-spacing.md), #430, is installed accepted oncf65dd76422b: cold median3.36s to2.11s, warm1.00s to1.02s,18 browser roots and137 Native provider/persistent unit generations preserved. [Evidence](docs/dev/notes/0291-2026-10-24-cold-rail-retry-spacing.md) retains the failed first comparison, mounted cache-caller correction, finite sample limits and three doctor advisories.422 asset intermittence and Remote View667 MCP-client restart loops remain separate. Retain the primary checkout and pinned candidates.
 
 Earlier combined source a3dbb1a97 was installed as sealed binary9cbf948ef4af through the supported preserve installer, including P285 cold catch-up, P289 terminal/activity recovery and P288/P290 writer repairs. All13 pre-install browser roots survive; public auth/workspace/assets and doctor pass with retained advisories. [P285 evidence](docs/dev/notes/0285-2026-10-24-workspace-inventory-latency.md) retains its causal cold catch-up comparison; the latest five stock Chrome156 visits have median1.168s/max1.939s.
@@ -87,6 +91,14 @@ P246/#295 completes this bounded tooling repair with seven CLI regressions and
 existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 
 ## Current execution
+
+### 2026-10-22 manual non-CDP MCP login
+
+[P269](docs/dev/plans/0269-2026-10-22-manual-login.md), #357, source-qualifies
+one-call manual login after integrating PR361 attachment/control. Final executable
+`f7c982787` passes the complete real-Chrome synthetic-provider lifecycle, persistent
+cookie preservation and thirteen-tool catalog consistency. The plan holds the
+acceptance matrix. PR362 awaits review; no production or Google account run.
 
 ### 2026-10-19 stale session host repair
 

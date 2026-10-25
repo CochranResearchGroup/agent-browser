@@ -17,6 +17,8 @@ use agent_browser_service_model::{
 };
 use serde_json::Value;
 
+mod manual;
+
 use super::action_runtime::runtime::DaemonState;
 use super::browser::{BrowserManager, WaitUntil};
 use super::cdp::chrome::LaunchOptions;
@@ -54,6 +56,15 @@ pub(crate) trait BrowserRuntimeDriver {
     ) -> Result<Option<agent_browser_service_model::BrowserRecovery>, String> {
         let _ = (profile, browser, tabs, navigation);
         Ok(None)
+    }
+
+    /// Pin one profile's next launches without changing another profile's build.
+    fn select_profile_browser_executable(
+        &mut self,
+        _profile_id: String,
+        _path: String,
+    ) -> Result<(), String> {
+        Err("browser_profile_build_selection_unsupported".into())
     }
 
     fn select_browser_executable(&mut self, _path: String) -> Result<(), String> {
@@ -269,6 +280,15 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
             .reconcile_profile_browser(profile, browser, tabs, navigation)
     }
 
+    fn select_profile_browser_executable(
+        &mut self,
+        profile_id: String,
+        path: String,
+    ) -> Result<(), String> {
+        self.runtime
+            .select_profile_browser_executable(profile_id, path)
+    }
+
     fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
         self.runtime.select_browser_executable(path)
     }
@@ -407,6 +427,7 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
         let user_data_dir = root.join(allocation_id);
         create_private_directory(&user_data_dir)?;
         Ok(BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: allocation_id.to_string(),
             name: allocation_id.to_string(),
             user_data_dir: user_data_dir.to_string_lossy().into_owned(),
@@ -556,6 +577,11 @@ enum BrowserRuntimeCommand {
     },
     PreflightLaunch {
         profile: BrowserProfileCatalogEntry,
+        reply: mpsc::Sender<Result<(), String>>,
+    },
+    SelectProfileExecutable {
+        profile_id: String,
+        path: String,
         reply: mpsc::Sender<Result<(), String>>,
     },
     SelectExecutable {
@@ -940,6 +966,22 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
             },
         )
     }
+    fn select_profile_browser_executable(
+        &mut self,
+        profile_id: String,
+        path: String,
+    ) -> Result<(), String> {
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::SelectProfileExecutable {
+                profile_id,
+                path,
+                reply,
+            },
+        )
+    }
+
     fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
         let (reply, receiver) = mpsc::channel();
         self.request(
@@ -1159,11 +1201,14 @@ fn run_browser_worker(
     mut config: BrowserManagerRuntimeConfig,
 ) {
     let mut browsers = HashMap::<String, DaemonState>::new();
+    let mut manual = manual::ManualBrowsers::default();
+    let mut profile_executables: HashMap<String, String> = HashMap::new();
     let mut shared_browser_tabs = HashMap::<String, BTreeSet<String>>::new();
     let mut borrowed_app_browsers = HashMap::<String, BorrowedAppBrowser>::new();
     let mut reconciled_targets = HashMap::<(String, String), String>::new();
     let mut next_browser_sequence = 0_u64;
     while let Ok(command) = receive_runtime_command(&receiver, || {
+        manual.poll_owned_exits();
         for state in browsers.values_mut() {
             if let Some(manager) = state.browser.as_mut() {
                 if manager.owns_launched_browser_process() {
@@ -1174,6 +1219,171 @@ fn run_browser_worker(
         }
     }) {
         match command {
+            BrowserRuntimeCommand::ReconcileProfile {
+                profile,
+                browser,
+                reply,
+                tabs,
+                ..
+            } if profile.manual_login_url.is_some() => {
+                if let Some(browser) = browser.as_ref().filter(|browser| {
+                    super::browser_session_host::browser_mode_host::recovery_authorized(
+                        &profile, browser,
+                    )
+                }) {
+                    let _ = reply.send(manual::reconcile_mode(&profile, browser, &tabs));
+                    continue;
+                }
+                if browser.is_none() {
+                    let _ = reply.send(manual::reconcile_initial(&profile));
+                    continue;
+                }
+                let result = browser
+                    .as_ref()
+                    .map_or(Ok(()), |browser| {
+                        if !manual::is_manual(browser) {
+                            return Err("browser_login_mode_conflict".into());
+                        }
+                        manual.verify(browser).and_then(|live| {
+                            if live {
+                                Ok(())
+                            } else {
+                                Err("manual_login_ended: close the login task before reopening"
+                                    .into())
+                            }
+                        })
+                    })
+                    .map(|()| None);
+                let _ = reply.send(result);
+            }
+            BrowserRuntimeCommand::Launch {
+                profile,
+                desktop,
+                environment,
+                recovery_browser,
+                reply,
+            } if profile.manual_login_url.is_some() => {
+                let result = (|| {
+                    if recovery_browser.as_ref().is_some_and(|browser| {
+                        !super::browser_session_host::browser_mode_host::recovery_authorized(
+                            &profile, browser,
+                        )
+                    }) {
+                        return Err("manual_login_recovery_requires_explicit_reopen".into());
+                    }
+                    let private =
+                        environment.ok_or("manual_login_requires_native_remote_desktop")?;
+                    let display = private
+                        .get("DISPLAY")
+                        .cloned()
+                        .ok_or("manual_login_display_unavailable")?;
+                    let executable = profile_executables
+                        .get(&profile.id)
+                        .cloned()
+                        .or_else(|| config.executable_path.clone())
+                        .or_else(|| {
+                            super::cdp::chrome::find_chrome()
+                                .map(|p| p.to_string_lossy().into_owned())
+                        })
+                        .ok_or("manual_login_browser_unavailable")?;
+                    let options = LaunchOptions {
+                        headless: false,
+                        manual_login: true,
+                        attachable: false,
+                        executable_path: Some(executable),
+                        profile: Some(profile.user_data_dir.clone()),
+                        args: vec![profile
+                            .manual_login_url
+                            .clone()
+                            .expect("matched login mode")],
+                        display: Some(display),
+                        remote_headed: true,
+                        private_launch_environment: Some(private),
+                        ..LaunchOptions::default()
+                    };
+                    let mut launch = manual.launch(&profile, desktop, options)?;
+                    if let Some(browser) = recovery_browser {
+                        manual.retain_logical_identity(&launch.browser_id, &browser.id)?;
+                        launch.browser_id = browser.id;
+                    }
+                    Ok(launch)
+                })();
+                let _ = reply.send(result);
+            }
+            BrowserRuntimeCommand::IsLive { browser, reply } if manual::is_manual(&browser) => {
+                let _ = reply.send(manual.verify(&browser));
+            }
+            BrowserRuntimeCommand::Close { browser, reply } if manual::is_manual(&browser) => {
+                let _ = reply.send(manual.close(&browser));
+            }
+            BrowserRuntimeCommand::AcquireInitialTab {
+                browser,
+                attributed_target_ids,
+                reply,
+                ..
+            } if manual::is_manual(&browser) => {
+                let result = manual.verify(&browser).and_then(|live| {
+                    if !live {
+                        return Err("manual_login_process_exited".into());
+                    }
+                    if !attributed_target_ids.is_empty() {
+                        return Err("manual_login_profile_in_use".into());
+                    }
+                    Ok(manual::window_tab(&browser))
+                });
+                let _ = reply.send(result);
+            }
+            BrowserRuntimeCommand::CreateTab { browser, reply } if manual::is_manual(&browser) => {
+                let _ = reply.send(Err("manual_login_additional_tabs_unavailable".into()));
+            }
+            BrowserRuntimeCommand::CloseTab { browser, reply, .. }
+                if manual::is_manual(&browser) =>
+            {
+                // The single human window is closed by the manager's final-task
+                // browser close, with exact original-process readback.
+                let _ = reply.send(manual.verify(&browser).map(|_| ()));
+            }
+            BrowserRuntimeCommand::Navigate {
+                browser,
+                url,
+                reply,
+                ..
+            } if manual::is_manual(&browser) => {
+                let _ = reply.send(
+                    manual
+                        .execute(
+                            &browser,
+                            &serde_json::json!({"action":"navigate","url":url}),
+                        )
+                        .map(|_| ()),
+                );
+            }
+            BrowserRuntimeCommand::Focus { browser, reply, .. } if manual::is_manual(&browser) => {
+                let _ = reply.send(manual.focus(&browser));
+            }
+            BrowserRuntimeCommand::Execute {
+                browser,
+                command,
+                reply,
+                ..
+            } if manual::is_manual(&browser) => {
+                let _ = reply.send(manual.execute(&browser, &command));
+            }
+            BrowserRuntimeCommand::IdleRetirement {
+                scope,
+                apply,
+                reply,
+                ..
+            } if manual::is_manual(&scope.browser) => {
+                // A manual task owns one native window. Its only synthetic tab
+                // retires with that exact process; another task cannot share it.
+                let result = if apply {
+                    manual.close(&scope.browser).map(|()| true)
+                } else {
+                    manual.verify(&scope.browser).map(|live| !live)
+                };
+                let _ = reply.send(result);
+            }
             BrowserRuntimeCommand::OperationBaseline {
                 shared_browser_ids,
                 borrowed_app_browsers: retained_attachments,
@@ -1350,6 +1560,14 @@ fn run_browser_worker(
                 };
                 let _ = reply.send(result);
             }
+            BrowserRuntimeCommand::SelectProfileExecutable {
+                profile_id,
+                path,
+                reply,
+            } => {
+                profile_executables.insert(profile_id, path);
+                let _ = reply.send(Ok(()));
+            }
             BrowserRuntimeCommand::SelectExecutable { path, reply } => {
                 config.executable_path = Some(path);
                 let _ = reply.send(Ok(()));
@@ -1423,7 +1641,10 @@ fn run_browser_worker(
                     let mut manager = BrowserManager::launch(
                         LaunchOptions {
                             headless: config.headless && display.is_none(),
-                            executable_path: config.executable_path.clone(),
+                            executable_path: profile_executables
+                                .get(&profile.id)
+                                .cloned()
+                                .or_else(|| config.executable_path.clone()),
                             profile: Some(profile.user_data_dir.clone()),
                             display,
                             remote_headed: config.remote_headed || desktop.is_some(),
@@ -2534,6 +2755,29 @@ fn prove_browser_recovery_absence(
         crate::process_identity::observe_process(browser.pid),
         &expected,
     )?;
+    prove_profile_process_census_absence(&expected)
+}
+
+/// Positive current absence for an unpublished launch. Unsupported platforms
+/// cannot substitute missing journal evidence for an operating-system proof.
+pub(crate) fn prove_profile_launch_absence(
+    profile: &BrowserProfileCatalogEntry,
+) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        let expected = fs::canonicalize(&profile.user_data_dir)
+            .map_err(|_| "browser_session_recovery_profile_unavailable")?;
+        prove_current_profile_lock_absence(&expected)?;
+        prove_profile_process_census_absence(&expected)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = profile;
+        Err("browser_session_launch_absence_unsupported".into())
+    }
+}
+
+fn prove_profile_process_census_absence(expected: &Path) -> Result<(), String> {
     let system = sysinfo::System::new_all();
     for process in system.processes().values() {
         let name = process.name().to_string_lossy().to_ascii_lowercase();
@@ -2651,6 +2895,177 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
+    #[test]
+    fn profile_build_pin_does_not_change_unrelated_launches() {
+        let root = TempDirectory::new();
+        let default = root
+            .0
+            .join("missing-default-chrome")
+            .to_string_lossy()
+            .into_owned();
+        let pinned = root
+            .0
+            .join("missing-pinned-chrome")
+            .to_string_lossy()
+            .into_owned();
+        let mut runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
+            headless: true,
+            executable_path: Some(default.clone()),
+            ..Default::default()
+        })
+        .unwrap();
+        runtime
+            .select_profile_browser_executable("source".into(), pinned.clone())
+            .unwrap();
+        for (id, expected) in [("source", &pinned), ("unrelated", &default)] {
+            let directory = root.0.join(id);
+            fs::create_dir_all(&directory).unwrap();
+            let profile = BrowserProfileCatalogEntry {
+                id: id.into(),
+                name: id.into(),
+                user_data_dir: directory.to_string_lossy().into_owned(),
+                kind: BrowserProfileKind::Named,
+                manual_login_url: None,
+            };
+            let failure = runtime.launch_browser(&profile, None).unwrap_err();
+            assert!(
+                failure.contains(expected),
+                "wrong executable selected: {failure}"
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn owner_profile_pin_keeps_real_launch_executables_isolated_after_restart() {
+        use agent_browser_service_model::{
+            BrowserProfileCatalog, BrowserSessionManager, BrowserSessionManagerConfig,
+            BrowserSessionState, OpenBrowserSession,
+        };
+        use std::os::unix::fs::PermissionsExt;
+        struct Peer(std::process::Child);
+        impl Drop for Peer {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let mut peer = Peer(
+            std::process::Command::new("/bin/sleep")
+                .arg("300")
+                .spawn()
+                .unwrap(),
+        );
+        let observe_peer = |pid| match crate::process_identity::observe_process(pid) {
+            crate::process_identity::ProcessObservation::Observed(observed) => (
+                observed.pid,
+                observed.start_token.expect("peer kernel start is required"),
+                observed
+                    .executable_path
+                    .expect("peer executable is required"),
+            ),
+            observation => panic!("owned live peer must remain observable: {observation:?}"),
+        };
+        let original_peer = observe_peer(peer.0.id());
+        assert_eq!(
+            original_peer.2,
+            fs::canonicalize("/bin/sleep")
+                .unwrap()
+                .to_string_lossy()
+                .as_ref()
+        );
+        let root = TempDirectory::new();
+        let mut catalog = BrowserProfileCatalog::default();
+        for id in ["pinned", "unrelated"] {
+            let directory = root.0.join(id);
+            fs::create_dir_all(&directory).unwrap();
+            catalog.profiles.insert(
+                id.into(),
+                BrowserProfileCatalogEntry {
+                    id: id.into(),
+                    name: id.into(),
+                    user_data_dir: directory.to_string_lossy().into_owned(),
+                    kind: BrowserProfileKind::Named,
+                    manual_login_url: None,
+                },
+            );
+        }
+        // These reviewed synthetic executables record the launch boundary then
+        // exit. They cannot open a browser, attach CDP or access a private profile.
+        for name in ["default", "selected"] {
+            let path = root.0.join(format!("{name}-chrome"));
+            fs::write(
+                &path,
+                "#!/bin/sh\nprofile=\nfor argument in \"$@\"; do\n  case \"$argument\" in --user-data-dir=*) profile=${argument#--user-data-dir=} ;; esac\ndone\nprintf '%s\\n' \"$profile\" >> \"$0.launches\"\nexit 71\n",
+            )
+            .unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let mut state = BrowserSessionState::default();
+        state.profile_executables.insert(
+            "pinned".into(),
+            root.0
+                .join("selected-chrome")
+                .to_string_lossy()
+                .into_owned(),
+        );
+        let mut previous_launches = [0; 2];
+        for order in [["pinned", "unrelated"], ["unrelated", "pinned"]] {
+            // The second generation restores persisted pins and reverses launch order.
+            state = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+            let runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
+                headless: true,
+                executable_path: Some(root.0.join("default-chrome").to_string_lossy().into_owned()),
+                ..Default::default()
+            })
+            .unwrap();
+            let mut effects = BrowserSessionEffectAdapter::new(runtime);
+            for id in order {
+                let result = BrowserSessionManager::new(
+                    &mut state,
+                    &catalog,
+                    &mut effects,
+                    BrowserSessionManagerConfig::default(),
+                )
+                .open(OpenBrowserSession::exact_profile(id, id, 100));
+                assert!(
+                    result.is_err(),
+                    "synthetic launcher deliberately exits before readiness"
+                );
+            }
+            drop(effects);
+            for (index, (name, profile_id)) in [("selected", "pinned"), ("default", "unrelated")]
+                .into_iter()
+                .enumerate()
+            {
+                let attempts = fs::read_to_string(root.0.join(format!("{name}-chrome.launches")))
+                    .unwrap_or_default();
+                let profiles = attempts.lines().collect::<Vec<_>>();
+                assert!(
+                    profiles.len() > previous_launches[index],
+                    "each generation must exercise the {name} executable"
+                );
+                let expected_profile = root.0.join(profile_id);
+                for actual_profile in &profiles[previous_launches[index]..] {
+                    assert_eq!(
+                        *actual_profile,
+                        expected_profile.to_string_lossy(),
+                        "every startup attempt must use its own profile's executable"
+                    );
+                }
+                previous_launches[index] = profiles.len();
+            }
+            assert!(peer.0.try_wait().unwrap().is_none());
+            assert_eq!(observe_peer(peer.0.id()), original_peer);
+        }
+        assert!(
+            state.browsers.is_empty(),
+            "failed synthetic launches publish no ready browser"
+        );
+        peer.0.kill().unwrap();
+        peer.0.wait().unwrap();
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn runtime_idle_receive_reaps_exited_owned_child_without_touching_live_peer() {
@@ -2735,6 +3150,7 @@ mod tests {
         fs::create_dir_all(&profile_path).unwrap();
         fs::create_dir_all(&other_path).unwrap();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "app".into(),
             name: "App".into(),
             user_data_dir: profile_path.to_string_lossy().into_owned(),
@@ -2819,6 +3235,7 @@ mod tests {
         let root = TempDirectory::new();
         fs::create_dir_all(&root.0).unwrap();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "profile".into(),
             name: "Profile".into(),
             user_data_dir: root.0.to_string_lossy().into_owned(),
@@ -2874,6 +3291,7 @@ mod tests {
             friendly_route_label: "app".into(),
         };
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "profile".into(),
             name: "Profile".into(),
             user_data_dir: "/synthetic/profile".into(),
@@ -3290,6 +3708,7 @@ mod tests {
         fs::create_dir_all(root.0.join("orphan")).unwrap();
         let allocation = ManagedDisposableProfile {
             profile: BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: "group-orphan".into(),
                 name: "synthetic".into(),
                 user_data_dir: root.0.join("orphan").to_string_lossy().into_owned(),
@@ -3504,6 +3923,7 @@ mod tests {
     fn runtime_original_retirement_reads_exact_targets_and_preserves_the_peer_after_restart() {
         let directory = TempDirectory::new();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "original-retirement-fixture".into(),
             name: "Original retirement fixture".into(),
             user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
@@ -3720,6 +4140,7 @@ mod tests {
         )
         .unwrap();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: intent.profile_id.clone(),
             name: "Synthetic".to_string(),
             user_data_dir: "/synthetic/profile-a".to_string(),
@@ -3745,6 +4166,7 @@ mod tests {
     fn remote_view_desktop_launch_fails_before_local_display_inference() {
         let directory = TempDirectory::new();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "remote-view-fixture".to_string(),
             name: "Remote View fixture".to_string(),
             user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
@@ -3874,6 +4296,7 @@ mod tests {
         ];
         for (path, limit, reason) in cases {
             let profile = BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: "Default".into(),
                 name: "Default".into(),
                 user_data_dir: path,
@@ -3910,6 +4333,7 @@ mod tests {
     fn resource_pressure_rejects_before_local_browser_launch() {
         let directory = TempDirectory::new();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "resource-pressure-fixture".to_string(),
             name: "Resource pressure fixture".to_string(),
             user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
@@ -3931,6 +4355,7 @@ mod tests {
     fn existing_profile_browser_is_reused_without_saved_inventory() {
         let directory = TempDirectory::new();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "reuse-fixture".into(),
             name: "Reuse fixture".into(),
             user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
@@ -3986,6 +4411,7 @@ mod tests {
     fn shared_profile_acquisition_and_close_preserve_peer_work() {
         let directory = TempDirectory::new();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "peer-fixture".into(),
             name: "Peer fixture".into(),
             user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
@@ -4065,6 +4491,7 @@ mod tests {
         };
         let directory = TempDirectory::new();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "publication-replay".into(),
             name: "Publication replay".into(),
             user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
@@ -4147,6 +4574,7 @@ mod tests {
     fn free_profile_recovery_ignores_unrelated_browser_profile_metadata() {
         let directory = TempDirectory::new();
         let occupied = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "unrelated-browser".into(),
             name: "Unrelated browser".into(),
             user_data_dir: directory.0.join("occupied").to_string_lossy().into_owned(),
@@ -4169,6 +4597,7 @@ mod tests {
         // The unrelated process remains live while its old argv path becomes stale.
         fs::rename(&occupied.user_data_dir, directory.0.join("moved-occupied")).unwrap();
         let free = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "free-profile".into(),
             name: "Free profile".into(),
             user_data_dir: directory.0.join("free").to_string_lossy().into_owned(),
@@ -4262,6 +4691,7 @@ mod tests {
             let directory = TempDirectory::new();
             fs::create_dir_all(&directory.0).unwrap();
             let profile = BrowserProfileCatalogEntry {
+                manual_login_url: None,
                 id: "p237-real-lifetime".into(),
                 name: "Synthetic P237".into(),
                 user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
@@ -4503,6 +4933,7 @@ mod tests {
         };
         let directory = TempDirectory::new();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "ordinary-reuse".into(),
             name: "Ordinary reuse".into(),
             user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
@@ -4687,6 +5118,7 @@ mod tests {
     fn runtime_restart_reattaches_and_closes_recorded_browser() {
         let directory = TempDirectory::new();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "restart-fixture".to_string(),
             name: "Restart fixture".to_string(),
             user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
@@ -4778,6 +5210,7 @@ mod tests {
         let root = TempDirectory::new();
         fs::create_dir_all(&root.0).unwrap();
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "profile-a".into(),
             name: "Synthetic".into(),
             user_data_dir: root.0.to_string_lossy().into_owned(),
@@ -4932,4 +5365,10 @@ mod hosted_reconnect_connection_tests {
         invalidate_changed_borrowed_connections(&mut browsers, &next, &next).unwrap();
         assert!(browsers.contains_key("peer"));
     }
+}
+
+/// Read-only Native workspace presence for a CDP-free managed process. This
+/// checks the published original identity without creating a CDP connection.
+pub(super) fn manual_browser_is_live(browser: &ManagedBrowserInstance) -> Result<bool, String> {
+    manual::ManualBrowsers::default().verify(browser)
 }

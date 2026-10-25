@@ -25,6 +25,8 @@ pub struct BrowserLaunch {
     pub process_identity: Option<crate::RecordedProcessIdentity>,
     pub browser_id: String,
     pub pid: u32,
+    /// Empty for a managed CDP-free native window. Native observation and input
+    /// use Remote View; DOM actions and debugging attachment are unavailable.
     pub cdp_endpoint: String,
     pub desktop: Option<RemoteViewFixedDesktop>,
 }
@@ -133,6 +135,15 @@ pub trait BrowserSessionEffects {
     }
 
     /// Select an executable for subsequent launches; existing browsers retain identity.
+    /// Pin one profile's next launches without changing another profile's build.
+    fn select_profile_browser_executable(
+        &mut self,
+        _profile_id: String,
+        _path: String,
+    ) -> Result<(), String> {
+        Err("browser_profile_build_selection_unsupported".into())
+    }
+
     fn select_browser_executable(&mut self, _path: String) -> Result<(), String> {
         Err("browser_build_selection_unsupported".into())
     }
@@ -588,6 +599,8 @@ pub struct ManagedBrowserInstance {
     pub id: String,
     pub profile_id: String,
     pub pid: u32,
+    /// Empty for a managed CDP-free native window. Native observation and input
+    /// use Remote View; DOM actions and debugging attachment are unavailable.
     pub cdp_endpoint: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub desktop: Option<RemoteViewFixedDesktop>,
@@ -774,6 +787,10 @@ pub struct PendingHumanTabRetention {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserSessionState {
+    /// Profile-wide owner operations retain an actionable journal identity.
+    /// A competing client must resume or cancel that operation before opening.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub profile_operation_ids: BTreeMap<String, String>,
     /// App continuity is separate from browser control and account readiness.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub hosted_continuity: BTreeMap<String, crate::BrowserHostedContinuity>,
@@ -831,6 +848,7 @@ pub struct BrowserSessionState {
 impl Default for BrowserSessionState {
     fn default() -> Self {
         Self {
+            profile_operation_ids: BTreeMap::new(),
             hosted_continuity: BTreeMap::new(),
             host_policies: crate::BrowserHostPolicies::default(),
             schema_version: BROWSER_SESSION_STATE_SCHEMA_V1.to_string(),
@@ -1066,12 +1084,19 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .filter_map(|id| crate::resolve_remote_view_tab_handoff(state, id).ok())
             .map(|target| target.session.id)
             .collect();
-        let leave_open_session_ids = state
+        let mut leave_open_session_ids = state
             .leave_open_session_ids
             .iter()
             .filter(|id| state.sessions.contains_key(*id))
             .cloned()
             .collect::<BTreeSet<_>>();
+        leave_open_session_ids.extend(
+            state
+                .sessions
+                .values()
+                .filter(|task| state.profile_operation_ids.contains_key(&task.profile_id))
+                .map(|task| task.id.clone()),
+        );
         protected_session_ids.extend(leave_open_session_ids.iter().cloned());
         Self {
             state,
@@ -1143,6 +1168,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .checked_add(self.config.session_idle_timeout_ms)
             .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
         let profile = self.resolve_profile_for_open(&request)?;
+        if let Some(operation) = self.state.profile_operation_ids.get(&profile.id) {
+            return Err(format!("browser_profile_operation_pending:{operation}:inspect or resume the owner operation"));
+        }
         if self
             .state
             .app_browser_attachments
@@ -1479,7 +1507,8 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .cloned()
             .collect::<Vec<_>>();
         if let Some(path) = self.state.profile_executables.get(&browser.profile_id) {
-            self.effects.select_browser_executable(path.clone())?;
+            self.effects
+                .select_profile_browser_executable(profile.id.clone(), path.clone())?;
         }
         let recovered = self.effects.recover_browser(
             &browser,
@@ -1492,7 +1521,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             return Err("browser_placement_conflict:recovery selected another desktop; explicitly relocate/rebind".into());
         }
         let browser_id = browser.id.clone();
-        self.publish_recovery(browser, tabs, recovered, false)?;
+        self.publish_recovery(browser, tabs, recovered, false, false)?;
         // A positively absent replacement has fresh launch custody; prior shared attachment does not transfer.
         self.state.shared_browser_ids.remove(&browser_id);
         Ok(())
@@ -1539,11 +1568,60 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     .effects
                     .pending_launch_intent()
                     .is_some_and(|intent| intent.profile_id == profile.id));
-        self.publish_recovery(browser.clone(), tabs, recovered, true)?;
+        self.publish_recovery(browser.clone(), tabs, recovered, true, false)?;
         if !managed {
             self.state.shared_browser_ids.insert(browser.id.clone());
         }
         Ok(true)
+    }
+
+    /// Publish a qualified owner-directed physical replacement. The lifecycle
+    /// adapter owns exact exit and launch proof; this seam retains logical IDs.
+    /// The operation fence remains until its durable journal is terminal.
+    pub fn publish_owner_replacement(
+        &mut self,
+        browser_id: &str,
+        operation_id: &str,
+        recovered: BrowserRecovery,
+    ) -> Result<(), String> {
+        let browser = self
+            .state
+            .browsers
+            .get(browser_id)
+            .cloned()
+            .ok_or("browser_owner_replacement_browser_missing")?;
+        if self
+            .state
+            .profile_operation_ids
+            .get(&browser.profile_id)
+            .map(String::as_str)
+            != Some(operation_id)
+            || recovered
+                .launch
+                .process_identity
+                .as_ref()
+                .is_none_or(|identity| {
+                    identity.pid != recovered.launch.pid
+                        || identity.start_token.is_empty()
+                        || identity
+                            .executable_path
+                            .as_deref()
+                            .is_none_or(str::is_empty)
+                })
+        {
+            return Err("browser_owner_replacement_identity_unverified".into());
+        }
+        let tabs = self
+            .state
+            .tabs
+            .values()
+            .filter(|tab| tab.browser_id == browser.id)
+            .cloned()
+            .collect();
+        self.publish_recovery(browser, tabs, recovered, false, true)?;
+        self.state.app_browser_attachments.remove(browser_id);
+        self.state.shared_browser_ids.remove(browser_id);
+        Ok(())
     }
 
     fn publish_recovery(
@@ -1552,11 +1630,12 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         tabs: Vec<ManagedBrowserTab>,
         recovered: BrowserRecovery,
         current_desktop_rebind: bool,
+        owner_replacement: bool,
     ) -> Result<(), String> {
         let targets = recovered.target_ids.values().collect::<BTreeSet<_>>();
         if recovered.launch.browser_id != browser.id
             || recovered.launch.pid == 0
-            || recovered.launch.cdp_endpoint.is_empty()
+            || (recovered.launch.cdp_endpoint.is_empty() && !owner_replacement)
             || (!current_desktop_rebind
                 && !self.state.shared_browser_ids.contains(&browser.id)
                 && browser.desktop.is_some()
@@ -1618,16 +1697,35 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         placement: Option<&BrowserPlacement>,
     ) -> Result<BrowserLaunch, String> {
         if let Some(path) = self.state.profile_executables.get(&profile.id) {
-            self.effects.select_browser_executable(path.clone())?;
+            self.effects
+                .select_profile_browser_executable(profile.id.clone(), path.clone())?;
         }
         if let Some(reconciled) = self
             .effects
             .reconcile_profile_browser(profile, None, &[], &[])?
         {
-            if reconciled.launch.pid == 0
-                || reconciled.launch.cdp_endpoint.is_empty()
-                || !reconciled.target_ids.is_empty()
-            {
+            let pending = self.effects.pending_launch_intent();
+            let valid_posture = if profile.manual_login_url.is_some() {
+                reconciled.launch.cdp_endpoint.is_empty()
+                    && pending
+                        .as_ref()
+                        .is_some_and(|intent| intent.profile_id == profile.id)
+                    && reconciled
+                        .launch
+                        .process_identity
+                        .as_ref()
+                        .is_some_and(|identity| {
+                            identity.pid == reconciled.launch.pid
+                                && !identity.start_token.is_empty()
+                                && identity
+                                    .executable_path
+                                    .as_deref()
+                                    .is_some_and(|path| !path.is_empty())
+                        })
+            } else {
+                !reconciled.launch.cdp_endpoint.is_empty()
+            };
+            if reconciled.launch.pid == 0 || !valid_posture || !reconciled.target_ids.is_empty() {
                 return Err("browser_session_recovery_identity_conflict".into());
             }
             if placement
@@ -1635,9 +1733,13 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             {
                 return Err("browser_placement_conflict:reconciled browser uses another desktop; explicitly relocate/rebind".into());
             }
-            self.state
-                .shared_browser_ids
-                .insert(reconciled.launch.browser_id.clone());
+            // An interrupted observed owner launch retains its durable custody.
+            // Only a current external attachment is borrowed/shared lifecycle.
+            if pending.is_none() {
+                self.state
+                    .shared_browser_ids
+                    .insert(reconciled.launch.browser_id.clone());
+            }
             return Ok(reconciled.launch);
         }
         let refreshed = match placement {
@@ -1836,6 +1938,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .get(session_id)
             .cloned()
             .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?;
+        if let Some(operation) = self.state.profile_operation_ids.get(&session.profile_id) {
+            return Err(format!("browser_profile_operation_pending:{operation}:inspect or cancel the owner operation before closing"));
+        }
         let browser = self
             .state
             .browsers

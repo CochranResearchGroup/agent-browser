@@ -7,7 +7,10 @@ mod host_control;
 mod host_policy;
 mod host_reconnect;
 mod hosted;
+#[cfg(all(test, unix))]
+mod native_policy_tests;
 mod playbooks;
+mod profile_duplicate;
 mod workflow;
 
 use crate::connection::Response;
@@ -85,9 +88,14 @@ const PROFILE_DIAGNOSIS_TEMPLATE: &str = SERVICE_PROFILE_DIAGNOSIS_MCP_RESOURCE_
 const PROFILE_SEEDING_HANDOFF_TEMPLATE: &str =
     "agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}";
 const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
-// Advanced MCP commands stay inside the addressed task's page. Owner and
-// authority operations remain outside this browser command seam.
+// Advanced commands address one task. Explicit profile duplication also
+// supports a source profile without acquiring a task.
 const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = &[
+    "mode",
+    "native_capture",
+    "native_input",
+    "profile_duplicate",
+    "mode_convert",
     "navigate",
     "evaluate",
     "back",
@@ -230,6 +238,71 @@ fn mcp_command_response_with_config(
         Some("host-control") => host_control::cli(args),
         Some("host-reconnect") => host_reconnect::cli(args),
         Some("host-policy") => host_policy::cli(args),
+        Some("mode-convert") => {
+            if args.len() != 3 {
+                return Err("Usage: agent-browser --json mcp mode-convert '<JSON request>'".into());
+            }
+            let mut params: Value =
+                serde_json::from_str(&args[2]).map_err(|_| "mode_operation_request_invalid")?;
+            let task_id = params["taskId"]
+                .as_str()
+                .ok_or("mode_operation_task_required")?
+                .to_string();
+            params
+                .as_object_mut()
+                .ok_or("mode_operation_request_invalid")?
+                .remove("taskId");
+            let response = mode_convert_call(
+                &json!({"taskId":task_id,"action":"mode_convert","params":params}),
+                "default",
+            )
+            .map_err(|error| error.message)?;
+            serde_json::from_str(
+                response["content"][0]["text"]
+                    .as_str()
+                    .ok_or("mode_operation_response_invalid")?,
+            )
+            .map_err(|_| "mode_operation_response_invalid".into())
+        }
+        Some("profile-duplicate") => profile_duplicate::cli(args),
+        Some("browser-native") => {
+            if args.len() != 5 || !matches!(args[3].as_str(), "native_capture" | "native_input") {
+                return Err("Usage: agent-browser --json mcp browser-native <task-id> <native_capture|native_input> '<params-json>'".into());
+            }
+            let params: Value =
+                serde_json::from_str(&args[4]).map_err(|_| "browser_native_params_invalid")?;
+            let mut arguments = json!({"taskId":args[2],"action":args[3],"params":params});
+            // CLI JSON carries the same request context as top-level MCP arguments.
+            for field in ["policyOverrideId", "requestId"] {
+                if let Some(value) = arguments["params"]
+                    .as_object_mut()
+                    .and_then(|params| params.remove(field))
+                {
+                    arguments[field] = value;
+                }
+            }
+            validate_browser_command_action(&arguments).map_err(|error| error.message)?;
+            let mut command = browser_command_command(BrowserCommandArgs {
+                action: &args[3],
+                params: arguments["params"].as_object(),
+                job_timeout_ms: None,
+                service_name: None,
+                agent_name: None,
+                task_name: None,
+            });
+            forward_native_request_context(&arguments, &mut command)
+                .map_err(native_request_error)?;
+            let session = workflow::address_task_command(&mut command, &args[2])?;
+            Ok(
+                json!({"success":true,"data":workflow::execute(command, &session).map_err(native_request_error)?}),
+            )
+        }
+        Some("browser-mode") => {
+            if args.len() != 3 || args[2].trim().is_empty() {
+                return Err("Usage: agent-browser --json mcp browser-mode <task-id>".into());
+            }
+            Ok(json!({"success":true,"data":workflow::inspect_mode(&args[2])?}))
+        }
         Some("host-task") => {
             let task_id = hosted::task_argument(args)?;
             Ok(json!({"success": true, "data": hosted::read_snapshot(task_id)?}))
@@ -5416,7 +5489,10 @@ fn call_service_mcp_tool(
             }
         }
     }
-    if name.starts_with("browser_") && !matches!(name, "browser_open" | "browser_discover") {
+    if name.starts_with("browser_")
+        && !matches!(name, "browser_open" | "browser_discover")
+        && !(name == "browser_command" && arguments["action"] == "profile_duplicate")
+    {
         required_string_argument(arguments, "taskId")?;
     }
     if name == "browser_reconnect" {
@@ -5482,6 +5558,72 @@ fn call_service_mcp_tool(
             return playbooks::call(arguments, session);
         }
         validate_browser_command_action(arguments)?;
+        if matches!(
+            arguments["action"].as_str(),
+            Some("native_input" | "native_capture")
+        ) {
+            let mut command = Value::Object(
+                optional_object_argument(arguments, "params")?
+                    .cloned()
+                    .unwrap_or_default(),
+            );
+            command["action"] = arguments["action"].clone();
+            command["id"] = json!(uuid::Uuid::new_v4().to_string());
+            // Existing owner grants bind to the exact task/action/request. This
+            // transports that context without granting authority or retrying input.
+            forward_native_request_context(arguments, &mut command)?;
+            let task_id = required_string_argument(arguments, "taskId")?;
+            let name = workflow::address_task_command(&mut command, task_id)
+                .map_err(|error| JsonRpcError::invalid_params(&error))?;
+            let mut data = workflow::execute(command, &name)?;
+            let image = if arguments["action"] == "native_capture" {
+                use base64::Engine;
+                let image = data.pointer("/capture/image").cloned().ok_or_else(|| {
+                    JsonRpcError::invalid_params("native_capture_image_unavailable")
+                })?;
+                let encoded = image["data"]
+                    .as_str()
+                    .filter(|value| value.len() <= 5_592_408)
+                    .ok_or_else(|| JsonRpcError::invalid_params("native_capture_image_invalid"))?;
+                let decoded = base64::engine::general_purpose::STANDARD
+                    .decode(encoded)
+                    .map_err(|_| JsonRpcError::invalid_params("native_capture_image_invalid"))?;
+                if image["mimeType"] != "image/png"
+                    || decoded.len() > 4_194_304
+                    || !decoded.starts_with(b"\x89PNG\r\n\x1a\n")
+                {
+                    return Err(JsonRpcError::invalid_params("native_capture_image_invalid"));
+                }
+                data["capture"]["image"] = json!({"mimeType":"image/png","imageContent":true});
+                Some(json!({"type":"image","mimeType":"image/png","data":encoded}))
+            } else {
+                None
+            };
+            let mut response =
+                tool_response_from_payload("browser_command", session, json!({}), data, false);
+            if let Some(image) = image {
+                response["content"].as_array_mut().unwrap().push(image);
+            }
+            return Ok(response);
+        }
+        if arguments["action"] == "mode_convert" {
+            return mode_convert_call(arguments, session);
+        }
+        if arguments["action"] == "profile_duplicate" {
+            return profile_duplicate::call(arguments, session);
+        }
+        if arguments["action"] == "mode" {
+            let task_id = required_string_argument(arguments, "taskId")?;
+            let data = workflow::inspect_mode(task_id)
+                .map_err(|error| JsonRpcError::invalid_params(&error))?;
+            return Ok(tool_response_from_payload(
+                "browser_command",
+                session,
+                json!({}),
+                data,
+                false,
+            ));
+        }
     }
     let task_route = if name.starts_with("browser_") {
         let task_id = required_string_argument(arguments, "taskId")?;
@@ -6280,6 +6422,46 @@ fn validate_browser_command_action(arguments: &Value) -> Result<&str, JsonRpcErr
         }
     }
     Ok(action)
+}
+
+/// Preserve request identity independently of an optional existing scoped grant.
+/// The owner still validates the grant and retains effect-admission semantics.
+fn forward_native_request_context(
+    arguments: &Value,
+    command: &mut Value,
+) -> Result<(), JsonRpcError> {
+    if let Some(request_id) = optional_string_argument(arguments, "requestId")? {
+        command["id"] = json!(request_id);
+    }
+    workflow::forward_policy_override(arguments, command)
+}
+
+fn native_request_error(error: JsonRpcError) -> String {
+    error
+        .data
+        .and_then(|data| data["message"].as_str().map(str::to_owned))
+        .unwrap_or_else(|| error.message.to_owned())
+}
+
+fn mode_convert_call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcError> {
+    let mut command = Value::Object(
+        optional_object_argument(arguments, "params")?
+            .cloned()
+            .unwrap_or_default(),
+    );
+    let task = required_string_argument(arguments, "taskId")?;
+    let session = workflow::address_task_command(&mut command, task)
+        .map_err(|error| JsonRpcError::invalid_params(&error))?;
+    command["action"] = json!("browser_session_mode_convert");
+    command["id"] = json!(uuid::Uuid::new_v4().to_string());
+    let data = workflow::execute(command, &session)?;
+    Ok(tool_response_from_payload(
+        "browser_command",
+        transport,
+        json!({}),
+        data,
+        false,
+    ))
 }
 
 fn call_browser_command(
@@ -11825,7 +12007,20 @@ mod tests {
             "Workflow schemas exceed the 15000-byte selection budget: {schema_bytes}"
         );
         for tool in tools {
-            if !matches!(
+            if tool["name"] == "browser_command" {
+                // Offline profile-copy operations bind their source profile
+                // without requiring an already-open task. Every other advanced
+                // operation still advertises an exact task requirement.
+                assert_eq!(tool["inputSchema"]["required"], json!(["action"]));
+                let alternatives = tool["inputSchema"]["anyOf"].as_array().unwrap();
+                assert_eq!(alternatives.len(), 2);
+                assert_eq!(alternatives[0]["required"], json!(["taskId"]));
+                assert_eq!(
+                    alternatives[1]["properties"]["action"]["const"],
+                    "profile_duplicate"
+                );
+                assert_eq!(alternatives[1]["required"], json!(["params"]));
+            } else if !matches!(
                 tool["name"].as_str(),
                 Some("browser_open" | "browser_discover")
             ) {
@@ -11953,6 +12148,125 @@ mod tests {
         .unwrap();
         assert_eq!(missing_provider["id"], "provider");
         assert_eq!(missing_provider["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn native_policy_override_requires_request_identity_before_owner_or_transport() {
+        let root =
+            std::env::temp_dir().join(format!("native-policy-public-{}", uuid::Uuid::new_v4()));
+        let guard = crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_HOME"]);
+        guard.set("AGENT_BROWSER_HOME", root.to_str().unwrap());
+        for action in ["native_input", "native_capture"] {
+            let request = json!({"jsonrpc":"2.0","id":"native-policy","method":"tools/call",
+                "params":{"name":"browser_command","arguments":{"taskId":"task-not-opened",
+                    "action":action,"policyOverrideId":"synthetic-grant","params":{}}}});
+            let response = handle_jsonrpc_line(&request.to_string(), "unused-transport").unwrap();
+            assert_eq!(response["error"]["code"], -32602, "{response}");
+            assert_eq!(
+                response["error"]["data"]["message"], "requestId is required",
+                "{response}"
+            );
+            assert!(!response.to_string().contains("synthetic-grant"));
+        }
+        assert!(
+            !root.exists(),
+            "invalid requests must not initialize owner state"
+        );
+    }
+
+    #[test]
+    fn browser_mode_inspection_public_cli_and_mcp_preserve_task_without_transport() {
+        use crate::native::browser_session_store::BrowserSessionSqliteStore;
+        use agent_browser_service_model::{
+            BrowserSessionState, ManagedBrowserInstance, ManagedBrowserSession,
+        };
+        let directory =
+            std::env::temp_dir().join(format!("browser-mode-public-{}", uuid::Uuid::new_v4()));
+        let sockets = directory.join("sockets");
+        let guard = crate::test_utils::EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_SOCKET_DIR",
+        ]);
+        guard.set("HOME", directory.to_str().unwrap());
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        guard.set("AGENT_BROWSER_HOME", directory.to_str().unwrap());
+        guard.set("AGENT_BROWSER_SOCKET_DIR", sockets.to_str().unwrap());
+        assert!(BrowserSessionSqliteStore::default_sqlite_path()
+            .unwrap()
+            .starts_with(&directory));
+        let store = BrowserSessionSqliteStore::default_sqlite().unwrap();
+        let mut state = BrowserSessionState::default();
+        state.browsers.insert(
+            "browser".into(),
+            ManagedBrowserInstance {
+                id: "browser".into(),
+                profile_id: "profile".into(),
+                pid: std::process::id(),
+                cdp_endpoint: String::new(),
+                desktop: None,
+                active_session_ids: vec!["task".into()],
+            },
+        );
+        state.sessions.insert(
+            "task".into(),
+            ManagedBrowserSession {
+                id: "task".into(),
+                name: "lane".into(),
+                profile_id: "profile".into(),
+                browser_id: "browser".into(),
+                created_at_ms: 1,
+                last_activity_at_ms: 1,
+                expires_at_ms: 0,
+                current_tab_id: None,
+            },
+        );
+        store.save_session_state(&state).unwrap();
+        let cli =
+            mcp_command_response(&["mcp".into(), "browser-mode".into(), "task".into()]).unwrap();
+        let response = handle_jsonrpc_line(r#"{"jsonrpc":"2.0","id":401,"method":"tools/call","params":{"name":"browser_command","arguments":{"taskId":"task","action":"mode"}}}"#, "unused-transport").unwrap();
+        let mcp: Value =
+            serde_json::from_str(response["result"]["content"][0]["text"].as_str().unwrap())
+                .unwrap();
+        for data in [&cli["data"], &mcp["data"]] {
+            assert_eq!(data["browserId"], "browser");
+            assert_eq!(data["profileId"], "profile");
+            assert_eq!(data["taskId"], "task");
+            assert_eq!(
+                data["mode"], "unverified",
+                "legacy missing original identity is not negative CDP evidence"
+            );
+        }
+        assert_eq!(store.load_session_state().unwrap(), state);
+        assert!(
+            !sockets.exists(),
+            "inspection must not create a transport or browser owner"
+        );
+        drop(store);
+        fn remove_fixture(path: &std::path::Path) {
+            let metadata = std::fs::symlink_metadata(path).unwrap();
+            if metadata.is_dir() {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+                }
+                for entry in std::fs::read_dir(path).unwrap() {
+                    remove_fixture(&entry.unwrap().path());
+                }
+                std::fs::remove_dir(path).unwrap();
+            } else {
+                #[cfg(windows)]
+                {
+                    let mut permissions = metadata.permissions();
+                    permissions.set_readonly(false);
+                    std::fs::set_permissions(path, permissions).unwrap();
+                }
+                std::fs::remove_file(path).unwrap();
+            }
+        }
+        remove_fixture(&directory);
     }
 
     #[test]

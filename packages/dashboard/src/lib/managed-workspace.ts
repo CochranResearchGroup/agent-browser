@@ -58,6 +58,9 @@ export function managedWorkspaceSources(workspace?: ServiceManagedWorkspace, cur
   return {
     browsers: Object.values(workspace.browsers).map(browser => ({
       id: browser.id, profileId: browser.profileId, pid: browser.pid,
+      browserMode: current && browser.browserMode?.browserId === browser.id
+        && browser.browserMode.profileId === browser.profileId && browser.browserMode.pid === browser.pid
+        ? browser.browserMode : null,
       displayAllocationId: browser.desktop?.desktop_id ?? null,
       displayName: workspace.profiles?.[browser.profileId]?.name ?? browser.profileId,
       activeSessionIds: browser.activeSessionIds,

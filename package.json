@@ -84,6 +84,7 @@
     "test:dashboard-managed-workspace": "node --no-warnings --experimental-strip-types scripts/test-dashboard-managed-workspace.ts",
     "test:rail-observation-refresh": "node scripts/test-rail-observation-refresh.cjs",
     "test:native-rail": "node --no-warnings --experimental-strip-types scripts/test-native-rail.ts",
+    "test:browser-operation-reload": "node scripts/test-browser-operation-reload.cjs",
     "test:compact-native-workspace": "node scripts/test-compact-native-workspace.cjs",
     "test:native-window-inventory": "node --no-warnings --experimental-strip-types scripts/test-native-window-inventory.ts",
     "test:native-browser-windows": "node scripts/test-native-browser-windows.cjs",

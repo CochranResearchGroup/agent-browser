@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P283 Spec400 repairs](0283-2026-10-25-spec400-repairs.md): six bounded source-qualified repairs, real isolated recovery cases, retained failures and the separate integration/review boundary.
+
 [P291 cold rail retry spacing](0291-2026-10-24-cold-rail-retry-spacing.md): corrected caller revalidation is installed accepted; cold median3.36s to2.11s, with failed first acceptance and finite evidence limits preserved.
 
 [P290 writer executable continuity](0290-2026-10-24-writer-executable-continuity.md) records the public unlink regression and bounded source repair under PL-BUGFIX.

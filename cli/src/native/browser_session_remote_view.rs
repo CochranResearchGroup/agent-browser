@@ -485,6 +485,16 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
         }
     }
 
+    fn select_profile_browser_executable(
+        &mut self,
+        profile_id: String,
+        path: String,
+    ) -> Result<(), String> {
+        match self {
+            Self::Local(effects) => effects.select_profile_browser_executable(profile_id, path),
+            Self::Remote(effects) => effects.select_profile_browser_executable(profile_id, path),
+        }
+    }
     fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
         match self {
             Self::Local(effects) => effects.select_browser_executable(path),
@@ -804,6 +814,7 @@ mod tests {
             shared_with: vec![],
         };
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "profile".into(),
             name: "Profile".into(),
             user_data_dir: request.profile_path.clone(),

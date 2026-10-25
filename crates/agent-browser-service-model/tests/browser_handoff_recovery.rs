@@ -413,6 +413,7 @@ fn recovery_restores_peer_tabs_and_failed_restoration_keeps_unpublished_custody(
             ..Default::default()
         }));
         let profile = BrowserProfileCatalogEntry {
+            manual_login_url: None,
             id: "profile-a".into(),
             name: "Synthetic".into(),
             user_data_dir: "/synthetic/profile-a".into(),
@@ -673,6 +674,7 @@ fn hosted_reconnect_explicit_generation_recovery_uses_fresh_target_without_acqui
         friendly_route_label: "explicit recovery".into(),
     };
     let profile = BrowserProfileCatalogEntry {
+        manual_login_url: None,
         id: "profile-a".into(),
         name: "Synthetic".into(),
         user_data_dir: "/synthetic/profile-a".into(),
@@ -756,4 +758,74 @@ fn hosted_reconnect_explicit_generation_recovery_uses_fresh_target_without_acqui
             "restore:tab-task:about:blank"
         ]
     );
+}
+
+#[test]
+fn unresolved_initial_launch_readback_never_authorizes_implicit_second_launch() {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
+    ))
+    .unwrap();
+    let assignment: RemoteViewAssignmentRecord =
+        serde_json::from_value(fixture["assignment"].clone()).unwrap();
+    let evidence = Rc::new(RefCell::new(Evidence {
+        pending: Some(
+            BrowserLaunchCustodyRecord::pending(BrowserLaunchIntent {
+                intent_id: "66666666-6666-4666-8666-666666666666".into(),
+                profile_id: "profile-a".into(),
+                assignment,
+            })
+            .unwrap(),
+        ),
+        ..Default::default()
+    }));
+    let mut effects = RemoteViewSessionEffects::new(
+        Runtime {
+            evidence: evidence.clone(),
+            absent: false,
+            fail_restoration: false,
+            next_target: 0,
+        },
+        RemoteViewApplicationAdapter::new(
+            "agent-browser".into(),
+            Transport {
+                evidence: evidence.clone(),
+                fixture,
+            },
+        )
+        .unwrap(),
+        Store(evidence.clone()),
+        vec![],
+        || "unused-new-launch".into(),
+    )
+    .unwrap();
+    effects
+        .begin_operation(&BrowserSessionState::default())
+        .unwrap();
+    let profile = BrowserProfileCatalogEntry {
+        manual_login_url: None,
+        id: "profile-a".into(),
+        name: "Independent destination".into(),
+        user_data_dir: "/synthetic/destination".into(),
+        kind: BrowserProfileKind::Named,
+    };
+    assert_eq!(
+        effects
+            .reconcile_profile_browser(&profile, None, &[], &[])
+            .unwrap_err(),
+        "remote_view_session_launch_readback_required"
+    );
+    assert!(evidence.borrow().effects.is_empty());
+    assert_eq!(
+        evidence.borrow().pending.as_ref().unwrap().intent.intent_id,
+        "66666666-6666-4666-8666-666666666666"
+    );
+    let peer = BrowserProfileCatalogEntry {
+        id: "unrelated-profile".into(),
+        ..profile
+    };
+    assert!(effects
+        .reconcile_profile_browser(&peer, None, &[], &[])
+        .unwrap()
+        .is_none());
 }

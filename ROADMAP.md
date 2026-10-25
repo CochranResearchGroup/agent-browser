@@ -1,5 +1,7 @@
 # Roadmap
 
+[P283 Spec400 repairs](docs/dev/notes/0283-2026-10-25-spec400-repairs.md) qualify six bounded repairs #424–429 through isolated real-Chrome workflows and affected source gates. PR408 carries the source; merge and tracker closure remain separate at this checkpoint. Broader #402/#403 remain incomplete and #404 remains blocked. No runtime publication.
+
 [P291 corrected cold rail](docs/dev/plans/0291-2026-10-24-cold-rail-retry-spacing.md), #430, is installed accepted oncf65dd76422b: cold median3.36s to2.11s, warm1.00s to1.02s,18 browser roots and137 Native provider/persistent unit generations preserved. [Evidence](docs/dev/notes/0291-2026-10-24-cold-rail-retry-spacing.md) retains the failed first comparison, mounted cache-caller correction, finite sample limits and three doctor advisories.422 asset intermittence and Remote View667 MCP-client restart loops remain separate. Retain the primary checkout and pinned candidates.
 
 [P289 terminal acquisition and Native handoff acceptance](docs/dev/plans/0289-2026-10-24-terminal-acquisition-recovery.md), #412, is installed accepted on9cbf948ef4af with actual Native canvas/WebSocket proof and13 browser roots preserved. #422 retains the separate intermittent public asset finding.
@@ -54,6 +56,8 @@ P250 [dashboard subsystem health](docs/dev/plans/0250-2026-10-19-dashboard-subsy
 
 
 Updated: 2026-10-19
+
+[P283](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md) owns #401's read-only mode inspection under specification #400. Session conversion with native agentic input, profile duplication and Chrome/Chromium choice remain dependent tickets #402–#404.
 
 ## Current direction
 

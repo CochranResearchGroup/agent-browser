@@ -537,10 +537,18 @@ mod tests {
     #[test]
     fn shared_browser_guard_keeps_selected_task_policy_and_request_identity() {
         use crate::test_utils::EnvGuard;
-        let guard = EnvGuard::new(&["AGENT_BROWSER_HOME"]);
+        let guard = EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+        ]);
         let directory =
             std::env::temp_dir().join(format!("policy-dispatch-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&directory).unwrap();
+        // Keep default SQLite and its control sidecars inside this exact fixture.
+        // AGENT_BROWSER_HOME alone does not select the test service home.
+        guard.set("HOME", directory.to_str().unwrap());
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
         guard.set("AGENT_BROWSER_HOME", directory.to_str().unwrap());
         let mut state = fixture();
         let mut peer = state.sessions["alpha"].clone();

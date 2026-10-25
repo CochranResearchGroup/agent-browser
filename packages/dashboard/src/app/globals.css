@@ -5719,3 +5719,9 @@ button {
 .native-profile-properties input { box-sizing: border-box; width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid #666670; border-radius: 4px; background: #18181b; color: #f4f4f5; }
 .native-profile-properties input:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
 .native-profile-properties input:disabled { opacity: .6; }
+
+/* Mode inspection has its own button; opening its menu never selects a tab. */
+.native-workspace-browser-row { display: flex; align-items: center; }
+.native-workspace-browser-row .native-workspace-browser { flex: 1; min-width: 0; }
+.native-browser-mode { display: flex; align-items: center; justify-content: center; padding: 6px; flex-shrink: 0; border-radius: 4px; }
+.native-browser-mode:hover, .native-browser-mode:focus-visible { background: var(--muted); outline: 1px solid currentColor; }

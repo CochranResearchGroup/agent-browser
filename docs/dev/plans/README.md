@@ -1,5 +1,7 @@
 # Active plan index
 
+[P283 browser mode inspection](0283-2026-10-24-browser-mode-inspection.md) owns #401 under spec #400; TDD source work, no runtime publication.
+
 [P291 cold rail retry spacing](0291-2026-10-24-cold-rail-retry-spacing.md), #430, is closed with corrected caller revalidation installed oncf65dd76422b; cold median3.36s to2.11s, with warm behavior preserved.
 
 [P290 writer executable continuity](0290-2026-10-24-writer-executable-continuity.md), #417, owns the PR415 live-writer unlink regression under PL-BUGFIX.
@@ -38,6 +40,8 @@ Ordinary clients ignore persistent installer drain metadata. PR397 is integrated
 [P271: installed component convergence](0271-2026-10-22-install-component-convergence.md), #367, owns exact old MCP retirement and complete installation acceptance.
 
 [P270 hosted continuity](0270-2026-10-22-hosted-continuity.md) continues #351/#355 after merged PR364. Root owns the relocation provider boundary; parallel tracks repair exact fixture cleanup and measure warm control/cold pixels. The portable-launch backend decision is pending; no production effects.
+
+[P269 manual non-CDP login](0269-2026-10-22-manual-login.md), #357; source-qualified in PR362 on the attachment/control frontier, with persistent-cookie and catalog proof; no deployment.
 
 [P268 attachment](0268-2026-10-22-hosted-attachment.md), #349, and [P267/#350 takeover](0267-2026-10-22-hosted-takeover.md) are closed integrated source outcomes with actual Native04 acceptance and corrected cleanup. Native05 cookie continuity and independent cleanup also pass; no deployment; wider #347 remains open.
 

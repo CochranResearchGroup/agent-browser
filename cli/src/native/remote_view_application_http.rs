@@ -47,6 +47,84 @@ impl RemoteViewApplicationHttp {
         })
     }
 }
+impl RemoteViewApplicationHttp {
+    /// Existing Remote View agent-desktop API. No browser/CDP attachment or
+    /// controller takeover is performed by this transport.
+    pub(crate) fn native_request(&mut self, operation: &str, body: &Value) -> Result<Value, Error> {
+        if !matches!(
+            operation,
+            "observe" | "capture" | "capture_region" | "input" | "window" | "input_cancel"
+        ) {
+            return Err(Error::Rejected);
+        }
+        let mut endpoint = self.endpoint.clone();
+        endpoint.set_path(&format!("/v1/agent-desktop/{operation}"));
+        let authorization = self.authorization.clone();
+        let timeout = self.timeout;
+        let body = serde_json::to_vec(body).map_err(|_| Error::Rejected)?;
+        if body.len() > 1_048_576 {
+            return Err(Error::Rejected);
+        }
+        std::thread::Builder::new()
+            .name("remote-view-native-http".into())
+            .spawn(move || {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|_| Error::Unavailable)?;
+                runtime.block_on(async move {
+                    let client = reqwest::Client::builder()
+                        .no_proxy()
+                        .redirect(reqwest::redirect::Policy::none())
+                        .http1_only()
+                        .pool_max_idle_per_host(0)
+                        .timeout(timeout)
+                        .connect_timeout(timeout)
+                        .build()
+                        .map_err(|_| Error::Unavailable)?;
+                    let mut request = client
+                        .post(endpoint)
+                        .header(reqwest::header::CONTENT_TYPE, "application/json")
+                        .header(reqwest::header::CONNECTION, "close")
+                        .body(body);
+                    if let Some(authorization) = authorization {
+                        request = request.header(reqwest::header::AUTHORIZATION, authorization);
+                    }
+                    let mut response = request.send().await.map_err(|_| Error::OutcomeUnknown)?;
+                    if matches!(
+                        response.status(),
+                        reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN
+                    ) {
+                        return Err(Error::Rejected);
+                    }
+                    if response.status() != reqwest::StatusCode::OK {
+                        return Err(Error::OutcomeUnknown);
+                    }
+                    // Remote View bounds raw captures at 4 MiB; allow base64 and metadata.
+                    const LIMIT: usize = 6 * 1024 * 1024;
+                    if response
+                        .content_length()
+                        .is_some_and(|size| size > LIMIT as u64)
+                    {
+                        return Err(Error::OutcomeUnknown);
+                    }
+                    let mut bytes = Vec::new();
+                    while let Some(chunk) =
+                        response.chunk().await.map_err(|_| Error::OutcomeUnknown)?
+                    {
+                        if bytes.len().saturating_add(chunk.len()) > LIMIT {
+                            return Err(Error::OutcomeUnknown);
+                        }
+                        bytes.extend_from_slice(&chunk);
+                    }
+                    serde_json::from_slice(&bytes).map_err(|_| Error::OutcomeUnknown)
+                })
+            })
+            .map_err(|_| Error::Unavailable)?
+            .join()
+            .map_err(|_| Error::OutcomeUnknown)?
+    }
+}
 impl RemoteViewApplicationTransport for RemoteViewApplicationHttp {
     fn request(&mut self, envelope: &RemoteViewApplicationEnvelope) -> Result<Value, Error> {
         let body = serde_json::to_vec(envelope).map_err(|_| Error::Rejected)?;
@@ -257,6 +335,46 @@ mod tests {
             result.is_ok(),
             "configured private token must reach the native control service without a connector"
         );
+    }
+
+    #[test]
+    fn native_input_uses_existing_owner_endpoint_with_exact_target_and_no_retry() {
+        let guard =
+            crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE"]);
+        guard.remove("AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE");
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let origin = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let end = std::time::Instant::now() + Duration::from_secs(2);
+            let mut socket = loop {
+                if let Ok((socket, _)) = listener.accept() {
+                    break socket;
+                }
+                if std::time::Instant::now() >= end {
+                    return None;
+                }
+                std::thread::sleep(Duration::from_millis(2));
+            };
+            let request = read_request(&mut socket);
+            let body = "{\"schemaVersion\":1,\"dispatched\":true}";
+            write!(
+                socket,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+            Some(request)
+        });
+        let mut client = RemoteViewApplicationHttp::new(&origin, Duration::from_secs(2)).unwrap();
+        let target = serde_json::json!({"desktopId":"synthetic","expectedGeneration":7,"windowId":42,"controlEpoch":3,"actions":[{"kind":"key","chord":"Tab"}]});
+        let result = client.native_request("input", &target);
+        let request = server.join().unwrap();
+        assert_eq!(result.unwrap()["dispatched"], true);
+        let request = request.expect("native request reached its owner");
+        assert!(request.starts_with("POST /v1/agent-desktop/input HTTP/1.1"));
+        let body: Value = serde_json::from_str(request.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        assert_eq!(body, target);
     }
 
     #[cfg(unix)]
