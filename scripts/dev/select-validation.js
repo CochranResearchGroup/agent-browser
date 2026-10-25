@@ -244,6 +244,22 @@ function selectRecommendations(files, base) {
     add('pnpm --dir docs build', 'docs site changed');
   }
 
+  // Keep the real hook/cache seam selected even for test- or fixture-only changes.
+  if (files.some((file) =>
+    file === 'packages/dashboard/src/lib/dashboard-read-coordinator.ts' ||
+    file === 'packages/dashboard/src/lib/dashboard-api.ts' ||
+    file === 'packages/dashboard/src/lib/selected-workspace-context.ts' ||
+    file === 'packages/dashboard/src/hooks/use-selected-workspace-context.ts' ||
+    file === 'scripts/test-dashboard-read-coordinator.ts' ||
+    file === 'scripts/test-dashboard-workspace-startup.cjs' ||
+    file === 'scripts/test-dashboard-selected-workspace-context.js' ||
+    file === 'scripts/fixtures/workspace-startup.tsx'
+  )) {
+    add('pnpm test:dashboard-read-coordinator', 'dashboard polling, shared cache or startup validation changed');
+    add('pnpm test:dashboard-workspace-startup', 'mounted workspace startup verifies the real hook and shared cache');
+    add('pnpm test:dashboard-selected-workspace-context', 'workspace startup or selected-context inputs changed');
+  }
+
   if (files.some((file) => file.startsWith('packages/dashboard/') || file.startsWith('docs/src/components/dashboard/'))) {
     if (files.some((file) =>
       file.includes('view-stream') ||
