@@ -109,6 +109,38 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
       if(action==='restore_previous') await page.getByText('Effective mode: CDP',{exact:true}).waitFor();
       checks.push(`${kind}:${phase}:${action}`);await page.close();
     }
+    for (const kind of ['mode_convert','profile_duplicate']) {
+      const page=await browser.newPage({viewport:{width:1280,height:720}});const commands=[];
+      const id=`truncated-current-${kind}`;
+      const active=operation(kind,id,'prepared');
+      const records=[active,operation(kind,`truncated-pending-${kind}`,'prepared'),...Array.from({length:254},(_,index)=>({...operation(kind,`retained-history-${index}`,'cancelled'),actions:[]}))];
+      await page.route('**/api/command',async route=>{const command=route.request().postDataJSON();commands.push(command);await route.fulfill({json:{success:true,data:command.choice==='inspect'?{...lookup(kind,records),historyTruncated:true}:active}});});
+      await page.goto(origin);await open(page,kind);
+      const resumeName=record=>kind==='mode_convert'?`Resume ${record.operationId}`:`Resume ${record.destination.name} (${record.operationId})`;
+      const current=page.getByRole('button',{name:resumeName(active),exact:true});
+      await current.waitFor();
+      const visible=async(locator,message)=>{const box=await locator.boundingBox();const viewport=page.viewportSize();assert(box&&box.y>=0&&box.y+box.height<=viewport.height&&box.x>=0&&box.x+box.width<=viewport.width,message);};
+      await visible(current,'The exact current operation stays visible with a full bounded history at an ordinary viewport');
+      await page.getByText('Showing bounded operation history. Current and pending operations appear first.',{exact:true}).waitFor({timeout:2500});
+      const last=page.getByRole('button',{name:resumeName(records.at(-1)),exact:true});
+      await current.hover();await page.mouse.wheel(0,100000);
+      const lastElement=await last.elementHandle();
+      await page.waitForFunction(element=>{const box=element.getBoundingClientRect();return box.top>=0&&box.bottom<=innerHeight;},lastElement,{timeout:2500});
+      await visible(last,'Retained history stays reachable by scrolling');
+      await page.mouse.wheel(0,-100000);
+      const currentElement=await current.elementHandle();
+      await page.waitForFunction(element=>{const box=element.getBoundingClientRect();return box.top>=0&&box.bottom<=innerHeight;},currentElement,{timeout:2500});
+      assert.equal(commands.length,1,'Inspecting and scrolling history have no browser effects');
+      await current.click();assert.equal(commands.length,1,'Choosing an original operation remains read-only');
+      const confirmation=page.getByRole('checkbox',{name:'Confirm the selected browser action'});
+      const action=page.getByRole('button',{name:kind==='mode_convert'?'Relaunch now':'Close source and duplicate',exact:true});
+      await visible(confirmation,'Fresh confirmation remains visible after operation selection');
+      await visible(action,'The selected remediation stays reachable');
+      assert.equal(await action.isDisabled(),true);await confirmation.check();await action.click();
+      await page.waitForFunction(()=>document.querySelector('[data-mode-operation-busy],[data-profile-operation-busy]')===null);
+      assert.equal(commands.at(-1).operationId,id);assert.equal(commands.at(-1).ownerConfirmed,true);
+      checks.push(`${kind}:truncated-history-workflow`);await page.close();
+    }
     console.log(JSON.stringify({success:true,seam:'mounted full-reload operation recovery',checks,artifacts}));
   } finally {await browser?.close();await new Promise(resolve=>server.close(resolve));}
 })().catch(error=>{console.error(error);process.exitCode=1;});
