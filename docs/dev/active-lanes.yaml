@@ -35,14 +35,15 @@ lanes:
     product_lane: PL-PLATFORM
     objective: Deliver browser mode and independent profile controls through owner workflows
     plan: docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md
-    branch: platform/spec400-build-selection-404
+    branch: platform/spec400-parent-closeout
     target: main
     accountable_owner: ecochran76
-    work_items: [CochranResearchGroup/agent-browser#401, CochranResearchGroup/agent-browser#402, CochranResearchGroup/agent-browser#403, CochranResearchGroup/agent-browser#404, CochranResearchGroup/agent-browser#424, CochranResearchGroup/agent-browser#425, CochranResearchGroup/agent-browser#426, CochranResearchGroup/agent-browser#427, CochranResearchGroup/agent-browser#428, CochranResearchGroup/agent-browser#429]
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#400, CochranResearchGroup/agent-browser#401, CochranResearchGroup/agent-browser#402, CochranResearchGroup/agent-browser#403, CochranResearchGroup/agent-browser#404, CochranResearchGroup/agent-browser#424, CochranResearchGroup/agent-browser#425, CochranResearchGroup/agent-browser#426, CochranResearchGroup/agent-browser#427, CochranResearchGroup/agent-browser#428, CochranResearchGroup/agent-browser#429]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
     dependencies: []
-    validation_status: "401–403 and424–429 closed, PR436 merged ba5cda65c;404 unblocked and owned by root; six primaries, no auxiliaries; synthetic source validation only"
+    validation_status: "All 46 parent stories reconciled; children401–404 and repairs424–429 closed; PR436/439 merged; eight actual cross-build workflows and selected gates pass"
+    limitations: ["Source and isolated synthetic qualification only; no installed Native or real-account claim", "Retain primary, build-selection branch and pinned candidates; foreign worktrees untouched"]
     overlaps: [P269, P282]
     reconciled_overlaps: ["401 owns read-only mode projection, MCP adapter, schema/client and rail; preserve P269 manual launch and P282 upgrade source, coordinate shared docs at integration"]
     updated_at: 2026-10-25

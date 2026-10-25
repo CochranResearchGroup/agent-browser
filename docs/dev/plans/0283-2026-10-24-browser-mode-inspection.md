@@ -1,30 +1,33 @@
 # P283 Browser modes and independent profiles
 
-State: OPEN
+State: CLOSED
 Product lane: PL-PLATFORM
+Owner: ecochran76
 Accountable owner: ecochran76
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/400
-Work items: #401–404 under spec #400; only #404 remains open
-Integration branch: platform/spec400-build-selection-404
+Work items: #401–404 and repairs #424–429 closed; aggregate spec #400 qualified
+Integration branch: platform/spec400-parent-closeout
 Base: 07fb4c9cb020bb6349d3faf1efcd152cc34fd9ee
 Historical fourth-window deadline: 2026-10-24T23:23:20Z. The later repair continuation has no newly specified fixed allowance.
 
 ## Current State
 
-#401, #402 and #403 are closed. PR436 merged as
-`ba5cda65cc47073e0b53bd6af3b4d61fecf4bf51`; fresh native dependency readback
-shows both #404 prerequisites closed. Repairs #424–429 remain closed. Root now
-owns #404 alone on `platform/spec400-build-selection-404`, reusing the clean
-primary checkout from refreshed main. Both prior one-ticket workers completed
-and their auxiliary checkouts were removed through governed operations.
+All four children #401–404 and repairs #424–429 are closed. PR436 merged as
+`ba5cda65cc47073e0b53bd6af3b4d61fecf4bf51`; PR439 merged as
+`a34db3f23e288b07bb1eed15fd805756917ed3ad`. Fresh native subissue readback
+confirms every linked child is closed. Aggregate reconciliation covers all 46
+parent stories in the [canonical qualification note](../notes/0283-2026-10-25-spec400-repairs.md#parent-specification-400-aggregate-acceptance).
 
-The next bounded outcome is owner-directed executable selection and compatibility
-remediation through equivalent rail/MCP/CLI/HTTP controls. Mode and independent
-copy operations remain the physical lifecycle owners. No new viewer, provider
-authority, private-account use, production installation or CI dispatch.
-[Prior qualification](../notes/0283-2026-10-25-spec400-repairs.md) preserves
-the exact candidate, actual workflows, force-close login loss and failed receipts.
-Parent #400 stays open until #404 is qualified and merged.
+The bounded source outcome is complete: inspection, agentic mode conversion,
+independent profile copying and executable selection share the existing owner
+contracts through rail, MCP, CLI and HTTP. Actual Linux Chrome/Chromium workflows
+use a synthetic Native provider and independent authentication observations.
+Installed Native, production publication and real-account acceptance are separate
+claims and were not performed. Foreign worktrees, retained primary checkout,
+build-selection branch and pinned candidates remain untouched or retained.
+
+Historical checkpoints below preserve their original incomplete states and first
+failures. They do not override this final acceptance or authorize runtime effects.
 
 ## Packet and seams
 
@@ -36,10 +39,10 @@ Current owned surfaces: mode inspection and durable conversion journal/host, Nat
 
 | Ticket | Blockers | State | Owner | Result |
 | --- | --- | --- | --- | --- |
-| 401 | none | validated | root | five mode/interface/race tests, mounted rail and touched-surface gates pass |
-| 402 | 401 | pending | root checkpoint retained | public mode roundtrip/native login accepted synthetically; full recovery and actual Native acceptance pending |
-| 403 | 401 | pending | duplicate_403_r2 checkpoint retained | custody/readiness/lane/reconcile repairs integrated; full concurrent Xlib and actual Native qualification pending |
-| 404 | 402,403 | pending | unassigned | pending |
+| 401 | none | closed | root | accessible read-only mode projection and public discovery qualified |
+| 402 | 401 | closed | root | actual two-task Native workflows, force/prompt/recovery and selected gates qualified in PR436 |
+| 403 | 401 | closed | duplicate_403_r2 | actual concurrent independent profiles, quota/recovery and selected gates qualified in PR436 |
+| 404 | 402,403 | closed | root | eight versioned actual workflows and selected gates qualified in PR439 |
 
 ## TDD and validation
 
@@ -492,3 +495,19 @@ diff from the runtime-qualified candidate 40fcbc7b is recorded for policy 0042
 reuse. See the qualification note for pair versions, hashes, first failures and
 limits. PR439 integrates #404; parent #400 remains pending aggregate verification
 after child merge. No production or shared runtime publication occurred.
+
+## Parent aggregate closeout, 2026-10-25
+
+All 46 specification stories reconcile to integrated children and accepted
+receipts. PR439 merged at 22:31:11Z and #404 closed at 22:31:12Z. The final source
+candidate remains SHA256
+`283a5a768f13cc3956f85a9863882bb5f1cc33596613fc1b749204bd55bb2b02`.
+The final help-only difference has explicit policy 0042 reuse evidence; no native,
+mode, profile, copy or dashboard behavior changed after the eight runtime cases.
+Fresh OS closeout reports zero candidate or fixture processes.
+
+Parent closure records the accepted source program, not an installation or
+universal authentication guarantee. No second broad review, new runtime gate,
+CI dispatch, private-account use or worktree removal was introduced. The parent
+closeout changes governance only and retains the implementation branch and all
+pinned candidates.
