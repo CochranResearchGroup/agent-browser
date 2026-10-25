@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P291 cold rail retry spacing](0291-2026-10-24-cold-rail-retry-spacing.md): two API cold reproductions and an actual-scheduler red/green qualify the bounded source repair; installed acceptance remains separate.
+
 [P290 writer executable continuity](0290-2026-10-24-writer-executable-continuity.md) records the public unlink regression and bounded source repair under PL-BUGFIX.
 
 [P289 terminal acquisition](0289-2026-10-24-terminal-acquisition-recovery.md): installed terminal recovery and exact-scope readback pass actual Native iframe acceptance;13 browser roots survive and owned processes are absent.

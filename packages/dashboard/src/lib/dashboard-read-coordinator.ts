@@ -237,15 +237,16 @@ type WorkspacePresenceRead = {
   tabs?: Record<string, { presence?: { state?: string } | null }>;
 };
 
-/** Select a bounded startup catch-up without changing ordinary refresh cadence. */
+/** Spread three startup retries over 1.75s so a cold native read can complete. */
 export function createWorkspacePollInterval() {
   let remaining = 3;
   return (workspace?: WorkspacePresenceRead | null): number => {
     const tabs = Object.values(workspace?.tabs ?? {});
     if (remaining > 0 && tabs.some(tab => tab.presence?.state === "unknown")
         && !tabs.some(tab => tab.presence?.state === "live")) {
+      const delayMs = 250 * (2 ** (3 - remaining));
       remaining -= 1;
-      return 250;
+      return delayMs;
     }
     remaining = 0;
     return 3000;
