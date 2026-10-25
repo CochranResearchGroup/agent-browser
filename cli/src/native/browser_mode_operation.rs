@@ -279,6 +279,8 @@ pub trait ModeRuntime {
     fn restore_previous(&mut self, _request: &Request) -> Result<Mode, String> {
         Err("mode_operation_restore_unavailable".into())
     }
+    /// Retained previous executable configuration, independent of profile bytes.
+    fn previous_executable(&self, _request: &Request) -> Option<String> { None }
     /// Positive exact publication proof permits sealing a lost terminal write.
     /// Missing evidence never authorizes another close or replacement launch.
     fn replacement_is_published(
