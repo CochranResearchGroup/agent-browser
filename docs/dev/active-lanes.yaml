@@ -8,11 +8,11 @@ lanes:
     branch: platform/browser-mode-401
     target: main
     accountable_owner: ecochran76
-    work_items: [CochranResearchGroup/agent-browser#401, CochranResearchGroup/agent-browser#402, CochranResearchGroup/agent-browser#403]
+    work_items: [CochranResearchGroup/agent-browser#401, CochranResearchGroup/agent-browser#402, CochranResearchGroup/agent-browser#403, CochranResearchGroup/agent-browser#424, CochranResearchGroup/agent-browser#425, CochranResearchGroup/agent-browser#426, CochranResearchGroup/agent-browser#427, CochranResearchGroup/agent-browser#428, CochranResearchGroup/agent-browser#429]
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
     dependencies: []
-    validation_status: "Spec400 repairs resumed: root424, worker425 copy, worker426 lookup/rail, worker428 policy;427/429 locally integrated awaiting acceptance; all repairs open; PR408 draft"
+    validation_status: "Six Spec400 repairs source qualified with public synthetic recovery acceptance; PR408 merge/tracker closure and one post-repair review remain pending; broader402/403 incomplete"
     overlaps: [P269, P282]
     reconciled_overlaps: ["401 owns read-only mode projection, MCP adapter, schema/client and rail; preserve P269 manual launch and P282 upgrade source, coordinate shared docs at integration"]
     updated_at: 2026-10-25

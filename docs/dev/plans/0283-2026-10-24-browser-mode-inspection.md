@@ -7,13 +7,22 @@ Spec: https://github.com/CochranResearchGroup/agent-browser/issues/400
 Work items: #401, #402 and #403 under spec #400; #404 remains blocked
 Integration branch: platform/browser-mode-401
 Base: 07fb4c9cb020bb6349d3faf1efcd152cc34fd9ee
-Deadline: 2026-10-24T23:23:20Z (fourth implementation window; earlier windows retained as history)
+Historical fourth-window deadline: 2026-10-24T23:23:20Z. The later repair continuation has no newly specified fixed allowance.
 
 ## Current State
 
-The fourth-window integration remains `platform/browser-mode-401`. Current main through `aa507c91f` was reconciled in `1471bb78487fc53a8fe79cb3eae11d51d428dcd7`. #401 remains source validated. #402 is now a registered public owner operation across MCP, CLI, HTTP command routing and the rail, but full acceptance is incomplete. #403 has additional integrated source custody, readiness and recovery repairs, with its full concurrent public workflow still under qualification. #404 remains blocked. No installation or production publication occurred.
+The six approved repairs #424–429 are source qualified in the retained
+`platform/browser-mode-401` integration checkout. [The qualification note](../notes/0283-2026-10-25-spec400-repairs.md)
+records the exact scenarios, gates, retained failed receipts and reuse limits.
+PR408 carries the source; merged tracker closure remains the next gate at this
+checkpoint. Current main through `e8a5a97d9` is integrated. #401 retains its
+inspection qualification, #402/#403 remain broader incomplete outcomes and #404
+stays blocked. There is no installed or production publication.
 
-Root owns #402 and shared adapters. Worker `duplicate_403_r2` owns #403 in retained auxiliary `/home/ecochran76/workspace.local/agent-browser-duplicate-403`; bounded commits `cd31dbda5` and `c3cc1dbd9` were integrated as `96063d0a9` and `ea998d090`. The worker additionally owns the narrowly scoped Xlib stale-window repair in `x11_scene.rs` and its `browser.rs` loader call. Foreign work and unrelated runtime processes remain untouched.
+Root delivered #424. Dedicated workers delivered #425, #426 and #428, then reused
+idle capacity one ticket at a time for #427 and #429 acceptance. The post-repair
+Standards/Spec review and bounded findings pass remain pending with count zero.
+The retained duplicate403 Xlib candidate and all foreign checkouts remain excluded.
 
 ## Packet and seams
 

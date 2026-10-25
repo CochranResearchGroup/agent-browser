@@ -1,6 +1,6 @@
 # Runbook
 
-[P283 browser modes and profiles](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md) owns spec #400. Draft PR #408 retains source-validated #401 and partial #402/#403. The operator resumed repair implementation on October 25. Public owner conversion, rail actions, Native image/input adapters and duplication recovery are under qualification; full recovery and actual Native workflows remain open. #404 stays blocked. No runtime publication. The plan records exact source custody, tests and remaining gates.
+[P283 Spec400 repairs](docs/dev/notes/0283-2026-10-25-spec400-repairs.md) qualify six bounded repairs #424–429 through isolated real-Chrome workflows and affected source gates. PR408 carries the source; merge and tracker closure remain separate at this checkpoint. Broader #402/#403 remain incomplete and #404 remains blocked. No runtime publication.
 
 [P288 writer custody](docs/dev/plans/0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. PR415 carries the qualified source;221 workstation cases, strict Rust, fixtures and docs pass. Installed production is unchanged.
 
