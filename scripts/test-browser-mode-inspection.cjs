@@ -129,13 +129,13 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.getByText(/Refresh browser builds to read retained selection/).waitFor();
     assert.equal(await page.getByRole('button',{name:'Select for next launch',exact:true}).isEnabled(),false,'lost reply fences further selection effects');
     await page.getByRole('button',{name:'Refresh browser builds',exact:true}).click();
-    await page.getByRole('button',{name:'Open selected build',exact:true}).waitFor();
+    await page.getByRole('button',{name:'Open saved build selection',exact:true}).waitFor();
     const selection=buildCommands.find(command=>command.choice==='select_for_next_launch');
     assert.deepEqual({buildId:selection.buildId,expectedSha256:selection.expectedSha256,mode:selection.mode,ownerConfirmed:selection.ownerConfirmed},{...choice,mode:'cdp',ownerConfirmed:true});
     assert.equal(selection.executablePath,undefined,'the rail uses an opaque reviewed choice');
     await page.getByRole('button',{name:'Close',exact:true}).click();
     await openBuild();
-    await page.getByRole('button',{name:'Open selected build',exact:true}).click();
+    await page.getByRole('button',{name:'Open saved build selection',exact:true}).click();
     await page.getByText(/opened\. Login/).waitFor();
     assert.equal(buildCommands.find(command=>command.choice==='open_selected').operationId,selectedReceipt,'reopening reads the retained selection');
     await page.getByRole('button',{name:'Duplicate and test selected build',exact:true}).click();
@@ -144,6 +144,17 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     const duplicateBuild=buildCommands.find(command=>command.action==='browser_session_profile_duplicate' && command.choice==='prepare');
     assert.equal(duplicateBuild.buildId,choice.buildId); assert.equal(duplicateBuild.mode,'cdp_free');
     await page.getByRole('button',{name:'Close',exact:true}).click();
+    await page.getByRole('button',{name:'Close',exact:true}).click();
+    await openBuild();
+    // A user-entered custom path is submitted only after its own inspection;
+    // opaque installed choices still expose no path.
+    await page.getByRole('textbox',{name:'Other browser executable'}).fill('/reviewed/custom/chrome');
+    await page.getByRole('button',{name:'Inspect executable',exact:true}).click();
+    await page.getByRole('radio',{name:'chromium 150.0.0.0',exact:true}).check();
+    await page.getByRole('checkbox',{name:'Confirm build migration and login risk'}).check();
+    await page.getByRole('button',{name:'Select for next launch',exact:true}).click();
+    await page.getByText(/selected_for_next_launch\. Login/).waitFor();
+    assert.equal(buildCommands.filter(command=>command.choice==='select_for_next_launch').at(-1).executablePath,'/reviewed/custom/chrome');
     await page.getByRole('button',{name:'Close',exact:true}).click();
     activeBuildTasks=[{id:'task-one',name:'synthetic-owner',browserId:'browser'}];
     await openBuild();

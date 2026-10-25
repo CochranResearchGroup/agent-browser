@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type BrowserBuildChoice = { buildId: string; expectedSha256: string };
+export type BrowserBuildChoice = { buildId: string; expectedSha256: string; executablePath?: string };
 export type BrowserBuildEvidence = {
   id: string; name?: string; family?: string; version?: string; available: boolean; nativeBinary?: boolean;
   selection: BrowserBuildChoice; compatibility?: { versionRelation?: string; familyRelation?: string };
@@ -23,6 +23,7 @@ export function BrowserBuildPicker({ profileId, onChoose, onInspect }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState("");
+  const [reviewedPath, setReviewedPath] = useState<string | undefined>();
   const version = useRef(0);
   const callbacks = useRef({ onChoose, onInspect }); callbacks.current = { onChoose, onInspect };
   const inspect = useCallback(async (executablePath?: string) => {
@@ -34,7 +35,7 @@ export function BrowserBuildPicker({ profileId, onChoose, onInspect }: {
       const reply = await response.json();
       if (!response.ok || reply.success !== true || reply.data?.schemaVersion !== "agent-browser.build-selection.v1" || reply.data.profileId !== profileId || !Array.isArray(reply.data.availableBuilds) || !Array.isArray(reply.data.activeTasks)) throw new Error(typeof reply.error === "string" ? reply.error : "Build evidence could not be read.");
       if (current !== version.current) return;
-      setInspection(reply.data); callbacks.current.onInspect?.(reply.data);
+      setInspection(reply.data); setReviewedPath(executablePath); callbacks.current.onInspect?.(reply.data);
     } catch (error) { if (current === version.current) setError(error instanceof Error ? error.message : "Build evidence could not be read."); }
     finally { if (current === version.current) setBusy(false); }
   }, [profileId]);
@@ -46,7 +47,7 @@ export function BrowserBuildPicker({ profileId, onChoose, onInspect }: {
     {error && <p role="alert">{error} Refresh discovery before choosing.</p>}
     <div role="region" aria-label="Available browser builds" style={{ maxHeight: "min(16rem, 35vh)", overflowY: "auto" }}>
       {inspection?.availableBuilds.map(build => <label key={build.id} style={{ display: "block" }}>
-        <input type="radio" name={`browser-build-${profileId}`} aria-label={`${build.name ?? "Browser"} ${build.version ?? "Unverified version"}`} disabled={busy || !build.available || build.nativeBinary === false || !build.selection?.expectedSha256} checked={selected === build.id} onChange={() => { setSelected(build.id); callbacks.current.onChoose(build); }} />
+        <input type="radio" name={`browser-build-${profileId}`} aria-label={`${build.name ?? "Browser"} ${build.version ?? "Unverified version"}`} disabled={busy || !build.available || build.nativeBinary === false || !build.selection?.expectedSha256} checked={selected === build.id} onChange={() => { setSelected(build.id); callbacks.current.onChoose({ ...build, selection: { ...build.selection, ...(reviewedPath ? { executablePath: reviewedPath } : {}) } }); }} />
         {build.name ?? "Browser"} · {build.family ?? "Unverified family"} · {build.version ?? "Unverified version"}
         <small style={{ display: "block" }}>Version relation: {build.compatibility?.versionRelation ?? "unverified"}; family: {build.compatibility?.familyRelation ?? "unverified"}. {build.nativeBinary === false ? "Select the actual browser executable instead of this launcher." : !build.available ? "Unavailable. Choose another build." : ""}</small>
       </label>)}

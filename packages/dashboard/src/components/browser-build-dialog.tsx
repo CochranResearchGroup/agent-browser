@@ -37,7 +37,7 @@ export function BrowserBuildDialog({ open, onOpenChange, profileId, taskId, sess
       const reply = await response.json();
       if (!response.ok || reply.success !== true || reply.data?.operationId !== requestId || reply.data?.schemaVersion !== "agent-browser.build-selection.v1") throw new Error(typeof reply.error === "string" ? reply.error : "Outcome could not be confirmed.");
       setStatus(reply.data.phase); setUnknown(false);
-      if (choice === "select_for_next_launch") { setReceiptId(requestId); setConfirmed(false); operationId.current = crypto.randomUUID(); }
+      if (choice === "select_for_next_launch") { setReceiptId(requestId); setInspection({ ...inspection, nextLaunchBuild: build!, nextLaunchMode: mode, currentSelectionOperationId: requestId! }); setConfirmed(false); operationId.current = crypto.randomUUID(); }
       await onRefresh().catch(() => setError("Inventory could not refresh. Read browser builds again."));
     } catch (error) { setUnknown(true); setError(`${error instanceof Error ? error.message : "Unknown result"} Refresh browser builds to read retained selection and active tasks before another action.`); }
     finally { pending.current = false; setBusy(false); }
@@ -50,7 +50,8 @@ export function BrowserBuildDialog({ open, onOpenChange, profileId, taskId, sess
     <button type="button" disabled={!build || busy || unknown} onClick={() => setChild("copy")}>Duplicate and test selected build</button>
     {task && <button type="button" disabled={!build || busy || unknown} onClick={() => setChild("mode")}>Review original profile relaunch</button>}
     {!task && <><label><input type="checkbox" aria-label="Confirm build migration and login risk" checked={confirmed} disabled={busy || unknown} onChange={event => setConfirmed(event.target.checked)} />Confirm migration and login risk for this profile.</label><button type="button" disabled={!build || !confirmed || busy || unknown || !!inspection?.activeOperationId} onClick={() => void select("select_for_next_launch")}>Select for next launch</button></>}
-    {receiptId && <button type="button" disabled={busy || unknown || !!inspection?.activeOperationId} onClick={() => void select("open_selected")}>Open selected build</button>}
+    {receiptId && <p>Saved build: {inspection?.nextLaunchBuild?.name ?? "Unverified"} {inspection?.nextLaunchBuild?.version ?? ""}; saved mode: {inspection?.nextLaunchMode === "cdp_free" ? "No CDP" : "CDP"}. Operation: {receiptId}. Chooser changes take effect only after selection is confirmed.</p>}
+    {receiptId && <button type="button" disabled={busy || unknown || !!inspection?.activeOperationId} onClick={() => void select("open_selected")}>Open saved build selection</button>}
     {inspection?.activeTasks.map(task => <p key={task.id}>Active task: {task.name} ({task.id})</p>)}
     {status && <p role="status">{status}. Login and profile readability require separate verification in the browser.</p>}
     {error && <p role="alert">{error}</p>}
