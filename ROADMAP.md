@@ -1,5 +1,7 @@
 # Roadmap
 
+[P291 corrected cold rail](docs/dev/plans/0291-2026-10-24-cold-rail-retry-spacing.md), #430, is installed accepted oncf65dd76422b: cold median3.36s to2.11s, warm1.00s to1.02s,18 browser roots and137 Native provider/persistent unit generations preserved. [Evidence](docs/dev/notes/0291-2026-10-24-cold-rail-retry-spacing.md) retains the failed first comparison, mounted cache-caller correction, finite sample limits and three doctor advisories.422 asset intermittence and Remote View667 MCP-client restart loops remain separate. Retain the primary checkout and pinned candidates.
+
 [P289 terminal acquisition and Native handoff acceptance](docs/dev/plans/0289-2026-10-24-terminal-acquisition-recovery.md), #412, is installed accepted on9cbf948ef4af with actual Native canvas/WebSocket proof and13 browser roots preserved. #422 retains the separate intermittent public asset finding.
 
 [P290 writer executable continuity](docs/dev/plans/0290-2026-10-24-writer-executable-continuity.md), #417, repairs PR415 live-writer custody loss after executable unlink through public CLI TDD. PR419 carries the qualified source;221 workstation tests, public fixtures, strict Rust quality and docs pass. That source checkpoint left production unchanged; the later combined e0d5525e92cc install includes this repair.

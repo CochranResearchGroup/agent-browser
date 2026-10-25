@@ -6570,7 +6570,7 @@ are excluded. Failed or stale observations preserve selection and retained links
 a later successful refresh can restore the same tab without recreating it.
 The native rail reads the dedicated workspace projection and polls three seconds
 after each completed read. Startup with wholly unknown tabs gets at most three
-cache-revalidated catch-up reads 250 milliseconds apart, ending on known or
+cache-revalidated catch-up reads after delays of 250, 500 and 1000 milliseconds, ending on known or
 failed evidence. Service reconciliation and
 workstation diagnostics run only on diagnostic surfaces. Observation freshness expires
 independently after 30 seconds using elapsed time, even if the next read stalls.

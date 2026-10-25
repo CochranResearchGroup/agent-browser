@@ -136,10 +136,12 @@ For health, inventory or viewer failures, read [Dashboard diagnostics](reference
 
 After upgrades, reconnect MCP clients; doctor checks `installedMcpClients`.
 
-Development startup: [diagnostics](references/cli-and-service.md#development-host-startup).
+Startup: [diagnostics](references/cli-and-service.md#development-host-startup).
 
 ## Read browser mode
 
-Inspect with `browser_command` action `mode` and `taskId`, or CLI `agent-browser --json mcp browser-mode TASK`. Native: `native_capture`/`native_input` need readiness; top-level `policyOverrideId`/`requestId` bind existing grants. Delivery is not login proof. Discover `mode_convert` for relaunch or `profile_duplicate` for copies; retain operation IDs. [Controls](references/cli-and-service.md#browser-mode-inspection).
+Use `browser_command` action `mode` with `taskId`, or `agent-browser --json mcp browser-mode TASK`. Native capture/input need readiness; top-level `policyOverrideId`/`requestId` bind grants. Delivery is not login proof. Discover `mode_convert`/`profile_duplicate`; retain operation IDs. [Controls](references/cli-and-service.md#browser-mode-inspection).
 
-Diagnostics retain `?view=service:<name>` and selection query fields.
+Diagnostics retain service and selection query fields.
+
+Rail startup revalidates at 250/500/1000 ms while presence is unknown; then polls every three seconds.

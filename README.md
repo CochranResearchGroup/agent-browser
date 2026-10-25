@@ -1106,7 +1106,7 @@ are excluded. Failed or stale observations preserve selection and retained links
 a later successful refresh can restore the same tab without recreating it.
 The native rail reads the dedicated workspace projection and polls three seconds
 after each completed read. On startup only, wholly unknown tab presence gets up
-to three catch-up reads 250 milliseconds apart, ending on live, absent or failed
+to three catch-up reads after delays of 250, 500 and 1000 milliseconds, ending on live, absent or failed
 evidence. Catch-up revalidates the shared response cache. Both HTTP listeners read the current owner snapshot
 directly, without the diagnostic transport, CLI fallback or one-second status cache.
 Service reconciliation and workstation diagnostics run only on diagnostic surfaces. Observation freshness expires

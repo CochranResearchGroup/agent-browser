@@ -18,6 +18,24 @@ lanes:
     updated_at: 2026-10-25
 
 
+
+  - id: P291
+    product_lane: PL-BUGFIX
+    objective: Reduce cold rail wait after Native observation expires
+    plan: docs/dev/plans/0291-2026-10-24-cold-rail-retry-spacing.md
+    branch: fix/cold-rail-430
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#430]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    overlaps: [P283]
+    reconciled_overlaps: ["Own retry-spacing helper, hook revalidation, scheduler/mounted regressions and rail freshness prose only; preserve P283 observer/store/profile and peer profile repairs; reuse retained primary serially"]
+    validation_status: Installedcf65dd76422b; cold median3357.3ms to2112.7ms, warm1018.8ms, mounted regression and exact fixtures pass;18 browser roots and137 Native units preserved
+    limitations: ["Finite three-cold/five-warm acceptance; no universal latency guarantee", "Retain primary checkout and pinned candidates", "422 asset failures remain unexplained"]
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/433
+    updated_at: 2026-10-25
+
   - id: P290
     product_lane: PL-BUGFIX
     objective: Preserve executing writer custody after executable unlink
