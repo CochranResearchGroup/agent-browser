@@ -137,3 +137,8 @@ impl BrowserSessionSqliteStore {
         Ok(receipt)
     }
 }
+
+impl BrowserSessionSqliteStore {
+    /// Only positive copy publication admits an existing-profile broker fallback.
+    pub(crate) fn published_copy_profile(&self,_profile_id:&str)->Result<Option<agent_browser_service_model::BrowserProfileCatalogEntry>,String> {Ok(None)}
+}

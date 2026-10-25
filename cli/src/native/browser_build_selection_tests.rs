@@ -145,3 +145,35 @@ fn duplicate_build_review_retains_source_pin_and_rejects_changed_replay() {
         "Changed build intent cannot silently retarget an existing copy operation"
     );
 }
+
+#[test]
+fn future_build_selection_mode_survives_unspecified_open_and_explicit_mode_still_wins() {
+    use sha2::{Digest,Sha256};
+    for explicit in [None,Some(false)] {
+        let fixture=Fixture::new();
+        std::fs::create_dir(fixture.root.join("profile-a")).unwrap();
+        let mut host=fixture.host(Mode::Success,Rc::new(Cell::new(0)),Rc::new(Cell::new(0)));
+        let sha=format!("{:x}",Sha256::digest(std::fs::read("/usr/bin/python3").unwrap()));
+        let selected=host.handle_command(&json!({"action":"browser_session_build_select","profileId":"profile-a","choice":"select_for_next_launch","operationId":"future-mode","executablePath":"/usr/bin/python3","expectedSha256":sha,"mode":"cdp_free","ownerConfirmed":true}));
+        assert_eq!(selected["success"],true,"{selected}");
+        let mut command=json!({"action":"browser_session_open","profileId":"profile-a","sessionName":"Future preference","url":"about:blank"});
+        if let Some(value)=explicit {command["manualLogin"]=json!(value);}
+        let opened=host.handle_command(&command);
+        assert_eq!(opened["success"],true,"{opened}");
+        assert_eq!(fixture.store(false).load_profile_catalog().unwrap().catalog.profiles["profile-a"].manual_login_url.is_some(),explicit.is_none(),"An omitted mode must preserve No-CDP intent; an explicit mode may change it");
+    }
+}
+
+#[test]
+fn build_selection_existing_copy_requires_published_lineage_and_exact_directory() {
+    let fixture=Fixture::new();
+    std::fs::create_dir(fixture.root.join("profile-a")).unwrap();
+    let store=fixture.store(false);
+    assert!(store.published_copy_profile("profile-a").unwrap().is_none(),"An ordinary catalog row is not copy publication proof");
+    let connection=rusqlite::Connection::open(fixture.root.join("runtime.sqlite3")).unwrap();
+    connection.execute_batch("CREATE TABLE browser_profile_duplication_lineage(profile_id TEXT PRIMARY KEY,source_profile_id TEXT NOT NULL,operation_id TEXT NOT NULL,browser_build TEXT NOT NULL);INSERT INTO browser_profile_duplication_lineage VALUES('profile-a','source-original','copy-operation','source-build');").unwrap();
+    let copied=store.published_copy_profile("profile-a").unwrap();
+    assert!(copied.is_some(),"A published named copy must be available to the existing-profile open adapter");
+    std::fs::remove_dir(fixture.root.join("profile-a")).unwrap();
+    assert!(store.published_copy_profile("profile-a").is_err(),"A missing copied directory cannot become a newly created empty profile");
+}

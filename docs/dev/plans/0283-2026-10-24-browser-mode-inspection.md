@@ -416,3 +416,20 @@ pending. The ticket and parent remain open. The next focused invariant is that
 previous-configuration recovery launches the retained previous executable while
 preserving the selected target in the original operation history. This recovery
 must never be described as restoring migrated profile bytes.
+
+### Existing-copy remediation and launch continuity
+
+A failed copy launch already supports finishing the published copy without
+opening it. Reuse that bounded outcome for another-build remediation: complete
+the original copy operation without another launch, choose a build for the
+preserved destination profile, and explicitly open that existing profile. Do not
+recopy it or introduce another copy-execution authority. The rail must expose
+these concrete continuations and retain unknown outcomes for readback.
+
+The public open adapter must recognize a positively published independent copy
+from the Browser Runtime catalog without creating a second runtime directory or
+inventing a Service profile registration. Existing Service profiles retain their
+normal path. An unspecified open mode preserves an existing recorded profile
+posture; a new profile still defaults to CDP. Explicit automation or No-CDP
+selection remains independent of the executable. This prevents a build-only
+choice from silently enabling CDP during the next open.
