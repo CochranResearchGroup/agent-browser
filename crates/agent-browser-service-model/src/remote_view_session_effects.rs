@@ -597,6 +597,19 @@ impl<
             .effects
             .reconcile_profile_browser(profile, browser, tabs, navigation)?
         else {
+            if browser.is_none()
+                && self
+                    .store
+                    .unpublished_launch_records()
+                    .map_err(|_| "remote_view_session_launch_readback_required")?
+                    .iter()
+                    .any(|record| record.intent.profile_id == profile.id)
+            {
+                // A missing current attachment is not proof that an attempted
+                // initial launch had no effect. Explicit exact-absence settlement
+                // must precede a new launch through the original operation.
+                return Err("remote_view_session_launch_readback_required".into());
+            }
             return Ok(None);
         };
         // Physical reuse does not inherit an old presentation location. Join
