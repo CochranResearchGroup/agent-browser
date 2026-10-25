@@ -322,7 +322,7 @@ pub(super) fn public_operation_view(
         ],
         _ => vec![],
     };
-    json!({"schemaVersion":"agent-browser.mode-operation.v1","operationId":state.request.operation_id,"phase":phase,"failure":failure.or(state.failure.as_deref()),"launchAttempts":state.launch_attempts,"recoveryChoice":if state.restoring_previous {Some("restore_previous")}else{None},"effectiveMode":state.effective_mode.as_ref().map(|mode|if *mode==Mode::Cdp{"cdp"}else{"cdp_free"}),"browserId":state.request.browser_id,"profileId":state.request.profile_id,"taskId":task_id,"affectedTaskIds":state.request.task_ids,"requestedMode":if state.request.requested_mode==Mode::Cdp{"cdp"}else{"cdp_free"},"observedMode":if state.phase==Phase::Completed {Some(if state.effective_mode.as_ref().unwrap_or(&state.request.requested_mode)==&Mode::Cdp{"cdp"}else{"cdp_free"})}else{None},"nativeContextScope":"browser","restoration":"logical tasks and profile retained; transient pages are not replayed","warning":"Relaunch replaces the whole browser. Unsaved forms, downloads and page state can be lost. Native controls address the current browser window; URLs are unverified until observed. Force close may lose buffered data.","closeMethod":state.close_method,"actions":actions.into_iter().map(|(action,confirmation)|json!({"action":action,"requiresConfirmation":confirmation})).collect::<Vec<_>>()})
+    json!({"schemaVersion":"agent-browser.mode-operation.v1","operationId":state.request.operation_id,"phase":phase,"failure":failure.or(state.failure.as_deref()),"launchAttempts":state.launch_attempts,"recoveryChoice":if state.restoring_previous {Some("restore_previous")}else{None},"effectiveMode":state.effective_mode.as_ref().map(|mode|if *mode==Mode::Cdp{"cdp"}else{"cdp_free"}),"browserId":state.request.browser_id,"profileId":state.request.profile_id,"taskId":task_id,"affectedTaskIds":state.request.task_ids,"requestedMode":if state.request.requested_mode==Mode::Cdp{"cdp"}else{"cdp_free"},"observedMode":if state.phase==Phase::Completed {Some(if state.effective_mode.as_ref().unwrap_or(&state.request.requested_mode)==&Mode::Cdp{"cdp"}else{"cdp_free"})}else{None},"nativeContextScope":"browser","restoration":"logical tasks and profile retained; transient pages are not replayed; previous executable selection does not restore migrated profile bytes","warning":"Relaunch replaces the whole browser. Unsaved forms, downloads and page state can be lost. Native controls address the current browser window; URLs are unverified until observed. Force close may lose buffered data.","closeMethod":state.close_method,"actions":actions.into_iter().map(|(action,confirmation)|json!({"action":action,"requiresConfirmation":confirmation})).collect::<Vec<_>>()})
 }
 fn phase_name(phase: &Phase) -> &'static str {
     match phase {
@@ -652,6 +652,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             .effects
             .begin_operation(&self.host.persisted_state)?;
         Ok(true)
+    }
+    fn previous_executable(&self, _: &Request) -> Option<String> {
+        self.binding.original.executable_path.clone()
     }
     fn restore_previous(&mut self, request: &Request) -> Result<Mode, String> {
         let profile = self.profile(request);

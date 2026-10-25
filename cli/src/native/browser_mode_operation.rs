@@ -46,6 +46,8 @@ pub struct Operation {
     #[serde(default)]
     pub effective_mode: Option<Mode>,
     #[serde(default)]
+    pub effective_executable: Option<String>,
+    #[serde(default)]
     pub failure: Option<String>,
     #[serde(default)]
     pub launch_attempts: u32,
@@ -161,6 +163,7 @@ impl OperationStore {
             replacement: None,
             close_method: None,
             effective_mode: None,
+            effective_executable: None,
             failure: None,
             launch_attempts: 0,
             restoring_previous: false,
@@ -280,7 +283,9 @@ pub trait ModeRuntime {
         Err("mode_operation_restore_unavailable".into())
     }
     /// Retained previous executable configuration, independent of profile bytes.
-    fn previous_executable(&self, _request: &Request) -> Option<String> { None }
+    fn previous_executable(&self, _request: &Request) -> Option<String> {
+        None
+    }
     /// Positive exact publication proof permits sealing a lost terminal write.
     /// Missing evidence never authorizes another close or replacement launch.
     fn replacement_is_published(
@@ -349,6 +354,9 @@ impl OperationStore {
             return Ok(operation);
         }
         let mut effect_request = operation.request.clone();
+        if let Some(executable) = &operation.effective_executable {
+            effect_request.executable = executable.clone();
+        }
         if let Some(mode) = &operation.effective_mode {
             effect_request.requested_mode = mode.clone();
         }
@@ -389,12 +397,19 @@ impl OperationStore {
             let mode = runtime.restore_previous(&effect_request)?;
             let mut next = operation.clone();
             next.effective_mode = Some(mode.clone());
+            next.effective_executable = runtime
+                .previous_executable(&effect_request)
+                .or_else(|| Some(operation.request.executable.clone()));
             next.restoring_previous = false;
             next.replacement = None;
             next.phase = Phase::OriginalExited;
             self.save_transition(&operation, &next)?;
             operation = next;
             effect_request.requested_mode = mode;
+            effect_request.executable = operation
+                .effective_executable
+                .clone()
+                .unwrap_or_else(|| operation.request.executable.clone());
         }
         if matches!(choice, Choice::Cancel) {
             if operation.phase == Phase::ClosePrompt {

@@ -99,7 +99,15 @@ impl ModeRuntime for SyntheticRuntime {
             return Err("synthetic_pre_spawn_failure".into());
         }
         if request.executable.starts_with("/synthetic/versioned-") {
-            assert_eq!(request.executable, if request.requested_mode==Mode::Cdp { "/synthetic/versioned-previous" } else { "/synthetic/versioned-target" }, "Previous mode recovery must select the retained previous executable");
+            assert_eq!(
+                request.executable,
+                if request.requested_mode == Mode::Cdp {
+                    "/synthetic/versioned-previous"
+                } else {
+                    "/synthetic/versioned-target"
+                },
+                "Previous mode recovery must select the retained previous executable"
+            );
         }
         self.launches += 1;
         self.process = "boot:replacement:start".into();
@@ -149,7 +157,10 @@ impl ModeRuntime for SyntheticRuntime {
         Ok(Mode::Cdp)
     }
     fn previous_executable(&self, request: &Request) -> Option<String> {
-        request.executable.starts_with("/synthetic/versioned-").then(||"/synthetic/versioned-previous".into())
+        request
+            .executable
+            .starts_with("/synthetic/versioned-")
+            .then(|| "/synthetic/versioned-previous".into())
     }
     fn publish(&mut self, _: &Request, _: &Replacement) -> Result<(), String> {
         self.published = true;
@@ -858,8 +869,8 @@ fn prior_executable_selection_recovers_without_claiming_profile_rollback() {
     std::fs::create_dir(&directory).unwrap();
     let path = directory.join("operations.sqlite3");
     let mut store = OperationStore::open(&path).unwrap();
-    let mut selected=request();
-    selected.executable="/synthetic/versioned-target".into();
+    let mut selected = request();
+    selected.executable = "/synthetic/versioned-target".into();
     store.request(selected).unwrap();
     let mut runtime = SyntheticRuntime {
         process: "boot:pid:start".into(),
@@ -909,4 +920,3 @@ fn prior_executable_selection_recovers_without_claiming_profile_rollback() {
     drop(store);
     std::fs::remove_dir_all(directory).unwrap();
 }
-
