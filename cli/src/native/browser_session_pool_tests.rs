@@ -7533,3 +7533,156 @@ fn ordinary_live_profile_ignores_mismatched_historical_launch_observation() {
         "recovery launches once after current absence"
     );
 }
+
+#[test]
+fn activity_readback_observes_each_exact_scope_once_per_operation() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let alice = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let bob = consumer
+        .open(OpenBrowserSession::exact_profile("Bob", "profile-b", 101))
+        .unwrap();
+    let baseline = consumer.state().clone();
+    drop(consumer);
+    for browser_id in [&alice.browser_id, &bob.browser_id] {
+        for _ in 0..4 {
+            fixture
+                .store(false)
+                .admit_browser_activity(
+                    &uuid::Uuid::new_v4().to_string(),
+                    &baseline.browsers[browser_id],
+                    &baseline,
+                )
+                .unwrap();
+        }
+    }
+    // A retained original generation with the same PID/browser is a distinct
+    // observation scope. This fixture edit never changes the published launch.
+    let connection = rusqlite::Connection::open(fixture.root.join("runtime.sqlite3")).unwrap();
+    let source: String = connection
+        .query_row(
+            "SELECT json FROM state_documents WHERE kind='browser_idle_retirement_custody'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let mut ledger: Value = serde_json::from_str(&source).unwrap();
+    let first = ledger["activities"]
+        .as_object_mut()
+        .unwrap()
+        .values_mut()
+        .next()
+        .unwrap();
+    first["processIdentity"]["startToken"] = "synthetic-other-original".into();
+    let second = ledger["activities"]
+        .as_object_mut()
+        .unwrap()
+        .values_mut()
+        .nth(1)
+        .unwrap();
+    second.as_object_mut().unwrap().remove("processIdentity");
+    connection
+        .execute(
+            "UPDATE state_documents SET json=?1 WHERE kind='browser_idle_retirement_custody'",
+            [ledger.to_string()],
+        )
+        .unwrap();
+    drop(connection);
+    let count_path = fixture.root.join("activity-observation-count");
+    std::fs::write(&count_path, "0").unwrap();
+    let count = || {
+        std::fs::read_to_string(&count_path)
+            .unwrap()
+            .parse::<u32>()
+            .unwrap()
+    };
+    let mut effects = RemoteViewSessionEffects::new(
+        Process {
+            mode: Mode::Success,
+            root: fixture.root.clone(),
+            calls,
+        },
+        adapter(&fixture, provider),
+        fixture.store(false),
+        vec![],
+        || uuid::Uuid::new_v4().to_string(),
+    )
+    .unwrap();
+    effects.begin_operation(&baseline).unwrap();
+    assert_eq!(
+        count(),
+        4,
+        "eight rows name four exact scopes, including legacy missing identity"
+    );
+    assert!(fixture
+        .store(false)
+        .browser_activity_records()
+        .unwrap()
+        .iter()
+        .all(|row| !row.original_ended));
+    std::fs::write(
+        fixture.root.join("activity-count-readback-unavailable"),
+        "unknown",
+    )
+    .unwrap();
+    effects.begin_operation(&baseline).unwrap();
+    assert_eq!(
+        count(),
+        8,
+        "uncertain observation is shared only within this operation"
+    );
+    assert!(fixture
+        .store(false)
+        .browser_activity_records()
+        .unwrap()
+        .iter()
+        .all(|row| !row.original_ended));
+    std::fs::remove_file(fixture.root.join("activity-count-readback-unavailable")).unwrap();
+    std::fs::write(fixture.root.join("idle-process-absent"), "absent").unwrap();
+    let connection = rusqlite::Connection::open(fixture.root.join("runtime.sqlite3")).unwrap();
+    connection.execute_batch("CREATE TRIGGER fail_activity_settlement BEFORE UPDATE OF json ON state_documents WHEN NEW.kind='browser_idle_retirement_custody' BEGIN SELECT RAISE(ABORT, 'synthetic settlement unavailable'); END;").unwrap();
+    assert_eq!(
+        effects.begin_operation(&baseline).unwrap_err(),
+        "browser_session_activity_readback_unavailable"
+    );
+    assert_eq!(
+        count(),
+        9,
+        "failed settlement stops without inventing completion"
+    );
+    assert!(fixture
+        .store(false)
+        .browser_activity_records()
+        .unwrap()
+        .iter()
+        .all(|row| !row.original_ended));
+    connection
+        .execute_batch("DROP TRIGGER fail_activity_settlement;")
+        .unwrap();
+    drop(connection);
+    effects.begin_operation(&baseline).unwrap();
+    assert_eq!(
+        count(),
+        13,
+        "a later operation refreshes all original scopes"
+    );
+    let rows = fixture.store(false).browser_activity_records().unwrap();
+    assert_eq!(
+        rows.len(),
+        8,
+        "every durable activity history remains retained"
+    );
+    assert!(rows
+        .iter()
+        .all(|row| row.original_ended && !row.acknowledged));
+    effects.begin_operation(&baseline).unwrap();
+    assert_eq!(
+        count(),
+        13,
+        "positively ended history needs no further observation"
+    );
+}

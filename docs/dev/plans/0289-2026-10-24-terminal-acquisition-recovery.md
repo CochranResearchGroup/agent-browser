@@ -23,3 +23,7 @@ Terminal acquisition recovery is merged, installed and accepted: old Released hi
 ## Next bounded packet
 
 Own only measurement of the existing-task handoff HTTP producer/preparation/relay and exact original outcome. Up to three targeted diagnostic experiments, one real-boundary regression and one semantic repair. Do not mask a stalled producer by raising the15s UI deadline. Existing deployment authority applies after touched-surface qualification; native viewer ownership and all peer processes remain preserved. Recheck scope and overlap before editing a new source seam.
+
+## Activity observation hypothesis
+
+Current retained custody has165 active activity rows for only three exact browser/process scopes. Every begin_operation repeats the same OS observer for every row while the shared owner is serialized. Qualify deduplication only within this operation and only for completely equal BrowserIdleRetirementScope values. Cache positive original exit or retained uncertainty locally; settle each distinct durable row separately. Do not cache across operations, merge changed identities, change the observer/store or remove activity history. Primary writer extends only to this begin_operation block and its model regression; P283 keeps profile/store/observation implementation ownership. Require repeated scopes, changed browser/kernel identities, positive exit, uncertainty, failed settlement and next-operation refresh.
