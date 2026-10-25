@@ -312,3 +312,30 @@ styled regression. Shared dialog primitives are unchanged.
 One Standards/Spec review and one bounded findings pass have now been consumed.
 No second broad review is planned. Follow-up gates and candidate identity are
 recorded in the owning qualification note.
+
+## Child-ticket closure continuation, 2026-10-25
+
+The user renewed implementation direction after the six repair tickets closed.
+Root owns #401 acceptance and tracker reconciliation, then the next newly
+unblocked child. #402 and #403 each receive one implementation worker after
+#401 closure. #404 remains gated by their native dependency edges. No parked,
+needs-triage, private-account or live-gated portfolio item is resumed.
+
+The current primary branch is `platform/spec400-children-closeout` from freshly
+fetched main `b43833e9ac96f687d4bf60c731de5572a08ddd52`. Six registered
+primaries were inspected. Only canonical auth/receipts is dirty and remains
+untouched. The clean retained duplicate403 tree contains excluded Xlib work
+and is not reassigned. Two temporary auxiliaries are necessary for simultaneous
+one-ticket workers: `/tmp/agent-browser-spec400-child402` and
+`/tmp/agent-browser-spec400-child403`, branches `platform/spec400-complete-402`
+and `platform/spec400-complete-403`. Both bind to P283, start at current main,
+return scoped commits to root and require governed removal after integration.
+No new primary lane is created.
+
+Root owns shared plans/catalog/README/help/skills/docs and final integration.
+Worker402 owns mode lifecycle/host and mode acceptance; worker403 owns copy
+lifecycle/host and copy acceptance. Shared browser-session owner, Native
+transport, schema/client and public fixture changes require explicit writer
+coordination before editing; copy worker owns its dedicated fixture, mode
+worker the manual-login fixture. Preserve prior repairs and failed receipts.
+No production publication, shared provider effects or CI dispatch.
