@@ -269,3 +269,22 @@ routing, mounted rail reload, and synthetic private-profile Chrome workflows.
 Core state-machine tests alone do not establish complete ticket acceptance.
 The post-repair Standards/Spec review and one bounded TDD findings pass remain
 pending, with count zero for each at continuation.
+
+## Single post-repair review and bounded remediation
+
+PR408 merged as `081fbbce4e779d23874b372cbcef55d3cfeeb782`; all six repairs
+closed with merged provenance, while parents #400–404 remained open. The one
+additional review is pinned to `aeb49c5e0...081fbbce4`. Standards accepted zero
+findings. Spec accepted two blocking counterexamples: #424 can retain an
+unrecoverable restore selection after replacement publication but terminal
+journal loss; #426 can hide the active locator behind more than 256 historical
+rows before task/browser filtering. These two repairs are reopened temporarily.
+
+This is the single bounded TDD findings pass, not another broad review. Root owns
+#424 on `platform/spec400-post-review` in the existing primary. Worker #426 reuses
+the existing spec400-429 auxiliary on `platform/spec400-review-426`, pinned to
+the merged source. Its two transferred copy lookup edits were preserved in
+clean custody commit `89eb07382` before reassignment. No new worktree or runtime
+authority was created. Owner/public regression tests must fail before each fix,
+then affected gates qualify the follow-up PR. No additional review pass is
+authorized by this packet.
