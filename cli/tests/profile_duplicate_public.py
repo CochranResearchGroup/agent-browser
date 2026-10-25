@@ -333,6 +333,11 @@ def main():
                 number=os.read(read2,64).decode().strip();assert number.isdecimal() and second.poll() is None
                 displays.append(':'+number)
             finally:os.close(read2)
+            deadline = time.monotonic() + 10
+            while run(['xprop', '-root'], displays[1]).returncode != 0:
+                assert second.poll() is None, 'second Xvfb exited before accepting X11 clients'
+                assert time.monotonic() < deadline, 'second X11 client readiness deadline'
+                time.sleep(.02)
             spawn(['openbox','--sm-disable'],env=dict(env,DISPLAY=displays[1]),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
             deadline=time.monotonic()+10
             while 'window id #' not in run(['xprop','-root','_NET_SUPPORTING_WM_CHECK'],displays[1]).stdout:
@@ -468,6 +473,8 @@ def main():
                 task = None
             else:
                 receipt=copied['launch'];assert receipt['taskId']!=source_task['taskId'] and receipt['browserId']!=source_task['browserId'],copied
+                if 'handoffUrl' in source_task:
+                    assert receipt['handoffId'] != source_task['handoffUrl'].rsplit('/', 1)[-1], 'copy cloned the original handoff'
                 duplicate_task=receipt['taskId']
                 assert len(browsers())==1,'copy should launch only destination; source must reopen only when selected'
                 assert os.readlink('/proc/'+str(browsers()[0][0])+'/exe') == private_chrome, 'destination must execute its original exact pinned build'
@@ -491,6 +498,7 @@ def main():
                     deadline=time.monotonic()+10
                     while not any(record['path']=='/write-source' for record in get_requests):
                         assert time.monotonic()<deadline,'source write navigation missing';time.sleep(.02)
+                    assert next(record['cookie'] for record in get_requests if record['path']=='/write-source')=='initial', 'reopened source lost its original synthetic cookie'
                     assert native_visit(source_reopened['taskId'],'/check-source')=='source-diverged','source write did not persist'
                     # Native focus is explicit because the reopened source owns focus.
                     destination_pid=next(pid for pid,_ in browsers() if pid!=next(pid for pid,argv in browsers() if '--user-data-dir='+str(profile) in argv))

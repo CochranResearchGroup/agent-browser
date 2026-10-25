@@ -80,7 +80,29 @@ fn clean_stopped_profile_copies_privately_and_independently_without_runtime_owne
     let destination = root.join("destination");
     std::fs::create_dir_all(source.join("Default/Network")).unwrap();
     std::fs::write(source.join("Default/Network/Cookies"), b"synthetic-cookie").unwrap();
-    std::fs::write(source.join("SingletonLock"), b"must-not-clone").unwrap();
+    for artifact in [
+        "SingletonLock",
+        "SingletonCookie",
+        "SingletonSocket",
+        "DevToolsActivePort",
+    ] {
+        std::fs::write(source.join(artifact), b"must-not-clone").unwrap();
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o750)).unwrap();
+        std::fs::set_permissions(
+            source.join("Default"),
+            std::fs::Permissions::from_mode(0o710),
+        )
+        .unwrap();
+        std::fs::set_permissions(
+            source.join("Default/Network/Cookies"),
+            std::fs::Permissions::from_mode(0o640),
+        )
+        .unwrap();
+    }
     let request = copy::DuplicateRequest {
         operation_id: "duplicate-1".into(),
         source: copy::SourceProfile {
@@ -110,7 +132,46 @@ fn clean_stopped_profile_copies_privately_and_independently_without_runtime_owne
         std::fs::read(destination.join("Default/Network/Cookies")).unwrap(),
         b"synthetic-cookie"
     );
-    assert!(!destination.join("SingletonLock").exists());
+    for artifact in [
+        "SingletonLock",
+        "SingletonCookie",
+        "SingletonSocket",
+        "DevToolsActivePort",
+    ] {
+        assert!(!destination.join(artifact).exists());
+        assert!(
+            source.join(artifact).exists(),
+            "source runtime artifact was modified"
+        );
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(&destination)
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+        assert_eq!(
+            std::fs::metadata(destination.join("Default"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+        assert_eq!(
+            std::fs::metadata(destination.join("Default/Network/Cookies"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+    }
     std::fs::write(
         destination.join("Default/Network/Cookies"),
         b"destination-only",
@@ -1270,5 +1331,113 @@ fn existing_destination_with_pending_native_readiness_resumes_same_task_without_
         b"source-preserved"
     );
     drop(restarted);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "requires an explicitly admitted private mount namespace and tmpfs quota"]
+fn exhausted_destination_never_publishes_partial_profile_and_same_operation_resumes() {
+    use std::process::Command;
+    const CHILD: &str = "AGENT_BROWSER_DUPLICATE_QUOTA_FIXTURE";
+    if std::env::var(CHILD).as_deref() != Ok("1") {
+        let status = Command::new("unshare")
+            .args([
+                "--user",
+                "--map-current-user",
+                "--mount",
+                "--propagation",
+                "private",
+            ])
+            .arg(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "exhausted_destination_never_publishes_partial_profile_and_same_operation_resumes",
+                "--ignored",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(CHILD, "1")
+            .status()
+            .unwrap();
+        assert!(status.success());
+        return;
+    }
+    let root = std::env::temp_dir().join(format!("duplicate-quota-{}", uuid::Uuid::new_v4()));
+    let source = root.join("source");
+    let storage = root.join("limited-destination");
+    std::fs::create_dir_all(&source).unwrap();
+    std::fs::create_dir(&storage).unwrap();
+    let payload = vec![0x5a; 1024 * 1024];
+    std::fs::write(source.join("synthetic-profile-data"), &payload).unwrap();
+    assert!(Command::new("mount")
+        .args(["-t", "tmpfs", "-o", "size=64k,mode=700", "tmpfs"])
+        .arg(&storage)
+        .status()
+        .unwrap()
+        .success());
+    struct QuotaMount(std::path::PathBuf);
+    impl Drop for QuotaMount {
+        fn drop(&mut self) {
+            assert!(Command::new("umount")
+                .arg(&self.0)
+                .status()
+                .unwrap()
+                .success());
+        }
+    }
+    let mount = QuotaMount(storage.clone());
+    let database = root.join("operations.sqlite3");
+    let request = copy::DuplicateRequest {
+        operation_id: "quota-copy".into(),
+        source: copy::SourceProfile {
+            id: "source".into(),
+            name: "Source".into(),
+            user_data_dir: source.clone(),
+            browser_build: "same-build".into(),
+            generation: 1,
+        },
+        destination: copy::DestinationProfile {
+            id: "copy".into(),
+            name: "Copy".into(),
+            user_data_dir: storage.join("published"),
+        },
+        launch: false,
+    };
+    let mut store = copy::DuplicationStore::open(&database).unwrap();
+    store.prepare(request).unwrap();
+    assert!(store
+        .advance("quota-copy", copy::Choice::Proceed, &mut Runtime)
+        .is_err());
+    assert!(
+        !storage.join("published").exists(),
+        "partial bytes must never be published"
+    );
+    assert_eq!(
+        std::fs::read(source.join("synthetic-profile-data")).unwrap(),
+        payload
+    );
+    drop(store);
+    assert!(Command::new("mount")
+        .args(["-o", "remount,size=8m"])
+        .arg(&storage)
+        .status()
+        .unwrap()
+        .success());
+    let result = copy::DuplicationStore::open(&database)
+        .unwrap()
+        .advance("quota-copy", copy::Choice::Reconcile, &mut Runtime)
+        .unwrap();
+    assert_eq!(result.phase, copy::Phase::Completed);
+    assert_eq!(result.request.operation_id, "quota-copy");
+    assert_eq!(
+        std::fs::read(storage.join("published/synthetic-profile-data")).unwrap(),
+        payload
+    );
+    assert_eq!(
+        std::fs::read(source.join("synthetic-profile-data")).unwrap(),
+        payload
+    );
+    drop(mount);
     std::fs::remove_dir_all(root).unwrap();
 }
