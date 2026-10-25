@@ -26,30 +26,48 @@ fn table(connection: &Connection, name: &str) -> Result<bool, String> {
         )
         .map_err(|_| "browser_operation_journal_unavailable".into())
 }
+const LOOKUP_LIMIT: usize = 256;
+
+#[derive(Default)]
+struct OperationLookup {
+    operations: Vec<Value>,
+    history_truncated: bool,
+}
+
 fn mode_operations(
     database: &Path,
     profile: &str,
     browser: Option<&str>,
     task: Option<&str>,
     id: Option<&str>,
-) -> Result<Vec<Value>, String> {
+    active_id: Option<&str>,
+) -> Result<OperationLookup, String> {
     let Some(connection) = journal(&database.with_extension("mode.sqlite3"))? else {
-        return Ok(vec![]);
+        return Ok(OperationLookup::default());
     };
     if !table(&connection, "browser_mode_operations")? {
-        return Ok(vec![]);
+        return Ok(OperationLookup::default());
     }
-    let mut query = connection.prepare("SELECT state FROM browser_mode_operations WHERE json_extract(state,'$.request.profile_id')=?1 AND (?2 IS NULL OR id=?2) ORDER BY id LIMIT 257")
+    let mut query = connection.prepare("SELECT state FROM browser_mode_operations WHERE json_extract(state,'$.request.profile_id')=?1 AND (?2 IS NULL OR id=?2) AND (?3 IS NULL OR json_extract(state,'$.request.browser_id')=?3) AND (?4 IS NULL OR EXISTS(SELECT 1 FROM json_each(state,'$.request.task_ids') WHERE value=?4)) ORDER BY CASE WHEN id=?5 THEN 0 ELSE 1 END, terminal, rowid DESC LIMIT ?6")
         .map_err(|_| "browser_operation_readback_unavailable")?;
     let rows = query
-        .query_map(rusqlite::params![profile, id], |row| {
-            row.get::<_, String>(0)
-        })
+        .query_map(
+            rusqlite::params![
+                profile,
+                id,
+                browser,
+                task,
+                active_id,
+                (LOOKUP_LIMIT + 1) as i64
+            ],
+            |row| row.get::<_, String>(0),
+        )
         .map_err(|_| "browser_operation_readback_unavailable")?;
-    let mut views = vec![];
+    let mut lookup = OperationLookup::default();
     for (index, row) in rows.enumerate() {
-        if index >= 256 {
-            return Err("browser_operation_lookup_limit:select an operationId".into());
+        if index == LOOKUP_LIMIT {
+            lookup.history_truncated = true;
+            break;
         }
         let operation: super::super::browser_mode_operation::Operation =
             serde_json::from_str(&row.map_err(|_| "browser_operation_readback_unavailable")?)
@@ -66,12 +84,9 @@ fn mode_operations(
             None,
         );
         view["kind"] = json!("mode_convert");
-        views.push(view);
+        lookup.operations.push(view);
     }
-    if views.len() > 256 {
-        return Err("browser_operation_lookup_limit:select an operationId".into());
-    }
-    Ok(views)
+    Ok(lookup)
 }
 fn copy_operations(
     database: &Path,
@@ -237,23 +252,42 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         let database = self.persistence.runtime_database_path()?;
         let id = optional_string(command, "operationId");
         if inspect {
-            let operations = if kind == "mode_convert" {
-                mode_operations(&database, profile, browser_id, task_id, id)?
+            let lookup = if kind == "mode_convert" {
+                mode_operations(
+                    &database,
+                    profile,
+                    browser_id,
+                    task_id,
+                    id,
+                    state.profile_operation_ids.get(profile).map(String::as_str),
+                )?
             } else {
-                copy_operations(&database, profile, browser_id, task_id, id)?
+                OperationLookup {
+                    operations: copy_operations(&database, profile, browser_id, task_id, id)?,
+                    history_truncated: false,
+                }
             };
+            let operations = lookup.operations;
             if id.is_some() && operations.is_empty() {
                 return Err("browser_operation_not_found".into());
             }
             return Ok(Some(
-                json!({"schemaVersion":"agent-browser.browser-operations.v1","kind":kind,"profileId":profile,"browserId":browser_id,"taskId":task_id,"operations":operations}),
+                json!({"schemaVersion":"agent-browser.browser-operations.v1","kind":kind,"profileId":profile,"browserId":browser_id,"taskId":task_id,"operations":operations,"historyTruncated":lookup.history_truncated}),
             ));
         }
         let mut existing = if let Some(active_id) = state.profile_operation_ids.get(profile) {
             if Some(active_id.as_str()) == id {
                 return Ok(None);
             }
-            let mut existing = mode_operations(&database, profile, None, None, Some(active_id))?;
+            let mut existing = mode_operations(
+                &database,
+                profile,
+                None,
+                None,
+                Some(active_id),
+                Some(active_id),
+            )?
+            .operations;
             existing.extend(copy_operations(
                 &database,
                 profile,
@@ -265,7 +299,8 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         } else {
             // A crash can retain the durable unique browser operation before
             // its profile fence was published. Return that original locator.
-            mode_operations(&database, profile, browser_id, None, None)?
+            mode_operations(&database, profile, browser_id, None, None, None)?
+                .operations
                 .into_iter()
                 .filter(|operation| {
                     !matches!(operation["phase"].as_str(), Some("completed" | "cancelled"))
