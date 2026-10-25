@@ -107,7 +107,7 @@ pub(super) fn discover(arguments: &Value, session: &str) -> Result<Value, super:
         let schema = operation_schema(category, operation)?;
         json!({"category":category,"operation":operation,"inputSchema":schema,
             "execution":if category == "browser" {json!({"tool":"browser_command","action":operation,
-                "arguments":if operation == "profile_duplicate" {"Supply params.sourceProfileId, or taskId to bind the source profile. Supply params.operationId except for choice inspect, which lists matching operations."} else {"Place these page arguments in params and supply taskId."}})}
+                "arguments":if operation=="browser_build" {"Supply params.profileId or taskId. inspect needs no operationId; open_selected continues a confirmed selection and requires serviceName, agentName and taskName."} else if operation == "profile_duplicate" {"Supply params.sourceProfileId, or taskId to bind the source profile. Supply params.operationId except for choice inspect, which lists matching operations."} else {"Place these page arguments in params and supply taskId."}})}
                 else {service_execution(operation)}})
     } else {
         json!({"category":category,"operations":names,"next":"Request one operation for its argument schema."})
@@ -206,15 +206,15 @@ fn operation_schema(category: &str, operation: &str) -> Result<Value, super::Jso
                 "additionalProperties":false,"properties":{},"required":[]}))
             }
             "browser_build"=>Some(json!({"type":"object","additionalProperties":false,"properties":{
-                "profileId":{"type":"string","minLength":1},"operationId":{"type":"string","minLength":1},"choice":{"enum":["inspect","select_for_next_launch","open_selected"]},"executablePath":{"type":"string"},"expectedSha256":{"type":"string"},"mode":{"enum":["cdp","cdp_free"]},"ownerConfirmed":{"type":"boolean"},"serviceName":{"type":"string"},"agentName":{"type":"string"},"taskName":{"type":"string"}
+                "profileId":{"type":"string","minLength":1},"operationId":{"type":"string","minLength":1},"choice":{"enum":["inspect","select_for_next_launch","open_selected"]},"buildId":{"type":"string"},"executablePath":{"type":"string"},"expectedSha256":{"type":"string"},"mode":{"enum":["cdp","cdp_free"]},"ownerConfirmed":{"type":"boolean"},"serviceName":{"type":"string"},"agentName":{"type":"string"},"taskName":{"type":"string"}
             }})),
             "mode_convert" => Some(json!({"type":"object","additionalProperties":false,"properties":{
                 "operationId":{"type":"string","minLength":1},"mode":{"enum":["cdp","cdp_free"]},
-                "choice":{"enum":["inspect","prepare","relaunch","pause_and_relaunch","reconcile","retry_graceful_close","force_close","focus","restore_previous","select_build","cancel"]},"ownerConfirmed":{"type":"boolean"},"executablePath":{"type":"string"},"expectedSha256":{"type":"string"}
+                "choice":{"enum":["inspect","prepare","relaunch","pause_and_relaunch","reconcile","retry_graceful_close","force_close","focus","restore_previous","select_build","cancel"]},"ownerConfirmed":{"type":"boolean"},"buildId":{"type":"string"},"executablePath":{"type":"string"},"expectedSha256":{"type":"string"}
             },"allOf":[{"if":{"properties":{"choice":{"const":"inspect"}},"required":["choice"]},"then":{},"else":{"required":["operationId","mode"]}}]})),
             "profile_duplicate" => Some(json!({"type":"object","additionalProperties":false,"properties":{
                 "operationId":{"type":"string","minLength":1},"sourceProfileId":{"type":"string","minLength":1},"destinationName":{"type":"string","minLength":1},
-                "choice":{"enum":["inspect","prepare","reconcile","retry_launch","finish_without_opening","open_source","focus_source","close_and_duplicate","cancel"]},"ownerConfirmed":{"type":"boolean"},"launch":{"type":"boolean"},"executablePath":{"type":"string"},"expectedSha256":{"type":"string"},"mode":{"enum":["cdp","cdp_free"]}
+                "choice":{"enum":["inspect","prepare","reconcile","retry_launch","finish_without_opening","open_source","focus_source","close_and_duplicate","cancel"]},"ownerConfirmed":{"type":"boolean"},"launch":{"type":"boolean"},"buildId":{"type":"string"},"executablePath":{"type":"string"},"expectedSha256":{"type":"string"},"mode":{"enum":["cdp","cdp_free"]}
             },"allOf":[{"if":{"properties":{"choice":{"const":"inspect"}},"required":["choice"]},"then":{},"else":{"required":["operationId"]}}]})),
             "native_capture" => Some(json!({"type":"object","additionalProperties":false,"properties":{"region":{"type":"object","properties":{"x":{"type":"integer"},"y":{"type":"integer"},"width":{"type":"integer","minimum":1},"height":{"type":"integer","minimum":1}},"required":["x","y","width","height"],"additionalProperties":false}},"required":[]})),
             "native_input" => Some(json!({"type":"object","additionalProperties":false,"properties":{"actions":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"object"}},"controlEpoch":{"type":"integer","minimum":0}},"required":["actions"]})),

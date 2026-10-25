@@ -4,8 +4,7 @@ use super::super::browser_mode_operation::{
     Replacement, Request,
 };
 use super::browser_build_selection::{
-    executable_digest, inspect_executable, profile_data_version, requested_build, verify_build,
-    ExecutableEvidence,
+    executable_digest, inspect_executable, profile_data_version, verify_build, ExecutableEvidence,
 };
 use super::*;
 use agent_browser_service_model::{
@@ -138,7 +137,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 Some("cdp_free") => Mode::CdpFree,
                 _ => return Err("mode_operation_original_posture_unverified:refresh the current browser before conversion".into()),
             };
-            let selected_build = requested_build(command)?;
+            let selected_build = self.requested_profile_build(command, &profile.id)?;
             let mut previous_build = selected_build
                 .as_ref()
                 .and_then(|_| original.executable_path.as_ref())
@@ -193,6 +192,16 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                     );
                 }
             }
+        }
+        if optional_string(command, "choice") != Some("select_build")
+            && optional_string(command, "buildId").is_some_and(|id| {
+                binding
+                    .selected_build
+                    .as_ref()
+                    .is_none_or(|build| build.id != id)
+            })
+        {
+            return Err("mode_operation_id_conflict:continue the retained build selection".into());
         }
         let requested_mode = match optional_string(command, "mode") {
             Some("cdp") => Mode::Cdp,
@@ -289,8 +298,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 }
                 let selected = match choice {
                     "select_build" => {
-                        let build =
-                            requested_build(command)?.ok_or("browser_build_selection_required")?;
+                        let build = self
+                            .requested_profile_build(command, &binding.profile.id)?
+                            .ok_or("browser_build_selection_required")?;
                         Choice::SelectExecutable {
                             executable: build.path,
                             sha256: build.sha256.ok_or("browser_build_unavailable")?,
@@ -348,6 +358,11 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
 
 fn decorate_build_view(view: &mut Value, binding: &Binding) {
     if let Some(build) = &binding.selected_build {
+        view["compatibility"] = super::browser_build_selection::compatibility(
+            binding.profile_data_version.as_deref(),
+            binding.original.browser_family.as_deref(),
+            build,
+        );
         view["requestedBuild"] = build.public();
         view["selectedBuild"] = if view["effectiveBuild"].is_object() {
             view["effectiveBuild"].clone()

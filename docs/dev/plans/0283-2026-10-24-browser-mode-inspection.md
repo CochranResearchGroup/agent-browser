@@ -433,3 +433,21 @@ normal path. An unspecified open mode preserves an existing recorded profile
 posture; a new profile still defaults to CDP. Explicit automation or No-CDP
 selection remains independent of the executable. This prevents a build-only
 choice from silently enabling CDP during the next open.
+
+### Shared guidance overlap
+
+The retained P279 authentication/receipts checkout has uncommitted changes in
+README, CLI help and the primary skill. Its authentication/playbook sections
+remain with that lane. P283 is the primary writer for browser profile/build
+sections, the MCP command help section and `cli-and-service.md` profile guidance.
+These are separate section surfaces in shared files. Preserve the foreign
+checkout and reconcile additive documentation hunks at integration; do not take
+custody of its authentication code or guidance. P283 leaves package metadata
+and authentication references with P279.
+
+The build contract also exposes explicit `open_selected` as an adapter to the
+existing managed-open path. A selection receipt binds profile, current executable
+pin, reviewed SHA-256 and independent mode. The ordinary open path accepts
+`buildSelectionOperationId` for that same verification. Repeated opening uses a
+stable task name; build operations do not replay website actions. Actual loaded
+bytes and mode are checked before a selected opening can report success.

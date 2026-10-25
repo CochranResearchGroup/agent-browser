@@ -1,3 +1,4 @@
+#![cfg(target_os = "linux")]
 use super::*;
 use serde_json::json;
 
@@ -249,4 +250,37 @@ fn build_selection_receipt_cannot_open_changed_build_or_different_profile() {
             "A stale selection cannot launch or operate any browser"
         );
     }
+}
+
+#[test]
+fn build_selection_opaque_discovery_choice_executes_without_exposing_profile_paths() {
+    let fixture = Fixture::new();
+    std::fs::create_dir(fixture.root.join("profile-a")).unwrap();
+    let store = fixture.store(false);
+    let mut state = store.load_session_state().unwrap();
+    state
+        .profile_executables
+        .insert("profile-a".into(), "/usr/bin/python3".into());
+    store.save_session_state(&state).unwrap();
+    let calls = Rc::new(Cell::new(0));
+    let requests = Rc::new(Cell::new(0));
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
+    let inspected=host.handle_command(&json!({"action":"browser_session_build_select","profileId":"profile-a","choice":"inspect","executablePath":"/usr/bin/python3"}));
+    assert_eq!(inspected["success"], true, "{inspected}");
+    let mut selected = inspected["data"]["availableBuilds"][0]["selection"].clone();
+    selected["action"] = json!("browser_session_build_select");
+    selected["profileId"] = json!("profile-a");
+    selected["operationId"] = json!("opaque-choice");
+    selected["choice"] = json!("select_for_next_launch");
+    selected["mode"] = json!("cdp");
+    selected["ownerConfirmed"] = json!(true);
+    let selected = host.handle_command(&selected);
+    assert_eq!(
+        selected["success"], true,
+        "A discovered opaque choice must be executable: {selected}"
+    );
+    assert_eq!((calls.get(), requests.get()), (0, 0));
+    assert!(!inspected
+        .to_string()
+        .contains(&fixture.root.to_string_lossy().to_string()));
 }

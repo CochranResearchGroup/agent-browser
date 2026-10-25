@@ -1,6 +1,6 @@
 //! Hosted profile duplication joins the existing browser owner and private copy
 //! journal. Public requests carry intent, never process identity or profile paths.
-use super::browser_build_selection::{requested_build, verify_build, ExecutableEvidence};
+use super::browser_build_selection::{verify_build, ExecutableEvidence};
 use super::*;
 #[path = "profile_duplicate_copy.rs"]
 pub(super) mod profile_duplicate_copy;
@@ -79,6 +79,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                     "profile_duplicate_named_source_required:promote this profile first".into(),
                 );
             }
+            let target_build = self.requested_profile_build(command, &source_profile_id)?;
             let intent = PublicIntent {
                 operation_id: operation_id.to_owned(),
                 source_profile_id,
@@ -91,7 +92,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                     .and_then(Value::as_bool)
                     .unwrap_or(true),
                 profile_data_version: super::browser_build_selection::profile_data_version(source),
-                target_build: requested_build(command)?,
+                target_build,
                 target_mode: match command.get("mode") {
                     None => None,
                     Some(Value::String(mode)) if matches!(mode.as_str(), "cdp" | "cdp_free") => {
@@ -137,6 +138,14 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         if optional_string(command, "mode")
             .is_some_and(|mode| Some(mode) != intent.target_mode.as_deref())
         {
+            return Err("profile_duplicate_operation_id_conflict".into());
+        }
+        if optional_string(command, "buildId").is_some_and(|id| {
+            intent
+                .target_build
+                .as_ref()
+                .is_none_or(|build| build.id != id)
+        }) {
             return Err("profile_duplicate_operation_id_conflict".into());
         }
         let choice = optional_string(command, "choice").unwrap_or("prepare");
@@ -208,6 +217,11 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
 fn build_view(mut view: Value, intent: &PublicIntent) -> Value {
     if let Some(build) = &intent.target_build {
         view["selectedBuild"] = build.public();
+        view["compatibility"] = super::browser_build_selection::compatibility(
+            intent.profile_data_version.as_deref(),
+            None,
+            build,
+        );
         view["profileDataVersion"] = json!(intent.profile_data_version);
         view["compatibilityEvidenceSource"] = json!("prepare_snapshot");
         view["profileDataReadable"] = json!("unverified");

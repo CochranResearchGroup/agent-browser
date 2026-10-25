@@ -40,6 +40,18 @@ impl BrowserSessionSqliteStore {
     ) -> Result<Option<Value>, String> {
         retained(&self.connection, id, intent)
     }
+    pub(crate) fn current_profile_build_selection(
+        &self,
+        profile_id: &str,
+        build_id: &str,
+        mode: &str,
+    ) -> Result<Option<String>, String> {
+        let exists:bool=self.connection.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='browser_profile_build_selections')",[],|row|row.get(0)).map_err(|_|"browser_build_receipt_unavailable")?;
+        if !exists {
+            return Ok(None);
+        }
+        self.connection.query_row("SELECT id FROM browser_profile_build_selections WHERE json_extract(receipt,'$.profileId')=?1 AND json_extract(receipt,'$.selectedBuild.id')=?2 AND json_extract(receipt,'$.requestedMode')=?3 ORDER BY rowid DESC LIMIT 1",params![profile_id,build_id,mode],|row|row.get(0)).optional().map_err(|_|"browser_build_receipt_unavailable".into())
+    }
     pub(crate) fn profile_build_selection_by_id(
         &self,
         id: &str,

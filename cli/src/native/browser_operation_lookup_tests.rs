@@ -493,6 +493,15 @@ fn mode_binding_uses_actual_borrowed_process_posture_instead_of_catalog_intent()
         effect_counts,
         "A build switch cannot close the original without informed confirmation"
     );
+    std::fs::write(&selected_path, b"#!/bin/sh\nexit 0\n").unwrap();
+    selection["ownerConfirmed"] = json!(true);
+    let unavailable = host.mode_convert(&selection).unwrap();
+    assert_eq!(
+        unavailable["phase"], "prepared",
+        "An unsupported launcher must be refused before closing the original: {unavailable}"
+    );
+    assert_eq!(unavailable["failure"], "browser_build_launcher_unverified");
+    assert_eq!((calls.get(), requests.get()), effect_counts);
     let readback=host.handle_command(&json!({"action":"browser_session_mode_convert","sessionId":opened.session_id,"sessionName":"Alice","choice":"inspect","operationId":"selected-build"}));
     assert_eq!(
         readback["data"]["operations"][0]["selectedBuild"]["sha256"], selected_sha,

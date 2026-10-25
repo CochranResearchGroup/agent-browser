@@ -17,13 +17,95 @@ pub(super) struct ExecutableEvidence {
     pub version: Option<String>,
     pub sha256: Option<String>,
     pub available: bool,
+    #[serde(default)]
+    pub native_binary: Option<bool>,
 }
 impl ExecutableEvidence {
     pub fn public(&self) -> Value {
         json!({"id":self.id,"name":self.name,"family":self.family,"version":self.version,
-            "sha256":self.sha256,"available":self.available,
+            "sha256":self.sha256,"available":self.available,"nativeBinary":self.native_binary,
             "familyEvidence":if self.version.is_some(){"version_output"}else{"filename_hint_or_unknown"}})
     }
+}
+
+fn native_binary(path: &Path) -> Option<bool> {
+    #[cfg(target_os = "linux")]
+    {
+        let mut magic = [0; 4];
+        Some(
+            std::fs::File::open(path)
+                .and_then(|mut file| file.read_exact(&mut magic))
+                .is_ok()
+                && magic == *b"\x7fELF",
+        )
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = path;
+        None
+    }
+}
+pub(super) fn build_id(path: &str, sha256: &str) -> String {
+    format!(
+        "build:{:x}",
+        Sha256::digest(format!("{path}\0{sha256}").as_bytes())
+    )
+}
+fn candidate_paths(command: &Value, additional: &[String]) -> Result<Vec<PathBuf>, String> {
+    let mut paths = std::collections::BTreeSet::new();
+    if let Some(path) = optional_string(command, "executablePath") {
+        if !Path::new(path).is_absolute() {
+            return Err("browser_build_absolute_path_required".into());
+        }
+        paths.insert(PathBuf::from(path));
+    } else {
+        for path in additional {
+            if Path::new(path).is_absolute() {
+                paths.insert(PathBuf::from(path));
+            }
+        }
+        if let Ok(path) = std::env::var("AGENT_BROWSER_EXECUTABLE_PATH") {
+            if Path::new(&path).is_absolute() {
+                paths.insert(PathBuf::from(path));
+            }
+        }
+        if let Some(path) = crate::native::cdp::chrome::find_chrome() {
+            paths.insert(path);
+        }
+        for path in [
+            "/opt/google/chrome/chrome",
+            "/usr/lib/chromium/chromium",
+            "/usr/lib/chromium-browser/chromium-browser",
+        ] {
+            if Path::new(path).is_file() {
+                paths.insert(PathBuf::from(path));
+            }
+        }
+    }
+    Ok(paths
+        .into_iter()
+        .map(|path| path.canonicalize().unwrap_or(path))
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect())
+}
+pub(super) fn compatibility(
+    profile_version: Option<&str>,
+    source_family: Option<&str>,
+    build: &ExecutableEvidence,
+) -> Value {
+    let major = |value: Option<&str>| {
+        value
+            .and_then(|version| version.split('.').next())
+            .and_then(|part| part.parse::<u32>().ok())
+    };
+    let relation = match (major(profile_version), major(build.version.as_deref())) {
+        (Some(profile), Some(target)) if target < profile => "older_major",
+        (Some(profile), Some(target)) if target > profile => "newer_major",
+        (Some(_), Some(_)) => "same_major_unverified_storage",
+        _ => "unverified",
+    };
+    json!({"profileDataVersion":profile_version,"versionRelation":relation,"familyRelation":match(source_family,build.family.as_deref()){(Some(source),Some(target)) if source!=target=>"different",(Some(_),Some(_))=>"same_family_unverified_storage",_=>"unverified"},"familyPolicy":"advisory","storageFormat":"unverified","credentialStorage":"unverified","authenticationContinuity":"unverified","profileDataReadable":"unverified","options":["duplicate_and_test","choose_another_build","confirmed_original_profile_attempt","cancel"]})
 }
 
 pub(super) fn executable_digest(path: &Path) -> Result<String, String> {
@@ -191,6 +273,7 @@ pub(super) fn inspect_executable(path: &Path) -> ExecutableEvidence {
             format!("{path}\0{}", sha256.as_deref().unwrap_or("unavailable")).as_bytes()
         )
     );
+    let native_binary = native_binary(Path::new(&path));
     ExecutableEvidence {
         path,
         id,
@@ -198,6 +281,7 @@ pub(super) fn inspect_executable(path: &Path) -> ExecutableEvidence {
         family,
         version,
         available: executable && sha256.is_some() && stable,
+        native_binary,
         sha256,
     }
 }
@@ -210,6 +294,55 @@ pub(super) fn profile_data_version(profile: &BrowserProfileCatalogEntry) -> Opti
 impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserCommandEffects>
     BrowserSessionHost<P, E>
 {
+    fn profile_build_paths(&self, state: &BrowserSessionState, profile_id: &str) -> Vec<String> {
+        use agent_browser_service_model::BrowserLaunchCustodyStore;
+        let mut paths = state
+            .profile_executables
+            .get(profile_id)
+            .cloned()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let mut store = self
+            .persistence
+            .runtime_database_path()
+            .ok()
+            .and_then(|path| BrowserSessionSqliteStore::open_read_only(&path).ok());
+        for browser in state
+            .browsers
+            .values()
+            .filter(|browser| browser.profile_id == profile_id)
+        {
+            let process = state
+                .app_browser_attachments
+                .get(&browser.id)
+                .map(|attached| attached.request.process.clone())
+                .or_else(|| {
+                    store.as_mut().and_then(|store| {
+                        store
+                            .published_launch_process_identity(browser)
+                            .ok()
+                            .flatten()
+                    })
+                });
+            if let Some(path) = process.and_then(|process| process.executable_path) {
+                paths.push(path);
+            }
+        }
+        paths
+    }
+    pub(super) fn requested_profile_build(
+        &self,
+        command: &Value,
+        profile_id: &str,
+    ) -> Result<Option<ExecutableEvidence>, String> {
+        let extra = if optional_string(command, "executablePath").is_some() {
+            vec![]
+        } else {
+            let state = self.persistence.load_session_state()?;
+            self.profile_build_paths(&state, profile_id)
+        };
+        requested_build(command, &extra)
+    }
     pub(crate) fn browser_build_select(&mut self, command: &Value) -> Result<Value, String> {
         let choice = optional_string(command, "choice").unwrap_or("inspect");
         if choice == "open_selected" {
@@ -244,40 +377,58 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                     .map(|p| &p.profile)
             })
             .ok_or("browser_build_profile_missing")?;
-        let mut paths = std::collections::BTreeSet::new();
-        if let Some(p) = optional_string(command, "executablePath") {
-            if !Path::new(p).is_absolute() {
-                return Err("browser_build_absolute_path_required".into());
-            }
-            paths.insert(PathBuf::from(p));
-        }
-        if optional_string(command, "executablePath").is_none() {
-            if let Some(p) = state.profile_executables.get(profile_id) {
-                paths.insert(PathBuf::from(p));
-            }
-            if let Ok(p) = std::env::var("AGENT_BROWSER_EXECUTABLE_PATH") {
-                paths.insert(PathBuf::from(p));
-            }
-            if let Some(p) = crate::native::cdp::chrome::find_chrome() {
-                paths.insert(p);
-            }
-            for p in [
-                "/opt/google/chrome/chrome",
-                "/usr/lib/chromium/chromium",
-                "/usr/lib/chromium-browser/chromium-browser",
-            ] {
-                if Path::new(p).is_file() {
-                    paths.insert(PathBuf::from(p));
-                }
-            }
-        }
-        let available = paths
+        let extra = self.profile_build_paths(&state, profile_id);
+        let paths = candidate_paths(command, &extra)?;
+        let rows = paths
             .into_iter()
-            .map(|p| inspect_executable(&p).public())
+            .map(|path| inspect_executable(&path))
+            .collect::<Vec<_>>();
+        let pin = state.profile_executables.get(profile_id).map(|path| {
+            rows.iter()
+                .find(|row| Path::new(&row.path) == Path::new(path))
+                .cloned()
+                .unwrap_or_else(|| inspect_executable(Path::new(path)))
+        });
+        let profile_version = profile_data_version(profile);
+        let source_family = pin.as_ref().and_then(|pin| pin.family.as_deref());
+        let available = rows
+            .iter()
+            .map(|row| {
+                let mut value = row.public();
+                value["selection"] = json!({"buildId":row.id,"expectedSha256":row.sha256});
+                value["source"] = json!(if pin.as_ref().is_some_and(|pin| pin.id == row.id) {
+                    "profile_pin"
+                } else {
+                    "installed_or_configured"
+                });
+                value["compatibility"] =
+                    compatibility(profile_version.as_deref(), source_family, row);
+                value
+            })
+            .collect::<Vec<_>>();
+        let current_selection = if let Some(pin) = &pin {
+            BrowserSessionSqliteStore::open_read_only(&self.persistence.runtime_database_path()?)?
+                .current_profile_build_selection(
+                profile_id,
+                &pin.id,
+                if profile.manual_login_url.is_some() {
+                    "cdp_free"
+                } else {
+                    "cdp"
+                },
+            )?
+        } else {
+            None
+        };
+        let active_tasks = state
+            .sessions
+            .values()
+            .filter(|task| task.profile_id == profile_id)
+            .map(|task| json!({"id":task.id,"name":task.name,"browserId":task.browser_id}))
             .collect::<Vec<_>>();
         Ok(
             json!({"schemaVersion":"agent-browser.build-selection.v1","profileId":profile.id,"profileName":profile.name,
-            "profileDataVersion":profile_data_version(profile),"credentialStorage":"unverified","profileDataReadable":"unverified",
+            "profileDataVersion":profile_version,"profileKind":profile.kind,"nextLaunchMode":if profile.manual_login_url.is_some(){"cdp_free"}else{"cdp"},"nextLaunchBuild":pin.as_ref().map(ExecutableEvidence::public),"currentSelectionOperationId":current_selection,"activeTasks":active_tasks,"activeOperationId":state.profile_operation_ids.get(profile_id),"credentialStorage":"unverified","profileDataReadable":"unverified",
             "availableBuilds":available,"observedAtMs":current_unix_ms(),
             "warning":"A build change may migrate profile data or lose login. Previous executable selection does not restore profile bytes."}),
         )
@@ -288,19 +439,31 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             return Err("browser_build_operation_id_invalid".into());
         }
         let profile_id = required_string(command, "profileId")?;
-        let executable = required_string(command, "executablePath")?;
+        let executable = optional_string(command, "executablePath");
+        let requested_id = optional_string(command, "buildId");
+        if executable.is_none() && requested_id.is_none() {
+            return Err("browser_build_selection_required".into());
+        }
         let mode = required_string(command, "mode")?;
         if !matches!(mode, "cdp" | "cdp_free") {
             return Err("browser_build_mode_invalid".into());
         }
-        if !Path::new(executable).is_absolute() {
+        if executable.is_some_and(|path| !Path::new(path).is_absolute()) {
             return Err("browser_build_absolute_path_required".into());
         }
         if command["ownerConfirmed"] != true {
             return Err("browser_build_owner_confirmation_required:review migration and login risk; duplicate-and-test, choose another build or cancel".into());
         }
         let expected_sha = required_string(command, "expectedSha256")?;
-        let intent=serde_json::to_string(&json!({"profileId":profile_id,"executablePath":executable,"mode":mode,"sha256":expected_sha})).map_err(|_|"browser_build_intent_invalid")?;
+        let mut intent_value = json!({"profileId":profile_id,"mode":mode,"sha256":expected_sha});
+        if let Some(path) = executable {
+            intent_value["executablePath"] = json!(path);
+        }
+        if let Some(id) = requested_id {
+            intent_value["buildId"] = json!(id);
+        }
+        let intent =
+            serde_json::to_string(&intent_value).map_err(|_| "browser_build_intent_invalid")?;
         let database = self.persistence.runtime_database_path()?;
         let retained = BrowserSessionSqliteStore::open_read_only(&database)?
             .profile_build_selection_receipt(operation_id, &intent)?;
@@ -318,13 +481,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                     .map(|p| &p.profile)
             })
             .ok_or("browser_build_profile_missing")?;
-        let selected = inspect_executable(Path::new(executable));
-        if !selected.available {
-            return Err("browser_build_unavailable:choose another build or cancel".into());
-        }
-        if selected.sha256.as_deref() != Some(expected_sha) {
-            return Err("browser_build_changed:inspect and confirm the current build".into());
-        }
+        let selected = self
+            .requested_profile_build(command, profile_id)?
+            .ok_or("browser_build_selection_required")?;
         let mut store = BrowserSessionSqliteStore::open(
             database.parent().ok_or("browser_build_store_unavailable")?,
         )?;
@@ -359,20 +518,32 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
 }
 
 /// Review exact executable bytes without asserting profile or credential portability.
-pub(super) fn requested_build(command: &Value) -> Result<Option<ExecutableEvidence>, String> {
-    let Some(path) = optional_string(command, "executablePath") else {
+fn requested_build(
+    command: &Value,
+    additional: &[String],
+) -> Result<Option<ExecutableEvidence>, String> {
+    let requested_id = optional_string(command, "buildId");
+    if optional_string(command, "executablePath").is_none() && requested_id.is_none() {
         return Ok(None);
-    };
-    if !Path::new(path).is_absolute() {
-        return Err("browser_build_absolute_path_required".into());
     }
     let expected = required_string(command, "expectedSha256")?;
-    let selected = inspect_executable(Path::new(path));
+    let path = candidate_paths(command, additional)?
+        .into_iter()
+        .find(|path| {
+            requested_id.is_none_or(|id| build_id(&path.to_string_lossy(), expected) == id)
+        })
+        .ok_or("browser_build_unavailable:refresh discovery or choose another build")?;
+    let selected = inspect_executable(&path);
     if !selected.available {
         return Err("browser_build_unavailable:choose another build or cancel".into());
     }
     if selected.sha256.as_deref() != Some(expected) {
         return Err("browser_build_changed:inspect and confirm the current build".into());
+    }
+    if selected.native_binary == Some(false) {
+        return Err(
+            "browser_build_launcher_unverified:select the actual browser executable".into(),
+        );
     }
     Ok(Some(selected))
 }
@@ -382,6 +553,11 @@ pub(super) fn verify_build(path: &str, expected: Option<&str>) -> Result<(), Str
         return Ok(());
     };
     let path = Path::new(path);
+    if native_binary(path) == Some(false) {
+        return Err(
+            "browser_build_launcher_unverified:select the actual browser executable".into(),
+        );
+    }
     let executable = path.is_file() && {
         #[cfg(unix)]
         {
