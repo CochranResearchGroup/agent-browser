@@ -190,3 +190,131 @@ fn operation_lookup_keeps_current_mode_discoverable_after_long_scoped_history() 
     assert_eq!(host.state(), &before);
     assert_eq!((calls.get(), requests.get()), effects_before);
 }
+
+#[test]
+fn operation_lookup_keeps_current_copies_discoverable_after_long_scoped_history() {
+    let fixture = Fixture::new();
+    let calls = Rc::new(Cell::new(0));
+    let requests = Rc::new(Cell::new(0));
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
+    let mut destinations = std::collections::BTreeMap::new();
+    for id in ["zz-current-copy", "zy-pending-copy"] {
+        let prepared = host.handle_command(&json!({"action":"browser_session_profile_duplicate","sourceProfileId":"profile-a","operationId":id,"destinationName":id,"launch":false,"choice":"prepare"}));
+        assert_eq!(prepared["success"], true, "{prepared}");
+        destinations.insert(id.to_owned(), prepared["data"]["destination"].clone());
+    }
+    let opened = host
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let mut state = host.state().clone();
+    let tab = ManagedBrowserTab {
+        id: "retained-copy-tab".into(),
+        target_id: "synthetic-target".into(),
+        browser_id: opened.browser_id.clone(),
+        session_id: opened.session_id.clone(),
+        created_at_ms: 100,
+        last_activity_at_ms: 100,
+    };
+    state.tabs.insert(tab.id.clone(), tab.clone());
+    state.sessions.get_mut(&opened.session_id).unwrap().current_tab_id = Some(tab.id.clone());
+    fixture.store(false).save_session_state(&state).unwrap();
+    let browser = state.browsers[&opened.browser_id].clone();
+    let session = state.sessions[&opened.session_id].clone();
+    let path = fixture.root.join("profile-duplication/operations.sqlite3");
+    let mut journal = rusqlite::Connection::open(&path).unwrap();
+    journal.execute_batch("CREATE TABLE profile_duplicate_operations(id TEXT PRIMARY KEY,destination TEXT NOT NULL,terminal INTEGER NOT NULL DEFAULT 0,state TEXT NOT NULL)").unwrap();
+    let transaction = journal.transaction().unwrap();
+    // Seed valid retained journal records; only public owner replies are asserted below.
+    let seed = |id: &str, wrong_task: bool, terminal: bool| {
+        let destination = destinations
+            .get(id)
+            .cloned()
+            .unwrap_or_else(|| json!({"id":format!("destination-{id}"),"name":id}));
+        if terminal {
+            let intent = json!({"operation_id":id,"source_profile_id":"profile-a","destination_profile_id":destination["id"],"destination_name":destination["name"],"launch":false,"cancelled":false});
+            transaction
+                .execute(
+                    "INSERT INTO profile_duplicate_host_intents(id,intent) VALUES(?1,?2)",
+                    rusqlite::params![id, intent.to_string()],
+                )
+                .unwrap();
+        }
+        let mut session = session.clone();
+        let mut tab = tab.clone();
+        let mut browser = browser.clone();
+        if wrong_task {
+            session.id = "unrelated-task".into();
+            tab.session_id = session.id.clone();
+            browser.active_session_ids = vec![session.id.clone()];
+        }
+        let binding = json!({"borrowed_anchor":null,"original":{"pid":browser.pid,"startToken":"private-process-evidence","executablePath":"/private/chrome","browserFamily":null},"browser":browser,"session":session,"tab":tab,"executable":"/private/chrome","digest":"synthetic-build","close_dispatched":false,"clean_close":false,"reviewed_tasks":[session.id]});
+        transaction
+            .execute(
+                "INSERT INTO profile_duplicate_owner_bindings(id,binding) VALUES(?1,?2)",
+                rusqlite::params![id, binding.to_string()],
+            )
+            .unwrap();
+        let operation = json!({"request":{"operationId":id,"source":{"id":"profile-a","name":"Source","userDataDir":fixture.root.join("profile-a"),"browserBuild":"fixture-build","generation":1},"destination":{"id":destination["id"],"name":destination["name"],"userDataDir":fixture.root.join(id)},"launch":false},"phase":if terminal {"cancelled"} else {"prepared"},"affectedTaskIds":[session.id],"duplicate":null,"launch":null,"destinationTask":null,"failure":null});
+        transaction.execute("INSERT INTO profile_duplicate_operations(id,destination,terminal,state) VALUES(?1,?2,?3,?4)",rusqlite::params![id,destination["id"].as_str().unwrap(),terminal,operation.to_string()]).unwrap();
+    };
+    seed("zz-current-copy", false, false);
+    seed("zy-pending-copy", false, false);
+    for index in 0..300 {
+        for wrong_task in [false, true] {
+            seed(
+                &format!("history-{wrong_task}-{index:04}"),
+                wrong_task,
+                true,
+            );
+        }
+    }
+    transaction.commit().unwrap();
+    let persistence = fixture.store(false);
+    let mut persisted = persistence.load_session_state().unwrap();
+    persisted
+        .profile_operation_ids
+        .insert("profile-a".into(), "zz-current-copy".into());
+    persistence.save_session_state(&persisted).unwrap();
+    drop(host);
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
+    let before = host.state().clone();
+    let effects_before = (calls.get(), requests.get());
+    let inspect = json!({"action":"browser_session_profile_duplicate","sourceProfileId":"profile-a","sessionId":opened.session_id,"sessionName":"Alice","choice":"inspect"});
+    let response = host.handle_command(&inspect);
+    assert_eq!(
+        response["success"], true,
+        "Long copy history must not hide pending work: {response}"
+    );
+    let operations = response["data"]["operations"].as_array().unwrap();
+    assert_eq!(
+        operations.len(),
+        256,
+        "Wrong-task history cannot consume the scoped budget"
+    );
+    assert_eq!(operations[0]["operationId"], "zz-current-copy");
+    assert_eq!(operations[1]["operationId"], "zy-pending-copy");
+    assert_eq!(response["data"]["historyTruncated"], true);
+    assert!(operations
+        .iter()
+        .all(|operation| !operation["operationId"].as_str().unwrap().contains("true")));
+    assert!(!response.to_string().contains("private"));
+    assert_eq!(host.state(), &before);
+    assert_eq!((calls.get(), requests.get()), effects_before);
+    let mut exact = inspect.clone();
+    exact["operationId"] = json!("history-false-0000");
+    let older = host.handle_command(&exact);
+    assert_eq!(older["success"], true, "{older}");
+    assert_eq!(older["data"]["operations"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        older["data"]["operations"][0]["operationId"],
+        "history-false-0000"
+    );
+    assert_eq!(older["data"]["historyTruncated"], false);
+    let busy = host.handle_command(&json!({"action":"browser_session_profile_duplicate","sourceProfileId":"profile-a","sessionId":opened.session_id,"sessionName":"Alice","operationId":"new-copy-after-reload","choice":"prepare"}));
+    assert_eq!(
+        busy["data"]["activeOperation"]["operationId"], "zz-current-copy",
+        "{busy}"
+    );
+    assert_eq!(host.state(), &before);
+    assert_eq!((calls.get(), requests.get()), effects_before);
+}
