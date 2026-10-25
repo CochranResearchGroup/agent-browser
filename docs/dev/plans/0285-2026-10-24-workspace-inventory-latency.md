@@ -1,6 +1,6 @@
 # P285: Workspace inventory latency
 
-Status: IN_PROGRESS
+Status: CLOSED
 Product lane: PL-BUGFIX
 Work item: CochranResearchGroup/agent-browser#393
 Branch: fix/workspace-inventory-latency-393
@@ -33,3 +33,7 @@ PR410 is merged and sealed combined candidate4c8131146eb9 is installed through t
 ## Cold observation follow-up
 
 The next ten public contexts reproduce one4.01s first visit: the first response contains seven unknown candidate tabs and no live tabs, then the next poll contains six live tabs. Targeted follow-up reads show the owner already has live evidence about600ms after the initial unknown response. Primary writer expands only to the dashboard selected-context poll and read-coordinator helper; P283 retains Rust observation/store and profile source, and Native ownership is unchanged. Implement at most three250ms startup catch-up reads only while candidate presence is wholly unknown. Stop early on live/absent/error, preserve completion-driven serialization and visibility suspension, and retain normal3s polling afterward. Qualification must cover the actual scheduler and unknown-to-live transition, exhausted bound, failure, empty inventory, cleanup and normal cadence.
+
+## Final disposition
+
+PR416's bounded cold catch-up is installed and accepted on combined source fd6dcd8f9 / binary e0d5525e92cc. The actual cold visit improves3999.8ms to1955.6ms; five fresh contexts have median776.8ms. All11 browser roots survive and all16 probe process generations are independently absent. See the final installed section in the evidence note. P289 retains the separate Native workflow boundary. Retain the primary checkout and pinned artifacts.

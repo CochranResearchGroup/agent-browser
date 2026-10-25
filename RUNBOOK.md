@@ -1,10 +1,8 @@
 # Runbook
 
-[P290 writer executable continuity](docs/dev/plans/0290-2026-10-24-writer-executable-continuity.md), #417, repairs PR415 live-writer custody loss after executable unlink through public CLI TDD. PR419 carries the qualified source;221 workstation tests, public fixtures, strict Rust quality and docs pass. Production is unchanged.
+Combined source fd6dcd8f9 is installed as binary e0d5525e92cc through the supported preserve installer, including P285 cold catch-up, P289 terminal recovery and P288/P290 writer repairs. All11 pre-existing browser roots survive; public auth/workspace/assets and install doctor pass. [P285 acceptance](docs/dev/notes/0285-2026-10-24-workspace-inventory-latency.md) closes #393 with cold rail1955.6ms versus3999.8ms and five-context median776.8ms.
 
-[P288 writer custody](docs/dev/plans/0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. PR415 carries the qualified source;221 workstation cases, strict Rust, fixtures and docs pass. Installed production is unchanged.
-
-P285/#393 routing repair is merged (PR410) and installed as sealed candidate4c8131146eb9, preserving all11 existing browser process generations. Paired workspace median improves487.841ms to32.755ms. Public rail is usually subsecond, but one4.98s first-context tail remains unexplained; #393 stays open. Production synthetic open fails on pending Native acquisition readback; #412 owns that distinct recovery. See [P285 evidence](docs/dev/notes/0285-2026-10-24-workspace-inventory-latency.md).
+[P289/#412](docs/dev/notes/0289-2026-10-24-terminal-acquisition-recovery.md) stays open: installed Native terminal replay and synthetic open/continue pass, but the owned handoff POST aborts at the15s UI deadline and iframe pixels remain unaccepted. Exact failed-reservation recovery preserves active peers. Initial close publication-fence errors and subsequent owner/OS cleanup are recorded separately. Next packet measures the actual handoff request stage; no speculative timeout increase or authentication diagnosis. Retain primary checkout and pinned artifacts.
 
 [P284 operator-led upgrades](docs/dev/plans/0284-2026-10-24-operator-led-upgrades.md), #399, removes persistent upgrade markers and warning-based upgrade vetoes. The operator controls their workstation; optional live-work inspection is advisory. PR406 is integrated and exact candidate417d5886c68e is installed and accepted. Doctor and same-tab unsaved-work continuity pass.
 

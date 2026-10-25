@@ -1,6 +1,7 @@
 # P289: Terminal Native acquisition recovery
 
-Status: IN_PROGRESS
+State: OPEN
+Lane: P289
 Product lane: PL-BUGFIX
 Work item: CochranResearchGroup/agent-browser#412
 Branch: fix/native-acquisition-412
@@ -14,3 +15,11 @@ Use the public same-key reconciliation seam, capture released-outcome regression
 ## Producer dependency
 
 Current Native canonical source rejects same-key Released replay in complete_acquire, so a fake transport returning the released assignment alone cannot qualify the installed repair. Remote View#657 / plan0198 owns the minimal producer fix through the real HTTP consumer close/replay fixture in a bounded auxiliary. It returns exact terminal history with original fingerprint validation and no reallocation; no new lookup endpoint or private-store integration. Merge/adopt producer before claiming actual consumer recovery. Agent Browser's387 model cases pass; the first CLI filename filter selected zero cases, corrected to the actual pool_tests module before any qualification claim.
+
+## Current State
+
+Terminal acquisition recovery is merged, installed and accepted: old Released history is retained, fresh synthetic open/continue succeeds after exact failed-reservation recovery, and zero acquisitions remain pending. Full Native viewport acceptance fails because the exact owned handoff POST aborts at the component deadline. Follow the evidence note; do not claim pixels or an authentication cause. Retain the primary/candidates.
+
+## Next bounded packet
+
+Own only measurement of the existing-task handoff HTTP producer/preparation/relay and exact original outcome. Up to three targeted diagnostic experiments, one real-boundary regression and one semantic repair. Do not mask a stalled producer by raising the15s UI deadline. Existing deployment authority applies after touched-surface qualification; native viewer ownership and all peer processes remain preserved. Recheck scope and overlap before editing a new source seam.
