@@ -413,7 +413,7 @@ def main():
             if args.build_target:
                 build_pair={}
                 for role,path in [('source',args.chrome),('target',args.build_target)]:
-                    discovered=call('browser_command',dict(action='build_select',params=dict(profileId=source_task['profileId'],choice='inspect',executablePath=path)))
+                    discovered=call('browser_command',dict(action='browser_build',params=dict(profileId=source_task['profileId'],choice='inspect',executablePath=path)))
                     digest=hashlib.file_digest(open(path,'rb'),'sha256').hexdigest()
                     row=next(row for row in discovered['availableBuilds'] if row['sha256']==digest)
                     assert row['available'] and row['nativeBinary'] is True and row['version'], row
@@ -507,11 +507,11 @@ def main():
                     # The completed copy is reused through its published lineage,
                     # rather than copied again or replaced by an empty directory.
                     copied_id=copied['destination']['id']
-                    evidence=call('browser_command',dict(action='build_select',params=dict(profileId=copied_id,choice='inspect',executablePath=private_chrome)))
+                    evidence=call('browser_command',dict(action='browser_build',params=dict(profileId=copied_id,choice='inspect',executablePath=private_chrome)))
                     selected=next(row for row in evidence['availableBuilds'] if row['sha256']==build_pair['source']['sha256'])
-                    selected_receipt=call('browser_command',dict(action='build_select',params=dict(profileId=copied_id,operationId='copy-alternate-build',choice='select_for_next_launch',mode='cdp_free',ownerConfirmed=True,**selected['selection'])))
+                    selected_receipt=call('browser_command',dict(action='browser_build',params=dict(profileId=copied_id,operationId='copy-alternate-build',choice='select_for_next_launch',mode='cdp_free',ownerConfirmed=True,**selected['selection'])))
                     assert selected_receipt['phase']=='selected_for_next_launch'
-                    opened_copy=call('browser_command',dict(action='build_select',params=dict(profileId=copied_id,operationId='copy-alternate-build',choice='open_selected',serviceName='fixture',agentName='fixture',taskName='Retained independent copy')))
+                    opened_copy=call('browser_command',dict(action='browser_build',params=dict(profileId=copied_id,operationId='copy-alternate-build',choice='open_selected',serviceName='fixture',agentName='fixture',taskName='Retained independent copy')))
                     assert opened_copy['phase']=='opened',opened_copy
                     assert len(browsers())==1 and os.readlink('/proc/'+str(browsers()[0][0])+'/exe')==private_chrome
                     assert independent_marker.read_bytes()==b'destination-retained-across-recovery'

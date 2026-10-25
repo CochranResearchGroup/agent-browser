@@ -140,6 +140,6 @@ Startup: [diagnostics](references/cli-and-service.md#development-host-startup).
 
 ## Browser mode and builds
 
-Use `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `build_select`. Build family/version and CDP mode are independent. Inspect before choosing; copy success never proves login portability. Read [controls and recovery](references/cli-and-service.md#browser-build-selection) before changing a build. Reconcile original operations after lost replies.
+Use `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build family/version and CDP mode are independent. Inspect before choosing; copy success never proves login portability. Read [controls and recovery](references/cli-and-service.md#browser-build-selection) before changing a build. Reconcile original operations after lost replies.
 
 Diagnostics retain selection query fields. Rail presence revalidates at 250/500/1000 ms, then polls every three seconds.

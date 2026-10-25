@@ -1163,8 +1163,8 @@ profile and CDP mode remain independent. Family and older-version warnings are
 advisory; explicit confirmation cannot make a missing or changed executable
 usable. Select the actual native executable, rather than a shell launcher.
 
-MCP: discover `build_select`, then call `browser_command` with action
-`build_select` and `params: {"profileId":"PROFILE","choice":"inspect"}`.
+MCP: discover `browser_build`, then call `browser_command` with action
+`browser_build` and `params: {"profileId":"PROFILE","choice":"inspect"}`.
 An optional `taskId` binds the profile to that task. CLI:
 `agent-browser --json mcp browser-build '{"profileId":"PROFILE","choice":"inspect"}'`.
 HTTP uses `POST /api/command`, action `browser_session_build_select` and the

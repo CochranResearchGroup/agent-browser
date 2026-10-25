@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
@@ -234,7 +235,7 @@ def main():
                             for action in body['actions']:
                                 if action['kind']=='key':
                                     if action['chord'].lower() == 'alt+f4' and inject_pre_spawn.is_set():
-                                        Path(args.chrome).chmod(0o600)
+                                        Path(args.build_target or args.chrome).chmod(0o600)
                                         inject_pre_spawn.clear()
                                     result=run(['xdotool','key','--clearmodifiers',action['chord']])
                                 elif action['kind']=='text': result=run(['xdotool','type','--clearmodifiers','--delay','0','--',action['text']])
@@ -425,7 +426,7 @@ def main():
                 source_selection = {}
                 if args.build_target:
                     for role, path in [('source',args.chrome),('target',args.build_target)]:
-                        discovered=call('browser_command',dict(taskId=task['taskId'],action='build_select',params=dict(choice='inspect',executablePath=path)))
+                        discovered=call('browser_command',dict(taskId=task['taskId'],action='browser_build',params=dict(choice='inspect',executablePath=path)))
                         row=next(row for row in discovered['availableBuilds'] if row['sha256']==build_pair[role]['sha256'])
                         assert row['available'] and row['nativeBinary'] is True, row
                         build_pair[role].update(version=row['version'],family=row['family'])
@@ -433,6 +434,30 @@ def main():
                         build_evidence.append(dict(stage=role,profileDataVersion=discovered['profileDataVersion'],credentialStorage=discovered['credentialStorage'],profileDataReadable=discovered['profileDataReadable']))
                         if role=='target': target_selection=dict(executablePath=path,expectedSha256=row['sha256'])
                         else: source_selection=dict(executablePath=path,expectedSha256=row['sha256'])
+                if args.build_target:
+                    # All public adapters return the same owner evidence. These
+                    # discovery requests cannot replace or close the browser.
+                    before_discovery=[process_identity(pid) for pid,_ in browsers()]
+                    request_json=dict(profileId=task['profileId'],choice='inspect',executablePath=args.build_target)
+                    cli_reply=subprocess.run([str(Path(args.binary).resolve()),'--json','mcp','browser-build',json.dumps(request_json)],env=env,capture_output=True,text=True,timeout=30)
+                    assert cli_reply.returncode==0,cli_reply.stderr+cli_reply.stdout
+                    cli_data=json.loads(cli_reply.stdout)
+                    if 'data' in cli_data:cli_data=cli_data['data']
+                    assert cli_data['schemaVersion']=='agent-browser.build-selection.v1',cli_data
+                    stream_reply=subprocess.run([str(Path(args.binary).resolve()),'--json','stream','enable'],env=env,capture_output=True,text=True,timeout=30)
+                    assert stream_reply.returncode==0,stream_reply.stderr+stream_reply.stdout
+                    stream=json.loads(stream_reply.stdout)
+                    port=stream['data']['port']
+                    http_request=urllib.request.Request('http://127.0.0.1:'+str(port)+'/api/command',data=json.dumps(dict(request_json,action='browser_session_build_select')).encode(),headers={'Content-Type':'application/json'})
+                    with urllib.request.urlopen(http_request,timeout=30) as response:http_data=json.load(response)
+                    assert http_data['success'],http_data
+                    http_data=http_data['data']
+                    for adapter,data in [('CLI',cli_data),('HTTP',http_data)]:
+                        assert data['profileId']==task['profileId'] and data['nextLaunchMode']=='cdp'
+                        row=next(row for row in data['availableBuilds'] if row['sha256']==build_pair['target']['sha256'])
+                        assert row['version']==build_pair['target']['version']
+                        build_evidence.append(dict(stage='public_'+adapter,selectedBuildId=row['id'],version=row['version'],profileDataVersion=data['profileDataVersion'],credentialStorage=data['credentialStorage']))
+                    assert [process_identity(pid) for pid,_ in browsers()]==before_discovery,'build discovery changed physical browser identity'
                 prepared=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-one',mode='cdp_free',choice='prepare',**target_selection)))
                 assert prepared['phase']=='prepared',prepared
                 original_pid = browsers()[0][0]
@@ -470,7 +495,8 @@ def main():
                     return call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-one',mode='cdp_free',choice=choice,ownerConfirmed=confirmed)))
                 if args.recovery_case == 'lost-reply':
                     seq += 1
-                    mcp.stdin.write(json.dumps(dict(jsonrpc='2.0',id=seq,method='tools/call',params=dict(name='browser_command',arguments=dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-one',mode='cdp_free',choice='relaunch')))))+'\n');mcp.stdin.flush()
+                    lost_request=dict(jsonrpc='2.0',id=seq,method='tools/call',params=dict(name='browser_command',arguments=dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-one',mode='cdp_free',choice='relaunch',ownerConfirmed=bool(args.build_target)))))
+                    mcp.stdin.write(json.dumps(lost_request)+'\n');mcp.stdin.flush()
                     deadline=time.monotonic()+20
                     while not any(pid != original_pid for pid,_ in browsers()):
                         assert time.monotonic()<deadline,'replacement not launched';time.sleep(.02)
@@ -518,14 +544,14 @@ def main():
                 elif args.recovery_case and args.recovery_case != 'lost-reply':
                     wanted='replacement_pending' if args.recovery_case=='native-restore' else 'launch_absent'
                     deadline=time.monotonic()+15
-                    while changed['phase'] != wanted:
+                    while changed['phase'] != wanted and not (args.build_target and wanted=='launch_absent' and changed['phase']=='original_exited'):
                         assert time.monotonic()<deadline,changed
                         changed=convert('reconcile');time.sleep(.1)
                     assert changed['operationId']=='mode-one' and changed['failure'],changed
                     pending_processes=browsers()
                     assert len(pending_processes)==(1 if wanted=='replacement_pending' else 0),pending_processes
                     if args.restart_owner: fresh_requester(True)
-                    Path(args.chrome).chmod(0o755)
+                    Path(args.build_target or args.chrome).chmod(0o755)
                     suppress_replacement_windows.clear()
                     changed=convert('relaunch' if args.recovery_case=='pre-spawn-retry' else 'restore_previous',True)
                     deadline=time.monotonic()+15
@@ -537,7 +563,7 @@ def main():
                     if args.recovery_case!='pre-spawn-retry':
                         assert changed['effectiveMode']=='cdp' and changed['observedMode']=='cdp',changed
                         call('browser_navigate',dict(taskId=task['taskId'],url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/login-fixture'))
-                        changed=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-after-restore',mode='cdp_free',choice='relaunch')))
+                        changed=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-after-restore',mode='cdp_free',choice='relaunch',ownerConfirmed=bool(args.build_target),**target_selection)))
                 for _ in range(30):
                     if changed['phase']=='completed': break
                     time.sleep(.1)

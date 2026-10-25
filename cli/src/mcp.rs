@@ -12020,16 +12020,16 @@ mod tests {
         );
         for tool in tools {
             if tool["name"] == "browser_command" {
-                // Offline profile-copy operations bind their source profile
-                // without requiring an already-open task. Every other advanced
+                // Profile-copy and build choices bind a profile without an open
+                // task. Every other advanced
                 // operation still advertises an exact task requirement.
                 assert_eq!(tool["inputSchema"]["required"], json!(["action"]));
                 let alternatives = tool["inputSchema"]["anyOf"].as_array().unwrap();
                 assert_eq!(alternatives.len(), 2);
                 assert_eq!(alternatives[0]["required"], json!(["taskId"]));
                 assert_eq!(
-                    alternatives[1]["properties"]["action"]["const"],
-                    "profile_duplicate"
+                    alternatives[1]["properties"]["action"]["enum"],
+                    json!(["profile_duplicate", "browser_build"])
                 );
                 assert_eq!(alternatives[1]["required"], json!(["params"]));
             } else if !matches!(
