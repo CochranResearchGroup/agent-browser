@@ -19,6 +19,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     browser = await chromium.launch({ executablePath: process.env.AGENT_BROWSER_TEST_CHROME || '/usr/bin/google-chrome', headless: true });
     const page = await browser.newPage();
     await page.clock.install();
+    await page.clock.pauseAt(new Date(Date.now() + 100));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     await page.getByRole('button', { name: 'Browser mode for Synthetic browser: No CDP', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Browser mode for Synthetic browser: No CDP', exact: true }).hover();
@@ -28,7 +29,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.keyboard.press('Escape');
     const commands=[];
     await page.route('**/api/command',async route=>{
-      const command=route.request().postDataJSON();commands.push(command);
+      const command=route.request().postDataJSON();if(command.choice==='inspect'){await route.fulfill({json:{success:true,data:{schemaVersion:'agent-browser.browser-operations.v1',kind:'profile_duplicate',profileId:'profile',browserId:'browser',taskId:'task-one',operations:[]}}});return;}commands.push(command);
       if (commands.length===2) { await route.abort('failed'); return; }
       await route.fulfill({json:{success:true,data:{schemaVersion:'agent-browser.profile-duplication.v1',operationId:command.operationId,state:'source_review',affectedTaskIds:['task-one','task-two'],actions:[{action:'close_and_duplicate',requiresConfirmation:true},{action:'cancel',requiresConfirmation:false}]}}});
     });
@@ -58,7 +59,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     const modeCommands=[];
     await page.unroute('**/api/command');
     await page.route('**/api/command', async route => {
-      const command=route.request().postDataJSON();modeCommands.push(command);
+      const command=route.request().postDataJSON();if(command.choice==='inspect'){await route.fulfill({json:{success:true,data:{schemaVersion:'agent-browser.browser-operations.v1',kind:'mode_convert',taskId:'task-one',profileId:'profile',browserId:'browser',operations:modeCommands.length?[{schemaVersion:'agent-browser.mode-operation.v1',operationId:modeCommands[0].operationId,phase:'prepared',affectedTaskIds:['task-one','task-two'],actions:[{action:'relaunch',requiresConfirmation:true},{action:'cancel',requiresConfirmation:false}]}]:[]}}});return;}modeCommands.push(command);
       if(modeCommands.length===2){await route.abort('failed');return;}
       await route.fulfill({json:{success:true,data:{schemaVersion:'agent-browser.mode-operation.v1',operationId:command.operationId,phase:'prepared',affectedTaskIds:['task-one','task-two'],actions:[{action:'relaunch',requiresConfirmation:true},{action:'cancel',requiresConfirmation:false}]}}});
     });

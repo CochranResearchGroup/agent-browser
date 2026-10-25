@@ -7333,8 +7333,8 @@ Commands:
   host-task         Read compact app task metadata
   browser-mode TASK Inspect mode
   browser-native TASK ACTION JSON Input/capture <=1Mpx
-  profile-duplicate JSON Copy profile
-  mode-convert JSON Convert task mode
+  profile-duplicate JSON Copy/inspect; confirmed retry_launch or finish_without_opening after launch_absent
+  mode-convert JSON Convert/inspect; confirmed relaunch or restore_previous after launch_absent
   watch-host-task   Initial/changed NDJSON; fresh reconnect
   host-control      Status/view/takeover/return/override/reconcile; inspect failed return.
   host-reconnect    Status/disconnect/reconnect/rebind/configure/reopen

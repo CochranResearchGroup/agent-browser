@@ -1174,3 +1174,6 @@ fn consumer_retired_upgrade_drain_allows_live_navigation_and_physical_recovery()
         );
     }
 }
+
+#[path = "browser_operation_lookup_tests.rs"]
+mod operation_lookup_tests;

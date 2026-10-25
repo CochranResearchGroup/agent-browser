@@ -140,8 +140,8 @@ Startup: [diagnostics](references/cli-and-service.md#development-host-startup).
 
 ## Read browser mode
 
-Use `browser_command` action `mode` with `taskId`, or `agent-browser --json mcp browser-mode TASK`. Native capture/input need readiness; top-level `policyOverrideId`/`requestId` bind grants. Delivery is not login proof. Discover `mode_convert`/`profile_duplicate`; retain operation IDs. [Controls](references/cli-and-service.md#browser-mode-inspection).
+Use `browser_command` action `mode` with `taskId`. Native capture/input need readiness and scoped grants. Discover `mode_convert`/`profile_duplicate`; inspect original IDs after reload. Confirm retries, `restore_previous` or `finish_without_opening`; reconcile uncertainty. [Controls](references/cli-and-service.md#browser-mode-inspection).
 
-Diagnostics retain service and selection query fields.
+Diagnostics retain `?view=service:<name>` and selection query fields.
 
 Rail startup revalidates at 250/500/1000 ms while presence is unknown; then polls every three seconds.

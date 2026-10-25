@@ -93,6 +93,13 @@ page state may be lost, and uncertain website submissions are never replayed.
 Source or synthetic qualification does not prove installed Native readiness or
 authenticated site state.
 
+**Browser operation lookup**: Read-only discovery of retained owner mode-conversion
+or profile-copy operations for an exact task, browser and profile scope. Reload
+and selection read the original operation ID and supported actions without
+launching, closing or copying. Multiple matching copies require selection;
+a conflicting operation returns its original locator. Private profile paths
+and credentials stay outside public summaries and client persistence.
+
 **Durable profile**: Browser data retained across tasks. Separate tasks can share its browser through distinct sessions and tabs. Profile retention is separate from process, desktop, session and handoff lifetimes.
 
 **Workspace inventory projection**: The redacted managed-owner inventory with

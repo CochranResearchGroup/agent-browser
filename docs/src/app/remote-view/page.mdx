@@ -1118,4 +1118,18 @@ MCP uses `browser_command` with `taskId`, action `mode_convert`, and params cont
 
 Keep the operation ID after an uncertain reply and select `reconcile`; do not issue another close/open sequence. Close prompts offer focus, graceful retry and consequentially confirmed force close. Native screenshots and input remain separate from authentication proof. Conversion currently has incomplete recovery and installed Native qualification; do not treat the source implementation as accepted installed behavior.
 
+To find retained work after reload, send `choice: "inspect"` through the same
+`mode_convert` or `profile_duplicate` route. Omit `operationId` to list matching
+operations, or include it for one retained operation. Mode lookup requires the
+exact task; profile-copy lookup binds the source profile and optional exact
+task. The read-only `agent-browser.browser-operations.v1` response includes safe
+operation IDs, kinds, task/profile/browser bindings and supported actions. It
+never closes, launches or copies a browser. Select the original operation before
+continuing; multiple matching copies require an explicit selection. A busy
+response identifies the active operation instead of admitting a replacement ID.
+The rail reads this owner state when reopened, without persisting profile paths
+or credentials in client storage. CLI JSON requests use `choice: "inspect"`
+with `mcp mode-convert` or `mcp profile-duplicate`; HTTP uses the same existing
+owner actions at `POST /api/command`.
+
 Native capture returns PNG image content to MCP agents. Its default tile is bounded to one million pixels. Read `region`, `windowBounds` and `partialWindow`; request an explicit region for remaining pixels. A tile is not represented as a full-window screenshot.

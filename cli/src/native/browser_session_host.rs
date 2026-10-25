@@ -23,6 +23,8 @@ use super::browser_session_store::{BrowserProfileCatalogLoad, BrowserSessionSqli
 pub(crate) mod browser_mode_host;
 #[path = "browser_native_host.rs"]
 mod browser_native_host;
+#[path = "browser_operation_lookup.rs"]
+mod browser_operation_lookup;
 #[path = "profile_duplicate_host.rs"]
 mod profile_duplicate_host;
 
@@ -1544,6 +1546,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .get("action")
             .and_then(serde_json::Value::as_str)
             .ok_or_else(|| "browser_session_action_missing".to_string())?;
+        if let Some(readback) = self.operation_request_readback(command)? {
+            return Ok(readback);
+        }
         if action == "browser_session_mode_convert" {
             self.refresh_before_ordinary_command()?;
             return self.mode_convert(command);

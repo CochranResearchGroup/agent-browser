@@ -4235,7 +4235,10 @@ For an existing scoped `browser_policy` override, send `policyOverrideId` and
 `requestId` at the top level of `browser_command` for either Native action.
 The grant must match the exact task, action, request and current policy; a
 mismatch remains denied. Preserving request identity never authorizes replay of
-uncertain input. CLI and HTTP commands use the same top-level fields.
+uncertain input. CLI `mcp browser-native` JSON uses the same `policyOverrideId`
+and `requestId`. Raw HTTP `POST /api/command` sends `policyOverrideId` and
+the matching request identity as `id`, together with exact `sessionId` and
+`sessionName`; it does not use a `requestId` alias.
 Mode conversion remains a separate explicit owner operation.
 
 
@@ -4264,5 +4267,32 @@ The browser mode menu offers **Relaunch with CDP** and **Relaunch without CDP** 
 MCP uses `browser_command` with `taskId`, action `mode_convert`, and params containing `operationId`, `mode` (`cdp` or `cdp_free`) and `choice`. Start with `prepare`, then select an offered action. CLI accepts `agent-browser --json mcp mode-convert '{"taskId":"TASK","operationId":"mode-one","mode":"cdp_free","choice":"prepare"}'`. HTTP uses `POST /api/command` with action `browser_session_mode_convert`, the exact `sessionId` and owner `sessionName`, and the same operation fields.
 
 Keep the operation ID after an uncertain reply and select `reconcile`; do not issue another close/open sequence. Close prompts offer focus, graceful retry and consequentially confirmed force close. Native screenshots and input remain separate from authentication proof. Conversion currently has incomplete recovery and installed Native qualification; do not treat the source implementation as accepted installed behavior.
+
+
+Inspect the original operation after a failed launch. Copy readback separates
+`copyComplete` and `profilePublished` from `launchStatus` and `destinationTask`.
+For `launch_absent`, explicitly confirm `retry_launch` or
+`finish_without_opening`; the latter retains the published independent copy.
+Mode `launch_absent` offers confirmed `relaunch` or `restore_previous`.
+A launched replacement with unavailable Native readiness reports
+`replacement_pending`; confirmed `restore_previous` selects the original mode
+through the same operation. Unknown launches and copy `launch_pending` first
+`reconcile` the original operation and exact task. Never repeat the copy or
+blindly launch again. Restoration preserves requested-mode history, reports
+its effective mode, and does not replay uncertain website submissions.
+
+To find retained work after reload, send `choice: "inspect"` through the same
+`mode_convert` or `profile_duplicate` route. Omit `operationId` to list matching
+operations, or include it for one retained operation. Mode lookup requires the
+exact task; profile-copy lookup binds the source profile and optional exact
+task. The read-only `agent-browser.browser-operations.v1` response includes safe
+operation IDs, kinds, task/profile/browser bindings and supported actions. It
+never closes, launches or copies a browser. Select the original operation before
+continuing; multiple matching copies require an explicit selection. A busy
+response identifies the active operation instead of admitting a replacement ID.
+The rail reads this owner state when reopened, without persisting profile paths
+or credentials in client storage. CLI JSON requests use `choice: "inspect"`
+with `mcp mode-convert` or `mcp profile-duplicate`; HTTP uses the same existing
+owner actions at `POST /api/command`.
 
 Native capture returns PNG image content to MCP agents. Its default tile is bounded to one million pixels. Read `region`, `windowBounds` and `partialWindow`; request an explicit region for remaining pixels. A tile is not represented as a full-window screenshot.
