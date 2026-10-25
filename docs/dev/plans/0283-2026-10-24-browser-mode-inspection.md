@@ -206,3 +206,30 @@ At resume, re-anchor current main/integration/worker tips and the frozen #400/#4
 Fourth-window closeout: the worker auxiliary is clean and remote-verified at `9935916f2c6d7e1751a798faec4b6351fb45bd0a`. Its 23:19:59 UTC fresh OS readback contains no owned pinned CLI, synthetic Chrome or displayfd Xvfb processes. All root and worker compiler/test/fixture handles are terminal. The auxiliary inspection was non-mutating, clean and free of active candidate builds or pins; retain it for the excluded Xlib candidate rather than removing useful custody.
 
 Memory disposition: `queued`, job `130c141b-8884-4c4b-90ea-6b1835b80bfa`, from this curated checkpoint in `agent_browser_main`. Queue acceptance is recorded in the user-scoped receipt; persistence and retrieval are not claimed. No second write or ambiguous retry was attempted. Implementation stops at the user-requested one-hour cutoff with full #402/#403 acceptance incomplete and #404 blocked. This checkpoint does not shrink the governing objective or claim ticket completion.
+
+## Approved review repair campaign, 2026-10-25
+
+Product lane: PL-PLATFORM. Specification400 and draft PR408 remain the parent program. User authorized six repair tickets, one ticket per worker, root taking one, then exactly one post-repair Standards/Spec review and one bounded TDD remediation pass. Tracker closure requires complete integrated acceptance and merged PR provenance. Broader parent gates and excluded Xlib work remain open.
+
+Manual resource monitoring replaces Codex Wake by explicit operator direction. The shared goal-limit controller was stopped and verified inactive with MainPID0; other Wake services and historical ledgers are preserved. Manual fresh allowance starts 2026-10-25T01:52:42Z and ends 2026-10-25T03:52:42Z, ceiling2000000 fresh tokens including workers, checkpoint reserve60 seconds. Native goal counters are observations, not reset proof. Check elapsed time, usage, memory and process state periodically.
+
+Repair baseline: aeb49c5e0d285a91c897861109100f23e1cdadb3. Current main reconciliation:6e3d49577e84e68679a62103b8fd426881d916a9; append conflicts preserve both test functions and both lanes' planning records. Integration branch platform/browser-mode-401.
+
+| Ticket | State | Owner | Owned surfaces | Blockers |
+| --- | --- | --- | --- | --- |
+|424 mode recovery|running|root|browser_mode_operation, browser_mode_host, mode public contracts and absence-proof adapter|none|
+|425 copy launch recovery|pending|queued worker|profile_duplicate_operation/host and public copy contracts|none; serialize shared lifecycle edits|
+|426 rail resume|pending|queued worker|rail dialogs, operation lookup and public clients|none; root owns shared owner contract until checkpoint|
+|427 profile pin isolation|running|repair427|manager scoped pin calls, host build-selection hunk, launch contract tests|none|
+|428 native overrides|running|repair428|MCP native forwarding and policy contract tests|none|
+|429 guidance|running|repair429|canonical CONTEXT and five guidance surfaces, comment-only runtime/catalog definitions|none|
+
+Three necessary temporary worker auxiliaries branch platform/spec400-repair-427 through429 at /tmp/agent-browser-spec400-427 through429 from the repair baseline. Parent P283 owns integration and terminal custody. Admission inspected all six registered trees; foreign canonical auth changes, dashboard Native work, enrollment, profile-proof and retained duplicate403 excluded Xlib commits remain untouched. Three auxiliary checkouts permit the explicitly requested simultaneous independent edits; they create no primary lanes or runtime authority. Each uses a private target, returns a reviewed commit/patch, and requires governed closeout after integration. Worker handles /root/repair427, /root/repair428, /root/repair429. Root owns plan/catalog and integrates serially.
+
+Public seams: owner mode conversion proves exact-operation effects and custody, process runtime absence proves retry admission, MCP native command tests prove scoped grants, profile manager open proves pin isolation, mounted rail reload proves operation identity continuity. Synthetic boundary effects do not establish installed Native qualification. Red/green commands and receipts will be appended with each result.
+
+### Repair integration readback
+
+Main reconciliation is committed as971edefe4. Both conflicting pool-test functions survive; exact manual-login pool test passes on the reconciled source (3656 filtered,13.35s execution; compile6m36s). Format and patch hygiene pass. #429 source integrated asbb10149b2, with worker parity, six changed-link checks and36-route docs build passing; integrated root skill is9981bytes after main reconciliation. #427 scoped-pin source integrated as3e6a5d674; manager red exposes A-pin leaking into B, green and48 model cases pass. Real-runtime launch oracle and integrated strict Rust gates remain pending. Worker Clippy begun before auxiliary reassignment is invalidated; it is not counted. Mode summary extraction from #426 integrated ase8ddb7d99 to serialize later host changes.
+
+Auxiliary427 is reused serially for worker repair427 ticket425 on branch platform/spec400-repair-425 atbb10149b2 after pin custody. Auxiliary429 is reused for worker repair429 ticket426 on branch platform/spec400-repair-426 atbb10149b2 after guidance commit. No additional checkout was created. Ticket428 remains with repair428. New copy phase/choices and mode recovery phases must reach lookup/rail through the shared safe summaries.
