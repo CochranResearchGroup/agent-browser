@@ -116,7 +116,7 @@ fn version_output(path: &Path) -> Option<(String, String)> {
             Ok(None) if std::time::Instant::now() < deadline => {
                 std::thread::sleep(std::time::Duration::from_millis(10))
             }
-            _ => {
+            Ok(None) => {
                 // The unreaped leader reserves this newly created process group.
                 unsafe {
                     libc::kill(-(child.id() as i32), libc::SIGKILL);
@@ -124,6 +124,7 @@ fn version_output(path: &Path) -> Option<(String, String)> {
                 let _ = child.wait();
                 return None;
             }
+            Err(_) => return None,
         }
     }
     let mut text = String::new();
@@ -196,8 +197,8 @@ pub(super) fn inspect_executable(path: &Path) -> ExecutableEvidence {
         name,
         family,
         version,
+        available: executable && sha256.is_some() && stable,
         sha256,
-        available: executable && stable,
     }
 }
 fn profile_data_version(profile: &BrowserProfileCatalogEntry) -> Option<String> {
@@ -210,16 +211,16 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
     BrowserSessionHost<P, E>
 {
     pub(crate) fn browser_build_select(&mut self, command: &Value) -> Result<Value, String> {
-        if optional_string(command, "choice").unwrap_or("inspect") != "inspect" {
+        let choice = optional_string(command, "choice").unwrap_or("inspect");
+        if choice == "select_for_next_launch" {
+            return self.select_offline_build(command);
+        }
+        if choice != "inspect" {
             return Err("browser_build_choice_unsupported".into());
         }
+        let (state, catalog) = self.persistence.load_owner_snapshot()?;
         let task = optional_string(command, "sessionId")
-            .map(|id| {
-                self.state
-                    .sessions
-                    .get(id)
-                    .ok_or("browser_build_task_missing")
-            })
+            .map(|id| state.sessions.get(id).ok_or("browser_build_task_missing"))
             .transpose()?;
         let profile_id = optional_string(command, "profileId")
             .or_else(|| task.map(|t| t.profile_id.as_str()))
@@ -230,12 +231,11 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         }) {
             return Err("browser_build_task_profile_conflict".into());
         }
-        let profile = self
-            .catalog
+        let profile = catalog
             .profiles
             .get(profile_id)
             .or_else(|| {
-                self.state
+                state
                     .disposable_profiles
                     .get(profile_id)
                     .map(|p| &p.profile)
@@ -248,7 +248,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             }
             paths.insert(PathBuf::from(p));
         }
-        if let Some(p) = self.state.profile_executables.get(profile_id) {
+        if let Some(p) = state.profile_executables.get(profile_id) {
             paths.insert(PathBuf::from(p));
         }
         if let Ok(p) = std::env::var("AGENT_BROWSER_EXECUTABLE_PATH") {
@@ -276,5 +276,79 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             "availableBuilds":available,"observedAtMs":current_unix_ms(),
             "warning":"A build change may migrate profile data or lose login. Previous executable selection does not restore profile bytes."}),
         )
+    }
+    fn select_offline_build(&mut self, command: &Value) -> Result<Value, String> {
+        let operation_id = required_string(command, "operationId")?;
+        if operation_id.len() > 128 {
+            return Err("browser_build_operation_id_invalid".into());
+        }
+        let profile_id = required_string(command, "profileId")?;
+        let executable = required_string(command, "executablePath")?;
+        let mode = required_string(command, "mode")?;
+        if !matches!(mode, "cdp" | "cdp_free") {
+            return Err("browser_build_mode_invalid".into());
+        }
+        if !Path::new(executable).is_absolute() {
+            return Err("browser_build_absolute_path_required".into());
+        }
+        if command["ownerConfirmed"] != true {
+            return Err("browser_build_owner_confirmation_required:review migration and login risk; duplicate-and-test, choose another build or cancel".into());
+        }
+        let expected_sha = required_string(command, "expectedSha256")?;
+        let intent=serde_json::to_string(&json!({"profileId":profile_id,"executablePath":executable,"mode":mode,"sha256":expected_sha})).map_err(|_|"browser_build_intent_invalid")?;
+        let database = self.persistence.runtime_database_path()?;
+        let retained = BrowserSessionSqliteStore::open_read_only(&database)?
+            .profile_build_selection_receipt(operation_id, &intent)?;
+        if let Some(receipt) = retained {
+            return Ok(receipt);
+        }
+        let (state, catalog) = self.persistence.load_owner_snapshot()?;
+        let profile = catalog
+            .profiles
+            .get(profile_id)
+            .or_else(|| {
+                state
+                    .disposable_profiles
+                    .get(profile_id)
+                    .map(|p| &p.profile)
+            })
+            .ok_or("browser_build_profile_missing")?;
+        let selected = inspect_executable(Path::new(executable));
+        if !selected.available {
+            return Err("browser_build_unavailable:choose another build or cancel".into());
+        }
+        if selected.sha256.as_deref() != Some(expected_sha) {
+            return Err("browser_build_changed:inspect and confirm the current build".into());
+        }
+        let mut store = BrowserSessionSqliteStore::open(
+            database.parent().ok_or("browser_build_store_unavailable")?,
+        )?;
+        let receipt = store.select_profile_build(
+            super::super::browser_session_store::profile_build::ProfileBuildSelection {
+                operation_id,
+                profile,
+                expected_pin: state
+                    .profile_executables
+                    .get(profile_id)
+                    .map(String::as_str),
+                intent: &intent,
+                executable: &selected.path,
+                mode,
+                public_build: selected.public(),
+            },
+            || {
+                if executable_digest(Path::new(&selected.path))?.as_str() != expected_sha {
+                    return Err(
+                        "browser_build_changed:inspect and confirm the current build".into(),
+                    );
+                }
+                Ok(())
+            },
+        )?;
+        let (state, catalog) = self.persistence.load_owner_snapshot()?;
+        self.persisted_state = state.clone();
+        self.state = state;
+        self.catalog = catalog;
+        Ok(receipt)
     }
 }
