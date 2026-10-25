@@ -651,6 +651,37 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         self.recovery = None;
         Ok(self.binding.original_mode.clone())
     }
+    fn replacement_is_published(
+        &mut self,
+        request: &Request,
+        replacement: &Replacement,
+    ) -> Result<bool, String> {
+        if self.host.persistence.load_session_state()? != self.host.persisted_state {
+            return Err("mode_operation_publication_conflict".into());
+        }
+        let current = self.host.state.browsers.get(&request.browser_id)
+            .ok_or("mode_operation_browser_missing")?;
+        let expected: RecordedProcessIdentity = serde_json::from_str(&replacement.process_identity)
+            .map_err(|_| "mode_operation_replacement_identity_invalid")?;
+        let published = BrowserSessionSqliteStore::open_read_only(
+            &self.host.persistence.runtime_database_path()?,
+        )?.published_launch_process_identity(current)
+            .map_err(|_| "mode_operation_publication_readback_required")?;
+        if published.as_ref() == Some(&expected) {
+            if current.profile_id != request.profile_id
+                || current.pid != expected.pid
+                || !original_matches(&expected)?
+                || self.host.persistence.load_session_state()? != self.host.persisted_state
+            {
+                return Err("mode_operation_replacement_changed:inspect current target".into());
+            }
+            return Ok(true);
+        }
+        if current != &self.binding.browser {
+            return Err("mode_operation_replacement_changed:inspect current target".into());
+        }
+        Ok(false)
+    }
     fn publish(&mut self, request: &Request, replacement: &Replacement) -> Result<(), String> {
         if let Some(current) = self
             .host

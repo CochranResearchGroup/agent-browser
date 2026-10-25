@@ -270,6 +270,15 @@ pub trait ModeRuntime {
     fn restore_previous(&mut self, _request: &Request) -> Result<Mode, String> {
         Err("mode_operation_restore_unavailable".into())
     }
+    /// Positive exact publication proof permits sealing a lost terminal write.
+    /// Missing evidence never authorizes another close or replacement launch.
+    fn replacement_is_published(
+        &mut self,
+        _request: &Request,
+        _replacement: &Replacement,
+    ) -> Result<bool, String> {
+        Ok(false)
+    }
     fn publish(&mut self, request: &Request, replacement: &Replacement) -> Result<(), String>;
 }
 impl OperationStore {
@@ -342,6 +351,24 @@ impl OperationStore {
             ) {
                 return Err("mode_operation_phase_conflict:read current operation".into());
             }
+        }
+        let restore_requested = operation.restoring_previous
+            || matches!(choice, Choice::RestorePrevious { confirmed: true });
+        if restore_requested {
+            if let Some(replacement) = operation.replacement.as_ref() {
+                if runtime.replacement_is_published(&effect_request, replacement)? {
+                    // The physical outcome already committed. Reject the new
+                    // consequence, repair the lost journal tail, and release
+                    // custody without closing that published browser.
+                    let mut next = operation.clone();
+                    next.phase = Phase::Completed;
+                    next.restoring_previous = false;
+                    self.save_transition(&operation, &next)?;
+                    return Err("mode_operation_already_completed:inspect completion, then start a new conversion to change configuration".into());
+                }
+            }
+        }
+        if matches!(choice, Choice::RestorePrevious { confirmed: true }) {
             let mut next = operation.clone();
             next.restoring_previous = true;
             self.save_transition(&operation, &next)?;

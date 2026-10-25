@@ -24,7 +24,7 @@ def main():
     parser.add_argument('--binary', required=True)
     parser.add_argument('--chrome', required=True)
     parser.add_argument('--mode-conversion', action='store_true')
-    parser.add_argument('--recovery-case', choices=['pre-spawn-retry', 'pre-spawn-restore', 'native-restore', 'lost-reply'])
+    parser.add_argument('--recovery-case', choices=['pre-spawn-retry', 'pre-spawn-restore', 'native-restore', 'lost-reply', 'published-terminal'])
     parser.add_argument('--restart-owner', action='store_true')
     parser.add_argument('--namespace-worker', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--parent-proof-fd', type=int, help=argparse.SUPPRESS)
@@ -363,6 +363,11 @@ def main():
                 prepared=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-one',mode='cdp_free',choice='prepare')))
                 assert prepared['phase']=='prepared',prepared
                 original_pid = browsers()[0][0]
+                if args.recovery_case == 'published-terminal':
+                    journal = root / '.agent-browser/service/runtime.mode.sqlite3'
+                    assert journal.is_file(), 'prepared operation journal required for fault injection'
+                    with sqlite3.connect(journal) as connection:
+                        connection.execute("CREATE TRIGGER fixture_terminal_loss BEFORE UPDATE OF terminal ON browser_mode_operations WHEN NEW.terminal=1 BEGIN SELECT RAISE(ABORT,'fixture_terminal_write_loss'); END")
                 if args.recovery_case and args.recovery_case.startswith('pre-spawn'):
                     inject_pre_spawn.set()
                 if args.recovery_case == 'native-restore':
@@ -379,7 +384,18 @@ def main():
                     changed=convert('reconcile')
                 else:
                     changed=convert('relaunch')
-                if args.recovery_case and args.recovery_case != 'lost-reply':
+                if args.recovery_case == 'published-terminal':
+                    assert changed['phase'] == 'launch_dispatched' and changed['failure'] == 'mode_operation_write_failed', changed
+                    published_pid = browsers()[0][0]
+                    assert published_pid != original_pid and len(browsers()) == 1
+                    with sqlite3.connect(journal) as connection:
+                        connection.execute('DROP TRIGGER fixture_terminal_loss')
+                    if args.restart_owner: fresh_requester(True)
+                    changed = convert('restore_previous', True)
+                    assert changed['phase'] == 'completed' and changed['failure'] == 'mode_operation_already_completed', changed
+                    assert changed['recoveryChoice'] is None, 'rejected restore must not persist an effect intent'
+                    assert len(browsers()) == 1 and browsers()[0][0] == published_pid, 'published completion refusal must preserve its process'
+                elif args.recovery_case and args.recovery_case != 'lost-reply':
                     wanted='replacement_pending' if args.recovery_case=='native-restore' else 'launch_absent'
                     deadline=time.monotonic()+15
                     while changed['phase'] != wanted:
