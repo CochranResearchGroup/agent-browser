@@ -391,7 +391,12 @@ def main():
                     unrelated_identity = process_identity(unrelated.pid)
                 if args.mode_case and args.mode_case.startswith('prompt'):
                     call('browser_navigate', dict(taskId=task['taskId'], url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/close-prompt'))
-                    call('browser_command',dict(taskId=task['taskId'],action='native_input',params=dict(actions=[dict(kind='key',chord='ctrl+1'),dict(kind='click',x=400,y=400,button=1,count=1)])))
+                    # Chrome may retain an unowned startup tab. Select the exact
+                    # addressed task through the public surface, never an index.
+                    call('browser_tab', dict(taskId=task['taskId'], operation='select'))
+                    page = call('browser_snapshot', dict(taskId=task['taskId']))
+                    assert 'Arm close prompt' in json.dumps(page), 'synthetic prompt page is ready in the addressed task'
+                    call('browser_command',dict(taskId=task['taskId'],action='native_input',params=dict(actions=[dict(kind='click',x=400,y=400,button=1,count=1)])))
                     assert prompt_armed.wait(5), 'real beforeunload prompt armed by observed native click'
                 prepared=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-one',mode='cdp_free',choice='prepare')))
                 assert prepared['phase']=='prepared',prepared
