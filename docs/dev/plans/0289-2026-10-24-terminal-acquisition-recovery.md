@@ -18,7 +18,7 @@ Current Native canonical source rejects same-key Released replay in complete_acq
 
 ## Current State
 
-Terminal acquisition recovery is merged, installed and accepted: old Released history is retained, fresh synthetic open/continue succeeds after exact failed-reservation recovery, and zero acquisitions remain pending. Full Native viewport acceptance fails because the exact owned handoff POST aborts at the component deadline. Follow the evidence note; do not claim pixels or an authentication cause. Retain the primary/candidates.
+Terminal acquisition recovery is merged, installed and accepted: old Released history is retained, fresh synthetic open/continue succeeds after exact failed-reservation recovery, and zero acquisitions remain pending. The exact owned handoff POST still fails on installed e0d5525e92cc. PR421 qualifies operation-local exact-scope observation sharing: full96-case pool plus387 model gates, strict Rust quality and exact sealed candidate installer fixtures pass. Install candidate9cbf948ef4af through the supported preserve path, then prove Native iframe pixels and cleanup. Retain the primary/candidates.
 
 ## Next bounded packet
 
