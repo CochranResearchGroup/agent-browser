@@ -7238,7 +7238,7 @@ The browser mode menu offers **Relaunch with CDP** and **Relaunch without CDP** 
 
 MCP uses `browser_command` with `taskId`, action `mode_convert`, and params containing `operationId`, `mode` (`cdp` or `cdp_free`) and `choice`. Start with `prepare`, then select an offered action. CLI accepts `agent-browser --json mcp mode-convert '{"taskId":"TASK","operationId":"mode-one","mode":"cdp_free","choice":"prepare"}'`. HTTP uses `POST /api/command` with action `browser_session_mode_convert`, the exact `sessionId` and owner `sessionName`, and the same operation fields.
 
-Keep the operation ID after an uncertain reply and select `reconcile`; do not issue another close/open sequence. Close prompts offer focus, graceful retry and consequentially confirmed force close. Native screenshots and input remain separate from authentication proof. Conversion currently has incomplete recovery and installed Native qualification; do not treat the source implementation as accepted installed behavior.
+Keep the operation ID after an uncertain reply and select `reconcile`; do not issue another close/open sequence. Close prompts offer focus, graceful retry and consequentially confirmed force close. Native screenshots and input remain separate from authentication proof. Conversion and bounded recovery are qualified in isolated synthetic Native workflows. Installed Native qualification remains separate; source acceptance does not prove installed behavior.
 
 Select `pause_and_relaunch` to hold the operation in `paused` before closing
 anything. Affected tasks stay fenced against page and Native automation. Later

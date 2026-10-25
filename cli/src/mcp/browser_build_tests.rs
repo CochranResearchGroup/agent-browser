@@ -58,3 +58,19 @@ fn build_selection_does_not_relax_transport_or_page_profile_reservations() {
             .contains("reserved")
     );
 }
+
+#[test]
+fn build_selection_discovery_retains_only_its_declared_profile_context() {
+    let build = catalog::browser_argument_schema("browser_build").unwrap();
+    for field in ["profileId", "serviceName", "agentName", "taskName"] {
+        assert!(
+            build["properties"].get(field).is_some(),
+            "Missing build context: {field}"
+        );
+    }
+    for field in ["sessionName", "browserId", "requestPrincipalSource"] {
+        assert!(build["properties"].get(field).is_none());
+    }
+    let page = catalog::browser_argument_schema("reload").unwrap();
+    assert!(page["properties"].get("profileId").is_none());
+}

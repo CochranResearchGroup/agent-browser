@@ -131,8 +131,8 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     }
     for (const [kind, phase, action, label] of [
       ['mode_convert', 'launch_absent', 'relaunch', 'Relaunch now'],
-      ['mode_convert', 'launch_absent', 'restore_previous', 'Restore previous mode'],
-      ['mode_convert', 'replacement_pending', 'restore_previous', 'Restore previous mode'],
+      ['mode_convert', 'launch_absent', 'restore_previous', 'Restore previous build and mode'],
+      ['mode_convert', 'replacement_pending', 'restore_previous', 'Restore previous build and mode'],
       ['profile_duplicate', 'launch_absent', 'retry_launch', 'Retry opening copy'],
       ['profile_duplicate', 'launch_absent', 'finish_without_opening', 'Finish without opening'],
     ]) {

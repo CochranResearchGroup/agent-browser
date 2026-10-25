@@ -101,7 +101,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.route('**/api/command',async route=>{
       const command=route.request().postDataJSON(); buildCommands.push(command);
       if(command.action==='browser_session_build_select' && command.choice==='inspect') {
-        await route.fulfill({json:{success:true,data:{schemaVersion:'agent-browser.build-selection.v1',profileId:'profile',profileDataVersion:'153.0.0.0',nextLaunchMode:'cdp_free',availableBuilds:[build],activeTasks:activeBuildTasks,currentSelectionOperationId:selectedReceipt}}});return;
+        await route.fulfill({json:{success:true,data:{schemaVersion:'agent-browser.build-selection.v1',profileId:command.profileId,profileDataVersion:'153.0.0.0',nextLaunchMode:'cdp_free',availableBuilds:[build],activeTasks:activeBuildTasks,currentSelectionOperationId:selectedReceipt}}});return;
       }
       if(command.action==='browser_session_build_select') {
         selectedReceipt=command.operationId;
@@ -109,7 +109,10 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
         await route.fulfill({json:{success:true,data:{schemaVersion:'agent-browser.build-selection.v1',operationId:command.operationId,phase:command.choice==='open_selected'?'opened':'selected_for_next_launch'}}});return;
       }
       if(command.choice==='inspect') {
-        await route.fulfill({json:{success:true,data:{schemaVersion:'agent-browser.browser-operations.v1',kind:command.kind,profileId:'profile',taskId:command.sessionId,browserId:command.browserId,operations:[]}}});return;
+        await route.fulfill({json:{success:true,data:{schemaVersion:'agent-browser.browser-operations.v1',kind:command.kind,profileId:command.sourceProfileId ?? 'profile',taskId:command.sessionId,browserId:command.browserId,operations:[]}}});return;
+      }
+      if(command.kind==='profile_duplicate') {
+        await route.fulfill({json:{success:true,data:{schemaVersion:'agent-browser.profile-duplication.v1',operationId:command.operationId,phase:command.choice==='close_and_duplicate'?'completed':'prepared',profilePublished:command.choice==='close_and_duplicate',destination:{id:'copy-target',name:'Independent copy'},actions:command.choice==='close_and_duplicate'?[]:[{action:'close_and_duplicate',requiresConfirmation:true},{action:'cancel',requiresConfirmation:false}]}}});return;
       }
       await route.fulfill({json:{success:true,data:{schemaVersion:command.kind==='mode_convert'?'agent-browser.mode-operation.v1':'agent-browser.profile-duplication.v1',operationId:command.operationId,phase:'prepared',actions:[{action:'cancel',requiresConfirmation:false}]}}});
     });
@@ -143,6 +146,18 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.getByRole('button',{name:'Cancel operation',exact:true}).waitFor();
     const duplicateBuild=buildCommands.find(command=>command.action==='browser_session_profile_duplicate' && command.choice==='prepare');
     assert.equal(duplicateBuild.buildId,choice.buildId); assert.equal(duplicateBuild.mode,'cdp_free');
+    await page.getByRole('checkbox',{name:'Confirm the selected browser action'}).check();
+    await page.getByRole('button',{name:'Close source and duplicate',exact:true}).click();
+    await page.getByRole('button',{name:'Choose another build for this copy',exact:true}).click();
+    await page.getByRole('radio',{name:'chromium 150.0.0.0',exact:true}).check();
+    assert.equal(buildCommands.filter(command=>command.action==='browser_session_build_select' && command.choice==='inspect').at(-1).profileId,'copy-target');
+    await page.getByRole('button',{name:'Duplicate and test selected build',exact:true}).click();
+    await page.getByRole('button',{name:'Review duplication',exact:true}).click();
+    await page.getByRole('button',{name:'Cancel operation',exact:true}).waitFor();
+    const copyFromCopy=buildCommands.filter(command=>command.action==='browser_session_profile_duplicate' && command.choice==='prepare').at(-1);
+    assert.equal(copyFromCopy.sourceProfileId,'copy-target');
+    assert.equal(copyFromCopy.browserId,undefined,'an independent copy must never inherit the source browser scope');
+
     await page.getByRole('button',{name:'Close',exact:true}).click();
     await page.getByRole('button',{name:'Close',exact:true}).click();
     await openBuild();

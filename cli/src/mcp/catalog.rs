@@ -227,7 +227,9 @@ fn operation_schema(category: &str, operation: &str) -> Result<Value, super::Jso
                 "Argument metadata is unavailable for this operation; use agent-browser --help",
             )
         })?;
-    if category == "browser" {
+    // The build adapter declares its own narrow profile/open context. Applying
+    // the generic page-only projection would remove fields that it requires.
+    if category == "browser" && operation != "browser_build" {
         if let Some(properties) = schema["properties"].as_object_mut() {
             properties.retain(|name, _| schema_property_is_page_argument(name));
         }

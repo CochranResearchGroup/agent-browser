@@ -6,8 +6,8 @@ import { ProfileDuplicateDialog } from "@/components/profile-duplicate-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 /** Build, profile and mode remain separate choices; existing owner operations perform effects. */
-export function BrowserBuildDialog({ open, onOpenChange, profileId, taskId, sessionName, browserId, onRefresh, onChooseCopy }: {
-  open: boolean; onOpenChange: (open: boolean) => void; profileId: string; taskId?: string | null; sessionName?: string | null; browserId?: string;
+export function BrowserBuildDialog({ open, onOpenChange, profileId, taskId, onRefresh, onChooseCopy }: {
+  open: boolean; onOpenChange: (open: boolean) => void; profileId: string; taskId?: string | null;
   onRefresh: () => Promise<void>; onChooseCopy: (profileId: string) => void;
 }) {
   const [build, setBuild] = useState<BrowserBuildEvidence | null>(null);
@@ -56,7 +56,7 @@ export function BrowserBuildDialog({ open, onOpenChange, profileId, taskId, sess
     {status && <p role="status">{status}. Login and profile readability require separate verification in the browser.</p>}
     {error && <p role="alert">{error}</p>}
   </DialogContent></Dialog>
-  {task && child === "mode" && <BrowserModeDialog open onOpenChange={value => { if (!value) setChild(null); }} taskId={task.id} sessionName={task.name || sessionName || ""} profileId={profileId} browserId={task.browserId ?? browserId} mode={mode} build={build ?? undefined} onRefresh={onRefresh} />}
-  {child === "copy" && <ProfileDuplicateDialog open onOpenChange={value => { if (!value) setChild(null); }} profileId={profileId} taskId={task?.id} sessionName={task?.name} browserId={task?.browserId ?? browserId} build={build ?? undefined} mode={mode} onRefresh={onRefresh} onChooseCopy={id => { setChild(null); onOpenChange(false); onChooseCopy(id); }} />}
+  {task && child === "mode" && <BrowserModeDialog open onOpenChange={value => { if (!value) setChild(null); }} taskId={task.id} sessionName={task.name} profileId={profileId} browserId={task.browserId} mode={mode} build={build ?? undefined} onRefresh={onRefresh} />}
+  {child === "copy" && <ProfileDuplicateDialog open onOpenChange={value => { if (!value) setChild(null); }} profileId={profileId} taskId={task?.id} sessionName={task?.name} browserId={task?.browserId} build={build ?? undefined} mode={mode} onRefresh={onRefresh} onChooseCopy={id => { setChild(null); onOpenChange(false); onChooseCopy(id); }} />}
   </>;
 }
