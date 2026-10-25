@@ -1,6 +1,6 @@
 # P291: Cold rail retry spacing
 
-Status: IN_PROGRESS
+Status: CLOSED
 Product lane: PL-BUGFIX
 Work item: https://github.com/CochranResearchGroup/agent-browser/issues/430
 Primary: agent-browser-dashboard, fix/cold-rail-430
@@ -41,3 +41,13 @@ The first sealed candidate `35e0e3058ecc13d66f3266c458773ee8a203885217ee410fe86f
 Do not accept the latency objective: three proven-cold visits have median3357.3ms before and3257.4ms after; five warm visits have median1003.4ms before and1052.5ms after. The mounted caller still revalidates only when the interval equals250ms, allowing500/1000ms retries to consume cached unknown evidence. The policy-only regression missed this integration seam.
 
 The existing mounted startup fixture fails before correction. Strengthen it to assert the revalidation header on every retry and allow the documented1.75second bounded schedule, then fix the hook predicate to cover all startup intervals. Ready/unknown/failure/empty mounted cases pass afterward, with no observed fixture residue. This is the second semantic repair cycle. Complete one corrective sealed build and supported preserve replacement, then repeat three proven-cold and five warm visits. No additional timing-policy change or Native/auth/ingress repair is included. Preserve all failed evidence and keep430 open until the corrected installed result is qualified.
+
+## Corrected installed acceptance, 2026-10-25
+
+Corrective source `b8a7fc9d6d9456da017e76bda6d7903cf26a2831`, integrated through PR433 as `69cc71ef0698bfc408152ca71dc1c14aaf93d02c`, is installed as sealed binary `cf65dd76422b0d05d1c4332d431a6f2448128e8570bd8402b1d3420f793bd17c`. Preserve transaction `upgrade-46c54750-ff6d-4d25-b454-055feecbefd2` is successful, ready and complete. All563 executable inputs and exact installer/supervisor fixtures pass; all79 observed corrective fixture generations are absent.
+
+Three proven-cold visits are1994.7,2112.7 and2217.6ms, median2112.7ms versus3357.3ms baseline, a37.1percent reduction. Five warm visits have median1018.8ms versus1003.4ms baseline. Every corrected cold visit is faster than every baseline cold visit. All visits render correctly without page errors, serialization failure or service mutation attempts. This is finite fresh-context evidence, not a universal latency guarantee or proof of Native viewport interaction.
+
+Fresh readback confirms all18 protected browser roots and137 Native provider/persistent service generations remain unchanged. Configuration and dashboard authentication are unchanged. All153 observed QA generations across recorded visit cohorts and the source-overlay check are absent. Fifteen startup files match sealed hashes on both public and loopback endpoints; installed-path doctor passes with the three existing advisories. The pre-existing MCP-client restart loops are tracked separately in Remote View667;422 remains open for unrelated asset stalls.
+
+Close430 and this plan. Retain the primary worktree and all pinned candidates. No provider, ingress, authentication or private-account action was performed. The accepted source fix is the retry spacing plus caller revalidation, backed by the mounted regression and actual installed comparison, not the earlier policy-only result alone.
