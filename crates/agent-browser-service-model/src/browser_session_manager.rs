@@ -1507,7 +1507,8 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .cloned()
             .collect::<Vec<_>>();
         if let Some(path) = self.state.profile_executables.get(&browser.profile_id) {
-            self.effects.select_browser_executable(path.clone())?;
+            self.effects
+                .select_profile_browser_executable(profile.id.clone(), path.clone())?;
         }
         let recovered = self.effects.recover_browser(
             &browser,
@@ -1696,7 +1697,8 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         placement: Option<&BrowserPlacement>,
     ) -> Result<BrowserLaunch, String> {
         if let Some(path) = self.state.profile_executables.get(&profile.id) {
-            self.effects.select_browser_executable(path.clone())?;
+            self.effects
+                .select_profile_browser_executable(profile.id.clone(), path.clone())?;
         }
         if let Some(reconciled) = self
             .effects

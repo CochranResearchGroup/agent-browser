@@ -233,7 +233,8 @@ pub(crate) async fn execute_shared_remote_view_open(
             let expected = path
                 .canonicalize()
                 .map_err(|_| "browser_build_executable_unavailable")?;
-            let profile = optional_string(&command, "runtimeProfile");
+            let profile = optional_string(&command, "runtimeProfile")
+                .or_else(|| optional_string(&command, "profileId"));
             for browser in host
                 .state
                 .browsers
@@ -252,9 +253,13 @@ pub(crate) async fn execute_shared_remote_view_open(
             if let Some(profile) = profile {
                 host.state.profile_executables.insert(profile.into(), expected.to_string_lossy().into_owned());
                 host.commit_state()?;
+                host.effects.select_profile_browser_executable(
+                    profile.into(), expected.to_string_lossy().into_owned(),
+                )?;
+            } else {
+                host.effects
+                    .select_browser_executable(expected.to_string_lossy().into_owned())?;
             }
-            host.effects
-                .select_browser_executable(expected.to_string_lossy().into_owned())?;
         }
 
         // Restore retained runtime ownership before navigation uses its target.

@@ -2910,6 +2910,97 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn owner_profile_pin_keeps_real_launch_executables_isolated_after_restart() {
+        use agent_browser_service_model::{
+            BrowserProfileCatalog, BrowserSessionManager, BrowserSessionManagerConfig,
+            BrowserSessionState, OpenBrowserSession,
+        };
+        use std::os::unix::fs::PermissionsExt;
+        let root = TempDirectory::new();
+        let mut catalog = BrowserProfileCatalog::default();
+        for id in ["pinned", "unrelated"] {
+            let directory = root.0.join(id);
+            fs::create_dir_all(&directory).unwrap();
+            catalog.profiles.insert(
+                id.into(),
+                BrowserProfileCatalogEntry {
+                    id: id.into(),
+                    name: id.into(),
+                    user_data_dir: directory.to_string_lossy().into_owned(),
+                    kind: BrowserProfileKind::Named,
+                    manual_login_url: None,
+                },
+            );
+        }
+        // These reviewed synthetic executables record the launch boundary then
+        // exit. They cannot open a browser, attach CDP or access a private profile.
+        for name in ["default", "selected"] {
+            let path = root.0.join(format!("{name}-chrome"));
+            fs::write(
+                &path,
+                format!(
+                    "#!/bin/sh\nprintf '%s\\n' \"$$\" >> '{}'\nexit 71\n",
+                    root.0.join(format!("{name}-launches")).display()
+                ),
+            )
+            .unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let mut state = BrowserSessionState::default();
+        state.profile_executables.insert(
+            "pinned".into(),
+            root.0
+                .join("selected-chrome")
+                .to_string_lossy()
+                .into_owned(),
+        );
+        let mut expected = 0;
+        for order in [["pinned", "unrelated"], ["unrelated", "pinned"]] {
+            for _restart in 0..2 {
+                state = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+                let runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
+                    headless: true,
+                    executable_path: Some(
+                        root.0.join("default-chrome").to_string_lossy().into_owned(),
+                    ),
+                    ..Default::default()
+                })
+                .unwrap();
+                let mut effects = BrowserSessionEffectAdapter::new(runtime);
+                for id in order {
+                    let result = BrowserSessionManager::new(
+                        &mut state,
+                        &catalog,
+                        &mut effects,
+                        BrowserSessionManagerConfig::default(),
+                    )
+                    .open(OpenBrowserSession::exact_profile(id, id, 100));
+                    assert!(
+                        result.is_err(),
+                        "synthetic launcher deliberately exits before readiness"
+                    );
+                }
+                drop(effects);
+                expected += 1;
+                for name in ["selected", "default"] {
+                    let pids = fs::read_to_string(root.0.join(format!("{name}-launches")))
+                        .unwrap_or_default();
+                    assert_eq!(
+                        pids.lines().count(),
+                        expected,
+                        "{name} executable must launch once per owner generation"
+                    );
+                }
+            }
+        }
+        assert!(
+            state.browsers.is_empty(),
+            "failed synthetic launches publish no ready browser"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn runtime_idle_receive_reaps_exited_owned_child_without_touching_live_peer() {
         use std::process::{Child, Command, Stdio};
         struct OwnedChildren(Child, Child);

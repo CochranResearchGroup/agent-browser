@@ -82,6 +82,7 @@ struct FixtureEffects {
     retirement_guard_active: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     launches: Vec<String>,
     executable: String,
+    profile_executables: BTreeMap<String, String>,
     launch_executables: Vec<(String, String)>,
     probes: Vec<String>,
     browser_live: bool,
@@ -312,6 +313,14 @@ impl BrowserSessionEffects for FixtureEffects {
         }
         self.acquire_idle_retirement_guard(&[])
     }
+    fn select_profile_browser_executable(
+        &mut self,
+        profile_id: String,
+        path: String,
+    ) -> Result<(), String> {
+        self.profile_executables.insert(profile_id, path);
+        Ok(())
+    }
     fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
         self.executable = path;
         Ok(())
@@ -324,8 +333,13 @@ impl BrowserSessionEffects for FixtureEffects {
         _navigation: &[BrowserNavigationRecord],
     ) -> Result<agent_browser_service_model::BrowserRecovery, String> {
         self.launches.push(profile.id.clone());
-        self.launch_executables
-            .push((profile.id.clone(), self.executable.clone()));
+        self.launch_executables.push((
+            profile.id.clone(),
+            self.profile_executables
+                .get(&profile.id)
+                .unwrap_or(&self.executable)
+                .clone(),
+        ));
         self.browser_live = true;
         Ok(agent_browser_service_model::BrowserRecovery {
             launch: BrowserLaunch {
@@ -355,8 +369,13 @@ impl BrowserSessionEffects for FixtureEffects {
         desktop: Option<&agent_browser_service_model::RemoteViewFixedDesktop>,
     ) -> Result<BrowserLaunch, String> {
         self.launches.push(profile.id.clone());
-        self.launch_executables
-            .push((profile.id.clone(), self.executable.clone()));
+        self.launch_executables.push((
+            profile.id.clone(),
+            self.profile_executables
+                .get(&profile.id)
+                .unwrap_or(&self.executable)
+                .clone(),
+        ));
         let sequence = self.launches.len();
         Ok(BrowserLaunch {
             process_identity: None,
@@ -2767,4 +2786,52 @@ fn owner_operation_prevents_a_competing_legacy_close() {
     let result = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
         .close_session(&opened.session_id, SessionEndReason::ExplicitClose, 1001);
     assert_eq!(result.unwrap_err(),"browser_profile_operation_pending:copy-one:inspect or cancel the owner operation before closing");
+}
+
+#[test]
+fn persisted_profile_pin_preserves_unpinned_default_in_both_launch_orders_and_restart() {
+    for profiles in [["profile-a", "profile-b"], ["profile-b", "profile-a"]] {
+        let mut catalog = catalog_with_named_profile();
+        let mut second = catalog.profiles["profile-a"].clone();
+        second.id = "profile-b".into();
+        second.user_data_dir = "/managed/profiles/profile-b".into();
+        catalog.profiles.insert(second.id.clone(), second);
+        let mut state = BrowserSessionState::default();
+        state
+            .profile_executables
+            .insert("profile-a".into(), "/reviewed/pinned/chrome".into());
+        for _restart in 0..2 {
+            state = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+            let mut effects = FixtureEffects {
+                browser_live: true,
+                executable: "/reviewed/default/chrome".into(),
+                ..Default::default()
+            };
+            let config = BrowserSessionManagerConfig::default();
+            for profile in profiles {
+                let opened =
+                    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+                        .open(OpenBrowserSession::exact_profile(profile, profile, 100))
+                        .unwrap();
+                BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+                    .close_session(&opened.session_id, SessionEndReason::ExplicitClose, 101)
+                    .unwrap();
+            }
+            let expected = profiles.map(|id| {
+                (
+                    id.to_owned(),
+                    if id == "profile-a" {
+                        "/reviewed/pinned/chrome"
+                    } else {
+                        "/reviewed/default/chrome"
+                    }
+                    .to_owned(),
+                )
+            });
+            assert_eq!(
+                effects.launch_executables, expected,
+                "unrelated profile must retain configured default"
+            );
+        }
+    }
 }

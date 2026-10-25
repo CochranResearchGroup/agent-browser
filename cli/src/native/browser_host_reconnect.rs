@@ -399,7 +399,8 @@ where
                     )?;
                 }
                 if let Some(path) = state.profile_executables.get(&browser.profile_id) {
-                    effects.select_browser_executable(path.clone())?;
+                    let profile_id = browser.profile_id.clone();
+                    effects.select_profile_browser_executable(profile_id, path.clone())?;
                 }
                 None
             };
