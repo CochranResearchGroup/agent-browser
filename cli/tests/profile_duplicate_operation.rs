@@ -510,6 +510,7 @@ fn public_operation_projection_exposes_actionable_choices_without_profile_paths_
         affected_task_ids: vec!["own-task".into(), "peer-task".into()],
         duplicate: None,
         launch: None,
+        destination_task: None,
         failure: None,
     };
     let public = operation.public_view();
@@ -752,6 +753,7 @@ fn qualified_graceful_source_custody_fences_launch_writes_and_publishes_on_its_c
         affected_task_ids: vec![],
         duplicate: Some(duplicate),
         launch: None,
+        destination_task: None,
         failure: Some("profile_duplicate_catalog_readback_required".into()),
     };
     custody::publish_recovered_copy(&database, &operation).unwrap();
@@ -920,4 +922,218 @@ fn owner_confirmed_borrowed_source_preserves_exact_preclose_anchor_under_copy_cu
     .is_err());
     drop(db);
     std::fs::remove_dir_all(root).unwrap();
+}
+
+struct UnstartedLaunchRuntime {
+    attempts: usize,
+    processes: usize,
+    fail: bool,
+}
+impl copy::DuplicationRuntime for UnstartedLaunchRuntime {
+    type Guard = ();
+    fn inspect_source(
+        &mut self,
+        source: &copy::SourceProfile,
+    ) -> Result<copy::SourceObservation, String> {
+        Runtime.inspect_source(source)
+    }
+    fn acquire_stopped_source(&mut self, source: &copy::SourceProfile) -> Result<(), String> {
+        Runtime.acquire_stopped_source(source)
+    }
+    fn focus_source(&mut self, _: &copy::SourceProfile) -> Result<(), String> {
+        panic!("source must not reopen")
+    }
+    fn graceful_close_source(
+        &mut self,
+        _: &copy::SourceProfile,
+        _: &str,
+    ) -> Result<copy::CloseOutcome, String> {
+        panic!("source must not close again")
+    }
+    fn publish_profile(&mut self, _: &copy::DuplicateProfile) -> Result<(), String> {
+        Ok(())
+    }
+    fn launch_duplicate(
+        &mut self,
+        profile: &copy::DuplicateProfile,
+    ) -> Result<copy::LaunchReceipt, String> {
+        self.attempts += 1;
+        if self.fail {
+            return Err("synthetic_pre_spawn_failure".into());
+        }
+        assert_eq!(self.processes, 0, "at most one destination process");
+        self.processes += 1;
+        Runtime.launch_duplicate(profile)
+    }
+    fn prove_launch_absent(&mut self, _: &copy::DuplicateProfile) -> Result<(), String> {
+        if self.processes == 0 {
+            Ok(())
+        } else {
+            Err("destination_exists".into())
+        }
+    }
+    fn reconcile_launch(
+        &mut self,
+        profile: &copy::DuplicateProfile,
+    ) -> Result<Option<copy::LaunchReceipt>, String> {
+        if self.processes == 0 {
+            Ok(None)
+        } else {
+            Runtime.launch_duplicate(profile).map(Some)
+        }
+    }
+}
+
+#[test]
+fn destination_pre_spawn_failure_exposes_same_operation_retry_and_finish_choices() {
+    let root = std::env::temp_dir().join(format!("duplicate-unstarted-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(root.join("source")).unwrap();
+    std::fs::write(root.join("source/Preferences"), b"source-original").unwrap();
+    let request = copy::DuplicateRequest {
+        operation_id: "unstarted".into(),
+        source: copy::SourceProfile {
+            id: "source".into(),
+            name: "Source".into(),
+            user_data_dir: root.join("source"),
+            browser_build: "reviewed-build".into(),
+            generation: 1,
+        },
+        destination: copy::DestinationProfile {
+            id: "destination".into(),
+            name: "Independent".into(),
+            user_data_dir: root.join("destination"),
+        },
+        launch: true,
+    };
+    let database = root.join("operations.sqlite3");
+    let mut runtime = UnstartedLaunchRuntime {
+        attempts: 0,
+        processes: 0,
+        fail: true,
+    };
+    let mut store = copy::DuplicationStore::open(&database).unwrap();
+    store.prepare(request).unwrap();
+    assert!(store
+        .advance("unstarted", copy::Choice::Proceed, &mut runtime)
+        .is_err());
+    let public = store.read("unstarted").unwrap().unwrap().public_view();
+    assert_eq!(public["phase"], "launch_absent");
+    assert!(public["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|a| a["action"] == "retry_launch"));
+    assert!(public["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|a| a["action"] == "finish_without_opening"));
+    assert_eq!(public["copyComplete"], true);
+    assert_eq!(public["profilePublished"], true);
+    assert_eq!(runtime.processes, 0);
+    assert_eq!(
+        std::fs::read(root.join("source/Preferences")).unwrap(),
+        b"source-original"
+    );
+    drop(store);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn destination_launch_recovery_after_restart_reuses_copy_and_only_requested_effect() {
+    for choice in [
+        copy::Choice::RetryLaunch,
+        copy::Choice::FinishWithoutOpening,
+    ] {
+        let root = std::env::temp_dir().join(format!(
+            "duplicate-launch-recovery-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(root.join("source")).unwrap();
+        std::fs::write(root.join("source/Preferences"), b"original").unwrap();
+        let request = copy::DuplicateRequest {
+            operation_id: "original-operation".into(),
+            source: copy::SourceProfile {
+                id: "source".into(),
+                name: "Source".into(),
+                user_data_dir: root.join("source"),
+                browser_build: "reviewed-build".into(),
+                generation: 1,
+            },
+            destination: copy::DestinationProfile {
+                id: "destination".into(),
+                name: "Independent".into(),
+                user_data_dir: root.join("destination"),
+            },
+            launch: true,
+        };
+        let database = root.join("operations.sqlite3");
+        let mut runtime = UnstartedLaunchRuntime {
+            attempts: 0,
+            processes: 0,
+            fail: true,
+        };
+        let mut store = copy::DuplicationStore::open(&database).unwrap();
+        store.prepare(request.clone()).unwrap();
+        assert!(store
+            .advance("original-operation", copy::Choice::Proceed, &mut runtime)
+            .is_err());
+        std::fs::write(root.join("destination/independent-marker"), b"retained").unwrap();
+        std::fs::write(root.join("source/Preferences"), b"source-changed").unwrap();
+        drop(store);
+        let mut restarted = copy::DuplicationStore::open(&database).unwrap();
+        assert_eq!(
+            restarted.prepare(request).unwrap().public_view()["phase"],
+            "launch_absent"
+        );
+        let inspected = restarted
+            .advance("original-operation", copy::Choice::Reconcile, &mut runtime)
+            .unwrap();
+        assert_eq!(inspected.public_view()["phase"], "launch_absent");
+        assert_eq!(runtime.attempts, 1, "restart/readback must not launch");
+        runtime.fail = false;
+        let completed = restarted
+            .advance("original-operation", choice, &mut runtime)
+            .unwrap();
+        assert_eq!(completed.phase, copy::Phase::Completed);
+        assert_eq!(completed.request.operation_id, "original-operation");
+        assert_eq!(
+            completed.duplicate.as_ref().unwrap().destination.id,
+            "destination"
+        );
+        assert_eq!(
+            std::fs::read(root.join("destination/Preferences")).unwrap(),
+            b"original"
+        );
+        assert_eq!(
+            std::fs::read(root.join("destination/independent-marker")).unwrap(),
+            b"retained"
+        );
+        assert_eq!(
+            std::fs::read(root.join("source/Preferences")).unwrap(),
+            b"source-changed"
+        );
+        if choice == copy::Choice::RetryLaunch {
+            assert_eq!(runtime.attempts, 2);
+            assert_eq!(runtime.processes, 1);
+            assert!(completed.launch.is_some());
+        } else {
+            assert_eq!(runtime.attempts, 1);
+            assert_eq!(runtime.processes, 0);
+            assert_eq!(
+                completed.public_view()["completionOutcome"],
+                "copied_without_opening"
+            );
+            assert!(completed.launch.is_none());
+        }
+        assert_eq!(
+            restarted
+                .advance("original-operation", choice, &mut runtime)
+                .unwrap(),
+            completed
+        );
+        assert!(runtime.processes <= 1);
+        drop(restarted);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

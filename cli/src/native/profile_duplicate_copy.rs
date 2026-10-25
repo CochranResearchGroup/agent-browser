@@ -40,6 +40,8 @@ pub enum Phase {
     Copied,
     Published,
     LaunchDispatched,
+    LaunchAbsent,
+    LaunchPending,
     Completed,
     Cancelled,
 }
@@ -51,6 +53,8 @@ pub struct Operation {
     pub affected_task_ids: Vec<String>,
     pub duplicate: Option<DuplicateProfile>,
     pub launch: Option<LaunchReceipt>,
+    #[serde(default)]
+    pub destination_task: Option<DestinationTask>,
     pub failure: Option<String>,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,6 +72,12 @@ pub struct LaunchReceipt {
     pub browser_id: String,
     pub handoff_id: String,
 }
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DestinationTask {
+    pub task_id: String,
+    pub browser_id: String,
+}
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SourceObservation {
     pub generation: u64,
@@ -81,6 +91,8 @@ pub enum Choice {
     CloseAndDuplicate,
     Cancel,
     Reconcile,
+    RetryLaunch,
+    FinishWithoutOpening,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CloseOutcome {
@@ -103,6 +115,17 @@ pub trait DuplicationRuntime {
     ) -> Result<CloseOutcome, String>;
     fn publish_profile(&mut self, profile: &DuplicateProfile) -> Result<(), String>;
     fn launch_duplicate(&mut self, profile: &DuplicateProfile) -> Result<LaunchReceipt, String>;
+    /// Positive exact destination process and custody absence, never inventory inference.
+    fn prove_launch_absent(&mut self, _profile: &DuplicateProfile) -> Result<(), String> {
+        Err("profile_duplicate_launch_absence_unverified".into())
+    }
+    /// Current exact published destination task, without readiness or launch effects.
+    fn destination_task(
+        &self,
+        _profile: &DuplicateProfile,
+    ) -> Result<Option<DestinationTask>, String> {
+        Ok(None)
+    }
     fn reconcile_launch(
         &mut self,
         profile: &DuplicateProfile,
@@ -155,6 +178,7 @@ impl DuplicationStore {
             affected_task_ids: vec![],
             duplicate: None,
             launch: None,
+            destination_task: None,
             failure: None,
         };
         self.connection
@@ -212,19 +236,42 @@ impl DuplicationStore {
             if matches!(op.phase, Phase::Completed | Phase::Cancelled) {
                 return Ok(op);
             }
-            if op.phase == Phase::LaunchDispatched {
+            if matches!(
+                op.phase,
+                Phase::LaunchDispatched | Phase::LaunchAbsent | Phase::LaunchPending
+            ) {
                 let duplicate = op
                     .duplicate
                     .as_ref()
-                    .ok_or("profile_duplicate_copy_record_missing")?;
-                if let Some(receipt) = runtime
-                    .reconcile_launch(duplicate)
-                    .map_err(|_| "profile_duplicate_launch_readback_required")?
-                {
+                    .ok_or("profile_duplicate_copy_record_missing")?
+                    .clone();
+                if let Ok(Some(receipt)) = runtime.reconcile_launch(&duplicate) {
+                    op.destination_task = Some(DestinationTask {
+                        task_id: receipt.task_id.clone(),
+                        browser_id: receipt.browser_id.clone(),
+                    });
                     op.launch = Some(receipt);
                     op.failure = None;
                     op.phase = Phase::Completed;
                     self.save(&op)?;
+                    return Ok(op);
+                }
+                self.classify_failed_launch(&mut op, runtime)?;
+                if matches!(choice, Choice::RetryLaunch | Choice::FinishWithoutOpening) {
+                    if op.phase != Phase::LaunchAbsent {
+                        return Err("profile_duplicate_launch_readback_required:inspect the original destination task before another effect".into());
+                    }
+                    // Never reuse an earlier absence observation as fresh launch authority.
+                    runtime.prove_launch_absent(&duplicate)?;
+                    if choice == Choice::FinishWithoutOpening {
+                        op.phase = Phase::Completed;
+                        op.failure = None;
+                        self.save(&op)?;
+                        return Ok(op);
+                    }
+                    op.phase = Phase::Published;
+                    self.save(&op)?;
+                    return self.publish_and_launch(op, runtime);
                 }
                 return Ok(op);
             }
@@ -316,6 +363,28 @@ impl DuplicationStore {
         }
         result
     }
+    fn classify_failed_launch(
+        &self,
+        op: &mut Operation,
+        runtime: &mut impl DuplicationRuntime,
+    ) -> Result<(), String> {
+        let duplicate = op
+            .duplicate
+            .as_ref()
+            .ok_or("profile_duplicate_copy_record_missing")?;
+        match runtime.destination_task(duplicate) {
+            Ok(Some(task)) => {
+                op.destination_task = Some(task);
+                op.phase = Phase::LaunchPending;
+            }
+            Ok(None) if runtime.prove_launch_absent(duplicate).is_ok() => {
+                op.destination_task = None;
+                op.phase = Phase::LaunchAbsent;
+            }
+            _ => op.phase = Phase::LaunchDispatched,
+        }
+        self.save(op)
+    }
     fn publish_and_launch(
         &self,
         mut op: Operation,
@@ -337,11 +406,19 @@ impl DuplicationStore {
         if op.request.launch {
             op.phase = Phase::LaunchDispatched;
             self.save(&op)?;
-            op.launch = Some(
-                runtime
-                    .launch_duplicate(duplicate)
-                    .map_err(|_| "profile_duplicate_launch_readback_required")?,
-            );
+            match runtime.launch_duplicate(duplicate) {
+                Ok(receipt) => {
+                    op.destination_task = Some(DestinationTask {
+                        task_id: receipt.task_id.clone(),
+                        browser_id: receipt.browser_id.clone(),
+                    });
+                    op.launch = Some(receipt);
+                }
+                Err(_) => {
+                    self.classify_failed_launch(&mut op, runtime)?;
+                    return Err("profile_duplicate_launch_readback_required".into());
+                }
+            }
         }
         op.failure = None;
         op.phase = Phase::Completed;
@@ -720,7 +797,12 @@ impl Operation {
                 ("cancel", false),
             ],
             Phase::Copying => vec![("reconcile", false), ("cancel", false)],
-            Phase::Copied | Phase::Published | Phase::LaunchDispatched => {
+            Phase::LaunchAbsent => vec![
+                ("retry_launch", true),
+                ("finish_without_opening", true),
+                ("reconcile", false),
+            ],
+            Phase::Copied | Phase::Published | Phase::LaunchDispatched | Phase::LaunchPending => {
                 vec![("reconcile", false)]
             }
             Phase::Completed | Phase::Cancelled => vec![("reconcile", false)],
@@ -729,9 +811,11 @@ impl Operation {
             "source":{"id":self.request.source.id,"name":self.request.source.name,"browserBuild":self.request.source.browser_build,"generation":self.request.source.generation},
             "destination":{"id":self.request.destination.id,"name":self.request.destination.name},
             "phase":self.phase,"affectedTaskIds":self.affected_task_ids,"launchRequested":self.request.launch,
-            "copyComplete":matches!(self.phase,Phase::Copied|Phase::Published|Phase::LaunchDispatched|Phase::Completed),
-            "profilePublished":matches!(self.phase,Phase::Published|Phase::LaunchDispatched|Phase::Completed),
-            "launch":self.launch,"failure":self.failure,"authenticationContinuity":"unverified",
+            "copyComplete":matches!(self.phase,Phase::Copied|Phase::Published|Phase::LaunchDispatched|Phase::LaunchAbsent|Phase::LaunchPending|Phase::Completed),
+            "profilePublished":matches!(self.phase,Phase::Published|Phase::LaunchDispatched|Phase::LaunchAbsent|Phase::LaunchPending|Phase::Completed),
+            "launch":self.launch,"destinationTask":self.destination_task,
+            "launchStatus":match self.phase { Phase::LaunchAbsent=>"absent",Phase::LaunchPending=>"readiness_unverified",Phase::LaunchDispatched=>"uncertain",Phase::Completed if self.launch.is_some()=>"ready",_=>"not_opened" },
+            "completionOutcome":if self.phase==Phase::Completed { Some(if self.launch.is_some(){"opened"}else{"copied_without_opening"}) }else{None},"failure":self.failure,"authenticationContinuity":"unverified",
             "actions":actions.into_iter().map(|(action,confirmation)|json!({"action":action,"requiresConfirmation":confirmation})).collect::<Vec<_>>(),
             "disruptionWarning":"Closing the source affects its tasks. Unsaved forms, downloads and live page state may not be restorable. The source reopens only when selected."})
     }

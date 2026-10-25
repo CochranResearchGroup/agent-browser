@@ -387,6 +387,16 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 }
                 Choice::CloseAndDuplicate
             }
+            "retry_launch" | "finish_without_opening" => {
+                if command["ownerConfirmed"] != true {
+                    return Err("profile_duplicate_owner_confirmation_required".into());
+                }
+                if command["choice"] == "retry_launch" {
+                    Choice::RetryLaunch
+                } else {
+                    Choice::FinishWithoutOpening
+                }
+            }
             "cancel" => Choice::Cancel,
             _ => return Err("profile_duplicate_choice_invalid".into()),
         };
@@ -756,6 +766,60 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         self.host.commit_state()?;
         self.ready_receipt(task.session_id, task.browser_id, handoff_id)
     }
+    fn destination_task(
+        &self,
+        profile: &DuplicateProfile,
+    ) -> Result<Option<DestinationTask>, String> {
+        let matches = self
+            .host
+            .state
+            .sessions
+            .values()
+            .filter(|task| {
+                task.profile_id == profile.destination.id
+                    && task.name == duplicate_session_name(&profile.operation_id, false)
+            })
+            .collect::<Vec<_>>();
+        match matches.as_slice() {
+            [] => Ok(None),
+            [task] => Ok(Some(DestinationTask {
+                task_id: task.id.clone(),
+                browser_id: task.browser_id.clone(),
+            })),
+            _ => Err("profile_duplicate_destination_task_ambiguous".into()),
+        }
+    }
+    fn prove_launch_absent(&mut self, profile: &DuplicateProfile) -> Result<(), String> {
+        if self
+            .host
+            .state
+            .browsers
+            .values()
+            .any(|browser| browser.profile_id == profile.destination.id)
+            || self
+                .host
+                .state
+                .sessions
+                .values()
+                .any(|task| task.profile_id == profile.destination.id)
+        {
+            return Err("profile_duplicate_destination_present".into());
+        }
+        let destination = self
+            .host
+            .catalog
+            .profiles
+            .get(&profile.destination.id)
+            .ok_or("profile_duplicate_destination_profile_missing")?;
+        super::super::browser_session_runtime::prove_profile_launch_absence(destination)?;
+        BrowserSessionSqliteStore::open(
+            self.database
+                .parent()
+                .ok_or("profile_duplicate_runtime_directory_missing")?,
+        )?
+        .settle_unpublished_profile_launch_absence(destination, &self.host.state, None)
+        .map_err(|_| "profile_duplicate_launch_custody_unresolved".to_string())
+    }
     fn reconcile_launch(
         &mut self,
         profile: &DuplicateProfile,
@@ -771,7 +835,21 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             })
             .cloned()
         else {
-            return Ok(None);
+            // An observed but unpublished launch is resumed through the ordinary
+            // owner join. The runtime keeps an unresolved claim fail-closed, so
+            // this cannot fall through to an implicit replacement launch.
+            use agent_browser_service_model::BrowserLaunchCustodyStore;
+            let mut store = BrowserSessionSqliteStore::open_read_only(&self.database)?;
+            let claims = store.unpublished_launch_records()
+                .map_err(|_| "profile_duplicate_launch_readback_required")?;
+            let observed = claims.iter().filter(|record| {
+                record.intent.profile_id == profile.destination.id
+                    && record.observed_process_identity.is_some()
+                    && record.observed_browser_id.is_some()
+            }).collect::<Vec<_>>();
+            if observed.is_empty() { return Ok(None); }
+            if observed.len() != 1 { return Err("profile_duplicate_launch_ambiguous".into()); }
+            return self.launch_duplicate(profile).map(Some);
         };
         if let Some(link) = self
             .host
