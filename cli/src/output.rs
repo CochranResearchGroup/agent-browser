@@ -7320,29 +7320,24 @@ Usage:
   agent-browser mcp serve
   agent-browser mcp resources
   agent-browser mcp read <uri>
-  agent-browser --json mcp browser-mode <task-id>
-  agent-browser --json mcp host-task <task-id>
-  agent-browser --json mcp watch-host-task <task-id>
+  agent-browser --json mcp <command> [arguments]
   agent-browser --json mcp host-control TASK OP [epoch actor reason request-id]
-  agent-browser --json mcp host-reconnect TASK OP [options-json]
-  agent-browser --json mcp host-policy '<JSON request>'
 
 Commands:
   serve             Run the MCP server
   resources/read    Diagnostics
-  host-task         Read compact app task metadata
+  host-task TASK    Read app metadata
   browser-mode TASK Inspect mode
   browser-native TASK ACTION JSON Input/capture <=1Mpx
-  profile-duplicate JSON Copy/inspect; confirmed retry_launch or finish_without_opening after launch_absent
-  mode-convert JSON Convert/inspect; pause_and_relaunch holds before explicit relaunch
-                    Confirm relaunch/restore_previous; cancel only before irreversible effects
-  watch-host-task   Initial/changed NDJSON; fresh reconnect
+  profile-duplicate JSON Copy/inspect; retry_launch or finish_without_opening after launch_absent
+  mode-convert JSON Convert/inspect: pause_and_relaunch, relaunch, cancel, restore_previous
+  watch-host-task TASK Initial/changed NDJSON; fresh reconnect
   host-control      Status/view/takeover/return/override/reconcile; inspect failed return.
-  host-reconnect    Status/disconnect/reconnect/rebind/configure/reopen
-  host-policy       Optional app/task rules and attributable scoped override
+  host-reconnect TASK OP [options-json] Status/disconnect/reconnect/rebind/configure/reopen
+  host-policy JSON  App/task rules and scoped override
 
-  Lookup note: at most 256 matching operations; active/pending first.
-  historyTruncated marks omissions. Published completion needs a new conversion.
+  Lookup: <=256 scoped operations, active/pending first; historyTruncated marks omissions.
+  Completed publication needs a new conversion.
 
 Workflow tools (16):
   browser_open          Open/reuse task and profile

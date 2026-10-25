@@ -7241,11 +7241,13 @@ MCP uses `browser_command` with `taskId`, action `mode_convert`, and params cont
 Keep the operation ID after an uncertain reply and select `reconcile`; do not issue another close/open sequence. Close prompts offer focus, graceful retry and consequentially confirmed force close. Native screenshots and input remain separate from authentication proof. Conversion currently has incomplete recovery and installed Native qualification; do not treat the source implementation as accepted installed behavior.
 
 Select `pause_and_relaunch` to hold the operation in `paused` before closing
-anything. The affected tasks stay fenced against page and Native work; later
-select confirmed `relaunch`, or cancel the pause. This does not automatically
-restart after a timer. Immediate `relaunch` remains a separate choice. A live
-close prompt can be cancelled only after the exact original browser is observed
-live and its prompt is dismissed; uncertain outcomes keep the operation fenced.
+anything. Affected tasks stay fenced against page and Native automation. Later
+select `relaunch`, confirming when the returned action requires it, or cancel
+the pause. There is no automatic timed restart. Immediate relaunch is separate.
+To cancel conversion at a close prompt, the owner sends Escape and rechecks the
+exact live original process and Native window before releasing the operation.
+A lost input reply or failed readback keeps custody. Inspect the original page
+before continuing; input delivery alone does not prove a page or dialog result.
 
 
 
