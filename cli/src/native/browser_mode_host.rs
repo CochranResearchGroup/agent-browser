@@ -263,25 +263,32 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             self.state.profile_operation_ids.remove(&browser.profile_id);
             self.commit_state()?;
         }
-        let phase = phase_name(&state.phase);
-        let actions = match state.phase {
-            Phase::Prepared => vec![
-                ("relaunch", state.request.task_ids.len() > 1),
-                ("cancel", false),
-            ],
-            Phase::Closing | Phase::ClosePrompt => vec![
-                ("focus", false),
-                ("retry_graceful_close", false),
-                ("force_close", true),
-                ("reconcile", false),
-            ],
-            Phase::OriginalExited | Phase::LaunchDispatched => vec![("reconcile", false)],
-            _ => vec![],
-        };
-        Ok(
-            json!({"schemaVersion":"agent-browser.mode-operation.v1","operationId":id,"phase":phase,"failure":failure,"browserId":browser.id,"profileId":binding.profile.id,"taskId":task_id,"affectedTaskIds":state.request.task_ids,"requestedMode":if state.request.requested_mode==Mode::Cdp{"cdp"}else{"cdp_free"},"observedMode":if state.phase==Phase::Completed {Some(if state.request.requested_mode==Mode::Cdp{"cdp"}else{"cdp_free"})}else{None},"nativeContextScope":"browser","restoration":"logical tasks and profile retained; transient pages are not replayed","warning":"Relaunch replaces the whole browser. Unsaved forms, downloads and page state can be lost. Native controls address the current browser window; URLs are unverified until observed. Force close may lose buffered data.","closeMethod":state.close_method,"actions":actions.into_iter().map(|(action,confirmation)|json!({"action":action,"requiresConfirmation":confirmation})).collect::<Vec<_>>()}),
-        )
+        Ok(public_operation_view(&state, task_id, failure.as_deref()))
     }
+}
+
+/// Redacted owner readback shared by explicit actions and read-only lookup.
+pub(super) fn public_operation_view(
+    state: &Operation,
+    task_id: &str,
+    failure: Option<&str>,
+) -> Value {
+    let phase = phase_name(&state.phase);
+    let actions = match state.phase {
+        Phase::Prepared => vec![
+            ("relaunch", state.request.task_ids.len() > 1),
+            ("cancel", false),
+        ],
+        Phase::Closing | Phase::ClosePrompt => vec![
+            ("focus", false),
+            ("retry_graceful_close", false),
+            ("force_close", true),
+            ("reconcile", false),
+        ],
+        Phase::OriginalExited | Phase::LaunchDispatched => vec![("reconcile", false)],
+        _ => vec![],
+    };
+    json!({"schemaVersion":"agent-browser.mode-operation.v1","operationId":state.request.operation_id,"phase":phase,"failure":failure,"browserId":state.request.browser_id,"profileId":state.request.profile_id,"taskId":task_id,"affectedTaskIds":state.request.task_ids,"requestedMode":if state.request.requested_mode==Mode::Cdp{"cdp"}else{"cdp_free"},"observedMode":if state.phase==Phase::Completed {Some(if state.request.requested_mode==Mode::Cdp{"cdp"}else{"cdp_free"})}else{None},"nativeContextScope":"browser","restoration":"logical tasks and profile retained; transient pages are not replayed","warning":"Relaunch replaces the whole browser. Unsaved forms, downloads and page state can be lost. Native controls address the current browser window; URLs are unverified until observed. Force close may lose buffered data.","closeMethod":state.close_method,"actions":actions.into_iter().map(|(action,confirmation)|json!({"action":action,"requiresConfirmation":confirmation})).collect::<Vec<_>>()})
 }
 fn phase_name(phase: &Phase) -> &'static str {
     match phase {
