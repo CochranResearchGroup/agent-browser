@@ -165,6 +165,34 @@ pub(super) fn address_task_command(command: &mut Value, task_id: &str) -> Result
     Ok(task.name.clone())
 }
 
+/// Read posture and positive copy publication without creating a runtime profile.
+fn profile_catalog_for_open(
+    id: &str,
+) -> Result<
+    (
+        Option<agent_browser_service_model::BrowserProfileCatalogEntry>,
+        Option<agent_browser_service_model::BrowserProfileCatalogEntry>,
+    ),
+    JsonRpcError,
+> {
+    let path = BrowserSessionSqliteStore::default_sqlite_path().map_err(issue)?;
+    match std::fs::metadata(&path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok((None, None)),
+        Err(_) => return Err(issue("browser_profile_catalog_unavailable")),
+        Ok(_) => {}
+    }
+    let store = BrowserSessionSqliteStore::open_read_only(&path).map_err(issue)?;
+    let entry = store
+        .load_profile_catalog()
+        .map_err(issue)?
+        .catalog
+        .profiles
+        .get(id)
+        .cloned();
+    let copied = store.published_copy_profile(id).map_err(issue)?;
+    Ok((entry, copied))
+}
+
 pub(super) fn open(
     arguments: &Value,
     transport_session: &str,
@@ -184,7 +212,7 @@ pub(super) fn open(
     if !matches!(control_mode, "automation" | "manual_login") {
         return Err(issue("browser_login_mode_invalid"));
     }
-    let manual = control_mode == "manual_login";
+    let mut manual = control_mode == "manual_login";
     if manual && mode == "disposable" {
         return Err(issue("manual_login_requires_persistent_profile"));
     }
@@ -206,6 +234,21 @@ pub(super) fn open(
     let service = required_string_argument(arguments, "serviceName")?;
     let agent = required_string_argument(arguments, "agentName")?;
     let task = required_string_argument(arguments, "taskName")?;
+    let (catalog_profile, copied_profile) = profile
+        .map(profile_catalog_for_open)
+        .transpose()?
+        .unwrap_or((None, None));
+    if arguments.get("mode").is_none() {
+        manual = catalog_profile
+            .as_ref()
+            .is_some_and(|profile| profile.manual_login_url.is_some());
+    }
+    if manual && mode == "disposable" {
+        return Err(issue("manual_login_requires_persistent_profile"));
+    }
+    if manual && !crate::native::browser_session_remote_view::remote_view_settings_present() {
+        return Err(issue("manual_login_requires_native_remote_desktop"));
+    }
     let hosted = arguments
         .get("hostBinding")
         .map(|value| {
@@ -237,7 +280,7 @@ pub(super) fn open(
     }
     .expect("string tuple serializes");
     let session_name = format!("workflow-{}", hex::encode(Sha256::digest(identity)));
-    if mode == "persistent" {
+    if mode == "persistent" && copied_profile.is_none() {
         cli(&["runtime", "create", profile.expect("profile validated")])?;
     }
     let mut command = json!({"id":uuid::Uuid::new_v4().to_string(),
@@ -253,27 +296,43 @@ pub(super) fn open(
     if let Some(profile_id) = profile {
         let mut state = load_default_service_state_snapshot().map_err(issue)?;
         state.overlay_configured_entities(configured.clone());
-        // Older runtime registrations predate the Service catalog join. Reconcile
-        // a positively configured profile through the same creation adapter.
-        if mode == "existing" && !state.profiles.contains_key(profile_id) {
-            let flags = crate::flags::parse_flags(&[]);
-            if flags.configured_runtime_profiles.contains_key(profile_id) {
-                cli(&["runtime", "create", profile_id])?;
-                state = load_default_service_state_snapshot().map_err(issue)?;
-                state.overlay_configured_entities(configured.clone());
+        if let Some(copied) = &copied_profile {
+            if state
+                .profiles
+                .get(profile_id)
+                .and_then(|profile| profile.user_data_dir.as_deref())
+                .is_some_and(|path| {
+                    std::fs::canonicalize(path).ok().as_deref()
+                        != Some(std::path::Path::new(&copied.user_data_dir))
+                })
+            {
+                return Err(issue("browser_profile_selector_conflict"));
             }
+            command["profileId"] = json!(profile_id);
+            command["profile"] = json!(copied.user_data_dir);
+        } else {
+            // Older runtime registrations predate the Service catalog join. Reconcile
+            // a positively configured profile through the same creation adapter.
+            if mode == "existing" && !state.profiles.contains_key(profile_id) {
+                let flags = crate::flags::parse_flags(&[]);
+                if flags.configured_runtime_profiles.contains_key(profile_id) {
+                    cli(&["runtime", "create", profile_id])?;
+                    state = load_default_service_state_snapshot().map_err(issue)?;
+                    state.overlay_configured_entities(configured.clone());
+                }
+            }
+            let selected = state
+                .profiles
+                .get(profile_id)
+                .ok_or_else(|| issue(format!("browser_profile_not_found:{profile_id}")))?;
+            let path = selected
+                .user_data_dir
+                .as_deref()
+                .ok_or_else(|| issue(format!("browser_profile_directory_missing:{profile_id}")))?;
+            command["profileId"] = json!(profile_id);
+            command["runtimeProfile"] = json!(profile_id);
+            command["profile"] = json!(path);
         }
-        let selected = state
-            .profiles
-            .get(profile_id)
-            .ok_or_else(|| issue(format!("browser_profile_not_found:{profile_id}")))?;
-        let path = selected
-            .user_data_dir
-            .as_deref()
-            .ok_or_else(|| issue(format!("browser_profile_directory_missing:{profile_id}")))?;
-        command["profileId"] = json!(profile_id);
-        command["runtimeProfile"] = json!(profile_id);
-        command["profile"] = json!(path);
     }
     // Opening verifies/reuses the existing managed browser before reading its task.
     // A retained current tab is live task state; navigation history is not a replay gate.

@@ -330,8 +330,16 @@ struct TestRetirementGuard;
 impl BrowserIdleRetirementGuard for TestRetirementGuard {}
 
 impl BrowserSessionEffects for Process {
-    fn select_profile_browser_executable(&mut self,profile_id:String,path:String)->Result<(),String> {
-        std::fs::write(self.root.join("selected-profile-executable.json"),serde_json::json!({"profileId":profile_id,"path":path}).to_string()).map_err(|_|"fixture_profile_pin_unavailable".to_string())
+    fn select_profile_browser_executable(
+        &mut self,
+        profile_id: String,
+        path: String,
+    ) -> Result<(), String> {
+        std::fs::write(
+            self.root.join("selected-profile-executable.json"),
+            serde_json::json!({"profileId":profile_id,"path":path}).to_string(),
+        )
+        .map_err(|_| "fixture_profile_pin_unavailable".to_string())
     }
 
     fn acquire_idle_retirement_guard(

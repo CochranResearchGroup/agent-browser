@@ -140,5 +140,38 @@ impl BrowserSessionSqliteStore {
 
 impl BrowserSessionSqliteStore {
     /// Only positive copy publication admits an existing-profile broker fallback.
-    pub(crate) fn published_copy_profile(&self,_profile_id:&str)->Result<Option<agent_browser_service_model::BrowserProfileCatalogEntry>,String> {Ok(None)}
+    pub(crate) fn published_copy_profile(
+        &self,
+        profile_id: &str,
+    ) -> Result<Option<agent_browser_service_model::BrowserProfileCatalogEntry>, String> {
+        let table:bool=self.connection.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='browser_profile_duplication_lineage')",[],|row|row.get(0)).map_err(|_|"browser_build_copy_lineage_unavailable")?;
+        if !table {
+            return Ok(None);
+        }
+        let lineage:Option<(String,String,String)>=self.connection.query_row("SELECT source_profile_id,operation_id,browser_build FROM browser_profile_duplication_lineage WHERE profile_id=?1",[profile_id],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?))).optional().map_err(|_|"browser_build_copy_lineage_unavailable")?;
+        let Some((source, operation, build)) = lineage else {
+            return Ok(None);
+        };
+        if source == profile_id
+            || [source, operation, build]
+                .iter()
+                .any(|value| value.trim().is_empty())
+        {
+            return Err("browser_build_copy_lineage_invalid".into());
+        }
+        let catalog = self.load_profile_catalog()?.catalog;
+        let profile = catalog
+            .profiles
+            .get(profile_id)
+            .filter(|profile| {
+                profile.kind == agent_browser_service_model::BrowserProfileKind::Named
+            })
+            .cloned()
+            .ok_or("browser_build_copy_catalog_missing:inspect the original copy operation")?;
+        let directory = Path::new(&profile.user_data_dir);
+        if !directory.is_dir() || directory.canonicalize().ok().as_deref() != Some(directory) {
+            return Err("browser_build_copy_directory_unavailable:restore the preserved directory or choose a new profile".into());
+        }
+        Ok(Some(profile))
+    }
 }
