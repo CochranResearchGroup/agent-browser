@@ -3312,6 +3312,80 @@ mod x11_focus {
         }
         (x11.free)(children as *mut c_void);
     }
+    #[cfg(test)]
+    mod protocol_tests {
+        use super::*;
+        use std::io::{BufRead, BufReader};
+        use std::process::{Command, Stdio};
+        use x11rb::connection::Connection;
+        use x11rb::protocol::xproto::*;
+        use x11rb::wrapper::ConnectionExt as _;
+
+        #[test]
+        #[ignore = "requires an explicitly admitted disposable Xvfb server"]
+        fn vanished_window_does_not_terminate_browser_owner() {
+            const CHILD: &str = "AGENT_BROWSER_X11_RACE_FIXTURE_DISPLAY";
+            if let Ok(display) = std::env::var(CHILD) {
+                let (connection, screen) = x11rb::connect(Some(&display)).unwrap();
+                let root = connection.setup().roots[screen].root;
+                let atom = |name: &[u8]| connection.intern_atom(false, name).unwrap().reply().unwrap().atom;
+                let clients = atom(b"_NET_CLIENT_LIST_STACKING");
+                let window = connection.generate_id().unwrap();
+                connection.create_window(0, window, root, 0, 0, 100, 100, 0,
+                    WindowClass::INPUT_OUTPUT, 0, &CreateWindowAux::new()).unwrap().check().unwrap();
+                connection.destroy_window(window).unwrap().check().unwrap();
+                connection.change_property32(PropMode::REPLACE, root, clients, AtomEnum::WINDOW, &[window]).unwrap().check().unwrap();
+                // The WM list is a snapshot: the selected window may disappear
+                // before its PID/geometry read. X protocol errors are readback,
+                // never permission to terminate the owner or claim focus.
+                assert!(focus_window_for_pid(std::process::id(), &display, true).is_err());
+                // The same owner must remain usable for a subsequent live target.
+                let live = connection.generate_id().unwrap();
+                connection.create_window(0, live, root, 0, 0, 100, 100, 0,
+                    WindowClass::INPUT_OUTPUT, 0, &CreateWindowAux::new()).unwrap().check().unwrap();
+                connection.change_property32(PropMode::REPLACE, live, atom(b"_NET_WM_PID"), AtomEnum::CARDINAL, &[std::process::id()]).unwrap().check().unwrap();
+                connection.map_window(live).unwrap().check().unwrap();
+                connection.change_property32(PropMode::REPLACE, root, clients, AtomEnum::WINDOW, &[live]).unwrap().check().unwrap();
+                assert_eq!(focus_window_for_pid(std::process::id(), &display, true).unwrap()["focused"], true);
+                close_windows_for_pid(std::process::id(), &display).unwrap();
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+                loop {
+                    if let Some(x11rb::protocol::Event::ClientMessage(event)) = connection.poll_for_event().unwrap() {
+                        assert_eq!(event.window, live);
+                        assert_eq!(event.type_, atom(b"WM_PROTOCOLS"));
+                        assert_eq!(event.data.as_data32()[0], atom(b"WM_DELETE_WINDOW"));
+                        break;
+                    }
+                    assert!(std::time::Instant::now() < deadline, "polite close was not delivered");
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                return;
+            }
+            let mut server = Command::new("Xvfb").args(["-displayfd", "1", "-screen", "0", "320x240x24", "-nolisten", "tcp", "-ac"])
+                .stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
+            let (sender, receiver) = std::sync::mpsc::channel();
+            let stdout = server.stdout.take().unwrap();
+            let reader = std::thread::spawn(move || {
+                let mut number = String::new();
+                let result = BufReader::new(stdout).read_line(&mut number).map(|_| number);
+                let _ = sender.send(result);
+            });
+            let number = receiver.recv_timeout(std::time::Duration::from_secs(10));
+            let outcome = if let Ok(Ok(number)) = number {
+                Command::new(std::env::current_exe().unwrap()).args([
+                    "--exact", "native::browser::x11_focus::protocol_tests::vanished_window_does_not_terminate_browser_owner",
+                    "--ignored", "--nocapture", "--test-threads=1"])
+                    .env(CHILD, format!(":{}", number.trim())).status()
+            } else {
+                Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "Xvfb readiness deadline"))
+            };
+            let _ = server.kill();
+            let _ = server.wait();
+            reader.join().unwrap();
+            assert!(outcome.unwrap().success(), "stale X window killed owner instead of returning readback");
+        }
+    }
+
 }
 
 #[cfg(test)]
