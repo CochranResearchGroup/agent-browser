@@ -376,7 +376,11 @@ fn mode_binding_uses_actual_borrowed_process_posture_instead_of_catalog_intent()
     let opened = host
         .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
         .unwrap();
+    host.navigate(&opened.session_id, "https://synthetic.example/", 101).unwrap();
     let mut state = host.state().clone();
+    let tab_id = state.sessions[&opened.session_id].current_tab_id.clone().unwrap();
+    let target_id = state.tabs[&tab_id].target_id.clone();
+    state.shared_browser_ids.insert(opened.browser_id.clone());
     let browser = state.browsers.get_mut(&opened.browser_id).unwrap();
     browser.pid = original.pid;
     browser.cdp_endpoint = "ws://127.0.0.1:9222/devtools/browser/synthetic".into();
@@ -392,7 +396,7 @@ fn mode_binding_uses_actual_borrowed_process_posture_instead_of_catalog_intent()
                     .to_string_lossy()
                     .into_owned(),
                 cdp_endpoint: browser.cdp_endpoint.clone(),
-                target_id: "borrowed-target".into(),
+                target_id: target_id.clone(),
                 shared_with: vec![],
             },
             owner: BrowserHostIdentity {
@@ -400,7 +404,7 @@ fn mode_binding_uses_actual_borrowed_process_posture_instead_of_catalog_intent()
                 participant_id: "app-owner".into(),
                 session_id: "app-session".into(),
             },
-            borrowed_tab_ids: std::collections::BTreeSet::from(["borrowed-target".into()]),
+            borrowed_tab_ids: std::collections::BTreeSet::from([target_id]),
             profile_id: "profile-a".into(),
             desktop: browser.desktop.clone().unwrap(),
             assignment: None,
