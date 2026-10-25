@@ -23,6 +23,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary', required=True)
     parser.add_argument('--chrome', required=True)
+    parser.add_argument('--build-target', help='Reviewed native browser executable for an explicit synthetic cross-build roundtrip')
     parser.add_argument('--mode-conversion', action='store_true')
     parser.add_argument('--mode-case', choices=['pause', 'prompt-cancel', 'prompt-force'])
     parser.add_argument('--recovery-case', choices=['pre-spawn-retry', 'pre-spawn-restore', 'native-restore', 'lost-reply', 'published-terminal'])
@@ -30,6 +31,8 @@ def main():
     parser.add_argument('--namespace-worker', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--parent-proof-fd', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.build_target and not args.mode_conversion:
+        parser.error('--build-target requires --mode-conversion')
     if args.mode_case and (not args.mode_conversion or args.recovery_case):
         parser.error('--mode-case requires --mode-conversion and excludes --recovery-case')
     if not args.namespace_worker:
@@ -41,7 +44,7 @@ def main():
             result = subprocess.run(['unshare', '--user', '--map-current-user', '--keep-caps', '--mount', '--net',
                 '--propagation', 'private', 'python3', str(Path(__file__).resolve()),
                 '--binary', str(Path(args.binary).resolve()), '--chrome', str(Path(args.chrome).resolve()),
-                '--namespace-worker', '--parent-proof-fd', str(read_fd), *(['--mode-conversion'] if args.mode_conversion else []), *(['--mode-case', args.mode_case] if args.mode_case else []), *(['--recovery-case', args.recovery_case] if args.recovery_case else []), *(['--restart-owner'] if args.restart_owner else [])], pass_fds=(read_fd,)).returncode
+                '--namespace-worker', '--parent-proof-fd', str(read_fd), *(['--build-target', str(Path(args.build_target).resolve())] if args.build_target else []), *(['--mode-conversion'] if args.mode_conversion else []), *(['--mode-case', args.mode_case] if args.mode_case else []), *(['--recovery-case', args.recovery_case] if args.recovery_case else []), *(['--restart-owner'] if args.restart_owner else [])], pass_fds=(read_fd,)).returncode
         finally:
             os.close(read_fd)
         raise SystemExit(result)
@@ -65,6 +68,24 @@ def main():
             else:
                 target.symlink_to(resource, target_is_directory=resource.is_dir())
         args.chrome = str(private_bundle / original_chrome.name)
+        if args.build_target:
+            original_target = Path(args.build_target).resolve()
+            target_bundle = root / 'target-build'
+            target_bundle.mkdir()
+            for resource in original_target.parent.iterdir():
+                target = target_bundle / resource.name
+                if resource == original_target:
+                    shutil.copy2(resource, target)
+                else:
+                    target.symlink_to(resource, target_is_directory=resource.is_dir())
+            args.build_target = str(target_bundle / original_target.name)
+        def build_identity(path):
+            digest = hashlib.file_digest(open(path, 'rb'), 'sha256').hexdigest()
+            return dict(executableName=Path(path).name, sha256=digest)
+        build_pair = dict(source=build_identity(args.chrome), target=build_identity(args.build_target)) if args.build_target else None
+        build_evidence = []
+        return_auth_preserved = None
+
         sockets = root / 'x11-sockets'
         sockets.mkdir(mode=0o1777)
         sockets.chmod(0o1777)
@@ -123,7 +144,8 @@ def main():
         def process_identity(pid):
             fields=Path('/proc/'+str(pid)+'/stat').read_text().rsplit(')',1)[1].split()
             return dict(pid=pid,start_token=fields[19],boot_id=Path('/proc/sys/kernel/random/boot_id').read_text().strip(),executable=os.readlink('/proc/'+str(pid)+'/exe'))
-        def assert_conversion_executable_pin(profile_id, mode):
+        def assert_conversion_executable_pin(profile_id, mode, expected=None):
+            expected = expected or args.chrome
             # Read only this synthetic owner's durable state after the public
             # conversion; no profile pin is seeded by the fixture itself.
             databases = list(root.rglob('runtime.sqlite3'))
@@ -132,11 +154,11 @@ def main():
                 row = connection.execute("SELECT json FROM state_documents WHERE kind='browser_session_state'").fetchone()
             assert row, 'converted owner state must be durable'
             state = json.loads(row[0])
-            assert state.get('profileExecutables', {}).get(profile_id) == args.chrome, 'public conversion must retain the exact fixture executable pin'
+            assert state.get('profileExecutables', {}).get(profile_id) == expected, 'public conversion must retain the exact fixture executable pin'
             physical = browsers()
             assert len(physical) == 1, 'conversion must retain one exact browser process'
-            assert process_identity(physical[0][0])['executable'] == args.chrome, 'converted process must use the retained executable pin'
-            executable_pin_provenance.append(dict(mode=mode, profileId=profile_id, durablePinMatches=True, processExecutableMatches=True))
+            assert process_identity(physical[0][0])['executable'] == expected, 'converted process must use the retained executable pin'
+            executable_pin_provenance.append(dict(mode=mode, profileId=profile_id, durablePinMatches=True, processExecutableMatches=True, loadedSha256=hashlib.file_digest(open('/proc/'+str(physical[0][0])+'/exe','rb'),'sha256').hexdigest()))
         def windows():
             result = []
             active = run(['xdotool', 'getactivewindow']).stdout.strip()
@@ -399,7 +421,19 @@ def main():
                     assert 'Arm close prompt' in json.dumps(page), 'synthetic prompt page is ready in the addressed task'
                     call('browser_command',dict(taskId=task['taskId'],action='native_input',params=dict(actions=[dict(kind='click',x=400,y=400,button=1,count=1)])))
                     assert prompt_armed.wait(5), 'real beforeunload prompt armed by observed native click'
-                prepared=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-one',mode='cdp_free',choice='prepare')))
+                target_selection = {}
+                source_selection = {}
+                if args.build_target:
+                    for role, path in [('source',args.chrome),('target',args.build_target)]:
+                        discovered=call('browser_command',dict(taskId=task['taskId'],action='build_select',params=dict(choice='inspect',executablePath=path)))
+                        row=next(row for row in discovered['availableBuilds'] if row['sha256']==build_pair[role]['sha256'])
+                        assert row['available'] and row['nativeBinary'] is True, row
+                        build_pair[role].update(version=row['version'],family=row['family'])
+                        assert row['version'], 'actual version evidence required'
+                        build_evidence.append(dict(stage=role,profileDataVersion=discovered['profileDataVersion'],credentialStorage=discovered['credentialStorage'],profileDataReadable=discovered['profileDataReadable']))
+                        if role=='target': target_selection=dict(executablePath=path,expectedSha256=row['sha256'])
+                        else: source_selection=dict(executablePath=path,expectedSha256=row['sha256'])
+                prepared=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-one',mode='cdp_free',choice='prepare',**target_selection)))
                 assert prepared['phase']=='prepared',prepared
                 original_pid = browsers()[0][0]
                 if args.mode_case:
@@ -443,7 +477,7 @@ def main():
                     fresh_requester(args.restart_owner)
                     changed=convert('reconcile')
                 else:
-                    changed=convert('relaunch', bool(args.mode_case))
+                    changed=convert('relaunch', bool(args.mode_case or args.build_target))
                 if args.mode_case and args.mode_case.startswith('prompt'):
                     assert changed['phase'] == 'close_prompt', changed
                     assert browsers()[0][0] == original_pid, 'prompt must retain original'
@@ -524,10 +558,10 @@ def main():
                     assert process_identity(unrelated.pid)==unrelated_identity, 'unrelated Chrome preserved through conversion'
                     assert process_identity(nonselected_process.pid)==nonselected_identity, 'nonselected process preserved through conversion'
                 assert changed['taskId']==original[0] and changed['browserId']==original[1] and changed['profileId']==original[2]
-                assert_conversion_executable_pin(original[2], 'cdp_free')
+                assert_conversion_executable_pin(original[2], 'cdp_free', args.build_target)
                 cookie_after_close.set()
                 call('browser_command',dict(taskId=task['taskId'],action='native_input',params=dict(actions=[dict(kind='key',chord='ctrl+l'),dict(kind='text',text=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/login-fixture',method='keys'),dict(kind='key',chord='Return')])))
-                if args.mode_case == 'prompt-force':
+                if args.mode_case == 'prompt-force' or args.build_target:
                     deadline = time.monotonic()+10
                     while True:
                         observations = [request for request in get_requests if request['afterClose'] and request['path']=='/login-fixture']
@@ -550,7 +584,7 @@ def main():
                 assert native_mouse.wait(5) and native_scroll.wait(5),'independently observed native click and scroll effects'
                 call('browser_command',dict(taskId=task['taskId'],action='native_input',params=dict(actions=[dict(kind='key',chord='ctrl+Home'),dict(kind='key',chord='Tab'),dict(kind='text',text='synthetic-proof'),dict(kind='key',chord='Return')])))
                 assert native_auth.wait(5),'native form login independently authenticated'
-                back=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-back',mode='cdp',choice='relaunch',ownerConfirmed=bool(peer))))
+                back=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-back',mode='cdp',choice='relaunch',ownerConfirmed=bool(peer or args.build_target),**source_selection)))
                 for _ in range(30):
                     if back['phase']=='completed': break
                     time.sleep(.1)
@@ -569,10 +603,23 @@ def main():
                     assert observed_peer['mode']=='cdp', observed_peer
                     assert call('browser_handoff',dict(taskId=peer['taskId']))['handoffUrl']==peer_link, 'peer durable handoff retained'
                 call('browser_navigate',dict(taskId=task['taskId'],url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/login-fixture'))
-                assert cookie_restored.is_set() or (args.mode_case=='prompt-force' and initial_cookie_preserved is False)
+                assert cookie_restored.is_set() or ((args.mode_case=='prompt-force' or args.build_target) and initial_cookie_preserved is False)
                 native_auth.clear()
                 call('browser_navigate',dict(taskId=task['taskId'],url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/auth-check'))
-                assert native_auth.wait(5),'native login continuity after CDP return'
+                return_auth_preserved = native_auth.wait(5)
+                if args.build_target and not return_auth_preserved:
+                    # Authentication loss is an observed outcome, never repaired by
+                    # changing encryption or declaring copied cookie bytes usable.
+                    native_page.clear()
+                    call('browser_navigate',dict(taskId=task['taskId'],url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/native-login'))
+                    assert native_page.wait(5)
+                    time.sleep(.3)
+                    call('browser_command',dict(taskId=task['taskId'],action='native_input',params=dict(actions=[dict(kind='key',chord='ctrl+Home'),dict(kind='key',chord='Tab'),dict(kind='text',text='synthetic-proof'),dict(kind='key',chord='Return')])))
+                    assert native_auth.wait(5),'fresh synthetic login after cross-build loss'
+                else:
+                    assert return_auth_preserved,'native login continuity after CDP return'
+                if args.build_target:
+                    build_evidence.append(dict(stage='return',profileDataVersions=[p.read_text().strip() for p in profile.glob('Last Version')],profileReadableByNavigation=True,credentialStorage='unverified'))
                 call('browser_close',dict(taskId=task['taskId']))
                 if peer: call('browser_close',dict(taskId=peer['taskId']))
                 task=None
@@ -677,7 +724,7 @@ def main():
                     cleanup_escalated = True
                 time.sleep(.02)
         if args.mode_conversion:
-            print(json.dumps(dict(passed=True,scope='public MCP, real Chrome and synthetic Native/X11; actual installed Native not qualified',modeRoundTrip=True,modeCase=args.mode_case,affectedTasks=2 if args.mode_case else 1,persistentCookiePreserved=initial_cookie_preserved,cookieContinuity='preserved' if initial_cookie_preserved else 'login_lost_after_forced_close',nativeLoginContinuityAfterCdpReturn=True,executablePinProvenance=executable_pin_provenance,cleanupVerified=True)))
+            print(json.dumps(dict(passed=True,scope='public MCP, real Chrome and synthetic Native/X11; actual installed Native not qualified',modeRoundTrip=True,modeCase=args.mode_case,affectedTasks=2 if args.mode_case else 1,persistentCookiePreserved=initial_cookie_preserved,cookieContinuity='preserved' if initial_cookie_preserved else ('login_lost_after_build_change' if args.build_target else 'login_lost_after_forced_close'),nativeLoginContinuityAfterCdpReturn=return_auth_preserved,buildPair=build_pair,buildEvidence=build_evidence,loginRemediation='fresh_synthetic_login_if_lost',credentialEncryptionModified=False,executablePinProvenance=executable_pin_provenance,cleanupVerified=True)))
         else:
             print(json.dumps(dict(passed=True, scope='public MCP, real Chrome/X11, synthetic r3 provider; no live Google or viewer',
                                   noCdp=True, headed=True, readyHandoff=True, replayPreserved=True, domRefused=True,

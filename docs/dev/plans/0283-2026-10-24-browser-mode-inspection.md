@@ -451,3 +451,19 @@ pin, reviewed SHA-256 and independent mode. The ordinary open path accepts
 `buildSelectionOperationId` for that same verification. Repeated opening uses a
 stable task name; build operations do not replay website actions. Actual loaded
 bytes and mode are checked before a selected opening can report success.
+
+### Build chooser integration checkpoint, 2026-10-25
+
+Ticket 404 now exposes opaque reviewed build choices through rail, MCP, CLI and
+HTTP adapters. Profile, build and mode choices stay independent. The rail routes
+running-profile effects through the existing mode operation, and copy effects
+through the existing duplication lifecycle. A completed preserved copy can be
+selected and explicitly opened through its published identity. Reload reads
+retained owner evidence. No client-side executable paths or profile data are
+persisted.
+
+Focused owner checks and mounted rail choices pass. Dashboard and client checks
+pass. Actual cross-build synthetic qualification and final batch gates remain
+pending. First failure logs are retained outside Git, including strict Clippy's
+unnecessary-closure finding. This checkpoint is not acceptance or runtime install
+proof. Production and the foreign authentication lane remain untouched.

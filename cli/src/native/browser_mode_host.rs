@@ -140,7 +140,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             let selected_build = self.requested_profile_build(command, &profile.id)?;
             let mut previous_build = selected_build
                 .as_ref()
-                .and_then(|_| original.executable_path.as_ref())
+                .and(original.executable_path.as_ref())
                 .map(|path| inspect_executable(Path::new(path)));
             #[cfg(target_os = "linux")]
             if let Some(previous) = previous_build.as_mut() {
