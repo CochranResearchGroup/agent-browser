@@ -470,4 +470,17 @@ fn mode_binding_uses_actual_borrowed_process_posture_instead_of_catalog_intent()
         effect_counts,
         "pause/cancel does not take lifecycle custody from the app"
     );
+    use sha2::{Digest,Sha256};
+    let selected_path="/usr/bin/python3";
+    let selected_sha=format!("{:x}",Sha256::digest(std::fs::read(selected_path).unwrap()));
+    let mut selection=json!({"sessionId":opened.session_id,"operationId":"selected-build","mode":"cdp_free","choice":"prepare","executablePath":selected_path,"expectedSha256":selected_sha});
+    let selected=host.mode_convert(&selection).unwrap();
+    assert_eq!(selected["selectedBuild"]["sha256"],selected_sha,"Build review must bind the exact selected bytes independently of original mode: {selected}");
+    selection["choice"]=json!("relaunch");
+    let refused=host.mode_convert(&selection).unwrap_err();
+    assert!(refused.starts_with("browser_build_owner_confirmation_required"),"{refused}");
+    assert_eq!((calls.get(),requests.get()),effect_counts,"A build switch cannot close the original without informed confirmation");
+    selection["choice"]=json!("cancel");
+    assert_eq!(host.mode_convert(&selection).unwrap()["phase"],"cancelled");
+
 }
