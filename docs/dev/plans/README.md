@@ -1,9 +1,14 @@
 # Active plan index
 
 [P283 browser mode inspection](0283-2026-10-24-browser-mode-inspection.md) owns #401 under spec #400; TDD source work, no runtime publication.
+
+[P290 writer executable continuity](0290-2026-10-24-writer-executable-continuity.md), #417, owns the PR415 live-writer unlink regression under PL-BUGFIX.
+
+[P289 terminal acquisition recovery](0289-2026-10-24-terminal-acquisition-recovery.md), #412, is closed with installed terminal recovery, activity readback and actual Native iframe acceptance; #422 is separate.
+
 [P288 writer custody](0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. PR415 carries the qualified source;221 workstation cases, strict Rust, fixtures and docs pass. Installed production is unchanged.
 
-[P285 inventory latency](0285-2026-10-24-workspace-inventory-latency.md), #393, owns the measured workspace-read repair under PL-BUGFIX.
+[P285 inventory latency](0285-2026-10-24-workspace-inventory-latency.md), #393, is closed with installed producer and cold catch-up acceptance; P289 owns the separate Native workflow.
 
 [P284 operator-led upgrades](0284-2026-10-24-operator-led-upgrades.md), #399, removes persistent upgrade markers and warning-based upgrade vetoes. The operator controls their workstation; optional live-work inspection is advisory. PR406 is integrated and exact candidate417d5886c68e is installed and accepted. Doctor and same-tab unsaved-work continuity pass.
 

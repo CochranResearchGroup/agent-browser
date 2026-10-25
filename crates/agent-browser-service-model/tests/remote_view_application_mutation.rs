@@ -398,6 +398,133 @@ fn interrupted_acquisition_reuses_original_key_and_requires_current_assignment()
 }
 
 #[test]
+fn interrupted_acquisition_records_exact_provider_released_outcome() {
+    let f = fixture();
+    let envelope: RemoteViewApplicationEnvelope =
+        serde_json::from_value(f["requests"][1].clone()).unwrap();
+    let record = RemoteViewApplicationMutationRecord {
+        schema_version: 1,
+        envelope: envelope.clone(),
+        outcome: None,
+    };
+    let records: Records = Rc::default();
+    records
+        .borrow_mut()
+        .insert(envelope.mutation_key().unwrap(), record.clone());
+    let mut released = f["assignment"].clone();
+    released["state"] = json!("released");
+    let mut inventory = f["inventory"].clone();
+    inventory["assignments"] = json!([released.clone()]);
+    let (mut adapter, mut store, steps) = setup(
+        vec![
+            (f["requests"][1].clone(), Ok(released.clone())),
+            (f["requests"][0].clone(), Ok(inventory)),
+        ],
+        records.clone(),
+    );
+    adapter.reconcile_acquisition(&record, &mut store).unwrap();
+    assert!(steps.borrow().is_empty());
+    let Some(RemoteViewApplicationMutationOutcome::Acquire(observed)) =
+        &records.borrow()[&envelope.mutation_key().unwrap()].outcome
+    else {
+        panic!("terminal acquisition outcome missing")
+    };
+    assert_eq!(serde_json::to_value(observed).unwrap(), released);
+    assert_eq!(observed.state, RemoteViewAssignmentState::Released);
+}
+
+#[test]
+fn interrupted_terminal_acquisition_requires_exact_current_proof_and_durable_completion() {
+    let f = fixture();
+    for case in [
+        "missing",
+        "generation",
+        "registration",
+        "pool",
+        "desktop",
+        "intermediate",
+        "persistence",
+    ] {
+        let envelope: RemoteViewApplicationEnvelope =
+            serde_json::from_value(f["requests"][1].clone()).unwrap();
+        let record = RemoteViewApplicationMutationRecord {
+            schema_version: 1,
+            envelope: envelope.clone(),
+            outcome: None,
+        };
+        let records: Records = Rc::default();
+        records
+            .borrow_mut()
+            .insert(envelope.mutation_key().unwrap(), record.clone());
+        let mut response = f["assignment"].clone();
+        response["state"] = json!("released");
+        let mut inventory = f["inventory"].clone();
+        let mut current = response.clone();
+        match case {
+            "generation" => current["generation"] = json!(999),
+            "registration" => response["registrationId"] = json!("foreign"),
+            "pool" => response["poolId"] = json!("foreign"),
+            "desktop" => current["desktopId"] = json!("00000000-0000-4000-8000-000000000099"),
+            "intermediate" => response["state"] = json!("release_pending"),
+            _ => {}
+        }
+        inventory["assignments"] = if case == "missing" {
+            json!([])
+        } else {
+            json!([current])
+        };
+        let (mut adapter, mut store, _) = setup(
+            vec![
+                (f["requests"][1].clone(), Ok(response)),
+                (f["requests"][0].clone(), Ok(inventory)),
+            ],
+            records.clone(),
+        );
+        store.fail_complete = case == "persistence";
+        assert!(
+            adapter.reconcile_acquisition(&record, &mut store).is_err(),
+            "{case}"
+        );
+        assert_eq!(
+            records.borrow()[&envelope.mutation_key().unwrap()],
+            record,
+            "{case}"
+        );
+    }
+}
+
+#[test]
+fn ordinary_acquisition_cannot_use_a_released_response() {
+    let f = fixture();
+    let mut released = f["assignment"].clone();
+    released["state"] = json!("released");
+    let records: Records = Rc::default();
+    let (mut adapter, mut store, _) = setup(
+        vec![
+            (f["requests"][0].clone(), Ok(f["inventory"].clone())),
+            (f["requests"][1].clone(), Ok(released)),
+        ],
+        records.clone(),
+    );
+    let RemoteViewApplicationRequest::Acquire {
+        pool_name,
+        idempotency_key,
+    } = serde_json::from_value::<RemoteViewApplicationEnvelope>(f["requests"][1].clone())
+        .unwrap()
+        .request
+    else {
+        panic!("acquisition fixture missing")
+    };
+    assert!(adapter
+        .acquire(pool_name, idempotency_key, &mut store)
+        .is_err());
+    assert!(records
+        .borrow()
+        .values()
+        .all(|record| record.outcome.is_none()));
+}
+
+#[test]
 fn cached_acquisition_cannot_restore_an_assignment_now_released_by_provider() {
     let f = fixture();
     let envelope: RemoteViewApplicationEnvelope =

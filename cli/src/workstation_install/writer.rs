@@ -3,8 +3,7 @@
 //! Physical locks cover claim read/commit only, never process convergence.
 
 use crate::process_identity::{
-    assess_process_ownership, capture_process_identity, observe_process, LegacyProfileProof,
-    ProcessObservation, RecordedProcessIdentity, RuntimeProcessOwnership,
+    capture_process_identity, observe_process, ProcessObservation, RecordedProcessIdentity,
 };
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
@@ -142,14 +141,15 @@ fn owner_pid(path: &Path) -> Result<Option<u32>, String> {
         if let ProcessObservation::Failed { reason } = &observed {
             return Err(format!("workstation_writer_identity_unavailable:{reason}"));
         }
-        let assessment = assess_process_ownership(
-            Some(&claim.process_identity),
-            observed,
-            LegacyProfileProof::Unproven,
-        );
-        return Ok(
-            (assessment.ownership == RuntimeProcessOwnership::MatchingBrowser).then_some(pid),
-        );
+        let ProcessObservation::Observed(observed) = observed else {
+            return Ok(None);
+        };
+        let start_token = observed
+            .start_token
+            .ok_or("workstation_writer_identity_unavailable:process_start_token_unavailable")?;
+        // Custody lasts for this process instance. Renaming or unlinking its
+        // executable does not end execution; a reused PID has a different token.
+        return Ok((start_token == claim.process_identity.start_token).then_some(pid));
     }
     // Older writers have PID text only. Require an executing installer mutation,
     // not an unrelated process that inherited its PID or an old inode's claim.
@@ -159,6 +159,8 @@ fn owner_pid(path: &Path) -> Result<Option<u32>, String> {
     let executable = observed
         .executable_path
         .as_deref()
+        // Linux annotates an unlinked executable without ending its process.
+        .map(|path| path.strip_suffix(" (deleted)").unwrap_or(path))
         .and_then(|value| Path::new(value).file_name())
         .and_then(|value| value.to_str());
     let arguments = observed.command_line.unwrap_or_default();

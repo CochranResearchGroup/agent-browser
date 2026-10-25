@@ -16,7 +16,7 @@ Creation context is immutable. Cards omit missing identity; polling, Share and j
 
 ## MCP task workflow
 
-Warnings are advisory; executing writers serialize.
+Warnings advise; writer custody survives executable unlink.
 
 Use `browser_open` with `{"serviceName":"my-app","agentName":"editor","taskName":"Edit draft","profile":"editorial","profileMode":"persistent","taskKey":"editing","url":"https://example.com"}`. Read `data.taskId`, `profileId`, `browserId`, `tabId`, `url`. Address actions with `taskId`. Reuse `taskKey` to preserve the page/edits without navigation; distinct keys separate tasks. `browser_close` ends only the addressed task.
 
@@ -73,7 +73,7 @@ Return, store, and reopen only `handoffUrl`: standalone `/remote-view/<handoff-i
 
 ## Operator workspace
 
-Read [Workspace](references/cli-and-service.md#operator-workspace) for tabs, sharing and handoffs. Focus needs an owned tab; acceptance is not focus. Reviews: opt-in Activity. Rail HTTP reads owner state. Remote View owns view/auth.
+Read [Workspace](references/cli-and-service.md#operator-workspace) for tabs, sharing and handoffs. Focus needs an owned tab; reviews are opt-in. Rail catches up once. Remote View owns view/auth. Terminal pool replay retains history.
 
 For non-CDP human sign-in, use [manual login](references/cli-and-service.md#manual-login) with `browser_open` mode `manual_login`.
 

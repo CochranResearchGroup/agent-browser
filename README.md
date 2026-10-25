@@ -643,8 +643,9 @@ isolated development and foreign processes are preserved. Install doctor exposes
 Retirement targets and outcomes are retained in the private install transaction.
 Forward recovery also reconciles MCP clients against the selected candidate.
 
-Only an executing workstation writer delays a conflicting change. Stale PID
-diagnostics do not establish writer custody or veto a valid request.
+Only an executing workstation writer delays a conflicting change. Renaming or
+unlinking its executable does not release that custody. Stale PID diagnostics
+do not establish writer custody or veto a valid request.
 
 The workstation operator decides whether to upgrade. Warnings about live work
 or incomplete observations are advisory and can suggest remedies; they never
@@ -1098,7 +1099,9 @@ confined to diagnostics rather than treated as native browser presence. Empty de
 are excluded. Failed or stale observations preserve selection and retained links;
 a later successful refresh can restore the same tab without recreating it.
 The native rail reads the dedicated workspace projection and polls three seconds
-after each completed read. Both HTTP listeners read the current owner snapshot
+after each completed read. On startup only, wholly unknown tab presence gets up
+to three catch-up reads 250 milliseconds apart, ending on live, absent or failed
+evidence. Catch-up revalidates the shared response cache. Both HTTP listeners read the current owner snapshot
 directly, without the diagnostic transport, CLI fallback or one-second status cache.
 Service reconciliation and workstation diagnostics run only on diagnostic surfaces. Observation freshness expires
 independently after 30 seconds using elapsed time, even if the next read stalls.
@@ -6972,7 +6975,9 @@ An interrupted acquisition retains its original request across restart. The next
 placement request reconciles that same provider idempotency key and requires the
 assignment in current inventory before launch. Failed reconciliation returns
 `remote_view_pool_acquisition_readback_required`; it does not allocate using a new key.
-An exact native released assignment permits the next demand to use a fresh
+If the same-key replay returns a released assignment, reconciliation records that
+exact terminal outcome only when current inventory contains the identical record.
+It never makes released capacity active. The next demand can then use a fresh
 acquisition key without rewriting history. Assignment, registration, pool,
 desktop and generation must match; inventory absence alone is insufficient.
 

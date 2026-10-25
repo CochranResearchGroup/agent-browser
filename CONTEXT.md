@@ -268,7 +268,7 @@ The Rust module that owns desired workstation state, observed state, the sealed 
 _Avoid_: Installer script, doctor warning, dashboard health heuristic
 
 **Workstation writer custody**:
-Evidence that one currently executing workstation mutation owns its coordinated operation. Process-start and PID-file identity distinguish that writer from retained diagnostics. Short physical locks protect claim transitions; warnings and historical PID text do not grant or withhold operator authority.
+Evidence that one currently executing workstation mutation owns its coordinated operation. Process-start and PID-file identity distinguish that writer from retained diagnostics. Custody follows that process instance even if its executable is renamed or unlinked. Short physical locks protect claim transitions; warnings and historical PID text do not grant or withhold operator authority.
 _Avoid_: Live PID alone, upgrade marker, permission grant
 
 **Semantic contract oracle**:

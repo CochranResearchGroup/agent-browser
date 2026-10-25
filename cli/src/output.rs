@@ -5893,6 +5893,7 @@ currentSelectionEvidence reports whether a later selected Linux installation
 proves its payload, dashboard and live host identity despite unrelated failed
 upgrade history. Executing writers serialize conflicting changes; stale
 PID diagnostics and uncertain history do not veto valid operator requests.
+Renaming or unlinking an executing writer binary does not release its custody.
 The workstation operator decides whether to upgrade. Run install workstation
 live --json for a read-only observation of what Agent Browser currently thinks
 is live. Incomplete observations and interruption warnings are advisory, with
@@ -6568,7 +6569,9 @@ confined to diagnostics rather than treated as native browser presence. Empty de
 are excluded. Failed or stale observations preserve selection and retained links;
 a later successful refresh can restore the same tab without recreating it.
 The native rail reads the dedicated workspace projection and polls three seconds
-after each completed read, with a one-second cache. Service reconciliation and
+after each completed read. Startup with wholly unknown tabs gets at most three
+cache-revalidated catch-up reads 250 milliseconds apart, ending on known or
+failed evidence. Service reconciliation and
 workstation diagnostics run only on diagnostic surfaces. Observation freshness expires
 independently after 30 seconds using elapsed time, even if the next read stalls.
 Search matches displayed tab labels and URLs, excluding embedded document payloads.
@@ -8166,7 +8169,7 @@ Environment:
   AGENT_BROWSER_REMOTE_VIEW_ORIGIN Loopback HTTP origin for managed-session Remote View
                                  Configured remote-view open uses managed placement; explicit runtime-profile/profile binds a persistent directory.
                                  Conflicting profile bindings fail. Open reports converging until operator presentation is proved.
-  AGENT_BROWSER_REMOTE_VIEW_POOL   Application pool name (required with origin; interrupted acquisitions reuse their key)
+  AGENT_BROWSER_REMOTE_VIEW_POOL   Application pool name (required with origin; same-key terminal acquisition readback preserves history)
   AGENT_BROWSER_REMOTE_VIEW_APPLICATION Application selector (default: agent-browser)
   AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT Warm desktop minimum (default: 1; demand grows to pool limit)
   AGENT_BROWSER_DURABLE_HANDOFF_TTL_MS Durable handoff TTL; 0 means unlimited (default: 0)

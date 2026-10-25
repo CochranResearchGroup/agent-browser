@@ -20,7 +20,8 @@ const readme = readFileSync('README.md', 'utf8');
 const dashboardDocs = readFileSync('docs/src/app/dashboard/page.mdx', 'utf8');
 const serviceModeDocs = readFileSync('docs/src/app/service-mode/page.mdx', 'utf8');
 const commandsDocs = readFileSync('docs/src/app/commands/page.mdx', 'utf8');
-const skill = readFileSync('skills/agent-browser/SKILL.md', 'utf8');
+const skill = readFileSync('skills/agent-browser/SKILL.md', 'utf8')
+  + readFileSync('skills/agent-browser/references/cli-and-service.md', 'utf8');
 const cliOutput = readFileSync('cli/src/output.rs', 'utf8');
 const cliInstall = readFileSync('cli/src/install.rs', 'utf8');
 const dashboardHttp = readFileSync('cli/src/native/stream/http.rs', 'utf8');

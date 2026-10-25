@@ -1,6 +1,10 @@
 # Roadmap
 
-[P288 writer custody](docs/dev/plans/0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. PR415 carries the qualified source;221 workstation cases, strict Rust, fixtures and docs pass. Installed production is unchanged.
+[P289 terminal acquisition and Native handoff acceptance](docs/dev/plans/0289-2026-10-24-terminal-acquisition-recovery.md), #412, is installed accepted on9cbf948ef4af with actual Native canvas/WebSocket proof and13 browser roots preserved. #422 retains the separate intermittent public asset finding.
+
+[P290 writer executable continuity](docs/dev/plans/0290-2026-10-24-writer-executable-continuity.md), #417, repairs PR415 live-writer custody loss after executable unlink through public CLI TDD. PR419 carries the qualified source;221 workstation tests, public fixtures, strict Rust quality and docs pass. That source checkpoint left production unchanged; the later combined e0d5525e92cc install includes this repair.
+
+[P288 writer custody](docs/dev/plans/0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. PR415 carries the qualified source;221 workstation cases, strict Rust, fixtures and docs pass. That source checkpoint left production unchanged; the later combined e0d5525e92cc install includes this repair.
 
 [P284 operator-led upgrades](docs/dev/plans/0284-2026-10-24-operator-led-upgrades.md), #399, removes persistent upgrade markers and warning-based upgrade vetoes. The operator controls their workstation; optional live-work inspection is advisory. PR406 is integrated and exact candidate417d5886c68e is installed and accepted. Doctor and same-tab unsaved-work continuity pass.
 

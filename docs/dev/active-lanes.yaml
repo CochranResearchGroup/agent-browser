@@ -17,6 +17,41 @@ lanes:
     reconciled_overlaps: ["401 owns read-only mode projection, MCP adapter, schema/client and rail; preserve P269 manual launch and P282 upgrade source, coordinate shared docs at integration"]
     updated_at: 2026-10-24
 
+
+  - id: P290
+    product_lane: PL-BUGFIX
+    objective: Preserve executing writer custody after executable unlink
+    plan: docs/dev/plans/0290-2026-10-24-writer-executable-continuity.md
+    branch: fix/writer-executable-continuity
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#417]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: [P288]
+    overlaps: [P289]
+    reconciled_overlaps: ["Own writer module, public takeover fixture and writer-only prose; preserve P289 acquisition and all peer work"]
+    validation_status: One public red-green slice;221 workstation tests, full installer fixture, strict Rust quality, docs and independent zero-residue readback pass
+    limitations: ["Source repair only; no production or foreign effects"]
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/419
+    updated_at: 2026-10-24
+
+  - id: P289
+    product_lane: PL-BUGFIX
+    objective: Reconcile exact released Native acquisitions without resurrecting capacity
+    plan: docs/dev/plans/0289-2026-10-24-terminal-acquisition-recovery.md
+    branch: fix/native-acquisition-412
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#412]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: [P285, P288]
+    overlaps: [P283]
+    reconciled_overlaps: ["Own mutation reconciliation and exact-scope begin_operation observation deduplication plus focused tests; preserve P283 mode/profile/store/observer implementation and Native ownership; reuse retained primary serially"]
+    validation_status: PR421 installed9cbf948ef4af;96 pool and387 model cases, strict Rust and exact installer fixtures pass; actual Native canvas/WebSocket proof, workflow closure,13 browser roots preserved and owned process cleanup accepted
+    limitations: ["Finite stock Chrome156 acceptance; public asset intermittence retained in422", "Doctor advisory global journey and profile bindings remain distinct", "Retain primary checkout and all pinned candidates"]
+    updated_at: 2026-10-24
   - id: P288
     product_lane: PL-BUGFIX
     objective: Remove stale writer refusal and report actual contention
@@ -43,14 +78,13 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#393]
-    plan_state: IN_PROGRESS
-    custody_state: ACTIVE
+    plan_state: CLOSED
+    custody_state: INTEGRATED
     overlaps: [P283, P284]
-    reconciled_overlaps: ["Own dashboard/http routing and rail freshness prose only; P283/P284 retain profile/store/observation and installer source; reuse primary and retain pinned artifacts"]
-    validation_status: PR410 merged; sealed preserve install accepted;11 browser generations preserved; paired installed workspace median32.755ms; Rust/docs/parity and exact installer fixture pass
-    limitations: ["Installed; one4.98s public cold rail tail remains unexplained", "No stale-data substitution, provider/ingress change or private-account activity", "Production synthetic open blocked by pending Native acquisition; tracked separately in #412"]
+    reconciled_overlaps: ["Own dashboard/http routing, bounded startup catch-up in selected-context/read-coordinator and rail freshness prose; P283/P284 retain profile/store/observation and installer source; reuse primary and retain pinned artifacts"]
+    validation_status: PR410 and PR416 installed on final e0d5525e92cc; cold visit1955.6ms versus3999.8ms, median776.8ms across five contexts;11 browser roots preserved and16 probe generations absent
+    limitations: ["Finite samples; no universal latency guarantee", "Native pixels and acquisition acceptance owned by P289", "Retain primary checkout and pinned candidates"]
     updated_at: 2026-10-24
-
   - id: P284
     product_lane: PL-PLATFORM
     objective: Remove upgrade markers and make operator warnings advisory

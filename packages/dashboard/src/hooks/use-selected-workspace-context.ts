@@ -5,7 +5,7 @@ import { useAtomValue } from "jotai/react";
 import { sessionsAtom } from "@/store/sessions";
 import { engineForPortAtom, tabsForPortAtom } from "@/store/tabs";
 import { fetchSharedServiceResources, fetchSharedServiceStatus, fetchSharedWorkspaceStatus } from "@/lib/dashboard-api";
-import { startCompletionDrivenDashboardPoll } from "@/lib/dashboard-read-coordinator";
+import { createWorkspacePollInterval, startCompletionDrivenDashboardPoll } from "@/lib/dashboard-read-coordinator";
 import {
   DASHBOARD_WORKSPACE_SELECTION_EVENT,
   readDashboardWorkspaceUrlSelection,
@@ -99,6 +99,8 @@ export function useSelectedWorkspaceContext(
   const [refreshedAt, setRefreshedAt] = useState(() => Date.now());
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
   const resourcesGeneration = useRef(0);
+  const startupInterval = useRef(createWorkspacePollInterval());
+  const nextPollInterval = useRef(3000);
   const observation = useRef<{ token: number | null; firstSeen: number }>({ token: null, firstSeen: 0 });
   const [, expireObservation] = useState(0);
   const presenceCurrent = observation.current.token !== null && performance.now() - observation.current.firstSeen < 30_000;
@@ -128,6 +130,8 @@ export function useSelectedWorkspaceContext(
         if (!statusResponse.ok) throw new Error(`HTTP ${statusResponse.status}`);
         const json = (await statusResponse.json()) as ApiResponse<ServiceStatusData>;
         if (!json.success) throw new Error(json.error || "Service status unavailable");
+        nextPollInterval.current = inventoryOnly
+          ? startupInterval.current(json.data?.browserRuntime?.workspace) : 3000;
         const token = json.data?.browserRuntime?.workspace?.observedAtMs;
         const age = json.data?.browserRuntime?.workspace?.observationAgeMs ?? 0;
         if (typeof token !== "number" || !Number.isFinite(token) || token < 0
@@ -141,6 +145,7 @@ export function useSelectedWorkspaceContext(
         setError(null);
         setRefreshedAt(Date.now());
       } catch (err) {
+        nextPollInterval.current = startupInterval.current();
         setError(err instanceof Error ? err.message : "Service status unavailable");
         setServiceResources(null);
         setRefreshedAt(Date.now());
@@ -173,7 +178,12 @@ export function useSelectedWorkspaceContext(
 
   useEffect(() => {
     if (!enabled) return;
-    return startCompletionDrivenDashboardPoll(() => load(), 3000);
+    startupInterval.current = createWorkspacePollInterval();
+    nextPollInterval.current = 3000;
+    return startCompletionDrivenDashboardPoll(
+      () => load(nextPollInterval.current === 250),
+      () => nextPollInterval.current,
+    );
   }, [enabled, load]);
 
   const daemonTabsByPort = useMemo(() => {
