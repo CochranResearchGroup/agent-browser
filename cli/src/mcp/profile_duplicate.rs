@@ -8,7 +8,9 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
             .cloned()
             .unwrap_or_default(),
     );
-    required_string_argument(&command, "operationId")?;
+    if command["choice"] != "inspect" {
+        required_string_argument(&command, "operationId")?;
+    }
     if let Some(task_id) = arguments["taskId"].as_str() {
         let session = super::workflow::address_task_command(&mut command, task_id)
             .map_err(|error| JsonRpcError::invalid_params(&error))?;

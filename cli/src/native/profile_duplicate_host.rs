@@ -2,7 +2,7 @@
 //! journal. Public requests carry intent, never process identity or profile paths.
 use super::*;
 #[path = "profile_duplicate_copy.rs"]
-mod profile_duplicate_copy;
+pub(super) mod profile_duplicate_copy;
 #[path = "profile_duplicate_custody.rs"]
 mod profile_duplicate_custody;
 use agent_browser_service_model::ManagedBrowserCommandEffects;
