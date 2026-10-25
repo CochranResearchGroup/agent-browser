@@ -340,3 +340,15 @@ transport, schema/client and public fixture changes require explicit writer
 coordination before editing; copy worker owns its dedicated fixture, mode
 worker the manual-login fixture. Preserve prior repairs and failed receipts.
 No production publication, shared provider effects or CI dispatch.
+
+### In-flight child gap audit
+
+402 worker adds a genuine durable `paused` stage before any close, later explicit
+relaunch/cancel, and positively observed cancellation of a live close prompt.
+Actual multi-task/prompt/force acceptance remains pending. One initial public
+fixture startup timeout is retained as setup failure, not a behavioral red.
+403 worker isolates stale/destroyed-window X11 owner termination with a checked
+protocol regression, replaces only `x11_focus` with Linux checked replies and
+retains `x11_scene`. A Linux-only dependency/lock change is explicitly owned by
+that worker. Xvfb readiness failure is retained separately. Actual concurrent
+copy/source and disk-exhaustion acceptance remain pending.

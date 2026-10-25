@@ -2055,6 +2055,14 @@ the matching request identity as `id`, together with exact `sessionId` and
 `sessionName`; it does not use a `requestId` alias.
 Mode conversion remains a separate explicit owner operation.
 
+Select `pause_and_relaunch` to hold the operation in `paused` before closing
+anything. The affected tasks stay fenced against page and Native work; later
+select confirmed `relaunch`, or cancel the pause. This does not automatically
+restart after a timer. Immediate `relaunch` remains a separate choice. A live
+close prompt can be cancelled only after the exact original browser is observed
+live and its prompt is dismissed; uncertain outcomes keep the operation fenced.
+
+
 Inspect the original operation after a failed launch. Copy readback separates
 `copyComplete` and `profilePublished` from `launchStatus` and `destinationTask`.
 For `launch_absent`, explicitly confirm `retry_launch` or

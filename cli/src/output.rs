@@ -7334,7 +7334,8 @@ Commands:
   browser-mode TASK Inspect mode
   browser-native TASK ACTION JSON Input/capture <=1Mpx
   profile-duplicate JSON Copy/inspect; confirmed retry_launch or finish_without_opening after launch_absent
-  mode-convert JSON Convert/inspect; confirmed relaunch or restore_previous after launch_absent
+  mode-convert JSON Convert/inspect; pause_and_relaunch holds before explicit relaunch
+                    Confirm relaunch/restore_previous; cancel only before irreversible effects
   watch-host-task   Initial/changed NDJSON; fresh reconnect
   host-control      Status/view/takeover/return/override/reconcile; inspect failed return.
   host-reconnect    Status/disconnect/reconnect/rebind/configure/reopen
