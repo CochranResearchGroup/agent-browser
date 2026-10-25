@@ -75,7 +75,7 @@ Return, store, and reopen only `handoffUrl`: standalone `/remote-view/<handoff-i
 
 Read [Workspace](references/cli-and-service.md#operator-workspace) for tabs, sharing and handoffs. Focus needs an owned tab; reviews are opt-in. Rail catches up once. Remote View owns view/auth. Terminal pool replay retains history.
 
-For non-CDP human sign-in, use [manual login](references/cli-and-service.md#manual-login) with `browser_open` mode `manual_login`.
+[Manual login](references/cli-and-service.md#manual-login) is CDP-free. Native control and human takeover are separate.
 
 ## Sharing a profile between tasks
 
@@ -134,12 +134,12 @@ Use `browser_discover` for advanced MCP metadata.
 
 For health, inventory or viewer failures, read [Dashboard diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics). A prepared handoff or reachable service does not prove a connected Native display. Read [embedded-page guidance](references/cli-and-service.md#embedded-native-desktop-failure-guidance) before retrying. Static assets use gzip and hashed caching.
 
-After upgrades, reconnect retired MCP clients; install doctor checks `installedMcpClients`.
+After upgrades, reconnect MCP clients; doctor checks `installedMcpClients`.
 
-Development startup ownership: [diagnostics](references/cli-and-service.md#development-host-startup).
+Development startup: [diagnostics](references/cli-and-service.md#development-host-startup).
 
 ## Read browser mode
 
-Inspect with `browser_command` action `mode` and `taskId`, or CLI `agent-browser --json mcp browser-mode TASK`. Native actions: `native_capture`/`native_input`; delivery is not login proof. Discover `mode_convert` for relaunch or `profile_duplicate` for copies; retain operation IDs. [Controls](references/cli-and-service.md#browser-mode-inspection).
+Inspect with `browser_command` action `mode` and `taskId`, or CLI `agent-browser --json mcp browser-mode TASK`. Native: `native_capture`/`native_input` need readiness; top-level `policyOverrideId`/`requestId` bind existing grants. Delivery is not login proof. Discover `mode_convert` for relaunch or `profile_duplicate` for copies; retain operation IDs. [Controls](references/cli-and-service.md#browser-mode-inspection).
 
-Diagnostics retain `?view=service:<name>` and selected `workspace`, `browser`, `session`, `tab`, `profile`, `job` query fields.
+Diagnostics retain `?view=service:<name>` and selection query fields.

@@ -7340,7 +7340,7 @@ Commands:
   host-reconnect    Status/disconnect/reconnect/rebind/configure/reopen
   host-policy       Optional app/task rules and attributable scoped override
 
-Default workflow tools (16):
+Workflow tools (16):
   browser_open          Open/reuse task and profile
   browser_navigate      Navigate current page
   browser_snapshot      Read page and element references
@@ -7361,7 +7361,7 @@ Default workflow tools (16):
 Rules:
   Use taskId on actions. Reuse taskKey on open; taskPolicy overrides app defaults.
   Open requires serviceName/agentName/taskName.
-  mode=manual_login: no-CDP; native_capture/native_input work.
+  manual_login: no CDP/DOM; ready Native agent control; human takeover separate.
   profileMode: persistent (default), existing or disposable.
   Hosted open: hostBinding v1, required/preferred placement; never silent fallback.
   Attachment: existing profile, exact app process/profile/page; omit url.
@@ -7374,10 +7374,10 @@ Rules:
   Reconnect: requestId/expectedRevision, lossPolicy=report_only|reopen.
   Proven loss: rebind saves recoveryDesktop; verified reopen uses it.
   Reopen: borrowed needs fresh attachment; managed needs agent/no pending.
-  Unknown effects stay pending, never replayed. Physical relocation is unsupported.
+  Unknown effects stay pending; no replay or physical relocation.
   Policy v1: deniedActions/artifactDestinations; task replacement or clear_task.
-  Changes: expectedRevision/actor/reason. Override: exact task/action/requestId.
-  Unrestricted tasks need no grant. Artifacts: handle/relative name; download selector.
+  Changes: expectedRevision/actor/reason. Native: top-level policyOverrideId/requestId.
+  No grant for unrestricted tasks. Artifacts: handle/relative name; download selector.
   Refuse existing files/symlinks/traversal; publication remains explicit.
   Close scope=browser needs actor/reason, no peers/borrowed custody; verify OS residue.
   Watch DB/WAL every 250 ms, not provider polling; events have watchId/sequence.
@@ -7385,7 +7385,7 @@ Rules:
   Keep secrets private; inspect unknown delivery.
   AGENT_BROWSER_SITEGUIDE_DIRECTORY selects guides.
 
-Full schemas: tools/list or browser_discover. Operating contract:
+Schemas: tools/list or browser_discover. Guide:
   agent-browser mcp read agent-browser://operating-guide
 "##
         }

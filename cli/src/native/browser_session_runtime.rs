@@ -5209,7 +5209,7 @@ mod hosted_reconnect_connection_tests {
     }
 }
 
-/// Read-only native workspace presence for a human-only managed process. This
+/// Read-only Native workspace presence for a CDP-free managed process. This
 /// checks the published original identity without creating a CDP connection.
 pub(super) fn manual_browser_is_live(browser: &ManagedBrowserInstance) -> Result<bool, String> {
     manual::ManualBrowsers::default().verify(browser)

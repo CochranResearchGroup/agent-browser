@@ -192,8 +192,8 @@ output pipe otherwise exits on the next emitted event. Recorded browser state,
 viewer delivery, controller state and account authentication are separate;
 metadata-only reads leave unobserved readiness explicitly unverified.
 
-For human sign-in, call `browser_open` with `mode: "manual_login"`, a named
-persistent profile, and the login URL. For example:
+For a CDP-free sign-in task, call `browser_open` with `mode: "manual_login"`, a
+named persistent profile, and the login URL. For example:
 
 ```json
 {"profile":"canvacli","profileMode":"persistent","mode":"manual_login","taskKey":"google-login","url":"https://accounts.google.com/","serviceName":"canvacli","agentName":"codex","taskName":"Google sign-in"}
@@ -202,14 +202,20 @@ persistent profile, and the login URL. For example:
 This opens a headed window on the configured native Remote View desktop without
 CDP, a debugging port, or a debugging pipe. The same call returns `handoffUrl`
 and requires `operatorVisible.state: "ready"`. Reuse the task key to retain the
-login window. DOM/page automation and additional agent tabs are unavailable in
-this mode. The reported URL is the initial requested location (`urlObserved:
-false`); desktop readiness and profile continuity do not verify authentication.
-Use `browser_close` after sign-in, then reopen that same profile in the default
-`automation` mode. An active browser in the other mode produces an explicit
-conflict; it is never closed, replaced, or attached automatically.
-If closure reports a pending browser prompt, finish it on the desktop and repeat
-`browser_close` before reopening the profile.
+login window. DOM/CDP actions and additional agent tabs are unavailable in this
+mode. Authorized agents can instead use `native_capture` and `native_input`
+through the existing Native owner when its current capabilities are ready.
+Human takeover remains separate; these commands never return human control
+automatically. The reported URL is the initial requested location
+(`urlObserved: false`); desktop readiness and profile continuity do not verify
+authentication.
+To change debugging posture, discover `mode_convert` and review its explicit
+replacement choices. A successful replacement preserves the logical task,
+profile and original handoff while replacing the physical browser; unsaved page
+state may be lost. Alternatively, explicitly close the task and reopen the same
+profile in `automation` mode. Ordinary open never silently closes, replaces or
+attaches to a browser in the other mode. Source/synthetic checks do not establish
+installed Native readiness or authenticated site state.
 
 The default MCP catalog contains 16 workflow tools: `browser_open`, `browser_navigate`,
 `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
@@ -7197,7 +7203,12 @@ input reports delivery separately from completed page effects. Observe after
 an uncertain reply before deciding another input is appropriate. These actions
 never attach CDP, acquire another task, or return explicit human takeover.
 An unavailable Native owner or changed process/window returns remediation.
-Mode conversion remains a separate operation under development.
+For an existing scoped `browser_policy` override, send `policyOverrideId` and
+`requestId` at the top level of `browser_command` for either Native action.
+The grant must match the exact task, action, request and current policy; a
+mismatch remains denied. Preserving request identity never authorizes replay of
+uncertain input. CLI and HTTP commands use the same top-level fields.
+Mode conversion remains a separate explicit owner operation.
 
 
 The rail's browser-mode menu offers **Duplicate profile**. Enter a copy name,
@@ -7220,7 +7231,7 @@ effect. Cancelling a request does not reopen a source already stopped.
 
 ### Convert an existing task
 
-The browser mode menu offers **Relaunch with CDP** and **Relaunch without CDP** for managed tasks. Review the affected tasks before selecting relaunch. Unsaved page state and downloads may be lost; unknown URLs and uncertain website submissions are never replayed.
+The browser mode menu offers **Relaunch with CDP** and **Relaunch without CDP** for managed tasks. A successful explicit replacement preserves the logical task, durable profile and original handoff; it changes the physical browser process. Review the affected tasks before selecting relaunch. Unsaved page state and downloads may be lost; unknown URLs and uncertain website submissions are never replayed.
 
 MCP uses `browser_command` with `taskId`, action `mode_convert`, and params containing `operationId`, `mode` (`cdp` or `cdp_free`) and `choice`. Start with `prepare`, then select an offered action. CLI accepts `agent-browser --json mcp mode-convert '{"taskId":"TASK","operationId":"mode-one","mode":"cdp_free","choice":"prepare"}'`. HTTP uses `POST /api/command` with action `browser_session_mode_convert`, the exact `sessionId` and owner `sessionName`, and the same operation fields.
 

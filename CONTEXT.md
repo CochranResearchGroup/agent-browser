@@ -78,11 +78,20 @@ second process. Pressure handling preserves current work.
 kept with active browser state. Bounding this projection does not delete older
 durable history or change live tasks and valid handoffs.
 
-**Manual login mode**: A human-only managed native window with no CDP endpoint,
-debugging listener or DOM control. It owns one task and preserves the durable
-profile. Its URL describes initial intent, not the human's current page or
-verified authentication. Explicit closure permits a later automation launch on
-that same profile. Current launch posture cannot change underneath active tasks.
+**Manual login mode**: A managed Native window with no CDP endpoint, debugging
+listener or DOM control. Authorized agents can observe screenshots and send
+Native input when the exact process, window and provider are ready. Human
+takeover is a separate control-authority choice. The mode owns one logical task
+and preserves its durable profile; its URL describes initial intent, not the
+current page or verified authentication.
+
+**Mode conversion**: An explicit owner operation that replaces a physical
+browser with or without CDP while preserving its logical task, profile and
+original handoff. It reviews affected tasks and consequential close choices;
+ordinary open never silently changes a running process's posture. Transient
+page state may be lost, and uncertain website submissions are never replayed.
+Source or synthetic qualification does not prove installed Native readiness or
+authenticated site state.
 
 **Durable profile**: Browser data retained across tasks. Separate tasks can share its browser through distinct sessions and tabs. Profile retention is separate from process, desktop, session and handoff lifetimes.
 

@@ -22,8 +22,9 @@ pub struct BrowserProfileCatalogEntry {
     pub name: String,
     pub user_data_dir: String,
     pub kind: BrowserProfileKind,
-    /// A human-only browser starts at this requested URL without a CDP endpoint.
-    /// Mode changes are admitted only after all current profile tasks are closed.
+    /// A CDP-free Native browser starts at this requested URL. Authorized agent
+    /// screenshots/input require current Native readiness; human takeover is separate.
+    /// An explicit owner conversion can replace its process while retaining the task.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub manual_login_url: Option<String>,
 }
