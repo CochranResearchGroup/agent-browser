@@ -659,14 +659,19 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         if self.host.persistence.load_session_state()? != self.host.persisted_state {
             return Err("mode_operation_publication_conflict".into());
         }
-        let current = self.host.state.browsers.get(&request.browser_id)
+        let current = self
+            .host
+            .state
+            .browsers
+            .get(&request.browser_id)
             .ok_or("mode_operation_browser_missing")?;
         let expected: RecordedProcessIdentity = serde_json::from_str(&replacement.process_identity)
             .map_err(|_| "mode_operation_replacement_identity_invalid")?;
         let published = BrowserSessionSqliteStore::open_read_only(
             &self.host.persistence.runtime_database_path()?,
-        )?.published_launch_process_identity(current)
-            .map_err(|_| "mode_operation_publication_readback_required")?;
+        )?
+        .published_launch_process_identity(current)
+        .map_err(|_| "mode_operation_publication_readback_required")?;
         if published.as_ref() == Some(&expected) {
             if current.profile_id != request.profile_id
                 || current.pid != expected.pid
