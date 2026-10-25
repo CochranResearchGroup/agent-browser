@@ -12,7 +12,7 @@ lanes:
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
     dependencies: []
-    validation_status: "PR408 merged and six repairs closed; single review accepted two Spec findings,424/426 reopened for one bounded TDD pass; Standards zero; broader402/403 incomplete"
+    validation_status: "PR408 merged; single review Standards zero and two Spec findings repaired in one bounded TDD pass; final synthetic candidate,24contracts,4owner and16rail cases pass; follow-up closes424/426; broader402/403 incomplete"
     overlaps: [P269, P282]
     reconciled_overlaps: ["401 owns read-only mode projection, MCP adapter, schema/client and rail; preserve P269 manual launch and P282 upgrade source, coordinate shared docs at integration"]
     updated_at: 2026-10-25
