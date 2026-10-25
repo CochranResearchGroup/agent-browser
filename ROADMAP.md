@@ -1,6 +1,6 @@
 # Roadmap
 
-[P291 cold rail acceptance](docs/dev/plans/0291-2026-10-24-cold-rail-retry-spacing.md), #430, installed35e with17 browser roots and137 Native provider/persistent unit generations preserved, but cold median3.36s to3.26s is not accepted as a meaningful speedup. A mounted regression exposes cached unknown responses at the hook caller; corrective source is qualified and awaits its exact candidate. [Evidence](docs/dev/notes/0291-2026-10-24-cold-rail-retry-spacing.md) retains failed acceptance, separate MCP-client churn and422 asset scope.
+[P291 corrected cold rail](docs/dev/plans/0291-2026-10-24-cold-rail-retry-spacing.md), #430, is installed accepted oncf65dd76422b: cold median3.36s to2.11s, warm1.00s to1.02s,18 browser roots and137 Native provider/persistent unit generations preserved. [Evidence](docs/dev/notes/0291-2026-10-24-cold-rail-retry-spacing.md) retains the failed first comparison, mounted cache-caller correction, finite sample limits and three doctor advisories.422 asset intermittence and Remote View667 MCP-client restart loops remain separate. Retain the primary checkout and pinned candidates.
 
 [P289 terminal acquisition and Native handoff acceptance](docs/dev/plans/0289-2026-10-24-terminal-acquisition-recovery.md), #412, is installed accepted on9cbf948ef4af with actual Native canvas/WebSocket proof and13 browser roots preserved. #422 retains the separate intermittent public asset finding.
 
