@@ -256,12 +256,22 @@ pub enum CloseOutcome {
 }
 pub enum Choice {
     Pause,
-    SelectExecutable {executable:String,sha256:String,confirmed:bool},
-    Relaunch { confirmed: bool },
+    SelectExecutable {
+        executable: String,
+        sha256: String,
+        confirmed: bool,
+    },
+    Relaunch {
+        confirmed: bool,
+    },
     Resume,
-    RestorePrevious { confirmed: bool },
+    RestorePrevious {
+        confirmed: bool,
+    },
     RetryGracefulClose,
-    ForceClose { confirmed: bool },
+    ForceClose {
+        confirmed: bool,
+    },
     ReturnToBrowser,
     Cancel,
 }
@@ -269,7 +279,9 @@ pub enum Choice {
 /// a dispatch acknowledgement is not an exit, launch or publication receipt.
 pub trait ModeRuntime {
     fn original_status(&mut self, request: &Request) -> Result<OriginalStatus, String>;
-    fn validate_executable(&mut self, _request:&Request)->Result<(),String> {Ok(())}
+    fn validate_executable(&mut self, _request: &Request) -> Result<(), String> {
+        Ok(())
+    }
     fn graceful_close(&mut self, request: &Request) -> Result<CloseOutcome, String>;
     /// Dismiss only the exact live original's pending close and positively
     /// observe it still live. Failure keeps the operation fenced for readback.
@@ -371,13 +383,59 @@ impl OperationStore {
         if let Some(mode) = &operation.effective_mode {
             effect_request.requested_mode = mode.clone();
         }
+        if let Choice::SelectExecutable {
+            executable,
+            sha256,
+            confirmed,
+        } = choice
+        {
+            if !confirmed {
+                return Err("browser_build_owner_confirmation_required".into());
+            }
+            if !matches!(
+                operation.phase,
+                Phase::Prepared | Phase::Paused | Phase::OriginalExited | Phase::LaunchAbsent
+            ) {
+                return Err("mode_operation_phase_conflict:reconcile existing launch before choosing another build".into());
+            }
+            if !std::path::Path::new(&executable).is_absolute() || sha256.is_empty() {
+                return Err("browser_build_selection_invalid".into());
+            }
+            if matches!(operation.phase, Phase::OriginalExited | Phase::LaunchAbsent)
+                && (runtime.reconcile_replacement(&effect_request)?.is_some()
+                    || !runtime.replacement_absent(&effect_request)?)
+            {
+                return Err(
+                    "mode_operation_launch_absence_unproven:reconcile existing launch".into(),
+                );
+            }
+            let mut selected = effect_request.clone();
+            selected.executable = executable.clone();
+            selected.executable_sha256 = Some(sha256.clone());
+            runtime.validate_executable(&selected)?;
+            let mut next = operation.clone();
+            next.effective_executable = Some(executable);
+            next.effective_executable_sha256 = Some(sha256);
+            next.failure = None;
+            self.save_transition(&operation, &next)?;
+            return Ok(next);
+        }
+        if matches!(
+            choice,
+            Choice::Relaunch { .. } | Choice::RetryGracefulClose | Choice::ForceClose { .. }
+        ) {
+            runtime.validate_executable(&effect_request)?;
+        }
         if let Choice::RestorePrevious { confirmed } = choice {
             if !confirmed {
                 return Err("mode_operation_restore_confirmation_required".into());
             }
             if !matches!(
                 operation.phase,
-                Phase::LaunchDispatched | Phase::LaunchAbsent | Phase::ReplacementPending
+                Phase::OriginalExited
+                    | Phase::LaunchDispatched
+                    | Phase::LaunchAbsent
+                    | Phase::ReplacementPending
             ) {
                 return Err("mode_operation_phase_conflict:read current operation".into());
             }
@@ -585,6 +643,7 @@ impl OperationStore {
             }
         }
         if operation.phase == Phase::OriginalExited {
+            runtime.validate_executable(&effect_request)?;
             if !matches!(
                 runtime.original_status(&effect_request)?,
                 OriginalStatus::Exited

@@ -179,16 +179,19 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         if session.browser_id != binding.browser.id || session.profile_id != binding.profile.id {
             return Err("mode_operation_task_binding_changed".into());
         }
-        if optional_string(command, "executablePath").is_some() {
-            let selected = requested_build(command)?.ok_or("browser_build_selection_missing")?;
-            if binding
-                .selected_build
-                .as_ref()
-                .is_none_or(|retained| retained.id != selected.id)
-            {
-                return Err(
-                    "mode_operation_id_conflict:continue the retained build selection".into(),
-                );
+        if optional_string(command, "choice") != Some("select_build") {
+            if let Some(path) = optional_string(command, "executablePath") {
+                let canonical = Path::new(path).canonicalize().ok();
+                if binding.selected_build.as_ref().is_none_or(|retained| {
+                    canonical
+                        .as_ref()
+                        .is_some_and(|path| path != Path::new(&retained.path))
+                        || optional_string(command, "expectedSha256") != retained.sha256.as_deref()
+                }) {
+                    return Err(
+                        "mode_operation_id_conflict:continue the retained build selection".into(),
+                    );
+                }
             }
         }
         let requested_mode = match optional_string(command, "mode") {
@@ -271,7 +274,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                     );
                 }
                 let confirmed = command["ownerConfirmed"] == true;
-                if binding.selected_build.is_some()
+                if (binding.selected_build.is_some() || state.effective_executable_sha256.is_some())
                     && matches!(choice, "relaunch" | "retry_graceful_close" | "force_close")
                     && !confirmed
                 {
@@ -285,6 +288,15 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                     )?;
                 }
                 let selected = match choice {
+                    "select_build" => {
+                        let build =
+                            requested_build(command)?.ok_or("browser_build_selection_required")?;
+                        Choice::SelectExecutable {
+                            executable: build.path,
+                            sha256: build.sha256.ok_or("browser_build_unavailable")?,
+                            confirmed,
+                        }
+                    }
                     "relaunch" => Choice::Relaunch { confirmed },
                     "pause_and_relaunch" => Choice::Pause,
                     "reconcile" => Choice::Resume,
@@ -357,6 +369,36 @@ fn decorate_build_view(view: &mut Value, binding: &Binding) {
     }
 }
 
+pub(super) fn decorate_retained_build(
+    connection: &rusqlite::Connection,
+    state: &Operation,
+    view: &mut Value,
+) -> Result<(), String> {
+    let exists:bool=connection.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='browser_mode_owner_bindings')",[],|row|row.get(0)).map_err(|_|"browser_build_readback_unavailable")?;
+    if !exists {
+        return Ok(());
+    }
+    let raw: Option<String> = connection
+        .query_row(
+            "SELECT binding FROM browser_mode_owner_bindings WHERE id=?1",
+            [&state.request.operation_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|_| "browser_build_readback_unavailable")?;
+    if let Some(raw) = raw {
+        let binding: Binding =
+            serde_json::from_str(&raw).map_err(|_| "browser_build_readback_invalid")?;
+        if binding.profile.id != state.request.profile_id
+            || binding.browser.id != state.request.browser_id
+        {
+            return Err("browser_build_readback_binding_changed".into());
+        }
+        decorate_build_view(view, &binding);
+    }
+    Ok(())
+}
+
 /// Redacted owner readback shared by explicit actions and read-only lookup.
 pub(super) fn public_operation_view(
     state: &Operation,
@@ -368,10 +410,12 @@ pub(super) fn public_operation_view(
         Phase::Prepared => vec![
             ("relaunch", state.request.task_ids.len() > 1),
             ("pause_and_relaunch", false),
+            ("select_build", true),
             ("cancel", false),
         ],
         Phase::Paused => vec![
             ("relaunch", state.request.task_ids.len() > 1),
+            ("select_build", true),
             ("cancel", false),
         ],
         Phase::Closing => vec![
@@ -387,18 +431,23 @@ pub(super) fn public_operation_view(
             ("force_close", true),
             ("reconcile", false),
         ],
-        Phase::OriginalExited => vec![("reconcile", false)],
+        Phase::OriginalExited => vec![
+            ("reconcile", false),
+            ("select_build", true),
+            ("restore_previous", true),
+        ],
         Phase::LaunchDispatched | Phase::ReplacementPending => {
             vec![("reconcile", false), ("restore_previous", true)]
         }
         Phase::LaunchAbsent => vec![
             ("relaunch", true),
+            ("select_build", true),
             ("restore_previous", true),
             ("reconcile", false),
         ],
         _ => vec![],
     };
-    json!({"schemaVersion":"agent-browser.mode-operation.v1","operationId":state.request.operation_id,"phase":phase,"failure":failure.or(state.failure.as_deref()),"launchAttempts":state.launch_attempts,"recoveryChoice":if state.restoring_previous {Some("restore_previous")}else{None},"effectiveMode":state.effective_mode.as_ref().map(|mode|if *mode==Mode::Cdp{"cdp"}else{"cdp_free"}),"browserId":state.request.browser_id,"profileId":state.request.profile_id,"taskId":task_id,"affectedTaskIds":state.request.task_ids,"requestedMode":if state.request.requested_mode==Mode::Cdp{"cdp"}else{"cdp_free"},"observedMode":if state.phase==Phase::Completed {Some(if state.effective_mode.as_ref().unwrap_or(&state.request.requested_mode)==&Mode::Cdp{"cdp"}else{"cdp_free"})}else{None},"nativeContextScope":"browser","restoration":"logical tasks and profile retained; transient pages are not replayed; previous executable selection does not restore migrated profile bytes","warning":"Relaunch replaces the whole browser. Unsaved forms, downloads and page state can be lost. Native controls address the current browser window; URLs are unverified until observed. Force close may lose buffered data.","closeMethod":state.close_method,"actions":actions.into_iter().map(|(action,confirmation)|json!({"action":action,"requiresConfirmation":confirmation})).collect::<Vec<_>>()})
+    json!({"schemaVersion":"agent-browser.mode-operation.v1","operationId":state.request.operation_id,"phase":phase,"failure":failure.or(state.failure.as_deref()),"launchAttempts":state.launch_attempts,"effectiveBuild":state.effective_executable.as_ref().map(|path|json!({"name":Path::new(path).file_name().map(|name|name.to_string_lossy()),"sha256":state.effective_executable_sha256,"version":null,"versionEvidence":"unverified"})),"recoveryChoice":if state.restoring_previous {Some("restore_previous")}else{None},"effectiveMode":state.effective_mode.as_ref().map(|mode|if *mode==Mode::Cdp{"cdp"}else{"cdp_free"}),"browserId":state.request.browser_id,"profileId":state.request.profile_id,"taskId":task_id,"affectedTaskIds":state.request.task_ids,"requestedMode":if state.request.requested_mode==Mode::Cdp{"cdp"}else{"cdp_free"},"observedMode":if state.phase==Phase::Completed {Some(if state.effective_mode.as_ref().unwrap_or(&state.request.requested_mode)==&Mode::Cdp{"cdp"}else{"cdp_free"})}else{None},"nativeContextScope":"browser","restoration":"logical tasks and profile retained; transient pages are not replayed; previous executable selection does not restore migrated profile bytes","warning":"Relaunch replaces the whole browser. Unsaved forms, downloads and page state can be lost. Native controls address the current browser window; URLs are unverified until observed. Force close may lose buffered data.","closeMethod":state.close_method,"actions":actions.into_iter().map(|(action,confirmation)|json!({"action":action,"requiresConfirmation":confirmation})).collect::<Vec<_>>()})
 }
 fn phase_name(phase: &Phase) -> &'static str {
     match phase {
@@ -553,6 +602,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
 impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserCommandEffects>
     ModeRuntime for Owner<'_, P, E>
 {
+    fn validate_executable(&mut self, request: &Request) -> Result<(), String> {
+        verify_build(&request.executable, request.executable_sha256.as_deref())
+    }
     fn original_status(&mut self, _: &Request) -> Result<OriginalStatus, String> {
         let _ = self.host.effects.browser_is_live(&self.binding.browser);
         Ok(if original_matches(&self.binding.original)? {
@@ -562,7 +614,6 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         })
     }
     fn graceful_close(&mut self, request: &Request) -> Result<CloseOutcome, String> {
-        verify_build(&request.executable, request.executable_sha256.as_deref())?;
         let reply = self
             .host
             .native_browser_command(&self.binding.target(), &json!({"action":"native_close"}))?;
@@ -598,7 +649,6 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         ))
     }
     fn force_close(&mut self, request: &Request) -> Result<CloseOutcome, String> {
-        verify_build(&request.executable, request.executable_sha256.as_deref())?;
         #[cfg(target_os = "linux")]
         {
             if !original_matches(&self.binding.original)? {

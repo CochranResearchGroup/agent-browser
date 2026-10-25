@@ -473,10 +473,11 @@ fn mode_binding_uses_actual_borrowed_process_posture_instead_of_catalog_intent()
         "pause/cancel does not take lifecycle custody from the app"
     );
     use sha2::{Digest, Sha256};
-    let selected_path = "/usr/bin/python3";
+    let selected_path = fixture.root.join("chromium");
+    std::fs::copy("/usr/bin/python3", &selected_path).unwrap();
     let selected_sha = format!(
         "{:x}",
-        Sha256::digest(std::fs::read(selected_path).unwrap())
+        Sha256::digest(std::fs::read(&selected_path).unwrap())
     );
     let mut selection = json!({"sessionId":opened.session_id,"operationId":"selected-build","mode":"cdp_free","choice":"prepare","executablePath":selected_path,"expectedSha256":selected_sha});
     let selected = host.mode_convert(&selection).unwrap();
@@ -492,6 +493,12 @@ fn mode_binding_uses_actual_borrowed_process_posture_instead_of_catalog_intent()
         effect_counts,
         "A build switch cannot close the original without informed confirmation"
     );
+    let readback=host.handle_command(&json!({"action":"browser_session_mode_convert","sessionId":opened.session_id,"sessionName":"Alice","choice":"inspect","operationId":"selected-build"}));
+    assert_eq!(
+        readback["data"]["operations"][0]["selectedBuild"]["sha256"], selected_sha,
+        "Reload retains the reviewed build: {readback}"
+    );
+    std::fs::remove_file(&selected_path).unwrap();
     selection["choice"] = json!("cancel");
     assert_eq!(host.mode_convert(&selection).unwrap()["phase"], "cancelled");
 }

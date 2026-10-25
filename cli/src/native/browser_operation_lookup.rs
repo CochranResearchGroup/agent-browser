@@ -83,6 +83,7 @@ fn mode_operations(
                 .ok_or("browser_operation_task_binding_missing")?,
             None,
         );
+        super::browser_mode_host::decorate_retained_build(&connection, &operation, &mut view)?;
         view["kind"] = json!("mode_convert");
         lookup.operations.push(view);
     }

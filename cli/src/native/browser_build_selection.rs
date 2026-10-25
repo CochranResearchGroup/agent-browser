@@ -248,22 +248,24 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             }
             paths.insert(PathBuf::from(p));
         }
-        if let Some(p) = state.profile_executables.get(profile_id) {
-            paths.insert(PathBuf::from(p));
-        }
-        if let Ok(p) = std::env::var("AGENT_BROWSER_EXECUTABLE_PATH") {
-            paths.insert(PathBuf::from(p));
-        }
-        if let Some(p) = crate::native::cdp::chrome::find_chrome() {
-            paths.insert(p);
-        }
-        for p in [
-            "/opt/google/chrome/chrome",
-            "/usr/lib/chromium/chromium",
-            "/usr/lib/chromium-browser/chromium-browser",
-        ] {
-            if Path::new(p).is_file() {
+        if optional_string(command, "executablePath").is_none() {
+            if let Some(p) = state.profile_executables.get(profile_id) {
                 paths.insert(PathBuf::from(p));
+            }
+            if let Ok(p) = std::env::var("AGENT_BROWSER_EXECUTABLE_PATH") {
+                paths.insert(PathBuf::from(p));
+            }
+            if let Some(p) = crate::native::cdp::chrome::find_chrome() {
+                paths.insert(p);
+            }
+            for p in [
+                "/opt/google/chrome/chrome",
+                "/usr/lib/chromium/chromium",
+                "/usr/lib/chromium-browser/chromium-browser",
+            ] {
+                if Path::new(p).is_file() {
+                    paths.insert(PathBuf::from(p));
+                }
             }
         }
         let available = paths
