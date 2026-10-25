@@ -1234,6 +1234,10 @@ fn run_browser_worker(
                     let _ = reply.send(manual::reconcile_mode(&profile, browser, &tabs));
                     continue;
                 }
+                if browser.is_none() {
+                    let _ = reply.send(manual::reconcile_initial(&profile));
+                    continue;
+                }
                 let result = browser
                     .as_ref()
                     .map_or(Ok(()), |browser| {
