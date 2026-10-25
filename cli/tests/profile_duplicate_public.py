@@ -16,6 +16,7 @@ import tempfile
 import threading
 import time
 import urllib.request
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
@@ -23,6 +24,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary', required=True)
     parser.add_argument('--chrome', required=True)
+    parser.add_argument('--public-build-adapters',action='store_true')
     parser.add_argument('--build-target')
     parser.add_argument('--target-mode', choices=['cdp','cdp_free'], default='cdp_free')
     parser.add_argument('--delayed-close', action='store_true')
@@ -42,7 +44,7 @@ def main():
             result = subprocess.run(['unshare', '--user', '--map-current-user', '--keep-caps', '--mount', '--net',
                 '--propagation', 'private', 'python3', str(Path(__file__).resolve()),
                 '--binary', str(Path(args.binary).resolve()), '--chrome', str(Path(args.chrome).resolve()),
-                '--namespace-worker', '--parent-proof-fd', str(read_fd), *(['--build-target',str(Path(args.build_target).resolve()),'--target-mode',args.target_mode] if args.build_target else []), *(['--delayed-close'] if args.delayed_close else []), *(['--borrowed-source'] if args.borrowed_source else []), *(['--launch-failure', args.launch_failure] if args.launch_failure else []), *(['--restart-owner'] if args.restart_owner else []), *(['--lost-launch-reply'] if args.lost_launch_reply else [])], pass_fds=(read_fd,)).returncode
+                '--namespace-worker', '--parent-proof-fd', str(read_fd), *(['--public-build-adapters'] if args.public_build_adapters else []), *(['--build-target',str(Path(args.build_target).resolve()),'--target-mode',args.target_mode] if args.build_target else []), *(['--delayed-close'] if args.delayed_close else []), *(['--borrowed-source'] if args.borrowed_source else []), *(['--launch-failure', args.launch_failure] if args.launch_failure else []), *(['--restart-owner'] if args.restart_owner else []), *(['--lost-launch-reply'] if args.lost_launch_reply else [])], pass_fds=(read_fd,)).returncode
         finally:
             os.close(read_fd)
         raise SystemExit(result)
@@ -509,9 +511,23 @@ def main():
                     copied_id=copied['destination']['id']
                     evidence=call('browser_command',dict(action='browser_build',params=dict(profileId=copied_id,choice='inspect',executablePath=private_chrome)))
                     selected=next(row for row in evidence['availableBuilds'] if row['sha256']==build_pair['source']['sha256'])
-                    selected_receipt=call('browser_command',dict(action='browser_build',params=dict(profileId=copied_id,operationId='copy-alternate-build',choice='select_for_next_launch',mode='cdp_free',ownerConfirmed=True,**selected['selection'])))
+                    selection_request=dict(profileId=copied_id,operationId='copy-alternate-build',choice='select_for_next_launch',mode='cdp_free',ownerConfirmed=True,**selected['selection'])
+                    if args.public_build_adapters:
+                        cli_reply=subprocess.run([str(Path(args.binary).resolve()),'--json','mcp','browser-build',json.dumps(selection_request)],env=env,capture_output=True,text=True,timeout=30)
+                        assert cli_reply.returncode==0,cli_reply.stdout+cli_reply.stderr
+                        selected_receipt=json.loads(cli_reply.stdout)['data']
+                    else:selected_receipt=call('browser_command',dict(action='browser_build',params=selection_request))
                     assert selected_receipt['phase']=='selected_for_next_launch'
-                    opened_copy=call('browser_command',dict(action='browser_build',params=dict(profileId=copied_id,operationId='copy-alternate-build',choice='open_selected',serviceName='fixture',agentName='fixture',taskName='Retained independent copy')))
+                    opening_request=dict(profileId=copied_id,operationId='copy-alternate-build',choice='open_selected',serviceName='fixture',agentName='fixture',taskName='Retained independent copy')
+                    if args.public_build_adapters:
+                        stream_reply=subprocess.run([str(Path(args.binary).resolve()),'--json','stream','enable'],env=env,capture_output=True,text=True,timeout=30)
+                        assert stream_reply.returncode==0,stream_reply.stdout+stream_reply.stderr
+                        port=json.loads(stream_reply.stdout)['data']['port']
+                        wire_request=urllib.request.Request('http://127.0.0.1:'+str(port)+'/api/command',data=json.dumps(dict(opening_request,action='browser_session_build_select')).encode(),headers={'Content-Type':'application/json'})
+                        with urllib.request.urlopen(wire_request,timeout=30) as response:payload=json.load(response)
+                        assert payload['success'],payload
+                        opened_copy=payload['data']
+                    else:opened_copy=call('browser_command',dict(action='browser_build',params=opening_request))
                     assert opened_copy['phase']=='opened',opened_copy
                     assert len(browsers())==1 and os.readlink('/proc/'+str(browsers()[0][0])+'/exe')==private_chrome
                     assert independent_marker.read_bytes()==b'destination-retained-across-recovery'
@@ -629,7 +645,7 @@ def main():
         print(json.dumps(dict(passed=True,scope='public MCP profile_duplicate, real Chrome/X11, synthetic Native owner',
             nativeGracefulClose=True,independentProfiles=True,concurrentBrowsers=not args.launch_failure and not args.lost_launch_reply,sourcePreserved=True,
             syntheticCookieContinuity=copy_cookie_preserved,buildPair=build_pair,targetMode=args.target_mode if args.build_target else None,copyLoginRemediated=copy_auth_remediated,credentialEncryptionModified=False,divergentWrites=not args.launch_failure and not args.lost_launch_reply,replayPreserved=True,cleanupVerified=True,
-            launchFailureRecovery=args.launch_failure,ownerRestart=args.restart_owner,lostLaunchReply=args.lost_launch_reply)))
+            publicBuildAdapters=args.public_build_adapters,launchFailureRecovery=args.launch_failure,ownerRestart=args.restart_owner,lostLaunchReply=args.lost_launch_reply)))
 
 
 if __name__ == '__main__':

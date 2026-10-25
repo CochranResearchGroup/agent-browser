@@ -6394,34 +6394,43 @@ fn validate_browser_command_action(arguments: &Value) -> Result<&str, JsonRpcErr
         let schema = catalog::browser_argument_schema(action)?;
         let page_arguments = schema["properties"].as_object().unwrap();
         for key in params.keys() {
-            if matches!(
-                key.as_str(),
-                "id" | "action"
-                    | "sessionName"
-                    | "sessionId"
-                    | "taskId"
-                    | "tabId"
-                    | "targetId"
-                    | "browserId"
-                    | "profile"
-                    | "profileId"
-                    | "runtimeProfile"
-                    | "profileCapability"
-                    | "serviceName"
-                    | "agentName"
-                    | "taskName"
-                    | "routeId"
-                    | "provider"
-                    | "tabHandle"
-                    | "serviceTabHandle"
-                    | "profileLeaseId"
-                    | "profileLeaseGeneration"
-                    | "connectionInstanceId"
-                    | "callerId"
-                    | "jobId"
-                    | "serviceJobId"
-                    | "requestPrincipalSource"
-            ) {
+            // Build choices are explicitly profile-scoped; opening their saved
+            // selection also requires the agent metadata declared by that adapter.
+            // Transport routes and principal fields remain reserved.
+            let build_context_argument = action == "browser_build"
+                && (key == "profileId"
+                    || (params.get("choice").and_then(Value::as_str) == Some("open_selected")
+                        && matches!(key.as_str(), "serviceName" | "agentName" | "taskName")));
+            if !build_context_argument
+                && matches!(
+                    key.as_str(),
+                    "id" | "action"
+                        | "sessionName"
+                        | "sessionId"
+                        | "taskId"
+                        | "tabId"
+                        | "targetId"
+                        | "browserId"
+                        | "profile"
+                        | "profileId"
+                        | "runtimeProfile"
+                        | "profileCapability"
+                        | "serviceName"
+                        | "agentName"
+                        | "taskName"
+                        | "routeId"
+                        | "provider"
+                        | "tabHandle"
+                        | "serviceTabHandle"
+                        | "profileLeaseId"
+                        | "profileLeaseGeneration"
+                        | "connectionInstanceId"
+                        | "callerId"
+                        | "jobId"
+                        | "serviceJobId"
+                        | "requestPrincipalSource"
+                )
+            {
                 return Err(JsonRpcError::invalid_params(&format!(
                     "browser_command params.{key} is reserved"
                 )));

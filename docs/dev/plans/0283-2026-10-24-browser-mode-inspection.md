@@ -467,3 +467,16 @@ pass. Actual cross-build synthetic qualification and final batch gates remain
 pending. First failure logs are retained outside Git, including strict Clippy's
 unnecessary-closure finding. This checkpoint is not acceptance or runtime install
 proof. Production and the foreign authentication lane remain untouched.
+
+### Build acceptance boundary correction
+
+Candidate v1 qualified both original-profile Chrome153 and Chromium150 mode
+roundtrips, version/hash provenance, public CLI/HTTP discovery, independent
+synthetic cookie/auth checks, unrelated-process preservation and cleanup. Seven
+no-launch service checks also passed. The first copy-build case then exposed a
+public MCP guard defect: profile-only build discovery rejected its declared
+`params.profileId` before reaching the adapter. That actual failure and its
+focused unit red are retained. Root is narrowing the reserved-field guard only
+for the build adapter's declared profile target and open-selected agent metadata;
+route and principal reservations remain covered. A replacement candidate must
+qualify the copy and public selection/open paths before ticket closure.
