@@ -94,6 +94,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.unroute('**/api/command');
     const buildCommands=[];
     let selectedReceipt=null;
+    let loseSelectionReply=true;
     let activeBuildTasks=[];
     const choice={buildId:'build:synthetic',expectedSha256:'a'.repeat(64)};
     const build={id:choice.buildId,name:'chromium',family:'chromium',version:'150.0.0.0',available:true,nativeBinary:true,selection:choice,compatibility:{versionRelation:'older',familyRelation:'different'}};
@@ -104,6 +105,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
       }
       if(command.action==='browser_session_build_select') {
         selectedReceipt=command.operationId;
+        if(command.choice==='select_for_next_launch' && loseSelectionReply){loseSelectionReply=false;await route.abort('failed');return;}
         await route.fulfill({json:{success:true,data:{schemaVersion:'agent-browser.build-selection.v1',operationId:command.operationId,phase:command.choice==='open_selected'?'opened':'selected_for_next_launch'}}});return;
       }
       if(command.choice==='inspect') {
@@ -124,6 +126,9 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.getByRole('radio',{name:'CDP',exact:true}).check();
     await page.getByRole('checkbox',{name:'Confirm build migration and login risk'}).check();
     await page.getByRole('button',{name:'Select for next launch',exact:true}).click();
+    await page.getByText(/Refresh browser builds to read retained selection/).waitFor();
+    assert.equal(await page.getByRole('button',{name:'Select for next launch',exact:true}).isEnabled(),false,'lost reply fences further selection effects');
+    await page.getByRole('button',{name:'Refresh browser builds',exact:true}).click();
     await page.getByRole('button',{name:'Open selected build',exact:true}).waitFor();
     const selection=buildCommands.find(command=>command.choice==='select_for_next_launch');
     assert.deepEqual({buildId:selection.buildId,expectedSha256:selection.expectedSha256,mode:selection.mode,ownerConfirmed:selection.ownerConfirmed},{...choice,mode:'cdp',ownerConfirmed:true});
