@@ -381,7 +381,7 @@ fn mode_binding_uses_actual_borrowed_process_posture_instead_of_catalog_intent()
     drop(host);
     let store = fixture.store(false);
     store.save_session_state(&state).unwrap();
-    let mut catalog = store.load_profile_catalog().unwrap();
+    let mut catalog = store.load_profile_catalog().unwrap().catalog;
     // Opposite launch intent must not rewrite observed original process mode.
     catalog.profiles.get_mut("profile-a").unwrap().manual_login_url = Some("about:blank".into());
     store.save_profile_catalog(&catalog).unwrap();
