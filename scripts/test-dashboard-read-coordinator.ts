@@ -311,11 +311,11 @@ const unknownWorkspace = { tabs: { candidate: { presence: { state: "unknown" } }
 const liveWorkspace = { tabs: { candidate: { presence: { state: "live" } } } };
 const startupInterval = createWorkspacePollInterval();
 assert.equal(startupInterval(unknownWorkspace), 250);
-assert.equal(startupInterval(unknownWorkspace), 250);
+assert.equal(startupInterval(unknownWorkspace), 500);
 assert.equal(startupInterval(liveWorkspace), 3000);
 assert.equal(startupInterval(unknownWorkspace), 3000, "settled startup must never restart rapid polling");
 const exhaustedInterval = createWorkspacePollInterval();
-assert.deepEqual(Array.from({ length: 6 }, () => exhaustedInterval(unknownWorkspace)), [250, 250, 250, 3000, 3000, 3000]);
+assert.deepEqual(Array.from({ length: 6 }, () => exhaustedInterval(unknownWorkspace)), [250, 500, 1000, 3000, 3000, 3000]);
 for (const settled of [undefined, { tabs: {} }, { tabs: { candidate: { presence: { state: "absent" } } } }]) {
   const interval = createWorkspacePollInterval();
   assert.equal(interval(settled), 3000);
@@ -342,5 +342,36 @@ assert.equal(coldRead, 2);
 assert.equal(coldTimers[0].delay, 3000, "live follow-up restores ordinary cadence immediately");
 stopCold();
 assert.equal(coldTimers.length, 0, "unmount cancels the startup follow-up");
+
+// Replay measured Native readiness beyond the original 750ms startup window.
+let coldNow = 0;
+let firstLiveReadAt: number | null = null;
+let delayedIntervalMs = 0;
+const delayedTimers: Timer[] = [];
+const delayedInterval = createWorkspacePollInterval();
+const delayedReadTimes: number[] = [];
+const stopDelayed = startCompletionDrivenDashboardPoll(async () => {
+  delayedReadTimes.push(coldNow);
+  const live = coldNow >= 1449;
+  if (live && firstLiveReadAt === null) firstLiveReadAt = coldNow;
+  delayedIntervalMs = delayedInterval(live ? liveWorkspace : unknownWorkspace);
+}, () => delayedIntervalMs, {
+  isVisible: () => true,
+  setTimeout: (callback, delay) => { delayedTimers.push({ callback, delay }); return delayedTimers.length; },
+  clearTimeout: () => { delayedTimers.length = 0; },
+  subscribeVisibility: () => () => undefined,
+});
+await new Promise(resolve => setImmediate(resolve));
+for (let i = 0; i < 5 && firstLiveReadAt === null; i++) {
+  const timer = delayedTimers.shift()!;
+  coldNow += timer.delay;
+  timer.callback();
+  await new Promise(resolve => setImmediate(resolve));
+}
+stopDelayed();
+assert.ok(firstLiveReadAt !== null && firstLiveReadAt <= 2000,
+  `Native evidence ready at1449ms waited until${firstLiveReadAt}ms; reads:${delayedReadTimes}`);
+assert.ok(delayedReadTimes.length <= 4, "cold catch-up must not increase the three-follow-up request budget");
+assert.equal(delayedTimers.length, 0, "unmount cancels the delayed startup timer");
 
 console.log("dashboard read coordinator tests passed");

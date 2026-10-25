@@ -1,5 +1,7 @@
 # Runbook
 
+[P291 cold rail retry spacing](docs/dev/plans/0291-2026-10-24-cold-rail-retry-spacing.md), #430, qualifies a source-only reduction of the measured expired-observation polling gap: actual scheduler replay improves3.750s to1.750s with the same three-follow-up budget. [Evidence](docs/dev/notes/0291-2026-10-24-cold-rail-retry-spacing.md) distinguishes this from422 asset failures and from installed acceptance. Production remains9cbf948ef4af.
+
 Combined source a3dbb1a97 is installed as sealed binary9cbf948ef4af through the supported preserve installer, including P285 cold catch-up, P289 terminal/activity recovery and P288/P290 writer repairs. All13 pre-install browser roots survive; public auth/workspace/assets and doctor pass with retained advisories. [P285 evidence](docs/dev/notes/0285-2026-10-24-workspace-inventory-latency.md) retains its causal cold catch-up comparison; the latest five stock Chrome156 visits have median1.168s/max1.939s.
 
 [P289/#412](docs/dev/notes/0289-2026-10-24-terminal-acquisition-recovery.md) is installed accepted: exact Released history, zero pending acquisitions, successful open/continue/close, and actual Native canvas/WebSocket proof in10.68s after the existing Cooper sign-in flow. Final14-process synthetic and9-process QA generations are absent. [#422](https://github.com/CochranResearchGroup/agent-browser/issues/422) retains a separate intermittent public asset timeout/ChunkLoadError finding; later exact asset and stock-browser checks pass, without an inferred cause. Retain primary checkout and pinned artifacts.

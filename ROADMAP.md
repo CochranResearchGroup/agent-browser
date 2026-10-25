@@ -1,5 +1,7 @@
 # Roadmap
 
+[P291 cold rail retry spacing](docs/dev/plans/0291-2026-10-24-cold-rail-retry-spacing.md), #430, qualifies a source-only reduction of the measured expired-observation polling gap: actual scheduler replay improves3.750s to1.750s with the same three-follow-up budget. [Evidence](docs/dev/notes/0291-2026-10-24-cold-rail-retry-spacing.md) distinguishes this from422 asset failures and from installed acceptance. Production remains9cbf948ef4af.
+
 [P289 terminal acquisition and Native handoff acceptance](docs/dev/plans/0289-2026-10-24-terminal-acquisition-recovery.md), #412, is installed accepted on9cbf948ef4af with actual Native canvas/WebSocket proof and13 browser roots preserved. #422 retains the separate intermittent public asset finding.
 
 [P290 writer executable continuity](docs/dev/plans/0290-2026-10-24-writer-executable-continuity.md), #417, repairs PR415 live-writer custody loss after executable unlink through public CLI TDD. PR419 carries the qualified source;221 workstation tests, public fixtures, strict Rust quality and docs pass. That source checkpoint left production unchanged; the later combined e0d5525e92cc install includes this repair.

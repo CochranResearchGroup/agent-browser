@@ -135,3 +135,5 @@ For health, inventory or viewer failures, read [Dashboard diagnostics](reference
 Workstation upgrades retire older installed MCP servers. Reconnect affected MCP hosts; install doctor checks `installedMcpClients` before accepting consistent runtime operation.
 
 Development startup ownership: [diagnostics](references/cli-and-service.md#development-host-startup).
+
+Dashboard rail startup uses at most three cache-revalidated inventory retries after delays of 250, 500 and 1000 milliseconds while candidate presence is unknown. Known or failed evidence ends catch-up; normal polling remains three seconds after completion.
