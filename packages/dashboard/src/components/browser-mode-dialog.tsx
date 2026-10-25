@@ -14,6 +14,7 @@ export function BrowserModeDialog({ open, onOpenChange, taskId, sessionName, pro
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent style={{ maxWidth: 480 }} aria-describedby="browser-mode-description">
     <DialogHeader><DialogTitle>Change browser mode</DialogTitle><DialogDescription id="browser-mode-description">Review affected tasks before relaunch. The same operation is retained through uncertain results.</DialogDescription></DialogHeader>
     <p>Requested mode: {(operation?.requestedMode ?? mode) === "cdp" ? "CDP" : "No CDP"}</p>
+    {operation?.effectiveMode && <p>Effective mode: {operation.effectiveMode === "cdp" ? "CDP" : "No CDP"}</p>}
     <p>Relaunch replaces the whole browser. Unsaved forms, downloads and page state may be lost. Logical tasks, profile and handoff links are retained. Native actions address the browser window.</p>
     {operation && <><p role="status">{operation.state ?? operation.phase}</p><p>Affected tasks</p><ul>{operation.affectedTaskIds?.map(id => <li key={id}>{id}</li>)}</ul><small>Operation: {operation.operationId}</small></>}
     {actions.some(action => action.requiresConfirmation) && <label><input type="checkbox" aria-label="Confirm the selected browser action" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />Confirm the selected browser action. Force close may lose buffered data. Confirm only the selected scope.</label>}

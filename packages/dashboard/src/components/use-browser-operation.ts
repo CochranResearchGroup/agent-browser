@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type BrowserOperation = {
   schemaVersion: string; operationId: string; kind?: string; state?: string; phase?: string;
-  profileId?: string; browserId?: string; taskId?: string; requestedMode?: "cdp" | "cdp_free";
+  profileId?: string; browserId?: string; taskId?: string; requestedMode?: "cdp" | "cdp_free"; effectiveMode?: "cdp" | "cdp_free";
   source?: { id: string }; destination?: { id: string; name: string }; launchRequested?: boolean;
   affectedTaskIds?: string[]; copyComplete?: boolean; profilePublished?: boolean; failure?: string | null;
   actions?: { action: string; requiresConfirmation: boolean }[];

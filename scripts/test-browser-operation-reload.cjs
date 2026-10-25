@@ -98,7 +98,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     ]) {
       const page=await browser.newPage(); const commands=[]; const id=`recovery-${kind}-${action}-${phase}`;
       const retained={...operation(kind,id,phase),actions:[{action,requiresConfirmation:true},{action:'reconcile',requiresConfirmation:false}]};
-      await page.route('**/api/command',async route=>{const command=route.request().postDataJSON();commands.push(command);await route.fulfill({json:{success:true,data:command.choice==='inspect'?lookup(kind,[retained]):retained}});});
+      await page.route('**/api/command',async route=>{const command=route.request().postDataJSON();commands.push(command);await route.fulfill({json:{success:true,data:command.choice==='inspect'?lookup(kind,[retained]):action==='restore_previous'?{...retained,phase:'completed',effectiveMode:'cdp',actions:[]}:retained}});});
       await page.goto(origin);await open(page,kind);
       await page.getByText(`Operation: ${id}`,{exact:true}).waitFor();
       const button=page.getByRole('button',{name:label,exact:true});
@@ -106,6 +106,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
       await page.getByRole('checkbox',{name:'Confirm the selected browser action'}).check();await button.click();
       await page.waitForFunction(()=>document.querySelector('[data-mode-operation-busy],[data-profile-operation-busy]')===null);
       assert.equal(commands.at(-1).operationId,id);assert.equal(commands.at(-1).choice,action);assert.equal(commands.at(-1).ownerConfirmed,true);
+      if(action==='restore_previous') await page.getByText('Effective mode: CDP',{exact:true}).waitFor();
       checks.push(`${kind}:${phase}:${action}`);await page.close();
     }
     console.log(JSON.stringify({success:true,seam:'mounted full-reload operation recovery',checks,artifacts}));
