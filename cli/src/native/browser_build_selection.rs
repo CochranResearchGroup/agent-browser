@@ -201,7 +201,7 @@ pub(super) fn inspect_executable(path: &Path) -> ExecutableEvidence {
         sha256,
     }
 }
-fn profile_data_version(profile: &BrowserProfileCatalogEntry) -> Option<String> {
+pub(super) fn profile_data_version(profile: &BrowserProfileCatalogEntry) -> Option<String> {
     let file = std::fs::File::open(Path::new(&profile.user_data_dir).join("Last Version")).ok()?;
     let mut text = String::new();
     file.take(128).read_to_string(&mut text).ok()?;
@@ -351,4 +351,49 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         self.catalog = catalog;
         Ok(receipt)
     }
+}
+
+/// Review exact executable bytes without asserting profile or credential portability.
+pub(super) fn requested_build(command: &Value) -> Result<Option<ExecutableEvidence>, String> {
+    let Some(path) = optional_string(command, "executablePath") else {
+        return Ok(None);
+    };
+    if !Path::new(path).is_absolute() {
+        return Err("browser_build_absolute_path_required".into());
+    }
+    let expected = required_string(command, "expectedSha256")?;
+    let selected = inspect_executable(Path::new(path));
+    if !selected.available {
+        return Err("browser_build_unavailable:choose another build or cancel".into());
+    }
+    if selected.sha256.as_deref() != Some(expected) {
+        return Err("browser_build_changed:inspect and confirm the current build".into());
+    }
+    Ok(Some(selected))
+}
+/// Verify before close and launch. Confirmation never substitutes for file evidence.
+pub(super) fn verify_build(path: &str, expected: Option<&str>) -> Result<(), String> {
+    let Some(expected) = expected else {
+        return Ok(());
+    };
+    let path = Path::new(path);
+    let executable = path.is_file() && {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            path.metadata()
+                .is_ok_and(|m| m.permissions().mode() & 0o111 != 0)
+        }
+        #[cfg(not(unix))]
+        {
+            true
+        }
+    };
+    if !executable {
+        return Err("browser_build_unavailable:choose another build or cancel".into());
+    }
+    if executable_digest(path)?.as_str() != expected {
+        return Err("browser_build_changed:choose another build and review again".into());
+    }
+    Ok(())
 }

@@ -9,6 +9,7 @@ fn request() -> Request {
         profile_id: "profile-1".into(),
         original_process: "boot:pid:start".into(),
         executable: "/synthetic/chrome".into(),
+        executable_sha256: None,
         task_ids: vec!["task-1".into(), "peer-task".into()],
         requested_mode: Mode::CdpFree,
     }

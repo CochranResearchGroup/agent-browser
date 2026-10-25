@@ -19,6 +19,8 @@ pub struct Request {
     pub profile_id: String,
     pub original_process: String,
     pub executable: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executable_sha256: Option<String>,
     pub task_ids: Vec<String>,
     pub requested_mode: Mode,
 }
@@ -45,8 +47,10 @@ pub struct Operation {
     pub close_method: Option<CloseMethod>,
     #[serde(default)]
     pub effective_mode: Option<Mode>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effective_executable: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effective_executable_sha256: Option<String>,
     #[serde(default)]
     pub failure: Option<String>,
     #[serde(default)]
@@ -164,6 +168,7 @@ impl OperationStore {
             close_method: None,
             effective_mode: None,
             effective_executable: None,
+            effective_executable_sha256: None,
             failure: None,
             launch_attempts: 0,
             restoring_previous: false,
@@ -286,6 +291,9 @@ pub trait ModeRuntime {
     fn previous_executable(&self, _request: &Request) -> Option<String> {
         None
     }
+    fn previous_executable_sha256(&self, _request: &Request) -> Option<String> {
+        None
+    }
     /// Positive exact publication proof permits sealing a lost terminal write.
     /// Missing evidence never authorizes another close or replacement launch.
     fn replacement_is_published(
@@ -356,6 +364,7 @@ impl OperationStore {
         let mut effect_request = operation.request.clone();
         if let Some(executable) = &operation.effective_executable {
             effect_request.executable = executable.clone();
+            effect_request.executable_sha256 = operation.effective_executable_sha256.clone();
         }
         if let Some(mode) = &operation.effective_mode {
             effect_request.requested_mode = mode.clone();
@@ -397,6 +406,7 @@ impl OperationStore {
             let mode = runtime.restore_previous(&effect_request)?;
             let mut next = operation.clone();
             next.effective_mode = Some(mode.clone());
+            next.effective_executable_sha256 = runtime.previous_executable_sha256(&effect_request);
             next.effective_executable = runtime
                 .previous_executable(&effect_request)
                 .or_else(|| Some(operation.request.executable.clone()));
@@ -406,6 +416,7 @@ impl OperationStore {
             self.save_transition(&operation, &next)?;
             operation = next;
             effect_request.requested_mode = mode;
+            effect_request.executable_sha256 = operation.effective_executable_sha256.clone();
             effect_request.executable = operation
                 .effective_executable
                 .clone()

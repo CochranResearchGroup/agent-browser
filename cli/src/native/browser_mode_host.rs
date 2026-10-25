@@ -3,6 +3,10 @@ use super::super::browser_mode_operation::{
     Choice, CloseOutcome, Mode, ModeRuntime, Operation, OperationStore, OriginalStatus, Phase,
     Replacement, Request,
 };
+use super::browser_build_selection::{
+    executable_digest, inspect_executable, profile_data_version, requested_build, verify_build,
+    ExecutableEvidence,
+};
 use super::*;
 use agent_browser_service_model::{
     BrowserLaunchCustodyStore, BrowserProfileCatalogEntry, BrowserRecovery, ManagedBrowserInstance,
@@ -20,6 +24,12 @@ struct Binding {
     tab: ManagedBrowserTab,
     original: RecordedProcessIdentity,
     original_mode: Mode,
+    #[serde(default)]
+    selected_build: Option<ExecutableEvidence>,
+    #[serde(default)]
+    previous_build: Option<ExecutableEvidence>,
+    #[serde(default)]
+    profile_data_version: Option<String>,
 }
 impl Binding {
     fn target(&self) -> RemoteViewTabHandoffTarget {
@@ -128,6 +138,21 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 Some("cdp_free") => Mode::CdpFree,
                 _ => return Err("mode_operation_original_posture_unverified:refresh the current browser before conversion".into()),
             };
+            let selected_build = requested_build(command)?;
+            let mut previous_build = selected_build
+                .as_ref()
+                .and_then(|_| original.executable_path.as_ref())
+                .map(|path| inspect_executable(Path::new(path)));
+            #[cfg(target_os = "linux")]
+            if let Some(previous) = previous_build.as_mut() {
+                if executable_digest(Path::new(&format!("/proc/{}/exe", original.pid))).ok()
+                    != previous.sha256
+                {
+                    previous.available = false;
+                    previous.sha256 = None;
+                }
+            }
+            let data_version = profile_data_version(&profile);
             let binding = Binding {
                 profile,
                 browser: browser.clone(),
@@ -135,6 +160,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 tab,
                 original,
                 original_mode,
+                selected_build,
+                previous_build,
+                profile_data_version: data_version,
             };
             connection
                 .execute(
@@ -150,6 +178,18 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         };
         if session.browser_id != binding.browser.id || session.profile_id != binding.profile.id {
             return Err("mode_operation_task_binding_changed".into());
+        }
+        if optional_string(command, "executablePath").is_some() {
+            let selected = requested_build(command)?.ok_or("browser_build_selection_missing")?;
+            if binding
+                .selected_build
+                .as_ref()
+                .is_none_or(|retained| retained.id != selected.id)
+            {
+                return Err(
+                    "mode_operation_id_conflict:continue the retained build selection".into(),
+                );
+            }
         }
         let requested_mode = match optional_string(command, "mode") {
             Some("cdp") => Mode::Cdp,
@@ -179,10 +219,15 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 original_process: serde_json::to_string(&binding.original)
                     .map_err(|_| "mode_operation_original_encode_failed")?,
                 executable: binding
-                    .original
-                    .executable_path
-                    .clone()
+                    .selected_build
+                    .as_ref()
+                    .map(|build| build.path.clone())
+                    .or_else(|| binding.original.executable_path.clone())
                     .ok_or("mode_operation_executable_unverified")?,
+                executable_sha256: binding
+                    .selected_build
+                    .as_ref()
+                    .and_then(|build| build.sha256.clone()),
                 task_ids: tasks,
                 requested_mode,
             })?
@@ -226,6 +271,12 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                     );
                 }
                 let confirmed = command["ownerConfirmed"] == true;
+                if binding.selected_build.is_some()
+                    && matches!(choice, "relaunch" | "retry_graceful_close" | "force_close")
+                    && !confirmed
+                {
+                    return Err("browser_build_owner_confirmation_required:profile migration and login loss are possible; duplicate-and-test, choose another build or cancel".into());
+                }
                 if !confirmed {
                     super::super::browser_host_control::check_state(
                         &self.state,
@@ -277,7 +328,32 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             self.state.profile_operation_ids.remove(&browser.profile_id);
             self.commit_state()?;
         }
-        Ok(public_operation_view(&state, task_id, failure.as_deref()))
+        let mut view = public_operation_view(&state, task_id, failure.as_deref());
+        decorate_build_view(&mut view, &binding);
+        Ok(view)
+    }
+}
+
+fn decorate_build_view(view: &mut Value, binding: &Binding) {
+    if let Some(build) = &binding.selected_build {
+        view["selectedBuild"] = build.public();
+        view["previousBuild"] = binding
+            .previous_build
+            .as_ref()
+            .map(ExecutableEvidence::public)
+            .unwrap_or(Value::Null);
+        view["profileDataVersion"] = json!(binding.profile_data_version);
+        view["credentialStorage"] = json!("unverified");
+        view["authenticationContinuity"] = json!("unverified");
+        view["profileDataReadable"] = json!("unverified");
+        view["migrationWarning"]=json!("The selected build may migrate profile data or lose login. Selecting the previous executable does not restore profile bytes. Verify login independently; do not change credential encryption.");
+        if let Some(actions) = view["actions"].as_array_mut() {
+            for action in actions {
+                if action["action"] == "relaunch" {
+                    action["requiresConfirmation"] = json!(true);
+                }
+            }
+        }
     }
 }
 
@@ -376,6 +452,26 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             .process_identity
             .as_ref()
             .ok_or("mode_operation_replacement_identity_missing")?;
+        if let Some(expected) = request.executable_sha256.as_deref() {
+            if original.executable_path.as_deref() != Some(request.executable.as_str()) {
+                return Err("browser_build_loaded_path_mismatch:inspect the launched process or restore previous executable".into());
+            }
+            #[cfg(target_os = "linux")]
+            if executable_digest(Path::new(&format!("/proc/{}/exe", original.pid)))?.as_str()
+                != expected
+            {
+                return Err(
+                    "browser_build_loaded_bytes_mismatch:reconcile the existing launch".into(),
+                );
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                let _ = expected;
+                return Err(
+                    "browser_build_loaded_bytes_unverified:platform qualification required".into(),
+                );
+            }
+        }
         let mut browser = self.binding.browser.clone();
         browser.pid = recovery.launch.pid;
         browser.cdp_endpoint = recovery.launch.cdp_endpoint.clone();
@@ -466,6 +562,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         })
     }
     fn graceful_close(&mut self, request: &Request) -> Result<CloseOutcome, String> {
+        verify_build(&request.executable, request.executable_sha256.as_deref())?;
         let reply = self
             .host
             .native_browser_command(&self.binding.target(), &json!({"action":"native_close"}))?;
@@ -501,6 +598,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         ))
     }
     fn force_close(&mut self, request: &Request) -> Result<CloseOutcome, String> {
+        verify_build(&request.executable, request.executable_sha256.as_deref())?;
         #[cfg(target_os = "linux")]
         {
             if !original_matches(&self.binding.original)? {
@@ -552,6 +650,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             .map(|_| ())
     }
     fn launch(&mut self, request: &Request) -> Result<Replacement, String> {
+        verify_build(&request.executable, request.executable_sha256.as_deref())?;
         let profile = self.profile(request);
         if let Some(current) = self.host.catalog.profiles.get(&profile.id) {
             let expected = self.host.catalog.clone();
@@ -656,7 +755,17 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
     fn previous_executable(&self, _: &Request) -> Option<String> {
         self.binding.original.executable_path.clone()
     }
+    fn previous_executable_sha256(&self, _: &Request) -> Option<String> {
+        self.binding
+            .previous_build
+            .as_ref()
+            .and_then(|build| build.sha256.clone())
+    }
     fn restore_previous(&mut self, request: &Request) -> Result<Mode, String> {
+        if self.binding.selected_build.is_some() {
+            let previous=self.binding.previous_build.as_ref().filter(|build|build.available).ok_or("browser_build_previous_unavailable:choose another build; profile bytes have not been restored")?;
+            verify_build(&previous.path, previous.sha256.as_deref())?;
+        }
         let profile = self.profile(request);
         self.host
             .effects
