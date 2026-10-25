@@ -599,6 +599,10 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 Some(&self.binding.browser),
             )
             .map_err(|_| "mode_operation_launch_custody_readback_required")?;
+        // The exact absent launch is durably settled before dropping its local
+        // observation. A subsequent state commit must not publish that dead
+        // replacement as if it were the selected recovery outcome.
+        self.host.effects.begin_operation(&self.host.persisted_state)?;
         Ok(true)
     }
     fn restore_previous(&mut self, request: &Request) -> Result<Mode, String> {
