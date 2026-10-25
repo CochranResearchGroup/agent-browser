@@ -99,6 +99,7 @@ def main():
         suppress_replacement_windows = threading.Event()
         original_pid = None
         executable_pin_provenance = []
+        initial_cookie_preserved = None
         prompt_armed=threading.Event(); prompt_disarmed=threading.Event()
         native_page=threading.Event(); native_mouse=threading.Event(); native_scroll=threading.Event(); native_auth=threading.Event()
         def spawn(command, **kwargs):
@@ -526,7 +527,20 @@ def main():
                 assert_conversion_executable_pin(original[2], 'cdp_free')
                 cookie_after_close.set()
                 call('browser_command',dict(taskId=task['taskId'],action='native_input',params=dict(actions=[dict(kind='key',chord='ctrl+l'),dict(kind='text',text=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/login-fixture',method='keys'),dict(kind='key',chord='Return')])))
-                assert cookie_restored.wait(10),'native navigation independently delivers preserved cookie'
+                if args.mode_case == 'prompt-force':
+                    deadline = time.monotonic()+10
+                    while True:
+                        observations = [request for request in get_requests if request['afterClose'] and request['path']=='/login-fixture']
+                        if observations:
+                            initial_cookie_preserved = observations[-1]['cookiePresent']
+                            break
+                        assert time.monotonic()<deadline, 'forced-close continuity requires an actual observed HTTP request'
+                        time.sleep(.02)
+                    # SIGKILL cannot flush buffered cookies. Report independently
+                    # observed login loss, then establish fresh synthetic auth.
+                else:
+                    initial_cookie_preserved = cookie_restored.wait(10)
+                    assert initial_cookie_preserved, 'native navigation independently delivers preserved cookie'
                 captured=rpc('tools/call',dict(name='browser_command',arguments=dict(taskId=task['taskId'],action='native_capture',params={})))
                 assert any(block.get('type')=='image' and block.get('mimeType')=='image/png' for block in captured.get('content',[])), 'native screenshot must be agent-visible image content'
                 call('browser_command',dict(taskId=task['taskId'],action='native_input',params=dict(actions=[dict(kind='key',chord='ctrl+l'),dict(kind='text',text=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/native-login'),dict(kind='key',chord='Return')])))
@@ -555,7 +569,7 @@ def main():
                     assert observed_peer['mode']=='cdp', observed_peer
                     assert call('browser_handoff',dict(taskId=peer['taskId']))['handoffUrl']==peer_link, 'peer durable handoff retained'
                 call('browser_navigate',dict(taskId=task['taskId'],url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/login-fixture'))
-                assert cookie_restored.is_set()
+                assert cookie_restored.is_set() or (args.mode_case=='prompt-force' and initial_cookie_preserved is False)
                 native_auth.clear()
                 call('browser_navigate',dict(taskId=task['taskId'],url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/auth-check'))
                 assert native_auth.wait(5),'native login continuity after CDP return'
@@ -663,7 +677,7 @@ def main():
                     cleanup_escalated = True
                 time.sleep(.02)
         if args.mode_conversion:
-            print(json.dumps(dict(passed=True,scope='public MCP, real Chrome and synthetic Native/X11; actual installed Native not qualified',modeRoundTrip=True,modeCase=args.mode_case,affectedTasks=2 if args.mode_case else 1,persistentCookiePreserved=True,executablePinProvenance=executable_pin_provenance,cleanupVerified=True)))
+            print(json.dumps(dict(passed=True,scope='public MCP, real Chrome and synthetic Native/X11; actual installed Native not qualified',modeRoundTrip=True,modeCase=args.mode_case,affectedTasks=2 if args.mode_case else 1,persistentCookiePreserved=initial_cookie_preserved,cookieContinuity='preserved' if initial_cookie_preserved else 'login_lost_after_forced_close',nativeLoginContinuityAfterCdpReturn=True,executablePinProvenance=executable_pin_provenance,cleanupVerified=True)))
         else:
             print(json.dumps(dict(passed=True, scope='public MCP, real Chrome/X11, synthetic r3 provider; no live Google or viewer',
                                   noCdp=True, headed=True, readyHandoff=True, replayPreserved=True, domRefused=True,
