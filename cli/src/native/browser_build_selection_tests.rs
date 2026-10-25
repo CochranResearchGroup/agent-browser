@@ -50,3 +50,32 @@ fn browser_build_inspection_reports_evidence_without_profile_or_browser_effects(
         .to_string()
         .contains(&fixture.root.to_string_lossy().to_string()));
 }
+
+#[test]
+fn browser_build_offline_selection_requires_confirmation_and_replays_without_overwrite() {
+    let fixture = Fixture::new();
+    std::fs::create_dir(fixture.root.join("profile-a")).unwrap();
+    let calls = Rc::new(Cell::new(0));
+    let requests = Rc::new(Cell::new(0));
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
+    let mut command = json!({"action":"browser_session_build_select","profileId":"profile-a",
+        "choice":"select_for_next_launch","operationId":"selection-a","executablePath":"/usr/bin/python3",
+        "mode":"cdp_free"});
+    let refused = host.handle_command(&command);
+    assert_eq!(refused["success"], false, "Consequential selection requires informed confirmation");
+    command["ownerConfirmed"] = json!(true);
+    let selected = host.handle_command(&command);
+    assert_eq!(selected["success"], true, "{selected}");
+    assert_eq!(selected["data"]["phase"], "selected_for_next_launch");
+    assert!(selected["data"]["observedMode"].is_null());
+    let mut peer = fixture.store(false);
+    let mut newer = peer.load_session_state().unwrap();
+    newer.profile_executables.insert("profile-a".into(), "/owner/later-choice".into());
+    peer.save_session_state(&newer).unwrap();
+    let mut restarted = fixture.host(Mode::Success, calls.clone(), requests.clone());
+    let replay = restarted.handle_command(&command);
+    assert_eq!(replay["success"], true, "{replay}");
+    assert_eq!(peer.load_session_state().unwrap().profile_executables["profile-a"], "/owner/later-choice");
+    assert_eq!((calls.get(), requests.get()), (0,0), "Offline selection cannot launch or operate a browser");
+    assert!(!selected.to_string().contains(&fixture.root.to_string_lossy().to_string()));
+}
