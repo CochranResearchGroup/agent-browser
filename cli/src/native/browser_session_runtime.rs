@@ -2751,6 +2751,29 @@ fn prove_browser_recovery_absence(
         crate::process_identity::observe_process(browser.pid),
         &expected,
     )?;
+    prove_profile_process_census_absence(&expected)
+}
+
+/// Positive current absence for an unpublished launch. Unsupported platforms
+/// cannot substitute missing journal evidence for an operating-system proof.
+pub(crate) fn prove_profile_launch_absence(
+    profile: &BrowserProfileCatalogEntry,
+) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        let expected = fs::canonicalize(&profile.user_data_dir)
+            .map_err(|_| "browser_session_recovery_profile_unavailable")?;
+        prove_current_profile_lock_absence(&expected)?;
+        prove_profile_process_census_absence(&expected)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = profile;
+        Err("browser_session_launch_absence_unsupported".into())
+    }
+}
+
+fn prove_profile_process_census_absence(expected: &Path) -> Result<(), String> {
     let system = sysinfo::System::new_all();
     for process in system.processes().values() {
         let name = process.name().to_string_lossy().to_ascii_lowercase();
