@@ -1,4 +1,4 @@
-//! Public MCP requests cross the real socket adapter into an isolated owner-policy endpoint.
+//! Public MCP, CLI and HTTP requests cross real adapters into an isolated owner-policy endpoint.
 //! The endpoint substitutes only the process/provider boundary; policy is the production owner.
 use super::*;
 use crate::native::{browser_host_policy, browser_session_store::BrowserSessionSqliteStore};
@@ -21,6 +21,69 @@ impl Drop for Endpoint {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
         self.thread.take().unwrap().join().unwrap();
+    }
+}
+
+struct NativeHttp {
+    runtime: tokio::runtime::Runtime,
+    server: crate::native::stream::StreamServer,
+}
+
+impl NativeHttp {
+    fn start() -> Self {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let (server, _) = runtime
+            .block_on(crate::native::stream::StreamServer::start_without_client(
+                0,
+                "lane-task".into(),
+                false,
+            ))
+            .unwrap();
+        Self { runtime, server }
+    }
+
+    fn command(&self, task: &str, action: &str, request: &str, grant: Option<&str>) -> Value {
+        let mut command = json!({"id":request,"action":action,"sessionId":task,"sessionName":format!("lane-{task}")});
+        if action == "native_input" {
+            command["actions"] = json!([{"kind":"move","x":1,"y":1}]);
+        }
+        if let Some(grant) = grant {
+            command["policyOverrideId"] = json!(grant);
+        }
+        self.runtime.block_on(async {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let body = command.to_string();
+            let mut client = tokio::net::TcpStream::connect(("127.0.0.1", self.server.port()))
+                .await
+                .unwrap();
+            client.write_all(format!("POST /api/command HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).as_bytes()).await.unwrap();
+            let mut response = String::new();
+            tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                client.read_to_string(&mut response),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            let (headers, body) = response.split_once("\r\n\r\n").unwrap();
+            assert!(headers.starts_with("HTTP/1.1 200 OK"), "{headers}");
+            let value: Value = serde_json::from_str(body).unwrap();
+            assert_eq!(value["id"], request, "HTTP must retain the scoped request ID");
+            assert!(!body.contains("synthetic-transport-token"));
+            if let Some(grant) = grant {
+                assert!(!body.contains(grant), "HTTP must not echo scoped grants");
+            }
+            value
+        })
+    }
+}
+
+impl Drop for NativeHttp {
+    fn drop(&mut self) {
+        self.runtime.block_on(self.server.shutdown());
     }
 }
 
@@ -189,7 +252,10 @@ fn native_policy_override_public_mcp_preserves_exact_scope_and_refusal() {
                         command["action"].clone(),
                         command["id"].clone(),
                     ));
-                    if command["id"] == "uncertain-input" {
+                    if matches!(
+                        command["id"].as_str(),
+                        Some("uncertain-input" | "uncertain-cli-input" | "uncertain-http-input")
+                    ) {
                         json!({"id":command["id"],"success":false,"error":"native_input_uncertain: inspect before any new effect"})
                     } else {
                         json!({"id":command["id"],"success":true,"data":{"admitted":true,"capture":{"image":{"mimeType":"image/png","data":"iVBORw0KGgo="}}}})
@@ -203,6 +269,7 @@ fn native_policy_override_public_mcp_preserves_exact_scope_and_refusal() {
         stop,
         thread: Some(thread),
     };
+    let http = NativeHttp::start();
     let call = |task: &str, action: &str, request: Option<&str>, grant: Option<&str>| {
         let params = if action == "native_input" {
             json!({"actions":[{"kind":"move","x":1,"y":1}]})
@@ -227,6 +294,9 @@ fn native_policy_override_public_mcp_preserves_exact_scope_and_refusal() {
             !allowed.to_string().contains(&grant),
             "responses must not echo scoped grants"
         );
+        let http_allowed = http.command("task", action, &request, Some(&grant));
+        assert_eq!(http_allowed["success"], true, "{http_allowed}");
+        assert_eq!(http_allowed["data"]["admitted"], true);
         for (task, actual_action, request, grant) in [
             ("task", action, "wrong-request", Some(grant.as_str())),
             ("peer", action, request.as_str(), Some(grant.as_str())),
@@ -254,6 +324,15 @@ fn native_policy_override_public_mcp_preserves_exact_scope_and_refusal() {
             if let Some(grant) = grant {
                 assert!(!denied.to_string().contains(grant));
             }
+            let http_denied = http.command(task, actual_action, request, grant);
+            assert_eq!(http_denied["success"], false, "{http_denied}");
+            assert!(
+                http_denied["error"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("browser_policy_action_denied:"),
+                "{http_denied}"
+            );
         }
         let mut cli_params = if action == "native_input" {
             json!({"actions":[{"kind":"move","x":1,"y":1}]})
@@ -271,6 +350,7 @@ fn native_policy_override_public_mcp_preserves_exact_scope_and_refusal() {
         ])
         .unwrap();
         assert_eq!(cli["data"]["admitted"], true, "{cli}");
+        assert!(!cli.to_string().contains(&grant));
         let mut wrong_cli = cli_params;
         wrong_cli["requestId"] = json!("wrong-cli-request");
         let refused = mcp_command_response(&[
@@ -287,6 +367,8 @@ fn native_policy_override_public_mcp_preserves_exact_scope_and_refusal() {
         );
         let peer = call("unrestricted", action, Some("unrestricted-request"), None);
         assert!(peer.get("error").is_none(), "{peer}");
+        let http_peer = http.command("unrestricted", action, "unrestricted-request", None);
+        assert_eq!(http_peer["success"], true, "{http_peer}");
     }
     let uncertain = call(
         "unrestricted",
@@ -295,29 +377,56 @@ fn native_policy_override_public_mcp_preserves_exact_scope_and_refusal() {
         None,
     );
     assert!(uncertain.to_string().contains("native_input_uncertain"));
+    let cli_uncertain = mcp_command_response(&[
+        "mcp".into(),
+        "browser-native".into(),
+        "unrestricted".into(),
+        "native_input".into(),
+        json!({"requestId":"uncertain-cli-input","actions":[{"kind":"move","x":1,"y":1}]})
+            .to_string(),
+    ])
+    .unwrap_err();
+    assert!(cli_uncertain.contains("native_input_uncertain"));
+    let http_uncertain = http.command("unrestricted", "native_input", "uncertain-http-input", None);
+    assert_eq!(http_uncertain["success"], false);
+    assert!(http_uncertain["error"]
+        .as_str()
+        .unwrap()
+        .contains("native_input_uncertain"));
     let dispatched = effects.lock().unwrap().clone();
     assert_eq!(
         dispatched.len(),
-        7,
+        13,
         "refused requests have no Native effect and uncertain input is not replayed"
     );
-    assert_eq!(
-        dispatched[0],
-        (
-            json!("task"),
-            json!("native_input"),
-            json!("request-native_input")
-        )
-    );
-    assert_eq!(
-        dispatched[3],
-        (
-            json!("task"),
-            json!("native_capture"),
-            json!("request-native_capture")
-        )
-    );
-    assert_eq!(dispatched[6].2, "uncertain-input");
+    for action in ["native_input", "native_capture"] {
+        assert_eq!(
+            dispatched
+                .iter()
+                .filter(|(task, actual_action, request)| {
+                    task == "task"
+                        && actual_action == action
+                        && request == &format!("request-{action}")
+                })
+                .count(),
+            3,
+            "MCP, CLI and HTTP must use the same task/action/request binding"
+        );
+    }
+    for request in [
+        "uncertain-input",
+        "uncertain-cli-input",
+        "uncertain-http-input",
+    ] {
+        assert_eq!(
+            dispatched
+                .iter()
+                .filter(|(_, _, actual_request)| actual_request == request)
+                .count(),
+            1,
+            "uncertain Native input is never automatically replayed"
+        );
+    }
     assert_eq!(
         store
             .load_session_state()
@@ -328,6 +437,7 @@ fn native_policy_override_public_mcp_preserves_exact_scope_and_refusal() {
         2,
         "unrelated grants remain intact"
     );
+    drop(http);
     drop(endpoint);
     drop(store);
     fn remove_fixture(path: &std::path::Path) {
