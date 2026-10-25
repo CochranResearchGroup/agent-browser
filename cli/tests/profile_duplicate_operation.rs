@@ -1137,3 +1137,138 @@ fn destination_launch_recovery_after_restart_reuses_copy_and_only_requested_effe
         std::fs::remove_dir_all(root).unwrap();
     }
 }
+
+struct PendingDestinationRuntime {
+    launched: bool,
+    ready: bool,
+}
+impl copy::DuplicationRuntime for PendingDestinationRuntime {
+    type Guard = ();
+    fn inspect_source(
+        &mut self,
+        source: &copy::SourceProfile,
+    ) -> Result<copy::SourceObservation, String> {
+        Runtime.inspect_source(source)
+    }
+    fn acquire_stopped_source(&mut self, source: &copy::SourceProfile) -> Result<(), String> {
+        Runtime.acquire_stopped_source(source)
+    }
+    fn focus_source(&mut self, _: &copy::SourceProfile) -> Result<(), String> {
+        panic!("no source effect during destination recovery")
+    }
+    fn graceful_close_source(
+        &mut self,
+        _: &copy::SourceProfile,
+        _: &str,
+    ) -> Result<copy::CloseOutcome, String> {
+        panic!("no source effect during destination recovery")
+    }
+    fn publish_profile(&mut self, _: &copy::DuplicateProfile) -> Result<(), String> {
+        Ok(())
+    }
+    fn launch_duplicate(
+        &mut self,
+        _: &copy::DuplicateProfile,
+    ) -> Result<copy::LaunchReceipt, String> {
+        assert!(!self.launched, "a pending destination cannot launch twice");
+        self.launched = true;
+        Err("synthetic_native_readiness_pending_after_launch".into())
+    }
+    fn destination_task(
+        &self,
+        _: &copy::DuplicateProfile,
+    ) -> Result<Option<copy::DestinationTask>, String> {
+        Ok(self.launched.then(|| copy::DestinationTask {
+            task_id: "original-destination-task".into(),
+            browser_id: "original-destination-browser".into(),
+        }))
+    }
+    fn reconcile_launch(
+        &mut self,
+        _: &copy::DuplicateProfile,
+    ) -> Result<Option<copy::LaunchReceipt>, String> {
+        if !self.ready {
+            return Err("synthetic_native_not_ready".into());
+        }
+        Ok(Some(copy::LaunchReceipt {
+            task_id: "original-destination-task".into(),
+            browser_id: "original-destination-browser".into(),
+            handoff_id: "original-destination-handoff".into(),
+        }))
+    }
+}
+#[test]
+fn existing_destination_with_pending_native_readiness_resumes_same_task_without_second_launch() {
+    let root = std::env::temp_dir().join(format!("duplicate-pending-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(root.join("source")).unwrap();
+    std::fs::write(root.join("source/Preferences"), b"source-preserved").unwrap();
+    let database = root.join("operations.sqlite3");
+    let mut store = copy::DuplicationStore::open(&database).unwrap();
+    store
+        .prepare(copy::DuplicateRequest {
+            operation_id: "pending-native".into(),
+            source: copy::SourceProfile {
+                id: "source".into(),
+                name: "Source".into(),
+                user_data_dir: root.join("source"),
+                browser_build: "reviewed-build".into(),
+                generation: 1,
+            },
+            destination: copy::DestinationProfile {
+                id: "destination".into(),
+                name: "Independent".into(),
+                user_data_dir: root.join("destination"),
+            },
+            launch: true,
+        })
+        .unwrap();
+    let mut runtime = PendingDestinationRuntime {
+        launched: false,
+        ready: false,
+    };
+    assert!(store
+        .advance("pending-native", copy::Choice::Proceed, &mut runtime)
+        .is_err());
+    let pending = store.read("pending-native").unwrap().unwrap().public_view();
+    assert_eq!(pending["phase"], "launch_pending");
+    assert_eq!(pending["launchStatus"], "readiness_unverified");
+    assert_eq!(pending["copyComplete"], true);
+    assert_eq!(pending["profilePublished"], true);
+    assert_eq!(
+        pending["destinationTask"]["taskId"],
+        "original-destination-task"
+    );
+    assert!(pending["launch"].is_null());
+    drop(store);
+    let mut restarted = copy::DuplicationStore::open(&database).unwrap();
+    assert_eq!(
+        restarted
+            .advance("pending-native", copy::Choice::Reconcile, &mut runtime)
+            .unwrap()
+            .phase,
+        copy::Phase::LaunchPending
+    );
+    for choice in [
+        copy::Choice::RetryLaunch,
+        copy::Choice::FinishWithoutOpening,
+    ] {
+        assert!(restarted
+            .advance("pending-native", choice, &mut runtime)
+            .is_err());
+    }
+    runtime.ready = true;
+    let completed = restarted
+        .advance("pending-native", copy::Choice::Reconcile, &mut runtime)
+        .unwrap();
+    assert_eq!(completed.phase, copy::Phase::Completed);
+    assert_eq!(
+        completed.launch.unwrap().task_id,
+        "original-destination-task"
+    );
+    assert_eq!(
+        std::fs::read(root.join("source/Preferences")).unwrap(),
+        b"source-preserved"
+    );
+    drop(restarted);
+    std::fs::remove_dir_all(root).unwrap();
+}

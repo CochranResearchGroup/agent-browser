@@ -190,6 +190,21 @@ impl BrowserSessionSqliteStore {
         {
             return Err(Error::Conflict);
         }
+        let catalog: agent_browser_service_model::BrowserProfileCatalog = load_optional_document(
+            &transaction,
+            "browser_profile_catalog",
+            "agent-browser.browser-profile-catalog.v1",
+        )
+        .map_err(|_| Error::Unavailable)?;
+        if catalog.profiles.get(&profile.id).or_else(|| {
+            state
+                .disposable_profiles
+                .get(&profile.id)
+                .map(|allocation| &allocation.profile)
+        }) != Some(profile)
+        {
+            return Err(Error::Conflict);
+        }
         super::browser_session_runtime::prove_profile_launch_absence(profile)
             .map_err(|_| Error::Unavailable)?;
         let mut records = ledger(&transaction)?;
@@ -848,6 +863,17 @@ mod tests {
             kind: agent_browser_service_model::BrowserProfileKind::Named,
             manual_login_url: None,
         };
+        let catalog = agent_browser_service_model::BrowserProfileCatalog {
+            profiles: std::collections::BTreeMap::from([(profile.id.clone(), profile.clone())]),
+            ..Default::default()
+        };
+        save_document(
+            store.remote_view_mutation_connection(),
+            "browser_profile_catalog",
+            "agent-browser.browser-profile-catalog.v1",
+            &catalog,
+        )
+        .unwrap();
         let expected = current(store.remote_view_mutation_connection()).unwrap();
         let retained = intent();
         store.admit_launch_intent(&retained, &expected).unwrap();
@@ -857,6 +883,15 @@ mod tests {
             .insert("foreign".into(), "foreign-operation".into());
         assert_eq!(
             store.settle_unpublished_profile_launch_absence(&profile, &stale, None),
+            Err(LaunchCustodyStoreError::Conflict)
+        );
+        assert_eq!(store.unpublished_launch_records().unwrap().len(), 1);
+        let stale_profile = agent_browser_service_model::BrowserProfileCatalogEntry {
+            name: "stale catalog name".into(),
+            ..profile.clone()
+        };
+        assert_eq!(
+            store.settle_unpublished_profile_launch_absence(&stale_profile, &expected, None),
             Err(LaunchCustodyStoreError::Conflict)
         );
         assert_eq!(store.unpublished_launch_records().unwrap().len(), 1);
