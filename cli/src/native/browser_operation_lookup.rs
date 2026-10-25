@@ -1,7 +1,7 @@
 //! Read-only operation discovery. Private journals remain owner-only; public
 //! summaries reuse the operation's action projection and contain no paths.
 use super::*;
-use rusqlite::{Connection, OpenFlags, OptionalExtension};
+use rusqlite::{Connection, OpenFlags};
 use serde_json::{json, Value};
 
 fn journal(path: &Path) -> Result<Option<Connection>, String> {
@@ -94,76 +94,88 @@ fn copy_operations(
     browser: Option<&str>,
     task: Option<&str>,
     id: Option<&str>,
-) -> Result<Vec<Value>, String> {
+    active_id: Option<&str>,
+) -> Result<OperationLookup, String> {
     let path = database
         .parent()
         .ok_or("browser_operation_runtime_directory_missing")?
         .join("profile-duplication/operations.sqlite3");
     let Some(connection) = journal(&path)? else {
-        return Ok(vec![]);
+        return Ok(OperationLookup::default());
     };
     if !table(&connection, "profile_duplicate_host_intents")? {
-        return Ok(vec![]);
+        return Ok(OperationLookup::default());
     }
     let has_operations = table(&connection, "profile_duplicate_operations")?;
     let has_bindings = table(&connection, "profile_duplicate_owner_bindings")?;
-    let mut query = connection.prepare("SELECT id,intent FROM profile_duplicate_host_intents WHERE json_extract(intent,'$.source_profile_id')=?1 AND (?2 IS NULL OR id=?2) ORDER BY id LIMIT 257")
+    // Older journals can retain an intent before either auxiliary table exists.
+    // SQL must scope every available binding before applying the readback budget.
+    let binding = if has_bindings {
+        "bindings.binding"
+    } else {
+        "NULL"
+    };
+    let state = if has_operations {
+        "operations.state"
+    } else {
+        "NULL"
+    };
+    let bindings_join = if has_bindings {
+        "LEFT JOIN profile_duplicate_owner_bindings AS bindings ON bindings.id=intents.id"
+    } else {
+        ""
+    };
+    let operations_join = if has_operations {
+        "LEFT JOIN profile_duplicate_operations AS operations ON operations.id=intents.id"
+    } else {
+        ""
+    };
+    let terminal = if has_operations {
+        "COALESCE(operations.terminal,json_extract(intents.intent,'$.cancelled'),0)"
+    } else {
+        "COALESCE(json_extract(intents.intent,'$.cancelled'),0)"
+    };
+    let sql = format!("SELECT intents.id,intents.intent,{binding},{state} FROM profile_duplicate_host_intents AS intents {bindings_join} {operations_join} WHERE json_extract(intents.intent,'$.source_profile_id')=?1 AND (?2 IS NULL OR intents.id=?2) AND (?3 IS NULL OR {binding} IS NULL OR json_extract({binding},'$.browser.id')=?3) AND (?4 IS NULL OR {binding} IS NULL OR EXISTS(SELECT 1 FROM json_each({binding},'$.reviewed_tasks') WHERE value=?4)) ORDER BY CASE WHEN intents.id=?5 THEN 0 ELSE 1 END,{terminal},intents.rowid DESC LIMIT ?6");
+    let mut query = connection
+        .prepare(&sql)
         .map_err(|_| "browser_operation_readback_unavailable")?;
     let rows = query
-        .query_map(rusqlite::params![profile, id], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })
+        .query_map(
+            rusqlite::params![
+                profile,
+                id,
+                browser,
+                task,
+                active_id,
+                (LOOKUP_LIMIT + 1) as i64
+            ],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            },
+        )
         .map_err(|_| "browser_operation_readback_unavailable")?;
-    let mut views = vec![];
+    let mut lookup = OperationLookup::default();
     for (index, row) in rows.enumerate() {
-        if index >= 256 {
-            return Err("browser_operation_lookup_limit:select an operationId".into());
+        let (id, raw, binding, state) =
+            row.map_err(|_| "browser_operation_readback_unavailable")?;
+        if index == LOOKUP_LIMIT {
+            lookup.history_truncated = true;
+            break;
         }
-        let (id, raw) = row.map_err(|_| "browser_operation_readback_unavailable")?;
         let intent: Value =
             serde_json::from_str(&raw).map_err(|_| "browser_operation_readback_invalid")?;
         if intent["operation_id"] != id || intent["source_profile_id"] != profile {
             return Err("browser_operation_readback_invalid".into());
         }
-        let binding: Option<String> = if has_bindings {
-            connection
-                .query_row(
-                    "SELECT binding FROM profile_duplicate_owner_bindings WHERE id=?1",
-                    [&id],
-                    |row| row.get(0),
-                )
-                .optional()
-                .map_err(|_| "browser_operation_readback_unavailable")?
-        } else {
-            None
-        };
         let binding: Option<Value> = binding
             .map(|raw| serde_json::from_str(&raw))
             .transpose()
             .map_err(|_| "browser_operation_readback_invalid")?;
-        if let Some(binding) = &binding {
-            if browser.is_some_and(|id| binding["browser"]["id"].as_str() != Some(id))
-                || task.is_some_and(|id| {
-                    !binding["reviewed_tasks"]
-                        .as_array()
-                        .is_some_and(|tasks| tasks.iter().any(|task| task.as_str() == Some(id)))
-                })
-            {
-                continue;
-            }
-        }
-        let state: Option<String> = if has_operations {
-            connection
-                .query_row(
-                    "SELECT state FROM profile_duplicate_operations WHERE id=?1",
-                    [&id],
-                    |row| row.get(0),
-                )
-                .optional()
-                .map_err(|_| "browser_operation_readback_unavailable")?
-        } else {
-            None
-        };
         let mut view = if let Some(raw) = state {
             let operation: super::profile_duplicate_host::profile_duplicate_copy::Operation =
                 serde_json::from_str(&raw).map_err(|_| "browser_operation_readback_invalid")?;
@@ -179,12 +191,9 @@ fn copy_operations(
             .map(|value| value["browser"]["id"].clone())
             .unwrap_or_else(|| json!(browser));
         view["taskId"] = json!(task);
-        views.push(view);
+        lookup.operations.push(view);
     }
-    if views.len() > 256 {
-        return Err("browser_operation_lookup_limit:select an operationId".into());
-    }
-    Ok(views)
+    Ok(lookup)
 }
 
 impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserCommandEffects>
@@ -262,10 +271,14 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                     state.profile_operation_ids.get(profile).map(String::as_str),
                 )?
             } else {
-                OperationLookup {
-                    operations: copy_operations(&database, profile, browser_id, task_id, id)?,
-                    history_truncated: false,
-                }
+                copy_operations(
+                    &database,
+                    profile,
+                    browser_id,
+                    task_id,
+                    id,
+                    state.profile_operation_ids.get(profile).map(String::as_str),
+                )?
             };
             let operations = lookup.operations;
             if id.is_some() && operations.is_empty() {
@@ -288,13 +301,17 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 Some(active_id),
             )?
             .operations;
-            existing.extend(copy_operations(
-                &database,
-                profile,
-                None,
-                None,
-                Some(active_id),
-            )?);
+            existing.extend(
+                copy_operations(
+                    &database,
+                    profile,
+                    None,
+                    None,
+                    Some(active_id),
+                    Some(active_id),
+                )?
+                .operations,
+            );
             existing
         } else {
             // A crash can retain the durable unique browser operation before

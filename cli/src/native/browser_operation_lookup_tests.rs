@@ -93,8 +93,16 @@ fn operation_lookup_recovers_multiple_offline_copy_intents_without_effects() {
     let readback = host.handle_command(&inspect);
     assert_eq!(readback["success"], true, "{readback}");
     assert_eq!(readback["data"]["operations"].as_array().unwrap().len(), 2);
-    assert_eq!(readback["data"]["operations"][0]["operationId"], "copy-one");
-    assert_eq!(readback["data"]["operations"][1]["operationId"], "copy-two");
+    let ids = readback["data"]["operations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|operation| operation["operationId"].as_str().unwrap())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        ids,
+        std::collections::BTreeSet::from(["copy-one", "copy-two"])
+    );
     assert_eq!(
         readback["data"]["operations"][1]["actions"][0]["action"],
         "open_source"
@@ -216,7 +224,11 @@ fn operation_lookup_keeps_current_copies_discoverable_after_long_scoped_history(
         last_activity_at_ms: 100,
     };
     state.tabs.insert(tab.id.clone(), tab.clone());
-    state.sessions.get_mut(&opened.session_id).unwrap().current_tab_id = Some(tab.id.clone());
+    state
+        .sessions
+        .get_mut(&opened.session_id)
+        .unwrap()
+        .current_tab_id = Some(tab.id.clone());
     fixture.store(false).save_session_state(&state).unwrap();
     let browser = state.browsers[&opened.browser_id].clone();
     let session = state.sessions[&opened.session_id].clone();
