@@ -83,25 +83,35 @@ impl ManualBrowsers {
             identity.clone()
         } else {
             let path = super::super::browser_session_store::BrowserSessionSqliteStore::default_sqlite_path()?;
-            let mut store = super::super::browser_session_store::BrowserSessionSqliteStore::open_read_only(&path)?;
+            let mut store =
+                super::super::browser_session_store::BrowserSessionSqliteStore::open_read_only(
+                    &path,
+                )?;
             match store.published_launch_process_identity(browser) {
                 Ok(Some(identity)) if identity.pid == browser.pid => identity,
                 _ => {
-                    let records = store.unpublished_launch_records()
+                    let records = store
+                        .unpublished_launch_records()
                         .map_err(|_| "manual_login_original_identity_unavailable")?;
-                    let matches = records.into_iter().filter(|record| {
-                        record.intent.profile_id == browser.profile_id
-                            && record.observed_browser_id.as_deref() == Some(browser.id.as_str())
-                            && record.observed_pid == Some(browser.pid)
-                            && browser.desktop.as_ref().is_some_and(|desktop| {
-                                desktop.desktop_id == record.intent.assignment.desktop_id
-                                    && desktop.generation == record.intent.assignment.generation
-                            })
-                    }).collect::<Vec<_>>();
+                    let matches = records
+                        .into_iter()
+                        .filter(|record| {
+                            record.intent.profile_id == browser.profile_id
+                                && record.observed_browser_id.as_deref()
+                                    == Some(browser.id.as_str())
+                                && record.observed_pid == Some(browser.pid)
+                                && browser.desktop.as_ref().is_some_and(|desktop| {
+                                    desktop.desktop_id == record.intent.assignment.desktop_id
+                                        && desktop.generation == record.intent.assignment.generation
+                                })
+                        })
+                        .collect::<Vec<_>>();
                     let [record] = matches.as_slice() else {
                         return Err("manual_login_original_identity_missing".into());
                     };
-                    record.observed_process_identity.clone()
+                    record
+                        .observed_process_identity
+                        .clone()
                         .ok_or("manual_login_original_identity_missing")?
                 }
             }

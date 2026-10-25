@@ -840,15 +840,23 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             // this cannot fall through to an implicit replacement launch.
             use agent_browser_service_model::BrowserLaunchCustodyStore;
             let mut store = BrowserSessionSqliteStore::open_read_only(&self.database)?;
-            let claims = store.unpublished_launch_records()
+            let claims = store
+                .unpublished_launch_records()
                 .map_err(|_| "profile_duplicate_launch_readback_required")?;
-            let observed = claims.iter().filter(|record| {
-                record.intent.profile_id == profile.destination.id
-                    && record.observed_process_identity.is_some()
-                    && record.observed_browser_id.is_some()
-            }).collect::<Vec<_>>();
-            if observed.is_empty() { return Ok(None); }
-            if observed.len() != 1 { return Err("profile_duplicate_launch_ambiguous".into()); }
+            let observed = claims
+                .iter()
+                .filter(|record| {
+                    record.intent.profile_id == profile.destination.id
+                        && record.observed_process_identity.is_some()
+                        && record.observed_browser_id.is_some()
+                })
+                .collect::<Vec<_>>();
+            if observed.is_empty() {
+                return Ok(None);
+            }
+            if observed.len() != 1 {
+                return Err("profile_duplicate_launch_ambiguous".into());
+            }
             return self.launch_duplicate(profile).map(Some);
         };
         if let Some(link) = self
