@@ -7253,6 +7253,11 @@ through the same operation. Unknown launches and copy `launch_pending` first
 blindly launch again. Restoration preserves requested-mode history, reports
 its effective mode, and does not replay uncertain website submissions.
 
+An already published replacement is a completed physical outcome even when the
+final operation-journal write was lost. A restore request then seals the original
+operation and reports `mode_operation_already_completed`, preserving the current
+browser. Start a new explicit conversion to select another configuration.
+
 To find retained work after reload, send `choice: "inspect"` through the same
 `mode_convert` or `profile_duplicate` route. Omit `operationId` to list matching
 operations, or include it for one retained operation. Mode lookup requires the
@@ -7266,5 +7271,10 @@ The rail reads this owner state when reopened, without persisting profile paths
 or credentials in client storage. CLI JSON requests use `choice: "inspect"`
 with `mcp mode-convert` or `mcp profile-duplicate`; HTTP uses the same existing
 owner actions at `POST /api/command`.
+
+Inspection returns at most 256 matching operations after task/browser filtering,
+with the exact active operation and pending work first. `historyTruncated`
+reports omitted retained history. Supply a known `operationId` for exact older
+readback; inspection and selection still have no browser effects.
 
 Native capture returns PNG image content to MCP agents. Its default tile is bounded to one million pixels. Read `region`, `windowBounds` and `partialWindow`; request an explicit region for remaining pixels. A tile is not represented as a full-window screenshot.

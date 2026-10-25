@@ -7340,6 +7340,9 @@ Commands:
   host-reconnect    Status/disconnect/reconnect/rebind/configure/reopen
   host-policy       Optional app/task rules and attributable scoped override
 
+  Lookup note: at most 256 matching operations; active/pending first.
+  historyTruncated marks omissions. Published completion needs a new conversion.
+
 Workflow tools (16):
   browser_open          Open/reuse task and profile
   browser_navigate      Navigate current page
