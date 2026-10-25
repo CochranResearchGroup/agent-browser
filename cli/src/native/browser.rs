@@ -3027,7 +3027,6 @@ mod x11_focus {
         use std::process::{Command, Stdio};
         use x11rb::connection::Connection;
         use x11rb::protocol::xproto::*;
-        use x11rb::wrapper::ConnectionExt as _;
 
         #[test]
         #[ignore = "requires an explicitly admitted disposable Xvfb server"]
