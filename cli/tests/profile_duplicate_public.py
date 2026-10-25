@@ -495,6 +495,7 @@ def main():
                 else:
                     source_reopened=call('browser_open',dict(request,taskKey='source-reopened',url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/write-source'))
                     assert len(browsers())==2,'source and independent duplicate must coexist'
+                    assert all(os.readlink('/proc/'+str(pid)+'/exe') == private_chrome for pid, _ in browsers()), 'concurrent source and duplicate must use the exact same pinned build'
                     deadline=time.monotonic()+10
                     while not any(record['path']=='/write-source' for record in get_requests):
                         assert time.monotonic()<deadline,'source write navigation missing';time.sleep(.02)
