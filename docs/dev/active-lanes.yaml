@@ -32,7 +32,7 @@ lanes:
     dependencies: [P285, P288]
     overlaps: [P283]
     reconciled_overlaps: ["Own mutation reconciliation and focused tests only; preserve P283 mode/profile/store/observation and Native provider ownership; reuse retained primary serially after PR416"]
-    validation_status: Exact pending key maps to provider-released assignment; regression pending
+    validation_status: PR418 installed; exact Released history saved, zero pending acquisitions, synthetic open/continue pass; owned handoff POST aborts and pixels remain unaccepted
     limitations: ["No terminal inference from missing records", "No provider or ingress reconfiguration", "Installed acceptance remains separate"]
     updated_at: 2026-10-24
 
@@ -62,14 +62,13 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#393]
-    plan_state: IN_PROGRESS
-    custody_state: ACTIVE
+    plan_state: CLOSED
+    custody_state: INTEGRATED
     overlaps: [P283, P284]
     reconciled_overlaps: ["Own dashboard/http routing, bounded startup catch-up in selected-context/read-coordinator and rail freshness prose; P283/P284 retain profile/store/observation and installer source; reuse primary and retain pinned artifacts"]
-    validation_status: PR410 merged; sealed preserve install accepted;11 browser generations preserved; paired installed workspace median32.755ms; Rust/docs/parity and exact installer fixture pass
-    limitations: ["Installed; one4.98s public cold rail tail remains unexplained", "No stale-data substitution, provider/ingress change or private-account activity", "Production synthetic open blocked by pending Native acquisition; tracked separately in #412"]
+    validation_status: PR410 and PR416 installed on final e0d5525e92cc; cold visit1955.6ms versus3999.8ms, median776.8ms across five contexts;11 browser roots preserved and16 probe generations absent
+    limitations: ["Finite samples; no universal latency guarantee", "Native pixels and acquisition acceptance owned by P289", "Retain primary checkout and pinned candidates"]
     updated_at: 2026-10-24
-
   - id: P284
     product_lane: PL-PLATFORM
     objective: Remove upgrade markers and make operator warnings advisory

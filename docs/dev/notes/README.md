@@ -5,7 +5,7 @@
 [P289 terminal acquisition](0289-2026-10-24-terminal-acquisition-recovery.md): exact provider-released replay unblocks interrupted acquisition without resurrecting capacity.
 [P288 writer custody](0288-2026-10-24-workstation-writer-custody.md): public CLI red/green repair of stale writer refusal and contention projection.
 
-[P285 inventory latency](0285-2026-10-24-workspace-inventory-latency.md): generation dashboard bypasses diagnostic fallback; installed workspace reads measured in milliseconds; intermittent cold rail tail and Native acquisition acceptance remain open.
+[P285 inventory latency](0285-2026-10-24-workspace-inventory-latency.md): installed producer routing and bounded startup catch-up accepted; cold visit1.956s, five-context median0.777s; Native workflow evidence stays with P289.
 
 [P284 operator-led upgrades](0284-2026-10-24-operator-led-upgrades.md): retire upgrade marker producers and recovery vetoes; optional advisory live-work inspection and operator authority. PR406 is integrated and exact candidate417d5886c68e is installed and accepted. Doctor and same-tab unsaved-work continuity pass.
 
