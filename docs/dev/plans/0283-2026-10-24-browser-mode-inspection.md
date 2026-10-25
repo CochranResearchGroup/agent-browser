@@ -233,3 +233,30 @@ Public seams: owner mode conversion proves exact-operation effects and custody, 
 Main reconciliation is committed as971edefe4. Both conflicting pool-test functions survive; exact manual-login pool test passes on the reconciled source (3656 filtered,13.35s execution; compile6m36s). Format and patch hygiene pass. #429 source integrated asbb10149b2, with worker parity, six changed-link checks and36-route docs build passing; integrated root skill is9981bytes after main reconciliation. #427 scoped-pin source integrated as3e6a5d674; manager red exposes A-pin leaking into B, green and48 model cases pass. Real-runtime launch oracle and integrated strict Rust gates remain pending. Worker Clippy begun before auxiliary reassignment is invalidated; it is not counted. Mode summary extraction from #426 integrated ase8ddb7d99 to serialize later host changes.
 
 Auxiliary427 is reused serially for worker repair427 ticket425 on branch platform/spec400-repair-425 atbb10149b2 after pin custody. Auxiliary429 is reused for worker repair429 ticket426 on branch platform/spec400-repair-426 atbb10149b2 after guidance commit. No additional checkout was created. Ticket428 remains with repair428. New copy phase/choices and mode recovery phases must reach lookup/rail through the shared safe summaries.
+
+## Repair continuation, 2026-10-25
+
+The operator explicitly resumed implementation and requested one active ticket per
+agent. Root owns #424 in the existing integration checkout. Worker repair425 owns
+#425 in the retained spec400-427 auxiliary; repair426 owns #426 in spec400-429;
+repair428 owns #428 in spec400-428. These are reused P283 auxiliaries, not new
+primary lanes. #427 and #429 retain local integrations and await final acceptance
+when a worker slot opens. All six tracker issues remain open. No new fixed time
+or token allocation was stated; the expired previous allowance is historical.
+Manual supervision continues and the Wake controller remains masked.
+
+Fresh inventory preserves the canonical auth/receipts dirty work and all foreign
+checkouts. Fresh origin/main is e8a5a97d9; integration remains on the retained
+repair lineage, with reconciliation required before merge. Root owns mode core,
+mode host and parent runtime absence proof. Copy worker owns copy core, copy
+host/MCP adapter, manual initial reconciliation and exact launch-custody
+settlement; rail worker transfers its two minimal copy adapter changes to that
+worker and retains lookup, consumer, UI and documentation surfaces. Override
+worker owns native MCP policy and its HTTP parity fixture. No production
+installation, private profiles, provider mutation or CI dispatch is included.
+
+Stable acceptance seams are the public owner operations, public MCP/CLI/HTTP
+routing, mounted rail reload, and synthetic private-profile Chrome workflows.
+Core state-machine tests alone do not establish complete ticket acceptance.
+The post-repair Standards/Spec review and one bounded TDD findings pass remain
+pending, with count zero for each at continuation.
