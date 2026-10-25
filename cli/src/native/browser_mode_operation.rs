@@ -256,6 +256,7 @@ pub enum CloseOutcome {
 }
 pub enum Choice {
     Pause,
+    SelectExecutable {executable:String,sha256:String,confirmed:bool},
     Relaunch { confirmed: bool },
     Resume,
     RestorePrevious { confirmed: bool },
@@ -268,6 +269,7 @@ pub enum Choice {
 /// a dispatch acknowledgement is not an exit, launch or publication receipt.
 pub trait ModeRuntime {
     fn original_status(&mut self, request: &Request) -> Result<OriginalStatus, String>;
+    fn validate_executable(&mut self, _request:&Request)->Result<(),String> {Ok(())}
     fn graceful_close(&mut self, request: &Request) -> Result<CloseOutcome, String>;
     /// Dismiss only the exact live original's pending close and positively
     /// observe it still live. Failure keeps the operation fenced for readback.

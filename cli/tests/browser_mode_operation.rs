@@ -62,6 +62,9 @@ struct SyntheticRuntime {
     focuses: usize,
 }
 impl ModeRuntime for SyntheticRuntime {
+    fn validate_executable(&mut self, request:&Request)->Result<(),String> {
+        if request.executable=="/synthetic/unavailable" {Err("browser_build_unavailable".into())} else {Ok(())}
+    }
     fn original_status(&mut self, _: &Request) -> Result<OriginalStatus, String> {
         Ok(if self.process == "boot:pid:start" {
             OriginalStatus::Live
@@ -920,4 +923,35 @@ fn prior_executable_selection_recovers_without_claiming_profile_rollback() {
     assert!(runtime.published);
     drop(store);
     std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn unavailable_build_keeps_original_and_allows_explicit_same_operation_selection() {
+    let directory=std::env::temp_dir().join(format!("mode-build-selection-{}",uuid::Uuid::new_v4()));
+    std::fs::create_dir(&directory).unwrap();
+    let path=directory.join("operations.sqlite3");
+    let mut store=OperationStore::open(&path).unwrap();
+    let mut selected=request();selected.executable="/synthetic/unavailable".into();selected.executable_sha256=Some("reviewed-missing-build".into());
+    store.request(selected).unwrap();
+    let mut runtime=SyntheticRuntime {process:"boot:pid:start".into(),mode:Mode::Cdp,closes:0,launches:0,published:false,lose_launch_reply:false,fail_before_launch:true,native_unready:false,lose_restore_reply:false,prompt:false,uncertain_close:false,forces:0,focuses:0};
+    assert!(store.advance("convert-1",Choice::Relaunch{confirmed:true},&mut runtime).is_err());
+    assert_eq!(store.read("convert-1").unwrap().unwrap().phase,Phase::Prepared,"Unavailable target must be rejected before a close is dispatched");
+    assert_eq!((runtime.closes,runtime.launches),(0,0));
+    assert!(store.advance("convert-1",Choice::SelectExecutable{executable:"/synthetic/alternative".into(),sha256:"alternative-sha".into(),confirmed:false},&mut runtime).is_err());
+    let reviewed=store.advance("convert-1",Choice::SelectExecutable{executable:"/synthetic/alternative".into(),sha256:"alternative-sha".into(),confirmed:true},&mut runtime).unwrap();
+    assert_eq!(reviewed.effective_executable.as_deref(),Some("/synthetic/alternative"));
+    assert_eq!((runtime.closes,runtime.launches),(0,0),"Selecting a build alone does not relaunch");
+    assert!(store.advance("convert-1",Choice::Relaunch{confirmed:true},&mut runtime).is_err());
+    drop(store);
+    let mut store=OperationStore::open(&path).unwrap();
+    let absent=store.advance("convert-1",Choice::Resume,&mut runtime).unwrap();
+    assert_eq!(absent.phase,Phase::LaunchAbsent);
+    let next=store.advance("convert-1",Choice::SelectExecutable{executable:"/synthetic/another-build".into(),sha256:"another-sha".into(),confirmed:true},&mut runtime).unwrap();
+    assert_eq!(next.request.executable,"/synthetic/unavailable","Original request history remains unchanged");
+    assert_eq!(next.effective_executable.as_deref(),Some("/synthetic/another-build"));
+    assert_eq!((runtime.closes,runtime.launches),(1,0));
+    let completed=store.advance("convert-1",Choice::Relaunch{confirmed:true},&mut runtime).unwrap();
+    assert_eq!(completed.phase,Phase::Completed);
+    assert_eq!((runtime.closes,runtime.launches),(1,1));
+    drop(store);std::fs::remove_dir_all(directory).unwrap();
 }
