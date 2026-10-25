@@ -11,6 +11,7 @@ import re
 import select
 import signal
 import shutil
+import sqlite3
 import subprocess
 import tempfile
 import threading
@@ -94,6 +95,7 @@ def main():
         inject_pre_spawn = threading.Event()
         suppress_replacement_windows = threading.Event()
         original_pid = None
+        executable_pin_provenance = []
         native_page=threading.Event(); native_mouse=threading.Event(); native_scroll=threading.Event(); native_auth=threading.Event()
         def spawn(command, **kwargs):
             child = subprocess.Popen(command, env=env, start_new_session=True, **kwargs)
@@ -116,6 +118,20 @@ def main():
         def process_identity(pid):
             fields=Path('/proc/'+str(pid)+'/stat').read_text().rsplit(')',1)[1].split()
             return dict(pid=pid,start_token=fields[19],boot_id=Path('/proc/sys/kernel/random/boot_id').read_text().strip(),executable=os.readlink('/proc/'+str(pid)+'/exe'))
+        def assert_conversion_executable_pin(profile_id, mode):
+            # Read only this synthetic owner's durable state after the public
+            # conversion; no profile pin is seeded by the fixture itself.
+            databases = list(root.rglob('runtime.sqlite3'))
+            assert len(databases) == 1, 'one exact fixture runtime database required'
+            with sqlite3.connect('file:' + str(databases[0]) + '?mode=ro', uri=True) as connection:
+                row = connection.execute("SELECT json FROM state_documents WHERE kind='browser_session_state'").fetchone()
+            assert row, 'converted owner state must be durable'
+            state = json.loads(row[0])
+            assert state.get('profileExecutables', {}).get(profile_id) == args.chrome, 'public conversion must retain the exact fixture executable pin'
+            physical = browsers()
+            assert len(physical) == 1, 'conversion must retain one exact browser process'
+            assert process_identity(physical[0][0])['executable'] == args.chrome, 'converted process must use the retained executable pin'
+            executable_pin_provenance.append(dict(mode=mode, profileId=profile_id, durablePinMatches=True, processExecutableMatches=True))
         def windows():
             result = []
             active = run(['xdotool', 'getactivewindow']).stdout.strip()
@@ -393,6 +409,7 @@ def main():
                 assert changed['phase']=='completed',changed
                 physical=browsers();assert len(physical)==1 and '--remote-debugging' not in physical[0][1], 'no-CDP replacement proof'
                 assert changed['taskId']==original[0] and changed['browserId']==original[1] and changed['profileId']==original[2]
+                assert_conversion_executable_pin(original[2], 'cdp_free')
                 cookie_after_close.set()
                 call('browser_command',dict(taskId=task['taskId'],action='native_input',params=dict(actions=[dict(kind='key',chord='ctrl+l'),dict(kind='text',text=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/login-fixture',method='keys'),dict(kind='key',chord='Return')])))
                 assert cookie_restored.wait(10),'native navigation independently delivers preserved cookie'
@@ -411,6 +428,7 @@ def main():
                     time.sleep(.1)
                     back=call('browser_command',dict(taskId=task['taskId'],action='mode_convert',params=dict(operationId='mode-back',mode='cdp',choice='reconcile')))
                 assert back['phase']=='completed',back
+                assert_conversion_executable_pin(original[2], 'cdp')
                 observed=call('browser_command',dict(taskId=task['taskId'],action='mode'))
                 assert observed['mode']=='cdp'
                 final_link=call('browser_handoff',dict(taskId=task['taskId']))
@@ -508,7 +526,7 @@ def main():
                 assert time.monotonic() < deadline, 'fixture process residue: ' + str(residue)
                 time.sleep(.02)
         if args.mode_conversion:
-            print(json.dumps(dict(passed=True,scope='public MCP, real Chrome and synthetic Native/X11; actual installed Native not qualified',modeRoundTrip=True,persistentCookiePreserved=True,cleanupVerified=True)))
+            print(json.dumps(dict(passed=True,scope='public MCP, real Chrome and synthetic Native/X11; actual installed Native not qualified',modeRoundTrip=True,persistentCookiePreserved=True,executablePinProvenance=executable_pin_provenance,cleanupVerified=True)))
         else:
             print(json.dumps(dict(passed=True, scope='public MCP, real Chrome/X11, synthetic r3 provider; no live Google or viewer',
                                   noCdp=True, headed=True, readyHandoff=True, replayPreserved=True, domRefused=True,
