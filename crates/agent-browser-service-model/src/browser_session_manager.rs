@@ -1704,10 +1704,28 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .effects
             .reconcile_profile_browser(profile, None, &[], &[])?
         {
-            if reconciled.launch.pid == 0
-                || reconciled.launch.cdp_endpoint.is_empty()
-                || !reconciled.target_ids.is_empty()
-            {
+            let pending = self.effects.pending_launch_intent();
+            let valid_posture = if profile.manual_login_url.is_some() {
+                reconciled.launch.cdp_endpoint.is_empty()
+                    && pending
+                        .as_ref()
+                        .is_some_and(|intent| intent.profile_id == profile.id)
+                    && reconciled
+                        .launch
+                        .process_identity
+                        .as_ref()
+                        .is_some_and(|identity| {
+                            identity.pid == reconciled.launch.pid
+                                && !identity.start_token.is_empty()
+                                && identity
+                                    .executable_path
+                                    .as_deref()
+                                    .is_some_and(|path| !path.is_empty())
+                        })
+            } else {
+                !reconciled.launch.cdp_endpoint.is_empty()
+            };
+            if reconciled.launch.pid == 0 || !valid_posture || !reconciled.target_ids.is_empty() {
                 return Err("browser_session_recovery_identity_conflict".into());
             }
             if placement
@@ -1715,9 +1733,13 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             {
                 return Err("browser_placement_conflict:reconciled browser uses another desktop; explicitly relocate/rebind".into());
             }
-            self.state
-                .shared_browser_ids
-                .insert(reconciled.launch.browser_id.clone());
+            // An interrupted observed owner launch retains its durable custody.
+            // Only a current external attachment is borrowed/shared lifecycle.
+            if pending.is_none() {
+                self.state
+                    .shared_browser_ids
+                    .insert(reconciled.launch.browser_id.clone());
+            }
             return Ok(reconciled.launch);
         }
         let refreshed = match placement {

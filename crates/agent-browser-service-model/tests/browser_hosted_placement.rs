@@ -21,6 +21,7 @@ struct Effects {
     mutations: usize,
     live: Option<bool>,
     reconciled: Option<BrowserRecovery>,
+    pending: Option<BrowserLaunchIntent>,
     attachments: usize,
     wrong_process: bool,
     app_desktop: Option<String>,
@@ -77,6 +78,9 @@ impl BrowserSessionEffects for Effects {
         _: &[BrowserNavigationRecord],
     ) -> Result<Option<BrowserRecovery>, String> {
         Ok(self.reconciled.clone())
+    }
+    fn pending_launch_intent(&self) -> Option<BrowserLaunchIntent> {
+        self.pending.clone()
     }
     fn launch_browser(
         &mut self,
@@ -716,4 +720,67 @@ fn app_attachment_preexisting_popup_is_preserved_while_new_task_popup_closes() {
         .unwrap();
     assert_eq!(effects.mutations, 1);
     assert!(effects.launched.is_empty());
+}
+
+#[test]
+fn unpublished_manual_destination_rejoins_owned_launch_without_second_process() {
+    let mut state = BrowserSessionState::default();
+    let mut catalog = catalog();
+    catalog
+        .profiles
+        .get_mut("profile")
+        .unwrap()
+        .manual_login_url = Some("https://example.test".into());
+    let assignment: RemoteViewAssignmentRecord = serde_json::from_value(
+        serde_json::from_str::<serde_json::Value>(include_str!(
+            "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
+        ))
+        .unwrap()["assignment"]
+            .clone(),
+    )
+    .unwrap();
+    let mut fx = Effects {
+        pending: Some(BrowserLaunchIntent {
+            intent_id: "retained-launch".into(),
+            profile_id: "profile".into(),
+            assignment,
+        }),
+        reconciled: Some(BrowserRecovery {
+            launch: BrowserLaunch {
+                process_identity: Some(RecordedProcessIdentity {
+                    pid: 42,
+                    start_token: "original-kernel-instance".into(),
+                    executable_path: Some("/reviewed/chrome".into()),
+                    browser_family: None,
+                }),
+                browser_id: "original-browser".into(),
+                pid: 42,
+                cdp_endpoint: String::new(),
+                desktop: Some(desktop("original", 1)),
+            },
+            target_ids: BTreeMap::new(),
+        }),
+        ..Effects::default()
+    };
+    let opened = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut fx,
+        BrowserSessionManagerConfig::default(),
+    )
+    .open(OpenBrowserSession::exact_profile(
+        "original-copy-task",
+        "profile",
+        1,
+    ))
+    .unwrap();
+    assert_eq!(opened.browser_id, "original-browser");
+    assert!(
+        !state.shared_browser_ids.contains("original-browser"),
+        "owned interrupted launch must retain ordinary lifecycle custody"
+    );
+    assert!(
+        fx.launched.is_empty(),
+        "reconciliation must not launch a second process"
+    );
 }
