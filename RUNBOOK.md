@@ -1,6 +1,6 @@
 # Runbook
 
-[P283 Spec400 repairs](docs/dev/notes/0283-2026-10-25-spec400-repairs.md) qualify six bounded repairs #424–429 through isolated real-Chrome workflows and affected source gates. PR408 carries the source; merge and tracker closure remain separate at this checkpoint. Broader #402/#403 remain incomplete and #404 remains blocked. No runtime publication.
+[P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): repairs #424–429 are closed through merged PR408/435; inspection #401 is now closed after fresh current-main rail acceptance. One worker each completes #402 conversion and #403 independent profiles. #404 remains blocked by both. Source and isolated synthetic qualification only; no runtime publication.
 
 [P288 writer custody](docs/dev/plans/0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. PR415 carries the qualified source;221 workstation cases, strict Rust, fixtures and docs pass. Installed production is unchanged.
 

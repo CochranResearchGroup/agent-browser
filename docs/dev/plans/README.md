@@ -1,6 +1,6 @@
 # Active plan index
 
-[P283 browser mode inspection](0283-2026-10-24-browser-mode-inspection.md) owns #401 under spec #400; TDD source work, no runtime publication.
+[P283 browser modes and profiles](0283-2026-10-24-browser-mode-inspection.md): inspection401 and repairs424–429 are closed; one worker each completes402/403, then404. No runtime publication.
 
 [P291 cold rail retry spacing](0291-2026-10-24-cold-rail-retry-spacing.md), #430, is closed with corrected caller revalidation installed oncf65dd76422b; cold median3.36s to2.11s, with warm behavior preserved.
 

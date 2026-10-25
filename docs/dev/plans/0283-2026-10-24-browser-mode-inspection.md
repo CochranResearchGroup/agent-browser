@@ -5,26 +5,27 @@ Product lane: PL-PLATFORM
 Accountable owner: ecochran76
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/400
 Work items: #401, #402 and #403 under spec #400; #404 remains blocked
-Integration branch: platform/spec400-post-review
+Integration branch: platform/spec400-children-closeout
 Base: 07fb4c9cb020bb6349d3faf1efcd152cc34fd9ee
 Historical fourth-window deadline: 2026-10-24T23:23:20Z. The later repair continuation has no newly specified fixed allowance.
 
 ## Current State
 
-The six approved repairs #424–429 entered main through
-[PR408](https://github.com/CochranResearchGroup/agent-browser/pull/408), merge
-`081fbbce4e779d23874b372cbcef55d3cfeeb782`. The single post-repair review
-accepted zero Standards findings and two Spec findings. Both have been repaired
-in the single bounded TDD pass on `platform/spec400-post-review`; follow-up
-merge and final tracker readback remain the closeout gate. #424/#426 were
-reopened for that pass; the other four repairs remain closed.
+The six approved repairs #424–429 are closed through merged PR408 and PR435
+(main `b43833e9a`). The single post-repair review recorded zero Standards
+findings and two Spec findings, both fixed in one bounded TDD pass.
 
-[The qualification note](../notes/0283-2026-10-25-spec400-repairs.md) records
-scenarios, failed receipts and evidence reuse limits. #401 retains its inspection
-qualification. #402/#403 remain broader incomplete outcomes and #404 stays
-blocked. There is no installed or production publication. Root owns #424;
-dedicated workers own the other tickets one at a time. The retained duplicate403
-Xlib candidate and foreign checkouts remain excluded.
+#401 is closed with merged inspection provenance and a fresh mounted
+mode-button/independent-expiry pass on current main. Root owns this acceptance
+reconciliation. Its closure removes the native dependency gate for #402/#403;
+workers `complete402` and `complete403` own one ticket each in the admitted
+auxiliaries below. #404 remains blocked until both are complete and integrated.
+Root then takes that newly unblocked executable-selection ticket. No parked
+portfolio work or production effect is resumed.
+
+[The qualification note](../notes/0283-2026-10-25-spec400-repairs.md) retains
+the initial repair evidence and failures. Parent #400 remains open. The excluded
+duplicate403 Xlib candidate and all foreign checkouts remain untouched.
 
 ## Packet and seams
 
