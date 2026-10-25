@@ -23,3 +23,7 @@ Require the actual-scheduler regression red before repair, then green within2000
 ## Source qualification
 
 The actual scheduler regression fails at3750ms before repair and passes at1750ms after repair. The request count remains bounded by three follow-ups. Scheduler, selected-context, navigator and handoff documentation tests pass, as do40 CLI output tests, Rust format, strict workspace Clippy, dashboard/docs builds, policy wiring and changed-document links. Exact browser replays rendered without errors and all observed test generations are absent. Their differing shell costs do not qualify a production speedup. Preserve the source versus installed distinction and keep430 open pending installed cold-distribution acceptance;422 remains separate.
+
+## Integration checkpoint
+
+Source commit `33b31d49dc5a4562de8526bacf4b3494711366b5` merged through [PR431](https://github.com/CochranResearchGroup/agent-browser/pull/431) as `20c5f3e1bae860dc50f9a748bebccf15a5971ebb`. Source custody is integrated. Keep the plan in progress and430 open for later exact-candidate installed cold-distribution acceptance. Retain this primary checkout and its pinned candidates; no auxiliary was created.
