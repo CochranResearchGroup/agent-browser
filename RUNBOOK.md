@@ -1,6 +1,6 @@
 # Runbook
 
-[P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): inspection #401 and repairs #424–429 are closed. [PR436](https://github.com/CochranResearchGroup/agent-browser/pull/436) delivers fully qualified #402 conversion and #403 independent profiles on candidate0837b9d9, including actual two-task Native workflows and concurrent copy/source proof. Force-close login loss is explicit. #404 follows merged closure. Source qualification only; no runtime publication.
+[P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): #401–403 and repairs #424–429 are closed; PR436 merged as ba5cda65c. Root owns newly unblocked #404 browser-build selection in the retained primary. Actual conversion/copy evidence and force-close login loss are recorded in the qualification note. No runtime publication.
 
 [P288 writer custody](docs/dev/plans/0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. PR415 carries the qualified source;221 workstation cases, strict Rust, fixtures and docs pass. Installed production is unchanged.
 

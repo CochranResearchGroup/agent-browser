@@ -4,27 +4,27 @@ State: OPEN
 Product lane: PL-PLATFORM
 Accountable owner: ecochran76
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/400
-Work items: #401, #402 and #403 under spec #400; #404 remains blocked
-Integration branch: platform/spec400-children-closeout
+Work items: #401–404 under spec #400; only #404 remains open
+Integration branch: platform/spec400-build-selection-404
 Base: 07fb4c9cb020bb6349d3faf1efcd152cc34fd9ee
 Historical fourth-window deadline: 2026-10-24T23:23:20Z. The later repair continuation has no newly specified fixed allowance.
 
 ## Current State
 
-#401 is closed with merged inspection provenance and fresh mounted acceptance.
-Repairs #424–429 are closed through PR408/435. One worker each completed #402
-and #403; [PR436](https://github.com/CochranResearchGroup/agent-browser/pull/436)
-now carries their fully qualified conversion and independent-copy outcomes.
-Root owns integration and tracker closure. #404 remains gated until their
-merged closure is observed, then root takes that next ticket. Parent #400 stays
-open until all four children are complete.
+#401, #402 and #403 are closed. PR436 merged as
+`ba5cda65cc47073e0b53bd6af3b4d61fecf4bf51`; fresh native dependency readback
+shows both #404 prerequisites closed. Repairs #424–429 remain closed. Root now
+owns #404 alone on `platform/spec400-build-selection-404`, reusing the clean
+primary checkout from refreshed main. Both prior one-ticket workers completed
+and their auxiliary checkouts were removed through governed operations.
 
-[The qualification note](../notes/0283-2026-10-25-spec400-repairs.md) records
-the exact candidate, all criteria, actual Native/X11 workflows, observed
-force-close login loss, retained failed fixtures and evidence reuse limits.
-Both temporary child auxiliaries are closed through governed operations; the
-primary remains for #404. Foreign dirty work and excluded Xlib work remain
-untouched. There is no installed, private-account or production claim.
+The next bounded outcome is owner-directed executable selection and compatibility
+remediation through equivalent rail/MCP/CLI/HTTP controls. Mode and independent
+copy operations remain the physical lifecycle owners. No new viewer, provider
+authority, private-account use, production installation or CI dispatch.
+[Prior qualification](../notes/0283-2026-10-25-spec400-repairs.md) preserves
+the exact candidate, actual workflows, force-close login loss and failed receipts.
+Parent #400 stays open until #404 is qualified and merged.
 
 ## Packet and seams
 
@@ -363,3 +363,38 @@ paths retain strict continuity. Two fixture-only corrections after freeze
 select the exact original tab and report positive force loss honestly. No
 production source changed after the frozen candidate. PR436 closes402/403;
 401 is already closed. Next bounded outcome is404 after native graph readback.
+
+## Executable selection child #404
+
+Product lane: PL-PLATFORM. Owner: root. Base: merged PR436
+`ba5cda65cc47073e0b53bd6af3b4d61fecf4bf51`. No new checkout or worker is
+needed because only this implementation child is unblocked.
+
+Deliver one browser-build selection contract for a named profile or exact task.
+Read-only discovery returns available Chrome/Chromium build/version evidence
+and explicit uncertainty for profile storage and credentials. Review offers an
+independent duplicate-and-test, another build, confirmed original-profile
+attempt, or cancellation. An original live-profile switch delegates its exact
+close/replacement to the existing mode operation. Independent copying delegates
+to the existing copy operation; it never shares a writable directory. Offline
+profile selection records the build for an explicit subsequent open.
+
+Family/version policy is advisory. Missing executables and changed build
+identity remain technical failures with executable remediation; confirmation
+does not invent readiness. Selected mode is independent of build. Previous
+executable recovery does not restore migrated profile bytes. Credential storage
+is never weakened, exported or replaced to make a test pass.
+
+Stable seams: owner/public request tests catch profile/build binding, warnings,
+confirmation and no-effect discovery; mode/copy contracts catch durable replay
+and replacement recovery; mounted UI proves executable choices and fresh
+confirmation; a versioned real-browser fixture proves only exact tested pairs,
+independent synthetic-cookie observations and cleanup. Local baseline readbacks
+are Chrome153.0.8010.52 and Chromium150.0.7835.0, rechecked at qualification.
+Technical or login-loss outcomes must remain explicit instead of being called
+portable authentication. Source and installed qualification remain separate.
+
+Completion requires all nine #404 criteria, matching documentation/help/client
+contracts, required Rust quality and affected tests, actual isolated workflows,
+a merged PR and fresh tracker readback. Preserve previous review budgets and
+failed evidence. No second broad review is implied by this packet.
