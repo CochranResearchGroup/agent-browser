@@ -9,6 +9,8 @@ from pathlib import Path
 import re
 import select
 import signal
+import shutil
+import sqlite3
 import subprocess
 import tempfile
 import threading
@@ -23,6 +25,9 @@ def main():
     parser.add_argument('--chrome', required=True)
     parser.add_argument('--delayed-close', action='store_true')
     parser.add_argument('--borrowed-source', action='store_true')
+    parser.add_argument('--launch-failure', choices=['retry', 'finish'], help='Inject permission failure on the fixture-owned Chrome executable copy')
+    parser.add_argument('--restart-owner', action='store_true', help='Restart the exact fixture runtime owner before recovering the same operation')
+    parser.add_argument('--lost-launch-reply', action='store_true', help='Disconnect the requester while the destination launches, then inspect its original operation')
     parser.add_argument('--namespace-worker', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--parent-proof-fd', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -35,7 +40,7 @@ def main():
             result = subprocess.run(['unshare', '--user', '--map-current-user', '--keep-caps', '--mount', '--net',
                 '--propagation', 'private', 'python3', str(Path(__file__).resolve()),
                 '--binary', str(Path(args.binary).resolve()), '--chrome', str(Path(args.chrome).resolve()),
-                '--namespace-worker', '--parent-proof-fd', str(read_fd), *(['--delayed-close'] if args.delayed_close else []), *(['--borrowed-source'] if args.borrowed_source else [])], pass_fds=(read_fd,)).returncode
+                '--namespace-worker', '--parent-proof-fd', str(read_fd), *(['--delayed-close'] if args.delayed_close else []), *(['--borrowed-source'] if args.borrowed_source else []), *(['--launch-failure', args.launch_failure] if args.launch_failure else []), *(['--restart-owner'] if args.restart_owner else []), *(['--lost-launch-reply'] if args.lost_launch_reply else [])], pass_fds=(read_fd,)).returncode
         finally:
             os.close(read_fd)
         raise SystemExit(result)
@@ -50,6 +55,18 @@ def main():
     wire2=json.loads(json.dumps(wire).replace('assignment-external-1','assignment-external-2').replace('22222222-2222-4222-8222-222222222222','44444444-4444-4444-8444-444444444444').replace('33333333-3333-4333-8333-333333333333','55555555-5555-4555-8555-555555555555'))
     with tempfile.TemporaryDirectory(prefix='ab403-public-') as temporary:
         root = Path(temporary)
+        # Only this private executable copy is changed for failure injection.
+        # Sibling resources remain read-only references to the supplied bundle.
+        original_chrome = Path(args.chrome).resolve()
+        private_bundle = root / 'chrome-build'
+        private_bundle.mkdir()
+        for resource in original_chrome.parent.iterdir():
+            target = private_bundle / resource.name
+            if resource == original_chrome:
+                shutil.copy2(resource, target)
+            else:
+                target.symlink_to(resource, target_is_directory=resource.is_dir())
+        args.chrome = str(private_bundle / original_chrome.name)
         sockets = root / 'x11-sockets'
         sockets.mkdir(mode=0o1777)
         sockets.chmod(0o1777)
@@ -79,6 +96,8 @@ def main():
         native_observed_pids=set()
         close_dispatches=[]
         displays=[]
+        failure_injected = threading.Event()
+        private_chrome = str(Path(args.chrome).resolve())
         acquired_second=threading.Event()
         cookie_seeded = threading.Event()
         cookie_after_close = threading.Event()
@@ -157,6 +176,9 @@ def main():
                                 if action['kind']=='key':
                                     if action['chord'].lower()=='alt+f4':
                                         close_dispatches.append(window['pid'])
+                                        if args.launch_failure and len(close_dispatches) == 1:
+                                            Path(private_chrome).chmod(0o600)
+                                            failure_injected.set()
                                         if args.delayed_close and len(close_dispatches)==1:
                                             # Failure injection pauses ONLY this exact synthetic Chrome.
                                             # Native WM close is genuinely dispatched while stopped; it
@@ -252,6 +274,33 @@ def main():
             payload = json.loads(result['content'][0]['text'])
             assert payload['success'], payload
             return payload['data']
+        def restart_owner():
+            nonlocal mcp
+            mcp.terminate(); mcp.wait(timeout=10)
+            manifest = json.loads((Path(env['AGENT_BROWSER_SOCKET_DIR']) / 'runtime-host.json').read_text())
+            owner_pid = manifest['pid']
+            owner = Path('/proc/' + str(owner_pid))
+            owner_env = owner.joinpath('environ').read_bytes().split(bytes([0]))
+            assert ('AGENT_BROWSER_HOME=' + env['AGENT_BROWSER_HOME']).encode() in owner_env
+            assert b'AGENT_BROWSER_RUNTIME_HOST_PROCESS=1' in owner_env
+            identity = process_identity(owner_pid)
+            assert identity['executable'] == str(Path(args.binary).resolve()), 'exact fixture owner executable required'
+            assert process_identity(owner_pid) == identity
+            os.kill(owner_pid, signal.SIGTERM)
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    if not owner.joinpath('cmdline').read_bytes(): break
+                except FileNotFoundError:
+                    break
+                assert time.monotonic() < deadline, 'fixture runtime owner did not exit'
+                time.sleep(.02)
+            with mcp_log.open('a') as diagnostics:
+                mcp = spawn([str(Path(args.binary).resolve()), 'mcp', 'serve'], stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE, stderr=diagnostics, text=True)
+            rpc('initialize', dict(protocolVersion='2024-11-05', capabilities={}, clientInfo=dict(name='copy-recovery-fixture', version='1')))
+            mcp.stdin.write(json.dumps(dict(jsonrpc='2.0', method='notifications/initialized')) + '\n'); mcp.stdin.flush()
+            return owner_pid
         try:
             read_fd, write_fd = os.pipe()
             try:
@@ -337,43 +386,107 @@ def main():
             assert prepared['phase']=='awaiting_owner_choice',prepared
             assert source_task['taskId'] in prepared['affectedTaskIds'],prepared
             assert any(action['action']=='close_and_duplicate' and action['requiresConfirmation'] for action in prepared['actions']),prepared
-            copied=duplicate('close_and_duplicate',True)
+            if args.lost_launch_reply:
+                seq += 1
+                mcp.stdin.write(json.dumps(dict(jsonrpc='2.0', id=seq, method='tools/call', params=dict(name='browser_command', arguments=dict(action='profile_duplicate',params=dict(operationId=operation_id,sourceProfileId=source_task['profileId'],destinationName='Independent fixture',choice='close_and_duplicate',ownerConfirmed=True,launch=True))))) + '\n'); mcp.stdin.flush()
+                deadline = time.monotonic() + 20
+                while not (len(close_dispatches) == 1 and any('--user-data-dir='+str(profile) not in command for _, command in browsers())):
+                    assert time.monotonic() < deadline, 'destination never reached the lost-reply boundary'
+                    time.sleep(.02)
+                # The requester's unread stream is abandoned. A fresh requester
+                # observes the original owner operation instead of resubmitting.
+                mcp.terminate(); mcp.wait(timeout=10)
+                with mcp_log.open('a') as diagnostics:
+                    mcp = spawn([str(Path(args.binary).resolve()), 'mcp', 'serve'], stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE, stderr=diagnostics, text=True)
+                rpc('initialize', dict(protocolVersion='2024-11-05', capabilities={}, clientInfo=dict(name='copy-lost-reply-fixture', version='1')))
+                mcp.stdin.write(json.dumps(dict(jsonrpc='2.0', method='notifications/initialized')) + '\n');mcp.stdin.flush()
+                copied = duplicate('reconcile')
+            else:
+                copied=duplicate('close_and_duplicate',True)
             deadline=time.monotonic()+15
-            while copied['phase']!='completed':
+            while copied['phase'] not in ('completed', 'launch_absent'):
                 assert time.monotonic()<deadline,copied
                 time.sleep(.1);copied=duplicate('reconcile')
+            if args.launch_failure:
+                assert copied['phase'] == 'launch_absent', copied
+                assert copied['copyComplete'] and copied['profilePublished'], copied
+                assert not browsers(), 'definitively unstarted destination must have no browser'
+                original_destination = copied['destination']['id']
+                directories = list(root.rglob('profile-duplication/profiles/' + original_destination.replace(':', '-')))
+                assert len(directories) == 1, 'exact independent destination directory required'
+                independent_marker = directories[0] / 'fixture-independent-marker'
+                independent_marker.write_bytes(b'destination-retained-across-recovery')
+                if args.restart_owner:
+                    restart_owner()
+                readback = duplicate('reconcile')
+                assert readback['operationId'] == operation_id and readback['destination']['id'] == original_destination, readback
+                assert readback['phase'] == 'launch_absent' and not browsers(), 'inspection/restart must not launch'
+                assert failure_injected.is_set(), 'private executable failure injection must have occurred'
+                Path(private_chrome).chmod(0o755);failure_injected.clear()
+                copied = duplicate('retry_launch' if args.launch_failure == 'retry' else 'finish_without_opening', True)
+                deadline = time.monotonic() + 15
+                while copied['phase'] != 'completed':
+                    assert time.monotonic() < deadline, copied
+                    time.sleep(.1);copied = duplicate('reconcile')
+                assert copied['destination']['id'] == original_destination, copied
+                assert independent_marker.read_bytes() == b'destination-retained-across-recovery', 'recovery repeated or overwrote the copy'
+            if args.restart_owner and not args.launch_failure:
+                retained_launch = copied.get('launch')
+                old_owner = restart_owner()
+                copied = duplicate('reconcile')
+                assert copied.get('launch') == retained_launch, 'owner restart replaced destination identity'
+                assert json.loads((Path(env['AGENT_BROWSER_SOCKET_DIR']) / 'runtime-host.json').read_text())['pid'] != old_owner
             assert copied['copyComplete'] and copied['profilePublished'],copied
+            # Private synthetic fixture readback proves the copied executable
+            # pin came from this public owner workflow, including after restart.
+            pin_states = []
+            for database in root.rglob('runtime.sqlite3'):
+                try:
+                    with sqlite3.connect('file:' + str(database) + '?mode=ro', uri=True) as connection:
+                        row = connection.execute("SELECT json FROM state_documents WHERE kind='browser_session_state'").fetchone()
+                    if row:
+                        pin_states.append(json.loads(row[0]).get('profileExecutables', {}))
+                except sqlite3.Error:
+                    continue
+            assert any(pins.get(copied['destination']['id']) == private_chrome for pins in pin_states), 'copied profile must retain its original exact executable pin'
             assert len(close_dispatches)==1,'operation reconciliation replayed Native close'
             assert copied['source']['id']!=copied['destination']['id'],copied
             assert not Path('/proc/'+str(source_browser)).exists(),'original source process still exists'
-            receipt=copied['launch'];assert receipt['taskId']!=source_task['taskId'] and receipt['browserId']!=source_task['browserId'],copied
-            duplicate_task=receipt['taskId']
-            assert len(browsers())==1,'copy should launch only destination; source must reopen only when selected'
-            assert browsers()[0][0] in native_observed_pids,'completed launch lacks qualified Native window readiness'
-            def native_visit(task_id,path):
-                call('browser_command',dict(taskId=task_id,action='native_input',params=dict(actions=[dict(kind='key',chord='ctrl+l'),dict(kind='text',text=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+path),dict(kind='key',chord='Return')])))
+            if args.launch_failure == 'finish':
+                assert copied['launch'] is None and not browsers(), 'finish must retain only the independent profile'
+                replay = duplicate('reconcile')
+                assert replay['phase'] == 'completed' and replay['launch'] is None and not browsers(), replay
+                task = None
+            else:
+                receipt=copied['launch'];assert receipt['taskId']!=source_task['taskId'] and receipt['browserId']!=source_task['browserId'],copied
+                duplicate_task=receipt['taskId']
+                assert len(browsers())==1,'copy should launch only destination; source must reopen only when selected'
+                assert browsers()[0][0] in native_observed_pids,'completed launch lacks qualified Native window readiness'
+                def native_visit(task_id,path):
+                    call('browser_command',dict(taskId=task_id,action='native_input',params=dict(actions=[dict(kind='key',chord='ctrl+l'),dict(kind='text',text=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+path),dict(kind='key',chord='Return')])))
+                    deadline=time.monotonic()+10
+                    while not any(record['path']==path for record in get_requests):
+                        assert time.monotonic()<deadline,'native navigation missing: '+path;time.sleep(.02)
+                    return next(record['cookie'] for record in get_requests if record['path']==path)
+                assert native_visit(duplicate_task,'/check-copy')=='initial','duplicate lost the synthetic authenticated cookie'
+                source_reopened=call('browser_open',dict(request,taskKey='source-reopened',url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/write-source'))
+                assert len(browsers())==2,'source and independent duplicate must coexist'
                 deadline=time.monotonic()+10
-                while not any(record['path']==path for record in get_requests):
-                    assert time.monotonic()<deadline,'native navigation missing: '+path;time.sleep(.02)
-                return next(record['cookie'] for record in get_requests if record['path']==path)
-            assert native_visit(duplicate_task,'/check-copy')=='initial','duplicate lost the synthetic authenticated cookie'
-            source_reopened=call('browser_open',dict(request,taskKey='source-reopened',url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/write-source'))
-            assert len(browsers())==2,'source and independent duplicate must coexist'
-            deadline=time.monotonic()+10
-            while not any(record['path']=='/write-source' for record in get_requests):
-                assert time.monotonic()<deadline,'source write navigation missing';time.sleep(.02)
-            assert native_visit(source_reopened['taskId'],'/check-source')=='source-diverged','source write did not persist'
-            # Native focus is explicit because the reopened source owns focus.
-            destination_pid=next(pid for pid,_ in browsers() if pid!=next(pid for pid,argv in browsers() if '--user-data-dir='+str(profile) in argv))
-            destination_window=next(window for window in windows() if window['pid']==destination_pid)
-            assert run(['xdotool','windowactivate','--sync',str(destination_window['id'])]).returncode==0
-            assert native_visit(duplicate_task,'/check-independent')=='initial','source mutation leaked into the copied profile'
-            paths=[re.search(r'--user-data-dir=([^ ]+)',argv).group(1) for _,argv in browsers()]
-            assert len(set(paths))==2,'two browsers shared a writable profile directory'
-            assert len({os.stat(path).st_ino for path in paths})==2,'profile directories are not independent'
-            replay=duplicate('reconcile');assert replay['launch']==receipt and len(browsers())==2,'operation replay launched another browser'
-            call('browser_close',dict(taskId=source_reopened['taskId']));call('browser_close',dict(taskId=duplicate_task));task=None
-            assert not browsers(),'closed synthetic browsers left owned process residue'
+                while not any(record['path']=='/write-source' for record in get_requests):
+                    assert time.monotonic()<deadline,'source write navigation missing';time.sleep(.02)
+                assert native_visit(source_reopened['taskId'],'/check-source')=='source-diverged','source write did not persist'
+                # Native focus is explicit because the reopened source owns focus.
+                destination_pid=next(pid for pid,_ in browsers() if pid!=next(pid for pid,argv in browsers() if '--user-data-dir='+str(profile) in argv))
+                destination_window=next(window for window in windows() if window['pid']==destination_pid)
+                assert run(['xdotool','windowactivate','--sync',str(destination_window['id'])]).returncode==0
+                assert native_visit(duplicate_task,'/check-independent')=='initial','source mutation leaked into the copied profile'
+                paths=[re.search(r'--user-data-dir=([^ ]+)',argv).group(1) for _,argv in browsers()]
+                assert len(set(paths))==2,'two browsers shared a writable profile directory'
+                assert len({os.stat(path).st_ino for path in paths})==2,'profile directories are not independent'
+                replay=duplicate('reconcile');assert replay['launch']==receipt and len(browsers())==2,'operation replay launched another browser'
+                call('browser_close',dict(taskId=source_reopened['taskId']));call('browser_close',dict(taskId=duplicate_task));task=None
+                assert not browsers(),'closed synthetic browsers left owned process residue'
 
         except BaseException:
             # This namespace contains synthetic data only. Keep bounded failure
@@ -385,6 +498,8 @@ def main():
                                   windows=windows(), logs=logs)), flush=True)
             raise
         finally:
+            if failure_injected.is_set():
+                Path(private_chrome).chmod(0o755);failure_injected.clear()
             # Only children and processes carrying this exact disposable namespace.
             if mcp and mcp.poll() is None:
                 mcp.terminate()
@@ -423,8 +538,9 @@ def main():
                 assert time.monotonic() < deadline, 'fixture process residue: ' + str(residue)
                 time.sleep(.02)
         print(json.dumps(dict(passed=True,scope='public MCP profile_duplicate, real Chrome/X11, synthetic Native owner',
-            nativeGracefulClose=True,independentProfiles=True,concurrentBrowsers=True,sourcePreserved=True,
-            syntheticCookieContinuity=True,divergentWrites=True,replayPreserved=True,cleanupVerified=True)))
+            nativeGracefulClose=True,independentProfiles=True,concurrentBrowsers=args.launch_failure!='finish',sourcePreserved=True,
+            syntheticCookieContinuity=args.launch_failure!='finish',divergentWrites=args.launch_failure!='finish',replayPreserved=True,cleanupVerified=True,
+            launchFailureRecovery=args.launch_failure,ownerRestart=args.restart_owner,lostLaunchReply=args.lost_launch_reply)))
 
 
 if __name__ == '__main__':
