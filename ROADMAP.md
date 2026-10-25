@@ -1,6 +1,6 @@
 # Roadmap
 
-[P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): #401–403 and repairs #424–429 are closed. #404 build selection is source-qualified through eight actual Chrome/Chromium workflows and final scoped gates, awaiting PR439 integration. Parent #400 remains open for aggregate verification. No runtime publication.
+[P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): all four children #401–404 and repairs #424–429 are closed. PR436 and PR439 are merged; aggregate acceptance maps all 46 parent stories to the retained source and isolated synthetic evidence. No runtime publication or installed Native/real-account qualification.
 
 [P291 corrected cold rail](docs/dev/plans/0291-2026-10-24-cold-rail-retry-spacing.md), #430, is installed accepted oncf65dd76422b: cold median3.36s to2.11s, warm1.00s to1.02s,18 browser roots and137 Native provider/persistent unit generations preserved. [Evidence](docs/dev/notes/0291-2026-10-24-cold-rail-retry-spacing.md) retains the failed first comparison, mounted cache-caller correction, finite sample limits and three doctor advisories.422 asset intermittence and Remote View667 MCP-client restart loops remain separate. Retain the primary checkout and pinned candidates.
 
@@ -57,7 +57,7 @@ P250 [dashboard subsystem health](docs/dev/plans/0250-2026-10-19-dashboard-subsy
 
 Updated: 2026-10-19
 
-[P283](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md) owns #401's read-only mode inspection under specification #400. Session conversion with native agentic input, profile duplication and Chrome/Chromium choice remain dependent tickets #402–#404.
+[P283](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md) completes specification #400 through closed children #401–404: accessible mode inspection, agentic CDP-free conversion, independent profile copies and owner-directed Chrome/Chromium choice. Qualification is source and isolated synthetic evidence; installed Native and private-account acceptance remain separate.
 
 ## Current direction
 

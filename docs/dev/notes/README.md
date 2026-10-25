@@ -2,7 +2,7 @@
 
 [P293 paired asset delivery](0293-2026-10-25-dashboard-asset-delivery.md):170 requests pass with stable serving identity; original timeout remains unreproduced under422.
 
-[P283 Spec400 qualification](0283-2026-10-25-spec400-repairs.md): repairs and children401–404 qualified, eight actual cross-build workflows, retained first failures, final help-budget proof and the separate parent integration boundary.
+[P283 Spec400 qualification](0283-2026-10-25-spec400-repairs.md): repairs and children #401–404 integrated, all 46 parent stories reconciled, eight actual cross-build workflows, retained first failures and final help-budget proof. Installed Native and real-account acceptance remain separate.
 
 [P291 cold rail retry spacing](0291-2026-10-24-cold-rail-retry-spacing.md): corrected caller revalidation is installed accepted; cold median3.36s to2.11s, with failed first acceptance and finite evidence limits preserved.
 
