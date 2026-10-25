@@ -165,25 +165,54 @@ impl BrowserSessionSqliteStore {
         expected_browser: Option<&agent_browser_service_model::ManagedBrowserInstance>,
     ) -> Result<(), LaunchCustodyStoreError> {
         use LaunchCustodyStoreError as Error;
-        let transaction = self.remote_view_mutation_connection()
+        let transaction = self
+            .remote_view_mutation_connection()
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|_| Error::Unavailable)?;
         let state = current(&transaction)?;
-        if state != *expected || match expected_browser {
-            Some(browser) => browser.profile_id != profile.id || state.browsers.get(&browser.id) != Some(browser),
-            None => state.browsers.values().any(|browser| browser.profile_id == profile.id)
-                || state.sessions.values().any(|task| task.profile_id == profile.id),
-        } { return Err(Error::Conflict); }
+        if state != *expected
+            || match expected_browser {
+                Some(browser) => {
+                    browser.profile_id != profile.id
+                        || state.browsers.get(&browser.id) != Some(browser)
+                }
+                None => {
+                    state
+                        .browsers
+                        .values()
+                        .any(|browser| browser.profile_id == profile.id)
+                        || state
+                            .sessions
+                            .values()
+                            .any(|task| task.profile_id == profile.id)
+                }
+            }
+        {
+            return Err(Error::Conflict);
+        }
         super::browser_session_runtime::prove_profile_launch_absence(profile)
             .map_err(|_| Error::Unavailable)?;
         let mut records = ledger(&transaction)?;
-        let claims = records.records.values().filter(|record| {
-            record.intent.profile_id == profile.id && !record.published
-                && !records.reconciled_absent.contains(&record.intent.intent_id)
-        }).cloned().collect::<Vec<_>>();
-        if claims.len() > 1 { return Err(Error::Conflict); }
+        let claims = records
+            .records
+            .values()
+            .filter(|record| {
+                record.intent.profile_id == profile.id
+                    && !record.published
+                    && !records.reconciled_absent.contains(&record.intent.intent_id)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if claims.len() > 1 {
+            return Err(Error::Conflict);
+        }
         for record in claims {
-            if expected_browser.is_some_and(|browser| record.observed_browser_id.as_ref().is_some_and(|id| id != &browser.id)) {
+            if expected_browser.is_some_and(|browser| {
+                record
+                    .observed_browser_id
+                    .as_ref()
+                    .is_some_and(|id| id != &browser.id)
+            }) {
                 return Err(Error::Conflict);
             }
             records.reconciled_absent.insert(record.intent.intent_id);
@@ -808,6 +837,46 @@ mod tests {
             assignment: serde_json::from_value(f["assignment"].clone()).unwrap(),
         }
     }
+    #[test]
+    fn exact_absent_unpublished_launch_settlement_preserves_history_and_checks_state() {
+        let fixture = Fixture::new();
+        let mut store = fixture.open(true);
+        let profile = agent_browser_service_model::BrowserProfileCatalogEntry {
+            id: "profile-a".into(),
+            name: "Synthetic destination".into(),
+            user_data_dir: fixture.0.to_string_lossy().into_owned(),
+            kind: agent_browser_service_model::BrowserProfileKind::Named,
+            manual_login_url: None,
+        };
+        let expected = current(store.remote_view_mutation_connection()).unwrap();
+        let retained = intent();
+        store.admit_launch_intent(&retained, &expected).unwrap();
+        let mut stale = expected.clone();
+        stale
+            .profile_operation_ids
+            .insert("foreign".into(), "foreign-operation".into());
+        assert_eq!(
+            store.settle_unpublished_profile_launch_absence(&profile, &stale, None),
+            Err(LaunchCustodyStoreError::Conflict)
+        );
+        assert_eq!(store.unpublished_launch_records().unwrap().len(), 1);
+        store
+            .settle_unpublished_profile_launch_absence(&profile, &expected, None)
+            .unwrap();
+        assert!(store.unpublished_launch_records().unwrap().is_empty());
+        let history = ledger(store.remote_view_mutation_connection()).unwrap();
+        assert_eq!(history.records[&retained.intent_id].intent, retained);
+        assert!(history.reconciled_absent.contains(&retained.intent_id));
+        store
+            .settle_unpublished_profile_launch_absence(&profile, &expected, None)
+            .unwrap();
+        let fresh = intent();
+        assert_eq!(
+            store.admit_launch_intent(&fresh, &expected).unwrap(),
+            LaunchCustodyAdmission::New
+        );
+    }
+
     fn release_evidence(
         intent: &BrowserLaunchIntent,
     ) -> (
