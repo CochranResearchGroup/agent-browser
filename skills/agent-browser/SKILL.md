@@ -140,7 +140,7 @@ Startup: [diagnostics](references/cli-and-service.md#development-host-startup).
 
 ## Read browser mode
 
-Use `browser_command` action `mode` with `taskId`. Native capture/input need readiness and scoped grants. Discover `mode_convert`/`profile_duplicate`; inspect original IDs after reload. Confirm retries, `restore_previous` or `finish_without_opening`; reconcile uncertainty. [Controls](references/cli-and-service.md#browser-mode-inspection).
+Use `browser_command`/`taskId` action `mode`. Native needs readiness and scoped grants. Discover `mode_convert`/`profile_duplicate`. Inspect originals after reload; `historyTruncated` marks omitted history. Published completion needs a new conversion. Confirm choices; reconcile. [Controls](references/cli-and-service.md#browser-mode-inspection).
 
 Diagnostics retain `?view=service:<name>` and selection query fields.
 
