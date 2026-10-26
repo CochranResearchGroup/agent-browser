@@ -1,5 +1,9 @@
 # Runbook
 
+### 2026-10-26 Stage 1 planning handoff
+
+[P295 challenge-aware continuation](docs/dev/plans/0295-2026-10-26-challenge-task-continuation.md) is PLANNED; [delivery work](https://github.com/CochranResearchGroup/agent-browser/issues/453) remains open and implementation has not started. Planning-only branch challenge/stage1-continuation-plan preserves all foreign Auth/dashboard/resource work. Next: review the bounded plan, then admit an implementation owner under current overlap/custody rules. No runtime effects or old challenge-lane resumption.
+
 [P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): #400–404 and repairs #424–429 are closed as source/synthetic outcomes. Production binary e7a233070ded is installed through an accepted preserve transaction; exact candidate qualification and published assets pass. Live build-chooser acceptance fails at dashboard command routing, tracked by [#451](https://github.com/CochranResearchGroup/agent-browser/issues/451). [Deployment evidence](docs/dev/notes/0283-2026-10-25-spec400-repairs.md) retains the failed process-preservation assertion and slow rail sample. Installed Spec400 workflow acceptance remains incomplete.
 
 [P288 writer custody](docs/dev/plans/0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. PR415 carries the qualified source;221 workstation cases, strict Rust, fixtures and docs pass. Installed production is unchanged.

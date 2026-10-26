@@ -1,6 +1,23 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P295
+    product_lane: PL-CHALLENGE
+    objective: Continue retained browser tasks through bounded challenge handling and native human assistance
+    plan: docs/dev/plans/0295-2026-10-26-challenge-task-continuation.md
+    branch: challenge/stage1-continuation-plan
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#453]
+    plan_state: PLANNED
+    custody_state: PAUSED_REF
+    dependencies: []
+    overlaps: [P279, P283, P240]
+    reconciled_overlaps: ["Planning only on fetched-main snapshot; no implementation custody; preserve foreign Auth449/P279 and dashboard451 files; future shared provider contracts precede client changes"]
+    validation_status: Planning/catalog, policy wiring, changed links and patch hygiene pass; webpack docs build passes; implementation not started
+    limitations: ["No implementation checkout or runtime effects", "Historical Turnstile66 remains paused", "Auth449 retains its separate owner"]
+    updated_at: 2026-10-26
+
   - id: P293
     product_lane: PL-BUGFIX
     objective: Diagnose intermittent public dashboard asset delivery

@@ -1,5 +1,7 @@
 # Active plan index
 
+[P295 challenge-aware task continuation](0295-2026-10-26-challenge-task-continuation.md), [Stage 1 delivery](https://github.com/CochranResearchGroup/agent-browser/issues/453), is PLANNED. Bounded briefing/classification/passive-checkbox/native assistance and original-operation recovery; no implementation started.
+
 [P293 asset delivery diagnosis](0293-2026-10-25-dashboard-asset-delivery.md), #422: five paired rounds passed; diagnostic packet closed, intermittent failure remains open.
 
 [P292 startup validation selection](0292-2026-10-25-startup-validation-selection.md), #437, closes the local selector omission found in the P291 retro with public-CLI red-green coverage.
