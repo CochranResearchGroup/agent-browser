@@ -784,9 +784,23 @@ pub struct PendingHumanTabRetention {
     pub expires_at_ms: Option<u64>,
 }
 
+/// A completed local artifact operation, without its path or private contents.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BrowserTaskArtifactReference {
+    pub artifact_id: String,
+    pub kind: String,
+    pub handle: String,
+    pub observed_at_ms: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserSessionState {
+    /// References recorded only after successful task artifact capture/download.
+    /// Absence in older state means not recorded, never no artifacts existed.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub task_artifact_references: BTreeMap<String, Vec<BrowserTaskArtifactReference>>,
     /// Profile-wide owner operations retain an actionable journal identity.
     /// A competing client must resume or cancel that operation before opening.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -848,6 +862,7 @@ pub struct BrowserSessionState {
 impl Default for BrowserSessionState {
     fn default() -> Self {
         Self {
+            task_artifact_references: BTreeMap::new(),
             profile_operation_ids: BTreeMap::new(),
             hosted_continuity: BTreeMap::new(),
             host_policies: crate::BrowserHostPolicies::default(),

@@ -68,6 +68,11 @@ use crate::native::service_trace::service_commands::service_now_timestamp;
 use crate::native::service_trace::{service_trace_response, ServiceTraceFilters};
 use crate::native::stream::service_profile_lookup_response_for_state;
 
+/// Shared read-only task briefing for HTTP and software consumers.
+pub(crate) fn task_briefing_response(task_id: &str) -> Result<Value, String> {
+    workflow::inspect_briefing(task_id)
+}
+
 const BROWSERS_RESOURCE: &str = "agent-browser://browsers";
 const EVENTS_RESOURCE: &str = "agent-browser://events";
 const JOBS_RESOURCE: &str = "agent-browser://jobs";
@@ -95,6 +100,7 @@ const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
 // supports a source profile without acquiring a task.
 const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = &[
     "mode",
+    "task_briefing",
     "native_capture",
     "native_input",
     "profile_duplicate",
@@ -301,6 +307,12 @@ fn mcp_command_response_with_config(
             Ok(
                 json!({"success":true,"data":workflow::execute(command, &session).map_err(native_request_error)?}),
             )
+        }
+        Some("task-briefing") => {
+            if args.len() != 3 || args[2].trim().is_empty() {
+                return Err("Usage: agent-browser --json mcp task-briefing <task-id>".into());
+            }
+            Ok(json!({"success":true,"data":workflow::inspect_briefing(&args[2])?}))
         }
         Some("browser-mode") => {
             if args.len() != 3 || args[2].trim().is_empty() {
@@ -5623,6 +5635,18 @@ fn call_service_mcp_tool(
         }
         if arguments["action"] == "profile_duplicate" {
             return profile_duplicate::call(arguments, session);
+        }
+        if arguments["action"] == "task_briefing" {
+            let task_id = required_string_argument(arguments, "taskId")?;
+            let data = workflow::inspect_briefing(task_id)
+                .map_err(|error| JsonRpcError::invalid_params(&error))?;
+            return Ok(tool_response_from_payload(
+                "browser_command",
+                session,
+                json!({}),
+                data,
+                false,
+            ));
         }
         if arguments["action"] == "mode" {
             let task_id = required_string_argument(arguments, "taskId")?;
@@ -12193,6 +12217,181 @@ mod tests {
             !root.exists(),
             "invalid requests must not initialize owner state"
         );
+    }
+
+    #[test]
+    fn task_briefing_public_cli_and_mcp_preserve_exact_task_without_transport() {
+        use crate::native::browser_session_store::BrowserSessionSqliteStore;
+        use agent_browser_service_model::{
+            BrowserSessionState, ManagedBrowserInstance, ManagedBrowserSession,
+        };
+        let directory =
+            std::env::temp_dir().join(format!("task-briefing-public-{}", uuid::Uuid::new_v4()));
+        let sockets = directory.join("sockets");
+        let guard = crate::test_utils::EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_SOCKET_DIR",
+        ]);
+        guard.set("HOME", directory.to_str().unwrap());
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        guard.set("AGENT_BROWSER_HOME", directory.to_str().unwrap());
+        guard.set("AGENT_BROWSER_SOCKET_DIR", sockets.to_str().unwrap());
+        assert!(BrowserSessionSqliteStore::default_sqlite_path()
+            .unwrap()
+            .starts_with(&directory));
+        let store = BrowserSessionSqliteStore::default_sqlite().unwrap();
+        let mut state = BrowserSessionState::default();
+        state.browsers.insert(
+            "browser".into(),
+            ManagedBrowserInstance {
+                id: "browser".into(),
+                profile_id: "profile".into(),
+                pid: std::process::id(),
+                cdp_endpoint: String::new(),
+                desktop: None,
+                active_session_ids: vec!["task".into()],
+            },
+        );
+        state.sessions.insert(
+            "task".into(),
+            ManagedBrowserSession {
+                id: "task".into(),
+                name: "lane".into(),
+                profile_id: "profile".into(),
+                browser_id: "browser".into(),
+                created_at_ms: 1,
+                last_activity_at_ms: 1,
+                expires_at_ms: 0,
+                current_tab_id: None,
+            },
+        );
+        // A same-name peer must never be selected in place of the opaque ID.
+        let mut peer = state.sessions["task"].clone();
+        peer.id = "peer".into();
+        state.sessions.insert("peer".into(), peer);
+        state.managed_tab_requests.insert(
+            "uncertain-peer-or-task".into(),
+            serde_json::from_value(
+                json!({"sessionName":"lane","commandDigest":"private-digest",
+                "profileId":"profile","response":null}),
+            )
+            .unwrap(),
+        );
+        store.save_session_state(&state).unwrap();
+        let cli =
+            mcp_command_response(&["mcp".into(), "task-briefing".into(), "task".into()]).unwrap();
+        let response = handle_jsonrpc_line(r#"{"jsonrpc":"2.0","id":401,"method":"tools/call","params":{"name":"browser_command","arguments":{"taskId":"task","action":"task_briefing"}}}"#, "unused-transport").unwrap();
+        let mcp: Value =
+            serde_json::from_str(response["result"]["content"][0]["text"].as_str().unwrap())
+                .unwrap();
+        for data in [&cli["data"], &mcp["data"]] {
+            assert_eq!(data["browserId"], "browser");
+            assert_eq!(data["profileId"], "profile");
+            assert_eq!(data["taskId"], "task");
+            assert_eq!(data["contextEvidence"], "retained_not_live");
+            assert_eq!(data["control"]["owner"], "unverified");
+            assert_eq!(data["goal"]["status"], "missing");
+            assert_eq!(data["lastVerifiedOutcome"]["status"], "missing");
+            assert_eq!(data["artifacts"]["status"], "not_recorded");
+            assert_eq!(data["legacyRequestAttribution"], "ambiguous_excluded");
+            assert_eq!(data["uncertainOperations"], json!([]));
+            assert!(!data.to_string().contains("private-digest"));
+        }
+        // A replacement reader receives useful retained evidence in one call,
+        // without reconstructing it from raw history or reading private pages.
+        let mut enriched = state.clone();
+        enriched.sessions.get_mut("task").unwrap().current_tab_id = Some("tab".into());
+        enriched.tabs.insert(
+            "tab".into(),
+            serde_json::from_value(json!({
+            "id":"tab","targetId":"target","browserId":"browser","sessionId":"task",
+            "createdAtMs":1,"lastActivityAtMs":2}))
+            .unwrap(),
+        );
+        enriched.tab_metadata.insert(
+            "tab".into(),
+            serde_json::from_value(json!({
+            "attribution":"caller_supplied","taskName":"Export a monthly report",
+            "purpose":"Download the approved period","requestId":"original-request"}))
+            .unwrap(),
+        );
+        enriched.navigation_history.push(serde_json::from_value(json!({
+            "profileId":"profile","sessionId":"task","browserId":"browser","tabId":"tab",
+            "targetId":"target","url":"https://private.example/?token=secret-token","visitedAtMs":2})).unwrap());
+        enriched.pending_human_tabs.insert(
+            "tab".into(),
+            serde_json::from_value(json!({
+            "handoffId":"original-handoff","requestedAtMs":3,"expiresAtMs":null}))
+            .unwrap(),
+        );
+        enriched.task_artifact_references.insert("task".into(), vec![serde_json::from_value(json!({
+            "artifactId":"original-artifact","kind":"download","handle":"reports","observedAtMs":2})).unwrap()]);
+        std::fs::write(
+            crate::native::browser_host_control::path("browser").unwrap(),
+            serde_json::to_vec(&json!({"epoch":4,"human":false,"pauseReads":false,
+                "awaitingObservation":false,"actor":"fixture","reason":"reconciled original",
+                "flights":{"original-lost-reply":"observed_uncertain_no_replay"},"audit":[]}))
+            .unwrap(),
+        )
+        .unwrap();
+        store.save_session_state(&enriched).unwrap();
+        let recovered =
+            mcp_command_response(&["mcp".into(), "task-briefing".into(), "task".into()]).unwrap();
+        let data = &recovered["data"];
+        assert_eq!(
+            data["uncertainOperations"][0]["operationId"],
+            "original-lost-reply"
+        );
+        assert_eq!(data["uncertainOperations"][0]["retryAllowed"], false);
+        assert_eq!(data["uncertainOperations"][0]["scope"], "browser");
+        assert_eq!(data["goal"]["taskName"], "Export a monthly report");
+        assert_eq!(data["goal"]["status"], "caller_supplied");
+        assert_eq!(data["goal"]["requestId"], "original-request");
+        assert_eq!(data["targetId"], "target");
+        assert_eq!(data["lastVerifiedOutcome"]["observedAtMs"], 2);
+        assert_eq!(data["lastVerifiedOutcome"]["taskCompletion"], "unverified");
+        assert_eq!(data["assistance"]["handoffId"], "original-handoff");
+        assert_eq!(
+            data["artifacts"]["references"][0]["artifactId"],
+            "original-artifact"
+        );
+        assert!(!recovered.to_string().contains("secret-token"));
+        assert_eq!(store.load_session_state().unwrap(), enriched);
+        store.save_session_state(&state).unwrap();
+        assert_eq!(cli["data"], mcp["data"]);
+        let wrong = mcp_command_response(&["mcp".into(), "task-briefing".into(), "lane".into()]);
+        assert!(wrong.unwrap_err().contains("browser_task_not_found"));
+        assert_eq!(store.load_session_state().unwrap(), state);
+        assert!(
+            !sockets.exists(),
+            "inspection must not create a transport or browser owner"
+        );
+        drop(store);
+        fn remove_fixture(path: &std::path::Path) {
+            let metadata = std::fs::symlink_metadata(path).unwrap();
+            if metadata.is_dir() {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+                }
+                for entry in std::fs::read_dir(path).unwrap() {
+                    remove_fixture(&entry.unwrap().path());
+                }
+                std::fs::remove_dir(path).unwrap();
+            } else {
+                #[cfg(windows)]
+                {
+                    let mut permissions = metadata.permissions();
+                    permissions.set_readonly(false);
+                    std::fs::set_permissions(path, permissions).unwrap();
+                }
+                std::fs::remove_file(path).unwrap();
+            }
+        }
+        remove_fixture(&directory);
     }
 
     #[test]

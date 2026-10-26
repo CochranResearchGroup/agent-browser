@@ -197,6 +197,20 @@ pub(crate) fn metadata(browser_id: &str) -> Result<Value, String> {
     )
 }
 
+/// Original unresolved or explicitly uncertain requests remain useful after
+/// reconciliation. These are browser-scoped references, never retry authority.
+pub(crate) fn uncertain_operation_references(browser_id: &str) -> Result<Value, String> {
+    let control = read(browser_id)?;
+    let rows = control
+        .flights
+        .iter()
+        .filter(|(_, state)| state.as_str() != "observed_completed");
+    let count = rows.clone().count();
+    Ok(json!({"truncated":count > 32,"operations":rows.take(32)
+        .map(|(id, state)| json!({"source":"cooperative_control","scope":"browser",
+            "operationId":id,"state":state,"retryAllowed":false})).collect::<Vec<_>>()}))
+}
+
 pub(crate) fn observation(action: &str) -> bool {
     matches!(
         action,

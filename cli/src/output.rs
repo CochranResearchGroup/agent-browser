@@ -7330,6 +7330,8 @@ Commands:
   serve             Run the MCP server
   resources/read    Diagnostics
   host-task TASK    Read app metadata
+  task-briefing TASK Read retained task context without browser effects
+  Teaching evidence: client teaching-evidence / teaching-evidence-http; scoped A/V and Speech ranges
   browser-mode TASK Inspect mode
   browser-native TASK ACTION JSON Input/capture <=1Mpx
   browser-build JSON Inspect/select/open profile build

@@ -7376,3 +7376,33 @@ independent copy for testing. If login is lost, stop account actions and sign
 in explicitly in the chosen browser. Never weaken encryption, export keys or
 replace credential stores to manufacture portability. Inspect another build,
 use a confirmed original, keep the copy without opening, or cancel.
+
+### Inspect a retained task
+
+Use `browser_command` with `taskId` and `action: "task_briefing"`, or
+`agent-browser --json mcp task-briefing TASK`. Both return the same compact
+briefing from existing owner stores without starting a daemon, opening a
+browser, navigating, focusing, taking control or acknowledging human use.
+
+The briefing includes exact retained profile/browser/target identity, original
+caller-supplied goal attribution, last recorded verified navigation, recorded
+artifact references, pending human assistance and original uncertain operation
+IDs. Retained context is not a live page observation or proof of task completion.
+Missing evidence stays missing; ambiguous legacy lane requests are excluded.
+URLs, page bodies, artifact paths and credentials are omitted. Artifact references
+recorded by `browser_artifact` describe completed operations, not continuing file
+availability. Older artifacts without recorded references remain unknown.
+
+Software clients can use `getTaskBriefing({baseUrl, taskId, headers})` from
+`@agent-browser/client/task-briefing`. Its authenticated read endpoint is
+`GET /api/browser/tasks/{encoded-task-id}/briefing`; supply the existing dashboard
+session cookie in the request headers. The helper rejects redirects and identity
+mismatches without retrying. A task retains at most 256 artifact references;
+new capture/download requests fail before browser effects when this capacity is full.
+
+Backend clients can use `@agent-browser/client/teaching-evidence` and
+`@agent-browser/client/teaching-evidence-http` for exact scoped A/V evidence,
+selected isolated narration import into Speech Saved custody, explicit ranges
+of at most five minutes and reopening original transcript operations. See the
+[teaching evidence guide](docs/src/app/teaching-evidence/page.mdx). Source, timing,
+recognition uncertainty and protected stop/resume gaps remain explicit.

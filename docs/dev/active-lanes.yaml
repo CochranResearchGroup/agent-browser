@@ -1,6 +1,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P296
+    product_lane: PL-RECIPES
+    objective: Deliver dependable browser journeys and narrated teaching spec466
+    plan: docs/dev/plans/0296-2026-10-26-browser-journeys-teaching.md
+    branch: recipes/spec466-integration
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#466, CochranResearchGroup/agent-browser#467, CochranResearchGroup/agent-browser#473]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [P295]
+    reconciled_overlaps: ["Preserve separate Auth owner; serialize shared public contracts with teaching worker473"]
+    limitations: ["No production effects; real narration and portal scope pending", "One broad review and one bounded remediation"]
+    updated_at: 2026-10-26
   - id: P295
     product_lane: PL-AUTH
     objective: Integrate standalone Auth Receipts and qualify browser continuation

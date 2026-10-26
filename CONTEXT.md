@@ -4,6 +4,16 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Teaching evidence**: Exact finalized A/V recording and selected isolated
+narration linked to Speech Saved/range receipts. Gaps, conversion alignment,
+speaker identity and critical-token uncertainty remain explicit; a sequence
+annotation does not verify recorder suppression.
+
+**Task briefing**: A read-only exact-ID projection of retained goal attribution,
+current logical identity, historical verified progress, local artifact references,
+pending assistance/control and original uncertain operations. It never launches,
+observes a live page, acknowledges human use or turns missing evidence into success.
+
 **Browser mode inspection**: Read-only current original-process debugging posture.
 CDP and no-CDP require complete current process evidence joined to immutable
 owner identity. Missing, changed or stale evidence is unverified. Executable

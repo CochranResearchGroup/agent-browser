@@ -139,6 +139,122 @@ pub(super) fn inspect_mode(task_id: &str) -> Result<Value, String> {
     BrowserSessionSqliteStore::open_read_only(&path)?.inspect_task_mode(task_id)
 }
 
+/// Read a compact briefing from the existing owner stores. No transport, live
+/// browser observation, credentials, page bodies or human-use acknowledgement.
+pub(super) fn inspect_briefing(task_id: &str) -> Result<Value, String> {
+    let path = BrowserSessionSqliteStore::default_sqlite_path()?;
+    let store = BrowserSessionSqliteStore::open_read_only(&path)?;
+    let state = store.load_session_state()?;
+    let task = state
+        .sessions
+        .get(task_id)
+        .filter(|task| task.id == task_id)
+        .ok_or_else(|| format!("browser_task_not_found:{task_id}"))?;
+    let tab = task
+        .current_tab_id
+        .as_ref()
+        .and_then(|id| state.tabs.get(id))
+        .filter(|tab| tab.session_id == task_id && tab.browser_id == task.browser_id);
+    let metadata = tab.and_then(|tab| state.tab_metadata.get(&tab.id));
+    let goal = metadata
+        .map(|m| {
+            json!({"status":"caller_supplied", "attribution":m.attribution,
+        "taskName":m.task_name,"purpose":m.purpose,"serviceName":m.service_name,
+        "agentName":m.agent_name,"originKind":m.origin_kind,
+        "requestId":m.request_id,"jobId":m.job_id})
+        })
+        .unwrap_or(json!({"status":"missing"}));
+    let last = state
+        .navigation_history
+        .iter()
+        .filter(|row| {
+            row.session_id == task_id
+                && row.browser_id == task.browser_id
+                && row.profile_id == task.profile_id
+        })
+        .max_by_key(|row| row.visited_at_ms);
+    // Navigation records prove a historical navigation, never task completion.
+    // Deliberately omit URL/title/body: they can contain tokens or private data.
+    let outcome = last
+        .map(|row| {
+            json!({"status":"historical_verified_navigation",
+        "tabId":row.tab_id,"targetId":row.target_id,"observedAtMs":row.visited_at_ms,
+        "taskCompletion":"unverified"})
+        })
+        .unwrap_or(json!({"status":"missing"}));
+    let control_path = crate::native::browser_host_control::path(&task.browser_id)?;
+    let control_recorded = match std::fs::symlink_metadata(control_path) {
+        Ok(_) => true,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(_) => return Err("browser_task_control_read_failed".into()),
+    };
+    let control = crate::native::browser_host_control::metadata(&task.browser_id)?;
+    let original_uncertainty =
+        crate::native::browser_host_control::uncertain_operation_references(&task.browser_id)?;
+    let mut uncertain = original_uncertainty["operations"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    if let Some(continuity) = state.hosted_continuity.get(task_id) {
+        uncertain.extend(continuity.requests.iter().filter(|(_, row)| row.pending)
+            .map(|(id, _)| json!({"source":"hosted_reconnect","operationId":id,"retryAllowed":false})));
+    }
+    // Legacy tab requests bind a lane name. Only an unambiguous retained lane
+    // can be attributed; duplicate names never substitute a peer's operations.
+    let unique_lane = state
+        .sessions
+        .values()
+        .filter(|row| row.name == task.name)
+        .count()
+        == 1;
+    if unique_lane {
+        uncertain.extend(
+            state
+                .managed_tab_requests
+                .iter()
+                .filter(|(_, row)| {
+                    row.session_name == task.name
+                        && row.response.is_none()
+                        && row
+                            .profile_id
+                            .as_ref()
+                            .is_none_or(|id| id == &task.profile_id)
+                })
+                .map(
+                    |(id, _)| json!({"source":"tab_request","operationId":id,"retryAllowed":false}),
+                ),
+        );
+    }
+    let uncertainty_truncated = uncertain.len() > 32 || original_uncertainty["truncated"] == true;
+    uncertain.truncate(32);
+    let assistance = tab
+        .and_then(|tab| state.pending_human_tabs.get(&tab.id))
+        .map(|hold| {
+            json!({"status":"retained_pending_human","handoffId":hold.handoff_id,
+            "requestedAtMs":hold.requested_at_ms,"expiresAtMs":hold.expires_at_ms,
+            "humanUse":"unverified"})
+        })
+        .unwrap_or(json!({"status":"none_recorded"}));
+    let after = store.load_session_state()?;
+    if after != state {
+        return Err("browser_task_briefing_changed_retry_read".into());
+    }
+    Ok(
+        json!({"schemaVersion":"agent-browser.task-briefing.v1","taskId":task_id,
+        "profileId":task.profile_id,"browserId":task.browser_id,
+        "tabId":tab.map(|tab| &tab.id),"targetId":tab.map(|tab| &tab.target_id),
+        "contextEvidence":"retained_not_live","currentTargetState":if tab.is_some(){"retained_not_live"}else{"missing_or_conflicting"},
+        "lastActivityAtMs":task.last_activity_at_ms,"goal":goal,"lastVerifiedOutcome":outcome,
+        "artifacts":{"status":if state.task_artifact_references.contains_key(task_id){"recorded_references_not_revalidated"}else{"not_recorded"},
+            "references":state.task_artifact_references.get(task_id)},
+        "assistance":assistance,"control":{"epoch":control["epoch"],"owner":if control_recorded {control["owner"].clone()} else {json!("unverified")},
+            "pauseReads":control["pauseReads"],"cooperativeOnly":true},
+        "uncertainOperations":uncertain,"uncertaintyTruncated":uncertainty_truncated,
+        "legacyRequestAttribution":if unique_lane {"exact_retained_lane"} else {"ambiguous_excluded"},
+        "browserEffects":"none","liveObservation":"not_performed"}),
+    )
+}
+
 /// An opaque task identity resolves through the existing durable session state.
 pub(super) fn task_session(task_id: &str) -> Result<String, JsonRpcError> {
     let path = BrowserSessionSqliteStore::default_sqlite_path().map_err(issue)?;

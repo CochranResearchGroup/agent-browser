@@ -853,6 +853,22 @@ pub(super) async fn handle_http_request(
         }
     }
 
+    if method == "GET" && path.starts_with("/api/browser/tasks/") && path.ends_with("/briefing") {
+        if let Err(response) = dashboard_auth::require_authenticated(&headers, secure_cookie) {
+            let _ = stream.write_all(&response.into_http_bytes()).await;
+            return;
+        }
+        let encoded = path
+            .strip_prefix("/api/browser/tasks/")
+            .and_then(|p| p.strip_suffix("/briefing"))
+            .unwrap_or("");
+        let result = decode_path_segment(encoded, "task id")
+            .and_then(|id| crate::mcp::task_briefing_response(&id))
+            .map(|data| json!({"success":true,"data":data}).to_string());
+        write_json_result(&mut stream, result, "400 Bad Request").await;
+        return;
+    }
+
     if method == "GET" && path == "/api/service/contracts" {
         write_json_value(
             &mut stream,

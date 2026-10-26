@@ -49,6 +49,13 @@ pub(super) fn artifact(arguments: &Value, transport: &str) -> Result<Value, Json
         .sessions
         .get(task_id)
         .ok_or_else(|| issue("browser_artifact_task_missing"))?;
+    if state
+        .task_artifact_references
+        .get(task_id)
+        .is_some_and(|rows| rows.len() >= 256)
+    {
+        return Err(issue("browser_artifact_reference_capacity_reached"));
+    }
     let id = arguments["requestId"]
         .as_str()
         .filter(|id| !id.is_empty())
@@ -70,6 +77,34 @@ pub(super) fn artifact(arguments: &Value, transport: &str) -> Result<Value, Json
     policy::prepare_command(&state, &task.name, &mut command).map_err(issue)?;
     let path = command["path"].clone();
     let result = super::workflow::execute(command, transport)?;
+    // Publish only a successful operation's opaque reference into the existing
+    // owner aggregate. Never persist private paths or page/download contents.
+    let current = store.load_session_state().map_err(issue)?;
+    if current.sessions.get(task_id) != state.sessions.get(task_id) {
+        return Err(issue(
+            "browser_artifact_completed_reference_context_changed: do not repeat capture",
+        ));
+    }
+    let mut next = current.clone();
+    let reference = serde_json::from_value(json!({"artifactId":id,"kind":kind,
+        "handle":arguments["handle"],"observedAtMs":std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).map_err(|_| issue("browser_artifact_clock_invalid"))?.as_millis() as u64}))
+        .map_err(|_| issue("browser_artifact_reference_invalid"))?;
+    let references = next
+        .task_artifact_references
+        .entry(task_id.into())
+        .or_default();
+    if !references.iter().any(|row| row.artifact_id == id) {
+        references.push(reference);
+    }
+    // Write through a writable owner connection; the earlier inspection remains
+    // read-only. Optimistic fencing prevents loss of concurrent task updates.
+    let mut writer = BrowserSessionSqliteStore::default_sqlite().map_err(issue)?;
+    writer
+        .compare_and_save_session_state(&current, &next)
+        .map_err(|_| {
+            issue("browser_artifact_completed_reference_pending: do not repeat capture")
+        })?;
     Ok(super::tool_response_from_payload(
         "browser_artifact",
         transport,

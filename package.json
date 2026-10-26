@@ -331,7 +331,9 @@
     "test:dashboard-workspace-startup": "node scripts/test-dashboard-workspace-startup.cjs",
     "test:standalone-auth-bootstrap": "node scripts/test-standalone-auth-bootstrap.js",
     "test:owner-auth-source": "node scripts/test-owner-login-playbook.js && node scripts/test-owner-login-recovery.js && node scripts/test-owner-totp-continuation.js && node scripts/test-owner-number-matching.js",
-    "test:owner-auth-chrome": "node scripts/test-owner-login-chrome.js"
+    "test:owner-auth-chrome": "node scripts/test-owner-login-chrome.js",
+    "test:task-briefing-client": "node scripts/test-task-briefing-client.js && pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext ../packages/client/src/task-briefing.js",
+    "test:teaching-evidence": "node scripts/test-teaching-evidence.js"
   },
   "keywords": [
     "browser",

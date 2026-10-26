@@ -571,3 +571,26 @@ The `closed` number identifies the former attached-tab index;
 `targetRemovalVerified` confirms physical closure. Explicit release-only or
 `closePhysicalTab: false` requests release logical custody without claiming a
 physical close. Failure journal records include request correlation and source location.
+
+### Inspect a retained task
+
+Use `browser_command` with `taskId` and `action: "task_briefing"`, or
+`agent-browser --json mcp task-briefing TASK`. Both return the same compact
+briefing from existing owner stores without starting a daemon, opening a
+browser, navigating, focusing, taking control or acknowledging human use.
+
+The briefing includes exact retained profile/browser/target identity, original
+caller-supplied goal attribution, last recorded verified navigation, recorded
+artifact references, pending human assistance and original uncertain operation
+IDs. Retained context is not a live page observation or proof of task completion.
+Missing evidence stays missing; ambiguous legacy lane requests are excluded.
+URLs, page bodies, artifact paths and credentials are omitted. Artifact references
+recorded by `browser_artifact` describe completed operations, not continuing file
+availability. Older artifacts without recorded references remain unknown.
+
+Software clients can use `getTaskBriefing({baseUrl, taskId, headers})` from
+`@agent-browser/client/task-briefing`. Its authenticated read endpoint is
+`GET /api/browser/tasks/{encoded-task-id}/briefing`; supply the existing dashboard
+session cookie in the request headers. The helper rejects redirects and identity
+mismatches without retrying. A task retains at most 256 artifact references;
+new capture/download requests fail before browser effects when this capacity is full.

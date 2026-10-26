@@ -201,7 +201,7 @@ fn operation_schema(category: &str, operation: &str) -> Result<Value, super::Jso
         .find(|tool| tool["name"] == tool_name)
         .map(|tool| tool["inputSchema"].clone())
         .or_else(|| match operation {
-            "mode" | "back" | "forward" | "reload" | "service_resources" => {
+            "task_briefing" | "mode" | "back" | "forward" | "reload" | "service_resources" => {
                 Some(json!({"type":"object",
                 "additionalProperties":false,"properties":{},"required":[]}))
             }
