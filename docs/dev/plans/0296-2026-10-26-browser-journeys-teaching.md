@@ -5,7 +5,7 @@ Status: OPEN
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/466
 Integration branch: recipes/spec466-integration
 Integration base: 5770d693b23d51c9932574fa68e012a98029ce73
-Validated source tip:34d400f0ebcb4915cc93746e46586e69d37e5573; latest documentation checkpoint follows on recipes/spec466-integration / draft PR480.
+Validated source tip:b7a4a6a3f366cb59500293cd579e793e5c580613; latest documentation checkpoint follows on recipes/spec466-integration / draft PR480.
 
 ## Custody and scope
 
@@ -18,9 +18,9 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 | Ticket | Blockers | State | Owner | Branch / checkout | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | 467 | none | validated | root | recipes/spec466-integration / duplicate-403 | Reopened regression repairedff812bf0f; model2/MCP151/strictClippy/fmt PASS34d400f0e; tracker CLOSED after requalification |
-| 468 | 467 | running | root | recipes/spec466-integration / duplicate-403 | worker045dd85a; integration96fad35a2; combined existing-profile HTTPS PASS; reopened borrowed-attachment regression |
-| 469 | 467 | integrated | implement_469 | challenge/native-assistance-469 / spec466-469 | base42875e629; independent source/native fixture work |
-| 470 | 468,469 | pending | unassigned | pending | none |
+| 468 | 467 | validated | root | recipes/spec466-integration / duplicate-403 | worker045dd85a; integration96fad35a2; combined HTTPS + repaired Native019 PASS; tracker reclosed |
+| 469 | 467 | validated | implement_469 | challenge/native-assistance-469 / spec466-469 | workeref57c4a0; combinedb7 Native019 attached/CDP-free PASS; tracker CLOSED |
+| 470 | 468,469 | running | implement_469 | challenge/native-checkbox-470 / spec466-469 | baseb7a4a6a3f; bounded current Native fixture |
 | 471 | 470 | pending | unassigned | pending | none |
 | 472 | 471 | pending | unassigned | pending | none |
 | 473 | none | validated | implement_473 | recipes/teaching-evidence-473 / profile-proof | worker ea0e2f42ab59; integration67780a8b1; synthetic cases and shared docs validation pass; tracker CLOSED with explicit source/synthetic receipt |
@@ -229,3 +229,9 @@ Root468 repair bcddaec4e follows qualified018 one-NUL-argument shape, not guesse
 At clean sourceb7a4a6a3f366cb59500293cd579e793e5c580613, combined154 MCP, strict workspace Clippy/format, implementation/declaration types, all public clients and new grilling export, full service-client suite, policy11, changed links11 and docs41 routes pass.476 tracker CLOSED. Original source/media boundaries remain as in its receipt.
 
 Immutable source-only candidate e1e2b25d93e875ecbbbc75e30fb69414172a14a8ecd262065e2218bc981ab59d binds that clean source.469 runs one full019 attached plus actual managed CDP-free Native qualification with mode preflight and diagnostic-only disabled.477 uses this binary with a separately pinned clean JS consumer source for owned HTTPS report acceptance. No production install or external/private portal authority.468 remains reopened until attached replay qualifies;470 stays pending.
+
+## Requalified original task and Native assistance
+
+Native019 candidateb7/e1e2b25d93e875ecbbbc75e30fb69414172a14a8ecd262065e2218bc981ab59d passes both attached and actual managed CDP-free OCR/input/viewer/takeover-return/independent HTTPS clearance and protected access, same original task/link/peer, exactly1 completion each. Mode preflight cdp/reason null proves the observed collapsed-argv defect is repaired without bypass. DIAGNOSTIC_ACCEPT122.69s, full historical matrix and external Native producer source/binary equivalence unclaimed. Fresh001–019438 owned PID/start generations absent, unknown/private-process/Docker/unit residue0,34 X11 bindings clear; foreign preserved.468 reclosed and469 CLOSED after qualification.
+
+470 is ready from this validated integration source. Reuse clean auxiliary469 at8182a35a72df741d93895a4746627afa6c5737de, no pinned candidates/active builds; preserve old branch and create challenge/native-checkbox-470 fromb7a4a6a3f. Worker owns pure/current Native checkbox helper, dedicated tests/docs and existing owned fixture changes. Root owns shared catalog/output/package/general docs;477 owns teaching review and report fixture, disjoint. Scope is bounded passive observation and one policy-authorized registered checkbox attempt with exact original-operation retention and independent admission; unknown/stale/uncertain cases assist, never blind retry. Historical observation-age changes require current-seam reproduction first. No paused legacy provider execution or production/site benchmark. No new checkout.
