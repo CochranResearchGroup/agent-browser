@@ -34,10 +34,15 @@ export function createOwnerLoginPlaybook({browser,auth,checkpoints}){
    if(busy.has(key))throw Error('owner_login_busy');busy.add(key);
    const intent=JSON.stringify({...Object.fromEntries(intentFields.map(field=>[field,options[field]])),callerTaskId:auth.callerTaskId});
    /** @type {OwnerLoginCheckpoint|null} */ let checkpoint=null;
+   /** @type {Record<string,any>|undefined} */ let request;
    /** @param {string} status @param {string} reasonCode @param {string} effectState */
-   const result=(status,reasonCode,effectState)=>({schemaVersion:'agent-browser.routine-result.v1',routine:'login',taskId:options.taskId,guideId:options.guideId,status,reasonCode,effectState,...(checkpoint?{requestId:checkpoint.requestId,actionId:checkpoint.requestId,...checkpoint.receiving}:{}),contract});
+   const result=(status,reasonCode,effectState)=>({schemaVersion:'agent-browser.routine-result.v1',routine:'login',taskId:options.taskId,guideId:options.guideId,status,reasonCode,effectState,...(request?.browserActionEvidence?{browserActionEvidence:request.browserActionEvidence}:{}),...(checkpoint?{requestId:checkpoint.requestId,actionId:checkpoint.requestId,...checkpoint.receiving}:{}),contract});
    /** @param {Record<string,any>} value */
-   const bound=value=>checkpoint&&value?.requestId===checkpoint.requestId&&value.taskId===auth.callerTaskId&&value.sourceId===checkpoint.selected.sourceId&&value.recordId===checkpoint.selected.recordId&&value.origin===options.origin&&value.targetId===options.targetId&&value.expiresAt===options.expiresAt&&value.mode==='private'&&value.operation==='login';
+   const bound=value=>{
+    const e=value?.browserActionEvidence;
+    const evidenceBound=e===undefined||e?.contractVersion===1&&Object.keys(e).every(k=>['contractVersion','requestId','attemptId','generation','input','submission'].includes(k))&&e.requestId===value.requestId&&e.attemptId===value.attemptId&&e.generation===checkpoint?.receiving.generation&&['not_attempted','unknown','acknowledged'].includes(e.input)&&['not_attempted','unknown','acknowledged'].includes(e.submission);
+    return evidenceBound&&checkpoint&&value?.requestId===checkpoint.requestId&&value.taskId===auth.callerTaskId&&value.sourceId===checkpoint.selected.sourceId&&value.recordId===checkpoint.selected.recordId&&value.origin===options.origin&&value.targetId===options.targetId&&value.expiresAt===options.expiresAt&&value.mode==='private'&&value.operation==='login';
+   };
    /** @param {Record<string,any>} value */
    const sameTarget=value=>{const current=checkpoint;return !!current&&receivingFields.every(field=>value?.[field]===current.receiving[field]);};
    const verify=async()=>{
@@ -74,7 +79,7 @@ export function createOwnerLoginPlaybook({browser,auth,checkpoints}){
      await checkpoints.save(key,checkpoint);
     }
     const requestId=checkpoint.requestId;if(!requestId)throw Error('owner_request_binding_mismatch');
-    let request;try{request=await auth.helper('inspect_credential_request',{requestId:checkpoint.requestId});}catch(error){return result('waiting',errorCode(error)??'auth_unavailable',checkpoint.advanceIntent?'unknown':'no_effect');}
+    try{request=await auth.helper('inspect_credential_request',{requestId:checkpoint.requestId});}catch(error){return result('waiting',errorCode(error)??'auth_unavailable',checkpoint.advanceIntent?'unknown':'no_effect');}
     if(!bound(request))throw Error('owner_request_binding_mismatch');
     if(['denied','revoked','cancelled','expired'].includes(request.state))return result('failed',`auth_${request.state}`,request.attemptId||checkpoint.advanceIntent||checkpoint.outcomeUnknown?'unknown':'no_effect');
     if(request.attemptId||request.state==='unknown'||request.authentication!==undefined){
