@@ -500,6 +500,17 @@ try{workload:{
  step='attach-through-bots-http';const opened=await attachInBots(bot,primaryTaskKey,'Use app-owned synthetic browser');task=opened;borrowedTasks.push(opened);
  assert.equal(typeof opened.tabId,'string');assert.notEqual(opened.tabId,primaryTarget);assert.equal(opened.host.hostId,'bots');assert.equal(opened.host.participantId,'bot:'+bot.id);await continuity('first-attach');
  step='public-page-action';const snapshotBefore=await workflow('browser_snapshot',{taskId:opened.taskId});assert(JSON.stringify(snapshotBefore).includes('ATTACHMENT SYNTHETIC MARKER'));
+ if(process.env.HOSTED_SMOKE_MODE_PREFLIGHT==='1'){
+  step='public-page-mode-preflight';
+  const observed=await processIdentity(original.pid),executable=await realpath(`/proc/${original.pid}/exe`),argv=await readFile(`/proc/${original.pid}/cmdline`);
+  await save('pre-fill-owner-process-proof.json',{pid:observed.pid,start:observed.start,executable,
+   matchesOriginal:observed.start===original.start&&executable===original.executablePath,
+   completeArgvPresent:argv.length>0&&argv.at(-1)===0,argvBytes:argv.length,
+   scope:'Current synthetic app owner parent readback; not substituted for MCP mode observation'});
+  const mode=await publicWorkflow('browser_command',{taskId:opened.taskId,action:'mode'});
+  await save('pre-fill-browser-mode.json',mode);
+  if(mode.mode==='unverified')throw Object.assign(Error('Public browser mode unverified; no fill dispatched'),{code:'fixture_browser_mode_unverified'});
+ }
  await workflow('browser_fill',{taskId:opened.taskId,selector:'#control',value:'public MCP preserved app browser'});assert.equal(await primary.locator('#control').inputValue(),'public MCP preserved app browser');await continuity('public-action');
  step='shared-attach-through-bots-http';const shared=await attachInBots(second,'attachment-shared-'+randomUUID(),'Explicitly share app-owned synthetic browser');borrowedTasks.push(shared);assert.notEqual(shared.taskId,opened.taskId);assert.notEqual(shared.tabId,opened.tabId);assert.notEqual(shared.tabId,primaryTarget);assert.equal(shared.browserId,opened.browserId);assert.equal(acquired.length,1);await continuity('shared-attach');
  await save('attachment.json',{original,processProof,initialTargets,primaryTarget,peerTarget,tasks:borrowedTasks.map(t=>({taskId:t.taskId,browserId:t.browserId,tabId:t.tabId,profileId:t.profileId})),scope:'Actual Bots attach HTTP and trusted fresh attachment observation, public Agent Browser controls, app-routed durable handoff and actual Native viewer'});
