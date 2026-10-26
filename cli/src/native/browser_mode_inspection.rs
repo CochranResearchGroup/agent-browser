@@ -52,8 +52,17 @@ pub(crate) fn inspect(
         result["reason"] = json!("command_line_unavailable");
         return result;
     };
+    // Chrome can collapse its proc argv into a single space-delimited entry
+    // after startup. Normalize that shape only; ordinary argv entries may
+    // contain spaces inside a URL or value and must retain their boundaries.
+    let args: Vec<&str> = if args.len() == 1 {
+        args[0].split_ascii_whitespace().collect()
+    } else {
+        args.iter().map(String::as_str).collect()
+    };
     if args
         .iter()
+        .copied()
         .any(|arg| arg == "--type" || arg.starts_with("--type="))
     {
         result["reason"] = json!("not_browser_root");
@@ -69,9 +78,10 @@ pub(crate) fn inspect(
         .and_then(|path| std::path::Path::new(path).file_name())
         .map(|name| name.to_string_lossy().into_owned()));
     result["executable"]["family"] = json!(process.browser_family);
-    let debugging = args.iter().any(|arg| {
+    let debugging = args.iter().copied().any(|arg| {
         ["--remote-debugging-port", "--remote-debugging-pipe"]
             .iter()
+            .copied()
             .any(|flag| {
                 arg == flag
                     || arg
@@ -145,6 +155,41 @@ mod tests {
         assert!(!mode.to_string().contains("CANARY"));
         assert!(!mode.to_string().contains("/opt/"));
     }
+    #[test]
+    fn browser_mode_inspection_recognizes_collapsed_original_browser_arguments() {
+        // The owned CfT fixture exposes one NUL-delimited proc argument after
+        // startup, while retaining the full space-delimited browser command.
+        let observed = observation(&[
+            "/opt/chrome/chrome --remote-debugging-port=0 --user-data-dir=/private/profile",
+        ]);
+        let mode = inspect(
+            &browser("ws://127.0.0.1:1234"),
+            Some(&original()),
+            "app_provided",
+            |_| observed.clone(),
+        );
+        assert_eq!(mode["mode"], "cdp");
+        assert_eq!(mode["capabilities"]["debugging"], "enabled");
+        assert!(!mode.to_string().contains("/private/"));
+        let child = observation(&["/opt/chrome/chrome --type=renderer"]);
+        assert_eq!(
+            inspect(&browser(""), Some(&original()), "app_provided", |_| child
+                .clone())["mode"],
+            "unverified",
+            "collapsed renderer arguments cannot prove a browser root"
+        );
+        let ordinary = observation(&[
+            "/opt/chrome/chrome",
+            "https://example.test/ --remote-debugging-port=0",
+        ]);
+        assert_eq!(
+            inspect(&browser(""), Some(&original()), "managed", |_| ordinary
+                .clone())["mode"],
+            "cdp_free",
+            "spaces inside an ordinary URL argument are not switch boundaries"
+        );
+    }
+
     #[test]
     fn browser_mode_inspection_no_cdp_requires_complete_original_browser_evidence() {
         let observed = observation(&[

@@ -119,3 +119,9 @@ physical media, speech services and final478 acceptance. No broad code review or
 postreview remediation has run in this worker. Memory disposition: forbidden,
 because the delegated task explicitly excludes Graphiti writes. The parent owns
 final program closeout.
+
+## Combined borrowed attachment repair
+
+Existing-profile combined9436460eb recovery passed, but attached Native016 refused before fill.017 public mode retained_debugger_endpoint proved immutable process identity and complete argv passed.018 proved one NUL argument with embedded ASCII whitespace: whole-token debugger matchfalse, whitespace-token matchtrue, renderer matchfalse; stable before/after argv hash125f28ccdb82fcb422dcf89c59e60fb993b0a797c6cd5df2250eea1e715a89ca,499bytes and pinned executable8c599d43. No raw argv retained in product sources. Both diagnostic runs stopped before input.405 owned process generations absent across001–018; Docker/unit/private-process residue0 and32 X11 bindings clear.
+
+Root public-mode red: cargo-safe focused browser_mode_inspection_recognizes_collapsed_original_browser_arguments returned unverified rather than cdp. Normalize only the single collapsed proc-argument shape before existing switch checks; ordinary argument boundaries and all immutable identity, root-process and stable-observation fences remain. Initial green compile found a Rust iterator reference mismatch, corrected before any pass claim. Focused browser_mode_inspection green6 passes, including public CLI/MCP, collapsed renderer refusal, ordinary URL argument boundaries, replaced identity and changed-task refusal. Strict/combined source and real Native requalification remain pending;468 stays reopened until those gates pass.
