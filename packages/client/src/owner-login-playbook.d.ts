@@ -5,12 +5,15 @@ export interface OwnerLoginOptions {
  query:string;accountHint:string;origin:string;targetId:string;purpose:string;
  expiresAt:number;idempotencyKey:string;
  profileId?:string;browserId?:string;tabId?:string;generation?:string;
+ /** Read back an existing owner checkpoint; never create a request or private use. */
+ reconcile?:boolean;
 }
 export interface OwnerLoginCheckpoint {
  contract:'auth-receipts-owner-v1';intent:string;
+ issuer?:'auth-receipts';callerTaskId?:string;
  receiving:Record<string,string>;
  selected:{sourceId:string;recordId:string};preparedPlan:Record<string,unknown>;
- requestId?:string;advanceIntent?:boolean;outcomeUnknown?:boolean;
+ requestId?:string;advanceIntent?:boolean;outcomeUnknown?:boolean;refusalCode?:string;
 }
 export interface OwnerLoginDependencies {
  browser:{
