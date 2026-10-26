@@ -37,6 +37,8 @@ capabilities require Auth installation/enrollment diagnostics, not direct vault
 access or a legacy auth fallback. Private discovery and bearer material stay in
 the SDK. Owner decisions, required delivery and exact browser binding still gate
 input. Never repeat an unknown credential attempt.
+Before private use is attempted, owner login may renew a typed `plan_stale` hold caused by owner-review delay. Renewal requires complete, unchanged guide, control, expected-state and task/profile/browser/tab bindings with the same receiving generation. The fresh plan is validated and durably saved against the original request before dispatch intent. Missing or changed proof stays held; attempted or unknown input never renews a plan or creates replacement approval.
+
 Use `createOwnerLoginPlaybook` with trusted browser routines, connected `auth` and
 metadata checkpoints for new requests. `createOwnerTotpContinuation` composes
 Auth's observed factor action after password/SSO; number matching follows the

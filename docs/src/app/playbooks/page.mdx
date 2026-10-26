@@ -82,6 +82,8 @@ number-matching or accessibility qualification. Neither factory returns codes or
 creates policy. Unknown input is retained without a new credential request.
 Owner login `reconcile: true` only reads an existing checkpoint/request.
 
+Before private use is attempted, owner login may renew a typed `plan_stale` hold caused by owner-review delay. Renewal requires complete, unchanged guide, control, expected-state and task/profile/browser/tab bindings with the same receiving generation. The fresh plan is validated and durably saved against the original request before dispatch intent. Missing or changed proof stays held; attempted or unknown input never renews a plan or creates replacement approval.
+
 Optional `browserActionEvidence` v1 describes protected input and submission
 acknowledgement for the exact request/attempt/generation. Dispatch is not server
 acceptance or authenticated identity, and this evidence never grants retry rights.
