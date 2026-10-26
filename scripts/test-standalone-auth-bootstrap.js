@@ -22,5 +22,8 @@ try{
  const module=pathToFileURL(resolve('packages/client/src/hosted-auth-helper.js')).href;
  const child=await promisify(execFile)(process.execPath,['--input-type=module','-e',`import {connectHostedAuthHelper} from ${JSON.stringify(module)};const x=await connectHostedAuthHelper();if(x.installation.product!=='auth-receipts')throw Error('Wrong producer');const c=await x.helper('auth_capabilities',{});if(c.sharedOwnerAuthority!==true)throw Error('Wrong authority');console.log('verified standalone');`],{env:{...process.env,HOME:home,XDG_DATA_HOME:join(home,'.local/share'),CODEX_THREAD_ID:'synthetic-thread',AUTH_RECEIPTS_DISCOVERY_FILE:file},encoding:'utf8'});
  assert.match(child.stdout,/verified standalone/);
- console.log('Default standalone Auth SDK discovery succeeds with Bots absent');
+ await rm(join(data,'current'));
+ const missing=await promisify(execFile)(process.execPath,['--input-type=module','-e',`import {connectHostedAuthHelper} from ${JSON.stringify(module)};try{await connectHostedAuthHelper();throw Error('Unexpected connection');}catch(e){if(e.code!=='auth_unavailable')throw e;console.log('missing SDK held');}`],{env:{...process.env,HOME:home,XDG_DATA_HOME:join(home,'.local/share'),CODEX_THREAD_ID:'synthetic-thread'},encoding:'utf8'});
+ assert.match(missing.stdout,/missing SDK held/);
+ console.log('Default standalone Auth SDK discovery succeeds with Bots absent; missing SDK holds');
 }finally{await host?.close();await rm(root,{recursive:true,force:true});}
