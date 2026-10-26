@@ -110,3 +110,9 @@ provider, ingress, authentication or release change. Parent integration owns the
 shared help/README/skill/context pointers and the final ticket disposition.
 
 Memory disposition: forbidden. Parent delegated scope excludes Graphiti writes.
+
+## Combined019 qualified checkpoint
+
+Clean sourceb7a4a6a3f366cb59500293cd579e793e5c580613 and immutable candidate SHA256 e1e2b25d93e875ecbbbc75e30fb69414172a14a8ecd262065e2218bc981ab59d pass repaired mode preflight and both actual attached/managed CDP-free Native OCR, viewer input, explicit takeover/return, independent HTTPS clearance/access, retained task/link and peer preservation, exactly1 completion each. DIAGNOSTIC_ACCEPT122.69s qualifies these workflows; full P279 matrix and external Native producer source/binary equivalence remain unclaimed.
+
+Combined154 MCP, strict Clippy/format, mode6, clients/types/exports and41-route docs pass.019 final cleanup qualifies438 exact owned process generations absent across001–019, unknown/private-process/Docker/unit residue0,34 X11 bindings clear, no foreign signals. Both468 and469 close after this qualification; earlier failures, reopening and their original evidence remain preserved. No production installation or private account/provider benchmark.
