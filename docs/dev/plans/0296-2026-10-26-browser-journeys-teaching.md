@@ -18,7 +18,7 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 | Ticket | Blockers | State | Owner | Branch / checkout | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | 467 | none | validated | root | recipes/spec466-integration / duplicate-403 | Reopened regression repairedff812bf0f; model2/MCP151/strictClippy/fmt PASS34d400f0e; tracker CLOSED after requalification |
-| 468 | 467 | validated | implement_468 | platform/task-recovery-468 / spec466-468 | worker045dd85a; integration96fad35a2; combined9436460eb source+HTTPS PASS; tracker CLOSED |
+| 468 | 467 | running | root | platform/task-recovery-468 / spec466-468 | worker045dd85a; integration96fad35a2; combined existing-profile HTTPS PASS; reopened borrowed-attachment regression |
 | 469 | 467 | integrated | implement_469 | challenge/native-assistance-469 / spec466-469 | base42875e629; independent source/native fixture work |
 | 470 | 468,469 | pending | unassigned | pending | none |
 | 471 | 470 | pending | unassigned | pending | none |
@@ -213,3 +213,7 @@ Combined9436460eb candidate passed468 replay: four successful replies lost witho
 Run016 against combined9436460eb failed before challenge/viewer phase: public browser_fill refused browser_task_operation_process_unverified. Aggregate INCOMPLETE, not an uncertain input replay. Trusted app attachment retained immutable PID/start/executable/family proof and all attachment/profile/endpoint/desktop joins; original failure-time mode.reason was not preserved, so it is unknown. No product guard change or inferred mode proof. Bounded017 diagnostic captures existing public mode before fill and stops on unverified evidence.469 stays OPEN;470 remains pending. Separate468 existing-profile recovery qualification remains valid within its actual scope.
 
 Fresh001–016 teardown audit:367 positively owned generations absent, unknown/private-process/Docker/unit residue0. Earlier failed run and its ambiguity remain in private receipts; no foreign signals. Full historical matrix remains unclaimed.
+
+## Borrowed attachment regression reopened468
+
+Run017 preserves mode=unverified, reason=retained_debugger_endpoint on the exact original app-provided process. Identity/family/complete argv passed; debugging flag recognition did not. It stopped before fill, ambiguous=false. No parser change is justified until argv shape is qualified;018 captures only token-shape diagnostics on a new owned fixture and stops before input if unverified.468 reopened; root owns the repair, worker468 now owns independently ready477. Do not infer a lost original identity or weaken its guard from this mode result.
