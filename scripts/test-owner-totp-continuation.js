@@ -93,22 +93,23 @@ for(const mode of ['unsupported','missing-account','wrong-account','generation',
 }
 console.log('Required delivery, factor classification/account, exact generation, owner identity and company verification remain enforced');
 
-{
- const f=await fixture({withPassword:true});
+for(const loseInput of [false,true]){
+ const f=await fixture({withPassword:true,loseInput});
  try{
   const found=await f.auth.helper('discover_credentials',{query:f.options.query,accountHint:f.options.accountHint});
   const original=await f.auth.requestLogin({sourceId:found.selected.sourceId,recordId:found.selected.recordId,origin:f.options.origin,targetId:f.options.targetId,purpose:'Synthetic preceding password attempt',expiresAt:f.options.expiresAt,idempotencyKey:'preceding-password'});
   f.respond();const attempted=await f.auth.advanceLogin({requestId:original.requestId});assert.ok(attempted.attemptId);assert.equal(attempted.state,'unknown');
-  const flow=createOwnerTotpContinuation({auth:f.auth,browser:f.browser,checkpoints:f.checkpoints});
+  let flow=createOwnerTotpContinuation({auth:f.auth,browser:f.browser,checkpoints:f.checkpoints});
   const options={...f.options,originalRequestId:original.requestId};
   const pending=await flow.advance(options);assert.equal(pending.reasonCode,'approval_required');assert.equal(pending.originalRequestId,original.requestId);
-  f.respond();const completed=await flow.advance(options);
+  f.respond();let completed=await flow.advance(options);
+  if(loseInput){assert.equal(completed.effectState,'unknown');assert.equal(f.state.factorInputs,1);await f.restart();flow=createOwnerTotpContinuation({auth:f.auth,browser:f.browser,checkpoints:f.checkpoints});completed=await flow.advance(options);}
   assert.equal(completed.status,'completed');assert.equal(completed.originalRequestId,original.requestId);assert.equal(f.state.inputs,1);assert.equal(f.state.factorInputs,1);
   const factor=await f.auth.helper('inspect_credential_request',{requestId:completed.requestId});
-  assert.equal(factor.authenticationBinding.account,'owner@example.test');assert.equal(factor.continuationOf,undefined,'Browser metadata linkage does not invent an unsupported provider predecessor');
+  assert.equal(factor.authenticationBinding,undefined);assert.equal(factor.continuationOf,original.requestId,'Same-target factor must transfer original receiving custody');assert.equal(factor.factorAccountId,original.recordId);
  }finally{await f.close();}
 }
-console.log('A preceding password attempt remains linked by exact browser metadata without inventing an Auth predecessor field');
+console.log('A preceding password attempt transfers exact provider continuation custody into the selected factor');
 
 {
  const f=await fixture();

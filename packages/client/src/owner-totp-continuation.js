@@ -13,6 +13,8 @@ const errorCode=error=>error&&typeof error==='object'&&'code' in error&&typeof e
 /** Advance Auth's public TOTP observation/continuation workflow. Private material,
  * decisions and receiving privacy stay with Auth. Durable browser metadata keeps
  * the original continuation/request across restart; unknown input is readback-only.
+ * Password continuations use Auth's validated original-request custody transfer;
+ * SSO continuations use the returned continue_authentication action.
  * @param {OwnerTotpDependencies} dependencies
  */
 export function createOwnerTotpContinuation({auth,browser,checkpoints}){
@@ -30,14 +32,14 @@ export function createOwnerTotpContinuation({auth,browser,checkpoints}){
    if(busy.has(key))throw Error('owner_totp_busy');busy.add(key);
    const intent=JSON.stringify({...Object.fromEntries(intentFields.map(field=>[field,options[field]])),callerTaskId:auth.callerTaskId});
    /** @type {OwnerTotpCheckpoint|null} */ let checkpoint=null;
-   /** @type {string|undefined} */ let originalAccount;
+   /** @type {Record<string,any>|undefined} */ let originalRequest;
    /** @type {number|undefined} */ let originalDeadline;
    /** @param {string} status @param {string} reasonCode @param {string} effectState */
    const result=(status,reasonCode,effectState)=>({schemaVersion:'agent-browser.routine-result.v1',routine:'login',method:'totp',contract,taskId:options.taskId,guideId:options.guideId,status,reasonCode,effectState,...(options.originalRequestId?{originalRequestId:options.originalRequestId}:{}),...(checkpoint?{requestId:checkpoint.requestId,actionId:checkpoint.requestId,continuationId:checkpoint.continuationId,...checkpoint.receiving}:{})});
    /** @param {Record<string,any>} value */
    const sameTarget=value=>{const current=checkpoint;return !!current&&receivingFields.every(field=>value?.[field]===current.receiving[field]);};
    /** @param {Record<string,any>} value */
-   const bound=value=>!!checkpoint&&value?.requestId===checkpoint.requestId&&value.taskId===auth.callerTaskId&&value.sourceId==='mfa'&&value.recordId===checkpoint.recordId&&value.origin===options.origin&&value.targetId===options.targetId&&value.mode==='private'&&value.operation==='login'&&value.credentialType==='otp'&&value.expiresAt===checkpoint.expiresAt&&value.authenticationBinding?.continuationId===checkpoint.continuationId&&value.authenticationBinding?.method==='totp'&&value.authenticationBinding?.generation===checkpoint.receiving.generation&&(originalAccount===undefined||value.authenticationBinding?.account?.trim().toLowerCase()===originalAccount)&&(checkpoint.authenticationBinding===undefined||JSON.stringify(value.authenticationBinding)===JSON.stringify(checkpoint.authenticationBinding));
+   const bound=value=>!!checkpoint&&value?.requestId===checkpoint.requestId&&value.taskId===auth.callerTaskId&&value.sourceId==='mfa'&&value.recordId===checkpoint.recordId&&value.origin===options.origin&&value.targetId===options.targetId&&value.mode==='private'&&value.operation==='login'&&value.credentialType==='otp'&&value.expiresAt===checkpoint.expiresAt&&(originalRequest?value.continuationOf===originalRequest.requestId&&value.factorAccountId===originalRequest.recordId&&['organization','group','delegation'].every(field=>value[field]===originalRequest?.[field])&&value.authenticationBinding===undefined:['continuationOf','factorAccountId'].every(field=>value[field]===undefined)&&value.authenticationBinding?.continuationId===checkpoint.continuationId&&value.authenticationBinding?.method==='totp'&&value.authenticationBinding?.generation===checkpoint.receiving.generation)&&(checkpoint.authenticationBinding===undefined||JSON.stringify(value.authenticationBinding)===JSON.stringify(checkpoint.authenticationBinding));
    const verify=async()=>{
     let observed;try{observed=await browser.verifyLogin(options);}catch{return result('waiting','receiving_unavailable','unknown');}
     if(!sameTarget(observed))return result('adaptation_required','task_target_changed','unknown');
@@ -51,7 +53,7 @@ export function createOwnerTotpContinuation({auth,browser,checkpoints}){
      let original;try{original=await auth.helper('inspect_credential_request',{requestId:options.originalRequestId});}catch(error){return result('waiting',errorCode(error),checkpoint?.useIntent?'unknown':'no_effect');}
      if(original.requestId!==options.originalRequestId||original.taskId!==auth.callerTaskId||original.origin!==options.origin||original.targetId!==options.targetId||original.operation!=='login'||original.mode!=='private'||!original.attemptId||['denied','revoked','cancelled','expired'].includes(original.state))return result('waiting','original_request_binding_mismatch',checkpoint?.useIntent?'unknown':'no_effect');
      if(!nonempty(original.account)||!Number.isSafeInteger(original.expiresAt))return result('waiting','original_account_unavailable',checkpoint?.useIntent?'unknown':'no_effect');
-     originalAccount=original.account.trim().toLowerCase();originalDeadline=original.expiresAt;
+     originalRequest=original;originalDeadline=original.expiresAt;
     }
     if(!checkpoint){
      let observed;try{observed=await browser.verifyLogin(options);}catch{return result('waiting','receiving_unavailable','no_effect');}
@@ -74,9 +76,9 @@ export function createOwnerTotpContinuation({auth,browser,checkpoints}){
      checkpoint={...checkpoint,recordId:selected};await checkpoints.save(key,checkpoint);
     }
     if(!checkpoint.requestId){
-     let requested;try{requested=await auth.helper('continue_authentication',{continuationId:checkpoint.continuationId,idempotencyKey:options.idempotencyKey,purpose:options.purpose,recordId:checkpoint.recordId});}catch(error){return result('waiting',errorCode(error),'no_effect');}
+     let requested;try{requested=originalRequest?await auth.helper('request_credential',{continuationOf:originalRequest.requestId,idempotencyKey:options.idempotencyKey,sourceId:'mfa',recordId:checkpoint.recordId,origin:options.origin,credentialType:'otp',operation:'login',mode:'private',targetId:options.targetId,purpose:options.purpose,expiresAt:checkpoint.expiresAt,...Object.fromEntries(['organization','group','delegation'].filter(field=>originalRequest?.[field]!==undefined).map(field=>[field,originalRequest?.[field]]))}):await auth.helper('continue_authentication',{continuationId:checkpoint.continuationId,idempotencyKey:options.idempotencyKey,purpose:options.purpose,recordId:checkpoint.recordId});}catch(error){return result('waiting',errorCode(error),'no_effect');}
      checkpoint={...checkpoint,requestId:requested.requestId};if(!bound(requested))throw Error('owner_factor_binding_mismatch');
-     checkpoint={...checkpoint,authenticationBinding:structuredClone(requested.authenticationBinding)};await checkpoints.save(key,checkpoint);
+     checkpoint={...checkpoint,...(requested.authenticationBinding?{authenticationBinding:structuredClone(requested.authenticationBinding)}:{})};await checkpoints.save(key,checkpoint);
     }
     const requestId=checkpoint.requestId;if(!requestId)throw Error('owner_factor_binding_mismatch');
     let request;try{request=await auth.helper('inspect_credential_request',{requestId});}catch(error){return result('waiting',errorCode(error),checkpoint.useIntent?'unknown':'no_effect');}

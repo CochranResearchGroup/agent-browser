@@ -20,8 +20,8 @@ export interface OwnerTotpDependencies {
  checkpoints:{load(key:string):Promise<OwnerTotpCheckpoint|null>;save(key:string,value:OwnerTotpCheckpoint):Promise<void>};
 }
 /** Compose Auth's observed TOTP need into its original private factor request.
- * An optional originalRequestId links browser workflow metadata; it does not
- * assert a provider predecessor field unsupported by continue_authentication. */
+ * An originalRequestId uses Auth's validated continuationOf request contract
+ * to transfer original receiving custody. SSO uses continue_authentication. */
 export function createOwnerTotpContinuation(dependencies:OwnerTotpDependencies):{
  advance(options:OwnerTotpOptions):Promise<Record<string,any>>;
 };
