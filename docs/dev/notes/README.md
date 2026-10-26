@@ -255,3 +255,5 @@ active backlog.
 - [P296 teaching review checkpoint](0296-teaching-review-475-source-receipt.md): immutable lineage, operator decisions and per-evidence availability.
 
 - [P296 Native challenge checkpoint](0296-challenge-assistance-469-source-receipt.md): same-frame classification and owned attached/CDP-free human assistance.
+
+- [P296 focused grilling checkpoint](0296-teaching-grilling-476-source-receipt.md): source-linked rounds, attributable answers and interruption recovery.

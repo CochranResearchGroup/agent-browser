@@ -140,9 +140,9 @@ Diagnostics retain selection query fields. Rail presence revalidates at 250/500/
 Use browser_command actions task_briefing and task_operation (params.requestId)
 for retained context and original receipts. Addressed CDP effects accept stable
 requestId; pending/uncertain never permits automatic retry. Read [recovery](references/session-management.md).
-Software helpers live in @agent-browser/client/task-briefing.
 Read [evidence](../../docs/src/app/teaching-evidence/page.mdx) for scoped recordings/Speech.
-For useful inert drafts and explicit operator review, read [teaching drafts](references/teaching-drafts.md)
-and [review](references/teaching-review.md). Preserve gaps and fresh-repeat requirements.
+For inert drafts, review and questions, read [drafts](references/teaching-drafts.md),
+[review](references/teaching-review.md) and [grilling](references/teaching-grilling.md).
+Preserve gaps; recommendations are not consent. Fresh-repeat validation is required.
 
-Native challenge: CLI reference.
+Native: CLI reference.

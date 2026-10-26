@@ -7447,3 +7447,11 @@ separate review and fresh-repeat qualification. See the
 ### Native challenge assistance
 
 Use native_capture with classifyChallenges to classify bounded same-frame OCR without exposing raw recognized text. The challenge-assistance client reuses the original opaque handoff and explicit Native takeover/return. Challenge clearance and protected-site admission require independent checks. See the [challenge assistance guide](docs/src/app/challenge-assistance/page.mdx).
+
+### Clarify teaching candidates
+
+Prepare a useful draft first, then use @agent-browser/client/teaching-grilling
+for source-linked dependency-ready questions and authenticated operator answers
+in the existing versioned candidate. Recommendations are not consent; ordinary
+review and fresh-repeat validation remain required. See the
+[teaching grilling guide](docs/src/app/teaching-grilling/page.mdx).

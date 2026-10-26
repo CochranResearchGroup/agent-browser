@@ -54,6 +54,10 @@
     "./challenge-assistance": {
       "types": "./src/challenge-assistance.d.ts",
       "import": "./src/challenge-assistance.js"
+    },
+    "./teaching-grilling": {
+      "types": "./src/teaching-grilling.d.ts",
+      "import": "./src/teaching-grilling.js"
     }
   },
   "scripts": {

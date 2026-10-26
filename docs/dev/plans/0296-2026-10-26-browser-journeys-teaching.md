@@ -26,7 +26,7 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 | 473 | none | validated | implement_473 | recipes/teaching-evidence-473 / profile-proof | worker ea0e2f42ab59; integration67780a8b1; synthetic cases and shared docs validation pass; tracker CLOSED with explicit source/synthetic receipt |
 | 474 | 473 | validated | implement_473 | recipes/teaching-draft-474 / profile-proof | worker243b7405; integration25dd69054; combinedMCP151/strict/docs/client PASS; tracker CLOSED after source qualification |
 | 475 | 474 | validated | implement_473 | recipes/teaching-review-475 / profile-proof | worker5e226f17+89da499b; source9436460eb gates PASS; tracker CLOSED |
-| 476 | 475 | running | implement_473 | recipes/teaching-grilling-476 / profile-proof | base9436460eb; new grilling module consumes review.save |
+| 476 | 475 | integrated | implement_473 | recipes/teaching-grilling-476 / profile-proof | workerace432be; integratione39dc8dae; shared gates pending |
 | 477 | 475 | running | implement_468 | recipes/report-repeat-477 / spec466-468 | base9436460eb; fresh repeat and promotion |
 | 478 | 468,469,476,477 | pending | unassigned | pending | requires real operator narration and scoped portal |
 
@@ -217,3 +217,9 @@ Fresh001–016 teardown audit:367 positively owned generations absent, unknown/p
 ## Borrowed attachment regression reopened468
 
 Run017 preserves mode=unverified, reason=retained_debugger_endpoint on the exact original app-provided process. Identity/family/complete argv passed; debugging flag recognition did not. It stopped before fill, ambiguous=false. No parser change is justified until argv shape is qualified;018 captures only token-shape diagnostics on a new owned fixture and stops before input if unverified.468 reopened; root owns the repair, worker468 now owns independently ready477. Do not infer a lost original identity or weaken its guard from this mode result.
+
+## Grilling integration and collapsed argv source repair
+
+476 ace432be6786257fff7b87448a529141d530165f integrated e39dc8dae with agreed optional clarification and fresh-repeat claim contracts. Worker154 MCP, strict Clippy/fmt, public synthetic authenticated-answer/killed-child recovery and implementation/declaration types pass. Static labels remain inert; this is not physical human participation. Only task identifier bounds expand to4000; actual length100 example, synthetic length186 and oversized refusal are distinct from477 future actual long-profile evidence.
+
+Root468 repair bcddaec4e follows qualified018 one-NUL-argument shape, not guessed missing identity. Public-mode RED unverified versus cdp, corrected minimal shape normalization GREEN6. Fixture-only observation commits04cf91573/8182a35a integrated685d28bdb/4d1ffad9d. Immutable identity and ordinary argv boundaries remain; collapsed renderer still refuses. All001–018 cleanup405 process generations absent, unknown/Docker/unit/private-process residue0,32 X11 bindings clear. Combined strict/MCP/client/docs source gates and actual attached/CDP-free Native replay remain pending before468/469 closure.

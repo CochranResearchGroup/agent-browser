@@ -471,3 +471,10 @@ sample retains its original identity and elapsed age; serving it does not renew
 confidence, tab lifetime or viewing authority. Unknown evidence stays unknown.
 
 **Native challenge assistance**: Bounded current OCR classification and explicit human takeover/return through the existing Native handoff. Clearance and protected application admission are separate checks; classification grants no attempt authority.
+
+**Clarification question**: An unresolved source-linked material choice whose
+prerequisite answers must be verified before it is ready to ask.
+
+**Clarification answer**: A receiver-authenticated event bound to the exact
+question and candidate digests. It is independent of procedure approval;
+unverified answer history blocks further rounds without inventing consent.

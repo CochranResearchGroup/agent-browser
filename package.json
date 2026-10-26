@@ -338,7 +338,8 @@
     "test:task-operation-client": "node scripts/test-task-operation-client.js",
     "smoke:task-operation-recovery": "node scripts/smoke-task-operation-recovery.mjs",
     "test:teaching-review": "node scripts/test-teaching-review.js",
-    "test:challenge-assistance": "node scripts/test-challenge-assistance.js"
+    "test:challenge-assistance": "node scripts/test-challenge-assistance.js",
+    "test:teaching-grilling": "node scripts/test-teaching-grilling.js"
   },
   "keywords": [
     "browser",
