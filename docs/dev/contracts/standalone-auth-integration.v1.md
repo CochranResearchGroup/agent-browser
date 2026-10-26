@@ -168,7 +168,10 @@ their ordinary continuity and ownership rules.
   Missing compatibility becomes a typed hold with retained recovery evidence.
 - For TOTP, observe current authentication need, then compose Auth's returned
   continue-authentication action into its ordinary request/approval/private-use
-  lifecycle. This can start after SSO/session reuse. Link factor requests to the
+  lifecycle after SSO/session reuse. When continuing a retained password attempt,
+  use Auth’s existing validated continuationOf request contract after current
+  factor observation so the exact held receiving resource transfers with it.
+  The two provider request contracts remain distinct. Link factor requests to the
   original browser workflow and verify the same account/recipient; unknown factor
   input reconciles that original factor request rather than generating a new code.
 - Existing private-attempt following handles supported number-matching observation
