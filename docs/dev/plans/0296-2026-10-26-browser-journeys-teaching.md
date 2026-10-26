@@ -27,7 +27,7 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 | 474 | 473 | validated | implement_473 | recipes/teaching-draft-474 / profile-proof | worker243b7405; integration25dd69054; combinedMCP151/strict/docs/client PASS; tracker CLOSED after source qualification |
 | 475 | 474 | validated | implement_473 | recipes/teaching-review-475 / profile-proof | worker5e226f17+89da499b; source9436460eb gates PASS; tracker CLOSED |
 | 476 | 475 | validated | implement_473 | recipes/teaching-grilling-476 / profile-proof | workerace432be; integratione39dc8dae; combinedb7a4a6a3f gates PASS; tracker CLOSED |
-| 477 | 475 | running | implement_468 | recipes/report-repeat-477 / spec466-468 | base9436460eb; fresh repeat and promotion |
+| 477 | 475 | integrated | implement_468 | recipes/report-repeat-477 / spec466-468 | worker0d83b36a7; merged source identical to tested consumerdfe37e641; combined gates pending |
 | 478 | 468,469,476,477 | pending | unassigned | pending | requires real operator narration and scoped portal |
 
 ## Validation and bounded review
@@ -251,3 +251,11 @@ Parent475 independently reproduced echo-only reader falsely approving on ordinar
 Date21dfd745d/91bea15c4f9b24846480d4178eed0dfa2189a3a439fc24bb442eafe7505e10a5 passes actual477 June value/input/change checks. Its report run then refuses before export because the runtime discarded already-qualified local attachment proof before the download adapter. Receipt report477-c27fd8c8-218f-47b2-88ac-281c39915a5c.json preserves report1/exports0 and cleanup0. Existing README already promises qualified existing-profile downloads; this is lost proof plumbing, not a new blob/data/remote download mode.
 
 Root adds a private download-only process/endpoint slot populated solely by existing verified local attach checks. Download revalidates that original process and endpoint; browser_pid/lifecycle/launcher semantics remain unchanged. Missing/changed/unverified sources still refuse; no caller PID authority. Current provider-free runtime gate31 passed,8 browser tests explicitly ignored; actual report verification still required. An inherited-disabled date case independently failed successfulfill on a disabled fieldset, then passed using the browser's disabled-state predicate; invalid/read-only/ordinary-text/date-event cases stay green.
+
+## Reviewed report integration
+
+Worker0d83b36a77eea98fac058eeff2c2c2ae5651578d merged serially. Shared476 provider changes were identical and produced no Rust difference from22a; parent475 binding-only fix auto-reconciled. Runtime-tested review.js/d.ts and smoke script blobs equal dfe37e6416837d645d780680157d2c9805b3c619. Root retains the independent ordinary-review echo regression alongside477 promoted-review test. Merged review/grilling and strong implementation/declaration checks pass; shared docs gates pending.
+
+Actual receipt report477-9bc83734-014a-4eac-9328-9bd49f9ded9b.json binds clean consumerdfe37e641 and binary22a75625932a21c1508739a95ef712b37215a7a8/d69e3ce33bd8a4dff6d70c7c826874dd434ce8cd239d3f5a8b9289cc0e586754. Wrong-May CSV rejected despite June UI/download; correct June artifact96a66dfd7fb0d1fcdd6525a004170b80042b46794e95f6d0c010ebd1ab64a3ed, actual lost successful submit reply produces submission1/export1/no replay. Only independent verifier proof plus operator event permits promotion; missing/changed proof revokes reuse. Changed Export control assists with exports0; peer/prior accepted/original template preserved. Fresh owned OS0 and private home removed. Earlier HTTP/proxy harness failures remain preserved without invented counters. Physical narration/private account/production installation remain478.
+
+At22a root154 MCP, download-artifact4, runtime31 (8 explicitly ignored real-browser cases), date E2E1, strict Clippy/fmt, help/parity/handoff/link and docs41 gates pass. Source22a remains the runtime pin; later output/help/doc changes require their own applicable source gates, not a claim of a new installed runtime.

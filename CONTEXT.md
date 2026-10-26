@@ -482,3 +482,11 @@ unverified answer history blocks further rounds without inventing consent.
 **Download source proof**: A currently verified local browser process and endpoint.
 A qualified attachment retains its original PID/start/executable proof for live
 revalidation; that proof grants no child-process lifecycle ownership.
+
+**Fresh-repeat receipt**: An existing receiving-application verifier's proof for
+an exact executed candidate/task, requested dates, report and actual artifact.
+Its verification assertions are independently read, not supplied as request labels.
+
+**Teaching promotion**: An immutable same-store lineage step selected only after
+revalidated operator review and fresh-repeat proof. Previous accepted bytes remain;
+stock MCP treats saved promotion metadata as inert.

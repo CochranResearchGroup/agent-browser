@@ -138,10 +138,11 @@ Diagnostics retain selection query fields. Rail presence revalidates at 250/500/
 ### Retained tasks and teaching
 
 Use browser_command task_briefing or task_operation (params.requestId) for
-original context/receipts. Addressed CDP requestId stays stable; pending/uncertain
+context/receipts. Keep CDP requestId stable; pending/uncertain
 never permits automatic replay. See [recovery](references/session-management.md).
-Teaching uses scoped recordings/Speech [evidence](../../docs/src/app/teaching-evidence/page.mdx),
+Teaching: scoped A/V/Speech [evidence](../../docs/src/app/teaching-evidence/page.mdx),
 inert [drafts](references/teaching-drafts.md), explicit [review](references/teaching-review.md)
-and [grilling](references/teaching-grilling.md). Keep gaps; proposals are not consent.
-Require fresh-repeat validation. Date fills use YYYY-MM-DD.
+[grilling](references/teaching-grilling.md), [repeat](references/report-repeat.md).
+Keep gaps; proposals are not consent.
+Require fresh-repeat proof before promotion. Dates use YYYY-MM-DD.
 Downloads require live local process proof. Native: CLI reference.

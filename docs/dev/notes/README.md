@@ -257,3 +257,5 @@ active backlog.
 - [P296 Native challenge checkpoint](0296-challenge-assistance-469-source-receipt.md): same-frame classification and owned attached/CDP-free human assistance.
 
 - [P296 focused grilling checkpoint](0296-teaching-grilling-476-source-receipt.md): source-linked rounds, attributable answers and interruption recovery.
+
+- [P296 reviewed report repeat](0296-report-repeat-477-source-receipt.md): independent CSV/date verification, refusal, original effects and immutable promotion.

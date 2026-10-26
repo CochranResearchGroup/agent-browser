@@ -339,7 +339,9 @@
     "smoke:task-operation-recovery": "node scripts/smoke-task-operation-recovery.mjs",
     "test:teaching-review": "node scripts/test-teaching-review.js",
     "test:challenge-assistance": "node scripts/test-challenge-assistance.js",
-    "test:teaching-grilling": "node scripts/test-teaching-grilling.js"
+    "test:teaching-grilling": "node scripts/test-teaching-grilling.js",
+    "test:teaching-report-repeat-client": "node scripts/test-teaching-review.js && pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --types node ../packages/client/src/teaching-review.js ../packages/client/src/teaching-review.d.ts",
+    "smoke:teaching-report-repeat": "node scripts/smoke-teaching-report-repeat.mjs"
   },
   "keywords": [
     "browser",

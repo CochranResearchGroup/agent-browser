@@ -7462,3 +7462,13 @@ for source-linked dependency-ready questions and authenticated operator answers
 in the existing versioned candidate. Recommendations are not consent; ordinary
 review and fresh-repeat validation remain required. See the
 [teaching grilling guide](docs/src/app/teaching-grilling/page.mdx).
+
+### Repeat reviewed reports
+
+Use existing routines and public browser controls to run the reviewed report for
+new dates. The receiving application independently verifies report identity,
+dates and actual CSV bytes before `recordFreshRepeat` retains its proof.
+`promote` rechecks that proof, explicit operator review and any clarification
+answers before selecting the reusable version; the previous accepted bytes stay
+unchanged. Stored labels remain inert in stock MCP. See the
+[report repeat guide](docs/src/app/report-repeat/page.mdx).

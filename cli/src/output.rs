@@ -7338,7 +7338,8 @@ Commands:
   task-operation TASK REQUEST Read original addressed CDP operation without retry
   Teaching evidence: client teaching-evidence / teaching-evidence-http; scoped A/V and Speech ranges
   Teaching drafts: inspect_guide / client inspectTeachingDraft; inert until reviewed
-  Teaching review: client teaching-review / validate_teaching_candidate; no promotion or execution
+  Teaching review: client teaching-review edits/reviews; MCP candidate validation stays inert
+  Teaching repeat: recordFreshRepeat / promote; trusted review plus actual report proof
   Teaching grilling: client teaching-grilling; source-linked questions, authenticated answers
   Native challenge: native_capture classifyChallenges; explicit takeover/return, separate access checks
   browser-mode TASK Inspect mode
