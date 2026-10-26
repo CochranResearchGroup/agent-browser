@@ -640,7 +640,7 @@ try{workload:{
   await continuity('after-challenge469');
   uiTakeoverDispatched=true;uiReturnDispatched=false;
   await qualifyNativeNoCdpChallenge({workflow:publicWorkflow,runCli,context,chrome,service,bot,page,nativeOrigin,site,save,
-   selectHandoff:manual=>{managedLossTasks.push(manual);uiHandoffId=manual.handoffId;return consumerControl;},
+   selectHandoff:manual=>{managedLossTasks.push(manual);uiHandoffId=new URL(manual.handoffUrl).pathname.split('/').at(-1);return consumerControl;},
    onClosed:id=>closedManagedLossTasks.add(id),
    observeOwned:async(pid,profile)=>{const identity=await cleanupProcessIdentity(pid);assert(identity&&identity.uid===process.getuid()&&identity.executable===chrome);assert(privateProfileReferenced(await readFile(`/proc/${pid}/cmdline`,'utf8'),profile));observedOwnedProcesses.set(pid,identity);await census();return identity;}});
   uiReturnDispatched=true;

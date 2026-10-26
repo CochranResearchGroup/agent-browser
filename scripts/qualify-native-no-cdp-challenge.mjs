@@ -42,12 +42,16 @@ export async function qualifyNativeNoCdpChallenge({workflow,runCli,context,chrom
   // A real Native operator dismisses only this owned synthetic interstitial.
   await page.frameLocator('#desktop-frame').getByRole('button',{name:'Take control',exact:true}).click();
   await page.frameLocator('#desktop-frame').getByRole('button',{name:'Give control back',exact:true}).waitFor();
+  const taken=await control();assert.equal(taken.control.owner,'human');assert.equal(taken.native.owner,'operator');
+  await frame.waitForFunction(()=>['active','released'].includes(document.querySelector('#input-status')?.dataset.state));
   await frame.locator('#desktop-surface').focus();
+  await save('challenge469-no-cdp-interstitial-before.json',{png:(await page.screenshot()).toString('base64')});
   await page.keyboard.type('thisisunsafe');
+  await save('challenge469-no-cdp-interstitial-after.json',{png:(await page.screenshot()).toString('base64')});
   const deadline=Date.now()+15000;
   let arrived=false;
   while(Date.now()<deadline){const state=await (await fetch(site+'/native/challenge/evidence')).json();if(state.pageRequests>0){arrived=true;break;}await new Promise(resolve=>setTimeout(resolve,100));}
-  assert(arrived,'Owned HTTPS challenge must actually load');
+  if(!arrived)throw Object.assign(Error('Owned HTTPS challenge must actually load'),{code:'no_cdp_synthetic_https_not_loaded'});
   await page.frameLocator('#desktop-frame').getByRole('button',{name:'Give control back',exact:true}).click();
   await page.frameLocator('#desktop-frame').getByRole('button',{name:'Take control',exact:true}).waitFor();
   const capture=await workflow('browser_command',{taskId:task.taskId,action:'native_capture',params:{classifyChallenges:true}});
