@@ -27,4 +27,3 @@ export async function resumeOwnerLoginInFreshProcess(f){
   const observed=JSON.parse(child.stdout.trim());assert.notEqual(observed.pid,process.pid,'Recovery must run in a fresh OS process');return observed.result;
  }finally{await new Promise(resolve=>server.close(resolve));}
 }
-
