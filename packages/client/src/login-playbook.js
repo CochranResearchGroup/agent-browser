@@ -1,4 +1,5 @@
 // @ts-check
+export {createOwnerLoginPlaybook} from './owner-login-playbook.js';
 /** @typedef {import('./login-playbook.d.ts').LoginOptions} LoginOptions */
 /** @typedef {import('./login-playbook.d.ts').Dependencies} Dependencies */
 /** @typedef {import('./login-playbook.d.ts').Checkpoint} Checkpoint */

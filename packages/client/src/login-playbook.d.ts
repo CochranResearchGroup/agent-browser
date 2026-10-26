@@ -35,3 +35,5 @@ export interface Dependencies {
 export function createLoginPlaybook(dependencies:Dependencies): {
   advance(options:LoginOptions):Promise<Record<string, any>>;
 };
+export {createOwnerLoginPlaybook} from './owner-login-playbook.js';
+export type {OwnerLoginOptions,OwnerLoginDependencies,OwnerLoginCheckpoint} from './owner-login-playbook.js';
