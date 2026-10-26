@@ -1,12 +1,12 @@
 # Active plan index
 
-[P294 dashboard browser commands](0294-2026-10-25-dashboard-browser-command.md), #451: restore authenticated build/mode/copy ingress with real-listener regression and preserve deployment.
+[P294 dashboard browser commands](0294-2026-10-25-dashboard-browser-command.md), #451 closed: authenticated ingress repaired, exact candidate qualified and preserve deployment/public chooser verified.
 
 [P293 asset delivery diagnosis](0293-2026-10-25-dashboard-asset-delivery.md), #422: five paired rounds passed; diagnostic packet closed, intermittent failure remains open.
 
 [P292 startup validation selection](0292-2026-10-25-startup-validation-selection.md), #437, closes the local selector omission found in the P291 retro with public-CLI red-green coverage.
 
-[P283 browser modes and profiles](0283-2026-10-24-browser-mode-inspection.md): children #401–404 and repairs #424–429 are closed; PR436/PR439 merged and all 46 parent stories reconcile to qualified source and isolated synthetic workflows. Production publication is recorded in P283 evidence; live chooser failure #451 is owned by P294.
+[P283 browser modes and profiles](0283-2026-10-24-browser-mode-inspection.md): children #401–404 and repairs #424–429 are closed; PR436/PR439 merged and all 46 parent stories reconcile to qualified source and isolated synthetic workflows. Production publication is recorded in P283 evidence; P294 resolves live chooser failure #451 with a qualified corrective publication.
 
 [P291 cold rail retry spacing](0291-2026-10-24-cold-rail-retry-spacing.md), #430, is closed with corrected caller revalidation installed oncf65dd76422b; cold median3.36s to2.11s, with warm behavior preserved.
 

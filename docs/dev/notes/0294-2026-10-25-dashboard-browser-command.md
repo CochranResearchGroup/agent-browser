@@ -37,19 +37,19 @@ through the authenticated dashboard service proxy. It retains body fields and
 owner validation and uses a bounded observation timeout without mutation replay.
 No CLI, MCP or service response contract changes.
 
-## Qualification in progress
+## Source qualification checkpoint
 
 Strict format and workspace clippy pass; all 70 focused dashboard Rust tests pass.
 The public duplication fixture now has an explicit private-dashboard lane that
 exercises mode changes, build inspection and independent profile copy through
 this listener. A reviewed read-only Node chooser probe can run against that
-same private dashboard before production effects. Exact binary and installed
-qualification remain pending.
+same private dashboard before production effects. At this checkpoint, exact
+binary and installed qualification were pending; completion is recorded below.
 
 Independent Standards and Spec reviewers reported zero confirmed source
 findings. The primary verified their conclusions against the frozen baseline
-and retains actual mutation, rendered chooser and installed readback as pending
-gates. Review is not runtime qualification.
+and retained actual mutation, rendered chooser and installed readback as pending
+gates at review time. Review is not runtime qualification.
 
 
 ## Private workflow setup corrections
@@ -134,6 +134,55 @@ namespace and fixture-tag scans report zero residue.
 The final fixture correction scopes close-count assertions to their phases:
 two legitimate mode closes are checked separately before the existing copy
 replay oracle requires exactly one close. This preserves the no-replay invariant.
-All earlier failed attempts remain retained. Production build, exact sealed
-qualification, preserve installation and public installed chooser inspection
-remain pending.
+All earlier failed attempts remain retained. At this development checkpoint, production qualification and publication were still pending; the subsequent receipt below records their completion.
+
+## Production qualification and publication, 2026-10-26
+
+Source PR455 merged at `3d4486bab1f4251bc9a75dc577668aeb836965de`.
+Candidate `candidate-86f3742d0e264777-3bcc060428a5e696` is production_shaped,
+release optimized with fat LTO, one codegen unit and stripping. All 583 sealed
+executable inputs matched. Binary SHA256:
+`3bcc060428a5e696fb6c70f25fdd4fac369bb0c926826c545fa10df9783f26f1`.
+
+The exact artifact passed three selected isolated workflows: authenticated
+dashboard build/mode/copy, Chrome to Chromium No CDP copy, and Chromium to Chrome
+CDP copy. Dashboard acceptance includes eleven requests, rendered chooser,
+both mode directions, independent observed-mode reads, two mode closes and
+one copy close with replay protection. All seven no-launch checks passed.
+Installer and supervisor fixtures left zero owned processes. Workflow namespace
+and fixture-tag scans also found zero residue. Historical Spec400 workflows
+were retained evidence, not all rerun on this binary.
+
+The first manual-copy cold window setup failed before copy or dashboard routing.
+One bounded fresh replay passed, followed by the reverse copy. The failed first
+aggregate remains preserved. This does not qualify universal cold manual startup.
+A private-script relative-path error stopped before installation; invoking that
+script from its required source root corrected the locator without an effect.
+
+Supported default-preserve transaction
+`upgrade-722e0906-24f6-4f38-b96d-90c44e2aff7d` completed ready and accepted.
+Before/after installation and fresh post-QA OS snapshots retain all 22 browser
+root PID/start identities, all 147 protected Native service generations and
+restart counts, and protected auth/configuration/shared-skill hashes. Advisory
+MCP clients churned separately. Process-read denials limit census coverage;
+the preservation claim applies to observed identities. No active candidate
+operation remains.
+
+The installed authenticated public chooser opens and receives the JSON build
+inspection schema. Independent modes and compatibility warnings render with
+zero page errors or mutation attempts. Public HTTPS and loopback each match
+all 15 referenced index/JS/CSS files to sealed inputs. QA children are reaped.
+Install doctor exits zero with retained warnings
+`dashboard_operator_journey_not_ready` and
+`profile_lease_runtime_owner_principal_binding_missing`.
+
+The populated dashboard rail sample exceeds its three-second budget, so that
+probe exits one despite no missing rail or page errors. This is retained as an
+unresolved latency limitation, not a routing pass. Native viewer journeys,
+real-account login portability and broad cold startup are not newly qualified.
+No formal release, CI dispatch, provider change or foreign cleanup occurred.
+
+Private operational evidence remains under the user-scoped implementation
+checkpoint `20261025-repair451`: candidate and qualification receipts, original
+failed aggregate, preserve transaction result, asset/UI checks and OS snapshots.
+Issue #451 is resolved by source, exact-artifact and installed chooser evidence.
