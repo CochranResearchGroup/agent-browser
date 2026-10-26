@@ -19,6 +19,8 @@ Ordinary clients ignore persistent installer drain metadata. PR397 is integrated
 
 [P243 profile-proof maintenance](docs/dev/maintenance/p243-profile-proof-namespace.md) repairs existing-profile continuation when runtime user namespaces deny descriptor-link observation. Focused source and observer checks pass; installed workflow qualification remains separate.
 
+[P270 hosted continuity](docs/dev/plans/0270-2026-10-22-hosted-continuity.md) retains the governing contract and bounded evidence for hosted continuity. The later combined-pair qualification is recorded under P279 below; Native578 relocation remains deferred.
+
 [P279 combined actual-host acceptance](docs/dev/plans/0279-2026-10-23-combined-host-matrix355.md) qualifies the remaining #355 matrix on one frozen pair, including real Native input, managed loss and generation-changing explicit recovery. [Evidence](docs/dev/notes/0279-2026-10-24-combined-host-matrix355.md) preserves strict warm targets, the separate five-context cold distribution and exact cleanup. Source integration remains distinct from production deployment; cold-open latency remains separate work. [P278 diagnosis](docs/dev/plans/0278-2026-10-23-reopen-launch-diagnosis355.md) retains the unexplained Native8 failure and qualified phase diagnostics. Native578 relocation stays deferred.
 
 [P268 attachment](docs/dev/plans/0268-2026-10-22-hosted-attachment.md) and [P267/#350 takeover](docs/dev/plans/0267-2026-10-22-hosted-takeover.md) close as integrated source outcomes. [Acceptance](docs/dev/notes/0268-2026-10-22-hosted-attachment-control.md) records actual Native04 workflow and corrected cleanup; Native05 cookie continuity and independent cleanup also pass. No deployment; wider #347 remains open.
