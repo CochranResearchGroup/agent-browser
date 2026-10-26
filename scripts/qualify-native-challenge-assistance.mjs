@@ -96,6 +96,8 @@ export async function probeCurrentNativeObservationAge({workflow,task,consumerCo
         actions:[{kind:'move',x:source.windowBounds.x+5+index,y:source.windowBounds.y+5}]}}));
     }
     const after=await workflow('browser_command',{taskId:task.taskId,action:'native_capture',params:{classifyChallenges:true}});
+    assert(replies.every(reply=>reply.delivery==='dispatched'),'Every motion requires the actual owner dispatch acknowledgement');
+    assert(Date.now()-start>750,'Probe must cross the historical age boundary');
     assert.equal(after.capture.windowId,source.capture.windowId);
     assert.equal(after.capture.generation,source.capture.generation);
     assert.deepEqual(after.capture.processIdentity,source.capture.processIdentity);
