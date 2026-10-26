@@ -11,6 +11,7 @@ const digest=value=>sha(JSON.stringify(canonical(value)));
 const id=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(value);
 const guideId=value=>typeof value==='string'&&/^[a-z0-9][a-z0-9-]{0,119}$/.test(value);
 const hash=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
+const task=value=>typeof value==='string'&&value.trim().length>0&&value.length<=4000&&!/\p{Cc}/u.test(value);
 const error=code=>{throw Error(code);};
 function content(guide) {
   const value=clone(guide);delete value.guideId;
@@ -24,7 +25,7 @@ function versionId(root,revision) {return `${root.length<=96?root:'teaching-'+sh
  * receiving application supplies the operator decision reader; model-supplied
  * approval booleans and merely opening this client establish no approval.
  */
-export function createTeachingReviewClient({candidateDirectory,browser,sourceStatus,readOperatorDecision,acceptedVersion}) {
+export function createTeachingReviewClient({candidateDirectory,browser,sourceStatus,readOperatorDecision,readFreshRepeat,readOperatorAnswer,acceptedVersion}) {
   const retainedConfiguration=acceptedVersion===undefined?undefined:clone(acceptedVersion);
   if(retainedConfiguration&&(!guideId(retainedConfiguration.guideId)||!hash(retainedConfiguration.sha256)))error('teaching_accepted_version_invalid');
   if(!isAbsolute(candidateDirectory??'') || !browser?.inspectTeachingDraft || !browser?.validateTeachingCandidate)error('teaching_review_configuration_required');
@@ -111,9 +112,17 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
   }
   async function accepted(record) {
     const configured=acceptedReference(record);
-    if(!configured)return {available:false,state:'none_configured'};
-    try {const value=await read(configured.guideId);return {...configured,available:value.sha256===configured.sha256,state:value.sha256===configured.sha256?'retained':'changed',readiness:'not_requalified'};}
-    catch {return {...configured,available:false,state:'unavailable',readiness:'not_requalified'};}
+    let retained={available:false,state:'none_configured'};
+    if(configured) {
+      try {const value=await read(configured.guideId);retained={...configured,available:value.sha256===configured.sha256,state:value.sha256===configured.sha256?'retained':'changed',readiness:'not_requalified'};}
+      catch {retained={...configured,available:false,state:'unavailable',readiness:'not_requalified'};}
+    }
+    for(const published of (await chain(lineage(record).rootGuideId)).reverse()) {
+      if(published.guide.teaching.lineage?.operationKind!=='promote')continue;
+      const proof=await validation(published);
+      if(proof.state==='verified')return {guideId:proof.executedGuideId,sha256:proof.executedSha256,available:true,state:'accepted',readiness:'qualified_fresh_repeat',validationId:proof.validationId,previousAcceptedVersion:retained};
+    }
+    return retained;
   }
   function checkedDecision(value,request) {
     if(!value||(request.decisionRef&&value.decisionId!==request.decisionRef)||!['approved','rejected'].includes(value.decision)||value.provenance!=='authenticated_operator'||
@@ -137,8 +146,50 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
       return {state:value.decision,...value};
     } catch {return {state:'unverified',reason:'operator_decision_unavailable',decisionId:saved.decisionId};}
   }
+  const date=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
+  function checkedRepeat(value,request) {
+    const bindings=['taskId','sourceTaskId','rootGuideId','executedGuideId','executedSha256','contentSha256','reviewDecisionId','playbookId','requestedStartDate','requestedEndDate','reportId'];
+    if(!value||value.schemaVersion!=='agent-browser.teaching-fresh-repeat.v1'||value.provenance!=='receiving_application_verifier'||value.verification!=='report_identity_requested_dates_and_content'||value.artifactMediaType!=='text/csv'||
+       value.validationId!==request.validationRef||!id(value.validationId)||!id(value.artifactId)||!id(value.originalOperationId)||!hash(value.artifactSha256)||bindings.some(key=>value[key]!==request[key]))error('teaching_repeat_receipt_invalid');
+    return Object.fromEntries(['schemaVersion','validationId','provenance',...bindings,'artifactId','artifactSha256','artifactMediaType','originalOperationId','verification'].map(key=>[key,value[key]]));
+  }
+  async function repeatReceipt(request) {
+    if(typeof readFreshRepeat!=='function')error('teaching_repeat_authority_unconfigured');
+    let value;try {value=await readFreshRepeat(request);} catch {error('teaching_repeat_receipt_unavailable');}
+    return checkedRepeat(value,request);
+  }
+  async function settled(record) {
+    if(record.guide.teaching.unresolved.length)error('teaching_open_questions_present');
+    if(record.guide.teaching.clarification?.questions?.length) {
+      if(typeof readOperatorAnswer!=='function')error('teaching_clarification_authority_unconfigured');
+      const {verifyTeachingClarificationAnswers}=await import('./teaching-grilling.js');
+      const answers=await verifyTeachingClarificationAnswers({view:{guide:record.guide,rootGuideId:lineage(record).rootGuideId},readOperatorAnswer,readCandidate:async({guideId:name})=>{const value=await read(name);return {...value,rootGuideId:lineage(value).rootGuideId,contentSha256:digest(content(value.guide))};}});
+      if(record.guide.teaching.clarification.questions.some(question=>answers.filter(answer=>answer.questionId===question.id&&answer.verification==='verified').length!==1))error('teaching_clarification_answers_unverified');
+    }
+  }
+  function repeatRequest(record,taskId,validationRef,start,end,reportId) {
+    const teaching=record.guide.teaching,saved=teaching.review;
+    const exampleStart=teaching.parameters.find(parameter=>parameter.id==='startDate'&&parameter.kind==='date');
+    const exampleEnd=teaching.parameters.find(parameter=>parameter.id==='endDate'&&parameter.kind==='date');
+    if(!date(start)||!date(end)||start>end||!id(reportId)||!id(validationRef)||!exampleStart||!exampleEnd||start===exampleStart.example||end===exampleEnd.example)error('teaching_fresh_dates_required');
+    if(!task(taskId)||taskId===teaching.sourceTaskId||taskId===saved?.taskId)error('teaching_fresh_task_required');
+    return {validationRef,taskId,sourceTaskId:teaching.sourceTaskId,rootGuideId:lineage(record).rootGuideId,executedGuideId:record.guide.guideId,executedSha256:record.sha256,contentSha256:digest(content(record.guide)),reviewDecisionId:saved?.decisionId,playbookId:teaching.playbook.id,requestedStartDate:start,requestedEndDate:end,reportId};
+  }
+  async function validation(record) {
+    const saved=record.guide.teaching.validation;
+    if(!saved)return {state:'not_validated'};
+    try {
+      await settled(record);
+      const decision=await review(record);if(decision.state!=='approved')error('teaching_operator_review_required');
+      const executed=await read(saved.executedGuideId);
+      if(executed.sha256!==saved.executedSha256||digest(content(executed.guide))!==digest(content(record.guide)))error('teaching_repeat_content_changed');
+      const request=repeatRequest(executed,saved.taskId,saved.validationId,saved.requestedStartDate,saved.requestedEndDate,saved.reportId);
+      const value=await repeatReceipt(request);if(digest(value)!==digest(saved))error('teaching_repeat_receipt_changed');
+      return {state:'verified',...value};
+    } catch(err) {return {state:'unverified',reason:err.message,validationId:saved.validationId};}
+  }
   async function mutate({taskId,guideId:name,expectedSha256,operationId},kind,intentData,transform) {
-    if(typeof taskId!=='string'||!taskId||!hash(expectedSha256)||!id(operationId))error('teaching_review_request_invalid');
+    if(!task(taskId)||!hash(expectedSha256)||!id(operationId))error('teaching_review_request_invalid');
     const base=candidate(await read(name)),meta=lineage(base),records=await chain(meta.rootGuideId);
     const intentSha256=digest({taskId,guideId:name,expectedSha256,operationId,kind,data:intentData});
     const recovered=prior(records,operationId,intentSha256);if(recovered)return recovered;
@@ -164,7 +215,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
     async open({taskId,guideId:name}) {
       const record=await read(name),guide=await browser.inspectTeachingDraft(taskId,name);
       if(digest(guide.teaching)!==digest(record.guide.teaching))error('teaching_review_readback_changed');
-      const [availability,decision,retained]=await Promise.all([source(guide),review(record),accepted(record)]);
+      const [availability,decision,retained,repeat]=await Promise.all([source(guide),review(record),accepted(record),validation(record)]);
       const evidence=new Map(guide.teaching.evidence.map(item=>[item.id,item]));
       const evidenceAvailability=new Map((availability.evidenceAvailability??[]).map(item=>[item.id,item]));
       const referenceView=id=>{const status=evidenceAvailability.get(id);return {...evidence.get(id),replayable:status?.replayable===true,availabilityState:status?.state??'unchecked',unavailabilityReason:status?.reason??availability.reason};};
@@ -172,8 +223,9 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
         expectedResult:step.expectedResult?{scope:'step',items:[step.expectedResult]}:{scope:'routine',items:routine.outcomes.map(item=>item.verification)},
         evidence:step.evidenceRefs.map(referenceView),
         sourceGaps:availability.gaps??[],uncertainty:[...guide.teaching.claims.filter(item=>item.attribution==='unknown'&&item.evidenceRefs.some(id=>step.evidenceRefs.includes(id))).map(item=>item.statement),...guide.teaching.unresolved.filter(item=>item.evidenceRefs.some(id=>step.evidenceRefs.includes(id))).map(item=>item.question)]})));
-      return {...receipt(record,'opened'),guide,contentSha256:digest(content(guide)),steps,source:availability,review:decision,acceptedVersion:retained,
-        warnings:clone(guide.teaching.limitations),proposals:guide.teaching.unresolved.map(item=>({...item,adopted:false})),blockers:[...(decision.state==='approved'?[]:['operator_review_required']),...(guide.teaching.unresolved.length?['open_questions_present']:[]),'fresh_repeat_validation_required'],ordinaryReuseAllowed:false};
+      const reusable=record.guide.teaching.lineage?.operationKind==='promote'&&repeat.state==='verified'&&decision.state==='approved'&&retained.guideId===repeat.executedGuideId&&retained.sha256===repeat.executedSha256;
+      return {...receipt(record,'opened'),guide,contentSha256:digest(content(guide)),steps,source:availability,review:decision,validation:repeat,acceptedVersion:retained,
+        warnings:clone(guide.teaching.limitations),proposals:guide.teaching.unresolved.map(item=>({...item,adopted:false})),blockers:reusable?[]:[...(decision.state==='approved'?[]:['operator_review_required']),...(guide.teaching.unresolved.length?['open_questions_present']:[]),repeat.state==='verified'?'promotion_required':'fresh_repeat_validation_required'],ordinaryReuseAllowed:reusable};
     },
     async save(input) {
       const prepared=clone(input.guide);
@@ -196,6 +248,30 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
         if((!availability.replayable||(availability.evidenceAvailability??[]).some(item=>!item.replayable))&&!decision.sourceUnavailableAcknowledged)error('teaching_source_unavailable_not_acknowledged');
         base.teaching.review=decision;delete base.teaching.validation;return base;
       });
+    },
+    async recordFreshRepeat(supplied) {
+      const input=clone(supplied);
+      if(typeof readFreshRepeat!=='function')error('teaching_repeat_authority_unconfigured');
+      return mutate(input,'repeat',{validationRef:input.validationRef,requestedStartDate:input.requestedStartDate,requestedEndDate:input.requestedEndDate,reportId:input.reportId},async(base,record)=>{
+        await settled(record);
+        if((await review(record)).state!=='approved')error('teaching_operator_review_required');
+        const request=repeatRequest(record,input.taskId,input.validationRef,input.requestedStartDate,input.requestedEndDate,input.reportId);
+        base.teaching.validation=await repeatReceipt(request);return base;
+      });
+    },
+    async promote(supplied) {
+      const input=clone(supplied);
+      if(typeof readFreshRepeat!=='function')error('teaching_repeat_authority_unconfigured');
+      const result=await mutate(input,'promote',{},async(base,record)=>{
+        await settled(record);
+        if((await review(record)).state!=='approved')error('teaching_operator_review_required');
+        if((await validation(record)).state!=='verified')error('teaching_fresh_repeat_required');
+        return base;
+      });
+      if(result.status!=='saved')return result;
+      const proof=await validation(await read(result.guideId));
+      if(proof.state!=='verified')error('teaching_fresh_repeat_required');
+      return {...result,status:'promoted',ordinaryReuseAllowed:true,acceptedVersion:{guideId:proof.executedGuideId,sha256:proof.executedSha256}};
     },
     async lookupOperation({rootGuideId,operationId}) {
       if(!id(operationId))error('teaching_review_request_invalid');
