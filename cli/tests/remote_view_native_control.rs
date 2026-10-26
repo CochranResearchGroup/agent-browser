@@ -197,6 +197,16 @@ fn native_capture_classifies_same_fenced_frame_without_projecting_private_ocr_te
             if operation == "observe" {
                 return self.0.request(operation, body);
             }
+            if operation == "control" {
+                assert_eq!(body["operation"], "status");
+                return Ok(
+                    serde_json::json!({"desktopId":"viewing","generation":9,"owner":"agent","epoch":4}),
+                );
+            }
+            assert_eq!(
+                body["controlEpoch"], 4,
+                "OCR must bind current Native control admission"
+            );
             let mut encoded = std::io::Cursor::new(Vec::new());
             image::DynamicImage::new_rgb8(1024, 768)
                 .write_to(&mut encoded, image::ImageFormat::Png)

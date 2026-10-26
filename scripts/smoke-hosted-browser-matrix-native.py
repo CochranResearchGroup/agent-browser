@@ -337,8 +337,9 @@ def main():
                         assert 0 < length <= 65536
                         body = json.loads(request.rfile.read(length))
                         with lock:
-                            if request.path in ('/v1/agent-desktop/observe', '/v1/agent-desktop/ocr'):
+                            if request.path in ('/v1/agent-desktop/observe', '/v1/agent-desktop/ocr', '/v1/agent-desktop/control'):
                                 assert args.challenge_assistance
+                                assert not request.path.endswith('/control') or body.get('operation') == 'status'
                                 assert body['desktopId'] == outer.target['viewingDesktopId'] and body['expectedGeneration'] == outer.target['viewingGeneration']
                                 from urllib.request import Request, urlopen
                                 forwarded = Request(f'http://127.0.0.1:{outer.control_port}'+request.path, data=json.dumps(body).encode(), method='POST', headers={'Authorization':'Bearer '+outer.token,'Content-Type':'application/json'})

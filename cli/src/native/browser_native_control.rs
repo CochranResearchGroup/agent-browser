@@ -138,6 +138,25 @@ pub fn execute(
     }
     if command["action"] == "native_capture" {
         body.as_object_mut().unwrap().remove("actions");
+        if classify {
+            // Read the existing Native owner's epoch. The cooperative browser
+            // epoch is a different authority and cannot authorize this capture.
+            let control = owner.request(
+                "control",
+                &json!({"desktopId":target.viewing_desktop_id,
+                "expectedGeneration":target.viewing_generation,"operation":"status"}),
+            )?;
+            if control["desktopId"] != target.viewing_desktop_id
+                || control["generation"] != target.viewing_generation
+                || control["owner"] != "agent"
+                || control["epoch"].as_u64().is_none()
+            {
+                return Err("browser_native_classification_control_changed:observe control".into());
+            }
+            body["controlEpoch"] = control["epoch"].clone();
+        } else if let Some(epoch) = command.get("controlEpoch") {
+            body["controlEpoch"] = epoch.clone();
+        }
         let full_width = window["width"]
             .as_u64()
             .ok_or("browser_native_geometry_unverified")?;
