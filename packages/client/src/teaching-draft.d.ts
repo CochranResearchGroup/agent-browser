@@ -18,7 +18,7 @@ export interface TeachingRoutine {
 export interface TeachingRetainedVersion {guideId: string; sha256: string}
 export interface TeachingVersionLineage {
   rootGuideId: string; revision: number; parentGuideId: string; parentSha256: string;
-  operationId: string; operationKind: 'edit' | 'review'; intentSha256: string;
+  operationId: string; operationKind: 'edit' | 'review' | 'repeat' | 'promote'; intentSha256: string;
   acceptedVersion?: TeachingRetainedVersion;
 }
 export interface TeachingOperatorReview {
@@ -26,6 +26,25 @@ export interface TeachingOperatorReview {
   sourceRef: string; provenance: 'authenticated_operator'; taskId: string;
   rootGuideId: string; reviewedGuideId: string; reviewedSha256: string;
   contentSha256: string; sourceUnavailableAcknowledged: boolean;
+}
+/** Inert receiver-verifier claim; trusted proof must be rechecked before reuse. */
+export interface TeachingValidation {
+ schemaVersion:'agent-browser.teaching-fresh-repeat.v1';validationId:string;
+ provenance:'receiving_application_verifier';taskId:string;sourceTaskId:string;
+ rootGuideId:string;executedGuideId:string;executedSha256:string;contentSha256:string;
+ reviewDecisionId:string;playbookId:string;requestedStartDate:string;requestedEndDate:string;
+ reportId:string;artifactId:string;artifactSha256:string;artifactMediaType:'text/csv';
+ originalOperationId:string;verification:'report_identity_requested_dates_and_content';
+}
+export interface TeachingClarificationQuestion {
+ id:string;question:string;interpretation:string;
+ category:'ambiguity'|'contradiction'|'missing_intent'|'variable_input'|'outcome'|'exception'|'recovery';
+ evidenceRefs:string[];stepRefs:string[];dependsOn:string[];
+}
+export interface TeachingClarificationAnswer {
+ questionId:string;questionSha256:string;answerRef:string;answer:string;
+ actorRef:string;sourceRef:string;provenance:'authenticated_operator';taskId:string;
+ rootGuideId:string;answeredGuideId:string;answeredSha256:string;contentSha256:string;
 }
 /** Inert knowledge inside the existing SiteGuide candidate, never execution approval. */
 export interface TeachingDraft {
@@ -37,6 +56,8 @@ export interface TeachingDraft {
   routines: TeachingRoutine[];
   playbook: {id: string; goal: string; routineIds: string[]; parameters: string[]; completionVerification: string; evidenceRefs: string[]};
   unresolved: Array<{id: string; question: string; interpretation: string; evidenceRefs: string[]}>;
+  clarification?:{questions:TeachingClarificationQuestion[];answers:TeachingClarificationAnswer[]};
+  validation?:TeachingValidation;
   limitations: string[]; lineage?: TeachingVersionLineage; review?: TeachingOperatorReview;
 }
 export interface TeachingSiteGuide {

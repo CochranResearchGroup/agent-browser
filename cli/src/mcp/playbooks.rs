@@ -637,3 +637,7 @@ mod teaching_tests;
 
 #[cfg(test)]
 mod teaching_review_tests;
+
+#[cfg(test)]
+#[path = "playbooks/teaching_grilling_tests.rs"]
+mod teaching_grilling_tests;

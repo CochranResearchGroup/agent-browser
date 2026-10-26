@@ -1,5 +1,8 @@
 //! Inert teaching knowledge extends the existing SiteGuide candidate format.
 //! Validation checks attribution/reference integrity, not the truth of model claims.
+mod clarification;
+mod fresh_repeat;
+
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
@@ -35,6 +38,10 @@ pub(super) struct TeachingDraft {
     limitations: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     lineage: Option<Lineage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    clarification: Option<clarification::Clarification>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    validation: Option<fresh_repeat::TeachingValidation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     review: Option<OperatorReview>,
 }
@@ -225,7 +232,6 @@ impl TeachingDraft {
             || self.state != "draft"
             || !text(&self.prepared_by)
             || !text(&self.source_task_id)
-            || self.source_task_id.len() > 128
             || !identifier(&self.recording_id)
             || !sha256(&self.video_sha256)
             || self.evidence.is_empty()
@@ -244,7 +250,10 @@ impl TeachingDraft {
                 || !(2..=256).contains(&lineage.revision)
                 || !sha256(&lineage.parent_sha256)
                 || !identifier(&lineage.operation_id)
-                || !matches!(lineage.operation_kind.as_str(), "edit" | "review")
+                || !matches!(
+                    lineage.operation_kind.as_str(),
+                    "edit" | "review" | "repeat" | "promote"
+                )
                 || !sha256(&lineage.intent_sha256)
                 || lineage.accepted_version.as_ref().is_some_and(|retained| {
                     !super::valid_guide_id(&retained.guide_id) || !sha256(&retained.sha256)
@@ -262,15 +271,41 @@ impl TeachingDraft {
                 || !matches!(review.decision.as_str(), "approved" | "rejected")
                 || review.provenance != "authenticated_operator"
                 || !text(&review.task_id)
-                || review.task_id.len() > 128
+                || !super::valid_guide_id(&review.reviewed_guide_id)
+                || !sha256(&review.reviewed_sha256)
                 || review.root_guide_id != lineage.root_guide_id
-                || review.reviewed_guide_id != lineage.parent_guide_id
-                || review.reviewed_sha256 != lineage.parent_sha256
                 || !sha256(&review.content_sha256)
-                || lineage.operation_kind != "review"
+                || match lineage.operation_kind.as_str() {
+                    "review" => {
+                        review.reviewed_guide_id != lineage.parent_guide_id
+                            || review.reviewed_sha256 != lineage.parent_sha256
+                    }
+                    "repeat" | "promote" => self.validation.as_ref().is_none_or(|validation| {
+                        validation.review_decision_id != review.decision_id
+                            || validation.content_sha256 != review.content_sha256
+                    }),
+                    _ => true,
+                }
             {
                 return Err(bad());
             }
+        }
+        if self.lineage.as_ref().is_some_and(|lineage| {
+            matches!(lineage.operation_kind.as_str(), "repeat" | "promote")
+                && (self.review.is_none() || self.validation.is_none())
+        }) {
+            return Err(bad());
+        }
+        if self
+            .clarification
+            .as_ref()
+            .is_some_and(|value| !value.valid(self))
+            || self
+                .validation
+                .as_ref()
+                .is_some_and(|value| !value.valid(self))
+        {
+            return Err(bad());
         }
         let evidence =
             identifiers(self.evidence.iter().map(|item| item.id.as_str())).ok_or_else(bad)?;
