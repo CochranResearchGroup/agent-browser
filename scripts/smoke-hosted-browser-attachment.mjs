@@ -180,10 +180,12 @@ async function startScopedBroker(){
   const denied=async()=>{brokerOperations.push({operation,denied:true});await save('broker-operations.json',brokerOperations);reply(400,{schema_version:1,code:'fixture_target_denied',message:'Operation outside exact fixture assignment',retryable:false});};
   let operation='invalid';
   try{
-   if(req.method==='POST'&&['/v1/agent-desktop/observe','/v1/agent-desktop/ocr','/v1/agent-desktop/control'].includes(req.url)){
+   if(req.method==='POST'&&['/v1/agent-desktop/observe','/v1/agent-desktop/ocr','/v1/agent-desktop/control','/v1/agent-desktop/input'].includes(req.url)){
     let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>65536)return denied();}
     const body=JSON.parse(raw),allowed=acquired.some(binding=>{const target=nativeTargets.get(binding.assignmentId);return target&&body.desktopId===target.viewingDesktopId&&body.expectedGeneration===target.viewingGeneration;});
     if(!allowed||process.env.HOSTED_SMOKE_CHALLENGE_469!=='1'||req.url.endsWith('/control')&&body.operation!=='status')return denied();
+    if(req.url.endsWith('/input')&&(process.env.HOSTED_SMOKE_OBSERVATION_AGE_PROBE!=='1'||!Array.isArray(body.actions)||body.actions.length<1||body.actions.length>16||
+      !body.actions.every(action=>action.kind==='move'&&Object.keys(action).sort().join(',')==='kind,x,y')))return denied();
     const upstream=await fetch(controlOrigin+req.url,{method:'POST',headers:{'content-type':'application/json',...(controlAuthorization?{authorization:controlAuthorization}:{})},body:raw,redirect:'error',signal:AbortSignal.timeout(15000)});
     return reply(upstream.status,await upstream.json());
    }
