@@ -123,6 +123,10 @@ try {
  assert.equal(promotedView.acceptedVersion.guideId,repeatReviewed.guideId);
  assert.equal(promotedView.acceptedVersion.sha256,reviewedRepeat.sha256);
  assert.equal(promotedView.ordinaryReuseAllowed,true);assert.deepEqual(promotedView.blockers,[]);
+ const echoedReview=await createTeachingReviewClient({...repeatOptions,readOperatorDecision:async request=>({...request})}).open({taskId:'fresh-report-task',guideId:promoted.guideId});
+ assert.equal(echoedReview.review.state,'unverified','Mirrored request bindings cannot supply operator authority');
+ assert.equal(echoedReview.ordinaryReuseAllowed,false);
+ assert.equal(echoedReview.acceptedVersion.guideId,accepted.guideId);
  assert.equal((await repeatClient.recordFreshRepeat(repeatInput)).guideId,repeated.guideId,'a repeated metadata operation returns its immutable original revision');
  assert.equal((await repeatClient.promote({taskId:'fresh-report-task',guideId:repeated.guideId,expectedSha256:repeatedView.sha256,operationId:'promote-repeat-1'})).guideId,promoted.guideId);
  const withoutRepeatAuthority=createTeachingReviewClient({...repeatOptions,readFreshRepeat:undefined});

@@ -117,3 +117,28 @@ binding-only answer receipts both refuse qualification. The grilling API alone
 removes an authenticated answered question from unresolved history; the caller
 cannot silently erase it in the answer request. This is protocol/source evidence,
 separate from the still-pending real report run.
+
+
+## Native date green and download boundary
+
+Consumer dd38cab30 and immutable root date-fix source21dfd745d (binary
+91bea15c4f9b) established both requested June dates through the unchanged public
+native-fill routine. Each control emitted one input/change pair; the independent
+app received the exact dates and committed one stale-case report. Download then
+refused before clicking the export control with
+`download_source_identity_unproven: local browser PID unavailable`. Its task
+operation remains uncertain; exports stayed empty. Private receipt
+report477-c27fd8c8-218f-47b2-88ac-281c39915a5c.json preserves this failed run,
+not report acceptance. Fresh owned OS census was zero and private-home removal
+succeeded. Root coordinates the existing-profile download identity seam; this
+worker adds no download mode, launcher change or manual export workaround.
+
+A separate public promotion regression proved that an operator reader which
+merely mirrored its request could previously requalify stored approval labels.
+Revalidation now sends only the decision reference and exact task/root/guide/raw
+and content bindings. The authority must independently return the decision, actor,
+source and provenance; the complete returned receipt still must match the saved
+receipt. The mirrored-reader test fails before this change and passes afterward,
+retaining the prior accepted version. Review and grilling harnesses and explicit
+JavaScript implementation plus declaration checking pass. This is bounded477
+trust-gate work, not the final broad review.
