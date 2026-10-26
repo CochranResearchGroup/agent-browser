@@ -5,7 +5,7 @@ Status: OPEN
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/466
 Integration branch: recipes/spec466-integration
 Integration base: 5770d693b23d51c9932574fa68e012a98029ce73
-Validated source tip:b7a4a6a3f366cb59500293cd579e793e5c580613; latest documentation checkpoint follows on recipes/spec466-integration / draft PR480.
+Validated source tip:d27092b68a1ba865ea52de7133290a82ace1f8cf; latest documentation checkpoint follows on recipes/spec466-integration / draft PR480.
 
 ## Custody and scope
 
@@ -27,8 +27,8 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 | 474 | 473 | validated | implement_473 | recipes/teaching-draft-474 / profile-proof | worker243b7405; integration25dd69054; combinedMCP151/strict/docs/client PASS; tracker CLOSED after source qualification |
 | 475 | 474 | validated | implement_473 | recipes/teaching-review-475 / profile-proof | worker5e226f17+89da499b; source9436460eb gates PASS; tracker CLOSED |
 | 476 | 475 | validated | implement_473 | recipes/teaching-grilling-476 / profile-proof | workerace432be; integratione39dc8dae; combinedb7a4a6a3f gates PASS; tracker CLOSED |
-| 477 | 475 | integrated | implement_468 | recipes/report-repeat-477 / spec466-468 | worker0d83b36a7; merged source identical to tested consumerdfe37e641; combined gates pending |
-| 478 | 468,469,476,477 | pending | unassigned | pending | requires real operator narration and scoped portal |
+| 477 | 475 | validated | implement_468 | recipes/report-repeat-477 / spec466-468 | worker0d83b36a7; merge4a68271a3; d270 gates + actual22a/dfe report PASS; tracker CLOSED |
+| 478 | 468,469,476,477 | blocked | unassigned | no execution custody | validated prerequisites; missing actual recording/portal/task authority |
 
 ## Validation and bounded review
 
@@ -259,3 +259,9 @@ Worker0d83b36a77eea98fac058eeff2c2c2ae5651578d merged serially. Shared476 provid
 Actual receipt report477-9bc83734-014a-4eac-9328-9bd49f9ded9b.json binds clean consumerdfe37e641 and binary22a75625932a21c1508739a95ef712b37215a7a8/d69e3ce33bd8a4dff6d70c7c826874dd434ce8cd239d3f5a8b9289cc0e586754. Wrong-May CSV rejected despite June UI/download; correct June artifact96a66dfd7fb0d1fcdd6525a004170b80042b46794e95f6d0c010ebd1ab64a3ed, actual lost successful submit reply produces submission1/export1/no replay. Only independent verifier proof plus operator event permits promotion; missing/changed proof revokes reuse. Changed Export control assists with exports0; peer/prior accepted/original template preserved. Fresh owned OS0 and private home removed. Earlier HTTP/proxy harness failures remain preserved without invented counters. Physical narration/private account/production installation remain478.
 
 At22a root154 MCP, download-artifact4, runtime31 (8 explicitly ignored real-browser cases), date E2E1, strict Clippy/fmt, help/parity/handoff/link and docs41 gates pass. Source22a remains the runtime pin; later output/help/doc changes require their own applicable source gates, not a claim of a new installed runtime.
+
+## Report repeat closed, real narrated journey input-gated
+
+Shared sourced27092b68a1ba865ea52de7133290a82ace1f8cf passes154 MCP, strict workspace Clippy/format, review/grilling clients and strong implementation/declaration types, full service-client suite, parity/handoff/changed-link checks and42-route docs.477 tracker CLOSED after publication. Actual runtime proof remains separately pinned to22a/dfe consumer and the completed owned report receipt; no later install/physical claim.
+
+478's four source dependencies are validated. Execution remains blocked on an actual operator-narrated recording/artifact selection and an authenticated reporting portal/account/task plus exact applicable effect/cleanup authority. Existing captioned/reference-tone fixtures and synthetic operator events cannot fulfill physical narration/review. The earlier user input request remains unanswered; no private recording archive is searched or provider/account effect inferred. Existing Auth449 capability is consumed only as required by the selected portal, not blocked wholesale by separate464 acceptance. Independent470–472 work continues; no final broad review/remediation has run (counts0/0).
