@@ -1189,6 +1189,16 @@ the complete agent, operator, reconnect, and troubleshooting workflows.
 
 ## SiteGuides and website routines
 
+`connectHostedAuthHelper()` uses standalone Auth Receipts by default. Owner setup
+selects Auth's verified SDK candidate at
+`${XDG_DATA_HOME:-~/.local/share}/auth-receipts/client/current`; Bots is not required.
+Use Auth's client-only candidate builder for installation preparation. Private
+`AUTH_RECEIPTS_DISCOVERY_FILE` configuration stays inside its trusted SDK. Missing
+or incompatible SDKs report installation diagnostics without legacy fallback.
+An explicit `installationRoot` is a diagnostic override, not required per task.
+The retained legacy callback playbook below is separate from owner-login methods.
+
+
 Private login composition is available through
 `@agent-browser/client/login-playbook`. Supply existing SiteGuide routines, the
 trusted shared auth-helper connection and a durable metadata checkpoint store.

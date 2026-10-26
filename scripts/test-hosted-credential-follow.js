@@ -11,7 +11,7 @@ const root=await mkdtemp(join(tmpdir(),'hosted-credential-follow-'));
 const previous=process.env.CODEX_THREAD_ID;process.env.CODEX_THREAD_ID='synthetic-caller';
 try{
  await mkdir(join(root,'scripts'));await mkdir(join(root,'src'));
- await writeFile(join(root,'scripts/verify-installation-candidate.mjs'),`export async function verifyCandidate(){return {identity:'synthetic-candidate',sourceRevision:'synthetic-source'};}`);
+ await writeFile(join(root,'scripts/verify-installation-candidate.mjs'),`export async function verifyCandidate(){return {product:'auth-receipts',contractVersion:1,identity:'synthetic-candidate',sourceRevision:'synthetic-source'};}`);
  await writeFile(join(root,'src/auth-client.mjs'),`
  export let owner=true,errorCode;export function setOwner(value){owner=value;}export function setError(value){errorCode=value;}export const operations=[];
  export function createHostedAuthClient(){return {async call(operation,args){operations.push(operation);if(errorCode)throw Object.assign(Error('Synthetic capability failure'),{code:errorCode});if(operation==='auth_capabilities')return {contractVersion:1,credentialOperations:true,sharedOwnerAuthority:owner,legacyCredentialEffects:!owner};return {requestId:args.requestId,operation};}};}
@@ -25,7 +25,7 @@ try{
  await assert.rejects(connected.followLogin({requestId:'original-request'}),{code:'auth_authority_migration_required'});assert.deepEqual(sdk.operations.slice(beforeCalls),['auth_capabilities']);
  sdk.setOwner(true);sdk.setError('auth_not_authorized');await assert.rejects(connected.followLogin({requestId:'original-request'}),{code:'auth_not_authorized'});sdk.setError('auth_unknown_operation');await assert.rejects(connected.followLogin({requestId:'original-request'}),{code:'auth_authority_migration_required'});
  const legacy=join(root,'legacy');await mkdir(join(legacy,'scripts'),{recursive:true});await mkdir(join(legacy,'src'));
- await writeFile(join(legacy,'scripts/verify-installation-candidate.mjs'),`export async function verifyCandidate(){return {identity:'synthetic-old',sourceRevision:'synthetic-old'};}`);
+ await writeFile(join(legacy,'scripts/verify-installation-candidate.mjs'),`export async function verifyCandidate(){return {product:'auth-receipts',contractVersion:1,identity:'synthetic-old',sourceRevision:'synthetic-old'};}`);
  await writeFile(join(legacy,'src/auth-client.mjs'),`export function createHostedAuthClient(){return {async call(){throw Error('No legacy effect permitted');}};}`);
  const old=await connectHostedAuthHelper({installationRoot:legacy});await assert.rejects(old.followLogin({requestId:'original-request'}),{code:'auth_authority_migration_required'});
  await assert.rejects(old.requestLogin({idempotencyKey:'original-login',sourceId:'synthetic',recordId:'synthetic:1',origin:'https://example.test',targetId:'browser',purpose:'Synthetic',expiresAt:1000}),{code:'auth_authority_migration_required'});

@@ -28,6 +28,16 @@ A standalone handoff resolves its current owned desktop and redirects to Native 
 
 After human input, `browser_continue` with the same `taskId` reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff.
 
+## Standalone authentication
+
+Website credential use belongs to standalone Auth Receipts; Bots is another
+consumer. The Node `connectHostedAuthHelper()` adapter discovers Auth's verified
+SDK at its data-directory `auth-receipts/client/current` selector. Missing SDK or
+capabilities require Auth installation/enrollment diagnostics, not direct vault
+access or a legacy auth fallback. Private discovery and bearer material stay in
+the SDK. Owner decisions, required delivery and exact browser binding still gate
+input. Never repeat an unknown credential attempt.
+
 ## Hosted workflow guidance v1
 
 Use Bots-native browsing when it already owns the right browser and task. Choose

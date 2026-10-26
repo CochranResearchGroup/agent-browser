@@ -5329,6 +5329,9 @@ Examples:
             r##"
 agent-browser auth - Manage authentication profiles
 
+Standalone website login helpers consume the verified Auth Receipts client SDK.
+Bots is not required; private discovery stays inside Auth Receipts.
+
 Usage: agent-browser auth <subcommand> [args]
 
 Subcommands:

@@ -55,6 +55,16 @@ Remote View supplies desktop interaction; shared auth helpers supply private
 credential/MFA operations. Session verification alone does not prove either
 provider integration or completed login automation.
 
+## Standalone Auth client
+
+`connectHostedAuthHelper()` now defaults to the independently installed Auth
+Receipts SDK. Owner setup selects `auth-receipts/client/current` under the data
+directory; no Bots installation or per-task SDK override is needed. Auth's candidate
+builder supplies the hash-bound verification manifest. The trusted SDK owns
+private `AUTH_RECEIPTS_DISCOVERY_FILE` discovery and connection rotation. Missing,
+unsafe or incompatible SDKs fail explicitly rather than using legacy credentials.
+Installed/source/provider qualification remains separate.
+
 ## Compose private login
 
 `@agent-browser/client/login-playbook` exports `createLoginPlaybook` with an

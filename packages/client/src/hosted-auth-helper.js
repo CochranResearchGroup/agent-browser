@@ -7,10 +7,11 @@ import {pathToFileURL} from 'node:url';
 /**
  * Connect through the installed producer's supported SDK. Bearer discovery,
  * connection rotation and native caller attestation remain producer-owned.
+ * Auth publishes the verified client at its data-directory client/current selector.
  * This Node-only adapter never reads or returns connection-file contents.
  * @param {{installationRoot?:string,discoveryFile?:string}} [options]
  */
-export async function connectHostedAuthHelper({installationRoot=join(homedir(),'.local/share/codex-bots/current'),discoveryFile}={}) {
+export async function connectHostedAuthHelper({installationRoot=join(process.env.XDG_DATA_HOME||join(homedir(),'.local/share'),'auth-receipts/client/current'),discoveryFile}={}) {
   const callerTaskId=process.env.CODEX_THREAD_ID;
   if(!callerTaskId)throw Object.assign(Error('A current Codex caller is required'),{code:'auth_live_task_required'});
   let client,installation,followCredentialLogin;
@@ -19,12 +20,15 @@ export async function connectHostedAuthHelper({installationRoot=join(homedir(),'
     const app=await realpath(installationRoot);
     const {verifyCandidate}=await import(pathToFileURL(join(app,'scripts/verify-installation-candidate.mjs')).href);
     const verified=await verifyCandidate(app);
+    if(verified.product!=='auth-receipts'||verified.contractVersion!==1)throw Object.assign(Error('Install a compatible standalone Auth Receipts client SDK'),{code:'auth_sdk_incompatible'});
     const sdk=await import(pathToFileURL(join(app,'src/auth-client.mjs')).href);
     const {createHostedAuthClient}=sdk;followCredentialLogin=sdk.followCredentialLogin;
+    if(typeof createHostedAuthClient!=='function')throw Object.assign(Error('Installed Auth SDK lacks the supported client export'),{code:'auth_sdk_incompatible'});
     client=createHostedAuthClient({discoveryFile,threadId:()=>callerTaskId});
-    installation={identity:verified.identity,sourceRevision:verified.sourceRevision};
-  } catch {
-    throw Object.assign(Error('Installed hosted auth helper is unavailable'),{code:'auth_unavailable'});
+    installation={product:verified.product,contractVersion:verified.contractVersion,identity:verified.identity,sourceRevision:verified.sourceRevision};
+  } catch(error) {
+    if(['auth_sdk_incompatible','auth_sdk_invalid'].includes(error?.code))throw error;
+    throw Object.assign(Error('Standalone Auth Receipts client SDK is unavailable; install its verified client/current candidate before retrying'),{code:'auth_unavailable'});
   }
   const migration=()=>Object.assign(Error('Installed owner-authority login is unavailable'),{code:'auth_authority_migration_required'});
   const requireOwner=async()=>{
