@@ -1,0 +1,74 @@
+# Repeat a reviewed report with different dates
+
+Keep the reviewed procedure in its existing SiteGuide candidate lineage. Execute
+its routines through the current browser workflow in a new task, using the
+caller's requested dates. Check the live controls, authenticated business context,
+report identity and actual output. A click or download event cannot establish
+that the requested report was produced.
+
+`createTeachingReviewClient` from `@agent-browser/client/teaching-review` can retain
+and promote that result. The receiving application configures two trusted readers:
+`readOperatorDecision` reads an existing authenticated operator review, and
+`readFreshRepeat` reads an independently verified report receipt. Models supply
+opaque references to those records. A caller's `passed: true` or an approval label
+never substitutes for either reader.
+
+## Verify the actual report
+
+A fresh-repeat receipt binds the exact executed guide ID and file digest, semantic
+content digest, operator decision, source task, new execution task, playbook,
+requested date range, report ID, actual CSV artifact ID/digest and original report
+submission operation. The dates must differ from the recorded examples, and the
+execution task must differ from the source and review tasks.
+
+The receiving application must compare the requested report/date range with the
+observed report and actual CSV content before issuing the receipt. It must retain
+the original operation when a reply is lost. Read that operation and observe its
+result; do not repeat a submission to find out whether it happened. Use only
+supported download behavior. If a control or output format changed, adapt from
+reviewed knowledge or return concrete assistance identifying the changed control,
+expected result and required operator check.
+
+## Record, then promote
+
+After explicit operator review and successful fresh execution, import its existing
+verified receipt:
+
+```js
+const repeated = await review.recordFreshRepeat({
+  taskId: freshTaskId,
+  guideId: reviewed.guideId,
+  expectedSha256: reviewed.sha256,
+  operationId: 'retain-june-repeat',
+  validationRef: verifiedReportReceiptId,
+  requestedStartDate: '2026-06-01',
+  requestedEndDate: '2026-06-30',
+  reportId: 'daily-sales',
+});
+const current = await review.open({ taskId: freshTaskId, guideId: repeated.guideId });
+const promoted = await review.promote({
+  taskId: freshTaskId,
+  guideId: current.guideId,
+  expectedSha256: current.sha256,
+  operationId: 'promote-june-repeat',
+});
+```
+
+Recording repeat evidence creates an immutable child and keeps
+`ordinaryReuseAllowed: false`. Promotion creates another immutable child only
+when the operator decision and exact fresh-repeat receipt still verify and no
+questions remain. Optional clarification answers must also reverify through the
+same trusted answer reader used by the grilling client. Missing authority,
+changed answers or unresolved questions block promotion.
+
+`open` rechecks the trusted records. Its `acceptedVersion` identifies the exact
+executed candidate, while the original accepted file remains unchanged. A later
+edit is a new inert candidate and retains the prior accepted version. Reusing an
+operation ID recovers its original revision; changed intent or stale revisions
+conflict rather than overwriting another caller's work.
+
+Stored validation, provenance and promotion labels are claims. Stock MCP
+inspection and shape validation remain inert and do not become execution or
+operator authority. Reuse qualification belongs to the trusted receiving
+application. Report verification, source recording availability, real account
+authentication and private narrated acceptance remain separate evidence.

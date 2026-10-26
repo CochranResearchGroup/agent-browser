@@ -32,10 +32,35 @@ operator decisions, observed training dates, reused review task and unresolved
 questions. All are provider-free client proofs, not actual portal acceptance.
 
 The optional typed validation contract and clarification revalidator are owned
-by476. Consumer implementation checking and actual portal qualification wait for
-that provider contract and a clean pinned combined binary. Inert metadata never
+by476. Provider ace432be6786257fff7b87448a529141d530165f is imported locally as
+d3430a1a7 without overlapping review client edits. The actual JS implementation
+now declares and checks its exported factory against TeachingReviewClient and
+TeachingReviewOptions. Explicit checkJs plus declaration checking passes with
+Node ambient types and without skipLibCheck; the unrelated docs MDX ambient
+namespace failure was isolated through the exact type scope. Both existing
+review and grilling protocol harnesses pass. Actual portal qualification remains
+pending against the clean pinned combined binary. Inert metadata never
 establishes successful execution or operator authority. Private narrated
 acceptance478, real Auth, Native media and production effects remain separate.
 
 Memory disposition: forbidden, because the delegated scope excludes Graphiti
 writes. No memory write is inferred from a source checkpoint.
+
+
+## Owned runtime fixture prepared
+
+The new focused smoke extends the existing report page through an HTTPS server
+transform. It does not change the original teaching HTML, source manifest, media
+or frame bytes. It uses an owned existing-profile Chrome and initial normal HTTP
+CSV download policy, configured before any browser tasks. No product download
+mode is added. Source pins remain separate: the clean JS consumer tree and the
+root's immutable b7a4a6a3f366cb59500293cd579e793e5c580613 binary,
+SHA256 e1e2b25d93e875ecbbbc75e30fb69414172a14a8ecd262065e2218bc981ab59d.
+
+The runtime matrix will reject a real downloaded May CSV when June was requested,
+execute the reviewed routines in a new task for June, drop its original report
+submission reply without replay, independently verify actual report/CSV content,
+require trusted review and repeat evidence for promotion, and produce concrete
+assistance for a renamed export control. Peer draft, prior accepted bytes and
+original teaching page preservation plus fresh owned OS cleanup are required.
+This prepared fixture is not yet an observed runtime verdict.

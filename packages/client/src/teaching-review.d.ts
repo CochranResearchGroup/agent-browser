@@ -50,7 +50,7 @@ export interface TeachingReviewView extends TeachingVersionReference {
     sourceGaps:Array<{tMs:number;scope:string;reason:string;timeDomain:'recording_ms'}>;
     uncertainty:string[];
   }>;
-  source:TeachingSourceState & {replayable:boolean;evidenceAvailability?:Array<TeachingEvidenceAvailability & {replayable:boolean}>};
+  source:TeachingSourceState & {replayable:boolean;evidenceAvailability?:Array<TeachingEvidenceAvailability & {replayable:boolean}>;gaps?:Array<{tMs:number;scope:string;reason:string;timeDomain:'recording_ms'}>};
   review: ({state:'approved'|'rejected'} & TeachingOperatorReview) | {state:'not_reviewed'|'unverified';reason?:string;decisionId?:string};
   validation:TeachingValidationState;
   acceptedVersion:TeachingAcceptedVersion;

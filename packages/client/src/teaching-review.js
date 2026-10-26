@@ -1,3 +1,4 @@
+// @ts-check
 import {readFile,lstat,open,link,unlink} from 'node:fs/promises';
 import {join,isAbsolute} from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
@@ -12,6 +13,7 @@ const id=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.t
 const guideId=value=>typeof value==='string'&&/^[a-z0-9][a-z0-9-]{0,119}$/.test(value);
 const hash=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
 const task=value=>typeof value==='string'&&value.trim().length>0&&value.length<=4000&&!/\p{Cc}/u.test(value);
+/** @param {string} code @returns {never} */
 const error=code=>{throw Error(code);};
 function content(guide) {
   const value=clone(guide);delete value.guideId;
@@ -24,6 +26,8 @@ function versionId(root,revision) {return `${root.length<=96?root:'teaching-'+sh
  * Review/version the existing SiteGuide JSON candidate directory. The trusted
  * receiving application supplies the operator decision reader; model-supplied
  * approval booleans and merely opening this client establish no approval.
+ * @param {import('./teaching-review.d.ts').TeachingReviewOptions} options
+ * @returns {import('./teaching-review.d.ts').TeachingReviewClient}
  */
 export function createTeachingReviewClient({candidateDirectory,browser,sourceStatus,readOperatorDecision,readFreshRepeat,readOperatorAnswer,acceptedVersion}) {
   const retainedConfiguration=acceptedVersion===undefined?undefined:clone(acceptedVersion);
@@ -58,7 +62,11 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
     }
     return records;
   }
-  function receipt(record,status='saved') {
+  /** @template {string} S
+   * @param {any} record @param {S} status
+   * @returns {import('./teaching-review.d.ts').TeachingVersionReference & {status:S,ordinaryReuseAllowed:false}}
+   */
+  function receipt(record,status) {
     const meta=lineage(record);
     return {status,guideId:record.guide.guideId,sha256:record.sha256,rootGuideId:meta.rootGuideId,revision:meta.revision,operationId:meta.operationId,ordinaryReuseAllowed:false};
   }
@@ -66,7 +74,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
     const record=records.find(item=>item.guide.teaching?.lineage?.operationId===operationId);
     if(!record)return;
     if(record.guide.teaching.lineage.intentSha256!==intentSha256)return {status:'conflict',reason:'operation_intent_changed',...receipt(record,'conflict')};
-    return {...receipt(record),recoveredOriginal:true};
+    return {...receipt(record,'saved'),recoveredOriginal:true};
   }
   async function publish(guide) {
     await directory();
@@ -93,7 +101,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
       if(!['available','unavailable'].includes(observed.state))return {...scope,state:'unchecked',replayable:false,reason:'source_state_unverified'};
       const available=observed.state==='available';
       if(observed.gaps!==undefined&&(!Array.isArray(observed.gaps)||observed.gaps.length>256||observed.gaps.some(gap=>!Number.isFinite(gap.tMs)||gap.tMs<0||!id(gap.reason)||!id(gap.scope))))return {...scope,state:'unchecked',replayable:false,reason:'source_gap_metadata_unverified'};
-      const gaps=(observed.gaps??[]).map(gap=>({tMs:gap.tMs,reason:gap.reason,scope:gap.scope,timeDomain:'recording_ms'}));
+      const gaps=(observed.gaps??[]).map(gap=>({tMs:gap.tMs,reason:gap.reason,scope:gap.scope,timeDomain:/** @type {const} */('recording_ms')}));
       const evidenceAvailability=guide.teaching.evidence.map(reference=>{
         const matches=Array.isArray(observed.evidence)?observed.evidence.filter(item=>item.id===reference.id):[];
         const row=matches.length===1?matches[0]:undefined;
@@ -110,8 +118,10 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
     if(retainedConfiguration&&retained&&digest(retainedConfiguration)!==digest(retained))error('teaching_accepted_version_conflict');
     return retained??retainedConfiguration;
   }
+  /** @returns {Promise<import('./teaching-review.d.ts').TeachingAcceptedVersion>} */
   async function accepted(record) {
     const configured=acceptedReference(record);
+    /** @type {import('./teaching-review.d.ts').TeachingAcceptedVersion} */
     let retained={available:false,state:'none_configured'};
     if(configured) {
       try {const value=await read(configured.guideId);retained={...configured,available:value.sha256===configured.sha256,state:value.sha256===configured.sha256?'retained':'changed',readiness:'not_requalified'};}
@@ -124,6 +134,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
     }
     return retained;
   }
+  /** @returns {import('./teaching-draft.js').TeachingOperatorReview} */
   function checkedDecision(value,request) {
     if(!value||(request.decisionRef&&value.decisionId!==request.decisionRef)||!['approved','rejected'].includes(value.decision)||value.provenance!=='authenticated_operator'||
        !id(value.decisionId)||!id(value.actorRef)||!id(value.sourceRef)||
@@ -135,6 +146,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
   async function operatorDecision(request) {
     try {return await readOperatorDecision(request);} catch {error('teaching_operator_decision_unavailable');}
   }
+  /** @returns {Promise<import('./teaching-review.d.ts').TeachingReviewView['review']>} */
   async function review(record) {
     const saved=record.guide.teaching.review;
     if(!saved)return {state:'not_reviewed'};
@@ -147,11 +159,17 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
     } catch {return {state:'unverified',reason:'operator_decision_unavailable',decisionId:saved.decisionId};}
   }
   const date=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
+  /** @returns {import('./teaching-draft.js').TeachingValidation} */
   function checkedRepeat(value,request) {
     const bindings=['taskId','sourceTaskId','rootGuideId','executedGuideId','executedSha256','contentSha256','reviewDecisionId','playbookId','requestedStartDate','requestedEndDate','reportId'];
     if(!value||value.schemaVersion!=='agent-browser.teaching-fresh-repeat.v1'||value.provenance!=='receiving_application_verifier'||value.verification!=='report_identity_requested_dates_and_content'||value.artifactMediaType!=='text/csv'||
        value.validationId!==request.validationRef||!id(value.validationId)||!id(value.artifactId)||!id(value.originalOperationId)||!hash(value.artifactSha256)||bindings.some(key=>value[key]!==request[key]))error('teaching_repeat_receipt_invalid');
-    return Object.fromEntries(['schemaVersion','validationId','provenance',...bindings,'artifactId','artifactSha256','artifactMediaType','originalOperationId','verification'].map(key=>[key,value[key]]));
+    return {schemaVersion:'agent-browser.teaching-fresh-repeat.v1',validationId:value.validationId,provenance:'receiving_application_verifier',
+      taskId:value.taskId,sourceTaskId:value.sourceTaskId,rootGuideId:value.rootGuideId,executedGuideId:value.executedGuideId,executedSha256:value.executedSha256,
+      contentSha256:value.contentSha256,reviewDecisionId:value.reviewDecisionId,playbookId:value.playbookId,
+      requestedStartDate:value.requestedStartDate,requestedEndDate:value.requestedEndDate,reportId:value.reportId,
+      artifactId:value.artifactId,artifactSha256:value.artifactSha256,artifactMediaType:'text/csv',originalOperationId:value.originalOperationId,
+      verification:'report_identity_requested_dates_and_content'};
   }
   async function repeatReceipt(request) {
     if(typeof readFreshRepeat!=='function')error('teaching_repeat_authority_unconfigured');
@@ -175,6 +193,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
     if(!task(taskId)||taskId===teaching.sourceTaskId||taskId===saved?.taskId)error('teaching_fresh_task_required');
     return {validationRef,taskId,sourceTaskId:teaching.sourceTaskId,rootGuideId:lineage(record).rootGuideId,executedGuideId:record.guide.guideId,executedSha256:record.sha256,contentSha256:digest(content(record.guide)),reviewDecisionId:saved?.decisionId,playbookId:teaching.playbook.id,requestedStartDate:start,requestedEndDate:end,reportId};
   }
+  /** @returns {Promise<import('./teaching-review.d.ts').TeachingValidationState>} */
   async function validation(record) {
     const saved=record.guide.teaching.validation;
     if(!saved)return {state:'not_validated'};
@@ -188,13 +207,14 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
       return {state:'verified',...value};
     } catch(err) {return {state:'unverified',reason:err.message,validationId:saved.validationId};}
   }
+  /** @returns {Promise<import('./teaching-review.d.ts').TeachingSaveResult>} */
   async function mutate({taskId,guideId:name,expectedSha256,operationId},kind,intentData,transform) {
     if(!task(taskId)||!hash(expectedSha256)||!id(operationId))error('teaching_review_request_invalid');
     const base=candidate(await read(name)),meta=lineage(base),records=await chain(meta.rootGuideId);
     const intentSha256=digest({taskId,guideId:name,expectedSha256,operationId,kind,data:intentData});
     const recovered=prior(records,operationId,intentSha256);if(recovered)return recovered;
     const head=records.at(-1);
-    if(base.sha256!==expectedSha256||head.guide.guideId!==name||head.sha256!==expectedSha256)return {status:'conflict',reason:'stale_revision',current:receipt(head),ordinaryReuseAllowed:false};
+    if(base.sha256!==expectedSha256||head.guide.guideId!==name||head.sha256!==expectedSha256)return {status:'conflict',reason:'stale_revision',current:receipt(head,'saved'),ordinaryReuseAllowed:false};
     if(meta.revision>=256)error('teaching_review_lineage_capacity');
     const retained=acceptedReference(base);
     const guide=await transform(clone(base.guide),base);
@@ -204,11 +224,11 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
       ...(retained?{acceptedVersion:clone(retained)}:{})};
     const validated=await browser.validateTeachingCandidate({taskId,guide});
     if(validated.valid!==true||validated.guideId!==guide.guideId||validated.taskId!==taskId||validated.executionAllowed!==false||validated.operatorReviewQualified!==false)error('teaching_candidate_validation_failed');
-    try {return receipt(await publish(guide));}
+    try {return receipt(await publish(guide),'saved');}
     catch(err) {
       if(err.code!=='EEXIST')return {status:'unknown',reason:'publication_result_unconfirmed',rootGuideId:meta.rootGuideId,operationId,ordinaryReuseAllowed:false};
       const observed=await chain(meta.rootGuideId),result=prior(observed,operationId,intentSha256);
-      return result??{status:'conflict',reason:'concurrent_revision',current:receipt(observed.at(-1)),ordinaryReuseAllowed:false};
+      return result??{status:'conflict',reason:'concurrent_revision',current:receipt(observed.at(-1),'saved'),ordinaryReuseAllowed:false};
     }
   }
   return {
@@ -219,6 +239,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
       const evidence=new Map(guide.teaching.evidence.map(item=>[item.id,item]));
       const evidenceAvailability=new Map((availability.evidenceAvailability??[]).map(item=>[item.id,item]));
       const referenceView=id=>{const status=evidenceAvailability.get(id);return {...evidence.get(id),replayable:status?.replayable===true,availabilityState:status?.state??'unchecked',unavailabilityReason:status?.reason??availability.reason};};
+      /** @type {import('./teaching-review.d.ts').TeachingReviewView['steps']} */
       const steps=guide.teaching.routines.flatMap(routine=>routine.steps.map((step,index)=>({stepRef:`${routine.id}:${index}`,routineId:routine.id,index,action:step.action,target:step.target,explanation:step.description,
         expectedResult:step.expectedResult?{scope:'step',items:[step.expectedResult]}:{scope:'routine',items:routine.outcomes.map(item=>item.verification)},
         evidence:step.evidenceRefs.map(referenceView),
@@ -276,7 +297,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
     async lookupOperation({rootGuideId,operationId}) {
       if(!id(operationId))error('teaching_review_request_invalid');
       const records=await chain(rootGuideId),found=records.find(record=>record.guide.teaching?.lineage?.operationId===operationId);
-      return found?{...receipt(found),recoveredOriginal:true}:{status:'not_observed',operationId,retryAuthority:'not_inferred'};
+      return found?{...receipt(found,'saved'),recoveredOriginal:true}:{status:'not_observed',operationId,retryAuthority:'not_inferred'};
     },
   };
 }
