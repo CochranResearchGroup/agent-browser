@@ -49,6 +49,9 @@ export function createPlaybookClient(callTool) {
       if(guide.teaching?.schemaVersion!=='agent-browser.teaching-draft.v1' || guide.teaching.state!=='draft') throw Error('teaching_draft_required');
       return guide;
     },
+    /** Validate inert candidate shape/reference integrity; never review or execute it.
+     * @param {{taskId:string, guide:Record<string, unknown>}} options */
+    validateTeachingCandidate: ({taskId,guide}) => run(taskId,'validate_teaching_candidate',{guide}),
     /** @param {VerifyLoginOptions} options @returns {Promise<RoutineResult>} */
     verifyLogin: ({taskId, ...params}) => run(taskId, 'verify_login', params),
     /** @param {VerifyLoginOptions} options */

@@ -10,6 +10,7 @@ mod teaching;
 pub(super) const OPERATIONS: &[&str] = &[
     "siteguides",
     "inspect_guide",
+    "validate_teaching_candidate",
     "verify_login",
     "prepare_login",
     "validate_plan",
@@ -20,6 +21,7 @@ pub(super) fn schema(operation: &str) -> Result<Value, JsonRpcError> {
     let mut properties = match operation {
         "siteguides" => json!({}),
         "inspect_guide" => json!({"guideId":{"type":"string"}}),
+        "validate_teaching_candidate" => json!({"guide":{"type":"object"}}),
         "collect_posts" => {
             json!({"guideId":{"type":"string"},"maxItems":{"type":"integer","minimum":1,"maximum":200},
             "maxPages":{"type":"integer","minimum":1,"maximum":10},"maxScrolls":{"type":"integer","minimum":0,"maximum":10},
@@ -37,6 +39,7 @@ pub(super) fn schema(operation: &str) -> Result<Value, JsonRpcError> {
     let required = match operation {
         "siteguides" => json!([]),
         "inspect_guide" => json!(["guideId"]),
+        "validate_teaching_candidate" => json!(["guide"]),
         "collect_posts" => json!(["guideId"]),
         "validate_plan" => json!(["guideId", "accountRef", "organizationRef", "plan"]),
         _ => json!(["guideId", "accountRef", "organizationRef"]),
@@ -147,13 +150,16 @@ fn fault(reason: &str) -> JsonRpcError {
     JsonRpcError::invalid_params(reason)
 }
 
-fn load_guide(guide_id: &str) -> Result<SiteGuide, JsonRpcError> {
-    if guide_id.is_empty()
-        || guide_id.len() > 120
-        || !guide_id
+fn valid_guide_id(guide_id: &str) -> bool {
+    !guide_id.is_empty()
+        && guide_id.len() <= 120
+        && guide_id
             .bytes()
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
-    {
+}
+
+fn load_guide(guide_id: &str) -> Result<SiteGuide, JsonRpcError> {
+    if !valid_guide_id(guide_id) {
         return Err(fault("siteguide_id_invalid"));
     }
     let bytes = if let Some(directory) = std::env::var_os("AGENT_BROWSER_SITEGUIDE_DIRECTORY") {
@@ -174,6 +180,14 @@ fn load_guide(guide_id: &str) -> Result<SiteGuide, JsonRpcError> {
     };
     let guide: SiteGuide =
         serde_json::from_slice(&bytes).map_err(|_| fault("siteguide_invalid"))?;
+    validate_guide(&guide, guide_id)?;
+    Ok(guide)
+}
+
+fn validate_guide(guide: &SiteGuide, guide_id: &str) -> Result<(), JsonRpcError> {
+    if !valid_guide_id(guide_id) {
+        return Err(fault("siteguide_id_invalid"));
+    }
     if guide.schema_version != "agent-browser.siteguide.v1"
         || guide.guide_id != guide_id
         || guide.allowed_origins.is_empty()
@@ -264,7 +278,7 @@ fn load_guide(guide_id: &str) -> Result<SiteGuide, JsonRpcError> {
     }) {
         return Err(fault("siteguide_state_invalid"));
     }
-    Ok(guide)
+    Ok(())
 }
 
 fn task_context(task_id: &str) -> Result<Value, JsonRpcError> {
@@ -319,9 +333,44 @@ pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, 
             return Err(fault("playbook_argument_unknown"));
         }
     }
-    task_context(task_id)?;
+    if matches!(
+        operation,
+        "siteguides" | "inspect_guide" | "validate_teaching_candidate"
+    ) {
+        // Inert procedure metadata survives loss of the physical browser target.
+        // Executable routines retain their full current-target checks below.
+        super::workflow::task_session(task_id)?;
+    } else {
+        task_context(task_id)?;
+    }
     if operation == "siteguides" {
         let data = json!({"guides":guide_names()?});
+        return Ok(super::tool_response_from_payload(
+            "browser_command",
+            transport_session,
+            json!({}),
+            data,
+            false,
+        ));
+    }
+    if operation == "validate_teaching_candidate" {
+        let raw = params
+            .get("guide")
+            .ok_or_else(|| fault("teaching_candidate_required"))?;
+        if serde_json::to_vec(raw)
+            .map_err(|_| fault("teaching_candidate_invalid"))?
+            .len()
+            > 65_536
+        {
+            return Err(fault("teaching_candidate_too_large"));
+        }
+        let guide: SiteGuide =
+            serde_json::from_value(raw.clone()).map_err(|_| fault("siteguide_invalid"))?;
+        if guide.teaching.is_none() {
+            return Err(fault("teaching_draft_required"));
+        }
+        validate_guide(&guide, &guide.guide_id)?;
+        let data = json!({"valid":true,"guideId":guide.guide_id,"taskId":task_id,"state":"draft","executionAllowed":false,"operatorReviewQualified":false});
         return Ok(super::tool_response_from_payload(
             "browser_command",
             transport_session,
@@ -585,3 +634,6 @@ fn guide_names() -> Result<Vec<String>, JsonRpcError> {
 
 #[cfg(test)]
 mod teaching_tests;
+
+#[cfg(test)]
+mod teaching_review_tests;

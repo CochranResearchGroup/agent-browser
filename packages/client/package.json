@@ -46,6 +46,10 @@
     "./teaching-draft": {
       "types": "./src/teaching-draft.d.ts",
       "import": "./src/teaching-draft.js"
+    },
+    "./teaching-review": {
+      "types": "./src/teaching-review.d.ts",
+      "import": "./src/teaching-review.js"
     }
   },
   "scripts": {

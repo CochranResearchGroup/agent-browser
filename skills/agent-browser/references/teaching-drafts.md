@@ -89,3 +89,7 @@ not source truth, execution approval, publication, authentication or an outcome
 receipt. Teaching drafts cannot invoke executable playbook routines. The next
 work is focused clarification and explicit review/versioning; preserve the
 accepted version until a new candidate is actually reviewed.
+
+For operator corrections and immutable revision/review handling, continue with
+[teaching review](teaching-review.md). Initial staging accepts fresh draft
+knowledge; reserved lineage/review/validation metadata uses the review workflow.

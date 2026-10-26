@@ -12,6 +12,7 @@ export async function writeTeachingDraftCandidate({candidateDirectory,candidateO
   if(candidateOnly!==true || typeof candidateDirectory!=='string' || !isAbsolute(candidateDirectory)) throw Error('teaching_candidate_intent_required');
   if(!guide || guide.schemaVersion!=='agent-browser.siteguide.v1' || !/^[a-z0-9][a-z0-9-]{0,119}$/.test(guide.guideId) ||
       guide.teaching?.schemaVersion!=='agent-browser.teaching-draft.v1' || guide.teaching.state!=='draft' ||
+      ['lineage','review','validation'].some(key=>key in guide.teaching) ||
       !Array.isArray(guide.teaching.routines) || !guide.teaching.routines.length || !guide.teaching.playbook?.routineIds?.length) throw Error('teaching_candidate_invalid');
   const metadata=await lstat(candidateDirectory);
   if(!metadata.isDirectory() || metadata.isSymbolicLink() || process.getuid && metadata.uid!==process.getuid() || process.platform!=='win32' && (metadata.mode&0o077)) throw Error('teaching_candidate_directory_invalid');

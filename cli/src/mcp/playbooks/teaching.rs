@@ -33,6 +33,10 @@ pub(super) struct TeachingDraft {
     playbook: Playbook,
     unresolved: Vec<Question>,
     limitations: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    lineage: Option<Lineage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    review: Option<OperatorReview>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -105,6 +109,8 @@ struct Step {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     parameter: Option<String>,
     description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    expected_result: Option<String>,
     evidence_refs: Vec<String>,
     attribution: Attribution,
 }
@@ -144,6 +150,44 @@ struct Question {
     question: String,
     interpretation: String,
     evidence_refs: Vec<String>,
+}
+
+/// Immutable version provenance within the existing SiteGuide directory.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Lineage {
+    root_guide_id: String,
+    revision: u16,
+    parent_guide_id: String,
+    parent_sha256: String,
+    operation_id: String,
+    operation_kind: String,
+    intent_sha256: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    accepted_version: Option<RetainedVersion>,
+}
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RetainedVersion {
+    guide_id: String,
+    sha256: String,
+}
+/// A stored claim is not qualification: the receiving application must verify
+/// the original operator receipt through its authenticated authority port.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct OperatorReview {
+    decision_id: String,
+    decision: String,
+    actor_ref: String,
+    source_ref: String,
+    provenance: String,
+    task_id: String,
+    root_guide_id: String,
+    reviewed_guide_id: String,
+    reviewed_sha256: String,
+    content_sha256: String,
+    source_unavailable_acknowledged: bool,
 }
 
 fn text(value: &str) -> bool {
@@ -193,6 +237,40 @@ impl TeachingDraft {
             || self.limitations.iter().any(|item| !text(item))
         {
             return Err(bad());
+        }
+        if self.lineage.as_ref().is_some_and(|lineage| {
+            !super::valid_guide_id(&lineage.root_guide_id)
+                || !super::valid_guide_id(&lineage.parent_guide_id)
+                || !(2..=256).contains(&lineage.revision)
+                || !sha256(&lineage.parent_sha256)
+                || !identifier(&lineage.operation_id)
+                || !matches!(lineage.operation_kind.as_str(), "edit" | "review")
+                || !sha256(&lineage.intent_sha256)
+                || lineage.accepted_version.as_ref().is_some_and(|retained| {
+                    !super::valid_guide_id(&retained.guide_id) || !sha256(&retained.sha256)
+                })
+        }) {
+            return Err(bad());
+        }
+        if let Some(review) = &self.review {
+            let Some(lineage) = &self.lineage else {
+                return Err(bad());
+            };
+            if !identifier(&review.decision_id)
+                || !identifier(&review.actor_ref)
+                || !identifier(&review.source_ref)
+                || !matches!(review.decision.as_str(), "approved" | "rejected")
+                || review.provenance != "authenticated_operator"
+                || !text(&review.task_id)
+                || review.task_id.len() > 128
+                || review.root_guide_id != lineage.root_guide_id
+                || review.reviewed_guide_id != lineage.parent_guide_id
+                || review.reviewed_sha256 != lineage.parent_sha256
+                || !sha256(&review.content_sha256)
+                || lineage.operation_kind != "review"
+            {
+                return Err(bad());
+            }
         }
         let evidence =
             identifiers(self.evidence.iter().map(|item| item.id.as_str())).ok_or_else(bad)?;
@@ -275,6 +353,10 @@ impl TeachingDraft {
                     || controls.contains(step.target.as_str())
                     || step.target == "downloaded-artifact")
                     || !text(&step.description)
+                    || step
+                        .expected_result
+                        .as_deref()
+                        .is_some_and(|value| !text(value))
                     || !refs(&step.evidence_refs)
                     || step
                         .parameter
