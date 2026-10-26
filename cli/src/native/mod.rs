@@ -54,6 +54,7 @@ pub(crate) mod browser_session_runtime;
 pub(crate) mod browser_session_store;
 #[allow(dead_code)]
 pub mod browser_tabs;
+pub(crate) mod browser_task_operations;
 #[allow(dead_code)]
 pub mod browser_wait;
 #[allow(dead_code)]

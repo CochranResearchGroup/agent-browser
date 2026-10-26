@@ -120,9 +120,11 @@ pub(super) fn execute(command: Value, session: &str) -> Result<Value, JsonRpcErr
         .and_then(Value::as_str)
         .unwrap_or(session)
         .to_string();
-    ensure_transport(&session)?;
-    let response = send_command(command, &session)
-        .map_err(|error| issue(format!("workflow_transport_failed:{error}")))?;
+    let response = super::task_operations::transport(command, |command| {
+        ensure_transport(&session).map_err(|_| "workflow_transport_start_failed".to_string())?;
+        send_command(command, &session)
+    })
+    .map_err(|error| issue(format!("workflow_transport_failed:{error}")))?;
     if !response.success {
         return Err(issue(
             response
@@ -225,6 +227,54 @@ pub(super) fn inspect_briefing(task_id: &str) -> Result<Value, String> {
                 ),
         );
     }
+    let operations = state.task_operations.get(task_id);
+    if let Some(operations) = operations {
+        uncertain.extend(
+            operations
+                .values()
+                .filter(|operation| {
+                    operation.state
+                        != agent_browser_service_model::BrowserTaskOperationState::OwnerAcknowledged
+                })
+                .map(|operation| {
+                    json!({"source":"task_operation","operationId":operation.request_id,
+                "state":operation.state,"retryAllowed":false})
+                }),
+        );
+    }
+    let mut artifact_references = state
+        .task_artifact_references
+        .get(task_id)
+        .map(|references| {
+            references
+                .iter()
+                .map(|reference| json!(reference))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if let Some(operations) = operations {
+        artifact_references.extend(
+            operations
+                .values()
+                .filter(|operation| {
+                    operation.state
+                        == agent_browser_service_model::BrowserTaskOperationState::OwnerAcknowledged
+                        && operation
+                            .evidence_references
+                            .get("artifactKind")
+                            .is_some_and(|kind| kind == "screenshot")
+                })
+                .filter_map(|operation| {
+                    operation
+                        .evidence_references
+                        .get("artifactId")
+                        .map(|artifact_id| {
+                            json!({"source":"task_operation","operationId":operation.request_id,
+                    "artifactId":artifact_id,"kind":"screenshot","availability":"not_revalidated"})
+                        })
+                }),
+        );
+    }
     let uncertainty_truncated = uncertain.len() > 32 || original_uncertainty["truncated"] == true;
     uncertain.truncate(32);
     let assistance = tab
@@ -245,8 +295,8 @@ pub(super) fn inspect_briefing(task_id: &str) -> Result<Value, String> {
         "tabId":tab.map(|tab| &tab.id),"targetId":tab.map(|tab| &tab.target_id),
         "contextEvidence":"retained_not_live","currentTargetState":if tab.is_some(){"retained_not_live"}else{"missing_or_conflicting"},
         "lastActivityAtMs":task.last_activity_at_ms,"goal":goal,"lastVerifiedOutcome":outcome,
-        "artifacts":{"status":if state.task_artifact_references.contains_key(task_id){"recorded_references_not_revalidated"}else{"not_recorded"},
-            "references":state.task_artifact_references.get(task_id)},
+        "artifacts":{"status":if !artifact_references.is_empty(){"recorded_references_not_revalidated"}else{"not_recorded"},
+            "references":artifact_references},
         "assistance":assistance,"control":{"epoch":control["epoch"],"owner":if control_recorded {control["owner"].clone()} else {json!("unverified")},
             "pauseReads":control["pauseReads"],"cooperativeOnly":true},
         "uncertainOperations":uncertain,"uncertaintyTruncated":uncertainty_truncated,
@@ -623,41 +673,60 @@ pub(super) fn close(arguments: &Value, session: &str) -> Result<Value, JsonRpcEr
     ))
 }
 
-/// Continuation is an ordinary addressed page read through the existing owner,
-/// not executable transfer, viewer admission, or a separate profile acquisition.
+/// Observe an exact retained target without recovering a physical browser or
+/// replaying navigation. Original operation readback is independent of this read.
 pub(super) fn continue_task(
     arguments: &Value,
     transport_session: &str,
 ) -> Result<Value, JsonRpcError> {
     let task_id = required_string_argument(arguments, "taskId")?;
+    let briefing = inspect_briefing(task_id).map_err(issue)?;
+    let mode = inspect_mode(task_id).map_err(issue)?;
+    let intervention = |reason: &str| {
+        super::tool_response_from_payload(
+            "browser_continue",
+            transport_session,
+            json!({}),
+            json!({"taskId":task_id,"status":"intervention_required","reason":reason,
+            "transientPageState":"unavailable_not_reconstructed","briefing":briefing,
+            "nextAction":"inspect_original_operations_and_choose_explicit_recovery_without_replay"}),
+            false,
+        )
+    };
+    if mode["mode"] == "unverified" {
+        return Ok(intervention("original_process_unverified_or_lost"));
+    }
+    let context =
+        crate::native::browser_task_operations::retained_context(task_id).map_err(issue)?;
     let session_name = task_session(task_id)?;
-    let observed = execute(
+    let observed = match execute(
         json!({"id":uuid::Uuid::new_v4().to_string(),
-        "action":"url","sessionName":session_name,"sessionId":task_id}),
+        "action":"url","sessionName":session_name,"sessionId":task_id,
+        "retainedTaskOnly":true,"hostControlFreshObservation":true,"retainedTaskContext":context}),
         transport_session,
-    )?;
+    ) {
+        Ok(observed) => observed,
+        Err(_) => return Ok(intervention("current_target_observation_failed")),
+    };
+    if crate::native::browser_task_operations::retained_context(task_id).map_err(issue)? != context
+    {
+        return Ok(intervention("retained_context_changed_during_observation"));
+    }
     let current_url = observed["url"]
         .as_str()
         .ok_or_else(|| issue("browser_task_current_url_missing"))?;
-    let path = BrowserSessionSqliteStore::default_sqlite_path().map_err(issue)?;
-    let store = BrowserSessionSqliteStore::open_read_only(&path).map_err(issue)?;
-    let state = store.load_session_state().map_err(issue)?;
-    let task = state
-        .sessions
-        .get(task_id)
-        .ok_or_else(|| issue("browser_task_not_found_after_continue"))?;
-    let tab_id = task
-        .current_tab_id
-        .as_deref()
-        .filter(|id| state.tabs.contains_key(*id))
-        .ok_or_else(|| issue("browser_task_current_tab_missing"))?;
+    let current_briefing = inspect_briefing(task_id).map_err(issue)?;
+    let url_observed = observed.get("urlObserved").cloned().unwrap_or(json!(true));
     Ok(super::tool_response_from_payload(
         "browser_continue",
         transport_session,
         json!({}),
-        json!({"taskId":task_id,"profileId":task.profile_id,"browserId":task.browser_id,
-            "tabId":tab_id,"url":current_url,"urlObserved":observed.get("urlObserved").cloned().unwrap_or(json!(true)),
-            "mode":observed.get("mode").cloned().unwrap_or(json!("automation"))}),
+        json!({"taskId":task_id,"profileId":context["profileId"],"browserId":context["browserId"],
+            "tabId":context["tabId"],"targetId":context["targetId"],"url":current_url,"urlObserved":url_observed,
+            "mode":observed.get("mode").cloned().unwrap_or(json!("automation")),
+            "status":if url_observed==true {"observed"}else{"retained_context"},
+            "transientPageState":if url_observed==true {"existing_target_observed_not_reconstructed"}else{"unverified"},
+            "briefing":current_briefing}),
         false,
     ))
 }

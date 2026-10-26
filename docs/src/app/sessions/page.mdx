@@ -594,3 +594,58 @@ Software clients can use `getTaskBriefing({baseUrl, taskId, headers})` from
 session cookie in the request headers. The helper rejects redirects and identity
 mismatches without retrying. A task retains at most 256 artifact references;
 new capture/download requests fail before browser effects when this capacity is full.
+
+
+### Recover the original operation
+
+For addressed MCP page effects, choose an opaque `requestId` before sending the
+request and keep it with the `taskId`:
+
+```json
+{"name":"browser_fill","arguments":{"taskId":"session:report","requestId":"report-draft-1","selector":"#draft","value":"Prepared draft"}}
+```
+
+`browser_navigate`, `browser_click`, `browser_fill`, `browser_screenshot`, and
+eligible single page actions through `browser_command` record a pending original
+operation before starting transport. Reusing the same request and ID reads its
+original receipt without dispatching again. Reusing an ID for changed arguments
+fails with a conflict. Do not put secrets in request IDs. Unscoped commands and
+legacy CLI page effects do not obtain these receipts. Auth, Native input and multi-step
+playbooks retain their separate owner journals.
+
+After a timeout, lost reply or owner restart, read the original operation:
+
+```json
+{"name":"browser_command","arguments":{"taskId":"session:report","action":"task_operation","params":{"requestId":"report-draft-1"}}}
+```
+
+```bash
+agent-browser --json mcp task-operation session:report report-draft-1
+```
+
+The lookup does not start a daemon, relaunch a browser, regenerate an auth factor,
+or repeat an action. `pending` and `uncertain` require inspection; they never
+permit an automatic retry. `owner_acknowledged` records the owner's successful
+reply and does not prove the site's business outcome. Receipts expose identifiers,
+status and selected evidence references, without raw fill values, scripts, page
+bodies or private command fingerprints. Each task retains at most 256 operations;
+capacity exhaustion preserves history and rejects further effects.
+
+Software can call `getTaskOperation({baseUrl, taskId, requestId, headers})` from
+`@agent-browser/client/task-briefing`, using the existing dashboard session cookie.
+Its authenticated endpoint is
+`GET /api/browser/tasks/{encoded-task-id}/operations/{encoded-request-id}`.
+Identity mismatches and redirects fail without retry. This GET and the CLI lookup
+are read-only; they do not make unrelated HTTP or CLI effects idempotent.
+
+`task_briefing` preserves original uncertain operation IDs and references to
+successfully produced screenshots across an owner restart. Operation-backed
+screenshot references identify the original capture and report
+`availability: "not_revalidated"`; they do not promise a file remains available.
+A replacement agent should use `browser_continue` to observe the retained current
+target. Healthy tasks retain their exact browser/tab and unsaved page state.
+Changed identity or lost physical state requires intervention. Continuation does
+not recreate a lost draft by replaying navigation or previous input.
+
+Native input keeps its existing Native owner and cooperative journal; it does not
+obtain a CDP task-operation receipt or an invented provider receipt ID.

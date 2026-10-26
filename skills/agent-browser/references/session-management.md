@@ -230,3 +230,33 @@ agent-browser --runtime-profile billing open https://app.example.com/invoices
 # Use --session mainly for concurrency or isolation
 agent-browser --session scrape-a open https://docs.example.com
 ```
+
+
+## Recover an addressed task operation
+
+Choose a non-secret opaque `requestId` before an addressed MCP page effect and
+retain it with `taskId`. `browser_navigate`, `browser_click`, `browser_fill`,
+`browser_screenshot` and eligible single page `browser_command` actions keep the
+original operation in the existing owner journal before transport starts.
+
+After a lost reply, read `browser_command` with `{taskId, action:
+"task_operation", params: {requestId}}`, or `agent-browser --json mcp
+task-operation TASK REQUEST`. A repeated identical addressed MCP request returns
+the original receipt without another dispatch. Changed arguments with the same
+ID conflict. Do not refill, repeat a submission, regenerate factors or relaunch
+to discover an uncertain outcome. `pending` and `uncertain` are inspection states;
+`owner_acknowledged` records an owner reply, not site completion.
+
+Use `task_briefing` for original operation references and recorded screenshot
+references, whose availability is not revalidated. `browser_continue` observes
+only the retained current target; lost transient state requires intervention and
+is never reconstructed through replay. Preserve peers and unsaved drafts.
+
+Software lookup uses `getTaskOperation` from `@agent-browser/client/task-briefing`
+and the authenticated GET `/api/browser/tasks/{task}/operations/{request}` with
+the existing dashboard session cookie. The CLI and HTTP lookup are read-only.
+Unscoped and legacy CLI effects do not gain operation receipts. Auth, Native input and
+multi-step playbooks keep their separate journals. No new approval flow is added.
+
+Native input keeps its existing Native owner and cooperative journal; it does not
+obtain a CDP task-operation receipt or an invented provider receipt ID.

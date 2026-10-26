@@ -14,19 +14,17 @@ mod hosted;
 mod native_policy_tests;
 mod playbooks;
 mod profile_duplicate;
+mod task_operations;
+#[cfg(test)]
+mod task_operations_tests;
 mod workflow;
 
 use crate::connection::Response;
 
 // Public page adapters carry the canonical session ID as their route. Resolve
 // only at the transport boundary so typed command builders cannot discard it.
-fn send_command(mut command: Value, route: &str) -> Result<Response, String> {
-    if route.starts_with("session:") {
-        let lane = workflow::address_task_command(&mut command, route)?;
-        crate::connection::send_command(command, &lane)
-    } else {
-        crate::connection::send_command(command, route)
-    }
+fn send_command(command: Value, route: &str) -> Result<Response, String> {
+    task_operations::send(command, route)
 }
 use crate::native::service_access::{
     parse_service_access_plan_query, service_access_plan_for_state,
@@ -72,6 +70,10 @@ use crate::native::stream::service_profile_lookup_response_for_state;
 pub(crate) fn task_briefing_response(task_id: &str) -> Result<Value, String> {
     workflow::inspect_briefing(task_id)
 }
+/// Read one original operation without daemon or browser effects.
+pub(crate) fn task_operation_response(task_id: &str, request_id: &str) -> Result<Value, String> {
+    task_operations::lookup(task_id, request_id)
+}
 
 const BROWSERS_RESOURCE: &str = "agent-browser://browsers";
 const EVENTS_RESOURCE: &str = "agent-browser://events";
@@ -99,6 +101,7 @@ const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
 // Advanced commands address one task. Explicit profile duplication also
 // supports a source profile without acquiring a task.
 const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = &[
+    "task_operation",
     "mode",
     "task_briefing",
     "native_capture",
@@ -307,6 +310,14 @@ fn mcp_command_response_with_config(
             Ok(
                 json!({"success":true,"data":workflow::execute(command, &session).map_err(native_request_error)?}),
             )
+        }
+        Some("task-operation") => {
+            if args.len() != 4 || args[2].trim().is_empty() || args[3].trim().is_empty() {
+                return Err(
+                    "Usage: agent-browser --json mcp task-operation <task-id> <request-id>".into(),
+                );
+            }
+            Ok(json!({"success":true,"data":task_operations::lookup(&args[2], &args[3])?}))
         }
         Some("task-briefing") => {
             if args.len() != 3 || args[2].trim().is_empty() {
@@ -5481,6 +5492,16 @@ fn call_service_mcp_tool(
     session: &str,
     configured_service_state: &ServiceState,
 ) -> Result<Value, JsonRpcError> {
+    task_operations::with_context(params, || {
+        call_service_mcp_tool_inner(params, session, configured_service_state)
+    })
+}
+
+fn call_service_mcp_tool_inner(
+    params: Option<&Value>,
+    session: &str,
+    configured_service_state: &ServiceState,
+) -> Result<Value, JsonRpcError> {
     let name = params
         .and_then(|value| value.get("name"))
         .and_then(|value| value.as_str())
@@ -5635,6 +5656,9 @@ fn call_service_mcp_tool(
         }
         if arguments["action"] == "profile_duplicate" {
             return profile_duplicate::call(arguments, session);
+        }
+        if arguments["action"] == "task_operation" {
+            return task_operations::call(arguments, session);
         }
         if arguments["action"] == "task_briefing" {
             let task_id = required_string_argument(arguments, "taskId")?;
