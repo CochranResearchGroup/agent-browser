@@ -5,7 +5,7 @@ Status: OPEN
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/466
 Integration branch: recipes/spec466-integration
 Integration base: 5770d693b23d51c9932574fa68e012a98029ce73
-Integration tip:25dd69054 plus current artifact repair/shared guidance; draft PR480 records publication.
+Validated source tip:34d400f0ebcb4915cc93746e46586e69d37e5573; latest documentation checkpoint follows on recipes/spec466-integration / draft PR480.
 
 ## Custody and scope
 
@@ -17,14 +17,14 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 
 | Ticket | Blockers | State | Owner | Branch / checkout | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| 467 | none | running | root | recipes/spec466-integration / duplicate-403 | Read-only gates passed72b62dc94; reopened artifact activity/identity regression, repair validation pending |
+| 467 | none | validated | root | recipes/spec466-integration / duplicate-403 | Reopened regression repairedff812bf0f; model2/MCP151/strictClippy/fmt PASS34d400f0e; reclosure pending |
 | 468 | 467 | running | implement_468 | platform/task-recovery-468 / spec466-468 | base42875e629; artifact gate repair pending |
 | 469 | 467 | running | implement_469 | challenge/native-assistance-469 / spec466-469 | base42875e629; independent source/native fixture work |
 | 470 | 468,469 | pending | unassigned | pending | none |
 | 471 | 470 | pending | unassigned | pending | none |
 | 472 | 471 | pending | unassigned | pending | none |
 | 473 | none | validated | implement_473 | recipes/teaching-evidence-473 / profile-proof | worker ea0e2f42ab59; integration67780a8b1; synthetic cases and shared docs validation pass; tracker CLOSED with explicit source/synthetic receipt |
-| 474 | 473 | integrated | implement_473 | recipes/teaching-draft-474 / profile-proof | worker243b7405; integration25dd69054; combined gates pending |
+| 474 | 473 | validated | implement_473 | recipes/teaching-draft-474 / profile-proof | worker243b7405; integration25dd69054; combinedMCP151/strict/docs/client PASS; closure pending |
 | 475 | 474 | pending | unassigned | pending | none |
 | 476 | 475 | pending | unassigned | pending | none |
 | 477 | 475 | pending | unassigned | pending | none |
@@ -107,3 +107,29 @@ The implementing agent interpreted real decoded frames from the fixed synthetic
 caption-led A/V and authored four useful routines, date/refunds parameters,
 outcomes/recovery and source-linked uncertainty. Reference-tone audio is not
 narration; actual spoken/portal qualification remains478. Combined gates pending.
+
+
+## Requalified467 and474 integration
+
+At34d400f0ebcb4915cc93746e46586e69d37e5573:
+- Public owner-model artifact regression PASS2 after both recorded reds.
+- Full MCP source set PASS151, including teaching inspection/compatibility,
+  ordinary task briefing and exact no-effect/peer/control checks.
+- Strict workspace Clippy PASS and cargo-safe workspace format check PASS.
+- Teaching draft/evidence and briefing client tests/types PASS; package exports PASS.
+- Docs build PASS38 routes; changed documentation links PASS.
+- API/MCP parity PASS. Handoff docs initially exposed that the compacted skill
+  had moved its explicit opaque-path rule into the reference. Restored readiness,
+  durable-link and raw-provider prohibition in the main skill; focused handoff
+  docs and parity both PASS, main skill9980 bytes.
+No user-scoped skill publication or runtime installation occurred.
+
+Root independently viewed the date/result frames: May1–May31, checked refunds,
+USD,125.00/5 and240.00/8 example rows, with captions distinguishing future policy
+and verification. This supports the concrete synthetic draft; it does not turn
+reference-tone audio into narration or validate future-date execution.
+
+467 may be reclosed with its repaired publication invariant and explicitly scoped
+source evidence.474 may be closed with meaningful agent-authored draft evidence.
+475 becomes ready only from this validated integration checkpoint;468/469 remain
+owned running work. Post-batch broad review/remediation counts remain0/0.

@@ -67,6 +67,9 @@ and epoch; inspect status and use a fresh explicit intent, never replay uncertai
 Read [retained workflow transport](references/cli-and-service.md#retained-workflow-transport)
 before downloads, stale transport recovery, retirement or advanced administration.
 
+Return, store, and reopen only `handoffUrl` (standalone: `/remote-view/<handoff-id>`).
+Never send providerExternalUrl or raw Guacamole URLs.
+
 ## Operator workspace
 
 Read [Workspace](references/cli-and-service.md#operator-workspace) for tabs, sharing and handoffs. Focus needs an owned tab; reviews are opt-in. Rail catches up once. Remote View owns view/auth. Terminal pool replay retains history.
