@@ -762,7 +762,12 @@ finally{
    uiReturnDispatched=true;const response=await fetch(service.url+`/api/agent-browser/handoffs/${uiHandoffId}/control`,{method:'POST',headers:{origin:service.url,'content-type':'application/json'},body:JSON.stringify({operation:'return',operationId:randomUUID(),expectedEpoch:current.control.epoch,actor:'synthetic-operator',reason:'Explicit synthetic fixture cleanup'}),signal:AbortSignal.timeout(120000)});assert.equal(response.status,200);const returned=await response.json();assert.equal(returned.control.owner,'agent');assert.equal(returned.native.owner,'agent');cleanup.nativeControlReturned=true;
   }else assert.equal(current.control.owner,'agent','Uncertain Native takeover requires explicit readback');
  });
- await clean('close-viewer',async()=>{await viewer?.close();});
+ await clean('close-viewer',async()=>{
+  // Drain/ignore only this fixture's routes before closing their contexts;
+  // otherwise an in-flight route.fetch can terminate Node during cleanup.
+  for(const context of viewer?.contexts()??[])for(const page of context.pages())await page.unrouteAll({behavior:'ignoreErrors'});
+  await viewer?.close();
+ });
  await clean('close-viewer-server',async()=>{await viewerServer?.close();});
  await clean('stop-watch',async()=>{if(watcher&&watcher.exitCode===null&&watcher.signalCode===null){const exit=once(watcher,'exit');watcher.kill('SIGTERM');await exit;}});
  for(const borrowed of borrowedTasks)if(!closedBorrowedTasks.has(borrowed.taskId))await clean('close-borrowed-task',async()=>{closedBorrowedTasks.add(borrowed.taskId);await workflow('browser_close',{taskId:borrowed.taskId});});

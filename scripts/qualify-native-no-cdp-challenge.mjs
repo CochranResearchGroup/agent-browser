@@ -10,7 +10,7 @@ export async function qualifyNativeNoCdpChallenge({workflow,runCli,context,chrom
   const profile='no-cdp-challenge-'+randomUUID();
   const created=JSON.parse((await runCli(context,['--json','runtime','create',profile,'--browser-family','chromium'])).stdout);
   assert.equal(created.created,true);
-  const selection=await workflow('browser_build',{params:{profileId:profile,operationId:randomUUID(),choice:'select_for_next_launch',
+  const selection=await workflow('browser_command',{action:'browser_build',params:{profileId:profile,operationId:randomUUID(),choice:'select_for_next_launch',
     mode:'cdp_free',executablePath:chrome,expectedSha256:createHash('sha256').update(await readFile(chrome)).digest('hex'),ownerConfirmed:true}});
   assert.equal(selection.phase,'selected_for_next_launch');
   const response=await fetch(service.url+`/api/bots/${bot.id}/hosted-browser`,{method:'POST',headers:{origin:service.url,'content-type':'application/json'},
