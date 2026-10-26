@@ -55,7 +55,40 @@ Remote View supplies desktop interaction; shared auth helpers supply private
 credential/MFA operations. Session verification alone does not prove either
 provider integration or completed login automation.
 
-## Compose private login
+## Standalone Auth client
+
+`connectHostedAuthHelper()` now defaults to the independently installed Auth
+Receipts SDK. Owner setup selects `auth-receipts/client/current` under the data
+directory; no Bots installation or per-task SDK override is needed. Auth's candidate
+builder supplies the hash-bound verification manifest. The trusted SDK owns
+private `AUTH_RECEIPTS_DISCOVERY_FILE` discovery and connection rotation. Missing,
+unsafe or incompatible SDKs fail explicitly rather than using legacy credentials.
+Installed/source/provider qualification remains separate.
+
+## Owner-authority login and factors
+
+Import `createOwnerLoginPlaybook`, `createOwnerTotpContinuation` and
+`createOwnerNumberMatchingContinuation` from the existing login-playbook entry.
+All use the connected standalone `auth` client, trusted `browser` routines and
+metadata `checkpoints`. Owner login resolves service/account intent into the
+existing owner review and private-use lifecycle. Exact task/profile/browser/tab/
+generation and current account/company evidence are required. Typed holds preserve
+missing prerequisites; a profile name is not identity proof.
+
+TOTP uses Auth's observed continuation, including after SSO. Number matching uses
+an existing private attempt and Auth's owner-only reverse-input path. Capabilities
+are receiving-path-specific: a browser-client TOTP route does not establish native
+number-matching or accessibility qualification. Neither factory returns codes or
+creates policy. Unknown input is retained without a new credential request.
+Owner login `reconcile: true` only reads an existing checkpoint/request.
+
+Optional `browserActionEvidence` v1 describes protected input and submission
+acknowledgement for the exact request/attempt/generation. Dispatch is not server
+acceptance or authenticated identity, and this evidence never grants retry rights.
+
+<a id="compose-private-login" />
+
+## Retained legacy callback checkpoints
 
 `@agent-browser/client/login-playbook` exports `createLoginPlaybook` with an
 existing routine client, a trusted auth-helper callback and a durable metadata
@@ -71,7 +104,8 @@ identifies its work, while taskId addresses the browser. Version2 independently
 freezes the exact receiving provider/task/profile/browser/tab. The hosted path
 uses request_login, inspect_request and begin_authentication; legacy callbacks
 retain authenticate. Credentials and factors stay inside trusted host receiving
-ports. The existing Bots service continues to own auth; no new service is made.
+ports. These operations describe retained legacy checkpoints. New credential requests
+use the standalone owner factory above; Bots is not Auth authority.
 
 Each advance returns the next actionable state. Preserve the original scope,
 task and expiry when continuing. The adapter records intent before submission

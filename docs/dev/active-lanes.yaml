@@ -1,6 +1,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P295
+    product_lane: PL-AUTH
+    objective: Integrate standalone Auth Receipts and qualify browser continuation
+    plan: docs/dev/plans/0295-2026-10-26-standalone-auth-449.md
+    branch: auth/standalone-449
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#449, CochranResearchGroup/agent-browser#457]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [P279]
+    reconciled_overlaps: ["Primary preserves original P279 dirty checkout; exact adapter/types/test/spec copied as reviewed inputs; worker writes serialize shared contracts"]
+    limitations: ["No production or live acceptance authority inferred", "One broad review and one bounded remediation"]
+    updated_at: 2026-10-26
   - id: P294
     product_lane: PL-BUGFIX
     objective: Restore authenticated dashboard browser operation ingress
