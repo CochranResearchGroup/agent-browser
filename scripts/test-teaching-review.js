@@ -9,10 +9,11 @@ import {fileURLToPath} from 'node:url';
 import {writeTeachingDraftCandidate} from '../packages/client/src/teaching-draft.js';
 import {createPlaybookClient} from '../packages/client/src/playbooks.js';
 import {createTeachingReviewClient} from '../packages/client/src/teaching-review.js';
+import {createTeachingGrillingClient} from '../packages/client/src/teaching-grilling.js';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const original=JSON.parse(await readFile(new URL('./fixtures/teaching-report/draft.json',import.meta.url),'utf8'));
 const directory=await mkdtemp(join(tmpdir(),'teaching-review-public-'));
-const decisions=new Map();let operatorPosts=0;
+const decisions=new Map(),answers=new Map();let operatorPosts=0;
 const server=createServer(async(req,res)=>{
  res.setHeader('content-type','application/json');
  const url=new URL(req.url,'http://fixture');
@@ -28,6 +29,16 @@ const server=createServer(async(req,res)=>{
  if(req.method==='GET'&&url.pathname.startsWith('/decisions/')) {
   if(req.headers.authorization!=='Bearer synthetic-receiver'){res.writeHead(403);res.end('{}');return;}
   const value=decisions.get(url.pathname.split('/').at(-1));res.writeHead(value?200:404);res.end(JSON.stringify(value??{}));return;
+ }
+ if(req.method==='POST'&&url.pathname==='/answers') {
+  if(req.headers.authorization!=='Bearer synthetic-human'||req.headers.origin!=='https://operator.test'){res.writeHead(403);res.end('{}');return;}
+  let raw='';for await(const chunk of req)raw+=chunk;const value=JSON.parse(raw);
+  const record={...value,answerRef:'answer-'+(answers.size+1),actorRef:'authenticated-human-1',sourceRef:'owner-answer-'+(answers.size+1),provenance:'authenticated_operator'};
+  answers.set(record.answerRef,record);res.end(JSON.stringify(record));return;
+ }
+ if(req.method==='GET'&&url.pathname.startsWith('/answers/')) {
+  if(req.headers.authorization!=='Bearer synthetic-receiver'){res.writeHead(403);res.end('{}');return;}
+  const value=answers.get(url.pathname.split('/').at(-1));res.writeHead(value?200:404);res.end(JSON.stringify(value??{}));return;
  }
  res.writeHead(404);res.end('{}');
 });
@@ -89,6 +100,79 @@ try {
  const echoOnly=await createTeachingReviewClient({...options,readOperatorDecision:async request=>({...request})}).open({taskId:'task',guideId:reviewed.guideId});
  assert.equal(echoOnly.review.state,'unverified','Mirrored request fields cannot establish an operator decision');
  assert.equal(final.blockers.includes('fresh_repeat_validation_required'),true);assert.equal(final.proposals[0].adopted,false);
+ const repeatRoot=structuredClone(original);repeatRoot.guideId='daily-sales-repeat-v1';repeatRoot.teaching.unresolved=[];
+ await writeTeachingDraftCandidate({candidateDirectory:directory,candidateOnly:true,guide:repeatRoot});
+ let trustedRepeat;
+ const repeatOptions={...options,readFreshRepeat:async request=>{if(request.validationRef!=='verified-repeat-1'||!trustedRepeat)throw Error('repeat receipt unavailable');return structuredClone(trustedRepeat);}};
+ const repeatClient=createTeachingReviewClient(repeatOptions);
+ const repeatView=await repeatClient.open({taskId:'review-task',guideId:repeatRoot.guideId});
+ const repeatDecision=await (await fetch(origin+'/decisions',{method:'POST',headers:{authorization:'Bearer synthetic-human',origin:'https://operator.test'},body:JSON.stringify({intent:'review_exact_candidate',decision:'approved',taskId:'review-task',rootGuideId:repeatView.rootGuideId,reviewedGuideId:repeatView.guideId,reviewedSha256:repeatView.sha256,contentSha256:repeatView.contentSha256})})).json();
+ const repeatReviewed=await repeatClient.recordDecision({taskId:'review-task',guideId:repeatView.guideId,expectedSha256:repeatView.sha256,operationId:'review-for-repeat',decisionRef:repeatDecision.decisionId});
+ const reviewedRepeat=await repeatClient.open({taskId:'review-task',guideId:repeatReviewed.guideId});
+ const actualCsv='report,date,net_usd,transactions\nDaily sales,2026-06-01,310.00,11\nDaily sales,2026-06-30,420.00,14\n';
+ await writeFile(join(directory,'repeat.csv'),actualCsv,{mode:0o600});
+ assert.equal(await readFile(join(directory,'repeat.csv'),'utf8'),actualCsv);
+ trustedRepeat={schemaVersion:'agent-browser.teaching-fresh-repeat.v1',validationId:'verified-repeat-1',provenance:'receiving_application_verifier',taskId:'fresh-report-task',sourceTaskId:repeatRoot.teaching.sourceTaskId,rootGuideId:repeatRoot.guideId,executedGuideId:repeatReviewed.guideId,executedSha256:reviewedRepeat.sha256,contentSha256:reviewedRepeat.contentSha256,reviewDecisionId:repeatDecision.decisionId,playbookId:repeatRoot.teaching.playbook.id,requestedStartDate:'2026-06-01',requestedEndDate:'2026-06-30',reportId:'daily-sales',artifactId:'verified-csv-1',artifactSha256:hash(await readFile(join(directory,'repeat.csv'))),artifactMediaType:'text/csv',originalOperationId:'report-submit-1',verification:'report_identity_requested_dates_and_content'};
+ const repeatInput={taskId:'fresh-report-task',guideId:repeatReviewed.guideId,expectedSha256:reviewedRepeat.sha256,operationId:'record-repeat-1',validationRef:'verified-repeat-1',requestedStartDate:'2026-06-01',requestedEndDate:'2026-06-30',reportId:'daily-sales'};
+ const repeated=await repeatClient.recordFreshRepeat(repeatInput);
+ assert.equal(repeated.status,'saved','verified fresh report evidence must be retained in the existing candidate lineage');
+ const repeatedView=await createTeachingReviewClient(repeatOptions).open({taskId:'fresh-report-task',guideId:repeated.guideId});
+ assert.equal(repeatedView.validation.state,'verified');assert.equal(repeatedView.ordinaryReuseAllowed,false);
+ assert.equal(await readFile(join(directory,accepted.guideId+'.json'),'utf8'),acceptedBytes,'repeat evidence alone never replaces accepted bytes');
+ const promoted=await repeatClient.promote({taskId:'fresh-report-task',guideId:repeated.guideId,expectedSha256:repeatedView.sha256,operationId:'promote-repeat-1'});
+ assert.equal(promoted.status,'promoted');assert.equal(promoted.ordinaryReuseAllowed,true);
+ const promotedView=await createTeachingReviewClient(repeatOptions).open({taskId:'fresh-report-task',guideId:promoted.guideId});
+ assert.equal(promotedView.acceptedVersion.guideId,repeatReviewed.guideId);
+ assert.equal(promotedView.acceptedVersion.sha256,reviewedRepeat.sha256);
+ assert.equal(promotedView.ordinaryReuseAllowed,true);assert.deepEqual(promotedView.blockers,[]);
+ const echoedReview=await createTeachingReviewClient({...repeatOptions,readOperatorDecision:async request=>({...request})}).open({taskId:'fresh-report-task',guideId:promoted.guideId});
+ assert.equal(echoedReview.review.state,'unverified','Mirrored request bindings cannot supply operator authority');
+ assert.equal(echoedReview.ordinaryReuseAllowed,false);
+ assert.equal(echoedReview.acceptedVersion.guideId,accepted.guideId);
+ assert.equal((await repeatClient.recordFreshRepeat(repeatInput)).guideId,repeated.guideId,'a repeated metadata operation returns its immutable original revision');
+ assert.equal((await repeatClient.promote({taskId:'fresh-report-task',guideId:repeated.guideId,expectedSha256:repeatedView.sha256,operationId:'promote-repeat-1'})).guideId,promoted.guideId);
+ const withoutRepeatAuthority=createTeachingReviewClient({...repeatOptions,readFreshRepeat:undefined});
+ await assert.rejects(withoutRepeatAuthority.recordFreshRepeat({...repeatInput,operationId:'model-forged-repeat',passed:true}),/teaching_repeat_authority_unconfigured/);
+ await assert.rejects(withoutRepeatAuthority.promote({taskId:'fresh-report-task',guideId:promoted.guideId,expectedSha256:promotedView.sha256,operationId:'model-forged-promotion',passed:true}),/teaching_repeat_authority_unconfigured/);
+ const authorityMissing=await withoutRepeatAuthority.open({taskId:'fresh-report-task',guideId:promoted.guideId});
+ assert.equal(authorityMissing.ordinaryReuseAllowed,false);assert.equal(authorityMissing.acceptedVersion.guideId,accepted.guideId);
+ const ownerProof=structuredClone(trustedRepeat);
+ for(const changedProof of [{...ownerProof,requestedStartDate:'2026-05-01'},{...ownerProof,reportId:'inventory-valuation'},{...ownerProof,artifactSha256:'a'.repeat(64)},{...ownerProof,executedSha256:'b'.repeat(64)}]) {
+  trustedRepeat=changedProof;
+  const refused=await repeatClient.open({taskId:'fresh-report-task',guideId:promoted.guideId});
+  assert.equal(refused.validation.state,'unverified');assert.equal(refused.ordinaryReuseAllowed,false);
+  assert.equal(refused.acceptedVersion.guideId,accepted.guideId,'changed trusted receipt cannot replace the prior accepted version');
+ }
+ trustedRepeat=ownerProof;
+ const operatorUnavailable=await createTeachingReviewClient({...repeatOptions,readOperatorDecision:undefined}).open({taskId:'fresh-report-task',guideId:promoted.guideId});
+ assert.equal(operatorUnavailable.ordinaryReuseAllowed,false);assert.equal(operatorUnavailable.acceptedVersion.guideId,accepted.guideId);
+ await assert.rejects(repeatClient.recordFreshRepeat({...repeatInput,guideId:promoted.guideId,expectedSha256:promotedView.sha256,operationId:'record-training-period',requestedStartDate:'2026-05-01',requestedEndDate:'2026-05-31'}),/teaching_fresh_dates_required/);
+ await assert.rejects(repeatClient.recordFreshRepeat({...repeatInput,guideId:promoted.guideId,expectedSha256:promotedView.sha256,operationId:'record-same-review-task',taskId:'review-task'}),/teaching_fresh_task_required/);
+ await assert.rejects(repeatClient.promote({taskId:'x'.repeat(4001),guideId:promoted.guideId,expectedSha256:promotedView.sha256,operationId:'reject-oversized-task'}),/teaching_review_request_invalid/);
+ await assert.rejects(repeatClient.promote({taskId:'fresh-report-task',guideId:reviewed.guideId,expectedSha256:final.sha256,operationId:'promote-unanswered-candidate'}),/teaching_open_questions_present/);
+ assert.equal(await readFile(join(directory,accepted.guideId+'.json'),'utf8'),acceptedBytes);
+ const clarifiedRoot=structuredClone(original);clarifiedRoot.guideId='daily-sales-clarification-repeat-v1';clarifiedRoot.teaching.unresolved=[clarifiedRoot.teaching.unresolved[0]];
+ await writeTeachingDraftCandidate({candidateDirectory:directory,candidateOnly:true,guide:clarifiedRoot});
+ let clarificationProof;
+ const readOperatorAnswer=async request=>{const response=await fetch(origin+'/answers/'+encodeURIComponent(request.answerRef),{headers:{authorization:'Bearer synthetic-receiver'},redirect:'error'});if(!response.ok)throw Error('operator answer unavailable');return response.json();};
+ const clarificationOptions={...options,readOperatorAnswer,readFreshRepeat:async()=>structuredClone(clarificationProof)};
+ const clarifiedReview=createTeachingReviewClient(clarificationOptions),grilling=createTeachingGrillingClient({review:clarifiedReview,readOperatorAnswer});
+ const clarificationInitial=await clarifiedReview.open({taskId:'task',guideId:clarifiedRoot.guideId});
+ const preparedQuestion=await grilling.prepare({taskId:'task',guideId:clarificationInitial.guideId,expectedSha256:clarificationInitial.sha256,operationId:'prepare-refunds-question',questions:[{id:'refunds-policy',category:'variable_input',stepRefs:['set-report-period:2'],dependsOn:[]}]});
+ const questionView=await grilling.open({taskId:'task',guideId:preparedQuestion.guideId}),question=questionView.round[0];
+ const answer=await (await fetch(origin+'/answers',{method:'POST',headers:{authorization:'Bearer synthetic-human',origin:'https://operator.test'},body:JSON.stringify({questionId:question.id,questionSha256:question.questionSha256,answer:'Keep refunds as the explicit caller choice for each report.',taskId:'task',rootGuideId:questionView.rootGuideId,answeredGuideId:questionView.guideId,answeredSha256:questionView.sha256,contentSha256:questionView.contentSha256})})).json();
+ const revised=structuredClone(questionView.guide);revised.teaching.parameters.find(parameter=>parameter.id==='includeRefunds').meaning='Use the explicit caller refunds choice confirmed by the operator, rather than adopting the example as a business default.';
+ const answered=await grilling.answer({taskId:'task',guideId:questionView.guideId,expectedSha256:questionView.sha256,operationId:'apply-authenticated-answer',questionId:question.id,answerRef:answer.answerRef,revisedGuide:revised});
+ const answeredView=await clarifiedReview.open({taskId:'review-task',guideId:answered.guideId});
+ const clarificationDecision=await (await fetch(origin+'/decisions',{method:'POST',headers:{authorization:'Bearer synthetic-human',origin:'https://operator.test'},body:JSON.stringify({intent:'review_exact_candidate',decision:'approved',taskId:'review-task',rootGuideId:answeredView.rootGuideId,reviewedGuideId:answeredView.guideId,reviewedSha256:answeredView.sha256,contentSha256:answeredView.contentSha256})})).json();
+ const clarificationReviewed=await clarifiedReview.recordDecision({taskId:'review-task',guideId:answeredView.guideId,expectedSha256:answeredView.sha256,operationId:'review-answered-procedure',decisionRef:clarificationDecision.decisionId});
+ const clarified=await clarifiedReview.open({taskId:'review-task',guideId:clarificationReviewed.guideId});
+ clarificationProof={...ownerProof,validationId:'verified-clarified-repeat',taskId:'fresh-clarified-task',rootGuideId:clarified.rootGuideId,executedGuideId:clarified.guideId,executedSha256:clarified.sha256,contentSha256:clarified.contentSha256,reviewDecisionId:clarificationDecision.decisionId,originalOperationId:'clarified-report-submit'};
+ const clarifiedInput={taskId:'fresh-clarified-task',guideId:clarified.guideId,expectedSha256:clarified.sha256,operationId:'record-clarified-repeat',validationRef:clarificationProof.validationId,requestedStartDate:'2026-06-01',requestedEndDate:'2026-06-30',reportId:'daily-sales'};
+ await assert.rejects(createTeachingReviewClient({...clarificationOptions,readOperatorAnswer:undefined}).recordFreshRepeat(clarifiedInput),/clarification_authority_unconfigured/);
+ await assert.rejects(createTeachingReviewClient({...clarificationOptions,readOperatorAnswer:async request=>({...request})}).recordFreshRepeat(clarifiedInput),/clarification_answers_unverified/,'mirrored bindings do not authenticate an answer');
+ const clarifiedRepeat=await clarifiedReview.recordFreshRepeat(clarifiedInput),clarifiedRepeatView=await clarifiedReview.open({taskId:'fresh-clarified-task',guideId:clarifiedRepeat.guideId});
+ assert.equal((await clarifiedReview.promote({taskId:'fresh-clarified-task',guideId:clarifiedRepeat.guideId,expectedSha256:clarifiedRepeatView.sha256,operationId:'promote-clarified-repeat'})).status,'promoted');
  const reopenedWithoutAcceptedConfig=await createTeachingReviewClient({...options,acceptedVersion:undefined}).open({taskId:'task',guideId:reviewed.guideId});assert.equal(reopenedWithoutAcceptedConfig.acceptedVersion.available,true);
  sourceAvailable=false;
  const missing=await reopened.open({taskId:'task',guideId:reviewed.guideId});
