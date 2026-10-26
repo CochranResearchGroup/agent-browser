@@ -64,3 +64,23 @@ require trusted review and repeat evidence for promotion, and produce concrete
 assistance for a renamed export control. Peer draft, prior accepted bytes and
 original teaching page preservation plus fresh owned OS cleanup are required.
 This prepared fixture is not yet an observed runtime verdict.
+
+
+## First actual attempt: fixture failure, not product red
+
+Consumer57da5f5be stopped with an owned HTTPS response-ordering error: a
+non-success path sent headers before the JSON helper tried to set them. Its
+callback escaped before the main finally handler, so no report/content/promotion
+verdict was admitted and past effects remain unqualified. A fresh OS readback
+identified the exact private runtime host. Cleanup rechecked its immutable
+process start, executable and private environment before signalling it; a second
+OS/profile census found zero exact owned resources and the private home was
+removed. The private failure/cleanup receipt is
+report477-setup-071ba112-7d67-4d2d-800f-e7b01d806410.json.
+
+The fixture now guards response ordering and callback containment, records phase
+progress without treating phases as outcome proof, and captures a dropped owner
+response status for assertion in the main flow. Cleanup additionally checks exact
+private profile arguments when process environment observation is unavailable.
+The next run uses a new clean consumer pin and independent namespace. These are
+fixture-only corrections; no product or Rust change was made for this failure.

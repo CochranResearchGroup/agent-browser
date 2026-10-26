@@ -5,7 +5,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {execFileSync,spawn} from 'node:child_process';
 import {createServer as httpsServer,get as httpsGet} from 'node:https';
 import {createServer as socketServer,connect} from 'node:net';
-import {readFileSync,writeFileSync,mkdirSync,readdirSync,existsSync,statSync,renameSync,unlinkSync,chmodSync} from 'node:fs';
+import {readFileSync,writeFileSync,mkdirSync,readdirSync,existsSync,statSync,renameSync,unlinkSync,chmodSync,appendFileSync} from 'node:fs';
 import {readFile,writeFile,copyFile} from 'node:fs/promises';
 import {join,isAbsolute} from 'node:path';
 import {createSmokeContext,createMcpStdioClient,runCli} from './smoke-utils.js';
@@ -59,7 +59,7 @@ function csv(report){return ['report,date,net_usd,transactions',...report.rows.m
 const application=httpsServer({key:readFileSync(keyPath),cert:readFileSync(certPath)},async(req,res)=>{
  try {
   const url=new URL(req.url,'https://fixture'),cookie=/ab_report_session=([^;]+)/.exec(req.headers.cookie??'')?.[1],authenticated=sessions.has(cookie);
-  const json=value=>{res.setHeader('content-type','application/json');res.end(JSON.stringify(value));};
+  const json=value=>{if(!res.headersSent)res.setHeader('content-type','application/json');res.end(JSON.stringify(value));};
   if(url.pathname==='/portal') {
    if(!authenticated){const session=randomUUID();sessions.add(session);res.setHeader('set-cookie','ab_report_session='+session+'; Secure; HttpOnly; SameSite=Strict; Path=/');}
    res.setHeader('content-type','text/html');res.end(template.replace('<body>','<body data-authenticated-context="synthetic">').replace(/<script>[\s\S]*?<\/script>/,'<script>('+runtimePage.toString()+')()</script>'));return;
@@ -86,24 +86,29 @@ const application=httpsServer({key:readFileSync(keyPath),cert:readFileSync(certP
    res.setHeader('content-type','text/csv');res.setHeader('content-disposition','attachment; filename="daily-sales-'+report.startDate+'-'+report.endDate+'.csv"');const exported=report.actor==='stale'?{...report,rows:records.filter(row=>row[0]>='2026-05-01'&&row[0]<='2026-05-31')}:report;res.end(csv(exported));return;
   }
   res.writeHead(404);json({});
- }catch{res.writeHead(400);res.end('fixture_request_rejected');}
+ }catch{if(res.headersSent){if(!res.writableEnded)res.destroy();}else{res.writeHead(400);res.end('fixture_request_rejected');}}
 });
 await new Promise(resolve=>application.listen(0,'127.0.0.1',resolve));origin='https://127.0.0.1:'+application.address().port;
 async function receiverRead(kind,id){return new Promise((resolve,reject)=>httpsGet(origin+'/receiver/'+kind+'/'+encodeURIComponent(id),{ca:readFileSync(certPath),headers:{authorization:'Bearer '+receiverSecret}},res=>{let body='';res.on('data',chunk=>body+=chunk);res.on('end',()=>res.statusCode===200?resolve(JSON.parse(body)):reject(Error('trusted_receipt_unavailable')));}).on('error',reject));}
-function ownedProcesses(){return readdirSync('/proc').filter(id=>/^\d+$/.test(id)&&Number(id)!==process.pid).filter(id=>{try{return readFileSync('/proc/'+id+'/environ').toString().split('\0').includes('AGENT_BROWSER_HOME='+context.agentHome);}catch{return false;}}).map(Number);}
+function ownedProcesses(){return readdirSync('/proc').filter(id=>/^\d+$/.test(id)&&Number(id)!==process.pid).filter(id=>{
+ try{if(statSync('/proc/'+id).uid!==process.getuid())return false;}catch{return false;}
+ try{if(readFileSync('/proc/'+id+'/environ').toString().split('\0').includes('AGENT_BROWSER_HOME='+context.agentHome))return true;}catch{}
+ try{return readFileSync('/proc/'+id+'/cmdline').toString().split('\0').some(argument=>argument.startsWith('--user-data-dir='+context.tempHome+'/'));}catch{return false;}
+}).map(Number);}
 const receipt={schemaVersion:'agent-browser.report-repeat-acceptance.v1',consumerCommit,binarySourceCommit:process.env.AGENT_BROWSER_SMOKE_BINARY_SOURCE,candidateSha256,browserSha256,teachingFixtureSha256:templateSha256,profileMode:'existing_owned_fixture_browser',tls:'exception_confined_to_owned_browser',synthetic:true,teachingSource:'existing_captioned_reference_tone_fixture_not_narrated',downloadPolicy:'owned_initial_allow_normal_HTTP_csv',beforeOwnedProcesses:ownedProcesses(),checks:[]};
 let client,chrome,proxy;const tasks=[];
+function phase(value){receipt.phase=value;appendFileSync(join(context.tempHome,'fixture-phases.jsonl'),JSON.stringify({at:new Date().toISOString(),phase:value,effectOutcome:'not_inferred_from_phase',counts})+'\n',{mode:0o600});}
 async function raw(name,args){let timer;try{return await Promise.race([client.send('tools/call',{name,arguments:args}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('bounded_fixture_request_timeout')),65000);})]);}finally{clearTimeout(timer);}}
 async function call(name,args){const result=await raw(name,args);assert.notEqual(result.isError,true,JSON.stringify(result));const envelope=JSON.parse(result.content.find(item=>item.type==='text').text);assert.equal(envelope.success,true,JSON.stringify(envelope));return envelope.data;}
 async function evaluate(taskId,script){const value=await call('browser_command',{taskId,action:'evaluate',params:{script}});return value.result??value;}
 async function waitFor(read,accept,label){const deadline=Date.now()+10000;let value;do{value=await read();if(accept(value))return value;await pause(50);}while(Date.now()<deadline);throw Error('fixture_observation_timeout:'+label);}
 async function replyLoss(){
- const path=join(context.socketDir,'runtime-host.sock'),original=path+'.original',inode=statSync(path).ino;renameSync(path,original);let drops=0,requests=0,armed=false;const sockets=new Set();
+ const path=join(context.socketDir,'runtime-host.sock'),original=path+'.original',inode=statSync(path).ino;renameSync(path,original);let drops=0,requests=0,armed=false,lastDroppedSuccess=null;const sockets=new Set();
  const server=socketServer(down=>{const up=connect(original);for(const socket of [down,up]){sockets.add(socket);socket.on('close',()=>sockets.delete(socket));socket.on('error',()=>{});}let request='',response='',drop=false,parsed=false;
-  down.on('data',chunk=>{if(!parsed){request+=chunk;if(request.includes('\n')){parsed=true;const command=JSON.parse(request.slice(0,request.indexOf('\n')));requests++;if(armed&&command.action==='click'){armed=false;drop=true;}}}up.write(chunk);});
-  up.on('data',chunk=>{if(!drop){down.write(chunk);return;}response+=chunk;if(response.includes('\n')){assert.equal(JSON.parse(response.slice(0,response.indexOf('\n'))).success,true);drops++;down.destroy();up.destroy();}});up.on('end',()=>down.end());down.on('end',()=>up.end());
+  down.on('data',chunk=>{if(!parsed){request+=chunk;if(request.includes('\n')){parsed=true;let command;try{command=JSON.parse(request.slice(0,request.indexOf('\n')));}catch{down.destroy();up.destroy();return;}requests++;if(armed&&command.action==='click'){armed=false;drop=true;}}}up.write(chunk);});
+  up.on('data',chunk=>{if(!drop){down.write(chunk);return;}response+=chunk;if(response.includes('\n')){try{lastDroppedSuccess=JSON.parse(response.slice(0,response.indexOf('\n'))).success===true;}catch{lastDroppedSuccess=false;}drops++;down.destroy();up.destroy();}});up.on('end',()=>down.end());down.on('end',()=>up.end());
  });await new Promise(resolve=>server.listen(path,resolve));const proxyInode=statSync(path).ino;
- return {arm(){armed=true;},get drops(){return drops;},get requests(){return requests;},async restore(){for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(resolve));assert.equal(statSync(path).ino,proxyInode);unlinkSync(path);assert.equal(statSync(original).ino,inode);renameSync(original,path);}};
+ return {arm(){armed=true;},get drops(){return drops;},get requests(){return requests;},get lastDroppedSuccess(){return lastDroppedSuccess;},async restore(){for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(resolve));assert.equal(statSync(path).ino,proxyInode);unlinkSync(path);assert.equal(statSync(original).ino,inode);renameSync(original,path);}};
 }
 async function configureDownloads(profile){
  const port=readFileSync(join(profile,'DevToolsActivePort'),'utf8').trim().split('\n');
@@ -133,14 +138,14 @@ async function executeReviewed(view,task,actor,{loseReply=false}={}){
    if(step.action==='set_checked'){await call('browser_command',{taskId:task.taskId,action:parameters[step.parameter]?'check':'uncheck',params:{selector},requestId:actor+'-refunds'});continue;}
    assert.equal(step.action,'activate');
    if(step.target==='export-csv'){artifact=await call('browser_command',{taskId:task.taskId,action:'download',params:{selector,path:join(context.tempHome,actor+'.csv')},requestId:actor+'-export'});continue;}
-   if(step.target==='run-report'&&loseReply){proxy.arm();let uncertain=false;try{uncertain=(await raw('browser_click',{taskId:task.taskId,selector,requestId:operationId})).isError===true;}catch{uncertain=true;}assert(uncertain);const original=await call('browser_command',{taskId:task.taskId,action:'task_operation',params:{requestId:operationId}});assert.equal(original.operation.state,'uncertain');const sent=proxy.requests;await raw('browser_click',{taskId:task.taskId,selector,requestId:operationId});assert.equal(proxy.requests,sent,'Original submission never repeats through transport');}
+   if(step.target==='run-report'&&loseReply){proxy.arm();let uncertain=false;try{uncertain=(await raw('browser_click',{taskId:task.taskId,selector,requestId:operationId})).isError===true;}catch{uncertain=true;}assert(uncertain);assert.equal(proxy.lastDroppedSuccess,true,'Reply loss follows a successful owner response');const original=await call('browser_command',{taskId:task.taskId,action:'task_operation',params:{requestId:operationId}});assert.equal(original.operation.state,'uncertain');const sent=proxy.requests;await raw('browser_click',{taskId:task.taskId,selector,requestId:operationId});assert.equal(proxy.requests,sent,'Original submission never repeats through transport');}
    else await call('browser_click',{taskId:task.taskId,selector,requestId:step.target==='run-report'?operationId:actor+'-'+step.target});
   }
  }
  return {status:'completed',artifact,operationId,parameters,observedReport:await evaluate(task.taskId,"({reportId:document.querySelector('#result').dataset.reportId,artifactId:document.querySelector('#result').dataset.artifactId})")};
 }
 try{
- receipt.phase='owned_profile';
+ phase('owned_profile');
  const profileName='report-repeat-owned-synthetic-portal-validation';
  const created=JSON.parse((await runCli(context,['--json','runtime','create',profileName])).stdout),profile=created.userDataDir??created.data?.userDataDir;assert(profile.startsWith(context.tempHome+'/'));mkdirSync(profile,{recursive:true});
  chrome=spawn(browser,['--headless=new','--no-sandbox','--disable-dev-shm-usage','--disable-background-networking','--password-store=basic','--no-first-run','--no-default-browser-check','--remote-debugging-port=0','--user-data-dir='+profile,'--ignore-certificate-errors','about:blank'],{env,stdio:'ignore'});
@@ -169,13 +174,13 @@ try{
  const reviewed=await review.open({taskId:reviewTask.taskId,guideId:recorded.guideId});assert.equal(reviewed.review.state,'approved');assert.equal(reviewed.ordinaryReuseAllowed,false);
  await assert.rejects(review.promote({taskId:freshTask.taskId,guideId:reviewed.guideId,expectedSha256:reviewed.sha256,operationId:'premature-promote',passed:true}),/fresh_repeat_required/);
  assert.equal(readFileSync(join(candidateDirectory,accepted.guideId+'.json'),'utf8'),acceptedBytes);
- receipt.phase='wrong_csv_refusal';
+ phase('wrong_csv_refusal');
  const staleTask=await call('browser_open',{...common,taskKey:'stale',url:origin+'/portal?actor=stale'});tasks.push(staleTask);
  const staleRun=await executeReviewed(reviewed,staleTask,'stale');assert.equal(staleRun.status,'verification_failed');assert.equal(counts.reports.stale,1);assert.equal(counts.exports.stale,1);
  await assert.rejects(review.recordFreshRepeat({taskId:staleTask.taskId,guideId:reviewed.guideId,expectedSha256:reviewed.sha256,operationId:'reject-wrong-csv',validationRef:'download-event-with-wrong-period',requestedStartDate:'2026-06-01',requestedEndDate:'2026-06-30',reportId:'daily-sales',passed:true}),/repeat_receipt_unavailable/);
  assert.equal((await review.open({taskId:reviewTask.taskId,guideId:reviewed.guideId})).acceptedVersion.guideId,accepted.guideId);
  receipt.checks.push({kind:'wrong_csv_refusal',downloadEventObserved:true,requestedJuneButCsvMay:true,independentOracleRejected:true,acceptedUnchanged:true,reportSubmissions:1,exports:1});
- receipt.phase='fresh_repeat';proxy=await replyLoss();const run=await executeReviewed(reviewed,freshTask,'repeat',{loseReply:true});assert.equal(run.status,'completed');assert.equal(proxy.drops,1);await proxy.restore();proxy=null;
+ phase('fresh_repeat');proxy=await replyLoss();const run=await executeReviewed(reviewed,freshTask,'repeat',{loseReply:true});assert.equal(run.status,'completed');assert.equal(proxy.drops,1);await proxy.restore();proxy=null;
  const actualReport=reports.get(run.observedReport.reportId);assert(actualReport);assert.equal(actualReport.reportId,'daily-sales');assert.equal(actualReport.startDate,'2026-06-01');assert.equal(actualReport.endDate,'2026-06-30');assert.equal(run.observedReport.artifactId,actualReport.artifactId);assert.equal(counts.reports.repeat,1);assert.equal(counts.exports.repeat,1);assert.equal(readFileSync(run.artifact.path,'utf8'),expectedCsv);
  const proof={schemaVersion:'agent-browser.teaching-fresh-repeat.v1',validationId:'independently-verified-june-report',provenance:'receiving_application_verifier',taskId:freshTask.taskId,sourceTaskId:guide.teaching.sourceTaskId,rootGuideId:reviewed.rootGuideId,executedGuideId:reviewed.guideId,executedSha256:reviewed.sha256,contentSha256:reviewed.contentSha256,reviewDecisionId:decision.decisionId,playbookId:guide.teaching.playbook.id,requestedStartDate:'2026-06-01',requestedEndDate:'2026-06-30',reportId:actualReport.reportId,artifactId:actualReport.artifactId,artifactSha256:hash(readFileSync(run.artifact.path)),artifactMediaType:'text/csv',originalOperationId:run.operationId,verification:'report_identity_requested_dates_and_content'};proofs.set(proof.validationId,proof);
  const repeated=await review.recordFreshRepeat({taskId:freshTask.taskId,guideId:reviewed.guideId,expectedSha256:reviewed.sha256,operationId:'retain-verified-repeat',validationRef:proof.validationId,requestedStartDate:'2026-06-01',requestedEndDate:'2026-06-30',reportId:'daily-sales'});
@@ -185,13 +190,16 @@ try{
  const untrusted=await createTeachingReviewClient({...options,readFreshRepeat:undefined}).open({taskId:freshTask.taskId,guideId:promoted.guideId});assert.equal(untrusted.ordinaryReuseAllowed,false);assert.equal(untrusted.acceptedVersion.guideId,accepted.guideId);
  const corrupt={...proof,requestedStartDate:'2026-05-01'};proofs.set(proof.validationId,corrupt);assert.equal((await review.open({taskId:freshTask.taskId,guideId:promoted.guideId})).ordinaryReuseAllowed,false);proofs.set(proof.validationId,proof);
  receipt.checks.push({kind:'fresh_repeat',newTask:true,differentDates:true,report:'daily-sales',period:['2026-06-01','2026-06-30'],csvSha256:proof.artifactSha256,independentContentVerified:true,reportSubmissions:1,exports:1,originalSubmissionUncertain:true,trustedReviewAndProofRequired:true,stockMcpRemainsInert:true});
- receipt.phase='changed_page';const changed=await call('browser_open',{...common,taskKey:'changed',url:origin+'/portal?actor=changed&variant=changed-export'});tasks.push(changed);const assistance=await executeReviewed(reviewed,changed,'changed');assert.equal(assistance.status,'assistance_required');assert.equal(assistance.controlId,'export-csv');assert.equal(counts.exports.changed??0,0);receipt.checks.push({kind:'changed_page',...assistance,exportEffects:0});
+ phase('changed_page');const changed=await call('browser_open',{...common,taskKey:'changed',url:origin+'/portal?actor=changed&variant=changed-export'});tasks.push(changed);const assistance=await executeReviewed(reviewed,changed,'changed');assert.equal(assistance.status,'assistance_required');assert.equal(assistance.controlId,'export-csv');assert.equal(counts.exports.changed??0,0);receipt.checks.push({kind:'changed_page',...assistance,exportEffects:0});
  assert(JSON.stringify(await call('browser_snapshot',{taskId:peer.taskId})).includes('Preserve this unsaved peer note'));assert.equal(counts.reports.repeat,1);assert.equal(readFileSync(join(candidateDirectory,accepted.guideId+'.json'),'utf8'),acceptedBytes);assert.equal(hash(readFileSync(templatePath)),templateSha256);
- receipt.checks.push({kind:'preservation',peerDraft:true,priorAcceptedBytes:true,originalTeachingPage:true});receipt.phase='complete';receipt.status='pass';
+ receipt.checks.push({kind:'preservation',peerDraft:true,priorAcceptedBytes:true,originalTeachingPage:true});phase('complete');receipt.status='pass';
 }catch(error){receipt.status='failed';receipt.error=error.message;receipt.counts=counts;throw error;}
 finally{
  if(proxy)await proxy.restore();if(client){for(const task of tasks.reverse()){try{await Promise.race([call('browser_close',{taskId:task.taskId}),pause(3000).then(()=>{throw Error('cleanup_deadline');})]);}catch{}}client.close();}
  if(chrome&&chrome.exitCode===null)chrome.kill('SIGTERM');for(const pid of ownedProcesses()){try{if(ownedProcesses().includes(pid))process.kill(pid,'SIGTERM');}catch{}}
  for(let i=0;i<100&&ownedProcesses().length;i++)await pause(50);receipt.afterOwnedProcesses=ownedProcesses();await new Promise(resolve=>application.close(resolve));assert.equal(hash(readFileSync(candidate)),candidateSha256);
- const out=join('/tmp/agent-browser-spec466-implementation','report477-'+randomUUID()+'.json');writeFileSync(out,JSON.stringify(receipt,null,2)+'\n',{mode:0o600,flag:'wx'});console.log(JSON.stringify({status:receipt.status,receiptPath:out,ownedResidue:receipt.afterOwnedProcesses.length,checks:receipt.checks}));assert.equal(receipt.afterOwnedProcesses.length,0);context.cleanupTempHome();
+ const out=join('/tmp/agent-browser-spec466-implementation','report477-'+randomUUID()+'.json');
+ if(receipt.afterOwnedProcesses.length){receipt.status='failed';receipt.cleanupFailure='owned_processes_remain';}
+ else {try{context.cleanupTempHome();receipt.privateHomeRemoved=!existsSync(context.tempHome);}catch{receipt.status='failed';receipt.cleanupFailure='private_home_removal_failed';}}
+ writeFileSync(out,JSON.stringify(receipt,null,2)+'\n',{mode:0o600,flag:'wx'});console.log(JSON.stringify({status:receipt.status,receiptPath:out,ownedResidue:receipt.afterOwnedProcesses.length,checks:receipt.checks}));assert.equal(receipt.afterOwnedProcesses.length,0);assert.equal(receipt.privateHomeRemoved,true);
 }
