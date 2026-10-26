@@ -80,6 +80,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
       return {guide,sha256:sha(bytes)};
     } finally {await file?.close();await unlink(temporary).catch(err=>{if(err.code!=='ENOENT')throw err;});bytes.fill(0);}
   }
+  /** @returns {Promise<import('./teaching-review.js').TeachingReviewView['source']>} */
   async function source(guide) {
     const scope={recordingId:guide.teaching.recordingId,videoSha256:guide.teaching.videoSha256,sourceTaskId:guide.teaching.sourceTaskId};
     const request={...scope,evidence:clone(guide.teaching.evidence)};

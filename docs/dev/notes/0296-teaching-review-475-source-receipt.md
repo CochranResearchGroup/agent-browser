@@ -65,3 +65,15 @@ provider, browser launch or installation was used. The authenticated HTTP fixtur
 is a receiving-application contract demonstration, not a production review service.
 
 Memory disposition: forbidden. Parent scope explicitly prohibits Graphiti writes.
+
+Integration follow-up: the earlier declaration check did not include the new
+JavaScript implementation. Explicit implementation `checkJs` reproduced three
+missing optional-property errors for unavailable source results. A return-type
+JSDoc now binds that helper to the existing public source-view contract, retaining
+its optional evidence/gap fields without changing runtime behavior. The explicit
+implementation check below, declaration check above, and all three teaching
+client test commands then passed:
+
+```sh
+pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext ../packages/client/src/teaching-review.js
+```
