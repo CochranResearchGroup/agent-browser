@@ -18,7 +18,7 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 | Ticket | Blockers | State | Owner | Branch / checkout | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | 467 | none | validated | root | recipes/spec466-integration / duplicate-403 | Reopened regression repairedff812bf0f; model2/MCP151/strictClippy/fmt PASS34d400f0e; tracker CLOSED after requalification |
-| 468 | 467 | integrated | implement_468 | platform/task-recovery-468 / spec466-468 | worker045dd85a; integration96fad35a2; combined gates pending |
+| 468 | 467 | validated | implement_468 | platform/task-recovery-468 / spec466-468 | worker045dd85a; integration96fad35a2; combined9436460eb source+HTTPS PASS; tracker CLOSED |
 | 469 | 467 | integrated | implement_469 | challenge/native-assistance-469 / spec466-469 | base42875e629; independent source/native fixture work |
 | 470 | 468,469 | pending | unassigned | pending | none |
 | 471 | 470 | pending | unassigned | pending | none |
@@ -27,7 +27,7 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 | 474 | 473 | validated | implement_473 | recipes/teaching-draft-474 / profile-proof | worker243b7405; integration25dd69054; combinedMCP151/strict/docs/client PASS; tracker CLOSED after source qualification |
 | 475 | 474 | validated | implement_473 | recipes/teaching-review-475 / profile-proof | worker5e226f17+89da499b; source9436460eb gates PASS; tracker CLOSED |
 | 476 | 475 | running | implement_473 | recipes/teaching-grilling-476 / profile-proof | base9436460eb; new grilling module consumes review.save |
-| 477 | 475 | pending | unassigned | pending | none |
+| 477 | 475 | running | implement_468 | recipes/report-repeat-477 / spec466-468 | base9436460eb; fresh repeat and promotion |
 | 478 | 468,469,476,477 | pending | unassigned | pending | requires real operator narration and scoped portal |
 
 ## Validation and bounded review
@@ -201,3 +201,9 @@ Source9436460eb8445814470238f051675cc56480a2da is clean and published through PR
 Immutable debug candidate SHA256 e33fb4738a548fc714fee29c0ad79dd565cec3f3ec544d60b1810b60b16c2471 binds source9436460eb. Workers468/469 rerun only their existing owned synthetic HTTPS recovery and attached/CDP-free Native workflows against it. No installed/runtime production claim. A mistaken nonexistent documentation-check filename supplied no evidence; canonical check-documentation-links.js passes.
 
 476 is ready from validated475 and reuses its clean candidate-free profile-proof checkout at source9436460eb. Pre-reuse inspection found no pinned candidates or active builds. Worker owns a new grilling client, its tests and dedicated documentation; it consumes existing review.save without editing teaching-review.js/d.ts. Root owns shared contracts/docs. Planned477 owns promotion/fresh-repeat changes in teaching-review and owned portal fixture, explicitly disjoint from476. No extra checkout, shared registry or Auth custody.
+
+## Recovery requalification and parallel teaching contracts
+
+Combined9436460eb candidate passed468 replay: four successful replies lost without duplicate PNG/fill/action/submission, isolated owner restart preserves task/target/drafts/artifact, and separate physical loss intervenes without navigation replay. Receipt recovery468-8a7d7fd4-8bbe-4d59-83b9-f6343c82bae6.json binds e33fb4738a548fc714fee29c0ad79dd565cec3f3ec544d60b1810b60b16c2471. Fresh owned process residue0; private fixture removed. Tracker468 CLOSED.469 run016 still qualifying.
+
+477 ready from validated475; reuses clean candidate-free auxiliary468 on recipes/report-repeat-477 from9436460eb. No new checkout.477 owns teaching-review.js/d.ts promotion/repeat ports and owned HTTPS report fixture.476 exclusively owns additive optional clarification metadata in teaching.rs and teaching-draft.d.ts plus new grilling module. Both consume existing immutable SiteGuide save semantics; neither edits the other's files without coordinator serialization. Root remains sole shared catalog/output/package/general documentation writer.
