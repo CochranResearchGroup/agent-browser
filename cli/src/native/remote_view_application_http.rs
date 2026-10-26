@@ -53,7 +53,7 @@ impl RemoteViewApplicationHttp {
     pub(crate) fn native_request(&mut self, operation: &str, body: &Value) -> Result<Value, Error> {
         if !matches!(
             operation,
-            "observe" | "capture" | "capture_region" | "input" | "window" | "input_cancel"
+            "observe" | "capture" | "capture_region" | "ocr" | "input" | "window" | "input_cancel"
         ) {
             return Err(Error::Rejected);
         }

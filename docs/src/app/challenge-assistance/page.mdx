@@ -1,0 +1,56 @@
+# Challenge observation and human assistance
+
+Use the existing task's Native capture for a bounded read without attaching a
+debugger:
+
+```json
+{"taskId":"TASK","action":"native_capture","params":{"classifyChallenges":true}}
+```
+
+The supported `browser_command` response keeps its existing PNG image and adds
+`challenge`, `recognition`, `observedAtMs` and `evidenceAgeMs` metadata.
+Classification uses the Remote View owner's current OCR capture, exact original
+process, current viewing generation, window and frame digest. Recognized page
+text remains process-local and is omitted from the result. Capture remains subject
+to the existing control/read admission and private-input boundaries.
+
+The versioned English text-signature corpus distinguishes passive checks,
+registered Turnstile/hCaptcha checkbox signatures, image instructions, ordinary
+login, loading and denial. It also reports unknown, ambiguous and stale evidence.
+OCR scores are engine scores, not probabilities. A partial window or unknown
+classification never proves absence of a challenge. A recognized signature grants
+no automated attempt, and it never proves protected-site admission. The declared
+synthetic corpus is a regression suite, not a provider accuracy benchmark.
+
+## Continue through the existing Native viewer
+
+`@agent-browser/client/challenge-assistance` composes the public task briefing,
+Native capture, existing opaque handoff, cooperative control and continuation.
+It does not add a viewer, grant ceremony, solver or control authority.
+
+1. Call `prepare({taskId})` to inspect the current exact task and return its
+   existing ready opaque handoff. Give the operator only that complete URL.
+2. The operator opens that same link, uses existing Native authentication and
+   explicitly takes control through the application's Native toolbar. Viewing
+   alone does not count as assistance.
+3. Call `recordTakeover(capsule)` to read the retained human control epoch.
+   The capsule contains references and identity, not page text or credentials.
+4. The operator completes the unsupported or unsuccessful challenge and
+   explicitly gives control back through the same toolbar.
+5. Call `continueAfterReturn(capsule)`. The helper rechecks task, physical
+   Native target and current control, then requires separate, source-attributed
+   challenge-clearance and protected-application verifiers. It reads the original
+   task only after both checks succeed.
+
+Configure `verifyClearance` and `verifyAccess` with the existing SiteGuide or
+application-specific read verifiers. Each returns a verified/unverified state,
+exact task and source frame digest, and a distinct evidence reference. They must
+observe the application independently; a disappeared widget, delivered input,
+changed URL or caller assertion does not substitute for those checks.
+
+The current cooperative control integration is hosted. A consumer without that
+integration reports its existing unsupported-control refusal; do not invent a
+dashboard workaround or a second viewer. Changed target/control identity or
+uncertain access remains intervention. The helper does not retry effects,
+regenerate factors, navigate to reconstruct state, or claim the larger task is
+complete.

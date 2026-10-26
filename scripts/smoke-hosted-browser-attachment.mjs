@@ -17,6 +17,9 @@ import {createHash,randomUUID} from 'node:crypto';
 import {once} from 'node:events';
 import {performance} from 'node:perf_hooks';
 import {createServer} from 'node:http';
+import {createServer as createHttpsServer} from 'node:https';
+import {createPublicKey} from 'node:crypto';
+import {qualifyNativeChallengeAssistance} from './qualify-native-challenge-assistance.mjs';
 import {mkdir,mkdtemp,readFile,readdir,realpath,stat,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {isAbsolute,join} from 'node:path';
@@ -175,6 +178,13 @@ async function startScopedBroker(){
   const denied=async()=>{brokerOperations.push({operation,denied:true});await save('broker-operations.json',brokerOperations);reply(400,{schema_version:1,code:'fixture_target_denied',message:'Operation outside exact fixture assignment',retryable:false});};
   let operation='invalid';
   try{
+   if(req.method==='POST'&&['/v1/agent-desktop/observe','/v1/agent-desktop/ocr'].includes(req.url)){
+    let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>65536)return denied();}
+    const body=JSON.parse(raw),allowed=acquired.some(binding=>body.desktopId===binding.viewingDesktopId&&body.expectedGeneration===binding.viewingGeneration);
+    if(!allowed||process.env.HOSTED_SMOKE_CHALLENGE_469!=='1')return denied();
+    const upstream=await fetch(controlOrigin+req.url,{method:'POST',headers:{'content-type':'application/json',...(controlAuthorization?{authorization:controlAuthorization}:{})},body:raw,redirect:'error',signal:AbortSignal.timeout(15000)});
+    return reply(upstream.status,await upstream.json());
+   }
    if(req.method!=='POST'||req.url!=='/v1/consumer')return denied();
    let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>65536)return denied();}
    const envelope=JSON.parse(raw),request=envelope.request;operation=request?.operation;
@@ -372,10 +382,28 @@ try{workload:{
  step='app-launch-environment';const launch=await remote.environment(binding);
  assert.equal(launch.target.desktopId,binding.desktopId);assert.equal(launch.target.lifecycleGeneration,binding.generation);assert.equal(launch.target.viewingGeneration,binding.viewingGeneration);
  step='register-disposable-named-profile';const createdProfile=JSON.parse((await runCli(context,['--json','runtime','create','borrowed-profile','--browser-family','chromium'])).stdout);assert.equal(createdProfile.created,true);const profilePath=await realpath(createdProfile.userDataDir);assert(profilePath.startsWith(root+'/'),'Named fixture profile must remain inside its private home');
+ const challenge469=process.env.HOSTED_SMOKE_CHALLENGE_469==='1';
+ const challengeState={completionRequests:0,protectedRequests:0};
+ let challengeTls,challengeSpki;
+ if(challenge469){
+  assert(inputDiagnostic&&fixtureNativeConnectOrigin,'Challenge fixture must remain the bounded isolated Native lane');
+  challengeTls={cert:await readFile(await absolute('HOSTED_SMOKE_CHALLENGE_SITE_CERT')),key:await readFile(await absolute('HOSTED_SMOKE_CHALLENGE_SITE_KEY'))};
+  challengeSpki=createHash('sha256').update(createPublicKey(challengeTls.cert).export({type:'spki',format:'der'})).digest('base64');
+ }
  const html='<!doctype html><title>App-owned attachment synthetic marker</title><body style="margin:0;background:#165dcc"><div style="height:75vh;background:#ff00aa;color:white;font:48px sans-serif">ATTACHMENT SYNTHETIC MARKER</div><input id="draft"><input id="control"><span id="peer">PREEXISTING PEER</span></body>';
- fixtureSite=createServer((req,res)=>{res.writeHead(200,{'content-type':'text/html'});res.end(html);});await new Promise(resolve=>fixtureSite.listen(0,'127.0.0.1',resolve));
- const site='http://127.0.0.1:'+fixtureSite.address().port;
- step='app-owned-browser-launch';appBrowser=spawn(chrome,[`--user-data-dir=${profilePath}`,'--no-first-run','--no-default-browser-check','--password-store=basic','--remote-debugging-address=127.0.0.1','--remote-debugging-port=0',site+'/primary'],{env:{...env,...launch.environment,AGENT_BROWSER_HOME:agentHome},detached:true,stdio:'ignore'});
+ const fixtureHandler=(req,res)=>{
+  if(challenge469&&req.url==='/challenge/complete'&&req.method==='POST'){
+   challengeState.completionRequests++;res.writeHead(challengeState.completionRequests===1?200:409,{'content-type':'application/json'});res.end(JSON.stringify(challengeState));return;
+  }
+  if(challenge469&&req.url==='/challenge/evidence'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(challengeState));return;}
+  if(challenge469&&req.url==='/protected-report'){
+   challengeState.protectedRequests++;res.writeHead(challengeState.completionRequests===1?200:403,{'content-type':'application/json'});res.end(JSON.stringify({report:challengeState.completionRequests===1?'ready':'denied'}));return;
+  }
+  res.writeHead(200,{'content-type':'text/html'});res.end(html);
+ };
+ fixtureSite=challenge469?createHttpsServer(challengeTls,fixtureHandler):createServer(fixtureHandler);await new Promise(resolve=>fixtureSite.listen(0,'127.0.0.1',resolve));
+ const site=(challenge469?'https://127.0.0.1:':'http://127.0.0.1:')+fixtureSite.address().port;
+ step='app-owned-browser-launch';appBrowser=spawn(chrome,[...(challengeSpki?['--ignore-certificate-errors-spki-list='+challengeSpki]:[]),`--user-data-dir=${profilePath}`,'--no-first-run','--no-default-browser-check','--password-store=basic','--remote-debugging-address=127.0.0.1','--remote-debugging-port=0',site+'/primary'],{env:{...env,...launch.environment,AGENT_BROWSER_HOME:agentHome},detached:true,stdio:'ignore'});
  appBrowser.on('error',()=>{ambiguous=true;});
  await once(appBrowser,'spawn');
  appRootProof={...await processIdentity(appBrowser.pid),executable:await realpath(`/proc/${appBrowser.pid}/exe`),profilePath};
@@ -581,6 +609,10 @@ try{workload:{
  const returned=await consumerControl();assert.equal(returned.control.owner,'agent');assert.equal(returned.control.epoch,human.control.epoch+1);assert.equal(returned.native.owner,'agent');assert.equal(returned.native.state,'ready');uiControlSettled=true;
  assert.equal((await readTask(opened.taskId)).controllerState.owner,'agent');await continuity('after-native-toolbar-control');
  await save('bots-native-control.json',{before:controlReceipt(beforeUi),human:controlReceipt(human),returned:controlReceipt(returned),passed:true});
+ if(challenge469){
+  await qualifyNativeChallengeAssistance({workflow:publicWorkflow,task:opened,page,primary,nativeOrigin,site,save,consumerControl});
+  await continuity('after-challenge469');
+ }
  if(inputDiagnostic){await save('native-input-diagnostic.json',{passed:true,fullMatrix:false,scope:'One Native text edit and return with independent app observation'});break workload;}
  // Start after all control transitions so the remaining event is scoped detach.
  if(process.env.HOSTED_SMOKE_CONTINUITY_REQUIRED==='1'){

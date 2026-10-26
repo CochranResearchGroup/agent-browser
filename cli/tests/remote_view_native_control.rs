@@ -182,3 +182,68 @@ fn native_task_window_remediation_uses_only_the_verified_window() {
         );
     }
 }
+
+#[test]
+fn native_capture_classifies_same_fenced_frame_without_projecting_private_ocr_text() {
+    use base64::Engine;
+    use sha2::Digest;
+    struct OcrOwner(NativeFixture);
+    impl browser_native_control::NativeOwner for OcrOwner {
+        fn request(
+            &mut self,
+            operation: &str,
+            body: &serde_json::Value,
+        ) -> Result<serde_json::Value, String> {
+            if operation == "observe" {
+                return self.0.request(operation, body);
+            }
+            let mut encoded = std::io::Cursor::new(Vec::new());
+            image::DynamicImage::new_rgb8(1024, 768)
+                .write_to(&mut encoded, image::ImageFormat::Png)
+                .unwrap();
+            let bytes = encoded.into_inner();
+            Ok(serde_json::json!({
+                "schemaVersion":1,"desktopId":"viewing","generation":9,"windowId":7,
+                "processIdentity":body["expectedProcessIdentity"],
+                "image":{"mimeType":"image/png","data":base64::engine::general_purpose::STANDARD.encode(&bytes)},
+                "capture":{"sha256":format!("{:x}",sha2::Sha256::digest(&bytes)),"width":1024,"height":768},
+                "ocr":{"state":"observed","engine":"tesseract","engineVersion":"fixture","modelSha256":"b".repeat(64),
+                    "lines":[{"text":"hCaptcha","confidence":95},{"text":"I am human","confidence":95},
+                        {"text":"private unrelated body","confidence":95}]}
+            }))
+        }
+    }
+    let original = agent_browser_service_model::RecordedProcessIdentity {
+        pid: 42,
+        start_token: "linux:boot:11".into(),
+        executable_path: Some("/synthetic/chrome".into()),
+        browser_family: Some("chrome".into()),
+    };
+    let target = agent_browser_service_model::RemoteViewApplicationTarget {
+        assignment_id: "assignment".into(),
+        registration_id: "registration".into(),
+        desktop_id: "lifecycle".into(),
+        lifecycle_generation: 2,
+        viewing_desktop_id: "viewing".into(),
+        viewing_generation: 9,
+    };
+    let result = browser_native_control::execute(
+        &original,
+        &target,
+        &serde_json::json!({"action":"native_capture","classifyChallenges":true}),
+        &mut OcrOwner(NativeFixture { calls: vec![] }),
+    )
+    .unwrap();
+    assert_eq!(result["challenge"]["kind"], "checkbox");
+    assert_eq!(
+        result["challenge"]["registeredProfileId"],
+        "hcaptcha-checkbox-p181-v2"
+    );
+    assert_eq!(
+        result["challenge"]["frameSha256"],
+        result["capture"]["capture"]["sha256"]
+    );
+    assert!(result["capture"].get("ocr").is_none());
+    assert!(!result.to_string().contains("private unrelated body"));
+    assert_eq!(result["taskCompleted"], false);
+}
