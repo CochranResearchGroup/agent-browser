@@ -2,8 +2,9 @@
  * /proc and the owned HTTPS application independently establish the posture.
  */
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {readFile,realpath,writeFile} from 'node:fs/promises';
 import {createHash,randomUUID} from 'node:crypto';
+import {join} from 'node:path';
 import {qualifyNativeChallengeAssistance} from './qualify-native-challenge-assistance.mjs';
 
 export async function qualifyNativeNoCdpChallenge({workflow,runCli,context,chrome,service,bot,page,nativeOrigin,site,save,selectHandoff,observeOwned,onClosed}) {
@@ -24,6 +25,13 @@ export async function qualifyNativeNoCdpChallenge({workflow,runCli,context,chrom
   // it is a different process, not the qualified manual-login browser below.
   const prepared=await launch('about:blank','Prepare owned synthetic profile');
   await workflow('browser_close',{taskId:prepared.taskId});onClosed(prepared.taskId);
+  const profilePath=await realpath(created.userDataDir),fixtureRoot=await realpath(context.tempHome);
+  assert(profilePath.startsWith(fixtureRoot+'/'),'First-run setup must remain inside this newly owned fixture');
+  // Same synthetic setup as smoke-mcp-manual-login.py:379. This models an
+  // already configured empty browser, not legal consent, login or auth proof.
+  await writeFile(join(profilePath,'First Run'),'',{flag:'wx',mode:0o600});
+  await save('challenge469-no-cdp-modeled-first-run.json',{fixtureOnly:true,profilePath,
+    source:'scripts/smoke-mcp-manual-login.py:379',setup:'modeled_first_run_marker',actualLegalConsent:false,loginOrAuthenticationClaimed:false});
   const selection=await workflow('browser_command',{action:'browser_build',params:{profileId:profile,operationId:randomUUID(),choice:'select_for_next_launch',
     mode:'cdp_free',executablePath:chrome,expectedSha256:createHash('sha256').update(await readFile(chrome)).digest('hex'),ownerConfirmed:true}});
   assert.equal(selection.phase,'selected_for_next_launch');
@@ -66,6 +74,7 @@ export async function qualifyNativeNoCdpChallenge({workflow,runCli,context,chrom
     browserPosture:'Managed manual_login; /proc verified no remote-debugging switches; no CDP connection opened'});
   await workflow('browser_close',{taskId:task.taskId});
   onClosed(task.taskId);
-  await save('challenge469-no-cdp-acceptance.json',{...receipt,managedManualLogin:true,process:kernel,debuggerSwitches:false,cdpConnectionsOpened:0});
+  await save('challenge469-no-cdp-acceptance.json',{...receipt,managedManualLogin:true,process:kernel,debuggerSwitches:false,cdpConnectionsOpened:0,
+    profileSetup:'Modeled first-run marker on newly owned empty synthetic profile; no legal consent, login or authentication claim'});
   return receipt;
 }
