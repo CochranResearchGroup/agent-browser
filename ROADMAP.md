@@ -1,6 +1,6 @@
 # Roadmap
 
-[P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): all four children #401–404 and repairs #424–429 are closed. PR436 and PR439 are merged; aggregate acceptance maps all 46 parent stories to the retained source and isolated synthetic evidence. No runtime publication or installed Native/real-account qualification.
+[P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): #400–404 and repairs #424–429 are closed as source/synthetic outcomes. Production binary e7a233070ded is installed through an accepted preserve transaction; exact candidate qualification and published assets pass. Live build-chooser acceptance fails at dashboard command routing, tracked by [#451](https://github.com/CochranResearchGroup/agent-browser/issues/451). [Deployment evidence](docs/dev/notes/0283-2026-10-25-spec400-repairs.md) retains the failed process-preservation assertion and slow rail sample. Installed Spec400 workflow acceptance remains incomplete.
 
 [P291 corrected cold rail](docs/dev/plans/0291-2026-10-24-cold-rail-retry-spacing.md), #430, is installed accepted oncf65dd76422b: cold median3.36s to2.11s, warm1.00s to1.02s,18 browser roots and137 Native provider/persistent unit generations preserved. [Evidence](docs/dev/notes/0291-2026-10-24-cold-rail-retry-spacing.md) retains the failed first comparison, mounted cache-caller correction, finite sample limits and three doctor advisories.422 asset intermittence and Remote View667 MCP-client restart loops remain separate. Retain the primary checkout and pinned candidates.
 

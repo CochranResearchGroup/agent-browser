@@ -1,6 +1,6 @@
 # Runbook
 
-[P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): all four children #401–404 and repairs #424–429 are closed. PR436 and PR439 are merged; aggregate acceptance maps all 46 parent stories to the retained source and isolated synthetic evidence. No runtime publication or installed Native/real-account qualification.
+[P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): #400–404 and repairs #424–429 are closed as source/synthetic outcomes. Production binary e7a233070ded is installed through an accepted preserve transaction; exact candidate qualification and published assets pass. Live build-chooser acceptance fails at dashboard command routing, tracked by [#451](https://github.com/CochranResearchGroup/agent-browser/issues/451). [Deployment evidence](docs/dev/notes/0283-2026-10-25-spec400-repairs.md) retains the failed process-preservation assertion and slow rail sample. Installed Spec400 workflow acceptance remains incomplete.
 
 [P288 writer custody](docs/dev/plans/0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. PR415 carries the qualified source;221 workstation cases, strict Rust, fixtures and docs pass. Installed production is unchanged.
 
