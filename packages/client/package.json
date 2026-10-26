@@ -42,6 +42,10 @@
     "./task-briefing": {
       "types": "./src/task-briefing.d.ts",
       "import": "./src/task-briefing.js"
+    },
+    "./teaching-draft": {
+      "types": "./src/teaching-draft.d.ts",
+      "import": "./src/teaching-draft.js"
     }
   },
   "scripts": {

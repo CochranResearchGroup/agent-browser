@@ -5,6 +5,7 @@ use sha2::{Digest, Sha256};
 
 use super::JsonRpcError;
 mod retrieval;
+mod teaching;
 
 pub(super) const OPERATIONS: &[&str] = &[
     "siteguides",
@@ -106,6 +107,9 @@ struct SiteGuide {
     states: Vec<PageState>,
     controls: Option<LoginControls>,
     retrieval: Option<retrieval::RetrievalGuide>,
+    /// Inert agent-prepared teaching knowledge; inspection is not execution approval.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    teaching: Option<teaching::TeachingDraft>,
 }
 
 /// A bounded observation plan is task-bound metadata, not an access grant.
@@ -189,11 +193,15 @@ fn load_guide(guide_id: &str) -> Result<SiteGuide, JsonRpcError> {
         }
     }
     if guide.retrieval.is_none()
+        && guide.teaching.is_none()
         && (guide.authenticated_selector.is_none()
             || guide.account.is_none()
             || guide.organization.is_none())
     {
         return Err(fault("siteguide_contract_invalid"));
+    }
+    if let Some(teaching) = &guide.teaching {
+        teaching.validate()?;
     }
     if let Some(retrieval) = &guide.retrieval {
         retrieval.validate()?;
@@ -334,6 +342,9 @@ pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, 
         ));
     }
     let guide = load_guide(super::required_string_argument(params, "guideId")?)?;
+    if guide.teaching.is_some() {
+        return Err(fault("teaching_draft_not_executable"));
+    }
     if operation == "collect_posts" {
         return retrieval::collect(&guide, params, task_id, transport_session);
     }
@@ -571,3 +582,6 @@ fn guide_names() -> Result<Vec<String>, JsonRpcError> {
     names.sort();
     Ok(names)
 }
+
+#[cfg(test)]
+mod teaching_tests;
