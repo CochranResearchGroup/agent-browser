@@ -87,13 +87,17 @@ export async function qualifyNativeChallengeAssistance({workflow,task,page,prima
 export async function probeCurrentNativeObservationAge({workflow,task,consumerControl,save}) {
     // Characterize the CURRENT public Native seam, not the archived desktop
     // transaction. Never send button-down or a challenge-solving click here.
+    await save('challenge470-age-probe-progress.json',{state:'capture_requested',buttonEvents:0});
     const source=await workflow('browser_command',{taskId:task.taskId,action:'native_capture',params:{classifyChallenges:true}});
+    await save('challenge470-age-probe-progress.json',{state:'capture_returned',frameSha256:source.capture.capture.sha256,buttonEvents:0});
     const control=await consumerControl();assert.equal(control.native.owner,'agent');
     const start=Date.now(),replies=[];
     for(let index=0;index<9;index++) {
       await new Promise(resolve=>setTimeout(resolve,120));
+      await save('challenge470-age-probe-progress.json',{state:'motion_requested',index,buttonEvents:0});
       replies.push(await workflow('browser_command',{taskId:task.taskId,action:'native_input',params:{controlEpoch:control.native.epoch,
         actions:[{kind:'move',x:source.windowBounds.x+5+index,y:source.windowBounds.y+5}]}}));
+      await save('challenge470-age-probe-progress.json',{state:'motion_returned',index,delivery:replies.at(-1).delivery,buttonEvents:0});
     }
     const after=await workflow('browser_command',{taskId:task.taskId,action:'native_capture',params:{classifyChallenges:true}});
     assert(replies.every(reply=>reply.delivery==='dispatched'),'Every motion requires the actual owner dispatch acknowledgement');
