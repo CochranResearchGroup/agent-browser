@@ -22,6 +22,7 @@ import {createPublicKey} from 'node:crypto';
 import {qualifyNativeChallengeAssistance} from './qualify-native-challenge-assistance.mjs';
 import {qualifyNativeNoCdpChallenge} from './qualify-native-no-cdp-challenge.mjs';
 import {mkdir,mkdtemp,readFile,readdir,realpath,stat,writeFile} from 'node:fs/promises';
+import {createReadStream} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {isAbsolute,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -502,14 +503,31 @@ try{workload:{
  step='public-page-action';const snapshotBefore=await workflow('browser_snapshot',{taskId:opened.taskId});assert(JSON.stringify(snapshotBefore).includes('ATTACHMENT SYNTHETIC MARKER'));
  if(process.env.HOSTED_SMOKE_MODE_PREFLIGHT==='1'){
   step='public-page-mode-preflight';
-  const observed=await processIdentity(original.pid),executable=await realpath(`/proc/${original.pid}/exe`),argv=await readFile(`/proc/${original.pid}/cmdline`);
-  await save('pre-fill-owner-process-proof.json',{pid:observed.pid,start:observed.start,executable,
-   matchesOriginal:observed.start===original.start&&executable===original.executablePath,
-   completeArgvPresent:argv.length>0&&argv.at(-1)===0,argvBytes:argv.length,
-   scope:'Current synthetic app owner parent readback; not substituted for MCP mode observation'});
+  async function processShape(){
+   const observed=await processIdentity(original.pid),executable=await realpath(`/proc/${original.pid}/exe`),argv=await readFile(`/proc/${original.pid}/cmdline`);
+   const digest=createHash('sha256');for await(const chunk of createReadStream(`/proc/${original.pid}/exe`))digest.update(chunk);
+   const args=argv.toString('utf8').split('\0').filter(Boolean),split=args.flatMap(arg=>arg.split(/[ \t\n\r\f\v]+/).filter(Boolean));
+   const debug=values=>values.some(arg=>['--remote-debugging-port','--remote-debugging-pipe'].some(flag=>arg===flag||arg.startsWith(flag+'=')));
+   const rootType=values=>values.some(arg=>arg==='--type'||arg.startsWith('--type='));
+   const current=await processIdentity(original.pid);
+   return {pid:observed.pid,start:observed.start,executable,executableSha256:digest.digest('hex'),
+    stableDuringRead:current.start===observed.start&&current.pid===observed.pid,
+    matchesOriginal:observed.start===original.start&&executable===original.executablePath,
+    completeArgvPresent:argv.length>0&&argv.at(-1)===0,argvBytes:argv.length,argvSha256:createHash('sha256').update(argv).digest('hex'),
+    nulArgc:args.length,anyEmbeddedAsciiWhitespace:args.some(arg=>/[ \t\n\r\f\v]/.test(arg)),
+    debugWholeToken:debug(args),debugAsciiWhitespaceSplit:debug(split),rootTypeWholeToken:rootType(args),rootTypeAsciiWhitespaceSplit:rootType(split)};
+  }
+  const before=await processShape();
   const mode=await publicWorkflow('browser_command',{taskId:opened.taskId,action:'mode'});
   await save('pre-fill-browser-mode.json',mode);
+  const after=await processShape();
+  await save('pre-fill-owner-process-proof.json',{before,after,
+   identityStable:before.pid===after.pid&&before.start===after.start&&before.executable===after.executable&&before.executableSha256===after.executableSha256,
+   argvStable:before.argvSha256===after.argvSha256,
+   modeJoins:{task:mode.taskId===opened.taskId,browser:mode.browserId===opened.browserId,profile:mode.profileId===opened.profileId,pid:mode.pid===original.pid},
+   scope:'Current synthetic app owner parent readback; no raw argv retained or substituted for MCP mode observation'});
   if(mode.mode==='unverified')throw Object.assign(Error('Public browser mode unverified; no fill dispatched'),{code:'fixture_browser_mode_unverified'});
+  if(process.env.HOSTED_SMOKE_MODE_DIAGNOSTIC_ONLY==='1')throw Object.assign(Error('Read-only mode diagnostic complete; no fill dispatched'),{code:'fixture_mode_diagnostic_complete'});
  }
  await workflow('browser_fill',{taskId:opened.taskId,selector:'#control',value:'public MCP preserved app browser'});assert.equal(await primary.locator('#control').inputValue(),'public MCP preserved app browser');await continuity('public-action');
  step='shared-attach-through-bots-http';const shared=await attachInBots(second,'attachment-shared-'+randomUUID(),'Explicitly share app-owned synthetic browser');borrowedTasks.push(shared);assert.notEqual(shared.taskId,opened.taskId);assert.notEqual(shared.tabId,opened.tabId);assert.notEqual(shared.tabId,primaryTarget);assert.equal(shared.browserId,opened.browserId);assert.equal(acquired.length,1);await continuity('shared-attach');

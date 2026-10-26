@@ -56,11 +56,13 @@ def main():
     parser.add_argument('--native-binary-source-commit')
     parser.add_argument('--challenge-assistance', action='store_true', help='Add owned HTTPS challenge/native assistance to bounded input diagnostic')
     parser.add_argument('--mode-preflight', action='store_true', help='Read public browser mode before first fill; unverified evidence stops the fixture')
+    parser.add_argument('--mode-diagnostic-only', action='store_true', help='Stop before fill after the read-only mode preflight regardless of result')
     parser.add_argument('--input-diagnostic', action='store_true', help='Bounded Native input diagnosis only; never full-matrix acceptance')
     parser.add_argument('--display', type=int, required=True)
     parser.add_argument('--vnc-port', type=int, required=True)
     parser.add_argument('--subnet', required=True)
     args = parser.parse_args()
+    assert not args.mode_diagnostic_only or args.mode_preflight, 'Mode diagnostic requires read-only preflight'
     assert not args.challenge_assistance or args.input_diagnostic, 'Challenge lane requires bounded input diagnostic'
     for commit in (args.agent_source_commit, args.native_binary_source_commit):
         assert commit is None or len(commit) == 40 and all(character in '0123456789abcdef' for character in commit)
@@ -127,7 +129,7 @@ def main():
     pair_digest = hashlib.sha256(json.dumps(source_pair, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
     plan = {'version': 1, 'runId': secrets.token_hex(16), 'pairDigest': pair_digest, 'sourcePair': source_pair,
             'coldContexts': 5, 'publicControlPairs': 10, 'nativeControlPairs': 3, 'warmTargetMs': 250,
-            'functionalUiPairs': 1, 'nativeTextEdits': 1, 'deadlineSeconds': 1200, 'cleanupDeadlineSeconds': 180, 'challengeAssistance': args.challenge_assistance, 'modePreflight':args.mode_preflight}
+            'functionalUiPairs': 1, 'nativeTextEdits': 1, 'deadlineSeconds': 1200, 'cleanupDeadlineSeconds': 180, 'challengeAssistance': args.challenge_assistance, 'modePreflight':args.mode_preflight, 'modeDiagnosticOnly':args.mode_diagnostic_only}
     if args.input_diagnostic:
         plan.update(mode='native_input_diagnostic', coldContexts=1, publicControlPairs=0,
                     nativeControlPairs=0, deadlineSeconds=300)
@@ -401,6 +403,8 @@ def main():
                 environment.update({'HOSTED_SMOKE_CHALLENGE_469':'1','HOSTED_SMOKE_CHALLENGE_SITE_CERT':str(self.certificate),'HOSTED_SMOKE_CHALLENGE_SITE_KEY':str(args.results/'fixture.key')})
             if args.mode_preflight:
                 environment['HOSTED_SMOKE_MODE_PREFLIGHT']='1'
+            if args.mode_diagnostic_only:
+                environment['HOSTED_SMOKE_MODE_DIAGNOSTIC_ONLY']='1'
             if args.browser_manifest:
                 environment['HOSTED_SMOKE_BROWSER_MANIFEST'] = str(args.browser_manifest)
             self.agent_child = subprocess.Popen([str(args.node), str(repo / 'scripts/smoke-hosted-browser-attachment.mjs')],
