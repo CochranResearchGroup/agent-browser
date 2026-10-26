@@ -380,13 +380,21 @@ try{workload:{
  broker=await startScopedBroker();env.AGENT_BROWSER_REMOTE_VIEW_ORIGIN=`http://127.0.0.1:${broker.address().port}`;
  await save('inputs.json',{binary,binarySha256:createHash('sha256').update(await readFile(binary)).digest('hex'),chrome,chromeSha256:createHash('sha256').update(await readFile(chrome)).digest('hex'),botsRoot,botsSourceCommit,installationId,appOrigin,nativeOrigin,agentHome,socketDir});
  const desktops=new Proxy(remote,{get(target,key){if(key!=='acquire')return typeof target[key]==='function'?target[key].bind(target):target[key];return async args=>{let binding;try{binding=await target.acquire(args);}catch(error){ambiguous=true;throw error;}assert(!baseline.assignments.some(a=>a.assignmentId===binding.assignmentId),'Provider returned a baseline peer assignment');acquired.push(binding);await save('acquired.json',acquired);Object.assign(binding,await target.observe(binding));await save('acquired.json',acquired);return binding;};}});
- step='initialize-ab-mcp';client=createMcpStdioClient({context,args:['mcp','serve'],onFatal:()=>{ambiguous=true;}});
- await send('initialize',{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'hosted-native-smoke',version:'1'}});client.notify('notifications/initialized');
  const bot={id:'fixture-'+randomUUID(),name:'Synthetic attachment owner',threadId:'synthetic-'+randomUUID()},second={id:'shared-'+randomUUID(),name:'Synthetic shared participant',threadId:'shared-session-'+randomUUID()};
  step='acquire-app-desktop';const binding=await desktops.acquire({botId:bot.id,idempotencyKey:'attachment-'+randomUUID()});
  assert.equal(acquired.length,1);
  step='app-launch-environment';const launch=await remote.environment(binding);
  assert.equal(launch.target.desktopId,binding.desktopId);assert.equal(launch.target.lifecycleGeneration,binding.generation);assert.equal(launch.target.viewingGeneration,binding.viewingGeneration);
+ // The existing manual-login X11 focus adapter authenticates from its owner
+ // environment. This fixture has one exact AB desktop; copy only its Native
+ // supplied cookie-file locator before starting the private owner, never a
+ // production display or a global X11 access change.
+ if(process.env.HOSTED_SMOKE_CHALLENGE_469==='1'){
+  assert(typeof launch.environment.XAUTHORITY==='string'&&isAbsolute(launch.environment.XAUTHORITY));
+  env.XAUTHORITY=launch.environment.XAUTHORITY;
+ }
+ step='initialize-ab-mcp';client=createMcpStdioClient({context,args:['mcp','serve'],onFatal:()=>{ambiguous=true;}});
+ await send('initialize',{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'hosted-native-smoke',version:'1'}});client.notify('notifications/initialized');
  step='register-disposable-named-profile';const createdProfile=JSON.parse((await runCli(context,['--json','runtime','create','borrowed-profile','--browser-family','chromium'])).stdout);assert.equal(createdProfile.created,true);const profilePath=await realpath(createdProfile.userDataDir);assert(profilePath.startsWith(root+'/'),'Named fixture profile must remain inside its private home');
  const challenge469=process.env.HOSTED_SMOKE_CHALLENGE_469==='1';
  const challengeState={completionRequests:0,protectedRequests:0};

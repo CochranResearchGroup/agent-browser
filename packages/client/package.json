@@ -42,6 +42,10 @@
     "./task-briefing": {
       "types": "./src/task-briefing.d.ts",
       "import": "./src/task-briefing.js"
+    },
+    "./challenge-assistance": {
+      "types": "./src/challenge-assistance.d.ts",
+      "import": "./src/challenge-assistance.js"
     }
   },
   "scripts": {
