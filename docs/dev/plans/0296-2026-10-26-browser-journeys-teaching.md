@@ -18,7 +18,7 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 | Ticket | Blockers | State | Owner | Branch / checkout | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | 467 | none | validated | root | recipes/spec466-integration / duplicate-403 | Reopened regression repairedff812bf0f; model2/MCP151/strictClippy/fmt PASS34d400f0e; tracker CLOSED after requalification |
-| 468 | 467 | running | root | platform/task-recovery-468 / spec466-468 | worker045dd85a; integration96fad35a2; combined existing-profile HTTPS PASS; reopened borrowed-attachment regression |
+| 468 | 467 | running | root | recipes/spec466-integration / duplicate-403 | worker045dd85a; integration96fad35a2; combined existing-profile HTTPS PASS; reopened borrowed-attachment regression |
 | 469 | 467 | integrated | implement_469 | challenge/native-assistance-469 / spec466-469 | base42875e629; independent source/native fixture work |
 | 470 | 468,469 | pending | unassigned | pending | none |
 | 471 | 470 | pending | unassigned | pending | none |
