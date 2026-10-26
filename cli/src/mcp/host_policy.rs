@@ -80,30 +80,22 @@ pub(super) fn artifact(arguments: &Value, transport: &str) -> Result<Value, Json
     // Publish only a successful operation's opaque reference into the existing
     // owner aggregate. Never persist private paths or page/download contents.
     let current = store.load_session_state().map_err(issue)?;
-    if current.sessions.get(task_id) != state.sessions.get(task_id) {
-        return Err(issue(
-            "browser_artifact_completed_reference_context_changed: do not repeat capture",
-        ));
-    }
     let mut next = current.clone();
     let reference = serde_json::from_value(json!({"artifactId":id,"kind":kind,
         "handle":arguments["handle"],"observedAtMs":std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH).map_err(|_| issue("browser_artifact_clock_invalid"))?.as_millis() as u64}))
         .map_err(|_| issue("browser_artifact_reference_invalid"))?;
-    let references = next
-        .task_artifact_references
-        .entry(task_id.into())
-        .or_default();
-    if !references.iter().any(|row| row.artifact_id == id) {
-        references.push(reference);
-    }
+    next.retain_completed_task_artifact(&state, task_id, reference)
+        .map_err(|error| issue(format!("{error}:{id}:do not repeat capture")))?;
     // Write through a writable owner connection; the earlier inspection remains
     // read-only. Optimistic fencing prevents loss of concurrent task updates.
     let mut writer = BrowserSessionSqliteStore::default_sqlite().map_err(issue)?;
     writer
         .compare_and_save_session_state(&current, &next)
         .map_err(|_| {
-            issue("browser_artifact_completed_reference_pending: do not repeat capture")
+            issue(format!(
+                "browser_artifact_completed_reference_pending:{id}:do not repeat capture"
+            ))
         })?;
     Ok(super::tool_response_from_payload(
         "browser_artifact",

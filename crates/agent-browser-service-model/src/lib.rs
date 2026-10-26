@@ -27,6 +27,7 @@ mod browser_profile_catalog;
 mod browser_recovery;
 mod browser_retirement;
 mod browser_session_manager;
+mod browser_task_artifacts;
 mod crash_regeneration;
 mod entity_source;
 mod failure_recourse;
