@@ -54,11 +54,13 @@ def main():
     parser.add_argument('--browser-manifest', type=Path)
     parser.add_argument('--agent-source-commit', required=True)
     parser.add_argument('--native-binary-source-commit')
+    parser.add_argument('--challenge-assistance', action='store_true', help='Add owned HTTPS challenge/native assistance to bounded input diagnostic')
     parser.add_argument('--input-diagnostic', action='store_true', help='Bounded Native input diagnosis only; never full-matrix acceptance')
     parser.add_argument('--display', type=int, required=True)
     parser.add_argument('--vnc-port', type=int, required=True)
     parser.add_argument('--subnet', required=True)
     args = parser.parse_args()
+    assert not args.challenge_assistance or args.input_diagnostic, 'Challenge lane requires bounded input diagnostic'
     for commit in (args.agent_source_commit, args.native_binary_source_commit):
         assert commit is None or len(commit) == 40 and all(character in '0123456789abcdef' for character in commit)
     repo = Path(__file__).resolve().parents[1]
@@ -107,6 +109,8 @@ def main():
     args.binary = args.native_binary
     fixture_files = ('scripts/smoke-hosted-browser-matrix-native.py', 'scripts/hosted-native-rpc.py',
                      'scripts/smoke-hosted-browser-attachment.mjs', 'scripts/hosted-performance.mjs')
+    if args.challenge_assistance:
+        fixture_files += ('scripts/qualify-native-challenge-assistance.mjs', 'scripts/qualify-native-no-cdp-challenge.mjs', 'packages/client/src/challenge-assistance.js')
     for name in fixture_files:
         h.run('git', '-C', repo, 'ls-files', '--error-unmatch', name)
     source_pair = {'agentBinarySha256': h.sha(args.agent_binary), 'agentBinarySourceCommit': args.agent_source_commit,
@@ -122,7 +126,7 @@ def main():
     pair_digest = hashlib.sha256(json.dumps(source_pair, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
     plan = {'version': 1, 'runId': secrets.token_hex(16), 'pairDigest': pair_digest, 'sourcePair': source_pair,
             'coldContexts': 5, 'publicControlPairs': 10, 'nativeControlPairs': 3, 'warmTargetMs': 250,
-            'functionalUiPairs': 1, 'nativeTextEdits': 1, 'deadlineSeconds': 1200, 'cleanupDeadlineSeconds': 180}
+            'functionalUiPairs': 1, 'nativeTextEdits': 1, 'deadlineSeconds': 1200, 'cleanupDeadlineSeconds': 180, 'challengeAssistance': args.challenge_assistance}
     if args.input_diagnostic:
         plan.update(mode='native_input_diagnostic', coldContexts=1, publicControlPairs=0,
                     nativeControlPairs=0, deadlineSeconds=300)
@@ -333,7 +337,23 @@ def main():
                         assert 0 < length <= 65536
                         body = json.loads(request.rfile.read(length))
                         with lock:
-                            if request.path == '/v1/consumer':
+                            if request.path in ('/v1/agent-desktop/observe', '/v1/agent-desktop/ocr', '/v1/agent-desktop/control'):
+                                assert args.challenge_assistance
+                                assert not request.path.endswith('/control') or body.get('operation') == 'status'
+                                assert body['desktopId'] == outer.target['viewingDesktopId'] and body['expectedGeneration'] == outer.target['viewingGeneration']
+                                from urllib.request import Request, urlopen
+                                forwarded = Request(f'http://127.0.0.1:{outer.control_port}'+request.path, data=json.dumps(body).encode(), method='POST', headers={'Authorization':'Bearer '+outer.token,'Content-Type':'application/json'})
+                                from urllib.error import HTTPError
+                                try:
+                                    with urlopen(forwarded, timeout=15) as result: result=json.load(result)
+                                except HTTPError as error:
+                                    # Retain only the owner's bounded diagnostic code,
+                                    # never recognized application text or credentials.
+                                    failure = json.load(error)
+                                    adapter_errors.append({'transport':'native-read','path':request.path,'status':error.code,'code':failure.get('code')})
+                                    h.private_json(args.results / 'matrix-adapter-errors.json', adapter_errors)
+                                    raise
+                            elif request.path == '/v1/consumer':
                                 assert set(body) == {'application', 'request'} and body['application'] == 'fixture'
                                 result = outer.rpc.handle_consumer(body['request'])
                             else:
@@ -376,6 +396,8 @@ def main():
                  'HOSTED_SMOKE_FIXTURE_NATIVE_CONNECT_ORIGIN': self.native_connect_origin,
                  'HOSTED_SMOKE_CONTINUITY_REQUIRED': '1', 'HOSTED_SMOKE_LOSS_REQUIRED': '1',
                  'HOSTED_SMOKE_EVIDENCE_DIR': str(args.results / 'agent'), 'NODE_EXTRA_CA_CERTS': str(self.certificate)})
+            if args.challenge_assistance:
+                environment.update({'HOSTED_SMOKE_CHALLENGE_469':'1','HOSTED_SMOKE_CHALLENGE_SITE_CERT':str(self.certificate),'HOSTED_SMOKE_CHALLENGE_SITE_KEY':str(args.results/'fixture.key')})
             if args.browser_manifest:
                 environment['HOSTED_SMOKE_BROWSER_MANIFEST'] = str(args.browser_manifest)
             self.agent_child = subprocess.Popen([str(args.node), str(repo / 'scripts/smoke-hosted-browser-attachment.mjs')],

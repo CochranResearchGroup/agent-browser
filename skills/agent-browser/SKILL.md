@@ -144,3 +144,5 @@ Software helpers live in @agent-browser/client/task-briefing.
 Read [evidence](../../docs/src/app/teaching-evidence/page.mdx) for scoped recordings/Speech.
 For useful inert drafts and explicit operator review, read [teaching drafts](references/teaching-drafts.md)
 and [review](references/teaching-review.md). Preserve gaps and fresh-repeat requirements.
+
+Native challenge: CLI reference.

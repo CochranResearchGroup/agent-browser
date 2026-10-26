@@ -50,6 +50,10 @@
     "./teaching-review": {
       "types": "./src/teaching-review.d.ts",
       "import": "./src/teaching-review.js"
+    },
+    "./challenge-assistance": {
+      "types": "./src/challenge-assistance.d.ts",
+      "import": "./src/challenge-assistance.js"
     }
   },
   "scripts": {

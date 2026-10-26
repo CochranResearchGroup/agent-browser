@@ -19,6 +19,20 @@ pub fn execute(
     ) {
         return Err("browser_native_action_unavailable".into());
     }
+    let classify = match command.get("classifyChallenges") {
+        None => false,
+        Some(value) => value
+            .as_bool()
+            .ok_or("browser_native_classification_flag_invalid")?,
+    };
+    if classify && command["action"] != "native_capture" {
+        return Err("browser_native_classification_requires_capture".into());
+    }
+    let observation_started = std::time::Instant::now();
+    let observed_at_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| "browser_native_observation_clock_invalid")?
+        .as_millis() as u64;
     let actions = if command["action"] == "native_input" {
         Some(
             command["actions"]
@@ -124,6 +138,25 @@ pub fn execute(
     }
     if command["action"] == "native_capture" {
         body.as_object_mut().unwrap().remove("actions");
+        if classify {
+            // Read the existing Native owner's epoch. The cooperative browser
+            // epoch is a different authority and cannot authorize this capture.
+            let control = owner.request(
+                "control",
+                &json!({"desktopId":target.viewing_desktop_id,
+                "expectedGeneration":target.viewing_generation,"operation":"status"}),
+            )?;
+            if control["desktopId"] != target.viewing_desktop_id
+                || control["generation"] != target.viewing_generation
+                || control["owner"] != "agent"
+                || control["epoch"].as_u64().is_none()
+            {
+                return Err("browser_native_classification_control_changed:observe control".into());
+            }
+            body["controlEpoch"] = control["epoch"].clone();
+        } else if let Some(epoch) = command.get("controlEpoch") {
+            body["controlEpoch"] = epoch.clone();
+        }
         let full_width = window["width"]
             .as_u64()
             .ok_or("browser_native_geometry_unverified")?;
@@ -139,10 +172,81 @@ pub fn execute(
                 "x":window["x"],"y":window["y"],"width":tile_width,"height":tile_height
             })
         });
-        let capture = owner.request("capture_region", &body)?;
-        return Ok(
-            json!({"source":"remote_view_native","capture":capture,"region":body["region"],"windowBounds":{"x":window["x"],"y":window["y"],"width":full_width,"height":full_height},"partialWindow":body["region"]!=json!({"x":window["x"],"y":window["y"],"width":full_width,"height":full_height}),"taskCompleted":false}),
-        );
+        let mut capture = owner.request(if classify { "ocr" } else { "capture_region" }, &body)?;
+        let mut classification = None;
+        let mut recognition = None;
+        if classify {
+            use base64::Engine;
+            use sha2::{Digest, Sha256};
+            if capture["desktopId"] != target.viewing_desktop_id
+                || capture["generation"] != target.viewing_generation
+                || capture["windowId"] != window["id"]
+                || capture["processIdentity"] != window["processIdentity"]
+            {
+                return Err("browser_native_classification_context_changed:refresh capture".into());
+            }
+            let encoded = capture
+                .pointer("/image/data")
+                .and_then(Value::as_str)
+                .filter(|data| data.len() <= 5_592_408)
+                .ok_or("browser_native_classification_image_invalid")?;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .map_err(|_| "browser_native_classification_image_invalid")?;
+            let digest = format!("{:x}", Sha256::digest(&bytes));
+            if bytes.len() > 4_194_304
+                || !bytes.starts_with(b"\x89PNG\r\n\x1a\n")
+                || capture.pointer("/capture/sha256").and_then(Value::as_str)
+                    != Some(digest.as_str())
+            {
+                return Err("browser_native_classification_frame_changed:refresh capture".into());
+            }
+            let lines = capture
+                .pointer("/ocr/lines")
+                .and_then(Value::as_array)
+                .ok_or("browser_native_classification_ocr_unavailable")?;
+            let words = lines
+                .iter()
+                .map(|line| {
+                    Ok(agent_browser_challenge_control::NativeChallengeText {
+                        text: line["text"]
+                            .as_str()
+                            .ok_or("browser_native_classification_ocr_invalid")?,
+                        confidence: line["confidence"]
+                            .as_f64()
+                            .ok_or("browser_native_classification_ocr_invalid")?,
+                    })
+                })
+                .collect::<Result<Vec<_>, &str>>()?;
+            classification = Some(agent_browser_challenge_control::classify_native_challenge(
+                &words,
+                &digest,
+                observation_started.elapsed().as_millis() <= 10_000,
+                body["region"]
+                    == json!({"x":window["x"],"y":window["y"],"width":full_width,"height":full_height}),
+            ));
+            recognition = Some(json!({"engine":capture["ocr"]["engine"],
+                "modelSha256":capture["ocr"]["modelSha256"],"lineCount":lines.len(),
+                "scoreMeaning":"OCR engine score, not a probability"}));
+            // Text stays process-local. The returned image and redacted rule IDs
+            // describe this one Native-fenced frame, never task/site completion.
+            capture
+                .as_object_mut()
+                .ok_or("browser_native_classification_ocr_invalid")?
+                .remove("ocr");
+        }
+        let mut result = json!({"source":"remote_view_native","capture":capture,"region":body["region"],
+            "windowBounds":{"x":window["x"],"y":window["y"],"width":full_width,"height":full_height},
+            "partialWindow":body["region"]!=json!({"x":window["x"],"y":window["y"],"width":full_width,"height":full_height}),
+            "taskCompleted":false});
+        if let Some(classification) = classification {
+            result["challenge"] = serde_json::to_value(classification)
+                .map_err(|_| "browser_native_classification_invalid")?;
+            result["recognition"] = recognition.unwrap_or(Value::Null);
+            result["observedAtMs"] = json!(observed_at_ms);
+            result["evidenceAgeMs"] = json!(observation_started.elapsed().as_millis() as u64);
+        }
+        return Ok(result);
     }
     if let Some(epoch) = command.get("controlEpoch") {
         body["controlEpoch"] = epoch.clone();

@@ -19,7 +19,7 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 | --- | --- | --- | --- | --- | --- |
 | 467 | none | validated | root | recipes/spec466-integration / duplicate-403 | Reopened regression repairedff812bf0f; model2/MCP151/strictClippy/fmt PASS34d400f0e; tracker CLOSED after requalification |
 | 468 | 467 | integrated | implement_468 | platform/task-recovery-468 / spec466-468 | worker045dd85a; integration96fad35a2; combined gates pending |
-| 469 | 467 | running | implement_469 | challenge/native-assistance-469 / spec466-469 | base42875e629; independent source/native fixture work |
+| 469 | 467 | integrated | implement_469 | challenge/native-assistance-469 / spec466-469 | base42875e629; independent source/native fixture work |
 | 470 | 468,469 | pending | unassigned | pending | none |
 | 471 | 470 | pending | unassigned | pending | none |
 | 472 | 471 | pending | unassigned | pending | none |
@@ -187,3 +187,9 @@ correct that record. Full No-CDP015 receipt passed the HTTPS workflow, but final
 current/historical cleanup and source handoff are still pending. First-run setup
 uses the existing empty-synthetic-profile smoke convention, not legal consent or
 login. Candidate pins are immutable. No dependent470 readiness is inferred yet.
+
+## Combined Native integration checkpoint
+
+469 worker ef57c4a06bc5a3503cc899cb52eb1c71fb552e2e integrated with468 and475. The only merge conflict was additive client exports; preserve all teaching and challenge entrypoints. Public client behavior checks pass for each. The attempted nonexistent client tsconfig command supplied no evidence; use the established explicit-file type gate.
+
+Final owned Native015 attached and CDP-free workflows passed with independent HTTPS clearance/access and exactly one completion each. Cleanup reconciles all001–015:348 owned process generations absent, unknown0, fresh matching process scan0, Docker resources0, unit files0 and26 X11 bindings clear. Foreign ancestry preserved. Full historical P279 matrix and source/binary equivalence of external Remote View remain unclaimed. Combined-source gates remain pending.

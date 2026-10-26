@@ -469,3 +469,5 @@ the original A/B/C table-placement proposals.
 window evidence. Native provider reads run in one background worker. A cached
 sample retains its original identity and elapsed age; serving it does not renew
 confidence, tab lifetime or viewing authority. Unknown evidence stays unknown.
+
+**Native challenge assistance**: Bounded current OCR classification and explicit human takeover/return through the existing Native handoff. Clearance and protected application admission are separate checks; classification grants no attempt authority.

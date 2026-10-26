@@ -4406,3 +4406,7 @@ For health, inventory or viewer failures, read [Dashboard diagnostics](#dashboar
 After upgrades, reconnect MCP clients; doctor checks `installedMcpClients`.
 
 Startup: [diagnostics](#development-host-startup).
+
+### Native challenge assistance
+
+Use native_capture params.classifyChallenges for bounded same-frame OCR classification. Unknown, ambiguous and stale evidence do not prove absence. The challenge-assistance client reuses the existing opaque handoff and explicit Native takeover/return. Require independent clearance and protected-access checks before continuation; classification grants no solving authority. See docs/src/app/challenge-assistance/page.mdx.

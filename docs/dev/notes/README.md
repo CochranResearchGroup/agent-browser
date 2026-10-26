@@ -253,3 +253,5 @@ active backlog.
 
 - [P296 task recovery checkpoint](0296-task-recovery-468-source-receipt.md): original operations and owned HTTPS reply-loss/restart proof.
 - [P296 teaching review checkpoint](0296-teaching-review-475-source-receipt.md): immutable lineage, operator decisions and per-evidence availability.
+
+- [P296 Native challenge checkpoint](0296-challenge-assistance-469-source-receipt.md): same-frame classification and owned attached/CDP-free human assistance.
