@@ -17,15 +17,15 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 
 | Ticket | Blockers | State | Owner | Branch / checkout | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| 467 | none | validated | root | recipes/spec466-integration / duplicate-403 | Reopened regression repairedff812bf0f; model2/MCP151/strictClippy/fmt PASS34d400f0e; reclosure pending |
+| 467 | none | validated | root | recipes/spec466-integration / duplicate-403 | Reopened regression repairedff812bf0f; model2/MCP151/strictClippy/fmt PASS34d400f0e; tracker CLOSED after requalification |
 | 468 | 467 | running | implement_468 | platform/task-recovery-468 / spec466-468 | base42875e629; artifact gate repair pending |
 | 469 | 467 | running | implement_469 | challenge/native-assistance-469 / spec466-469 | base42875e629; independent source/native fixture work |
 | 470 | 468,469 | pending | unassigned | pending | none |
 | 471 | 470 | pending | unassigned | pending | none |
 | 472 | 471 | pending | unassigned | pending | none |
 | 473 | none | validated | implement_473 | recipes/teaching-evidence-473 / profile-proof | worker ea0e2f42ab59; integration67780a8b1; synthetic cases and shared docs validation pass; tracker CLOSED with explicit source/synthetic receipt |
-| 474 | 473 | validated | implement_473 | recipes/teaching-draft-474 / profile-proof | worker243b7405; integration25dd69054; combinedMCP151/strict/docs/client PASS; closure pending |
-| 475 | 474 | pending | unassigned | pending | none |
+| 474 | 473 | validated | implement_473 | recipes/teaching-draft-474 / profile-proof | worker243b7405; integration25dd69054; combinedMCP151/strict/docs/client PASS; tracker CLOSED after source qualification |
+| 475 | 474 | running | implement_473 | recipes/teaching-review-475 / profile-proof | base785c4196e; result pending |
 | 476 | 475 | pending | unassigned | pending | none |
 | 477 | 475 | pending | unassigned | pending | none |
 | 478 | 468,469,476,477 | pending | unassigned | pending | requires real operator narration and scoped portal |
@@ -133,3 +133,17 @@ reference-tone audio into narration or validate future-date execution.
 source evidence.474 may be closed with meaningful agent-authored draft evidence.
 475 becomes ready only from this validated integration checkpoint;468/469 remain
 owned running work. Post-batch broad review/remediation counts remain0/0.
+
+
+475 admitted from785c4196e after live tracker/native blocker refresh. The prior
+worker243 commit was cherry-picked as25dd; all21 changed blobs verified identical,
+rather than claiming ancestry. Clean/pin-free/build-free inspection preceded
+reuse; prior branch retained.467 and474 tracker closures read back successfully.
+No new checkout for475.
+
+468 actual owned HTTPS EOF red observed: one dropped acknowledged fill reply
+caused two nonempty fills instead of one under the default transport retry.
+Peer draft and PNG existed, fresh owned residue census zero. Earlier TLS/profile
+setup failures are excluded.469 actual Native input/return ran, but OCR admission
+failed before complete workflow; those runs are diagnostic until full corrected
+Native/classification/admission qualification, with No-CDP posture separate.
