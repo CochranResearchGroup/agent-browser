@@ -32,3 +32,7 @@ with `lookupOperation` or the same exact operation. Reopen the returned immutabl
 revision before the next mutation. Stock MCP teaching inspection remains inert;
 a fake validation or promotion record cannot grant execution permission. Real
 Auth and private narrated acceptance keep their existing independent boundaries.
+
+The optional constructor accepted-version reference is the lineage baseline.
+Keep it unchanged or omit it on reopen; inspect `open().acceptedVersion` for the
+latest qualified immutable promotion. Do not overwrite the original accepted file.

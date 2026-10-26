@@ -4,7 +4,7 @@ Product lane: PL-RECIPES
 Parent implementation: P296 / spec466
 Worker branch: recipes/report-repeat-477
 Initial base: 9436460eb8445814470238f051675cc56480a2da
-Status: implementation in progress; no runtime or ticket acceptance claimed.
+Status: source/client gates qualified; real report acceptance waits for the root-owned date-fill repair.
 
 The clean auxiliary was reused with a new branch, preserving recovery commit
 045dd85abede058a59903087686252355fc296f4. Live issue477 and its admission
@@ -95,3 +95,25 @@ contract. This qualifies task-ID compatibility only. Report execution remains
 unqualified; control values, events and HTTP inputs must be observed before
 classifying a product or fixture cause. Fresh owned OS census was zero and
 private-home removal succeeded.
+
+
+## Exact public date-control red and clarification integration
+
+Consumer b5fc3b385 and unchanged b7/e1 binary produced a meaningful public red:
+`browser_fill` acknowledged the existing Start date input with requested
+2026-06-01, but immediate public DOM readback was empty. The observed input was
+type=date, with one untrusted clear/input event and no change event. The app saw
+no report request or export. Private receipt
+report477-40a803b7-7ef6-455b-a834-bbc247052e6f.json retains that bounded observation;
+fresh owned OS census was zero and private-home removal succeeded. Root owns the
+narrow interaction::fill date-contract repair. This worker preserves the native
+fill procedure and immediate readback without an evaluate workaround, wider
+selector or download/launcher change. Complete report acceptance remains pending.
+
+The public client harness now composes the actual476 grilling API: focused
+question preparation, authenticated operator answer, revised procedure, explicit
+review, fresh-repeat proof and promotion. Missing answer authority and mirrored
+binding-only answer receipts both refuse qualification. The grilling API alone
+removes an authenticated answered question from unresolved history; the caller
+cannot silently erase it in the answer request. This is protocol/source evidence,
+separate from the still-pending real report run.

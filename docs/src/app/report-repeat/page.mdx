@@ -61,6 +61,10 @@ questions remain. Optional clarification answers must also reverify through the
 same trusted answer reader used by the grilling client. Missing authority,
 changed answers or unresolved questions block promotion.
 
+The optional constructor `acceptedVersion` seeds the retained baseline for this
+lineage. Keep that baseline unchanged, or omit it when reopening published
+revisions; current qualified promotions are resolved from the existing lineage.
+
 `open` rechecks the trusted records. Its `acceptedVersion` identifies the exact
 executed candidate, while the original accepted file remains unchanged. A later
 edit is a new inert candidate and retains the prior accepted version. Reusing an
