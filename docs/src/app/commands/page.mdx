@@ -446,7 +446,7 @@ agent-browser download <sel> <path>   # Click element to trigger download
 agent-browser wait --download [path]  # Wait for any download to complete
 ```
 
-`download <selector> <path>` treats `<path>` as the delivery destination. It preserves the browser's existing download policy and peer destinations, and delivers only the completed download correlated to the requested target. Existing destination files are preserved. Artifact delivery checks the current local browser process; cancellation or missing identity fails explicitly. Existing-profile tasks do not require historical owner bindings or manual recovery before downloading.
+`download <selector> <path>` treats `<path>` as the delivery destination. It preserves the browser's existing download policy and peer destinations, and delivers only the completed download correlated to the requested target. Existing destination files are preserved. Artifact delivery checks the current local browser process; cancellation or missing identity fails explicitly. Existing-profile tasks do not require historical owner bindings or manual recovery before downloading. Qualified local attachments retain their original process/endpoint proof without acquiring child-process ownership; changed or unverified sources remain unavailable.
 
 Use `--download-path <dir>` (or `AGENT_BROWSER_DOWNLOAD_PATH` env) to set a default download directory. Without it, newly launched Chrome uses `agent-browser-downloads` under its profile directory.
 

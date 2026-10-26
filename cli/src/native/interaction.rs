@@ -161,7 +161,7 @@ pub async fn fill(
                     if (this.tagName !== 'INPUT' || this.type !== 'date') {
                         return { dateFilled: false };
                     }
-                    if (this.disabled || this.readOnly) {
+                    if (this.matches(':disabled') || this.readOnly) {
                         return { error: 'Date input is not writable' };
                     }
                     if (value !== '' && !/^\d{4,}-\d{2}-\d{2}$/.test(value)) {

@@ -1106,7 +1106,7 @@ async fn e2e_date_fill_preserves_value_events_and_writability() {
     guard.set("AGENT_BROWSER_HOME", home.to_str().unwrap());
     guard.set("AGENT_BROWSER_SESSION", "e2e-date-fill");
     let mut state = DaemonState::new();
-    let html = "<input id='date' type='date'><input id='text'><input id='locked' type='date' readonly value='2026-05-01'><script>window.events=[]; for(const name of ['input','change']) document.querySelector('#date').addEventListener(name,e=>events.push({type:e.type,value:e.target.value}));</script>";
+    let html = "<input id='date' type='date'><input id='text'><input id='locked' type='date' readonly value='2026-05-01'><fieldset disabled><input id='fieldset-date' type='date' value='2026-05-02'></fieldset><script>window.events=[]; for(const name of ['input','change']) document.querySelector('#date').addEventListener(name,e=>events.push({type:e.type,value:e.target.value}));</script>";
     let commands = [
         (
             json!({"id":"launch","action":"launch","headless":true,"profile":profile}),
@@ -1133,7 +1133,11 @@ async fn e2e_date_fill_preserves_value_events_and_writability() {
             false,
         ),
         (
-            json!({"id":"read","action":"evaluate","script":"({date:document.querySelector('#date').value,text:document.querySelector('#text').value,locked:document.querySelector('#locked').value,events})"}),
+            json!({"id":"fieldset","action":"fill","selector":"#fieldset-date","value":"2026-06-01"}),
+            false,
+        ),
+        (
+            json!({"id":"read","action":"evaluate","script":"({date:document.querySelector('#date').value,text:document.querySelector('#text').value,locked:document.querySelector('#locked').value,fieldset:document.querySelector('#fieldset-date').value,events})"}),
             true,
         ),
     ];
@@ -1159,7 +1163,7 @@ async fn e2e_date_fill_preserves_value_events_and_writability() {
     assert_eq!(
         observed.unwrap(),
         json!({
-            "date":"2026-06-01", "text":"ordinary text", "locked":"2026-05-01",
+            "date":"2026-06-01", "text":"ordinary text", "locked":"2026-05-01", "fieldset":"2026-05-02",
             "events":[{"type":"input","value":"2026-06-01"},{"type":"change","value":"2026-06-01"}]
         })
     );

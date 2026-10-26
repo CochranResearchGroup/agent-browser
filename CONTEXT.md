@@ -478,3 +478,7 @@ prerequisite answers must be verified before it is ready to ask.
 **Clarification answer**: A receiver-authenticated event bound to the exact
 question and candidate digests. It is independent of procedure approval;
 unverified answer history blocks further rounds without inventing consent.
+
+**Download source proof**: A currently verified local browser process and endpoint.
+A qualified attachment retains its original PID/start/executable proof for live
+revalidation; that proof grants no child-process lifecycle ownership.

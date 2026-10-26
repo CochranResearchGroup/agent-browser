@@ -4518,6 +4518,8 @@ Uses the current browser process; no historical owner binding is required.
 Ordinary task continuation reconciles interrupted publication of its live browser.
 Ordinary updates ignore malformed launch history and unchanged peer release fences.
 Local browser process proof is required for artifact delivery.
+Qualified local attachments preserve original process/endpoint proof without
+child-process ownership. Changed or unverified sources remain unavailable.
 
 Arguments:
   selector             Element to click (CSS selector or @ref)

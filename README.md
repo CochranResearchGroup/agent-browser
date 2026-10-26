@@ -3097,6 +3097,9 @@ correlated to the requested target. The path is a delivery destination; existing
 files are preserved. Delivery requires a proven local browser process and reports
 cancellation or missing identity explicitly. Existing-profile tasks download through
 their current browser without a historical owner binding or manual recovery.
+Qualified local attachments retain original process/endpoint proof for download
+verification without taking child-process ownership. Changed or unverified sources
+remain unavailable.
 Ordinary continuation reconnects to the live profile browser and reconciles an
 interrupted publication without replacing it or resetting its authenticated state.
 
