@@ -4,7 +4,7 @@ Product lane: PL-RECIPES
 Parent implementation: P296 / spec466
 Worker branch: recipes/report-repeat-477
 Initial base: 9436460eb8445814470238f051675cc56480a2da
-Status: source/client gates qualified; real report acceptance waits for the root-owned date-fill repair.
+Status: source/client and owned synthetic real-browser report acceptance qualified; parent owns integration and tracker closure.
 
 The clean auxiliary was reused with a new branch, preserving recovery commit
 045dd85abede058a59903087686252355fc296f4. Live issue477 and its admission
@@ -158,3 +158,52 @@ report477-harness-24847eb2-7228-4783-a506-3726ddb3ca4e.json. Restoration now che
 both socket identities before close, handles Node's expected unlink, is
 idempotent, and contains cleanup errors so the remaining cleanup runs. The
 reviewed routine and product binary are unchanged.
+
+
+## Completed owned synthetic report qualification
+
+The final run passed using clean consumer
+`dfe37e6416837d645d780680157d2c9805b3c619` and the independent root binary source
+`22a75625932a21c1508739a95ef712b37215a7a8`, executable SHA256
+`d69e3ce33bd8a4dff6d70c7c826874dd434ce8cd239d3f5a8b9289cc0e586754`.
+Reviewed Chrome executable SHA256 remained
+`0ba9d6c54dbc1a46dfaa5f95d5975bc9b963030c8647880f5b6a537f8af7d2e8`.
+Private receipt
+`/tmp/agent-browser-spec466-implementation/report477-9bc83734-014a-4eac-9328-9bd49f9ded9b.json`
+records status pass, phase complete, empty before/after owned-process censuses
+and successful private-home removal. Earlier failures remain distinct evidence.
+
+The actual public workflow selected Daily sales, filled June 1–30 through native
+date controls and requested normal HTTP CSV delivery. An independent exact CSV
+oracle rejected a downloaded May-content artifact despite June UI/filename;
+the prior accepted candidate remained selected. The successful fresh task
+produced exact June report/date/rows and artifact SHA256
+`96a66dfd7fb0d1fcdd6525a004170b80042b46794e95f6d0c010ebd1ab64a3ed`. A proxy dropped
+one successful submission reply. Reading the original uncertain operation and
+reusing the original request did not replay submission: the independent app
+counted one report submission and one export. The receiving application then
+issued the exact verified proof; only this plus the actual independently read
+operator decision permitted immutable promotion. Removing the proof reader or
+changing its dates revoked readiness, and stock MCP still treated stored
+promotion/validation metadata as inert.
+
+A renamed export control produced a concrete operator-assistance request before
+export, with zero changed-page export effects. The peer's unsaved note, prior
+accepted bytes and original teaching page hash remained intact. Actual review
+and fresh public task IDs were both131 characters. Root's narrow date-input and
+qualified local download-identity repairs supplied the binary; this worker made
+no Rust, launcher or download-mode change.
+
+The final consumer passed the existing review and grilling harnesses, explicit
+JavaScript implementation and declaration type checking with Node types, script
+syntax and patch hygiene. The fresh-repeat authority request was also checked:
+it contains only expected identity/content/date bindings, excluding verifier
+provenance/verification, artifact assertions and original operation proof. A
+mirrored request cannot supply those independently required assertions.
+
+Qualification is limited to the existing captioned/reference-tone teaching
+fixture and an owned synthetic HTTPS application with a synthetic authenticated
+operator event. It does not establish a private site, physical-human review,
+narrated video transcription, production installation or arbitrary download
+mode. Narrated end-to-end teaching remains the separate issue478. Memory
+disposition: forbidden by the delegated no-Graphiti-write boundary.
