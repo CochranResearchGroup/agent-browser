@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P295 standalone Auth installed qualification](0295-2026-10-26-installed-owner-auth.md): isolated default SDK/discovery, physically enrolled Chrome, actual capture fences, same-target password/TOTP and restart; production and real-provider acceptance remain separate.
+
 [P293 paired asset delivery](0293-2026-10-25-dashboard-asset-delivery.md):170 requests pass with stable serving identity; original timeout remains unreproduced under422.
 
 [P283 Spec400 qualification](0283-2026-10-25-spec400-repairs.md): repairs and children #401–404 integrated, all 46 parent stories reconciled, eight actual cross-build workflows, retained first failures and final help-budget proof. Installed Native and real-account acceptance remain separate.
