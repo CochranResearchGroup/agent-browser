@@ -115,3 +115,25 @@ The first completed conversion exposed an incorrect fixture assertion:
 normal completion publishes `observedMode`; `effectiveMode` belongs to recovery.
 The corrected assertion is followed by independent public mode inspection.
 All failed attempts remain retained with fresh zero namespace/process residue.
+
+
+## Optimized development acceptance
+
+Optimized CI-profile test binary
+`44027ca44896b0c6998078c2590728f1ed33c2165beb4e6da1180f50f137d06d`
+passes the complete private dashboard workflow. Its Native source diff matches
+the committed repair byte-for-byte. The workflow performs eleven authenticated
+dashboard commands: selected-build inspection, both mode directions and
+independent profile copy. It verifies terminal observed mode through an
+independent public read, two original mode closes, one copy close and replay
+without another launch or close. The rendered chooser passes the reviewed
+read-only probe with no page errors or mutation attempts. Copy/profile and
+synthetic-cookie checks pass across Chrome153 and Chromium150. Fresh owned
+namespace and fixture-tag scans report zero residue.
+
+The final fixture correction scopes close-count assertions to their phases:
+two legitimate mode closes are checked separately before the existing copy
+replay oracle requires exactly one close. This preserves the no-replay invariant.
+All earlier failed attempts remain retained. Production build, exact sealed
+qualification, preserve installation and public installed chooser inspection
+remain pending.

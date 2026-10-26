@@ -302,6 +302,7 @@ def main():
             raise AssertionError('MCP response deadline')
         dashboard = None
         dashboard_commands = []
+        dashboard_mode_close_count = 0
         def dashboard_command(command):
             nonlocal dashboard
             if dashboard is None:
@@ -489,6 +490,10 @@ def main():
                     assert probe.returncode == 0, (probe_output / 'probe.log').read_text()
                     assert json.loads((probe_output / 'feature-probe.json').read_text())['passed']
                     assert not json.loads((probe_output / 'feature-probe-cleanup.json').read_text())['retained']
+            if args.dashboard_commands:
+                dashboard_mode_close_count = len(close_dispatches)
+                assert dashboard_mode_close_count == 2, 'two mode operations must each close their original browser exactly once'
+                close_dispatches.clear()
             source_browser=browsers()[0][0]
             operation_id='synthetic-duplicate-one'
             target_selection={}
@@ -722,7 +727,7 @@ def main():
                     break
                 assert time.monotonic() < deadline, 'fixture process residue: ' + str(residue)
                 time.sleep(.02)
-        print(json.dumps(dict(passed=True,dashboardCommands=dashboard_commands,dashboardUiVerified=bool(args.dashboard_ui_probe),scope='public MCP profile_duplicate, real Chrome/X11, synthetic Native owner',
+        print(json.dumps(dict(passed=True,dashboardCommands=dashboard_commands,dashboardModeCloseCount=dashboard_mode_close_count,dashboardUiVerified=bool(args.dashboard_ui_probe),scope='public MCP profile_duplicate, real Chrome/X11, synthetic Native owner',
             nativeGracefulClose=True,independentProfiles=True,concurrentBrowsers=not args.launch_failure and not args.lost_launch_reply,sourcePreserved=True,
             syntheticCookieContinuity=copy_cookie_preserved,buildPair=build_pair,targetMode=args.target_mode if args.build_target else None,copyLoginRemediated=copy_auth_remediated,credentialEncryptionModified=False,divergentWrites=not args.launch_failure and not args.lost_launch_reply,replayPreserved=True,cleanupVerified=True,
             publicBuildAdapters=args.public_build_adapters,launchFailureRecovery=args.launch_failure,ownerRestart=args.restart_owner,lostLaunchReply=args.lost_launch_reply)))

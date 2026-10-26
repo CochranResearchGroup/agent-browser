@@ -13,7 +13,7 @@ lanes:
     custody_state: ACTIVE
     overlaps: [P283, P293]
     reconciled_overlaps: ["Sole primary owns dashboard command routing and listener regression; preserve P283 owner operations and P293 asset diagnosis; reuse retained mode checkout serially"]
-    validation_status: Installed chooser reproduction returns HTML; source regression pending
+    validation_status: Real-listener red-green, 70 dashboard tests, strict Rust and complete private dashboard workflow pass; production pending
     limitations: ["No provider mutation or foreign checkout cleanup", "Keep source and installed qualification separate"]
     updated_at: 2026-10-25
 
