@@ -17,11 +17,11 @@ const artifacts=await mkdtemp(join(tmpdir(),'owner-chrome-evidence-'));
 try{await withBrowserAcceptanceFixture({chromium,artifacts},async chrome=>{
  const {page,origin,counts,targetId,generation}=chrome,urls=[];page.on('request',r=>urls.push(r.url()));
  const fields='<input name="username" autocomplete="username"><input type="password" name="password" autocomplete="current-password">';
- for(const kind of ['click','submit','native','lost-submit','lost-fill','unhandled','wrong-account','wrong-organization','changed-target']){
+ for(const kind of ['click','click-button','submit','native','lost-submit','lost-fill','unhandled','wrong-account','wrong-organization','changed-target']){
   await page.goto(origin);
   const send=`const r=await fetch('/password',{method:'POST',body:new URLSearchParams(new FormData(document.querySelector('form')))});if(r.ok)document.body.innerHTML='<p>Signed in</p>';`;
   const event=kind==='unhandled'?'document.querySelector("button").addEventListener("click",e=>e.preventDefault());':kind==='submit'?'document.querySelector("form").addEventListener("submit",async e=>{e.preventDefault();'+send+'});':kind==='lost-fill'?'document.querySelector("input[type=password]").addEventListener("input",async()=>{'+send+'});':'document.querySelector("button").addEventListener("click",async e=>{e.preventDefault();'+send+'});';
-  await page.setContent(kind==='native'?`<!doctype html><form method="post" action="/password">${fields}<button>Sign in</button></form>`:`<!doctype html><form>${fields}<button>Sign in</button></form><script>${event}</script>`);
+  await page.setContent(kind==='native'?`<!doctype html><form method="post" action="/password">${fields}<button>Sign in</button></form>`:`<!doctype html><form>${fields}<button${kind==='click-button'?' type="button"':''}>Sign in</button></form><script>${event}</script>`);
   let held=false,receiver,receiverConfig,lost=false;
   let currentTarget=targetId,currentGeneration=generation;
   const originalPage={url:()=>page.url(),evaluate:async(fn,args)=>{const result=await page.evaluate(fn,args);if(kind==='lost-submit'&&fn.name==='submitForm'&&!lost){lost=true;throw Error('Synthetic lost submit acknowledgement');}return result;},locator(selector){const locator=page.locator(selector);if(kind!=='lost-fill'||selector!=='input')return locator;return {nth(index){const field=locator.nth(index);return {async fill(value){await field.fill(value);if(index===1&&!lost){lost=true;throw Error('Synthetic lost fill acknowledgement');}}};}};}};
@@ -64,5 +64,5 @@ try{await withBrowserAcceptanceFixture({chromium,artifacts},async chrome=>{
    assert.equal(urls.some(url=>url.includes('SYNTHETIC')||url.includes('synthetic-user')),false,'No protected fields in native GET URLs');
   }finally{await f.close();}
  }
- console.log('Actual Chrome: native POST, JavaScript submit/click, fresh OS-process lost fill/submit recovery and held unhandled/account/company/target negatives retain original requests without repeated effects');
+ console.log('Actual Chrome: native POST, JavaScript submit/submit-button/semantic-button click, fresh OS-process lost fill/submit recovery and held unhandled/account/company/target negatives retain original requests without repeated effects');
 });}finally{await rm(artifacts,{recursive:true,force:true});}
