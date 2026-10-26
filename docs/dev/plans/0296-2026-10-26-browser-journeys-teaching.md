@@ -18,14 +18,14 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 | Ticket | Blockers | State | Owner | Branch / checkout | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | 467 | none | validated | root | recipes/spec466-integration / duplicate-403 | Reopened regression repairedff812bf0f; model2/MCP151/strictClippy/fmt PASS34d400f0e; tracker CLOSED after requalification |
-| 468 | 467 | running | implement_468 | platform/task-recovery-468 / spec466-468 | base42875e629; artifact gate repair pending |
+| 468 | 467 | integrated | implement_468 | platform/task-recovery-468 / spec466-468 | worker045dd85a; integration96fad35a2; combined gates pending |
 | 469 | 467 | running | implement_469 | challenge/native-assistance-469 / spec466-469 | base42875e629; independent source/native fixture work |
 | 470 | 468,469 | pending | unassigned | pending | none |
 | 471 | 470 | pending | unassigned | pending | none |
 | 472 | 471 | pending | unassigned | pending | none |
 | 473 | none | validated | implement_473 | recipes/teaching-evidence-473 / profile-proof | worker ea0e2f42ab59; integration67780a8b1; synthetic cases and shared docs validation pass; tracker CLOSED with explicit source/synthetic receipt |
 | 474 | 473 | validated | implement_473 | recipes/teaching-draft-474 / profile-proof | worker243b7405; integration25dd69054; combinedMCP151/strict/docs/client PASS; tracker CLOSED after source qualification |
-| 475 | 474 | running | implement_473 | recipes/teaching-review-475 / profile-proof | base785c4196e; result pending |
+| 475 | 474 | integrated | implement_473 | recipes/teaching-review-475 / profile-proof | worker5e226f17; integrationfa5433ec3; combined gates pending |
 | 476 | 475 | pending | unassigned | pending | none |
 | 477 | 475 | pending | unassigned | pending | none |
 | 478 | 468,469,476,477 | pending | unassigned | pending | requires real operator narration and scoped portal |
@@ -147,3 +147,43 @@ Peer draft and PNG existed, fresh owned residue census zero. Earlier TLS/profile
 setup failures are excluded.469 actual Native input/return ran, but OCR admission
 failed before complete workflow; those runs are diagnostic until full corrected
 Native/classification/admission qualification, with No-CDP posture separate.
+
+
+## Integrated468 and475
+
+468045dd85abede058a59903087686252355fc296f4 integrated as96fad35a2.
+4755e226f172deb1f88fbf4193406654ad106b8cbc8 integrated asfa5433ec3.
+Shared lib merge was automatic and preserves467 artifact module. Root applied
+shared MCP/catalog/HTTP/native-module hunks within468 worker before its tests.
+Integration Node operation/review/draft/evidence cases PASS; shared guides,
+help, vocabulary, scripts and notes index now applied. Combined Rust/client/docs
+gates remain pending, so no dependents unlock yet.
+
+468 final source candidate SHA256 is
+7e0f6e99398915328b642058e7cd8e1ba29e2df67e1c4c2c9db9a54148df9165.
+Four lost successful replies covered screenshot plus fill/action/submission,
+no-recapture hash/mtime, one application effect each, original readback before
+owner replacement, isolated host restart, same drafts/target/artifact and
+separate physical-loss intervention. Fresh owned OS residue0. Private receipt
+recovery468-52de9c00-4fbb-4570-b092-081220304ac3.json; no raw state in Git.
+Worker gates: MCP151, host14, manager49, adopted-original1, clients/types,
+strict workspace Clippy and format PASS. Native and legacy/unscoped effects
+retain their prior journals/contracts. Qualified existing-profile adoption
+retains already-observed immutable process proof; no new PID trust or upgrade
+adoption program. New receipt ID constraints skip excluded/unscoped requests.
+
+475 gates: MCP152, strict Clippy/format and review/draft/evidence clients/types
+PASS. Authenticated synthetic HTTP operator POST and receiver read are exact-
+content bound; roles/proposals/unconfigured readers cannot approve. Concurrent/
+stale versions, real killed save children, original-operation replay and private
+derived-frame deletion preserve accepted/peer bytes. Evidence access is owner-
+bound per reference and unchecked by default. Production receiver review wiring
+and actual narrated portal remain separate.
+
+469 remains running. Its manual focus/close repair uses verified owned-child
+launch display after immutable identity checks. Historical006 orphan exposed
+parent-census coverage limits; exact cleanup and all001–014 owned-resource audit
+correct that record. Full No-CDP015 receipt passed the HTTPS workflow, but final
+current/historical cleanup and source handoff are still pending. First-run setup
+uses the existing empty-synthetic-profile smoke convention, not legal consent or
+login. Candidate pins are immutable. No dependent470 readiness is inferred yet.

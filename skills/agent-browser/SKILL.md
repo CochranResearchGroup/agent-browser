@@ -82,11 +82,9 @@ Use a separate task/session and tab for each workflow. Shared profiles share log
 
 ## CLI fallback
 
-If `browser_open` is absent from the client's callable tools, report missing
-Agent Browser MCP integration. Register the installed `agent-browser mcp serve`
-stdio command in that client and reconnect to refresh its cached catalog. Use
-the installed CLI to continue the task while integration is corrected; server
-`tools/list` alone does not prove client exposure.
+If browser_open is absent, report missing Agent Browser MCP integration.
+Register installed agent-browser mcp serve in that client and reconnect.
+Use the CLI while correcting integration; server tools/list does not prove client exposure.
 
 Help never launches browsers. MCP uses `success`, `data`, `error`; CLI failures add `type`. Private launch journals retain secret-free `details.phase`; unknown outcomes need readback.
 
@@ -137,11 +135,12 @@ Use `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_
 
 Diagnostics retain selection query fields. Rail presence revalidates at 250/500/1000 ms, then polls every three seconds.
 
-### Task briefing and teaching
+### Retained tasks and teaching
 
-Use `browser_command` action `task_briefing` or CLI `mcp task-briefing TASK`
-for exact retained provenance, progress, artifacts and uncertain IDs without live
-observation or human-use acknowledgement. Software: `@agent-browser/client/task-briefing`.
+Use browser_command actions task_briefing and task_operation (params.requestId)
+for retained context and original receipts. Addressed CDP effects accept stable
+requestId; pending/uncertain never permits automatic retry. Read [recovery](references/session-management.md).
+Software helpers live in @agent-browser/client/task-briefing.
 Read [evidence](../../docs/src/app/teaching-evidence/page.mdx) for scoped recordings/Speech.
-For useful inert SiteGuide drafts from video/narration, read [teaching drafts](references/teaching-drafts.md).
-Preserve gaps, unknown alignment/recognition and review requirements.
+For useful inert drafts and explicit operator review, read [teaching drafts](references/teaching-drafts.md)
+and [review](references/teaching-review.md). Preserve gaps and fresh-repeat requirements.

@@ -1,6 +1,6 @@
 # Ticket 475 teaching review source receipt
 
-Product lane: recipes
+Product lane: PL-RECIPES
 
 Scope: existing SiteGuide candidate directory and public browser-command playbook
 inspection/validation. This source packet does not install a runtime, promote a

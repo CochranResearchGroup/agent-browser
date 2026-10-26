@@ -4,6 +4,21 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Task operation receipt**: Existing-owner evidence for one original addressed
+CDP request, retained before transport. Attempt, owner acknowledgement and site
+completion are separate. Readback never dispatches; Native/Auth journals retain
+their own authority.
+
+**Candidate revision**: An immutable SiteGuide child in the existing directory,
+preserving parent, source and operation lineage while accepted versions remain.
+
+**Teaching review receipt**: A receiver-owned, attributable explicit operator
+decision bound to task, root and exact file/content digests, reverified on reopen.
+It does not establish fresh-repeat execution qualification.
+
+**Evidence availability**: Per-reference owner-bound access, distinct from overall
+recording access and retention of the accepted procedure.
+
 **Teaching draft**: Inert source-linked teaching knowledge in an existing
 SiteGuide candidate. The agent interprets video/narration into parameters,
 routines and a composed playbook before focused questions. Inspection validates

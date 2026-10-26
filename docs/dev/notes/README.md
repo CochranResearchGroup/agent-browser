@@ -250,3 +250,6 @@ active backlog.
 - [P296 teaching evidence source checkpoint](0296-teaching-evidence-473-source-receipt.md): scoped Remote View and Speech client qualification, with explicit physical-media limits.
 
 - [P296 teaching draft source checkpoint](0296-teaching-draft-474-source-receipt.md): interpreted synthetic demonstration, useful inert SiteGuide candidate and public inspection qualification.
+
+- [P296 task recovery checkpoint](0296-task-recovery-468-source-receipt.md): original operations and owned HTTPS reply-loss/restart proof.
+- [P296 teaching review checkpoint](0296-teaching-review-475-source-receipt.md): immutable lineage, operator decisions and per-evidence availability.

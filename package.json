@@ -334,7 +334,10 @@
     "test:owner-auth-chrome": "node scripts/test-owner-login-chrome.js",
     "test:task-briefing-client": "node scripts/test-task-briefing-client.js && pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext ../packages/client/src/task-briefing.js",
     "test:teaching-evidence": "node scripts/test-teaching-evidence.js",
-    "test:teaching-draft": "node scripts/test-teaching-draft.js"
+    "test:teaching-draft": "node scripts/test-teaching-draft.js",
+    "test:task-operation-client": "node scripts/test-task-operation-client.js",
+    "smoke:task-operation-recovery": "node scripts/smoke-task-operation-recovery.mjs",
+    "test:teaching-review": "node scripts/test-teaching-review.js"
   },
   "keywords": [
     "browser",

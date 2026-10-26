@@ -7414,3 +7414,32 @@ a useful evidence-linked SiteGuide candidate through the existing candidate mode
 Use `inspect_guide` or client `inspectTeachingDraft` to inspect typed parameters,
 routines/playbook, observed facts, inferred intent and unresolved questions.
 Drafts remain inert and cannot execute. See [teaching drafts](docs/src/app/teaching-drafts/page.mdx).
+
+### Recover original task operations
+
+Addressed MCP navigation, click, fill, screenshot and eligible single page commands
+accept a stable requestId (1–128 ASCII letters, digits, underscore, period, colon
+or hyphen). Identical requests return the original operation; changed arguments
+conflict before dispatch. Inspect with browser_command action task_operation and
+params.requestId, CLI agent-browser mcp task-operation TASK REQUEST, or
+getTaskOperation from @agent-browser/client/task-briefing.
+
+The software helper reads authenticated
+GET /api/browser/tasks/{task}/operations/{request} with the existing dashboard
+cookie. Pending/uncertain operations require observation; owner acknowledgement
+is separate from site completion. The 256-operation task limit retains history
+and refuses new effects when full. Continuation observes the retained current
+target or returns intervention for lost/changed state without navigation restore.
+Legacy unscoped CLI effects and Native/Auth journals retain their own contracts.
+Operation-backed screenshot references require availability readback before reuse.
+
+### Review teaching candidates
+
+@agent-browser/client/teaching-review edits/reopens immutable SiteGuide child
+revisions and records existing authenticated operator decisions against exact
+content. The receiver supplies trusted decision and per-evidence access readers.
+Opening, proposed interpretations and schema validation create no approval.
+Accepted procedures remain available when source media expires; each frame or
+transcript has its own access state. Ordinary reuse remains disabled until
+separate review and fresh-repeat qualification. See the
+[teaching review guide](docs/src/app/teaching-review/page.mdx).
