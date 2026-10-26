@@ -8,7 +8,7 @@ lanes:
     branch: recipes/spec466-integration
     target: main
     accountable_owner: ecochran76
-    work_items: [CochranResearchGroup/agent-browser#466, CochranResearchGroup/agent-browser#467, CochranResearchGroup/agent-browser#473, CochranResearchGroup/agent-browser#474, CochranResearchGroup/agent-browser#468, CochranResearchGroup/agent-browser#469, CochranResearchGroup/agent-browser#475]
+    work_items: [CochranResearchGroup/agent-browser#466, CochranResearchGroup/agent-browser#467, CochranResearchGroup/agent-browser#473, CochranResearchGroup/agent-browser#474, CochranResearchGroup/agent-browser#468, CochranResearchGroup/agent-browser#469, CochranResearchGroup/agent-browser#475, CochranResearchGroup/agent-browser#476]
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
     dependencies: []

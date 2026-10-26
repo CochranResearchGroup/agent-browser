@@ -25,8 +25,8 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 | 472 | 471 | pending | unassigned | pending | none |
 | 473 | none | validated | implement_473 | recipes/teaching-evidence-473 / profile-proof | worker ea0e2f42ab59; integration67780a8b1; synthetic cases and shared docs validation pass; tracker CLOSED with explicit source/synthetic receipt |
 | 474 | 473 | validated | implement_473 | recipes/teaching-draft-474 / profile-proof | worker243b7405; integration25dd69054; combinedMCP151/strict/docs/client PASS; tracker CLOSED after source qualification |
-| 475 | 474 | integrated | implement_473 | recipes/teaching-review-475 / profile-proof | worker5e226f17; integrationfa5433ec3; combined gates pending |
-| 476 | 475 | pending | unassigned | pending | none |
+| 475 | 474 | validated | implement_473 | recipes/teaching-review-475 / profile-proof | worker5e226f17+89da499b; source9436460eb gates PASS; tracker CLOSED |
+| 476 | 475 | running | implement_473 | recipes/teaching-grilling-476 / profile-proof | base9436460eb; new grilling module consumes review.save |
 | 477 | 475 | pending | unassigned | pending | none |
 | 478 | 468,469,476,477 | pending | unassigned | pending | requires real operator narration and scoped portal |
 
@@ -193,3 +193,11 @@ login. Candidate pins are immutable. No dependent470 readiness is inferred yet.
 469 worker ef57c4a06bc5a3503cc899cb52eb1c71fb552e2e integrated with468 and475. The only merge conflict was additive client exports; preserve all teaching and challenge entrypoints. Public client behavior checks pass for each. The attempted nonexistent client tsconfig command supplied no evidence; use the established explicit-file type gate.
 
 Final owned Native015 attached and CDP-free workflows passed with independent HTTPS clearance/access and exactly one completion each. Cleanup reconciles all001–015:348 owned process generations absent, unknown0, fresh matching process scan0, Docker resources0, unit files0 and26 X11 bindings clear. Foreign ancestry preserved. Full historical P279 matrix and source/binary equivalence of external Remote View remain unclaimed. Combined-source gates remain pending.
+
+## Combined source validation and next teaching admission
+
+Source9436460eb8445814470238f051675cc56480a2da is clean and published through PR480. MCP153, host14, manual2, Native integration14, model manager49/artifacts2 and ChallengeControl60 pass. Strict workspace Clippy/format, full client suite, explicit teaching/challenge/task implementation types, policy11, changed links20 and docs40 routes pass. Narrow475 type correction89da499b integrated9436460eb; prior declaration-only check did not cover implementation. Tracker475 CLOSED.
+
+Immutable debug candidate SHA256 e33fb4738a548fc714fee29c0ad79dd565cec3f3ec544d60b1810b60b16c2471 binds source9436460eb. Workers468/469 rerun only their existing owned synthetic HTTPS recovery and attached/CDP-free Native workflows against it. No installed/runtime production claim. A mistaken nonexistent documentation-check filename supplied no evidence; canonical check-documentation-links.js passes.
+
+476 is ready from validated475 and reuses its clean candidate-free profile-proof checkout at source9436460eb. Pre-reuse inspection found no pinned candidates or active builds. Worker owns a new grilling client, its tests and dedicated documentation; it consumes existing review.save without editing teaching-review.js/d.ts. Root owns shared contracts/docs. Planned477 owns promotion/fresh-repeat changes in teaching-review and owned portal fixture, explicitly disjoint from476. No extra checkout, shared registry or Auth custody.
