@@ -4,9 +4,9 @@
 import assert from 'node:assert/strict';
 import {createChallengeAssistanceClient} from '../packages/client/src/challenge-assistance.js';
 
-export async function qualifyNativeChallengeAssistance({workflow,task,page,primary,nativeOrigin,site,save,consumerControl}) {
+export async function qualifyNativeChallengeAssistance({workflow,task,page,primary,nativeOrigin,site,save,consumerControl,alreadyStaged=false,browserPosture}) {
   assert.equal(new URL(site).protocol,'https:','Challenge application must use owned HTTPS');
-  await primary.evaluate(()=>{
+  if(!alreadyStaged)await primary.evaluate(()=>{
     document.querySelector('#draft').inert=true;document.querySelector('#control').inert=true;
     const overlay=document.createElement('section');overlay.id='challenge469';
     overlay.style.cssText='position:fixed;inset:0;z-index:999999;background:white;color:black;padding:20px;font:24px sans-serif';
@@ -61,7 +61,12 @@ export async function qualifyNativeChallengeAssistance({workflow,task,page,prima
   // Only the challenge button is focusable in the owned overlay. These events
   // pass through the actual Native canvas/tunnel, not app DOM/CDP dispatch.
   await page.keyboard.press('Tab');await page.keyboard.press('Enter');
-  await primary.waitForFunction(()=>document.querySelector('#challenge469 h1')?.textContent==='Report ready');
+  if(primary)await primary.waitForFunction(()=>document.querySelector('#challenge469 h1')?.textContent==='Report ready');
+  else {
+    const deadline=Date.now()+15000;let complete=false;
+    while(Date.now()<deadline){if((await read('/challenge/evidence')).value.completionRequests===1){complete=true;break;}await new Promise(resolve=>setTimeout(resolve,100));}
+    assert(complete,'Independent HTTPS application must observe actual Native input');
+  }
   const applied=await read('/challenge/evidence');assert.equal(applied.value.completionRequests,1);
   await page.frameLocator('#desktop-frame').getByRole('button',{name:'Give control back',exact:true}).click();
   await page.frameLocator('#desktop-frame').getByRole('button',{name:'Take control',exact:true}).waitFor();
@@ -70,7 +75,7 @@ export async function qualifyNativeChallengeAssistance({workflow,task,page,prima
   assert.equal(result.status,'verified_access_after_return');
   assert.equal((await read('/challenge/evidence')).value.completionRequests,1);
   const receipt={passed:true,synthetic:true,actualNativeViewer:true,actualNativeInput:true,hiddenDebuggerUsedForPerception:false,
-    fixtureAppOwnedCdp:'Explicit staging and independent observation only; not a CDP-free browser-posture claim',
+    fixtureAppOwnedCdp:browserPosture??'Explicit staging and independent observation only; not a CDP-free browser-posture claim',
     taskId:task.taskId,handoffId:capsule.handoffId,originalBinding:capsule.binding,
     completionRequests:applied.value.completionRequests,clearance:result.verification.clearance,protectedAccess:result.verification.access,
     sourceFrameSha256:capsule.classification.frameSha256,returnedFrameSha256:result.verification.frameSha256,

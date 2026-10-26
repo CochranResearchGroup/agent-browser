@@ -110,7 +110,7 @@ def main():
     fixture_files = ('scripts/smoke-hosted-browser-matrix-native.py', 'scripts/hosted-native-rpc.py',
                      'scripts/smoke-hosted-browser-attachment.mjs', 'scripts/hosted-performance.mjs')
     if args.challenge_assistance:
-        fixture_files += ('scripts/qualify-native-challenge-assistance.mjs', 'packages/client/src/challenge-assistance.js')
+        fixture_files += ('scripts/qualify-native-challenge-assistance.mjs', 'scripts/qualify-native-no-cdp-challenge.mjs', 'packages/client/src/challenge-assistance.js')
     for name in fixture_files:
         h.run('git', '-C', repo, 'ls-files', '--error-unmatch', name)
     source_pair = {'agentBinarySha256': h.sha(args.agent_binary), 'agentBinarySourceCommit': args.agent_source_commit,

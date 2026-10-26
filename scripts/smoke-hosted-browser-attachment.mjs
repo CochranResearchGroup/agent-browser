@@ -20,6 +20,7 @@ import {createServer} from 'node:http';
 import {createServer as createHttpsServer} from 'node:https';
 import {createPublicKey} from 'node:crypto';
 import {qualifyNativeChallengeAssistance} from './qualify-native-challenge-assistance.mjs';
+import {qualifyNativeNoCdpChallenge} from './qualify-native-no-cdp-challenge.mjs';
 import {mkdir,mkdtemp,readFile,readdir,realpath,stat,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {isAbsolute,join} from 'node:path';
@@ -389,6 +390,7 @@ try{workload:{
  step='register-disposable-named-profile';const createdProfile=JSON.parse((await runCli(context,['--json','runtime','create','borrowed-profile','--browser-family','chromium'])).stdout);assert.equal(createdProfile.created,true);const profilePath=await realpath(createdProfile.userDataDir);assert(profilePath.startsWith(root+'/'),'Named fixture profile must remain inside its private home');
  const challenge469=process.env.HOSTED_SMOKE_CHALLENGE_469==='1';
  const challengeState={completionRequests:0,protectedRequests:0};
+ const nativeChallengeState={completionRequests:0,protectedRequests:0,pageRequests:0};
  let challengeTls,challengeSpki;
  if(challenge469){
   assert(inputDiagnostic&&fixtureNativeConnectOrigin,'Challenge fixture must remain the bounded isolated Native lane');
@@ -397,6 +399,17 @@ try{workload:{
  }
  const html='<!doctype html><title>App-owned attachment synthetic marker</title><body style="margin:0;background:#165dcc"><div style="height:75vh;background:#ff00aa;color:white;font:48px sans-serif">ATTACHMENT SYNTHETIC MARKER</div><input id="draft"><input id="control"><span id="peer">PREEXISTING PEER</span></body>';
  const fixtureHandler=(req,res)=>{
+  if(challenge469&&req.url==='/native-no-cdp'){
+   nativeChallengeState.pageRequests++;
+   res.writeHead(200,{'content-type':'text/html'});res.end('<!doctype html><title>Owned Native challenge</title><body style="background:white;color:black;padding:20px;font:24px sans-serif"><div style="position:absolute;right:10px;bottom:10px;background:#00ff00;width:80px;height:40px"></div><h1 style="font-size:26px">Select all images containing buses</h1><p>Owned unsupported image puzzle</p><div style="height:80px;background:#ddd">Synthetic image grid</div><button style="font:22px sans-serif" onclick="completeChallenge()">Complete verification</button><script>async function completeChallenge(){const result=await fetch("/native/challenge/complete",{method:"POST"});if(!result.ok)return;const report=await fetch("/native/protected-report");if(report.ok)document.body.innerHTML="<h1>Report ready</h1>";}</script>');return;
+  }
+  if(challenge469&&req.url==='/native/challenge/complete'&&req.method==='POST'){
+   nativeChallengeState.completionRequests++;res.writeHead(nativeChallengeState.completionRequests===1?200:409,{'content-type':'application/json'});res.end(JSON.stringify(nativeChallengeState));return;
+  }
+  if(challenge469&&req.url==='/native/challenge/evidence'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(nativeChallengeState));return;}
+  if(challenge469&&req.url==='/native/protected-report'){
+   nativeChallengeState.protectedRequests++;res.writeHead(nativeChallengeState.completionRequests===1?200:403,{'content-type':'application/json'});res.end(JSON.stringify({report:nativeChallengeState.completionRequests===1?'ready':'denied'}));return;
+  }
   if(challenge469&&req.url==='/challenge/complete'&&req.method==='POST'){
    challengeState.completionRequests++;res.writeHead(challengeState.completionRequests===1?200:409,{'content-type':'application/json'});res.end(JSON.stringify(challengeState));return;
   }
@@ -617,6 +630,13 @@ try{workload:{
  if(challenge469){
   await qualifyNativeChallengeAssistance({workflow:publicWorkflow,task:opened,page,primary,nativeOrigin,site,save,consumerControl});
   await continuity('after-challenge469');
+  uiTakeoverDispatched=true;uiReturnDispatched=false;
+  await qualifyNativeNoCdpChallenge({workflow:publicWorkflow,runCli,context,chrome,service,bot,page,nativeOrigin,site,save,
+   selectHandoff:manual=>{managedLossTasks.push(manual);uiHandoffId=manual.handoffId;return consumerControl;},
+   onClosed:id=>closedManagedLossTasks.add(id),
+   observeOwned:async(pid,profile)=>{const identity=await cleanupProcessIdentity(pid);assert(identity&&identity.uid===process.getuid()&&identity.executable===chrome);assert(privateProfileReferenced(await readFile(`/proc/${pid}/cmdline`,'utf8'),profile));observedOwnedProcesses.set(pid,identity);await census();return identity;}});
+  uiReturnDispatched=true;
+  await continuity('after-no-cdp-challenge469');
  }
  if(inputDiagnostic){await save('native-input-diagnostic.json',{passed:true,fullMatrix:false,scope:'One Native text edit and return with independent app observation'});break workload;}
  // Start after all control transitions so the remaining event is scoped detach.
