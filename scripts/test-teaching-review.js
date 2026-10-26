@@ -142,6 +142,7 @@ try {
  assert.equal(operatorUnavailable.ordinaryReuseAllowed,false);assert.equal(operatorUnavailable.acceptedVersion.guideId,accepted.guideId);
  await assert.rejects(repeatClient.recordFreshRepeat({...repeatInput,guideId:promoted.guideId,expectedSha256:promotedView.sha256,operationId:'record-training-period',requestedStartDate:'2026-05-01',requestedEndDate:'2026-05-31'}),/teaching_fresh_dates_required/);
  await assert.rejects(repeatClient.recordFreshRepeat({...repeatInput,guideId:promoted.guideId,expectedSha256:promotedView.sha256,operationId:'record-same-review-task',taskId:'review-task'}),/teaching_fresh_task_required/);
+ await assert.rejects(repeatClient.promote({taskId:'x'.repeat(4001),guideId:promoted.guideId,expectedSha256:promotedView.sha256,operationId:'reject-oversized-task'}),/teaching_review_request_invalid/);
  await assert.rejects(repeatClient.promote({taskId:'fresh-report-task',guideId:reviewed.guideId,expectedSha256:final.sha256,operationId:'promote-unanswered-candidate'}),/teaching_open_questions_present/);
  assert.equal(await readFile(join(directory,accepted.guideId+'.json'),'utf8'),acceptedBytes);
  const clarifiedRoot=structuredClone(original);clarifiedRoot.guideId='daily-sales-clarification-repeat-v1';clarifiedRoot.teaching.unresolved=[clarifiedRoot.teaching.unresolved[0]];

@@ -143,7 +143,7 @@ async function executeReviewed(view,task,actor,{loseReply=false}={}){
    }
    if(step.action==='set_checked'){await call('browser_command',{taskId:task.taskId,action:parameters[step.parameter]?'check':'uncheck',params:{selector},requestId:actor+'-refunds'});continue;}
    assert.equal(step.action,'activate');
-   if(step.target==='export-csv'){artifact=await call('browser_command',{taskId:task.taskId,action:'download',params:{selector,path:join(context.tempHome,actor+'.csv')},requestId:actor+'-export'});continue;}
+   if(step.target==='export-csv'){const destination=join(context.tempHome,actor+'.csv');artifact=await call('browser_command',{taskId:task.taskId,action:'download',params:{selector,path:destination},requestId:actor+'-export'});assert.equal(artifact.path,destination,'Artifact delivery must match this exact owned request');continue;}
    if(step.target==='run-report'&&loseReply){proxy.arm();let uncertain=false;try{uncertain=(await raw('browser_click',{taskId:task.taskId,selector,requestId:operationId})).isError===true;}catch{uncertain=true;}assert(uncertain);assert.equal(proxy.lastDroppedSuccess,true,'Reply loss follows a successful owner response');const original=await call('browser_command',{taskId:task.taskId,action:'task_operation',params:{requestId:operationId}});assert.equal(original.operation.state,'uncertain');const sent=proxy.requests;await raw('browser_click',{taskId:task.taskId,selector,requestId:operationId});assert.equal(proxy.requests,sent,'Original submission never repeats through transport');}
    else await call('browser_click',{taskId:task.taskId,selector,requestId:step.target==='run-report'?operationId:actor+'-'+step.target});
   }
