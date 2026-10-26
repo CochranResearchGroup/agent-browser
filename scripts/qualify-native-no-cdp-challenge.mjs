@@ -46,6 +46,7 @@ export async function qualifyNativeNoCdpChallenge({workflow,runCli,context,chrom
   await frame.waitForFunction(()=>['active','released'].includes(document.querySelector('#input-status')?.dataset.state));
   await frame.locator('#desktop-surface').focus();
   await save('challenge469-no-cdp-interstitial-before.json',{png:(await page.screenshot()).toString('base64')});
+  await frame.locator('#desktop-surface').click({position:{x:200,y:250}});
   await page.keyboard.type('thisisunsafe');
   await save('challenge469-no-cdp-interstitial-after.json',{png:(await page.screenshot()).toString('base64')});
   const deadline=Date.now()+15000;
@@ -60,7 +61,8 @@ export async function qualifyNativeNoCdpChallenge({workflow,runCli,context,chrom
   const cmdline=(await readFile(`/proc/${process.pid}/cmdline`,'utf8')).split('\0').filter(Boolean);
   assert(!cmdline.some(arg=>arg.startsWith('--remote-debugging-')),'Managed browser must have no debugger switches');
   assert(!cmdline.includes('--enable-automation'));
-  const receipt=await qualifyNativeChallengeAssistance({workflow,task,page,nativeOrigin,site:site+'/native',save,consumerControl:control,alreadyStaged:true,
+  const receipt=await qualifyNativeChallengeAssistance({workflow,task,page,nativeOrigin,site:site+'/native',
+    save:(name,value)=>save(name.replace('challenge469-','challenge469-no-cdp-'),value),consumerControl:control,alreadyStaged:true,
     browserPosture:'Managed manual_login; /proc verified no remote-debugging switches; no CDP connection opened'});
   await workflow('browser_close',{taskId:task.taskId});
   onClosed(task.taskId);
