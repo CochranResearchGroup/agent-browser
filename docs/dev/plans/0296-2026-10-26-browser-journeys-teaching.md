@@ -5,7 +5,7 @@ Status: OPEN
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/466
 Integration branch: recipes/spec466-integration
 Integration base: 5770d693b23d51c9932574fa68e012a98029ce73
-Integration tip:67780a8b1 plus the pending coordinator custody commit; source467 validation remains pending
+Integration tip:72b62dc94; source467 validation remains pending. Draft PR480 records publication.
 
 ## Custody and scope
 
@@ -17,14 +17,14 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 
 | Ticket | Blockers | State | Owner | Branch / checkout | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| 467 | none | running | root | recipes/spec466-integration / duplicate-403 | public red/green pending |
+| 467 | none | validated | root | recipes/spec466-integration / duplicate-403 | 135 MCP tests, strict workspace Clippy and format check PASS at72b62dc94; tracker closure pending |
 | 468 | 467 | pending | unassigned | pending | none |
 | 469 | 467 | pending | unassigned | pending | none |
 | 470 | 468,469 | pending | unassigned | pending | none |
 | 471 | 470 | pending | unassigned | pending | none |
 | 472 | 471 | pending | unassigned | pending | none |
-| 473 | none | validated | implement_473 | recipes/teaching-evidence-473 / profile-proof | worker ea0e2f42ab59; integration67780a8b1; synthetic cases and shared docs validation pass; tracker closure pending |
-| 474 | 473 | pending | unassigned | pending | none |
+| 473 | none | validated | implement_473 | recipes/teaching-evidence-473 / profile-proof | worker ea0e2f42ab59; integration67780a8b1; synthetic cases and shared docs validation pass; tracker CLOSED with explicit source/synthetic receipt |
+| 474 | 473 | running | implement_473 | recipes/teaching-draft-474 / profile-proof | base72b62dc94; result pending |
 | 475 | 474 | pending | unassigned | pending | none |
 | 476 | 475 | pending | unassigned | pending | none |
 | 477 | 475 | pending | unassigned | pending | none |
@@ -51,3 +51,13 @@ Worker ea0e2f42ab595bf7c11d4f598d7ade31b2ba5463 integrated serially as67780a8b1.
 Ticket467 follow-up source run exposed HTTP result serialization mismatch (compile error), corrected at the existing JSON writer adapter. Fresh full MCP tests and strict workspace Clippy queued through resource admission; no successful compile claimed for that failed attempt.
 
 Integration gates: docs build PASS37 routes; policy wiring PASS11; changed documentation links PASS; Remote View handoff docs PASS; full service-client provider-free contracts/types/exports/examples PASS. API/MCP parity initially found the existing main skill already exceeded its10000-byte cap at baseline11108 bytes. Moved unchanged advanced continuity and diagnostic guidance to its linked CLI/service reference; main skill9968 bytes, parity PASS. No user-scoped skill publication occurred.
+
+Tracker473 closed after remote branch publication and draft PR480, retaining explicit real-media/native qualification limits. Worker474 admitted serially by reusing its clean original checkout at72b62dc94; no new worktree. Root467 strict Rust validation still pending resource capacity.
+
+Source compilation resource receipt: default14GiB claim waited persistently while host MemAvailable stayed roughly26GiB. Replaced those waiting commands before execution with `AGENT_BROWSER_CARGO_MEMORY_CLAIM_KIB=8388608 AGENT_BROWSER_CARGO_MEMORY_HIGH=7G AGENT_BROWSER_CARGO_MEMORY_MAX=8G` and the same cargo-safe runners. This matches an8GiB admission claim to an8GiB hard cgroup limit while preserving the default16GiB host reserve; no process cleanup or reserve reduction. Prior exact-package unit compilation observed roughly6GiB compiler RSS. Full MCP tests and strict workspace Clippy admitted; outcomes pending.
+
+## Ticket467 validated source receipt
+
+At source commit72b62dc943f6576b334e037e7e30ee313b617f64: full MCP public tests PASS135 (including exact-ID CLI/MCP briefing, unchanged peer/owner state, no transport creation, retained progress/artifacts and original reconciled uncertainty); strict workspace Clippy PASS; cargo-safe format check PASS. Matching8GiB hard cgroup/admission claim retained16GiB reserve and succeeded. Client protocol/types, provider-free full client suite, parity and documentation gates passed as recorded above. No installed/native qualification claimed.
+
+Fresh admission inventory still has seven registered checkouts. Auth owner independently advanced its own checkout to auth/stripe-acceptance-464 at9ba0edc1987782f360361ea8deacc03324bbe12b; preserve it. Dashboard/mode checkouts have pinned candidates; enrollment has a retained candidate and active-build claim. Root dirty Auth work remains preserved. Teaching474 uses its already admitted profile-proof checkout. Two necessary source-worker auxiliaries for newly ready468/469 will be bound to P296, with exact clean integration and governed removal as terminal obligation; they do not gain runtime/install custody. No foreign checkout is reclaimed.
