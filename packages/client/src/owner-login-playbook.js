@@ -101,6 +101,26 @@ export function createOwnerLoginPlaybook({browser,auth,checkpoints}){
     }
     let validation;try{validation=await browser.validatePlan({...options,plan:checkpoint.preparedPlan});}catch{return result('waiting','receiving_unavailable','no_effect');}
     if(!sameTarget(validation))return result('adaptation_required','task_target_changed','no_effect');
+    if(validation.status==='adaptation_required'&&validation.reasonCode==='plan_stale'){
+     const retained=checkpoint.preparedPlan;
+     const semanticFields=/** @type {const} */ (['guideId','guideDigest','bindingDigest','controlFingerprint','expectedState','taskId','profileId','browserId','tabId']);
+     /** Complete public SiteGuide proof is required only for age renewal.
+      * Opaque legacy fixture plans cannot establish unchanged semantics.
+      * @param {Record<string,any>} plan */
+     const complete=plan=>semanticFields.every(field=>nonempty(plan[field]))&&nonempty(plan.planId)&&Number.isSafeInteger(plan.preparedAtMs)&&plan.preparedAtMs>=0&&Number.isSafeInteger(plan.maximumAgeMs)&&plan.maximumAgeMs>=1&&plan.maximumAgeMs<=60000&&plan.guideId===options.guideId&&['taskId','profileId','browserId','tabId'].every(field=>plan[field]===checkpoint?.receiving[field]);
+     if(complete(retained)){
+      let preparation;try{preparation=await browser.prepareLogin(options);}catch{return result('waiting','receiving_unavailable','no_effect');}
+      if(!sameTarget(preparation))return result('adaptation_required','task_target_changed','no_effect');
+      const renewed=preparation.plan;
+      if(preparation.status==='completed'&&renewed&&complete(renewed)&&semanticFields.every(field=>renewed[field]===retained[field])){
+       try{validation=await browser.validatePlan({...options,plan:renewed});}catch{return result('waiting','receiving_unavailable','no_effect');}
+       if(!sameTarget(validation))return result('adaptation_required','task_target_changed','no_effect');
+       if(validation.status==='completed'){
+        checkpoint={...checkpoint,preparedPlan:renewed};await checkpoints.save(key,checkpoint);
+       }
+      }
+     }
+    }
     if(validation.status!=='completed')return {...validation,...result(validation.status,validation.reasonCode,'no_effect')};
     checkpoint={...checkpoint,advanceIntent:true};await checkpoints.save(key,checkpoint);
     try{request=await auth.advanceLogin({requestId});}catch(error){const code=errorCode(error);checkpoint={...checkpoint,outcomeUnknown:true,...(['auth_capture_held','auth_target_busy','auth_not_authorized'].includes(code??'')?{refusalCode:code}:{})};await checkpoints.save(key,checkpoint);return result('waiting',code??'auth_outcome_uncertain','unknown');}
