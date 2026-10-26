@@ -342,7 +342,16 @@ def main():
                                 assert body['desktopId'] == outer.target['viewingDesktopId'] and body['expectedGeneration'] == outer.target['viewingGeneration']
                                 from urllib.request import Request, urlopen
                                 forwarded = Request(f'http://127.0.0.1:{outer.control_port}'+request.path, data=json.dumps(body).encode(), method='POST', headers={'Authorization':'Bearer '+outer.token,'Content-Type':'application/json'})
-                                with urlopen(forwarded, timeout=15) as result: result=json.load(result)
+                                from urllib.error import HTTPError
+                                try:
+                                    with urlopen(forwarded, timeout=15) as result: result=json.load(result)
+                                except HTTPError as error:
+                                    # Retain only the owner's bounded diagnostic code,
+                                    # never recognized application text or credentials.
+                                    failure = json.load(error)
+                                    adapter_errors.append({'transport':'native-read','path':request.path,'status':error.code,'code':failure.get('code')})
+                                    h.private_json(args.results / 'matrix-adapter-errors.json', adapter_errors)
+                                    raise
                             elif request.path == '/v1/consumer':
                                 assert set(body) == {'application', 'request'} and body['application'] == 'fixture'
                                 result = outer.rpc.handle_consumer(body['request'])
