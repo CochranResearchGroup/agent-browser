@@ -1421,6 +1421,10 @@ agent-browser chat "<instruction>"    # AI chat: natural language browser contro
 agent-browser chat                    # AI chat: interactive REPL mode
 ```
 
+Native date inputs use YYYY-MM-DD. Filling an editable date emits input and
+change events; invalid dates and non-writable date inputs return errors.
+
+
 `candidate build --dry-run` reports the exact isolated build plan without
 writing state or compiling. Build apply requires explicit `--apply`, claims one
 exact request, invokes Cargo through `scripts/ci/cargo-safe.sh`, derives the

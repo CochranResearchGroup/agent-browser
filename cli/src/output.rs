@@ -4348,6 +4348,8 @@ Usage: agent-browser fill <selector> <text>
 
 Clears the input field and fills it with the specified text.
 This replaces any existing content in the field.
+Native date inputs use YYYY-MM-DD and emit input/change events.
+Invalid dates and non-writable date inputs return errors.
 
 Global Options:
   --json               Output as JSON
@@ -7355,7 +7357,7 @@ Workflow tools (16):
   browser_navigate      Navigate current page
   browser_snapshot      Read page and element references
   browser_click         Click an element
-  browser_fill          Fill an input
+  browser_fill          Fill an input; native dates use YYYY-MM-DD
   browser_screenshot    Capture current page
   browser_tab           Task tabs; reuse tabKey for new
   browser_handoff       Ready HTTPS Remote View link

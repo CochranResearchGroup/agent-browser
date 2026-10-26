@@ -180,6 +180,10 @@ agent-browser close                   # Close browser (aliases: quit, exit)
 agent-browser close --all             # Close all active sessions
 ```
 
+Native date inputs use YYYY-MM-DD. Filling an editable date emits input and
+change events; invalid dates and non-writable date inputs return errors.
+
+
 `candidate status` projects the durable `coordinationLedger` and current
 workstation transaction into advisory state, then includes the running
 executable's build provenance. An absent coordination file is reported as an

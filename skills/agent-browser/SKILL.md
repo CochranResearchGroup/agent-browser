@@ -143,6 +143,7 @@ requestId; pending/uncertain never permits automatic retry. Read [recovery](refe
 Read [evidence](../../docs/src/app/teaching-evidence/page.mdx) for scoped recordings/Speech.
 For inert drafts, review and questions, read [drafts](references/teaching-drafts.md),
 [review](references/teaching-review.md) and [grilling](references/teaching-grilling.md).
-Preserve gaps; recommendations are not consent. Fresh-repeat validation is required.
+Keep gaps; proposals are not consent. Require fresh-repeat validation.
 
+Date fills use YYYY-MM-DD.
 Native: CLI reference.
