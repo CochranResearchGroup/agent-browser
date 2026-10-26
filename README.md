@@ -7406,3 +7406,11 @@ selected isolated narration import into Speech Saved custody, explicit ranges
 of at most five minutes and reopening original transcript operations. See the
 [teaching evidence guide](docs/src/app/teaching-evidence/page.mdx). Source, timing,
 recognition uncertainty and protected stop/resume gaps remain explicit.
+
+### Draft a SiteGuide from a demonstration
+
+An agent first interprets authorized video and selected narration, then prepares
+a useful evidence-linked SiteGuide candidate through the existing candidate model.
+Use `inspect_guide` or client `inspectTeachingDraft` to inspect typed parameters,
+routines/playbook, observed facts, inferred intent and unresolved questions.
+Drafts remain inert and cannot execute. See [teaching drafts](docs/src/app/teaching-drafts/page.mdx).

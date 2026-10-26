@@ -4,6 +4,11 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Teaching draft**: Inert source-linked teaching knowledge in an existing
+SiteGuide candidate. The agent interprets video/narration into parameters,
+routines and a composed playbook before focused questions. Inspection validates
+shape and source references, not factual truth, approval or successful execution.
+
 **Teaching evidence**: Exact finalized A/V recording and selected isolated
 narration linked to Speech Saved/range receipts. Gaps, conversion alignment,
 speaker identity and critical-token uncertainty remain explicit; a sequence

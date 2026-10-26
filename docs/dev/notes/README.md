@@ -248,3 +248,5 @@ active backlog.
 - [Dashboard summary response overflow](2026-10-17-dashboard-summary-overflow.md) records the bounded UX301 incident repair and qualification boundary.
 
 - [P296 teaching evidence source checkpoint](0296-teaching-evidence-473-source-receipt.md): scoped Remote View and Speech client qualification, with explicit physical-media limits.
+
+- [P296 teaching draft source checkpoint](0296-teaching-draft-474-source-receipt.md): interpreted synthetic demonstration, useful inert SiteGuide candidate and public inspection qualification.

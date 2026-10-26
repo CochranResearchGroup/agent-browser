@@ -134,12 +134,11 @@ Use `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_
 
 Diagnostics retain selection query fields. Rail presence revalidates at 250/500/1000 ms, then polls every three seconds.
 
-### Task briefing and teaching evidence
+### Task briefing and teaching
 
-Read `browser_command` action `task_briefing` or CLI `mcp task-briefing TASK`
-for exact retained context, provenance, progress, artifacts and uncertain IDs.
-This is read-only historical evidence, without live observation or human-use acknowledgement.
-Software: `@agent-browser/client/task-briefing`; [task briefing](../../docs/src/app/sessions/page.mdx).
-Teaching: `@agent-browser/client/teaching-evidence` and `teaching-evidence-http`
-join scoped recordings and Speech ranges; [teaching evidence](../../docs/src/app/teaching-evidence/page.mdx).
-Preserve protected-input gaps and unknown alignment/recognition; do not infer capture suppression.
+Use `browser_command` action `task_briefing` or CLI `mcp task-briefing TASK`
+for exact retained provenance, progress, artifacts and uncertain IDs without live
+observation or human-use acknowledgement. Software: `@agent-browser/client/task-briefing`.
+Read [evidence](../../docs/src/app/teaching-evidence/page.mdx) for scoped recordings/Speech.
+For useful inert SiteGuide drafts from video/narration, read [teaching drafts](references/teaching-drafts.md).
+Preserve gaps, unknown alignment/recognition and review requirements.

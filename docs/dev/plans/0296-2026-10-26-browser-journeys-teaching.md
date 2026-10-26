@@ -5,7 +5,7 @@ Status: OPEN
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/466
 Integration branch: recipes/spec466-integration
 Integration base: 5770d693b23d51c9932574fa68e012a98029ce73
-Integration tip:72b62dc94; source467 validation remains pending. Draft PR480 records publication.
+Integration tip:25dd69054 plus current artifact repair/shared guidance; draft PR480 records publication.
 
 ## Custody and scope
 
@@ -17,14 +17,14 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 
 | Ticket | Blockers | State | Owner | Branch / checkout | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| 467 | none | validated | root | recipes/spec466-integration / duplicate-403 | 135 MCP tests, strict workspace Clippy and format check PASS at72b62dc94; tracker closure pending |
-| 468 | 467 | pending | unassigned | pending | none |
-| 469 | 467 | pending | unassigned | pending | none |
+| 467 | none | running | root | recipes/spec466-integration / duplicate-403 | Read-only gates passed72b62dc94; reopened artifact activity/identity regression, repair validation pending |
+| 468 | 467 | running | implement_468 | platform/task-recovery-468 / spec466-468 | base42875e629; artifact gate repair pending |
+| 469 | 467 | running | implement_469 | challenge/native-assistance-469 / spec466-469 | base42875e629; independent source/native fixture work |
 | 470 | 468,469 | pending | unassigned | pending | none |
 | 471 | 470 | pending | unassigned | pending | none |
 | 472 | 471 | pending | unassigned | pending | none |
 | 473 | none | validated | implement_473 | recipes/teaching-evidence-473 / profile-proof | worker ea0e2f42ab59; integration67780a8b1; synthetic cases and shared docs validation pass; tracker CLOSED with explicit source/synthetic receipt |
-| 474 | 473 | running | implement_473 | recipes/teaching-draft-474 / profile-proof | base72b62dc94; result pending |
+| 474 | 473 | integrated | implement_473 | recipes/teaching-draft-474 / profile-proof | worker243b7405; integration25dd69054; combined gates pending |
 | 475 | 474 | pending | unassigned | pending | none |
 | 476 | 475 | pending | unassigned | pending | none |
 | 477 | 475 | pending | unassigned | pending | none |
@@ -61,3 +61,49 @@ Source compilation resource receipt: default14GiB claim waited persistently whil
 At source commit72b62dc943f6576b334e037e7e30ee313b617f64: full MCP public tests PASS135 (including exact-ID CLI/MCP briefing, unchanged peer/owner state, no transport creation, retained progress/artifacts and original reconciled uncertainty); strict workspace Clippy PASS; cargo-safe format check PASS. Matching8GiB hard cgroup/admission claim retained16GiB reserve and succeeded. Client protocol/types, provider-free full client suite, parity and documentation gates passed as recorded above. No installed/native qualification claimed.
 
 Fresh admission inventory still has seven registered checkouts. Auth owner independently advanced its own checkout to auth/stripe-acceptance-464 at9ba0edc1987782f360361ea8deacc03324bbe12b; preserve it. Dashboard/mode checkouts have pinned candidates; enrollment has a retained candidate and active-build claim. Root dirty Auth work remains preserved. Teaching474 uses its already admitted profile-proof checkout. Two necessary source-worker auxiliaries for newly ready468/469 will be bound to P296, with exact clean integration and governed removal as terminal obligation; they do not gain runtime/install custody. No foreign checkout is reclaimed.
+
+
+## Current worker and shared-contract custody
+
+The nine registered checkouts comprise preserved foreign/pinned lanes plus P296
+integration, existing teaching worker and two necessary temporary auxiliaries.
+Admissions468/469 are serialized under the common Git admission lock; exact
+receipts remain in common Git metadata. These auxiliaries must complete governed
+clean closeout after exact integration. No foreign checkout or pinned candidate
+is reclaimed.
+
+Root writes central MCP/catalog/HTTP/module lists, root scripts and shared docs.
+468 owns connection/task-operation/retained-only host/workflow and additive
+operation model;469 owns Native capture/OCR and pure classification;474 owns
+SiteGuide teaching/playbook/client/dedicated docs. Root applies shared snippets
+into worker branches serially.467 artifact repair adds one pure service-model
+artifact module/lib declaration, explicitly reconciled with468's disjoint model
+additions before either integration.
+
+## Reopened467 artifact publication regression
+
+Source-only briefing gates passed, but successful ordinary commands advance
+session activity/expiry. Comparing entire pre/post sessions incorrectly refused
+artifact publication.467 reopened; no dependent integration/closure relies on
+that incomplete artifact claim. New public owner-model seam retains a completed
+artifact under exact task/tab/target/process context, tolerating activity/expiry
+and peer changes without replay or paths/contents.
+
+Red: cargo-safe test -p agent-browser-service-model --test task_artifact_references
+failed legitimate activity/peer progress. Green passed after logical identity
+fencing. Second red exposed replaced-target acceptance; green2/2 follows exact
+target/process fencing. CLI publisher now delegates to that owner-model method,
+preserving original operation ID in completion-refusal errors. Combined MCP,
+strict Clippy/format and documentation qualification remain pending.
+
+## Integrated474 source checkpoint
+
+Worker243b7405cd3983eef71500bb370fea95b81590bc integrated as25dd69054.
+Public JSON-RPC source red/green covers useful typed teaching inspection,
+invented-reference refusal, ordinary BILL compatibility, no transport/peer/state
+mutation and inert draft execution. Worker strict Clippy/fmt passed. Integration
+teaching-draft/evidence JS tests pass; shared pointers/root script applied.
+The implementing agent interpreted real decoded frames from the fixed synthetic
+caption-led A/V and authored four useful routines, date/refunds parameters,
+outcomes/recovery and source-linked uncertainty. Reference-tone audio is not
+narration; actual spoken/portal qualification remains478. Combined gates pending.
