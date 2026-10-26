@@ -1,5 +1,12 @@
 import type {RoutineResult} from './playbooks.d.ts';
 
+/** Bounded receiver evidence; acknowledgement is distinct from authentication. */
+export interface BrowserActionEvidence {
+ contractVersion:1;requestId:string;attemptId:string;generation:string;
+ input:'not_attempted'|'unknown'|'acknowledged';
+ submission:'not_attempted'|'unknown'|'acknowledged';
+}
+
 export interface OwnerLoginOptions {
  taskId:string;guideId:string;accountRef:string;organizationRef?:string;
  query:string;accountHint:string;origin:string;targetId:string;purpose:string;

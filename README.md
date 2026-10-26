@@ -1199,17 +1199,40 @@ An explicit `installationRoot` is a diagnostic override, not required per task.
 The retained legacy callback playbook below is separate from owner-login methods.
 
 
+For new owner-authority requests, import `createOwnerLoginPlaybook`,
+`createOwnerTotpContinuation` and `createOwnerNumberMatchingContinuation` from
+`@agent-browser/client/login-playbook`. Supply the connected Auth client as `auth`,
+trusted SiteGuide routines as `browser`, and durable metadata `checkpoints`.
+Owner login takes service/account intent, exact target and operation identity,
+then discovers bounded records and preserves owner review before private use.
+Routine metadata must carry the current task/profile/browser/tab/generation;
+missing or changed evidence holds rather than being filled with caller guesses.
+TOTP can start after SSO without a password request. Number matching follows an
+existing private attempt; an ordinary caller cannot supply a number or decision.
+All factories retain original request custody and independently verify identity.
+`reconcile: true` on owner login is readback-only and requires an existing checkpoint.
+Qualified receivers may return bounded `browserActionEvidence` v1 for protected
+input and submission acknowledgement. It is separate from verified authentication
+and never authorizes another use, even when no browser input was attempted.
+
+Use `test:owner-auth-source` with reviewed `AUTH_RECEIPTS_SOURCE`, `RECEIPTS_SOURCE`
+and `AUTH_RECEIPTS_SDK_SOURCE` for actual-source synthetic qualification;
+`test:owner-auth-chrome` adds real Chrome/synthetic HTTPS operation evidence.
+Source tests do not prove installed owner, native accessibility or provider success.
+
+### Retained legacy callback checkpoints
+
 Private login composition is available through
 `@agent-browser/client/login-playbook`. Supply existing SiteGuide routines, the
 trusted shared auth-helper connection and a durable metadata checkpoint store.
 It persists submission custody and reconciles the same request after an unknown
 result. See the routine guide below for observer privacy requirements and current
 helper/provider qualification gaps.
-For the existing Bots-hosted helper, use
+For retained legacy inspection, the historical SDK adapter entry is
 `@agent-browser/client/hosted-auth-helper` and `connectHostedAuthHelper()`.
 It verifies the installed candidate and loads its supported private SDK without
-returning bearer material. Pass its `helper` and attested `callerTaskId` to the
-login playbook. The caller's Codex work ID differs from the receiving browser
+returning bearer material. New credential workflows use the owner factory above. Retained legacy callbacks
+keep their original issuer and may not create replacement owner requests. The caller's Codex work ID differs from the receiving browser
 `taskId`; the producer freezes the exact task/profile/browser/tab independently.
 Choose configured account/source/origin metadata through `list_accounts` and the
 existing source owner. A browser profile name is not a credential reference.

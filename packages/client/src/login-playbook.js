@@ -215,3 +215,6 @@ export function createLoginPlaybook({browser,helper,checkpoints}) {
     },
   };
 }
+
+export {createOwnerTotpContinuation} from './owner-totp-continuation.js';
+export {createOwnerNumberMatchingContinuation} from './owner-number-matching.js';

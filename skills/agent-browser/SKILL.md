@@ -37,6 +37,13 @@ capabilities require Auth installation/enrollment diagnostics, not direct vault
 access or a legacy auth fallback. Private discovery and bearer material stay in
 the SDK. Owner decisions, required delivery and exact browser binding still gate
 input. Never repeat an unknown credential attempt.
+Use `createOwnerLoginPlaybook` with trusted browser routines, connected `auth` and
+metadata checkpoints for new requests. `createOwnerTotpContinuation` composes
+Auth's observed factor action after password/SSO; number matching follows the
+original attempt with `createOwnerNumberMatchingContinuation`. Exact generation,
+privacy and identity evidence are required. Unsupported paths hold. Owner
+`reconcile: true` cannot create or repeat credential use. Legacy checkpoints keep
+their original issuer. Input/submission acknowledgement never proves login.
 
 ## Hosted workflow guidance v1
 

@@ -1,8 +1,16 @@
 // @ts-check
-import {realpath} from 'node:fs/promises';
+import {realpath,lstat} from 'node:fs/promises';
 import {homedir} from 'node:os';
 import {join,isAbsolute} from 'node:path';
 import {pathToFileURL} from 'node:url';
+
+/** Admit producer code within the owner-only installation trust boundary before
+ * executing its verifier. Same-user unrestricted processes are not sandboxed.
+ * @param {string} path @param {boolean} directory */
+async function ownedInstallationArtifact(path,directory){
+  const stat=await lstat(path);
+  if(stat.uid!==process.getuid()||stat.mode&0o022||(directory?!stat.isDirectory():!stat.isFile()))throw Object.assign(Error('Auth SDK installation is unsafe; rebuild the owner-controlled candidate'),{code:'auth_sdk_invalid'});
+}
 
 /**
  * Connect through the installed producer's supported SDK. Bearer discovery,
@@ -18,6 +26,10 @@ export async function connectHostedAuthHelper({installationRoot=join(process.env
   try {
     if(!isAbsolute(installationRoot))throw Error('Absolute installation required');
     const app=await realpath(installationRoot);
+    await ownedInstallationArtifact(app,true);
+    await ownedInstallationArtifact(join(app,'scripts'),true);
+    await ownedInstallationArtifact(join(app,'src'),true);
+    await ownedInstallationArtifact(join(app,'scripts/verify-installation-candidate.mjs'),false);
     const {verifyCandidate}=await import(pathToFileURL(join(app,'scripts/verify-installation-candidate.mjs')).href);
     const verified=await verifyCandidate(app);
     if(verified.product!=='auth-receipts'||verified.contractVersion!==1)throw Object.assign(Error('Install a compatible standalone Auth Receipts client SDK'),{code:'auth_sdk_incompatible'});
