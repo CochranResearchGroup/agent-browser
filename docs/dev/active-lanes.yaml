@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P294
+    product_lane: PL-BUGFIX
+    objective: Restore authenticated dashboard browser operation ingress
+    plan: docs/dev/plans/0294-2026-10-25-dashboard-browser-command.md
+    branch: fix/dashboard-command-451
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#451]
+    plan_state: IN_PROGRESS
+    custody_state: ACTIVE
+    overlaps: [P283, P293]
+    reconciled_overlaps: ["Sole primary owns dashboard command routing and listener regression; preserve P283 owner operations and P293 asset diagnosis; reuse retained mode checkout serially"]
+    validation_status: Real-listener red-green, 70 dashboard tests, strict Rust and complete private dashboard workflow pass; production pending
+    limitations: ["No provider mutation or foreign checkout cleanup", "Keep source and installed qualification separate"]
+    updated_at: 2026-10-25
+
   - id: P293
     product_lane: PL-BUGFIX
     objective: Diagnose intermittent public dashboard asset delivery
@@ -43,7 +59,7 @@ lanes:
     custody_state: INTEGRATED
     dependencies: []
     validation_status: "All 46 parent stories reconciled; children401–404 and repairs424–429 closed; PR436/439 merged; eight actual cross-build workflows and selected gates pass"
-    limitations: ["Source and isolated synthetic qualification only; no installed Native or real-account claim", "Retain primary, build-selection branch and pinned candidates; foreign worktrees untouched"]
+    limitations: ["Source and isolated synthetic outcome; e7a233070ded installed, live chooser routing defect owned by P294; no real-account claim", "Retain primary, build-selection branch and pinned candidates; foreign worktrees untouched"]
     overlaps: [P269, P282]
     reconciled_overlaps: ["401 owns read-only mode projection, MCP adapter, schema/client and rail; preserve P269 manual launch and P282 upgrade source, coordinate shared docs at integration"]
     updated_at: 2026-10-25

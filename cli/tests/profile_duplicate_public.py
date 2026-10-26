@@ -3,6 +3,8 @@
 import argparse
 import copy
 import hashlib
+import http.cookiejar
+import socket
 import json
 import os
 from pathlib import Path
@@ -25,6 +27,8 @@ def main():
     parser.add_argument('--binary', required=True)
     parser.add_argument('--chrome', required=True)
     parser.add_argument('--public-build-adapters',action='store_true')
+    parser.add_argument('--dashboard-commands', action='store_true', help='Exercise authenticated dashboard build, mode and copy commands in the private namespace')
+    parser.add_argument('--dashboard-ui-probe', help='Reviewed read-only Node chooser probe to run against this private dashboard')
     parser.add_argument('--build-target')
     parser.add_argument('--target-mode', choices=['cdp','cdp_free'], default='cdp_free')
     parser.add_argument('--delayed-close', action='store_true')
@@ -35,6 +39,8 @@ def main():
     parser.add_argument('--namespace-worker', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--parent-proof-fd', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.dashboard_ui_probe and not args.dashboard_commands:
+        parser.error('--dashboard-ui-probe requires --dashboard-commands')
     if not args.namespace_worker:
         read_fd, write_fd = os.pipe()
         proof = dict(parentPid=os.getpid(), namespaces={key: os.readlink('/proc/self/ns/' + key) for key in ['user', 'mnt', 'net']})
@@ -44,7 +50,7 @@ def main():
             result = subprocess.run(['unshare', '--user', '--map-current-user', '--keep-caps', '--mount', '--net',
                 '--propagation', 'private', 'python3', str(Path(__file__).resolve()),
                 '--binary', str(Path(args.binary).resolve()), '--chrome', str(Path(args.chrome).resolve()),
-                '--namespace-worker', '--parent-proof-fd', str(read_fd), *(['--public-build-adapters'] if args.public_build_adapters else []), *(['--build-target',str(Path(args.build_target).resolve()),'--target-mode',args.target_mode] if args.build_target else []), *(['--delayed-close'] if args.delayed_close else []), *(['--borrowed-source'] if args.borrowed_source else []), *(['--launch-failure', args.launch_failure] if args.launch_failure else []), *(['--restart-owner'] if args.restart_owner else []), *(['--lost-launch-reply'] if args.lost_launch_reply else [])], pass_fds=(read_fd,)).returncode
+                '--namespace-worker', '--parent-proof-fd', str(read_fd), *(['--public-build-adapters'] if args.public_build_adapters else []), *(['--dashboard-commands'] if args.dashboard_commands else []), *(['--dashboard-ui-probe', str(Path(args.dashboard_ui_probe).resolve())] if args.dashboard_ui_probe else []), *(['--build-target',str(Path(args.build_target).resolve()),'--target-mode',args.target_mode] if args.build_target else []), *(['--delayed-close'] if args.delayed_close else []), *(['--borrowed-source'] if args.borrowed_source else []), *(['--launch-failure', args.launch_failure] if args.launch_failure else []), *(['--restart-owner'] if args.restart_owner else []), *(['--lost-launch-reply'] if args.lost_launch_reply else [])], pass_fds=(read_fd,)).returncode
         finally:
             os.close(read_fd)
         raise SystemExit(result)
@@ -216,6 +222,7 @@ def main():
                                             timer=threading.Timer(3.5,resume);timer.daemon=True;timer.start()
                                     result=run(['xdotool','key','--clearmodifiers',action['chord']],display)
                                 elif action['kind']=='text': result=run(['xdotool','type','--clearmodifiers','--delay','0','--',action['text']],display)
+                                elif action['kind']=='move': result=run(['xdotool','mousemove',str(action['x']),str(action['y'])],display)
                                 else: raise AssertionError('unsupported synthetic input')
                                 assert result.returncode==0,result.stderr
                         else: raise AssertionError('unsupported synthetic Native operation')
@@ -293,7 +300,49 @@ def main():
                     assert 'error' not in reply, reply.get('error')
                     return reply['result']
             raise AssertionError('MCP response deadline')
+        dashboard = None
+        dashboard_commands = []
+        dashboard_mode_close_count = 0
+        def dashboard_command(command):
+            nonlocal dashboard
+            if dashboard is None:
+                # This worker already proved private user/mount/network namespaces.
+                stream = subprocess.run([str(Path(args.binary).resolve()), '--json', 'stream', 'enable'], env=env, capture_output=True, text=True, timeout=30)
+                assert stream.returncode == 0, 'private backend did not start'
+                backend_port = json.loads(stream.stdout)['data']['port']
+                with socket.socket() as reserve:
+                    reserve.bind(('127.0.0.1', 0)); port = reserve.getsockname()[1]
+                auth_dir = root / 'dashboard-auth'
+                dashboard_env = dict(env, AGENT_BROWSER_DASHBOARD='1', AGENT_BROWSER_DASHBOARD_BACKEND_ONLY='1', AGENT_BROWSER_DASHBOARD_PORT=str(port), AGENT_BROWSER_DASHBOARD_BACKEND_PORT=str(backend_port), AGENT_BROWSER_DASHBOARD_AUTH_DIR=str(auth_dir))
+                server = spawn([str(Path(args.binary).resolve())], env=dashboard_env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                origin = 'http://127.0.0.1:' + str(port)
+                deadline = time.monotonic() + 30
+                while True:
+                    try:
+                        with urllib.request.urlopen(origin + '/api/runtime/manifest', timeout=1) as response:
+                            assert json.load(response)['schemaVersion'] == 'agent-browser.runtime-manifest.v1'
+                        break
+                    except (OSError, ValueError):
+                        assert server.poll() is None and time.monotonic() < deadline, 'private dashboard readiness failed'
+                        time.sleep(.02)
+                credentials = dict(line.split('=', 1) for line in (auth_dir / 'dashboard-auth.env').read_text().splitlines() if line.startswith('AGENT_BROWSER_DASHBOARD_'))
+                password = credentials['AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD'].strip('"')
+                opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+                login = urllib.request.Request(origin + '/api/dashboard-auth/login', data=json.dumps(dict(username='admin', password=password)).encode(), headers={'Content-Type':'application/json'})
+                with opener.open(login, timeout=10) as response: assert response.status == 200
+                dashboard = (origin, opener)
+            origin, opener = dashboard
+            request = urllib.request.Request(origin + '/api/command', data=json.dumps(command).encode(), headers={'Content-Type':'application/json'})
+            with opener.open(request, timeout=60) as response:
+                assert response.headers.get_content_type() == 'application/json', 'dashboard command returned HTML'
+                payload = json.load(response)
+            assert payload['success'], payload
+            dashboard_commands.append(dict(action=command['action'], choice=command['choice']))
+            return payload['data']
         def call(name, arguments):
+            if args.dashboard_commands and name == 'browser_command' and arguments['action'] in ['profile_duplicate', 'browser_build']:
+                command = dict(arguments.get('params', {}), action={'profile_duplicate':'browser_session_profile_duplicate', 'browser_build':'browser_session_build_select'}[arguments['action']])
+                return dashboard_command(command)
             result = rpc('tools/call', dict(name=name, arguments=arguments))
             assert not result.get('isError'), result
             payload = json.loads(result['content'][0]['text'])
@@ -330,7 +379,7 @@ def main():
             read_fd, write_fd = os.pipe()
             try:
                 with (root / 'xvfb.log').open('w') as diagnostics:
-                    xvfb = spawn(['Xvfb', '-displayfd', str(write_fd), '-screen', '0', '1280x800x24', '-nolisten', 'tcp'],
+                    xvfb = spawn(['Xvfb', '-displayfd', str(write_fd), '-screen', '0', '1280x800x24', '-nolisten', 'tcp', '-noreset'],
                                  pass_fds=(write_fd,), stdout=subprocess.DEVNULL, stderr=diagnostics)
                 os.close(write_fd)
                 assert select.select([read_fd], [], [], 10)[0], 'Xvfb readiness deadline'
@@ -353,7 +402,7 @@ def main():
             read2,write2=os.pipe()
             try:
                 with (root/'xvfb-second.log').open('w') as diagnostics:
-                    second=spawn(['Xvfb','-displayfd',str(write2),'-screen','0','1280x800x24','-nolisten','tcp'],pass_fds=(write2,),stdout=subprocess.DEVNULL,stderr=diagnostics)
+                    second=spawn(['Xvfb','-displayfd',str(write2),'-screen','0','1280x800x24','-nolisten','tcp','-noreset'],pass_fds=(write2,),stdout=subprocess.DEVNULL,stderr=diagnostics)
                 os.close(write2);assert select.select([read2],[],[],10)[0],'second display readiness deadline'
                 number=os.read(read2,64).decode().strip();assert number.isdecimal() and second.poll() is None
                 displays.append(':'+number)
@@ -382,7 +431,7 @@ def main():
             rpc('initialize', dict(protocolVersion='2024-11-05', capabilities={}, clientInfo=dict(name='ab357-fixture', version='1')))
             mcp.stdin.write(json.dumps(dict(jsonrpc='2.0', method='notifications/initialized')) + '\n')
             mcp.stdin.flush()
-            request = dict(profile='manual-fixture', profileMode='persistent', mode='manual_login', taskKey='source-work',
+            request = dict(profile='manual-fixture', profileMode='persistent', mode='automation' if args.dashboard_commands else 'manual_login', taskKey='source-work',
                            url=env['AGENT_BROWSER_REMOTE_VIEW_ORIGIN']+'/seed', serviceName='fixture', agentName='fixture', taskName='Source work')
             if args.borrowed_source:
                 with (root/'borrowed-chrome.log').open('w') as diagnostics:
@@ -404,11 +453,47 @@ def main():
                     while borrowed.poll() is None:time.sleep(.02)
                 threading.Thread(target=reap_app_original,daemon=True).start()
             else:task=call('browser_open',request)
+            if args.dashboard_commands:
+                task.update(call('browser_handoff', dict(taskId=task['taskId'])))
             source_task=task
             assert task['operatorVisible']['state']=='ready', 'source Native handoff not ready'
             deadline=time.monotonic()+10
             while not any(record['path']=='/seed' for record in get_requests):
                 assert time.monotonic()<deadline,'synthetic cookie seed navigation missing';time.sleep(.02)
+            if args.dashboard_commands:
+                inspection = dashboard_command(dict(action='browser_session_build_select', profileId=task['profileId'], choice='inspect', executablePath=args.chrome))
+                with open(args.chrome, 'rb') as executable: source_sha = hashlib.file_digest(executable, 'sha256').hexdigest()
+                source_build = next(row for row in inspection['availableBuilds'] if row['sha256'] == source_sha)
+                source_selection = dict(source_build['selection'], executablePath=args.chrome)
+                active_task = next(row for row in inspection['activeTasks'] if row['id'] == task['taskId'])
+                for mode in ['cdp_free', 'cdp']:
+                    operation = 'dashboard-mode-' + mode
+                    scope = dict(action='browser_session_mode_convert', sessionId=task['taskId'], sessionName=active_task['name'], sourceProfileId=task['profileId'], browserId=task['browserId'], operationId=operation, mode=mode, **source_selection)
+                    prepared = dashboard_command(dict(scope, choice='prepare'))
+                    assert prepared['phase'] == 'prepared', prepared
+                    converted = dashboard_command(dict(scope, choice='relaunch', ownerConfirmed=True))
+                    deadline = time.monotonic() + 20
+                    while converted['phase'] != 'completed':
+                        assert time.monotonic() < deadline, converted
+                        time.sleep(.02)
+                        converted = dashboard_command(dict(scope, choice='reconcile'))
+                    assert converted['observedMode'] == mode, converted
+                    observed = call('browser_command', dict(taskId=task['taskId'], action='mode'))
+                    assert observed['mode'] == mode, observed
+                inspection = dashboard_command(dict(action='browser_session_build_select', profileId=task['profileId'], choice='inspect'))
+                assert inspection['schemaVersion'] == 'agent-browser.build-selection.v1'
+                if args.dashboard_ui_probe:
+                    probe_output = root / 'dashboard-ui-qa'
+                    probe_output.mkdir()
+                    with (probe_output / 'probe.log').open('w') as output:
+                        probe = subprocess.run(['node', str(Path(args.dashboard_ui_probe).resolve())], env=dict(env, PROBE_ORIGIN=dashboard[0], PROBE_AUTH_ENV=str(root / 'dashboard-auth/dashboard-auth.env'), PROBE_OUTPUT_DIR=str(probe_output), QA_BROWSER_EXECUTABLE=str(Path(args.chrome).resolve())), stdout=output, stderr=subprocess.STDOUT, timeout=90)
+                    assert probe.returncode == 0, (probe_output / 'probe.log').read_text()
+                    assert json.loads((probe_output / 'feature-probe.json').read_text())['passed']
+                    assert not json.loads((probe_output / 'feature-probe-cleanup.json').read_text())['retained']
+            if args.dashboard_commands:
+                dashboard_mode_close_count = len(close_dispatches)
+                assert dashboard_mode_close_count == 2, 'two mode operations must each close their original browser exactly once'
+                close_dispatches.clear()
             source_browser=browsers()[0][0]
             operation_id='synthetic-duplicate-one'
             target_selection={}
@@ -599,7 +684,7 @@ def main():
                     for path in [root / 'mcp.log', root / 'xvfb.log', root / 's/runtime-host.log',
                                  root / 'xdg_cache_home/openbox/openbox.log'] if path.is_file()}
             logs.update({str(path.relative_to(root)): path.read_text(errors='replace')[-6000:] for path in root.glob('.agent-browser/tmp/chrome-launches/*.log')})
-            print(json.dumps(dict(fixtureFailure=True, operations=operations, getRequests=get_requests,
+            print(json.dumps(dict(fixtureFailure=True, ownedChildren=[dict(pid=child.pid, role=Path(child.args[0]).name, exitCode=child.poll()) for child in children], operations=operations, getRequests=get_requests,
                                   browsers=browsers(), windows=windows(), logs=logs)), flush=True)
             raise
         finally:
@@ -642,7 +727,7 @@ def main():
                     break
                 assert time.monotonic() < deadline, 'fixture process residue: ' + str(residue)
                 time.sleep(.02)
-        print(json.dumps(dict(passed=True,scope='public MCP profile_duplicate, real Chrome/X11, synthetic Native owner',
+        print(json.dumps(dict(passed=True,dashboardCommands=dashboard_commands,dashboardModeCloseCount=dashboard_mode_close_count,dashboardUiVerified=bool(args.dashboard_ui_probe),scope='public MCP profile_duplicate, real Chrome/X11, synthetic Native owner',
             nativeGracefulClose=True,independentProfiles=True,concurrentBrowsers=not args.launch_failure and not args.lost_launch_reply,sourcePreserved=True,
             syntheticCookieContinuity=copy_cookie_preserved,buildPair=build_pair,targetMode=args.target_mode if args.build_target else None,copyLoginRemediated=copy_auth_remediated,credentialEncryptionModified=False,divergentWrites=not args.launch_failure and not args.lost_launch_reply,replayPreserved=True,cleanupVerified=True,
             publicBuildAdapters=args.public_build_adapters,launchFailureRecovery=args.launch_failure,ownerRestart=args.restart_owner,lostLaunchReply=args.lost_launch_reply)))
