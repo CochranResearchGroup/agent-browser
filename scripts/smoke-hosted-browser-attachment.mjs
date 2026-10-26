@@ -170,7 +170,7 @@ const peerIdentity=inventory=>inventory.assignments.map(a=>Object.fromEntries(['
 // /v1/consumer. Published request fields are snake_case; response inventory is
 // camelCase (remote_view_application.rs and *_records.rs). This broker never
 // forwards acquisition, release, retirement or route/grant operations.
-const brokerOperations=[],correlations=new Map();
+const brokerOperations=[],correlations=new Map(),nativeTargets=new Map();
 async function startScopedBroker(){
  const assignmentOperations=new Set(['observe_assignment','launch_environment','windows','activate','events','observe_idle','read_idle_retirement','register_native_handoff_observation']);
  const server=createServer(async(req,res)=>{
@@ -180,7 +180,7 @@ async function startScopedBroker(){
   try{
    if(req.method==='POST'&&['/v1/agent-desktop/observe','/v1/agent-desktop/ocr'].includes(req.url)){
     let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>65536)return denied();}
-    const body=JSON.parse(raw),allowed=acquired.some(binding=>body.desktopId===binding.viewingDesktopId&&body.expectedGeneration===binding.viewingGeneration);
+    const body=JSON.parse(raw),allowed=acquired.some(binding=>{const target=nativeTargets.get(binding.assignmentId);return target&&body.desktopId===target.viewingDesktopId&&body.expectedGeneration===target.viewingGeneration;});
     if(!allowed||process.env.HOSTED_SMOKE_CHALLENGE_469!=='1')return denied();
     const upstream=await fetch(controlOrigin+req.url,{method:'POST',headers:{'content-type':'application/json',...(controlAuthorization?{authorization:controlAuthorization}:{})},body:raw,redirect:'error',signal:AbortSignal.timeout(15000)});
     return reply(upstream.status,await upstream.json());
@@ -202,6 +202,11 @@ async function startScopedBroker(){
    // One forwarding attempt; no automatic retries and no redirects.
    let upstream;try{upstream=await fetch(controlOrigin+'/v1/consumer',{method:'POST',headers:{'content-type':'application/json',...(controlAuthorization?{authorization:controlAuthorization}:{})},body:raw,redirect:'error',signal:AbortSignal.timeout(120000)});}catch(error){ambiguous=true;throw error;}
    const value=await upstream.json();
+   if(upstream.ok&&operation==='observe_assignment'){
+    const binding=owned.get(request.assignment_id),target=value.target;
+    assert(target&&target.assignmentId===binding.assignmentId&&target.desktopId===binding.desktopId&&target.lifecycleGeneration===binding.generation&&target.viewingGeneration===binding.viewingGeneration);
+    nativeTargets.set(binding.assignmentId,target);
+   }
    if(upstream.ok&&operation==='inventory'){
     assert(Array.isArray(value.assignments)&&Array.isArray(value.desktops)&&Array.isArray(value.pools));
     value.assignments=value.assignments.filter(a=>owned.has(a.assignmentId)&&a.generation===owned.get(a.assignmentId).generation);
