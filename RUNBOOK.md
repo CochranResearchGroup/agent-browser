@@ -1,5 +1,7 @@
 # Runbook
 
+[P294 dashboard browser commands](docs/dev/plans/0294-2026-10-25-dashboard-browser-command.md), #451, repairs authenticated command ingress and preserves named owner routing. Real-listener red-green checks qualify source; corrected private mutation/UI and production deployment gates remain pending.
+
 [P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): #400–404 and repairs #424–429 are closed as source/synthetic outcomes. Production binary e7a233070ded is installed through an accepted preserve transaction; exact candidate qualification and published assets pass. Live build-chooser acceptance fails at dashboard command routing, tracked by [#451](https://github.com/CochranResearchGroup/agent-browser/issues/451). [Deployment evidence](docs/dev/notes/0283-2026-10-25-spec400-repairs.md) retains the failed process-preservation assertion and slow rail sample. Installed Spec400 workflow acceptance remains incomplete.
 
 [P288 writer custody](docs/dev/plans/0288-2026-10-24-workstation-writer-custody.md), #414, repairs stale PID refusal and truthful contention through public CLI TDD. PR415 carries the qualified source;221 workstation cases, strict Rust, fixtures and docs pass. Installed production is unchanged.

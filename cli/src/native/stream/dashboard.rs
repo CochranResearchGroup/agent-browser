@@ -639,6 +639,7 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
     if path == "/api/service"
         || path.starts_with("/api/service/")
         || path == "/api/dashboard/profile-properties"
+        || path == "/api/command"
     {
         let body_str = if matches!(method, "POST" | "PUT" | "PATCH" | "DELETE") {
             read_post_body(&mut stream, &buf, n).await
@@ -815,6 +816,56 @@ async fn handle_service_api_request(
     // Authentication has succeeded in the dashboard request handler. Keep the
     // requested owner-only inventory out of diagnostic discovery and fallback.
     let (route, query) = split_path_query(path);
+    let mut browser_command_port = None;
+    // These dashboard dialogs use the existing owner command protocol. Keep the
+    // ordinary authentication gate and restrict ingress to their three actions;
+    // owner dispatch still validates exact task/profile scope and confirmations.
+    if route == "/api/command" {
+        if method != "POST" {
+            write_json_error(
+                stream,
+                "405 Method Not Allowed",
+                "browser_command_method_invalid",
+            )
+            .await;
+            return;
+        }
+        let request = serde_json::from_str::<Value>(body).ok();
+        if !matches!(
+            request
+                .as_ref()
+                .and_then(|v| v.get("action"))
+                .and_then(Value::as_str),
+            Some(
+                "browser_session_build_select"
+                    | "browser_session_mode_convert"
+                    | "browser_session_profile_duplicate"
+            )
+        ) {
+            write_json_error(
+                stream,
+                "400 Bad Request",
+                "browser_command_action_unsupported",
+            )
+            .await;
+            return;
+        }
+        if let Some(session) = request.as_ref().and_then(|value| value.get("sessionName")) {
+            // The backend stamps its runtime lane during daemon relay. Keep an
+            // addressed task on its existing owner rather than borrowing the
+            // dashboard backend's launch and profile configuration.
+            let Some(port) = session.as_str().and_then(session_port_for_name) else {
+                write_json_error(
+                    stream,
+                    "503 Service Unavailable",
+                    "browser_command_owner_unavailable",
+                )
+                .await;
+                return;
+            };
+            browser_command_port = Some(port);
+        }
+    }
     if method == "GET"
         && route == "/api/service/status"
         && query_params(query)
@@ -1337,7 +1388,7 @@ async fn handle_service_api_request(
         return;
     }
 
-    if let Some(port) = dashboard_service_backend_port() {
+    if let Some(port) = browser_command_port.or_else(dashboard_service_backend_port) {
         let request_timeout = service_api_proxy_timeout(method, path, body);
         match proxy_dashboard_service_api_request(port, method, path, body, request_timeout).await {
             Ok(response) => {
@@ -1641,6 +1692,11 @@ fn service_api_proxy_timeout(method: &str, path: &str, body: &str) -> Duration {
     let (path, _) = split_path_query(path);
     if dashboard_service_status_cacheable(method, path) {
         return DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT;
+    }
+    if method == "POST" && path == "/api/command" {
+        // Owner operations may complete after the client's observation deadline.
+        // Forward once and retain their original operation IDs for reconciliation.
+        return DASHBOARD_REMOTE_VIEW_HANDOFF_PROXY_TIMEOUT;
     }
     if method == "POST" && path == "/api/service/request" {
         let action = serde_json::from_str::<Value>(body)
@@ -4088,6 +4144,183 @@ pub(super) async fn spawn_session(body: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn authenticated_browser_commands_cross_the_real_dashboard_listener() {
+        struct Scratch(std::path::PathBuf);
+        impl Drop for Scratch {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        async fn exchange(method: &str, path: &str, cookie: &str, body: &str) -> Vec<u8> {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.unwrap();
+                handle_dashboard_connection(stream).await;
+            });
+            let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
+            client.write_all(format!("{method} {path} HTTP/1.1\r\nHost: localhost\r\nCookie: {cookie}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+            let mut response = Vec::new();
+            timeout(Duration::from_secs(5), client.read_to_end(&mut response))
+                .await
+                .unwrap()
+                .unwrap();
+            server.await.unwrap();
+            response
+        }
+        let scratch = Scratch(
+            std::env::temp_dir().join(format!("dashboard-command-{}", uuid::Uuid::new_v4())),
+        );
+        let env = EnvGuard::new(&[
+            "AGENT_BROWSER_DASHBOARD_AUTH_DIR",
+            "AGENT_BROWSER_DASHBOARD_AUTH_FILE",
+            "AGENT_BROWSER_DASHBOARD_BACKEND_PORT",
+            "AGENT_BROWSER_SOCKET_DIR",
+        ]);
+        env.set(
+            "AGENT_BROWSER_SOCKET_DIR",
+            scratch.0.join("sockets").to_str().unwrap(),
+        );
+        std::fs::create_dir_all(crate::connection::get_socket_dir()).unwrap();
+        env.set(
+            "AGENT_BROWSER_DASHBOARD_AUTH_DIR",
+            scratch.0.to_str().unwrap(),
+        );
+        env.remove("AGENT_BROWSER_DASHBOARD_AUTH_FILE");
+        let config = dashboard_auth::ensure_dashboard_auth_config().unwrap();
+        let credentials = std::fs::read_to_string(config.bootstrap_credential_file).unwrap();
+        let password = credentials
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD=\"")
+                    .and_then(|s| s.strip_suffix('"'))
+            })
+            .unwrap();
+        let login = exchange(
+            "POST",
+            "/api/dashboard-auth/login",
+            "",
+            &json!({"username":"admin","password":password}).to_string(),
+        )
+        .await;
+        assert_eq!(http_response_status(&login), Some(200));
+        let login = String::from_utf8(login).unwrap();
+        let cookie = login
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("Set-Cookie: ")
+                    .and_then(|v| v.split(';').next())
+            })
+            .unwrap();
+        let backend = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        env.set(
+            "AGENT_BROWSER_DASHBOARD_BACKEND_PORT",
+            &backend.local_addr().unwrap().port().to_string(),
+        );
+        let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = observed.clone();
+        let task = tokio::spawn(async move {
+            loop {
+                let (mut stream, _) = backend.accept().await.unwrap();
+                let mut buf = vec![0; 8192];
+                let n = stream.read(&mut buf).await.unwrap();
+                assert!(buf[..n].starts_with(b"POST /api/command HTTP/1.1\r\n"));
+                let body = read_post_body(&mut stream, &buf, n).await;
+                let request: Value = serde_json::from_str(&body).unwrap();
+                captured.lock().unwrap().push(request.clone());
+                write_json_value(&mut stream, "200 OK", json!({"success":true,"data":{"schemaVersion":"agent-browser.build-selection.v1","request":request}})).await;
+            }
+        });
+        let body = json!({"action":"browser_session_build_select","choice":"inspect","profileId":"exact-profile"});
+        let denied = exchange("POST", "/api/command", "", &body.to_string()).await;
+        assert_eq!(http_response_status(&denied), Some(401));
+        assert!(observed.lock().unwrap().is_empty());
+        let result = exchange("POST", "/api/command", cookie, &body.to_string()).await;
+        assert_eq!(http_response_status(&result), Some(200));
+        let payload: Value = serde_json::from_slice(http_response_body(&result).unwrap())
+            .expect("dashboard command must return backend JSON, not the static HTML document");
+        assert_eq!(
+            payload["data"]["schemaVersion"],
+            "agent-browser.build-selection.v1"
+        );
+        assert_eq!(payload["data"]["request"], body);
+        for action in [
+            "browser_session_mode_convert",
+            "browser_session_profile_duplicate",
+        ] {
+            let body = json!({"action":action,"choice":"prepare","operationId":"operation-451","sourceProfileId":"exact-profile","sessionId":"exact-task","ownerConfirmed":true});
+            let result = exchange("POST", "/api/command", cookie, &body.to_string()).await;
+            let payload: Value =
+                serde_json::from_slice(http_response_body(&result).unwrap()).unwrap();
+            assert_eq!(
+                payload["data"]["request"], body,
+                "owner identity and confirmation must be forwarded unchanged"
+            );
+        }
+        for (method, body, status) in [
+            ("GET", "", 405),
+            (
+                "POST",
+                r#"{"action":"navigate","url":"https://invalid.example"}"#,
+                400,
+            ),
+            ("POST", "{", 400),
+        ] {
+            let result = exchange(method, "/api/command", cookie, body).await;
+            assert_eq!(http_response_status(&result), Some(status));
+            assert_eq!(
+                serde_json::from_slice::<Value>(http_response_body(&result).unwrap()).unwrap()
+                    ["success"],
+                false
+            );
+        }
+        let owner = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let sockets = crate::connection::get_socket_dir();
+        std::fs::write(
+            sockets.join("exact-owner.pid"),
+            std::process::id().to_string(),
+        )
+        .unwrap();
+        std::fs::write(
+            sockets.join("exact-owner.stream"),
+            owner.local_addr().unwrap().port().to_string(),
+        )
+        .unwrap();
+        let owner_task = tokio::spawn(async move {
+            let (mut stream, _) = owner.accept().await.unwrap();
+            let mut bytes = vec![0; 8192];
+            let n = stream.read(&mut bytes).await.unwrap();
+            let body = read_post_body(&mut stream, &bytes, n).await;
+            let request: Value = serde_json::from_str(&body).unwrap();
+            write_json_value(
+                &mut stream,
+                "200 OK",
+                json!({"success":true,"data":{"owner":"exact-owner","request":request}}),
+            )
+            .await;
+        });
+        let body = json!({"action":"browser_session_mode_convert","sessionId":"exact-task","sessionName":"exact-owner","choice":"prepare"});
+        let result = exchange("POST", "/api/command", cookie, &body.to_string()).await;
+        let payload: Value = serde_json::from_slice(http_response_body(&result).unwrap()).unwrap();
+        assert_eq!(
+            payload["data"]["owner"], "exact-owner",
+            "task-scoped commands must reach their owned lane instead of the dashboard backend"
+        );
+        assert_eq!(payload["data"]["request"], body);
+        owner_task.await.unwrap();
+        let body = json!({"action":"browser_session_mode_convert","sessionId":"exact-task","sessionName":"missing-owner","choice":"prepare"});
+        let result = exchange("POST", "/api/command", cookie, &body.to_string()).await;
+        assert_eq!(
+            http_response_status(&result),
+            Some(503),
+            "missing owner must not fall back to another lane"
+        );
+        assert_eq!(observed.lock().unwrap().len(), 3);
+        task.abort();
+        let _ = task.await;
+    }
+
     #[tokio::test]
     async fn dashboard_static_delivery_both_listener_http_contracts() {
         async fn exchange(per_session: bool, path: &str) -> Vec<u8> {

@@ -1,5 +1,7 @@
 # Roadmap
 
+[P294 dashboard browser commands](docs/dev/plans/0294-2026-10-25-dashboard-browser-command.md), #451, repairs authenticated command ingress and preserves named owner routing. Real-listener red-green checks qualify source; corrected private mutation/UI and production deployment gates remain pending.
+
 [P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): #400–404 and repairs #424–429 are closed as source/synthetic outcomes. Production binary e7a233070ded is installed through an accepted preserve transaction; exact candidate qualification and published assets pass. Live build-chooser acceptance fails at dashboard command routing, tracked by [#451](https://github.com/CochranResearchGroup/agent-browser/issues/451). [Deployment evidence](docs/dev/notes/0283-2026-10-25-spec400-repairs.md) retains the failed process-preservation assertion and slow rail sample. Installed Spec400 workflow acceptance remains incomplete.
 
 [P291 corrected cold rail](docs/dev/plans/0291-2026-10-24-cold-rail-retry-spacing.md), #430, is installed accepted oncf65dd76422b: cold median3.36s to2.11s, warm1.00s to1.02s,18 browser roots and137 Native provider/persistent unit generations preserved. [Evidence](docs/dev/notes/0291-2026-10-24-cold-rail-retry-spacing.md) retains the failed first comparison, mounted cache-caller correction, finite sample limits and three doctor advisories.422 asset intermittence and Remote View667 MCP-client restart loops remain separate. Retain the primary checkout and pinned candidates.

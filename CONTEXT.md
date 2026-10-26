@@ -12,8 +12,10 @@ separate observations; inspection does not acquire or mutate a browser.
 
 **Inspection review**: An explicit accepted or rejected judgment about one frozen inspection run, scoped to its original workspace, task, browser, tab and profile. Activity retains bounded identity and evidence-reference metadata. The judgment does not change observation validity, execution authority or readiness.
 
-**Exact task routing**: MCP retains task identity through page command builders
-and resolves the transport lane separately. The managed host joins the exact ID
+**Exact task routing**: MCP page commands and authenticated dashboard browser
+operations retain task identity and resolve the transport lane separately.
+A named dashboard command uses the existing owned session route; an unavailable
+owner is reported without falling back to the dashboard backend. The managed host joins the exact ID
 to the task name and selected browser profile. Missing or conflicting identity
 cannot fall back to another same-name task or a fresh launch.
 
