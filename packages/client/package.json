@@ -30,6 +30,18 @@
     "./native-receiving-browser": {
       "types": "./src/native-receiving-browser.d.ts",
       "import": "./src/native-receiving-browser.js"
+    },
+    "./teaching-evidence": {
+      "types": "./src/teaching-evidence.d.ts",
+      "import": "./src/teaching-evidence.js"
+    },
+    "./teaching-evidence-http": {
+      "types": "./src/teaching-evidence-http.d.ts",
+      "import": "./src/teaching-evidence-http.js"
+    },
+    "./task-briefing": {
+      "types": "./src/task-briefing.d.ts",
+      "import": "./src/task-briefing.js"
     }
   },
   "scripts": {
