@@ -142,3 +142,19 @@ receipt. The mirrored-reader test fails before this change and passes afterward,
 retaining the prior accepted version. Review and grilling harnesses and explicit
 JavaScript implementation plus declaration checking pass. This is bounded477
 trust-gate work, not the final broad review.
+
+
+The next run on root22a756259/d69e3ce33 and consumer1447 produced both private
+stale.csv and repeat.csv, then the fixture's proxy restoration failed: Node
+net.Server.close had already removed its Unix socket before the fixture stat.
+The finally block repeated the same failure, preventing ordinary receipt and
+cleanup. This is a harness failure, not completed report acceptance. Exact
+owned host cleanup verified PID/start/executable/private home before SIGTERM;
+fresh owned OS census was zero and the private home was removed. The first
+cleanup process hit a read-only migration archive after stopping the host; its
+locally read phase diagnostics were lost before a receipt write. No counters or
+site outcomes are reconstructed. The explicit failure/cleanup receipt is
+report477-harness-24847eb2-7228-4783-a506-3726ddb3ca4e.json. Restoration now checks
+both socket identities before close, handles Node's expected unlink, is
+idempotent, and contains cleanup errors so the remaining cleanup runs. The
+reviewed routine and product binary are unchanged.

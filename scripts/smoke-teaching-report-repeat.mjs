@@ -109,7 +109,8 @@ async function replyLoss(){
   down.on('data',chunk=>{if(!parsed){request+=chunk;if(request.includes('\n')){parsed=true;let command;try{command=JSON.parse(request.slice(0,request.indexOf('\n')));}catch{down.destroy();up.destroy();return;}requests++;if(armed&&command.action==='click'){armed=false;drop=true;}}}up.write(chunk);});
   up.on('data',chunk=>{if(!drop){down.write(chunk);return;}response+=chunk;if(response.includes('\n')){try{lastDroppedSuccess=JSON.parse(response.slice(0,response.indexOf('\n'))).success===true;}catch{lastDroppedSuccess=false;}drops++;down.destroy();up.destroy();}});up.on('end',()=>down.end());down.on('end',()=>up.end());
  });await new Promise(resolve=>server.listen(path,resolve));const proxyInode=statSync(path).ino;
- return {arm(){armed=true;},get drops(){return drops;},get requests(){return requests;},get lastDroppedSuccess(){return lastDroppedSuccess;},async restore(){for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(resolve));assert.equal(statSync(path).ino,proxyInode);unlinkSync(path);assert.equal(statSync(original).ino,inode);renameSync(original,path);}};
+ let restored=false;
+ return {arm(){armed=true;},get drops(){return drops;},get requests(){return requests;},get lastDroppedSuccess(){return lastDroppedSuccess;},async restore(){if(restored)return;assert.equal(statSync(path).ino,proxyInode);assert.equal(statSync(original).ino,inode);for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(resolve));if(existsSync(path)){assert.equal(statSync(path).ino,proxyInode);unlinkSync(path);}assert.equal(statSync(original).ino,inode);renameSync(original,path);restored=true;}};
 }
 async function configureDownloads(profile){
  const port=readFileSync(join(profile,'DevToolsActivePort'),'utf8').trim().split('\n');
@@ -201,7 +202,7 @@ try{
  receipt.checks.push({kind:'preservation',peerDraft:true,priorAcceptedBytes:true,originalTeachingPage:true});phase('complete');receipt.status='pass';
 }catch(error){receipt.status='failed';receipt.error=error.message;receipt.counts=counts;receipt.reportInputs=reportInputs;receipt.lastObservation=error.observation??null;throw error;}
 finally{
- if(proxy)await proxy.restore();if(client){for(const task of tasks.reverse()){try{await Promise.race([call('browser_close',{taskId:task.taskId}),pause(3000).then(()=>{throw Error('cleanup_deadline');})]);}catch{}}client.close();}
+ if(proxy){try{await proxy.restore();}catch(error){receipt.status='failed';receipt.proxyRestoreFailure=error.message;}}if(client){for(const task of tasks.reverse()){try{await Promise.race([call('browser_close',{taskId:task.taskId}),pause(3000).then(()=>{throw Error('cleanup_deadline');})]);}catch{}}client.close();}
  if(chrome&&chrome.exitCode===null)chrome.kill('SIGTERM');for(const pid of ownedProcesses()){try{if(ownedProcesses().includes(pid))process.kill(pid,'SIGTERM');}catch{}}
  for(let i=0;i<100&&ownedProcesses().length;i++)await pause(50);receipt.afterOwnedProcesses=ownedProcesses();await new Promise(resolve=>application.close(resolve));assert.equal(hash(readFileSync(candidate)),candidateSha256);
  const out=join('/tmp/agent-browser-spec466-implementation','report477-'+randomUUID()+'.json');
