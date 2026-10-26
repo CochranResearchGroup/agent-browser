@@ -10,14 +10,25 @@ export async function qualifyNativeNoCdpChallenge({workflow,runCli,context,chrom
   const profile='no-cdp-challenge-'+randomUUID();
   const created=JSON.parse((await runCli(context,['--json','runtime','create',profile,'--browser-family','chromium'])).stdout);
   assert.equal(created.created,true);
+  async function launch(url,taskName){
+    const response=await fetch(service.url+`/api/bots/${bot.id}/hosted-browser`,{method:'POST',headers:{origin:service.url,'content-type':'application/json'},
+      body:JSON.stringify({mode:'launch',sessionId:bot.threadId,requestId:randomUUID(),taskKey:randomUUID(),taskName,profileMode:'existing',profile,url}),signal:AbortSignal.timeout(120000)});
+    const task=await response.json();
+    await save('challenge469-no-cdp-'+(url==='about:blank'?'profile-preparation':'open')+'.json',{status:response.status,task});
+    assert.equal(response.status,201);
+    selectHandoff(task);
+    return task;
+  }
+  // The build owner selects existing owner-catalog profiles. Import this new
+  // disposable profile through an explicit ordinary blank launch and close;
+  // it is a different process, not the qualified manual-login browser below.
+  const prepared=await launch('about:blank','Prepare owned synthetic profile');
+  await workflow('browser_close',{taskId:prepared.taskId});onClosed(prepared.taskId);
   const selection=await workflow('browser_command',{action:'browser_build',params:{profileId:profile,operationId:randomUUID(),choice:'select_for_next_launch',
     mode:'cdp_free',executablePath:chrome,expectedSha256:createHash('sha256').update(await readFile(chrome)).digest('hex'),ownerConfirmed:true}});
   assert.equal(selection.phase,'selected_for_next_launch');
-  const response=await fetch(service.url+`/api/bots/${bot.id}/hosted-browser`,{method:'POST',headers:{origin:service.url,'content-type':'application/json'},
-    body:JSON.stringify({mode:'launch',sessionId:bot.threadId,requestId:randomUUID(),taskKey:randomUUID(),taskName:'Owned Native challenge without CDP',profileMode:'existing',profile,url:site+'/native-no-cdp'}),signal:AbortSignal.timeout(120000)});
-  const task=await response.json();
-  await save('challenge469-no-cdp-open.json',{status:response.status,task,selection});
-  assert.equal(response.status,201);
+  const task=await launch(site+'/native-no-cdp','Owned Native challenge without CDP');
+  await save('challenge469-no-cdp-selection.json',selection);
   assert.equal(task.mode,'manual_login');
   const control=selectHandoff(task);
   await page.goto(task.handoffUrl,{waitUntil:'domcontentloaded',timeout:30000});
