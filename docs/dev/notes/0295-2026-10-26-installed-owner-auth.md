@@ -42,3 +42,27 @@ The verified SDK reports product `auth-receipts`, contract version 1, identity `
 The completed same-target browser workflow produces exactly one password POST, one factor POST, one protected source read and three protected fills. All three fills require an actual enrolled capture refusal immediately before input. Capture succeeds before private work and after independent intended-account/company verification; it remains held on the MFA page. Authority restart and receiver reopen preserve original request identities and do not repeat input or submission. The original password workflow also independently reaches completed status after TOTP. A separate real target retains its original untouched password form. This installed recovery slice covers durable acknowledgement plus restart; source-level lost browser/transport acknowledgement fixtures remain separate evidence.
 
 The final run uses Chrome `153.0.8010.52`, proves the actual Chrome PID and derived generation, refuses a forged generation and an unenrolled caller, and observes the owned Chrome exit plus zero remaining profile processes and zero remaining processes retaining the task-owned HOME/candidate paths. Every test fixture and candidate directory is removed. The synthetic machine receipt is written outside Git at `/var/tmp/agent-browser-installed-owner-463.json` when `INSTALLED_OWNER_AUTH_EVIDENCE` is set; it includes the per-run PID, target and generation. No raw credential, seed, auth state, screenshot or provider content is retained in this note.
+
+## Bounded post-review repair: factor button activation
+
+The review identified that TOTP used `requestSubmit(button)` while password receiving activates the reviewed button itself. The installed fixture now attaches the factor POST handler to the actual Verify button and makes the form's submit event inert. Before the fix, the same-target run failed waiting for the signed-in page: code input occurred, but the button handler never ran. The owned Chrome PID `689825` exited and the fresh profile census was zero. Exact RED output is preserved outside Git in `/var/tmp/agent-browser-463-factor-button-red.log`; the corresponding existing generic receiver test also failed its expected authenticated result in `/var/tmp/auth-463-factor-button-unit-red.log`.
+
+RED and GREEN use the same installed public seam:
+
+```sh
+AUTH_RECEIPTS_SOURCE=/home/ecochran76/workspace.local/auth-receipts-browser449 RECEIPTS_SOURCE=/home/ecochran76/workspace.local/receipts-issue106 node scripts/test-installed-owner-auth.js
+```
+
+Auth commit `077f0e3f74420b52001e0120c138e353df8420e9` minimally changes factor submission to call the validated visible unique button's `click()` method and refuse a missing method. The existing no-submitter fallback remains `requestSubmit()`. Existing origin, method, target, form/control and action checks remain in force; no wire contract changes.
+
+The committed-producer installed GREEN is preserved in `/var/tmp/agent-browser-463-factor-button-green.json` and `.log`. It records one password POST, one TOTP POST through the actual reviewed button, one protected source read, three capture-fenced fills, restart without replay, independent account/company completion and the untouched peer target. Chrome PID `698422` exited; both the profile census and task-HOME/candidate-path census were zero. There was no retry of an unknown operation within the fixture.
+
+This latest run used Browser source `ee0cfb127b7c2e70fbfab19a776109836665c230` and parent `d6e07227e18b4ad9c866c6fe24e64bdcecdde294`. Closure hashes were service `67f0662ebb4051b4803784d17f3386b5ed4a079ab444c12f02e2228a68fa429e`, browser client `142a5b8a74fa8ea9b9fbdfd8063224ce2fe61fcb5894a2919bc373cd775d0f0b`, parent `82f7e4c0fa41a75d16fbed29682108d58affb4ab73b2b631d681147f5f431c14`, and SDK `29732cce70fd1454dee4481ccfb66e1729495ad88bed74467a6885672e16fad6`. Verified SDK identity was `e5995c2de61428c45b5ae5527531667f800614dc75d89df2131abb411af95d10`, bound to the committed Auth revision above.
+
+The generic receiver suite passed 21/21. The focused generic, helper and enrolled receiver suites passed 27/27 with:
+
+```sh
+node --test test/generic-browser-receiver.test.mjs test/helper-browser-receiver.test.mjs test/enrolled-browser-receiver.test.mjs
+```
+
+This is one bounded repair in the coordinator's single post-review TDD pass. Native AT-SPI and enrolled number matching remain outside the qualified route.
