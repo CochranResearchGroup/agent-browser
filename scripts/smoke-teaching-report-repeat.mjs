@@ -37,13 +37,14 @@ execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',ke
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const expectedCsv='report,date,net_usd,transactions\nDaily sales,2026-06-01,310.00,11\nDaily sales,2026-06-30,420.00,14\n';
 const records=[['2026-05-01','125.00',5],['2026-05-31','240.00',8],['2026-06-01','310.00',11],['2026-06-30','420.00',14]];
-const reports=new Map(),decisions=new Map(),proofs=new Map(),sessions=new Set(),counts={reports:{},exports:{}};
+const reports=new Map(),decisions=new Map(),proofs=new Map(),sessions=new Set(),counts={reports:{},exports:{}},reportInputs=[];
 const operatorSecret=randomUUID(),receiverSecret=randomUUID();let origin;
 function runtimePage(){
  const params=new URLSearchParams(location.search),actor=params.get('actor'),variant=params.get('variant');
  const selection=document.querySelector('#select'),configuration=document.querySelector('#configure'),result=document.querySelector('#result'),caption=document.querySelector('#caption');
  const note=document.createElement('textarea');note.id='peer-draft';note.setAttribute('aria-label','Private scratch draft');document.querySelector('main').append(note);
- let current;
+ let current;window.__reportInputEvents=[];
+ for(const control of document.querySelectorAll('input[aria-label]'))for(const type of ['input','change'])control.addEventListener(type,event=>{if(window.__reportInputEvents.length<64)window.__reportInputEvents.push({type,name:control.getAttribute('aria-label'),value:control.value,checked:control.checked,trusted:event.isTrusted});});
  document.querySelector('#open').onclick=()=>{selection.classList.add('hidden');configuration.classList.remove('hidden');};
  document.querySelector('#run').onclick=async()=>{
   const response=await fetch('/report',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({actor,report:document.querySelector('select').value,startDate:document.querySelector('[aria-label="Start date"]').value,endDate:document.querySelector('[aria-label="End date"]').value,includeRefunds:document.querySelector('[aria-label="Include refunds"]').checked})});
@@ -77,7 +78,7 @@ const application=httpsServer({key:readFileSync(keyPath),cert:readFileSync(certP
   if(!authenticated){res.writeHead(401);json({authenticated:false});return;}
   if(url.pathname==='/whoami'){json({authenticated:true,account:'training@example.invalid',organization:'north-warehouse'});return;}
   if(url.pathname==='/report'&&req.method==='POST') {
-   assert.equal(req.headers.origin,origin);let body='';for await(const chunk of req)body+=chunk;const input=JSON.parse(body);
+   assert.equal(req.headers.origin,origin);let body='';for await(const chunk of req)body+=chunk;const input=JSON.parse(body);reportInputs.push({actor:input.actor,report:input.report,startDate:input.startDate,endDate:input.endDate,includeRefunds:input.includeRefunds});
    assert.equal(input.report,'Daily sales');assert.match(input.startDate,/^2026-\d\d-\d\d$/);assert.match(input.endDate,/^2026-\d\d-\d\d$/);assert.equal(input.includeRefunds,true);
    const report={id:'report-'+(reports.size+1),actor:input.actor,reportId:'daily-sales',reportName:'Daily sales',startDate:input.startDate,endDate:input.endDate,includeRefunds:input.includeRefunds,currency:'USD',rows:records.filter(row=>row[0]>=input.startDate&&row[0]<=input.endDate)};report.artifactId='csv-'+report.id;reports.set(report.id,report);counts.reports[input.actor]=(counts.reports[input.actor]??0)+1;json(report);return;
   }
@@ -101,7 +102,7 @@ function phase(value){receipt.phase=value;appendFileSync(join(context.tempHome,'
 async function raw(name,args){let timer;try{return await Promise.race([client.send('tools/call',{name,arguments:args}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('bounded_fixture_request_timeout')),65000);})]);}finally{clearTimeout(timer);}}
 async function call(name,args){const result=await raw(name,args);assert.notEqual(result.isError,true,JSON.stringify(result));const envelope=JSON.parse(result.content.find(item=>item.type==='text').text);assert.equal(envelope.success,true,JSON.stringify(envelope));return envelope.data;}
 async function evaluate(taskId,script){const value=await call('browser_command',{taskId,action:'evaluate',params:{script}});return value.result??value;}
-async function waitFor(read,accept,label){const deadline=Date.now()+10000;let value;do{value=await read();if(accept(value))return value;await pause(50);}while(Date.now()<deadline);throw Error('fixture_observation_timeout:'+label);}
+async function waitFor(read,accept,label){const deadline=Date.now()+10000;let value;do{value=await read();if(accept(value))return value;await pause(50);}while(Date.now()<deadline);const error=Error('fixture_observation_timeout:'+label);error.observation=value;throw error;}
 async function replyLoss(){
  const path=join(context.socketDir,'runtime-host.sock'),original=path+'.original',inode=statSync(path).ino;renameSync(path,original);let drops=0,requests=0,armed=false,lastDroppedSuccess=null;const sockets=new Set();
  const server=socketServer(down=>{const up=connect(original);for(const socket of [down,up]){sockets.add(socket);socket.on('close',()=>sockets.delete(socket));socket.on('error',()=>{});}let request='',response='',drop=false,parsed=false;
@@ -134,7 +135,12 @@ async function executeReviewed(view,task,actor,{loseReply=false}={}){
    const observedName=await evaluate(task.taskId,'document.querySelector('+JSON.stringify(selector)+').getAttribute("aria-label") || document.querySelector('+JSON.stringify(selector)+').textContent.trim()');
    if(observedName!==control.name)return {status:'assistance_required',reason:'reviewed_control_changed',taskId:task.taskId,controlId:control.id,expectedName:control.name,observedName,nextAction:'Ask the operator to inspect the renamed export control and supported file format before any export.'};
    if(step.action==='select'){await call('browser_command',{taskId:task.taskId,action:'select',params:{selector,values:['Daily sales']},requestId:actor+'-select-report'});continue;}
-   if(step.action==='fill'){await call('browser_fill',{taskId:task.taskId,selector,value:parameters[step.parameter],requestId:actor+'-'+step.target});continue;}
+   if(step.action==='fill'){
+    await call('browser_fill',{taskId:task.taskId,selector,value:parameters[step.parameter],requestId:actor+'-'+step.target});
+    const observed=await evaluate(task.taskId,'({value:document.querySelector('+JSON.stringify(selector)+').value,type:document.querySelector('+JSON.stringify(selector)+').type,events:window.__reportInputEvents})');
+    (receipt.inputObservations??=[]).push({actor,controlId:step.target,requested:parameters[step.parameter],...observed});
+    assert.equal(observed.value,parameters[step.parameter],'Public fill must establish the requested date before report submission');continue;
+   }
    if(step.action==='set_checked'){await call('browser_command',{taskId:task.taskId,action:parameters[step.parameter]?'check':'uncheck',params:{selector},requestId:actor+'-refunds'});continue;}
    assert.equal(step.action,'activate');
    if(step.target==='export-csv'){artifact=await call('browser_command',{taskId:task.taskId,action:'download',params:{selector,path:join(context.tempHome,actor+'.csv')},requestId:actor+'-export'});continue;}
@@ -193,7 +199,7 @@ try{
  phase('changed_page');const changed=await call('browser_open',{...common,taskKey:'changed',url:origin+'/portal?actor=changed&variant=changed-export'});tasks.push(changed);const assistance=await executeReviewed(reviewed,changed,'changed');assert.equal(assistance.status,'assistance_required');assert.equal(assistance.controlId,'export-csv');assert.equal(counts.exports.changed??0,0);receipt.checks.push({kind:'changed_page',...assistance,exportEffects:0});
  assert(JSON.stringify(await call('browser_snapshot',{taskId:peer.taskId})).includes('Preserve this unsaved peer note'));assert.equal(counts.reports.repeat,1);assert.equal(readFileSync(join(candidateDirectory,accepted.guideId+'.json'),'utf8'),acceptedBytes);assert.equal(hash(readFileSync(templatePath)),templateSha256);
  receipt.checks.push({kind:'preservation',peerDraft:true,priorAcceptedBytes:true,originalTeachingPage:true});phase('complete');receipt.status='pass';
-}catch(error){receipt.status='failed';receipt.error=error.message;receipt.counts=counts;throw error;}
+}catch(error){receipt.status='failed';receipt.error=error.message;receipt.counts=counts;receipt.reportInputs=reportInputs;receipt.lastObservation=error.observation??null;throw error;}
 finally{
  if(proxy)await proxy.restore();if(client){for(const task of tasks.reverse()){try{await Promise.race([call('browser_close',{taskId:task.taskId}),pause(3000).then(()=>{throw Error('cleanup_deadline');})]);}catch{}}client.close();}
  if(chrome&&chrome.exitCode===null)chrome.kill('SIGTERM');for(const pid of ownedProcesses()){try{if(ownedProcesses().includes(pid))process.kill(pid,'SIGTERM');}catch{}}

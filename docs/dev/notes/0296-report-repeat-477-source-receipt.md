@@ -84,3 +84,14 @@ response status for assertion in the main flow. Cleanup additionally checks exac
 private profile arguments when process environment observation is unavailable.
 The next run uses a new clean consumer pin and independent namespace. These are
 fixture-only corrections; no product or Rust change was made for this failure.
+
+
+Consumer2450cd967 completed its cleanup but failed the exact report/date
+observation before CSV. Its private receipt is
+report477-5d4b04ec-d730-4c49-bc27-961f7cb4de9b.json. Application committed-report
+and export counters were empty, while actual public review/fresh task IDs were
+both131 characters and the operator review metadata passed the new bounded-task
+contract. This qualifies task-ID compatibility only. Report execution remains
+unqualified; control values, events and HTTP inputs must be observed before
+classifying a product or fixture cause. Fresh owned OS census was zero and
+private-home removal succeeded.
