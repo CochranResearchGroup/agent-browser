@@ -43,25 +43,6 @@ export async function qualifyNativeChallengeAssistance({workflow,task,page,prima
     }return false;
   },null,{timeout:15000});
   const capsule=await client.prepare({taskId:task.taskId});
-  if(process.env.HOSTED_SMOKE_OBSERVATION_AGE_PROBE==='1') {
-    // Characterize the CURRENT public Native seam, not the archived desktop
-    // transaction. Never send button-down or a challenge-solving click here.
-    const source=await workflow('browser_command',{taskId:task.taskId,action:'native_capture',params:{classifyChallenges:true}});
-    const control=await consumerControl();assert.equal(control.native.owner,'agent');
-    const start=Date.now(),replies=[];
-    for(let index=0;index<9;index++) {
-      await new Promise(resolve=>setTimeout(resolve,120));
-      replies.push(await workflow('browser_command',{taskId:task.taskId,action:'native_input',params:{controlEpoch:control.native.epoch,
-        actions:[{kind:'move',x:source.windowBounds.x+5+index,y:source.windowBounds.y+5}]}}));
-    }
-    const after=await workflow('browser_command',{taskId:task.taskId,action:'native_capture',params:{classifyChallenges:true}});
-    assert.equal(after.capture.windowId,source.capture.windowId);
-    assert.equal(after.capture.generation,source.capture.generation);
-    assert.deepEqual(after.capture.processIdentity,source.capture.processIdentity);
-    await save('challenge470-current-observation-age.json',{currentPublicNativeSeam:true,sourceObservedAtMs:source.observedAtMs,
-      elapsedMs:Date.now()-start,motionRequests:9,buttonEvents:0,replies,windowPreserved:true,generationPreserved:true,
-      legacyDefectReproduced:false,limitation:'Current native_input reobserves its window per request; it does not consume the historical desktop transaction observation or its 750ms budget. No click attempted and no timing constant changed.'});
-  }
   assert.equal(capsule.classification.kind,'image_puzzle');
   assert.equal(capsule.handoffUrl,task.handoffUrl,'The same opaque task handoff must be reused');
   assert.equal((await consumerControl()).control.owner,'agent','Viewing is not assistance');
@@ -101,4 +82,24 @@ export async function qualifyNativeChallengeAssistance({workflow,task,page,prima
     taskCompleted:false};
   await save('challenge469-acceptance.json',receipt);
   return receipt;
+}
+
+export async function probeCurrentNativeObservationAge({workflow,task,consumerControl,save}) {
+    // Characterize the CURRENT public Native seam, not the archived desktop
+    // transaction. Never send button-down or a challenge-solving click here.
+    const source=await workflow('browser_command',{taskId:task.taskId,action:'native_capture',params:{classifyChallenges:true}});
+    const control=await consumerControl();assert.equal(control.native.owner,'agent');
+    const start=Date.now(),replies=[];
+    for(let index=0;index<9;index++) {
+      await new Promise(resolve=>setTimeout(resolve,120));
+      replies.push(await workflow('browser_command',{taskId:task.taskId,action:'native_input',params:{controlEpoch:control.native.epoch,
+        actions:[{kind:'move',x:source.windowBounds.x+5+index,y:source.windowBounds.y+5}]}}));
+    }
+    const after=await workflow('browser_command',{taskId:task.taskId,action:'native_capture',params:{classifyChallenges:true}});
+    assert.equal(after.capture.windowId,source.capture.windowId);
+    assert.equal(after.capture.generation,source.capture.generation);
+    assert.deepEqual(after.capture.processIdentity,source.capture.processIdentity);
+    await save('challenge470-current-observation-age.json',{currentPublicNativeSeam:true,sourceObservedAtMs:source.observedAtMs,
+      elapsedMs:Date.now()-start,motionRequests:9,buttonEvents:0,replies,windowPreserved:true,generationPreserved:true,
+      legacyDefectReproduced:false,limitation:'Current native_input reobserves its window per request; it does not consume the historical desktop transaction observation or its 750ms budget. No click attempted and no timing constant changed.'});
 }

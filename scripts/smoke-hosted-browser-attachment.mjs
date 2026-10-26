@@ -19,7 +19,7 @@ import {performance} from 'node:perf_hooks';
 import {createServer} from 'node:http';
 import {createServer as createHttpsServer} from 'node:https';
 import {createPublicKey} from 'node:crypto';
-import {qualifyNativeChallengeAssistance} from './qualify-native-challenge-assistance.mjs';
+import {qualifyNativeChallengeAssistance,probeCurrentNativeObservationAge} from './qualify-native-challenge-assistance.mjs';
 import {qualifyNativeNoCdpChallenge} from './qualify-native-no-cdp-challenge.mjs';
 import {mkdir,mkdtemp,readFile,readdir,realpath,stat,writeFile} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
@@ -610,6 +610,11 @@ try{workload:{
  async function consumerControl(){const response=await fetch(service.url+`/api/agent-browser/handoffs/${uiHandoffId}/control`,{signal:AbortSignal.timeout(15000)});assert.equal(response.status,200);return response.json();}
  const controlReceipt=value=>({control:Object.fromEntries(['owner','epoch','pauseReads','pendingOutcomeCount'].filter(key=>key in value.control).map(key=>[key,value.control[key]])),native:Object.fromEntries(['owner','state','epoch','hostedOperationId'].filter(key=>key in value.native).map(key=>[key,value.native[key]]))});
  const beforeUi=await consumerControl();assert.equal(beforeUi.control.owner,'agent');assert.equal(beforeUi.native.owner,'agent');
+ if(process.env.HOSTED_SMOKE_OBSERVATION_AGE_PROBE==='1'){
+  step='current-native-observation-age';await probeCurrentNativeObservationAge({workflow:publicWorkflow,task:opened,consumerControl,save});
+  await continuity('after-native-motion-age-probe');
+  await save('native-input-diagnostic.json',{passed:true,fullMatrix:false,scope:'Current Native motion-only observation-age characterization; no click or operator takeover'});break workload;
+ }
  if(workloadPlan){
   const desktop=await remote.observation(binding),windows=desktop.windows.windows.filter(window=>window.pid===original.pid);
   assert.equal(windows.length,1,'The owned browser requires one positively observed Native window');
