@@ -55,6 +55,7 @@ def main():
     parser.add_argument('--agent-source-commit', required=True)
     parser.add_argument('--native-binary-source-commit')
     parser.add_argument('--challenge-assistance', action='store_true', help='Add owned HTTPS challenge/native assistance to bounded input diagnostic')
+    parser.add_argument('--observation-age-probe', action='store_true', help='Characterize current Native motion across the archived observation-age boundary; no checkbox click')
     parser.add_argument('--mode-preflight', action='store_true', help='Read public browser mode before first fill; unverified evidence stops the fixture')
     parser.add_argument('--mode-diagnostic-only', action='store_true', help='Stop before fill after the read-only mode preflight regardless of result')
     parser.add_argument('--input-diagnostic', action='store_true', help='Bounded Native input diagnosis only; never full-matrix acceptance')
@@ -64,6 +65,7 @@ def main():
     args = parser.parse_args()
     assert not args.mode_diagnostic_only or args.mode_preflight, 'Mode diagnostic requires read-only preflight'
     assert not args.challenge_assistance or args.input_diagnostic, 'Challenge lane requires bounded input diagnostic'
+    assert not args.observation_age_probe or args.challenge_assistance, 'Age probe requires owned challenge fixture'
     for commit in (args.agent_source_commit, args.native_binary_source_commit):
         assert commit is None or len(commit) == 40 and all(character in '0123456789abcdef' for character in commit)
     repo = Path(__file__).resolve().parents[1]
@@ -401,6 +403,8 @@ def main():
                  'HOSTED_SMOKE_EVIDENCE_DIR': str(args.results / 'agent'), 'NODE_EXTRA_CA_CERTS': str(self.certificate)})
             if args.challenge_assistance:
                 environment.update({'HOSTED_SMOKE_CHALLENGE_469':'1','HOSTED_SMOKE_CHALLENGE_SITE_CERT':str(self.certificate),'HOSTED_SMOKE_CHALLENGE_SITE_KEY':str(args.results/'fixture.key')})
+            if args.observation_age_probe:
+                environment['HOSTED_SMOKE_OBSERVATION_AGE_PROBE']='1'
             if args.mode_preflight:
                 environment['HOSTED_SMOKE_MODE_PREFLIGHT']='1'
             if args.mode_diagnostic_only:
