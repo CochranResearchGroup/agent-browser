@@ -132,7 +132,8 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
     if(saved.contentSha256!==digest(content(record.guide)))return {state:'unverified',reason:'reviewed_content_changed',decisionId:saved.decisionId};
     if(typeof readOperatorDecision!=='function')return {state:'unverified',reason:'operator_authority_unconfigured',decisionId:saved.decisionId};
     try {
-      const value=checkedDecision(await operatorDecision({...saved,decisionRef:saved.decisionId}),saved);
+      const request={decisionRef:saved.decisionId,taskId:saved.taskId,rootGuideId:saved.rootGuideId,reviewedGuideId:saved.reviewedGuideId,reviewedSha256:saved.reviewedSha256,contentSha256:saved.contentSha256};
+      const value=checkedDecision(await operatorDecision(request),request);
       if(digest(value)!==digest(saved))error('teaching_operator_decision_changed');
       return {state:value.decision,...value};
     } catch {return {state:'unverified',reason:'operator_decision_unavailable',decisionId:saved.decisionId};}

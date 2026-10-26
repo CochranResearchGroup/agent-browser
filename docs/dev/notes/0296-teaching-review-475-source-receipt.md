@@ -77,3 +77,7 @@ client test commands then passed:
 ```sh
 pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext ../packages/client/src/teaching-review.js
 ```
+
+## Binding-only operator requalification correction
+
+477 exposed a parent475 requalification flaw: the reader request included saved decision/actor/source/provenance fields. Root reproduced it independently on the original public review API: an echo-only reader falsely returned approved rather than unverified. The request now contains only decisionRef, task/root, reviewed guide/raw/content bindings; an authoritative reader must independently supply the actual decision and provenance. Exact returned receipt comparison remains. Public review and grilling tests plus strong implementation/declaration type checks pass. This restores the declared receiver-authority boundary without changing candidate schema, Rust runtime or source media. The477 consumer already carries the matching correction; its full report acceptance remains separate.

@@ -86,6 +86,8 @@ try {
  assert.equal(recovered.guideId,reviewed.guideId);assert.equal(recovered.recoveredOriginal,true);
  const final=await reopened.open({taskId:'task',guideId:reviewed.guideId});
  assert.equal(final.review.state,'approved');assert.equal(final.ordinaryReuseAllowed,false);assert.equal(operatorPosts,1);
+ const echoOnly=await createTeachingReviewClient({...options,readOperatorDecision:async request=>({...request})}).open({taskId:'task',guideId:reviewed.guideId});
+ assert.equal(echoOnly.review.state,'unverified','Mirrored request fields cannot establish an operator decision');
  assert.equal(final.blockers.includes('fresh_repeat_validation_required'),true);assert.equal(final.proposals[0].adopted,false);
  const reopenedWithoutAcceptedConfig=await createTeachingReviewClient({...options,acceptedVersion:undefined}).open({taskId:'task',guideId:reviewed.guideId});assert.equal(reopenedWithoutAcceptedConfig.acceptedVersion.available,true);
  sourceAvailable=false;
