@@ -15,11 +15,14 @@ try{
  await writeFile(join(root,'src/auth-client.mjs'),`
  export let owner=true,errorCode;export function setOwner(value){owner=value;}export function setError(value){errorCode=value;}export const operations=[];
  export function createHostedAuthClient(){return {async call(operation,args){operations.push(operation);if(errorCode)throw Object.assign(Error('Synthetic capability failure'),{code:errorCode});if(operation==='auth_capabilities')return {contractVersion:1,credentialOperations:true,sharedOwnerAuthority:owner,legacyCredentialEffects:!owner};return {requestId:args.requestId,operation};}};}
- export async function followCredentialLogin({client,requestId}){return {followState:'completed',request:await client.call('inspect_credential_request',{requestId})};}
+ export async function followCredentialLogin({client,requestId}){const request=await client.call('inspect_credential_request',{requestId});return requestId==='accountless-original'?{followState:'held',heldFor:'authentication_required',request,authentication:{method:'totp',binding:{originalRequestId:requestId},nextAction:{operation:'continue_authentication'}}}:{followState:'completed',request};}
  `);
  const connected=await connectHostedAuthHelper({installationRoot:root});
  const result=await connected.followLogin({requestId:'original-request',intervalMs:1,maxObservations:2});
  assert.equal(result.request.requestId,'original-request');assert.equal(result.followState,'completed');
+ const factor=await connected.followLogin({requestId:'accountless-original',maxObservations:1});
+ assert.equal(factor.followState,'held');assert.equal(factor.heldFor,'authentication_required');
+ assert.deepEqual(factor.authentication,{method:'totp',binding:{originalRequestId:'accountless-original'},nextAction:{operation:'continue_authentication'}});
  await assert.rejects(connected.followLogin({requestId:'original-request',client:{call(){throw Error('Client override');}}}),{code:'auth_invalid_request'});
  const sdk=await import(pathToFileURL(join(root,'src/auth-client.mjs')));sdk.setOwner(false);const beforeCalls=sdk.operations.length;
  await assert.rejects(connected.followLogin({requestId:'original-request'}),{code:'auth_authority_migration_required'});assert.deepEqual(sdk.operations.slice(beforeCalls),['auth_capabilities']);

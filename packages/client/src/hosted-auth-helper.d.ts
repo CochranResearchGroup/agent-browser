@@ -8,6 +8,8 @@ export function connectHostedAuthHelper(options?:{installationRoot?:string;disco
   followLogin(options:{requestId:string;intervalMs?:number;maxObservations?:number;signal?:AbortSignal;onUpdate?:(summary:Record<string,unknown>)=>void|Promise<void>}):Promise<{
     request?:Record<string,any>;
     challenge?:Record<string,any>;
+    /** Read-only factor observation bound by Auth to the original login. */
+    authentication?:Record<string,unknown>;
     followState:'completed'|'failed'|'held'|'timed_out'|'aborted';
     heldFor?:string;
   }>;
