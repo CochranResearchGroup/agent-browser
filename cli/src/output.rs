@@ -7344,6 +7344,7 @@ Commands:
   Native challenge: bounded passive wait or one registered checkbox attempt per task
   Native OCR: high-confidence hCaptcha variants require same-frame brand and registered pixels
   Native input: stable original requestId; uncertain delivery forbids replay
+  Native completion errors: inspect the original requestId and safe cause; never replay
   Native policy: verified CDP origin/provider required; CDP-free uses human assistance
   Native return: original opaque handoff, explicit takeover/return, separate access checks
   browser-mode TASK Inspect mode

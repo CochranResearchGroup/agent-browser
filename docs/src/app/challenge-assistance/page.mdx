@@ -120,6 +120,10 @@ keeps it awaiting independent verification, and original-operation readback
 always forbids replay. Public retained evidence excludes pixels, raw OCR text,
 URL paths and executable paths.
 
+Completion errors retain the original request ID and a safe diagnostic cause.
+Inspect that original rather than sending another attempt. The cause excludes
+raw storage errors and does not grant retry authority.
+
 `resolve` requires distinct `verifyClearance` and `verifyAccess` results before
 reporting verified access. It does not mark the larger browser task complete.
 Unsupported challenges, refused policy and uncertain outcomes use the same

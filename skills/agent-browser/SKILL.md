@@ -138,7 +138,7 @@ Diagnostics retain selection query fields. Rail presence revalidates at 250/500/
 ### Tasks and teaching
 
 Use browser_command task_briefing or task_operation (params.requestId) for
-context/receipts. Keep requestId stable; never replay pending/uncertain input.
+context/receipts/errors. Keep requestId; never replay pending/uncertain input.
 See [recovery](references/session-management.md).
 Teaching: [A/V/Speech](../../docs/src/app/teaching-evidence/page.mdx),
 inert [drafts](references/teaching-drafts.md), [review](references/teaching-review.md),

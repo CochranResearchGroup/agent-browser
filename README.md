@@ -7453,6 +7453,8 @@ separate review and fresh-repeat qualification. See the
 
 ### Native challenge assistance
 
+Native completion errors retain the original request ID and a safe diagnostic cause. Inspect that original; a diagnostic cause never permits replay.
+
 Use native_capture with classifyChallenges for bounded same-frame OCR. The challenge-assistance client supports a bounded passive wait or one registered checkbox attempt per task, with owner-verified policy, provider capability and current Native evidence. Automatic origin qualification requires an existing verified CDP task; CDP-free tasks use human assistance. Known hCaptcha OCR variants require strong same-frame branding and registered checkbox geometry; uncertain text requires assistance. Pending or uncertain input never permits replay. Clearance and protected-site admission require independent checks. Human assistance reuses the original opaque handoff and explicit Native takeover/return. See the [challenge assistance guide](docs/src/app/challenge-assistance/page.mdx).
 
 ### Clarify teaching candidates
