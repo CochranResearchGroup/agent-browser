@@ -78,7 +78,9 @@ missing prerequisites; a profile name is not identity proof.
 TOTP uses Auth's observed continuation, including after SSO. After password use,
 retain `originalRequestId` so Auth can bind an account-less factor screen to the
 original attempt. The helper creates the factor request through that observed
-continuation, preserving Auth's account and receiving checks. Number matching uses
+continuation, preserving Auth's account and receiving checks. If multiple factors
+match, `factor_choice_required` returns issuer/account/source labels with the
+record IDs. Select a returned `recordId` and resume the same checkpoint. Number matching uses
 an existing private attempt and Auth's owner-only reverse-input path. Capabilities
 are receiving-path-specific: a browser-client TOTP route does not establish native
 number-matching or accessibility qualification. Neither factory returns codes or

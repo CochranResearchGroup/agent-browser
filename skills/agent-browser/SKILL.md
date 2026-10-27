@@ -41,7 +41,7 @@ Before private use is attempted, owner login may renew a typed `plan_stale` hold
 
 Use `createOwnerLoginPlaybook` with trusted browser routines, connected `auth` and
 metadata checkpoints for new requests. `createOwnerTotpContinuation` composes
-Auth's observed factor action after password/SSO. Retain the original password request ID for account-less factor screens; Auth resolves its binding and creates the factor request through the observed continuation. Number matching follows the
+Auth's observed factor action after password/SSO. Retain the original password request ID for account-less factor screens; Auth resolves its binding and creates the factor request through the observed continuation. When `factor_choice_required` is returned, use the supplied issuer/account labels to select a returned `recordId` and resume the same checkpoint. Do not rediscover or guess among opaque IDs. Number matching follows the
 original attempt with `createOwnerNumberMatchingContinuation`. Exact generation,
 privacy and identity evidence are required. Unsupported paths hold. Owner
 `reconcile: true` cannot create or repeat credential use. Legacy checkpoints keep

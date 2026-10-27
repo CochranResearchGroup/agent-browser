@@ -1,3 +1,8 @@
+/** Non-secret labels for an explicit Auth-returned factor choice. */
+export interface OwnerTotpCandidate {
+ recordId:string;sourceId?:string;issuer?:string;account?:string;name?:string;
+ method?:'totp'|'hotp';staged?:boolean;
+}
 export interface OwnerTotpOptions {
  taskId:string;guideId:string;accountRef:string;organizationRef?:string;
  origin:string;targetId:string;purpose:string;expiresAt:number;idempotencyKey:string;
@@ -7,7 +12,7 @@ export interface OwnerTotpOptions {
 export interface OwnerTotpCheckpoint {
  contract:'auth-receipts-totp-v1';intent:string;receiving:Record<string,string>;
  preparedPlan:Record<string,unknown>;continuationId:string;expiresAt:number;
- candidates:Array<{recordId:string}>;recordId?:string;requestId?:string;
+ candidates:Array<OwnerTotpCandidate>;recordId?:string;requestId?:string;
  authenticationBinding?:Record<string,unknown>;useIntent?:boolean;outcomeUnknown?:boolean;
 }
 export interface OwnerTotpDependencies {
