@@ -1331,13 +1331,21 @@ fn native_image_kernel_plan(
             .ok_or("browser_native_original_observation_unqualified")?;
         let old =
             serde_json::from_str(encoded).map_err(|_| "browser_native_image_round_invalid")?;
-        if prior
+        let mut prior_binding = prior
             .evidence_references
             .get("nativeSitePolicy")
-            .and_then(|s| serde_json::from_str::<Value>(s).ok())
-            .as_ref()
-            != Some(binding)
-        {
+            .and_then(|value| serde_json::from_str::<Value>(value).ok())
+            .ok_or("browser_native_site_policy_changed")?;
+        let mut current_binding = binding.clone();
+        // Service revision is advisory evidence of the read, not challenge
+        // authority. Preserve exact comparison of every other binding field.
+        for value in [&mut prior_binding, &mut current_binding] {
+            value
+                .as_object_mut()
+                .ok_or("browser_native_site_policy_invalid")?
+                .remove("observedServiceRevision");
+        }
+        if prior_binding != current_binding {
             return Err("browser_native_site_policy_changed".into());
         }
         return super::browser_native_image::plan_following(
