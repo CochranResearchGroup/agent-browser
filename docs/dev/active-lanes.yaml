@@ -11,7 +11,7 @@ lanes:
     work_items: [CochranResearchGroup/agent-browser#466, CochranResearchGroup/agent-browser#467, CochranResearchGroup/agent-browser#473, CochranResearchGroup/agent-browser#474, CochranResearchGroup/agent-browser#468, CochranResearchGroup/agent-browser#469, CochranResearchGroup/agent-browser#475, CochranResearchGroup/agent-browser#476, CochranResearchGroup/agent-browser#477, CochranResearchGroup/agent-browser#470, CochranResearchGroup/agent-browser#471]
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    dependencies: [CochranResearchGroup/remote-view#689]
+    dependencies: []
     overlaps: [P295]
     reconciled_overlaps: ["Preserve separate Auth owner; serialize shared public contracts with teaching worker473"]
     limitations: ["No production effects; real narration and portal scope pending", "One broad review and one bounded remediation"]

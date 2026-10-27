@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P296 Native image qualification](0296-native-image-471-source-receipt.md): actual image selection, Native dispatch and independent access qualify; source-pinned Native pointer-replay repair, refusal/no-replay and exact cleanup remain separately bounded.
+
 [P296 Native checkbox qualification](0296-native-checkbox-470-source-receipt.md): both families, passive and bounded refusal/no-replay cases qualify on actual Native controls with independent HTTPS checks and exact cleanup; installation and production remain separate.
 
 [P295 standalone Auth installed qualification](0295-2026-10-26-installed-owner-auth.md): isolated default SDK/discovery, physically enrolled Chrome, actual capture fences, same-target password/TOTP and restart; production and real-provider acceptance remain separate.
