@@ -435,24 +435,30 @@ def main():
                                 if (args.checkbox_assistance or args.image_assistance) and request.path.endswith('/input'):
                                     h.private_json(args.results / 'native-original-input-intent.json', body)
                                     guard_observation('native-guard-before-input')
-                                def pointer_observation(label):
-                                    if not args.image_assistance or not request.path.endswith('/input'):
+                                def pointer_observation(label, observation=None):
+                                    if not args.image_assistance or (observation is None and not request.path.endswith('/input')):
                                         return
-                                    probe = {'processIdentity':body['expectedProcessIdentity'],
-                                             'windowId':body['windowId'], 'ownedRoot':str(args.results),
+                                    frame = observation if observation is not None else body
+                                    probe = {'processIdentity':frame['processIdentity'] if observation is not None else body['expectedProcessIdentity'],
+                                             'windowId':frame['windowId'], 'ownedRoot':str(args.results),
                                              'displays':[args.display,args.display+1]}
                                     observed = subprocess.run([sys.executable, str(Path(__file__).with_name('probe-native-pointer.py'))],
                                         input=json.dumps(probe), text=True, capture_output=True, timeout=8)
                                     assert observed.returncode == 0, 'owned_pointer_observation_failed'
                                     value = json.loads(observed.stdout)
-                                    value.update(desktopId=body['desktopId'],generation=body['expectedGeneration'],
-                                                 nativeControlEpoch=body['controlEpoch'],phase=label)
+                                    value.update(desktopId=frame['desktopId'],
+                                                 generation=frame['generation'] if observation is not None else body['expectedGeneration'],
+                                                 nativeControlEpoch=body.get('controlEpoch'),phase=label)
                                     h.private_json(args.results / (label+'.json'), value)
+                                    assert value.get('status') == 'observed', 'owned_pointer_observation_failed'
+                                    if observation is not None:
+                                        assert value['button1Down'] is False, 'owned_pointer_already_held'
                                 pointer_observation('native-pointer-before-input')
                                 try:
                                     with build_opener(NoRedirect).open(forwarded, timeout=15) as result: result=json.load(result)
                                     if (args.checkbox_assistance or args.image_assistance) and request.path.endswith('/ocr'):
                                         retain_visual('native-original-ocr', result)
+                                        pointer_observation('native-pointer-original-observation', result)
                                     if args.checkbox_observe_only and request.path.endswith('/ocr'):
                                         h.private_json(args.results / 'synthetic-checkbox-ocr.json', result)
                                         png = base64.b64decode(result['image']['data'], validate=True)

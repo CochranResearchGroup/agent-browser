@@ -7,24 +7,30 @@ from pathlib import Path
 import subprocess
 import sys
 
-request = json.load(sys.stdin)
-identity = request['processIdentity']
-process = Path('/proc') / str(identity['pid'])
-raw = (process / 'stat').read_text()
-assert raw[raw.rfind(')') + 2:].split()[19] == identity['start_token']
-assert os.readlink(process / 'exe') == identity['executable']
-assert process.stat().st_uid == identity['uid']
-assert Path('/proc/sys/kernel/random/boot_id').read_text().strip() == identity['boot_id']
-selected = {}
-for item in (process / 'environ').read_bytes().split(b'\0'):
-    name, separator, value = item.partition(b'=')
-    if separator and name in (b'DISPLAY', b'XAUTHORITY'):
-        selected[name.decode()] = value.decode()
-displays = [':' + str(number) for number in request['displays']]
-assert selected['DISPLAY'] in displays or selected['DISPLAY'] in [value + '.0' for value in displays]
-authority = Path(selected['XAUTHORITY']).resolve(strict=True)
-assert authority.is_relative_to(Path(request['ownedRoot']).resolve(strict=True))
-code = '''
+stage = 'request'
+try:
+    request = json.load(sys.stdin)
+    stage = 'process_identity'
+    identity = request['processIdentity']
+    process = Path('/proc') / str(identity['pid'])
+    raw = (process / 'stat').read_text()
+    assert raw[raw.rfind(')') + 2:].split()[19] == identity['start_token']
+    assert os.readlink(process / 'exe') == identity['executable']
+    assert process.stat().st_uid == identity['uid']
+    assert Path('/proc/sys/kernel/random/boot_id').read_text().strip() == identity['boot_id']
+    stage = 'owned_display_environment'
+    selected = {}
+    for item in (process / 'environ').read_bytes().split(b'\0'):
+        name, separator, value = item.partition(b'=')
+        if separator and name in (b'DISPLAY', b'XAUTHORITY'):
+            selected[name.decode()] = value.decode()
+    displays = [':' + str(number) for number in request['displays']]
+    assert selected['DISPLAY'] in displays or selected['DISPLAY'] in [value + '.0' for value in displays]
+    stage = 'provided_auth_path'
+    if 'XAUTHORITY' in selected:
+        authority = Path(selected['XAUTHORITY']).resolve(strict=True)
+        assert authority.is_relative_to(Path(request['ownedRoot']).resolve(strict=True))
+    code = '''
 import ctypes,json,os
 x=ctypes.CDLL('libX11.so.6')
 x.XOpenDisplay.argtypes=[ctypes.c_char_p];x.XOpenDisplay.restype=ctypes.c_void_p
@@ -45,10 +51,13 @@ try:
  assert x.XQueryPointer(d,WINDOW,ctypes.byref(root),ctypes.byref(child),ctypes.byref(rx),ctypes.byref(ry),ctypes.byref(wx),ctypes.byref(wy),ctypes.byref(mask))
  print(json.dumps({'buttonMask':mask.value&0x1f00,'button1Down':bool(mask.value&0x100)}))
 finally:x.XCloseDisplay(d)
-'''.replace('WINDOW', str(int(request['windowId']))).replace('EXPECTED_PID', str(int(identity['pid'])))
-result = subprocess.run([sys.executable, '-c', code], env=selected, text=True, capture_output=True, timeout=5)
-assert result.returncode == 0, 'owned_pointer_query_failed'
-assert len(result.stdout) < 1024
-value = json.loads(result.stdout)
-value.update(windowId=request['windowId'], processIdentityVerified=True, windowProcessVerified=True, inputSent=False, device="core_pointer")
-print(json.dumps(value))
+    '''.replace('WINDOW', str(int(request['windowId']))).replace('EXPECTED_PID', str(int(identity['pid'])))
+    stage = 'window_process_and_pointer_query'
+    result = subprocess.run([sys.executable, '-c', code], env=selected, text=True, capture_output=True, timeout=5)
+    assert result.returncode == 0, 'owned_pointer_query_failed'
+    assert len(result.stdout) < 1024
+    value = json.loads(result.stdout)
+    value.update(status='observed', windowId=request['windowId'], processIdentityVerified=True, windowProcessVerified=True, inputSent=False, device="core_pointer")
+    print(json.dumps(value))
+except Exception:
+    print(json.dumps({'status':'failed','stage':stage,'inputSent':False}))
