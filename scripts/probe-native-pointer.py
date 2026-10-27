@@ -50,5 +50,5 @@ result = subprocess.run([sys.executable, '-c', code], env=selected, text=True, c
 assert result.returncode == 0, 'owned_pointer_query_failed'
 assert len(result.stdout) < 1024
 value = json.loads(result.stdout)
-value.update(windowId=request['windowId'], processIdentityVerified=True, windowProcessVerified=True, inputSent=False)
+value.update(windowId=request['windowId'], processIdentityVerified=True, windowProcessVerified=True, inputSent=False, device="core_pointer")
 print(json.dumps(value))
