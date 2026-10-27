@@ -7459,6 +7459,8 @@ The opt-in static image profile supports one 3×3 bus-selection round. It requir
 
 Full-window image evidence remains the default. For a fresh complete puzzle region, supply `imageCaptureScope: "complete_puzzle_region"` and `region` before capture, or configure the image client's `captureRegion`. The owner must find the complete prompt, brand, nine cells and Verify inside that region. The original region and hash remain unchanged through input, alongside full-window identity and geometry fences. Partial-window metadata stays honest; regional puzzle evidence never proves whole-window clearance. Independent clearance and protected-site checks remain required.
 
+Image expiry errors may include `observationClock` with a validated reason, observation and validation timestamps, and age. These diagnostics distinguish a future timestamp from evidence older than 60 seconds. Inspect the original operation; the error does not permit replay.
+
 Use native_capture with classifyChallenges for bounded same-frame OCR. The challenge-assistance client supports a bounded passive wait or one registered checkbox attempt per task, with owner-verified policy, provider capability and current Native evidence. Automatic origin qualification requires an existing verified CDP task; CDP-free tasks use human assistance. Known hCaptcha OCR variants require strong same-frame branding and registered checkbox geometry; uncertain text requires assistance. Pending or uncertain input never permits replay. Clearance and protected-site admission require independent checks. Human assistance reuses the original opaque handoff and explicit Native takeover/return. See the [challenge assistance guide](docs/src/app/challenge-assistance/page.mdx).
 
 ### Clarify teaching candidates

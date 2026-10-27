@@ -144,5 +144,5 @@ Teaching: [A/V/Speech](../../docs/src/app/teaching-evidence/page.mdx),
 inert [drafts](references/teaching-drafts.md), [review](references/teaching-review.md),
 [grilling](references/teaching-grilling.md), [repeat](references/report-repeat.md).
 Keep gaps; proposals are not consent. Promotion needs fresh-repeat proof.
-Dates use YYYY-MM-DD; downloads need live local process proof.
-[Native OCR](references/challenge-assistance.md), [images](references/image-challenge.md).
+Dates: YYYY-MM-DD; downloads need live process proof.
+[OCR](references/challenge-assistance.md), [image expiry clocks](references/image-challenge.md).
