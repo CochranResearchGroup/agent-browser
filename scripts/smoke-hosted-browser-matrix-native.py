@@ -375,10 +375,13 @@ def main():
                                 forwarded = Request(f'http://127.0.0.1:{outer.control_port}'+request.path, data=json.dumps(body).encode(), method='POST', headers={'Authorization':'Bearer '+outer.token,'Content-Type':'application/json'})
                                 from urllib.error import HTTPError
                                 def retain_visual(label, value):
-                                    h.private_json(args.results / (label + '.json'), value)
                                     png = base64.b64decode(value['image']['data'], validate=True)
                                     assert 0 < len(png) <= 4_194_304
                                     assert hashlib.sha256(png).hexdigest() == value['capture']['sha256']
+                                    # Each scene/observation remains recoverable when
+                                    # later scenarios use the same diagnostic label.
+                                    label += '-' + value['capture']['sha256']
+                                    h.private_json(args.results / (label + '.json'), value)
                                     path = args.results / (label + '.png')
                                     path.write_bytes(png)
                                     path.chmod(0o600)
