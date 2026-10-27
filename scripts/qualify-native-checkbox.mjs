@@ -53,7 +53,7 @@ export async function qualifyNativeCheckbox({workflow,task,nextTask,primary,site
         const size=family==='hcaptcha'?30:24,gap=family==='hcaptcha'?16:8;
         const row=document.createElement('div');row.style.cssText='position:absolute;left:100px;top:150px;display:flex;align-items:center;gap:'+gap+'px;height:'+size+'px';
         const box=document.createElement('button');box.type='button';box.style.cssText='box-sizing:border-box;display:block;margin:0;padding:0;border:2px solid #222;border-radius:0;background:white;width:'+size+'px;height:'+size+'px;min-width:'+size+'px';
-        const prompt=document.createElement('span');prompt.style.cssText='font:14px Arial,sans-serif;color:black;white-space:nowrap;transform:translateY(2px)';prompt.textContent=family==='hcaptcha'?'I am human':'Verify you are human';
+        const prompt=document.createElement('span');prompt.style.cssText='font:18px Arial,sans-serif;color:black;white-space:nowrap;transform:translateY(2px)';prompt.textContent=family==='hcaptcha'?'I am human':'Verify you are human';
         row.append(box,prompt);panel.append(row);
         const brand=document.createElement('span');brand.textContent=family==='hcaptcha'?'hCaptcha':'Cloudflare';brand.style.cssText='position:absolute;left:340px;top:156px;font:18px Arial,sans-serif';panel.append(brand);
         box.onclick=async()=>{
@@ -115,9 +115,12 @@ export async function qualifyNativeCheckbox({workflow,task,nextTask,primary,site
   }
   if(observeOnly){
     const scene='observe-only-'+randomUUID();oracle.create(scene,{});await stage(scene);
+    const currentUrl=await workflow('browser_command',{taskId:task.taskId,action:'url'});
+    const appUrl=primary.url();
+    await save('checkbox470-current-origin.json',{taskId:task.taskId,currentUrl,appUrl,oracleOrigin:site,source:'Existing addressed task URL and independently owned app page URL; not launch intent'});
+    assert.equal(new URL(appUrl).protocol,'https:');
+    assert.equal(new URL(currentUrl.url).protocol,'https:');assert.equal(new URL(currentUrl.url).origin,new URL(appUrl).origin);
     const capture=await workflow('browser_command',{taskId:task.taskId,action:'native_capture',params:{classifyChallenges:true}});
-    const png=Buffer.from(capture.capture?.image?.data??'','base64');assert(png.length>0&&png.length<=4194304);
-    await writeFile(new URL('checkbox470-observed.png','file://'+faultFile),png,{mode:0o600});
     await save('checkbox470-observed.json',{capture,application:oracle.state(scene),observeOnly:true,challengeInputDispatched:false});
     assert.equal(oracle.state(scene).inputEvents,0);return;
   }

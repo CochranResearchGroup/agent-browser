@@ -6,6 +6,7 @@ the Native Fixture owns its two desktops, peer application and resource cleanup.
 This adapter never retries a consumer mutation or a restart intent.
 """
 import argparse
+import base64
 import hashlib
 import importlib
 import importlib.util
@@ -377,6 +378,11 @@ def main():
                                     with build_opener(NoRedirect).open(forwarded, timeout=15) as result: result=json.load(result)
                                     if args.checkbox_observe_only and request.path.endswith('/ocr'):
                                         h.private_json(args.results / 'synthetic-checkbox-ocr.json', result)
+                                        png = base64.b64decode(result['image']['data'], validate=True)
+                                        assert 0 < len(png) <= 4_194_304
+                                        png_path = args.results / 'synthetic-checkbox-observed.png'
+                                        png_path.write_bytes(png)
+                                        png_path.chmod(0o600)
                                 except HTTPError as error:
                                     # Retain only the owner's bounded diagnostic code,
                                     # never recognized application text or credentials.
