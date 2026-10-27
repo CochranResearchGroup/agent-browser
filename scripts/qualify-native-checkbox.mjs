@@ -85,7 +85,7 @@ export async function qualifyNativeCheckbox({workflow,task,nextTask,primary,site
   async function run(label,family='hcaptcha',options={}) {
     const current=label==='hcaptcha-success'?task:await nextTask(label);
     const scene=label+'-'+randomUUID();oracle.create(scene,options);await stage(scene,{family,passive:options.passive});
-    const originalId='native470:'+randomUUID();let passiveAdvanced=false;
+    const originalId='native470:'+randomUUID();let passiveAdvanced=false,inputExchange=null;
     const client=createChallengeAssistanceClient({
       callTool:async(name,args)=>{
         const input=name==='browser_command'&&args.action==='native_input';
@@ -107,6 +107,7 @@ export async function qualifyNativeCheckbox({workflow,task,nextTask,primary,site
           }
           throw error;
         }
+        if(input)inputExchange={response:value,before,after:await readOriginal()};
         if(options.passive&&name==='browser_command'&&args.action==='native_capture'&&value.challenge?.kind==='passive_check'&&!passiveAdvanced){
           await save('checkbox470-passive-initial.json',{classification:value.challenge,frameSha256:value.capture.capture.sha256,actualNative:true,productInputEvents:0});
           passiveAdvanced=true;oracle.passive(scene);await primary.evaluate(()=>window.completePassive470());
@@ -119,7 +120,7 @@ export async function qualifyNativeCheckbox({workflow,task,nextTask,primary,site
     if(options.dropReply)await writeFile(faultFile,JSON.stringify({state:'armed',kind:'drop_input_reply_once'}),{mode:0o600});
     const result=await client.resolve({taskId:current.taskId,requestId:originalId});
     const application=oracle.state(scene);
-    await save('checkbox470-'+label+'.json',{result,application,task:current,originalId,family,synthetic:true});
+    await save('checkbox470-'+label+'.json',{result,application,task:current,originalId,family,synthetic:true,inputExchange});
     if(options.passive){assert.equal(result.status,'verified_access_after_passive_wait');assert.equal(application.inputEvents,0);assert.equal(application.passiveTransitions,1);}
     else if(options.dropReply){
       assert(['awaiting_operator','intervention'].includes(result.status));assert.equal(application.inputEvents,1);
