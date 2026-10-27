@@ -29,6 +29,33 @@ export function createNativeCheckboxOracle() {
   };
 }
 
+/** Wait for this owned static fixture's full Native window to settle before
+ * creating any classified observation or original attempt. Later changes still
+ * fail the owner's unchanged expectedVisual guard.
+ */
+export async function waitForNativeCheckboxStability({readCapture,save,now=()=>performance.now(),sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))}) {
+  const started=now(),samples=[];let binding,previous,stableSince,identical=0;
+  try{
+    for(let index=0;index<12&&now()-started<=15000;index++){
+      if(index)await sleep(500);
+      if(now()-started>15000)break;
+      const value=await readCapture(),capture=value.capture;
+      assert.equal(value.partialWindow,false,'Fixture readiness requires the complete Native window');
+      assert.equal(value.nativeObservation,undefined,'Fixture readiness must not register a challenge observation');
+      const sha256=capture?.capture?.sha256;assert.match(sha256??'',/^[a-f0-9]{64}$/);
+      assert.equal(capture.region?.width,capture.capture.width);assert.equal(capture.region?.height,capture.capture.height);
+      const current={desktopId:capture.desktopId,generation:capture.generation,windowId:capture.windowId,processIdentity:capture.processIdentity,region:capture.region,windowBounds:value.windowBounds};
+      assert(current.desktopId&&Number.isInteger(current.generation)&&Number.isInteger(current.windowId)&&current.processIdentity&&current.region&&current.windowBounds,'Fixture readiness requires a complete Native binding');
+      if(binding)assert.deepEqual(current,binding,'Native target changed during fixture readiness');else binding=current;
+      const elapsedMs=now()-started;
+      if(previous===sha256)identical++;else{previous=sha256;identical=1;stableSince=elapsedMs;}
+      samples.push({elapsedMs,sha256,identical,stableMs:elapsedMs-stableSince});
+      if(elapsedMs<=15000&&identical>=3&&elapsedMs-stableSince>=3000){await save({state:'stable',binding,samples,challengeInputDispatched:false});return;}
+    }
+    throw Object.assign(Error('Owned Native fixture did not settle within its bounded readiness window'),{code:'fixture_native_window_unstable'});
+  }catch(error){await save({state:'refused',binding,samples,code:error.code??error.name,challengeInputDispatched:false});throw error;}
+}
+
 export async function qualifyNativeCheckbox({workflow,task,nextTask,primary,site,profilePath,configFile,faultFile,oracle,save,continuity,observeOnly=false}) {
   // Prepare the owned app's existing window before observation. Product focus
   // must be idempotent here; a changed frame in the attempt still refuses.
@@ -42,6 +69,7 @@ export async function qualifyNativeCheckbox({workflow,task,nextTask,primary,site
     sitePolicies:{[sitePolicy.id]:sitePolicy},providers:{[provider.id]:provider}}};
   await writeFile(configFile,JSON.stringify(config),{mode:0o600});
   const receipts=[];
+  const settled=(current,label)=>waitForNativeCheckboxStability({readCapture:()=>workflow('browser_command',{taskId:current.taskId,action:'native_capture'}),save:value=>save('checkbox470-'+label+'-readiness.json',value)});
   async function stage(scene,{family='hcaptcha',passive=false}={}) {
     await primary.evaluate(({scene,family,passive})=>{
       document.querySelector('#checkbox470')?.remove();
@@ -88,6 +116,7 @@ export async function qualifyNativeCheckbox({workflow,task,nextTask,primary,site
   async function run(label,family='hcaptcha',options={}) {
     const current=label==='hcaptcha-success'?task:await nextTask(label);
     const scene=label+'-'+randomUUID();oracle.create(scene,options);await stage(scene,{family,passive:options.passive});
+    await settled(current,label);
     const originalId='native470:'+randomUUID();let passiveAdvanced=false,inputExchange=null;
     const client=createChallengeAssistanceClient({
       callTool:async(name,args)=>{
@@ -139,6 +168,7 @@ export async function qualifyNativeCheckbox({workflow,task,nextTask,primary,site
   }
   if(observeOnly){
     const scene='observe-only-'+randomUUID();oracle.create(scene,{});await stage(scene);
+    await settled(task,'observe-only');
     const currentUrl=await workflow('browser_command',{taskId:task.taskId,action:'url'});
     const appUrl=primary.url();
     await save('checkbox470-current-origin.json',{taskId:task.taskId,currentUrl,appUrl,oracleOrigin:site,source:'Existing addressed task URL and independently owned app page URL; not launch intent'});
@@ -154,6 +184,7 @@ export async function qualifyNativeCheckbox({workflow,task,nextTask,primary,site
   // A fresh frame, changed family and fresh request cannot renew this task's budget.
   {
     const scene='budget-'+randomUUID();oracle.create(scene);await stage(scene,{family:'turnstile'});
+    await settled(first.task,'budget');
     const captureId='native470:'+randomUUID(),attemptId='native470:'+randomUUID();
     const capture=await workflow('browser_command',{taskId:first.task.taskId,action:'native_capture',requestId:captureId,params:{classifyChallenges:true,registeredActionId:'turnstile-checkbox-p169-v1'}});
     assert(capture.nativeObservation,'Fresh family observation must itself qualify');
@@ -167,6 +198,7 @@ export async function qualifyNativeCheckbox({workflow,task,nextTask,primary,site
   // Direct public primitives exercise owner checks independently of client policy.
   for(const condition of ['changed-frame','missing-provider','expired']) {
     const current=await nextTask(condition),scene=condition+'-'+randomUUID();oracle.create(scene);await stage(scene);
+    await settled(current,condition);
     const captureId='native470:'+randomUUID(),attemptId='native470:'+randomUUID();
     const capture=await workflow('browser_command',{taskId:current.taskId,action:'native_capture',requestId:captureId,params:{classifyChallenges:true,registeredActionId:'hcaptcha-checkbox-p181-v2'}});
     assert(capture.nativeObservation,'Direct owner refusal needs a qualified original capture');
