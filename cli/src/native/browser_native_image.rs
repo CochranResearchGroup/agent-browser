@@ -7,6 +7,19 @@ use sha2::{Digest, Sha256};
 
 pub const PROFILE_ID: &str = "hcaptcha-image-grid-3x3-v1";
 pub const CONFIG_REF: &str = "agent-browser:remote-view-native-image-static-3x3:v1";
+pub const ROUNDS_PROFILE_ID: &str = "hcaptcha-image-grid-3x3-two-round-v1";
+pub const ROUNDS_CONFIG_REF: &str =
+    "agent-browser:remote-view-native-image-static-3x3-two-round:v1";
+pub fn is_profile(id: &str) -> bool {
+    matches!(id, PROFILE_ID | ROUNDS_PROFILE_ID)
+}
+pub fn command_profile(command: &Value) -> &'static str {
+    if command["imageAttempt"].get("originalRequestId").is_some() {
+        ROUNDS_PROFILE_ID
+    } else {
+        PROFILE_ID
+    }
+}
 pub const MAX_AGE_MS: u64 = 60_000;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,6 +61,10 @@ pub struct NativeImageObservation {
     pub puzzle_sha256: String,
     pub candidates: Vec<NativeImageCandidate>,
     pub verify: NativeChallengeBounds,
+    /// Owner-hashed tile interiors exclude eight border pixels on each edge.
+    /// Required only by the opt-in whole-grid two-round profile.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tile_image_sha256s: Vec<String>,
 }
 
 pub fn digest(value: &impl Serialize) -> Result<String, String> {
@@ -215,6 +232,29 @@ pub fn observe(
         return Ok(None);
     }
     let region = &observation.region;
+    if observation.registered_action_id == ROUNDS_PROFILE_ID
+        && ocr["lines"].as_array().is_some_and(|lines| {
+            lines.iter().any(|line| {
+                line["text"].as_str().is_some_and(|text| {
+                    let text = text.to_ascii_lowercase();
+                    [
+                        "try again",
+                        "incorrect",
+                        "please retry",
+                        "challenge failed",
+                        "verification failed",
+                        "loading",
+                        "please wait",
+                    ]
+                    .iter()
+                    .any(|marker| text.contains(marker))
+                })
+            })
+        })
+    {
+        return Ok(None);
+    }
+
     if ocr["lines"].as_array().is_some_and(|lines| {
         lines.iter().any(|line| {
             line["confidence"].as_f64().is_some_and(|v| v >= 70.0)
@@ -322,11 +362,28 @@ pub fn observe(
         })
         .collect();
     observation.verify = verify.bounds(region);
+    if observation.registered_action_id == ROUNDS_PROFILE_ID {
+        observation.tile_image_sha256s = tiles
+            .iter()
+            .map(|tile| {
+                let interior = image::imageops::crop_imm(
+                    &image,
+                    tile.x + 8,
+                    tile.y + 8,
+                    tile.width - 16,
+                    tile.height - 16,
+                )
+                .to_image();
+                format!("{:x}", Sha256::digest(interior.as_raw()))
+            })
+            .collect();
+    }
+
     observation.puzzle_sha256 = digest(&(
         &observation.frame_sha256,
         &observation.candidates,
         &observation.verify,
-        PROFILE_ID,
+        observation.registered_action_id.as_str(),
     ))?;
     Ok(Some(observation))
 }
@@ -344,7 +401,11 @@ impl NativeImageObservation {
                 && i64::from(b.y) + i64::from(b.height)
                     <= i64::from(self.region.y) + i64::from(self.region.height)
         };
-        if self.registered_action_id != PROFILE_ID
+        if !is_profile(&self.registered_action_id)
+            || (self.registered_action_id == ROUNDS_PROFILE_ID
+                && (self.tile_image_sha256s.len() != 9
+                    || self.tile_image_sha256s.iter().any(|v| !hex(v))))
+            || (self.registered_action_id == PROFILE_ID && !self.tile_image_sha256s.is_empty())
             || self.desktop_id.is_empty()
             || self.desktop_id.len() > 256
             || !hex(&self.frame_sha256)
@@ -407,7 +468,7 @@ impl NativeImageObservation {
                     &self.frame_sha256,
                     &self.candidates,
                     &self.verify,
-                    PROFILE_ID,
+                    self.registered_action_id.as_str(),
                 ))?
         {
             return Err("browser_native_image_observation_invalid".into());
@@ -462,6 +523,38 @@ pub fn plan(
     binding: &Value,
     now_ms: u64,
 ) -> Result<NativeImagePlan, String> {
+    plan_inner(task, attempt, observation, selected, binding, now_ms, None)
+}
+
+pub fn plan_following(
+    task: &str,
+    attempt: &str,
+    observation: &NativeImageObservation,
+    selected: &[String],
+    binding: &Value,
+    now_ms: u64,
+    prior: (&str, &NativeImageObservation),
+) -> Result<NativeImagePlan, String> {
+    plan_inner(
+        task,
+        attempt,
+        observation,
+        selected,
+        binding,
+        now_ms,
+        Some(prior),
+    )
+}
+
+fn plan_inner(
+    task: &str,
+    attempt: &str,
+    observation: &NativeImageObservation,
+    selected: &[String],
+    binding: &Value,
+    now_ms: u64,
+    prior: Option<(&str, &NativeImageObservation)>,
+) -> Result<NativeImagePlan, String> {
     use agent_browser_challenge_control::*;
     observation.validate(now_ms)?;
     let actions = observation.actions(selected)?;
@@ -474,26 +567,37 @@ pub fn plan(
         .as_str()
         .filter(|v| !v.is_empty())
         .ok_or("browser_native_site_policy_provider_missing")?;
-    let profile_digest = digest(&PROFILE_ID)?;
+    let rounds = observation.registered_action_id == ROUNDS_PROFILE_ID;
+    let profile_digest = digest(&observation.registered_action_id)?;
     let capability = VisualProviderCapability {
         capability_id: provider.into(),
-        capability_version: PROFILE_ID.into(),
-        capability_digest: digest(&(provider, CONFIG_REF, &policy_digest))?,
+        capability_version: observation.registered_action_id.clone(),
+        capability_digest: digest(&(
+            provider,
+            if rounds {
+                ROUNDS_CONFIG_REF
+            } else {
+                CONFIG_REF
+            },
+            &policy_digest,
+        ))?,
     };
     let policy = VisualRoundPolicy {
         policy_digest: policy_digest.clone(),
         profile_digest: profile_digest.clone(),
         provider_capability: capability.clone(),
-        max_rounds: 1,
+        max_rounds: if rounds { 2 } else { 1 },
         max_selections_per_round: 4,
         max_steps_per_round: 1,
         max_pointer_events_per_round: 15,
         max_key_events_per_round: 0,
-        max_total_selections: 4,
-        max_total_steps: 1,
-        max_total_pointer_events: 15,
+        max_total_selections: if rounds { 8 } else { 4 },
+        max_total_steps: if rounds { 2 } else { 1 },
+        max_total_pointer_events: if rounds { 30 } else { 15 },
         max_total_key_events: 0,
-        deadline_at_ms: observation
+        deadline_at_ms: prior
+            .map(|(_, old)| old)
+            .unwrap_or(observation)
             .observed_at_ms
             .checked_add(MAX_AGE_MS)
             .ok_or("browser_native_image_observation_invalid")?,
@@ -527,7 +631,7 @@ pub fn plan(
         attempt_id: attempt.into(),
         profile_digest,
         policy_digest,
-        round_index: 1,
+        round_index: if prior.is_some() { 2 } else { 1 },
         round_id: observation.puzzle_sha256.clone(),
         evidence_digest: String::new(),
         frame_digest: observation.frame_sha256.clone(),
@@ -548,6 +652,75 @@ pub fn plan(
     evidence.evidence_digest = visual_round_evidence_digest(&evidence);
     let initial = VisualRoundSnapshot::new(task, attempt)
         .map_err(|_| "browser_native_image_round_invalid")?;
+    let initial = if let Some((encoded, old)) = prior {
+        old.validate(now_ms)?;
+        if !rounds
+            || old.registered_action_id != ROUNDS_PROFILE_ID
+            || old.desktop_id != observation.desktop_id
+            || old.generation != observation.generation
+            || old.window_id != observation.window_id
+            || old.process_digest != observation.process_digest
+            || old.native_control_epoch != observation.native_control_epoch
+            || old.window != observation.window
+            || old.region != observation.region
+            || old.capture_scope != observation.capture_scope
+            || old.display_width != observation.display_width
+            || old.display_height != observation.display_height
+            || old.verify != observation.verify
+            || old
+                .candidates
+                .iter()
+                .zip(&observation.candidates)
+                .any(|(a, b)| a.bounds != b.bounds)
+            || old.frame_sha256 == observation.frame_sha256
+            || old.puzzle_sha256 == observation.puzzle_sha256
+            || old
+                .tile_image_sha256s
+                .iter()
+                .zip(&observation.tile_image_sha256s)
+                .any(|(a, b)| a == b)
+            || observation.observed_at_ms <= old.observed_at_ms
+        {
+            return Err("browser_native_image_round_changed".into());
+        }
+        let retained: RetainedRound =
+            serde_json::from_str(encoded).map_err(|_| "browser_native_image_round_invalid")?;
+        if retained.snapshot.task_id != task
+            || retained.snapshot.attempt_id != attempt
+            || retained.snapshot.next_round_index != 1
+            || retained.deadline_at_ms != policy.deadline_at_ms
+            || retained.snapshot.phase != VisualRoundPhase::AwaitingAfterState
+            || retained.intent.round_id != old.puzzle_sha256
+        {
+            return Err("browser_native_image_round_changed".into());
+        }
+        let next = decide_visual_round(
+            &policy,
+            &retained.snapshot,
+            VisualRoundEvent::Classify {
+                after_state: VisualRoundAfterState {
+                    round_id: retained.intent.round_id.clone(),
+                    evidence_digest: retained.intent.evidence_digest.clone(),
+                    frame_digest: evidence.frame_digest.clone(),
+                    context_digest: evidence.context_digest.clone(),
+                    geometry_digest: evidence.geometry_digest.clone(),
+                    candidate_set_digest: evidence.candidate_set_digest.clone(),
+                    observed_at_ms: observation.observed_at_ms,
+                    expires_at_ms: policy.deadline_at_ms,
+                    outcome: VisualAfterStateOutcome::NextRound,
+                    terminal_receipt_ref: None,
+                },
+                now_ms,
+            },
+        )
+        .map_err(|_| "browser_native_image_round_invalid")?;
+        let VisualRoundDecision::Continue { snapshot } = next else {
+            return Err("browser_native_image_round_refused".into());
+        };
+        snapshot
+    } else {
+        initial
+    };
     let observed = decide_visual_round(
         &policy,
         &initial,
@@ -602,7 +775,17 @@ pub fn selection(command: &Value) -> Result<Vec<String>, String> {
     let attempt = command["imageAttempt"]
         .as_object()
         .filter(|a| {
-            a.len() == 2
+            (a.len() == 2
+                || a.len() == 3
+                    && a.get("originalRequestId")
+                        .and_then(Value::as_str)
+                        .is_some_and(|id| {
+                            !id.is_empty()
+                                && id.len() <= 128
+                                && id
+                                    .bytes()
+                                    .all(|b| b.is_ascii_alphanumeric() || b"-_.:".contains(&b))
+                        }))
                 && a.contains_key("observationRequestId")
                 && a.contains_key("selectedCandidateIds")
         })
@@ -681,18 +864,19 @@ pub fn finish_round(
         .active_evidence
         .as_ref()
         .ok_or("browser_native_image_round_invalid")?;
+    let rounds = retained.intent.provider_capability.capability_version == ROUNDS_PROFILE_ID;
     let policy = VisualRoundPolicy {
         policy_digest: evidence.policy_digest.clone(),
-        profile_digest: digest(&PROFILE_ID)?,
+        profile_digest: digest(&retained.intent.provider_capability.capability_version)?,
         provider_capability: retained.intent.provider_capability.clone(),
-        max_rounds: 1,
+        max_rounds: if rounds { 2 } else { 1 },
         max_selections_per_round: 4,
         max_steps_per_round: 1,
         max_pointer_events_per_round: 15,
         max_key_events_per_round: 0,
-        max_total_selections: 4,
-        max_total_steps: 1,
-        max_total_pointer_events: 15,
+        max_total_selections: if rounds { 8 } else { 4 },
+        max_total_steps: if rounds { 2 } else { 1 },
+        max_total_pointer_events: if rounds { 30 } else { 15 },
         max_total_key_events: 0,
         deadline_at_ms: retained.deadline_at_ms,
     };

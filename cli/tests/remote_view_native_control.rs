@@ -1062,3 +1062,146 @@ fn native_image_complete_puzzle_region_is_explicit_fresh_and_fully_contained() {
         assert!(result.get("nativeImageObservation").is_none());
     }
 }
+
+#[test]
+fn native_image_rounds_owner_hashes_interiors_and_vetoes_rejection_at_any_confidence() {
+    struct RoundOwner {
+        inner: ImagePuzzleOwner,
+        case: &'static str,
+    }
+    impl browser_native_control::NativeOwner for RoundOwner {
+        fn request(
+            &mut self,
+            operation: &str,
+            body: &serde_json::Value,
+        ) -> Result<serde_json::Value, String> {
+            use base64::Engine;
+            use sha2::Digest;
+            let mut value = self.inner.request(operation, body)?;
+            if operation != "ocr" {
+                return Ok(value);
+            }
+            if self.case == "rejection" {
+                value["ocr"]["lines"].as_array_mut().unwrap().push(serde_json::json!({"text":"Please try again","confidence":12,"bounds":{"x":100,"y":450,"width":180,"height":18}}));
+            }
+            if matches!(self.case, "border" | "interiors") {
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(value["image"]["data"].as_str().unwrap())
+                    .unwrap();
+                let mut pixels = image::load_from_memory(&bytes).unwrap().to_rgb8();
+                for row in 0..3 {
+                    for column in 0..3 {
+                        let inset = if self.case == "border" { 4 } else { 20 };
+                        pixels.put_pixel(
+                            100 + column * 66 + inset,
+                            200 + row * 66 + inset,
+                            image::Rgb([220, 220, 220]),
+                        );
+                    }
+                }
+                let mut encoded = std::io::Cursor::new(Vec::new());
+                image::DynamicImage::ImageRgb8(pixels)
+                    .write_to(&mut encoded, image::ImageFormat::Png)
+                    .unwrap();
+                let bytes = encoded.into_inner();
+                value["image"]["data"] =
+                    serde_json::json!(base64::engine::general_purpose::STANDARD.encode(&bytes));
+                value["capture"]["sha256"] =
+                    serde_json::json!(format!("{:x}", sha2::Sha256::digest(&bytes)));
+            }
+            Ok(value)
+        }
+    }
+    let original = agent_browser_service_model::RecordedProcessIdentity {
+        pid: 42,
+        start_token: "linux:boot:11".into(),
+        executable_path: Some("/synthetic/chrome".into()),
+        browser_family: Some("chrome".into()),
+    };
+    let target = agent_browser_service_model::RemoteViewApplicationTarget {
+        assignment_id: "assignment".into(),
+        registration_id: "registration".into(),
+        desktop_id: "lifecycle".into(),
+        lifecycle_generation: 2,
+        viewing_desktop_id: "viewing".into(),
+        viewing_generation: 9,
+    };
+    let capture = |case, profile| {
+        browser_native_control::execute(&original,&target,&serde_json::json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":profile}),&mut RoundOwner{inner:ImagePuzzleOwner{fixture:NativeFixture{calls:vec![]}},case}).unwrap()
+    };
+    let baseline = capture("baseline", browser_native_image::ROUNDS_PROFILE_ID);
+    let border = capture("border", browser_native_image::ROUNDS_PROFILE_ID);
+    let interiors = capture("interiors", browser_native_image::ROUNDS_PROFILE_ID);
+    let hashes = baseline["nativeImageObservation"]["tileImageSha256s"]
+        .as_array()
+        .unwrap();
+    assert_eq!(hashes.len(), 9);
+    assert_eq!(
+        baseline["nativeImageObservation"]["tileImageSha256s"],
+        border["nativeImageObservation"]["tileImageSha256s"]
+    );
+    assert!(hashes
+        .iter()
+        .zip(
+            interiors["nativeImageObservation"]["tileImageSha256s"]
+                .as_array()
+                .unwrap()
+        )
+        .all(|(a, b)| a != b));
+    let first: browser_native_image::NativeImageObservation =
+        serde_json::from_value(baseline["nativeImageObservation"].clone()).unwrap();
+    let mut fresh: browser_native_image::NativeImageObservation =
+        serde_json::from_value(interiors["nativeImageObservation"].clone()).unwrap();
+    fresh.observed_at_ms = first.observed_at_ms + 1;
+    let binding =
+        serde_json::json!({"digest":"d".repeat(64),"providerId":"explicit-two-round-provider"});
+    let selected = vec![first.candidates[0].candidate_id.clone()];
+    let plan = browser_native_image::plan(
+        "task",
+        "original",
+        &first,
+        &selected,
+        &binding,
+        first.observed_at_ms,
+    )
+    .unwrap();
+    let (_, finished) = browser_native_image::finish_round(
+        &browser_native_image::retain_plan(&plan).unwrap(),
+        true,
+        "original",
+    )
+    .unwrap();
+    let selected = vec![fresh.candidates[0].candidate_id.clone()];
+    let continued = browser_native_image::plan_following(
+        "task",
+        "original",
+        &fresh,
+        &selected,
+        &binding,
+        fresh.observed_at_ms,
+        (&finished, &first),
+    )
+    .unwrap();
+    assert_eq!(continued.policy.deadline_at_ms, plan.policy.deadline_at_ms);
+    assert_eq!(continued.snapshot.attempt_id, "original");
+    assert!(browser_native_image::plan_following(
+        "task",
+        "original",
+        &fresh,
+        &selected,
+        &binding,
+        first.observed_at_ms + 60000,
+        (&finished, &first)
+    )
+    .is_err());
+    assert!(
+        capture("rejection", browser_native_image::ROUNDS_PROFILE_ID)
+            .get("nativeImageObservation")
+            .is_none()
+    );
+    assert!(
+        capture("rejection", browser_native_image::PROFILE_ID)["nativeImageObservation"]
+            .get("tileImageSha256s")
+            .is_none()
+    );
+}

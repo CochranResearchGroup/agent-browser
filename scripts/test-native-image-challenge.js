@@ -64,3 +64,50 @@ const captures=roi.calls.filter(call=>call.args.action==='native_capture');asser
 console.log('Explicit complete-puzzle ROI client protocol PASS; partial unknown alone never grants clearance');
 const roiMismatch=fixture({roi:true,captureRegion:{x:0,y:101,width:640,height:379}});await roiMismatch.client.resolve({taskId:'task',requestId:'attempt'});assert.equal(roiMismatch.inputs,0);assert.equal(roiMismatch.selected,0);
 const roiDenied=fixture({roi:true,verifyClearance:async context=>({state:'unverified',taskId:context.taskId,frameSha256:context.frameSha256,evidenceRef:'partial-unknown-alone'})});assert.notEqual((await roiDenied.client.resolve({taskId:'task',requestId:'attempt'})).status,'verified_access_after_native_image');assert.equal(roiDenied.inputs,1);assert(!roiDenied.calls.some(call=>call.name==='browser_continue'));
+
+// The owned public protocol double independently gates final protected access.
+async function roundsCase(fault) {
+  const {createNativeImageRoundsChallengeClient}=await import('../packages/client/src/native-image-challenge.js');
+  const records=new Map(),frames=[png(255),png(240),png(225)];
+  const hashes=frames.map(bytes=>createHash('sha256').update(bytes).digest('hex'));
+  let inputs=0,selections=0,clock=now,deadlines=[];
+  const payload=(data,images=[])=>({content:[{type:'text',text:JSON.stringify({success:true,data})},...images]});
+  const frame=()=>{
+    const index=inputs,obs=structuredClone(observation);
+    obs.registeredActionId='hcaptcha-image-grid-3x3-two-round-v1';obs.frameSha256=hashes[index];obs.puzzleSha256=(index?'e':'c').repeat(64);obs.observedAtMs=now+index;
+    obs.tileImageSha256s=Array(9).fill((index?'f':'a').repeat(64));
+    if(fault==='partial'&&index===1)obs.tileImageSha256s[4]='a'.repeat(64);
+    obs.candidates.forEach((candidate,tile)=>candidate.candidateId=`tile:${tile+1}:${hashes[index].slice(0,16)}`);
+    return {source:'remote_view_native',partialWindow:false,windowBounds:obs.window,capture:{desktopId:'desktop',generation:9,windowId:7,processIdentity:{pid:42,start_token:'owned'},region:obs.region,capture:{sha256:hashes[index],width:640,height:480}},challenge:{kind:index<2?'image_puzzle':'unknown',family:index<2?'hcaptcha':null,frameSha256:hashes[index],completeWindow:true,automatedAttemptAuthorized:false},nativeControlEpoch:4,...(index<2&&!(fault==='rejection'&&index===1)?{nativeImageObservation:obs}:{})};
+  };
+  const config=structuredClone(policy);config.provider.configRef='agent-browser:remote-view-native-image-static-3x3-two-round:v1';
+  if(fault==='empty-policy')config.sitePolicy.allowedChallengeProviders=[];
+  if(fault==='single-provider')config.provider.configRef=provider.configRef;
+  const client=createNativeImageRoundsChallengeClient({now:()=>clock,callTool:async(name,args)=>{
+    if(name==='browser_command'&&args.action==='task_operation'){const operation=records.get(args.params.requestId);if(!operation)throw {code:'browser_task_operation_not_found'};return payload({operation});}
+    if(name==='browser_command'&&args.action==='task_briefing')return payload(binding);
+    if(name==='browser_command'&&args.action==='native_capture'){clock=now+inputs;return payload(frame(),[{type:'image',mimeType:'image/png',data:frames[inputs].toString('base64')}]);}
+    if(name==='browser_command'&&args.action==='native_input'){
+      assert.equal(args.params.imageAttempt.originalRequestId,'round-attempt');
+      assert.equal(args.params.imageAttempt.observationRequestId,inputs===0?'round-attempt:observation':'round-attempt:observation2');
+      const expected=`tile:1:${hashes[inputs].slice(0,16)}`;assert.deepEqual(args.params.imageAttempt.selectedCandidateIds,[expected]);
+      inputs++;const uncertain=fault==='lost-second'&&inputs===2;
+      records.set(args.requestId,{...identity,requestId:args.requestId,action:'native_input',state:uncertain?'uncertain':'owner_acknowledged'});
+      if(uncertain)throw Error('lost acknowledgement');return payload({source:'remote_view_native',delivery:'dispatched'});
+    }
+    if(name==='browser_continue'){assert.equal(inputs,2);return payload(identity);}
+    throw Error('assistance transport unavailable');
+  },resolvePolicy:async()=>config,selectCandidates:async context=>{
+    selections++;deadlines.push(context.deadlineAtMs);assert.equal(context.roundIndex,selections);
+    if(fault==='cancel-second'&&selections===2)throw Error('selection cancelled');
+    if(fault==='expired-second'&&selections===2)clock=now+60000;
+    return {taskId:'task',observationRequestId:context.observationRequestId,frameSha256:context.observation.frameSha256,puzzleSha256:context.observation.puzzleSha256,selectedCandidateIds:[`tile:1:${hashes[fault==='stale-second'&&selections===2?0:selections-1].slice(0,16)}`]};
+  },verifyClearance:async context=>{assert.equal(inputs,2);return {taskId:'task',state:'verified',frameSha256:context.frameSha256,evidenceRef:'independent-clearance'}},verifyAccess:async context=>{assert.equal(inputs,2);return {taskId:'task',state:fault==='denied'?'unknown':'verified',frameSha256:context.frameSha256,evidenceRef:'independent-protected-access'}}});
+  const result=await client.resolve({taskId:'task',requestId:'round-attempt'});
+  if(!fault){assert.equal(result.status,'verified_access_after_native_image');assert.equal(inputs,2);assert.equal(result.roundOperations.length,2);assert.ok(deadlines.every(value=>value<=now+60000));}
+  else {assert.equal(result.status,'intervention');assert.equal(result.retryAllowed,false);assert.equal(inputs,['empty-policy','single-provider'].includes(fault)?0:['lost-second','denied'].includes(fault)?2:1);}
+  const before=inputs;await client.resolve({taskId:'task',requestId:'round-attempt'});assert.equal(inputs,before);
+}
+await roundsCase();
+for(const fault of ['partial','rejection','empty-policy','single-provider','stale-second','cancel-second','expired-second','lost-second','denied'])await roundsCase(fault);
+console.log('Two-round public image protocol PASS: fresh evidence, original deadline, stale/partial/rejected/cancelled/uncertain no-replay and independent protected access');
