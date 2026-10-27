@@ -471,3 +471,10 @@ Actual042 independent cleanup and fresh001–042 census qualified1090 recorded p
 ## Safe expiry diagnostics after042
 
 Worker6b3a07b integrated as52b0d5441. Behavioral public-completion RED lacked bounded clock fields; GREEN covers future and expired observations, exact numeric sanitization and preserved pending/no-replay. Image8, Native22, full diagnostic MCP163, format and strict Clippy passed. One prior full-MCP owner-admission failure remains unexplained and retained; subsequent focused and full diagnostic runs passed without production behavior changes between them.042 remains unexplained: only558ms transport timing is retained, not the failed observation/validation timestamps. New diagnostics preserve the existing future/60second predicate and will expose those exact numeric facts in a fresh scoped attempt. No behavioral expiry repair or471 acceptance is claimed.
+
+
+## Actual043 retained uncertain input
+
+Clean904439d95a7367d33229e41c086c3256428efbd9 passed combined format, strict Clippy, docs build and five changed-file link checks. Optimized ci build3m43s produced immutable e1acea3c66cd86dcac0d77868d6ea78b6c52c8f6077a0f96cd92df48a2220cc4, uninstalled.043 fresh complete-puzzle observation succeeded, so042 expiry cause remains unknown rather than repaired. Root inspected its actual Native PNG and selected three visible buses through the digest-bound candidate-ID response.
+
+The original guard crop had the identical SHA at forwarding. Its four-click batch forwarded once, then the Native owner returned HTTP400 input_effect_uncertain. The independent application oracle recorded zero selection/Verify events, but provider zero effects is not proved. Original input is terminal intervention with reserved maximum uncertain accounting and no replay. No other model phase ran; parent INCOMPLETE is retained. Cleanup reported no failure; fresh001–043 census qualified1120 recorded generations absent, unknown0 and no positive owned processes/Docker/units. Source-only diagnosis of the provider failure is assigned to worker471; no blind retry or471 acceptance.472 stays blocked; final review/remediation remain0/0.
