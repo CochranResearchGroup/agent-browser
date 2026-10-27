@@ -157,6 +157,7 @@ def main():
         fixture_files += ('scripts/qualify-native-checkbox.mjs',)
     if args.image_assistance:
         fixture_files += ('scripts/qualify-native-image.mjs', 'scripts/qualify-native-checkbox.mjs',
+                          'scripts/probe-native-pointer.py', 'scripts/test-native-owner-failure-diagnostics.py',
                           'packages/client/src/native-image-challenge.js', 'packages/client/src/native-image-challenge.d.ts')
     for name in fixture_files:
         h.run('git', '-C', repo, 'ls-files', '--error-unmatch', name)
@@ -434,6 +435,20 @@ def main():
                                 if (args.checkbox_assistance or args.image_assistance) and request.path.endswith('/input'):
                                     h.private_json(args.results / 'native-original-input-intent.json', body)
                                     guard_observation('native-guard-before-input')
+                                def pointer_observation(label):
+                                    if not args.image_assistance or not request.path.endswith('/input'):
+                                        return
+                                    probe = {'processIdentity':body['expectedProcessIdentity'],
+                                             'windowId':body['windowId'], 'ownedRoot':str(args.results),
+                                             'displays':[args.display,args.display+1]}
+                                    observed = subprocess.run([sys.executable, str(Path(__file__).with_name('probe-native-pointer.py'))],
+                                        input=json.dumps(probe), text=True, capture_output=True, timeout=8)
+                                    assert observed.returncode == 0, 'owned_pointer_observation_failed'
+                                    value = json.loads(observed.stdout)
+                                    value.update(desktopId=body['desktopId'],generation=body['expectedGeneration'],
+                                                 nativeControlEpoch=body['controlEpoch'],phase=label)
+                                    h.private_json(args.results / (label+'.json'), value)
+                                pointer_observation('native-pointer-before-input')
                                 try:
                                     with build_opener(NoRedirect).open(forwarded, timeout=15) as result: result=json.load(result)
                                     if (args.checkbox_assistance or args.image_assistance) and request.path.endswith('/ocr'):
@@ -449,6 +464,7 @@ def main():
                                     # Retain only the owner's bounded diagnostic code,
                                     # never recognized application text or credentials.
                                     failure = json.load(error)
+                                    pointer_observation('native-pointer-after-refusal')
                                     code = failure.get('code', failure.get('error', {}).get('code'))
                                     if (args.checkbox_assistance or args.image_assistance) and request.path.endswith('/input') and code == 'visual_observation_conflict':
                                         native_refusals.append({'path':request.path,'status':error.code,'code':code,'effectsAcknowledged':False})
