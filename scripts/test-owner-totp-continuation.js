@@ -7,7 +7,7 @@ async function fixture({loseInput=false,notificationGate='delivered',withPasswor
   state.time=45000;state.factorKind='totp';state.factorAccount='owner@example.test';state.factorInputs=0;state.factorReconciles=0;
   return {materials:{key:Buffer.alloc(32,3),readClock:async()=>({synchronized:true,timeMs:state.time}),minimumRemainingMs:0,verifyEnrollment:async()=>true},
    receiver:{...receiver,
-    async observeAuthentication({principal,targetId,origin}){return {method:state.factorKind,observationId:'synthetic-totp-form',account:state.factorAccount,binding:{clientId:principal.id,taskId:principal.taskId,targetId,origin,generation:receiving.generation}};},
+    async observeAuthentication({principal,targetId,origin,originalRequest}){if(withPassword&&!originalRequest)return {method:state.factorKind,heldFor:'account',observationId:'synthetic-totp-form',binding:{clientId:principal.id,taskId:principal.taskId,targetId,origin,generation:receiving.generation}};return {method:state.factorKind,observationId:'synthetic-totp-form',account:state.factorAccount,binding:{clientId:principal.id,taskId:principal.taskId,targetId,origin,generation:receiving.generation}};},
     async use({credential,authorize}){await authorize();if(withPassword&&credential.type!=='otp'){state.inputs++;return {released:true};}assert.equal(credential.type,'otp');assert.equal(credential.code,'287082','Trusted receiver verifies the RFC synthetic factor');state.factorInputs++;state.authenticated=true;if(loseInput)throw Error('Synthetic lost factor acknowledgement');return {released:true,authenticated:true};},
     async reconcile({request}){state.factorReconciles++;return {released:state.factorInputs>0,authenticated:state.authenticated,terminal:true,evidenceId:request.attemptId};}
    }};

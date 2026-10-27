@@ -75,7 +75,10 @@ existing owner review and private-use lifecycle. Exact task/profile/browser/tab/
 generation and current account/company evidence are required. Typed holds preserve
 missing prerequisites; a profile name is not identity proof.
 
-TOTP uses Auth's observed continuation, including after SSO. Number matching uses
+TOTP uses Auth's observed continuation, including after SSO. After password use,
+retain `originalRequestId` so Auth can bind an account-less factor screen to the
+original attempt. The helper creates the factor request through that observed
+continuation, preserving Auth's account and receiving checks. Number matching uses
 an existing private attempt and Auth's owner-only reverse-input path. Capabilities
 are receiving-path-specific: a browser-client TOTP route does not establish native
 number-matching or accessibility qualification. Neither factory returns codes or
