@@ -139,6 +139,23 @@ Observe the actual Native image before proposing tile IDs:
 {"taskId":"TASK","action":"native_capture","requestId":"image:observation","params":{"classifyChallenges":true,"registeredActionId":"hcaptcha-image-grid-3x3-v1"}}
 ```
 
+Full-window evidence is the default. To declare a complete puzzle region before
+a **fresh** observation, add `imageCaptureScope: "complete_puzzle_region"` and
+an explicit `region` with Native desktop-pixel `x`, `y`, `width` and `height`.
+The typed client exposes this as `captureRegion`. Choose a region containing
+the entire prompt, brand, nine aligned cells and Verify. The owner derives
+completeness from those Native pixels and OCR, not from the caller's scope label.
+
+`nativeImageObservation.captureScope` distinguishes `complete_window` from
+`complete_puzzle_region`. Generic `partialWindow` and
+`challenge.completeWindow` keep their actual meaning; a complete puzzle region
+is not whole-window evidence. The original ROI and SHA remain fixed through
+selection and input, with full window/process/control/geometry fences retained.
+Subsequent observations retain that ROI. A cropped unknown classification alone
+cannot prove clearance; both independent application verifiers remain necessary.
+Never clip or refresh an old original to make its guard pass. Legacy observations
+without a scope remain complete-window evidence and cannot become regional proof.
+
 Reason from those pixels and use only returned candidate IDs. A selection is
 untrusted input to the owner, not authority to send coordinates:
 

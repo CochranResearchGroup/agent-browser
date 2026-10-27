@@ -474,6 +474,8 @@ confidence, tab lifetime or viewing authority. Unknown evidence stays unknown.
 
 Static image rounds require the distinct opt-in configRef agent-browser:remote-view-native-image-static-3x3:v1 and explicit SitePolicy provider membership; an empty list grants no image authority. An agent reasons from current Native pixels and proposes returned candidate IDs; the owner derives coordinates and binds the original frame, task, window, control and cumulative budget. The supported static3x3 bus round permits at most four tiles plus Verify and one attempt within its60second evidence bound. Checkbox limits remain unchanged; new observations or families cannot renew consumed attempts. Unsupported or dynamic puzzles remain intervention.
 
+Image capture scope defaults to complete_window. Explicit complete_puzzle_region requires a declared ROI before fresh capture and owner-derived completeness of prompt, brand, nine cells and Verify inside it. Original ROI/SHA and whole-window context fences stay fixed; honest partial-window metadata is not whole-window clearance. Legacy evidence is not reinterpreted, and independent application verification remains separate.
+
 **Clarification question**: An unresolved source-linked material choice whose
 prerequisite answers must be verified before it is ready to ask.
 

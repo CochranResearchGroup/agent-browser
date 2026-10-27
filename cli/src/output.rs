@@ -7347,6 +7347,7 @@ Commands:
   Native completion errors: inspect the original requestId and safe cause; never replay
   Native image: explicit provider membership; static 3x3 bus grid; returned IDs only
   Native image budget: one attempt, at most four tiles plus Verify, 60 seconds
+  Native image ROI: declare complete_puzzle_region before capture; original region/hash stay fixed
   Native policy: verified CDP origin/provider required; CDP-free uses human assistance
   Native return: original opaque handoff, explicit takeover/return, separate access checks
   browser-mode TASK Inspect mode

@@ -46,7 +46,18 @@ export async function qualifyNativeImage({workflow,task,nextTask,primary,site,pr
     await workflow('browser_tab',{taskId:current.taskId,operation:'select',tabId:current.tabId});
     await primary.bringToFront();
     const staging=await primary.context().newCDPSession(primary);
-    try{const window=await staging.send('Browser.getWindowForTarget');await staging.send('Browser.setWindowBounds',{windowId:window.windowId,bounds:{windowState:'maximized'}});await save('image471-'+label+'-window-preparation.json',{publicTaskTabSelected:true,taskId:current.taskId,tabId:current.tabId,appOwnedCdp:true,pageBroughtToFront:true,windowId:window.windowId,windowState:'maximized',challengeInputDispatched:false});}finally{await staging.detach();}
+    try{
+      const window=await staging.send('Browser.getWindowForTarget');await staging.send('Browser.setWindowBounds',{windowId:window.windowId,bounds:{windowState:'maximized'}});
+      const native=await workflow('browser_command',{taskId:current.taskId,action:'native_capture'}),bounds=native.windowBounds;
+      // Owned app setup supplies viewport EXTENT only. Puzzle controls and
+      // semantic choices still come exclusively from the recorded Native ROI.
+      const viewport=await primary.evaluate(()=>({width:innerWidth,height:innerHeight}));
+      assert(Number.isInteger(viewport.width)&&Number.isInteger(viewport.height)&&viewport.width>0&&viewport.height>0&&viewport.width<=bounds.width&&viewport.height<bounds.height);
+      const captureRegion={x:bounds.x+(bounds.width-viewport.width)/2,y:bounds.y+bounds.height-viewport.height,width:viewport.width,height:viewport.height};
+      assert(Number.isInteger(captureRegion.x)&&Number.isInteger(captureRegion.y));
+      await save('image471-'+label+'-window-preparation.json',{publicTaskTabSelected:true,taskId:current.taskId,tabId:current.tabId,appOwnedCdp:true,pageBroughtToFront:true,windowId:window.windowId,windowState:'maximized',nativeWindowBounds:bounds,ownedViewportExtent:viewport,captureRegion,captureScope:'complete_puzzle_region',puzzleElementDomCoordinatesUsed:false,challengeInputDispatched:false});
+      return captureRegion;
+    }finally{await staging.detach();}
   }
 
   const provider={id:'owned-static-image-provider',kind:'captcha',enabled:true,capabilities:['captcha_solve'],configRef:'agent-browser:remote-view-native-image-static-3x3:v1'};
@@ -88,7 +99,7 @@ export async function qualifyNativeImage({workflow,task,nextTask,primary,site,pr
   }
   async function selection(context,label) {
     const nonce=randomUUID(),responseFile='image471-selection-response-'+nonce+'.json';
-    const request={schemaVersion:'agent-browser.native-image-selection-request.v1',selectionRequestId:nonce,label,taskId:context.taskId,observationRequestId:context.observationRequestId,frameSha256:context.observation.frameSha256,puzzleSha256:context.observation.puzzleSha256,candidates:context.observation.candidates,pngPath:join(dirname(selectionDirectory),'native-original-ocr-'+context.observation.frameSha256+'.png'),responseFile:join(selectionDirectory,responseFile),deadlineAtMs:Math.min(context.deadlineAtMs-1000,context.observation.observedAtMs+59000),responseMustBeAtomic:true,requiredProvenance:{kind:'agent_visual_inspection',actor:'root',sourceFrameSha256:context.observation.frameSha256}};
+    const request={schemaVersion:'agent-browser.native-image-selection-request.v1',selectionRequestId:nonce,label,taskId:context.taskId,observationRequestId:context.observationRequestId,frameSha256:context.observation.frameSha256,puzzleSha256:context.observation.puzzleSha256,captureScope:context.observation.captureScope,region:context.observation.region,windowBounds:context.observation.window,candidates:context.observation.candidates,pngPath:join(dirname(selectionDirectory),'native-original-ocr-'+context.observation.frameSha256+'.png'),responseFile:join(selectionDirectory,responseFile),deadlineAtMs:Math.min(context.deadlineAtMs-1000,context.observation.observedAtMs+59000),responseMustBeAtomic:true,requiredProvenance:{kind:'agent_visual_inspection',actor:'root',sourceFrameSha256:context.observation.frameSha256}};
     await save('image471-selection-request-'+nonce+'.json',request);await save('image471-selection-request.json',request);
     while(Date.now()<request.deadlineAtMs&&!context.signal.aborted) {
       let info;try{info=await lstat(request.responseFile)}catch(error){if(error.code!=='ENOENT')throw error;}
@@ -107,10 +118,11 @@ export async function qualifyNativeImage({workflow,task,nextTask,primary,site,pr
   }
   async function run(label,options={}) {
     const current=label==='success'?task:await nextTask(label),scene=label+'-'+randomUUID();oracle.create(scene,options);await stage(scene,options.unsupported);
-    await prepareWindow(label,current);
+    const captureRegion=await prepareWindow(label,current);
     await waitForNativeCheckboxStability({readCapture:()=>workflow('browser_command',{taskId:current.taskId,action:'native_capture'}),save:value=>save('image471-'+label+'-readiness.json',value)});
     const originalId='image471:'+randomUUID();let inputCalls=0,workflowErrorSequence=0;
     const client=createNativeImageChallengeClient({
+      captureRegion,
       callTool:async(name,args)=>{
         const input=name==='browser_command'&&args.action==='native_input';if(input){inputCalls++;if(options.changedFrame){await primary.evaluate(()=>{document.querySelector('#image471-marker').style.background='#ff0000'});await primary.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));}}
         let value;
