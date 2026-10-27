@@ -364,6 +364,18 @@ def main():
                         try:
                             with lock:
                                 response = outer.rpc.handle(message)
+                                call = message.get('params', {})
+                                consumer = call.get('arguments', {}).get('request', {})
+                                if (args.image_assistance and call.get('name') == 'remote_view_consumer'
+                                        and consumer.get('operation') == 'launch_environment'):
+                                    launch = outer.rpc._value(response)
+                                    assert launch['target']['desktopId'] == outer.target['desktopId']
+                                    assert launch['target']['viewingGeneration'] == outer.target['viewingGeneration']
+                                    # Reuse the same scoped public Native response as
+                                    # the child; cookie-file locators stay memory-only.
+                                    outer.image_pointer_environment = {key:launch['environment'][key]
+                                                                       for key in ('DISPLAY','XAUTHORITY')}
+
                         except Exception as error:
                             adapter_errors.append({'transport': 'unix', 'type': type(error).__name__})
                             response = {'jsonrpc': '2.0', 'id': message.get('id'),
@@ -441,6 +453,7 @@ def main():
                                     frame = observation if observation is not None else body
                                     probe = {'processIdentity':frame['processIdentity'] if observation is not None else body['expectedProcessIdentity'],
                                              'windowId':frame['windowId'], 'ownedRoot':str(args.results),
+                                             'environment':outer.image_pointer_environment,
                                              'displays':[args.display,args.display+1]}
                                     observed = subprocess.run([sys.executable, str(Path(__file__).with_name('probe-native-pointer.py'))],
                                         input=json.dumps(probe), text=True, capture_output=True, timeout=8)

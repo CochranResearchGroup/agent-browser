@@ -19,11 +19,9 @@ try:
     assert process.stat().st_uid == identity['uid']
     assert Path('/proc/sys/kernel/random/boot_id').read_text().strip() == identity['boot_id']
     stage = 'owned_display_environment'
-    selected = {}
-    for item in (process / 'environ').read_bytes().split(b'\0'):
-        name, separator, value = item.partition(b'=')
-        if separator and name in (b'DISPLAY', b'XAUTHORITY'):
-            selected[name.decode()] = value.decode()
+    selected = request['environment']
+    assert set(selected) == {'DISPLAY', 'XAUTHORITY'}
+    assert all(isinstance(value, str) and value for value in selected.values())
     displays = [':' + str(number) for number in request['displays']]
     assert selected['DISPLAY'] in displays or selected['DISPLAY'] in [value + '.0' for value in displays]
     stage = 'provided_auth_path'
