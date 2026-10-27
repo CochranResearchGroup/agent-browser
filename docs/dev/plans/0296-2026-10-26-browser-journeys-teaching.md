@@ -21,8 +21,8 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 | 468 | 467 | validated | root | recipes/spec466-integration / duplicate-403 | worker045dd85a; integration96fad35a2; combined HTTPS + repaired Native019 PASS; tracker reclosed |
 | 469 | 467 | validated | implement_469 | challenge/native-assistance-469 retained / auxiliary reused by471 | workeref57c4a0; combinedb7 Native019 attached/CDP-free PASS; tracker CLOSED |
 | 470 | 468,469 | validated | root | recipes/spec466-integration; native-checkbox-470 branch retained | fe6a/ef948 source gates and actual037 bounded checkbox lane PASS; peer-preserving cleanup and940-generation census qualified; tracker CLOSED |
-| 471 | 470 | validated | root / implement_471 | recipes/spec466-integration; single-round-image-471 branch retained | actual050 static-image lane PASS, Native690 merged, explicit assignment release/peer preservation and1330-generation census; tracker closure follows |
-| 472 | 471 | ready | unassigned | auxiliary reuse admission pending | validated471 prerequisite; source packet not yet assigned |
+| 471 | 470 | validated | root / implement_471 | recipes/spec466-integration; single-round-image-471 branch retained | actual050 static-image lane PASS, Native690 merged, explicit assignment release/peer preservation and1330-generation census; tracker CLOSED |
+| 472 | 471 | running | implement_472 | challenge/refreshed-image-rounds-472 / reused spec466-469 auxiliary | admitted from validated189277c3a; explicit bounded interface proposal before owner/client edits |
 | 473 | none | validated | implement_473 | recipes/teaching-evidence-473 retained / auxiliary removed | worker ea0e2f42ab59; integration67780a8b1; synthetic cases and shared docs validation pass; tracker CLOSED with explicit source/synthetic receipt |
 | 474 | 473 | validated | implement_473 | recipes/teaching-draft-474 retained / auxiliary removed | worker243b7405; integration25dd69054; combinedMCP151/strict/docs/client PASS; tracker CLOSED after source qualification |
 | 475 | 474 | validated | implement_473 | recipes/teaching-review-475 retained / auxiliary removed | worker5e226f17+89da499b; source9436460eb gates PASS; tracker CLOSED |
@@ -508,3 +508,10 @@ Native689 source-pinned actual049 reproduced the held-button refusal; legacy bin
 ## Ticket471 actual qualification accepted
 
 Owned050 accepted every frozen static-image phase with source-pinned Native repair, actual visual selection, independent protected access and preserved original identities. Native PR690 is merged at1910ad8; Native689 closed after canonical ancestry readback. Explicit assignment release and peer preservation are independent from fresh1330-generation absence proof. [Curated471 receipt](../notes/0296-native-image-471-source-receipt.md) binds exact sources, gates, scope and retained unknowns.471 is validated and472 unblocked. No production installation or formal release. Native candidate and auxiliary remain retained for dependent472; reserved final broad review/remediation0/0.
+
+
+## Ticket472 admission
+
+471 tracker is CLOSED with actual050 receipt. Read-only governed inspection of exact auxiliary incarnation877044c62029f5e6424c56ce5315f483878556d9588ff66515d3b2cea689d7ad found clean6b3a07b, no pinned candidate or active build. Exact old single-round branch is retained and published before checkout reuse. Fresh inventory has seven Agent Browser checkouts; unrelated Auth/dashboard/enrollment/mode work remains preserved. New dependent472 branch starts from qualified integration189277c3a.
+
+Admit one fresh bounded worker with compact source packet and no full-history copy. Aggregate usage remains uncalibrated/nonzero; this is a new feature milestone after the closed Native specialist packet, not a reset of its allowance. Local first-packet allowance:20k estimated worker tokens/45minutes, primary integration/runtime reserve25k estimated tokens; not a user-specified budget. No worker wave. Root owns shared README/help/main skill/CONTEXT, catalog/ledger, MCP metadata and qualifier/runtime. Worker owns focused owner/client/tests/reference, first proposes a bounded interface using existing stores/kernels. Keep old471 authority/limits and sealed bytes unchanged; no Native runtime effects by worker. Final review/remediation remain0/0.
