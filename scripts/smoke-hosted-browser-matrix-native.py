@@ -374,8 +374,32 @@ def main():
                                         return None
                                 forwarded = Request(f'http://127.0.0.1:{outer.control_port}'+request.path, data=json.dumps(body).encode(), method='POST', headers={'Authorization':'Bearer '+outer.token,'Content-Type':'application/json'})
                                 from urllib.error import HTTPError
+                                def retain_visual(label, value):
+                                    h.private_json(args.results / (label + '.json'), value)
+                                    png = base64.b64decode(value['image']['data'], validate=True)
+                                    assert 0 < len(png) <= 4_194_304
+                                    assert hashlib.sha256(png).hexdigest() == value['capture']['sha256']
+                                    path = args.results / (label + '.png')
+                                    path.write_bytes(png)
+                                    path.chmod(0o600)
+                                def guard_observation(label):
+                                    # Observe the original guard region without changing,
+                                    # refreshing or replaying the input intent.
+                                    observation = {key:value for key,value in body.items()
+                                                   if key not in ('actions', 'leaseId', 'expectedVisual')}
+                                    observation['region'] = body['expectedVisual']['region']
+                                    query = Request(f'http://127.0.0.1:{outer.control_port}/v1/agent-desktop/capture_region',
+                                                    data=json.dumps(observation).encode(), method='POST',
+                                                    headers={'Authorization':'Bearer '+outer.token,'Content-Type':'application/json'})
+                                    with build_opener(NoRedirect).open(query, timeout=15) as response:
+                                        retain_visual(label, json.load(response))
+                                if args.checkbox_assistance and request.path.endswith('/input'):
+                                    h.private_json(args.results / 'native-original-input-intent.json', body)
+                                    guard_observation('native-guard-before-input')
                                 try:
                                     with build_opener(NoRedirect).open(forwarded, timeout=15) as result: result=json.load(result)
+                                    if args.checkbox_assistance and request.path.endswith('/ocr'):
+                                        retain_visual('native-original-ocr', result)
                                     if args.checkbox_observe_only and request.path.endswith('/ocr'):
                                         h.private_json(args.results / 'synthetic-checkbox-ocr.json', result)
                                         png = base64.b64decode(result['image']['data'], validate=True)
@@ -391,6 +415,7 @@ def main():
                                     if args.checkbox_assistance and request.path.endswith('/input') and code == 'visual_observation_conflict':
                                         native_refusals.append({'path':request.path,'status':error.code,'code':code,'effectsAcknowledged':False})
                                         h.private_json(args.results / 'native-owner-refusals.json', native_refusals)
+                                        guard_observation('native-guard-after-refusal')
                                         result, forwarded_status = failure, error.code
                                     else:
                                         adapter_errors.append({'transport':'native-owner','path':request.path,'status':error.code,'code':code})

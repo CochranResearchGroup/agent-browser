@@ -5,7 +5,7 @@ Status: OPEN
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/466
 Integration branch: recipes/spec466-integration
 Integration base: 5770d693b23d51c9932574fa68e012a98029ce73
-Validated source tip:0adf8dfa9c66e5df89db04ecf9531e5abb094922; latest documentation checkpoint follows on recipes/spec466-integration / draft PR480.
+Validated source tip:5a9f53ebdc09b1c591604a191999bc3e673ae1b0; latest documentation checkpoint follows on recipes/spec466-integration / draft PR480.
 
 ## Custody and scope
 
@@ -351,3 +351,21 @@ Fixture-only commits9230c782e/7b339612f now retain bounded public input errors a
 Fresh030 reproduced the first automatic hCaptcha refusal. The new fixture captured exact public error browser_session_activity_admission_conflict. Before input the original was absent; afterwards it was uncertain/noRetry with owner site/provider refs retained. Application input0 and no protected access remain independently recorded. No029 original was replayed. Root requested a narrow source-grounded activity ownership repair with public regression from the worker, preserving pending-before-focus and foreign/competing activity exclusion. No bypass or input-policy relaxation is authorized. Fresh Native historical census and exact030 X11/kernel-listener readback are retained privately; no new runtime starts before source/gates and a new candidate.
 
 Source diagnosis corrected the initial nested-activity hypothesis: focus admission compares the current complete session document to effects.expected. Native policy evidence publication advances the owner document; refreshing the host cache left the existing effects baseline stale. Approved bounded repair adds exact expected-before atomic owner publication returning its exact post-own-update snapshot, then updates the same effects operation from that proof before exact retained-only focus. Arbitrary fresh reloads, foreign context/epoch/target changes and retirement remain rejected. Worker owns narrow Native host/task-operation mutation plus production-consumed adapter regression; no shared model/store relaxation or new caller bypass. Actual030 is the public RED; persistent provider-free RED/GREEN and a new qualified candidate are required before another Native run. Source/gates pending.
+
+## Owner-publication repair integrated and source-qualified
+
+Worker461e5fd69ee3099a3de0a24417a1dd6e68bac7a3 integrated as5a9f53ebdc09b1c591604a191999bc3e673ae1b0. Persistent public Native-host adapter RED reproduced the real SQLite/effects activity conflict after own policy publication; GREEN and foreign-before/after-target and cooperative-epoch negatives passed with original pending/budget retained and no launch/input. The owner mutation atomically checks exact before-state and pending retained context, returns an unforgeable process-local exact after-state proof, and the same effects adapter reseeds only from that proof before retained-only focus. Store/model/retirement fences remain unchanged.
+
+Clean combined5a9f passed fmt, strict workspace Clippy, MCP155 and optimized ci build. Byte-identical client/docs gates remain valid from the preceding slice. Immutable executable SHA256dffa4eaa051d391f16cba647b0e8bc016c9e1588b2d6e2220c91dbce929f5ffb is not installed. Root released one fresh full031 against that pin and frozen461e consumer after fresh740-generation cleanup and exact external/resource checks. Displays7030/7031, VNC62500/62501 and nonoverlapping owned subnet were checked; no prior uncertain original is replayed. Actual031 result and cleanup pending;470 remains OPEN.
+
+## Native031 visual-fence refusal and separate assignment obligation
+
+Fresh031 on repaired5a9/dffa passed the former activity-conflict point and forwarded exactly one click intent. Actual Native owner returned HTTP400 visual_observation_conflict with no delivery acknowledgement; application input/access remained0 and original uncertain/noRetry. The fixture effectsAcknowledged:false annotation is not independent provider zero-effect proof. Do not replay this original or infer frame drift. Actual prior OCR exposes distinct rendered capture and sourceCapture hashes; which digest the pinned input API requires remains a contract question under read-only source discovery. No hash guard is relaxed.
+
+Child cleanup retained taskClosed:false and assignment-cleanup failure, although final child process observations and outer resources were absent. Root fresh001–031 census independently qualified770 recorded Native generations absent, unknown0, no positive owned runtime resources; exact031 X11/kernel listeners were absent. This settles the resource readback, not the retained assignment disposition, which remains under diagnosis. No new runtime until that obligation and digest contract are resolved.
+
+## Native031 retained disposition and frame diagnostic
+
+Authoritative Remote View source confirms expectedVisual uses the cropped capture SHA256, not sourceCapture. OCR and guard share the screenshot and GdkPixbuf crop path; binary/source equivalence remains unclaimed. No hash substitution or guard relaxation is justified. Exact031 acquired assignment and baseline peer remain active in the offline private pool store, with empty release replay records. Root recorded retain/quarantined disposition privately; process absence does not establish logical release. Do not restart or reuse that namespace to manufacture release evidence.
+
+Root added fixture-only private original OCR PNG plus same-region pre-input and post-refusal capture evidence. The original input intent and expectedVisual remain unchanged and forward at most once; extra calls are observations. Python syntax and patch hygiene passed. Initial032 invocation refused dirty tracked source before namespace creation or runtime effects; source must be frozen before qualification. Existing5a9/dffa runtime is unchanged and needs no rebuild.470 stays OPEN; final review/remediation counts remain0/0.
