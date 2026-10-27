@@ -94,3 +94,44 @@ nonnegative elapsed milliseconds, clamped to zero for a future timestamp; use
 the two timestamps to inspect that direction. These values grant no authority
 and do not alter the 60-second limit. Inspect the retained original without
 replaying capture or input.
+
+## Opt-in two whole-grid rounds
+
+`createNativeImageRoundsChallengeClient` from the same client entry supports at
+most two static English 3×3 bus grids. Configure an enabled `captcha` provider
+with `captcha_solve`, exact
+`configRef: agent-browser:remote-view-native-image-static-3x3-two-round:v1`, and
+explicit membership in the owner-verified SitePolicy's allowed providers.
+The checkbox and single-round configurations do not grant this authority.
+
+Capture with `registeredActionId: hcaptcha-image-grid-3x3-two-round-v1`.
+The owner adds `tileImageSha256s`, nine hashes of interiors excluding eight
+pixels along every tile edge. The second grid requires all nine interiors to
+change, with the original window, process, generation, control, ROI, geometry and
+policy preserved. Partial replacement, loading, unchanged/rejected grids and
+unsupported layouts require assistance. For this profile, any OCR line containing
+“try again”, “incorrect”, “please retry”, “challenge failed” or “verification
+failed”, “loading” or “please wait” vetoes an observation, regardless of recognition confidence. This
+conservative veto does not alter positive recognition thresholds.
+
+Each input uses exactly these fields:
+
+```json
+{"imageAttempt":{"originalRequestId":"image:attempt","observationRequestId":"image:observation","selectedCandidateIds":["CURRENT-OWNER-ID"]}}
+```
+
+For round one, `originalRequestId` equals the input's `requestId`. Round two uses
+a new input `requestId` and fresh durable observation, retaining the original
+ID. Both rounds share one task, one attempt and the original 60-second deadline;
+the selection callback receives `roundIndex`, the remaining bounded deadline
+and an abort signal. The maximum is four tiles plus Verify per round, ten
+clicks, thirty pointer events and zero key events cumulatively.
+
+The first operation stays immutable. The second retains accumulated counts and
+the original deadline. Results include `roundOperations` for inspection. A lost
+acknowledgement, cancellation, rejection or exhausted budget returns intervention
+with `retryAllowed: false`. Repeating either request reads its original result
+without replay. The client never creates a replacement task. Independent future
+authorized tasks remain possible; this is not a browser-lifetime challenge ban.
+Success still requires independent clearance and protected application access.
+Provider-free protocol tests do not qualify actual Native input or real sites.

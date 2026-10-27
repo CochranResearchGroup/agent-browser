@@ -248,34 +248,46 @@ fn native_completion_failure_causes_never_expose_unreviewed_details() {
 
 #[test]
 fn native_image_public_original_reserves_one_taskwide_attempt_and_never_replays() {
-    native_image_public_completion_case(false, false, None);
+    native_image_public_completion_case(false, false, None, false, None);
 }
 
 #[test]
 fn native_image_public_acknowledged_original_retains_typed_batch_budget() {
-    native_image_public_completion_case(true, false, None);
+    native_image_public_completion_case(true, false, None, false, None);
 }
 
 #[test]
 fn native_image_public_region_original_retains_scope_and_one_attempt() {
-    native_image_public_completion_case(true, true, None);
-    native_image_public_completion_case(false, true, None);
+    native_image_public_completion_case(true, true, None, false, None);
+    native_image_public_completion_case(false, true, None, false, None);
 }
 #[test]
 fn native_image_public_capture_expiry_reports_only_bounded_clock_values() {
     for reason in ["future_timestamp", "age_exceeded"] {
-        native_image_public_completion_case(false, true, Some(reason));
+        native_image_public_completion_case(false, true, Some(reason), false, None);
     }
 }
 fn native_image_public_completion_case(
     acknowledged: bool,
     region: bool,
     clock_fault: Option<&str>,
+    rounds: bool,
+    round_fault: Option<&str>,
 ) {
     use crate::native::{
         browser_native_image as image, browser_session_store::BrowserSessionSqliteStore,
     };
     use agent_browser_service_model::BrowserSessionState;
+    let profile = if rounds {
+        "hcaptcha-image-grid-3x3-two-round-v1"
+    } else {
+        image::PROFILE_ID
+    };
+    let config = if rounds {
+        "agent-browser:remote-view-native-image-static-3x3-two-round:v1"
+    } else {
+        image::CONFIG_REF
+    };
     struct OwnedProcess(std::process::Child);
     impl Drop for OwnedProcess {
         fn drop(&mut self) {
@@ -327,7 +339,7 @@ fn native_image_public_completion_case(
         serde_json::to_value(agent_browser_service_model::ServiceState::default()).unwrap();
     service["profiles"] = json!({"profile":{"id":"profile","name":"Image fixture","userDataDir":profile_path,"sitePolicyIds":["image-site"]}});
     service["sitePolicies"] = json!({"image-site":{"id":"image-site","originPattern":"https://owned.example.test","challengePolicy":"provider_allowed","allowedChallengeProviders":["image-provider"]}});
-    service["providers"] = json!({"image-provider":{"id":"image-provider","kind":"captcha","enabled":true,"capabilities":["captcha_solve"],"configRef":image::CONFIG_REF}});
+    service["providers"] = json!({"image-provider":{"id":"image-provider","kind":"captcha","enabled":true,"capabilities":["captcha_solve"],"configRef":config}});
     JsonServiceStateStore::new(crate::native::service_store::default_service_state_path().unwrap())
         .save(&serde_json::from_value(service).unwrap())
         .unwrap();
@@ -336,7 +348,10 @@ fn native_image_public_completion_case(
         .unwrap()
         .as_millis() as u64;
     let candidates=(0..9).map(|index|json!({"candidateId":format!("tile:{}:{}",index+1,"a".repeat(16)),"bounds":{"x":100+(index%3)*66,"y":200+(index/3)*66,"width":64,"height":64}})).collect::<Vec<_>>();
-    let mut observation = json!({"desktopId":"viewing","generation":9,"windowId":7,"processDigest":"b".repeat(64),"window":{"x":0,"y":0,"width":640,"height":480},"displayWidth":640,"displayHeight":480,"region":{"x":0,"y":0,"width":640,"height":480},"frameSha256":"a".repeat(64),"nativeControlEpoch":4,"observedAtMs":now,"registeredActionId":image::PROFILE_ID,"puzzleSha256":"","candidates":candidates,"verify":{"x":100,"y":414,"width":80,"height":30}});
+    let mut observation = json!({"desktopId":"viewing","generation":9,"windowId":7,"processDigest":"b".repeat(64),"window":{"x":0,"y":0,"width":640,"height":480},"displayWidth":640,"displayHeight":480,"region":{"x":0,"y":0,"width":640,"height":480},"frameSha256":"a".repeat(64),"nativeControlEpoch":4,"observedAtMs":now,"registeredActionId":profile,"puzzleSha256":"","candidates":candidates,"verify":{"x":100,"y":414,"width":80,"height":30}});
+    if rounds {
+        observation["tileImageSha256s"] = json!(vec!["a".repeat(64); 9]);
+    }
     if region {
         observation["captureScope"] = json!("complete_puzzle_region");
         observation["region"] = json!({"x":80,"y":140,"width":440,"height":320});
@@ -345,10 +360,10 @@ fn native_image_public_completion_case(
         &observation["frameSha256"],
         &observation["candidates"],
         &observation["verify"],
-        image::PROFILE_ID
+        profile
     ))
     .unwrap());
-    let capture_params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_capture","requestId":"image-observation","params":{"classifyChallenges":true,"registeredActionId":image::PROFILE_ID}}});
+    let capture_params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_capture","requestId":"image-observation","params":{"classifyChallenges":true,"registeredActionId":profile}}});
     if let Some(reason) = clock_fault {
         let observed = if reason == "future_timestamp" {
             now + 120_000
@@ -358,7 +373,7 @@ fn native_image_public_completion_case(
         observation["observedAtMs"] = json!(observed);
         let mut failure = String::new();
         task_operations::with_context(Some(&capture_params),||{
-            failure=match task_operations::transport(json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":image::PROFILE_ID}),|_|Ok(crate::connection::Response{success:true,data:Some(json!({"nativeImageObservation":observation})),..Default::default()})){Err(error)=>error,Ok(_)=>panic!("expired image observation must refuse completion")};Ok(Value::Null)
+            failure=match task_operations::transport(json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":profile}),|_|Ok(crate::connection::Response{success:true,data:Some(json!({"nativeImageObservation":observation})),..Default::default()})){Err(error)=>error,Ok(_)=>panic!("expired image observation must refuse completion")};Ok(Value::Null)
         }).unwrap();
         assert!(failure.contains("cause=browser_native_image_observation_expired"));
         let safe: Value = serde_json::from_str(
@@ -379,16 +394,39 @@ fn native_image_public_completion_case(
             "pending"
         );
         task_operations::with_context(Some(&capture_params),||{
-            let repeated=task_operations::transport(json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":image::PROFILE_ID}),|_|panic!("expired original must never redispatch capture")).unwrap();
+            let repeated=task_operations::transport(json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":profile}),|_|panic!("expired original must never redispatch capture")).unwrap();
             assert!(!repeated.success);assert_eq!(repeated.data.unwrap()["replayed"],true);Ok(Value::Null)
         }).unwrap();
         return;
     }
     task_operations::with_context(Some(&capture_params),||{
-        let response=task_operations::transport(json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":image::PROFILE_ID}),|_|Ok(crate::connection::Response{success:true,data:Some(json!({"nativeImageObservation":observation})),..Default::default()})).expect("public image observation must complete");
+        let response=task_operations::transport(json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":profile}),|_|Ok(crate::connection::Response{success:true,data:Some(json!({"nativeImageObservation":observation})),..Default::default()})).expect("public image observation must complete");
         assert!(response.success);Ok(Value::Null)
     }).unwrap();
-    let input = json!({"action":"native_input","imageAttempt":{"observationRequestId":"image-observation","selectedCandidateIds":[format!("tile:1:{}","a".repeat(16)),format!("tile:3:{}","a".repeat(16))]}});
+    let mut input = json!({"action":"native_input","imageAttempt":{"observationRequestId":"image-observation","selectedCandidateIds":[format!("tile:1:{}","a".repeat(16)),format!("tile:3:{}","a".repeat(16))]}});
+    if rounds {
+        input["imageAttempt"]["originalRequestId"] = json!("image-attempt");
+    }
+    let mut wrong_profile_envelope = input.clone();
+    if rounds {
+        wrong_profile_envelope["imageAttempt"]
+            .as_object_mut()
+            .unwrap()
+            .remove("originalRequestId");
+    } else {
+        wrong_profile_envelope["imageAttempt"]["originalRequestId"] = json!("image-attempt");
+    }
+    let wrong_profile_params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_input","requestId":"image-attempt","params":wrong_profile_envelope}});
+    task_operations::with_context(Some(&wrong_profile_params), || {
+        assert!(
+            task_operations::transport(wrong_profile_envelope.clone(), |_| panic!(
+                "profile authority crossed envelope boundary"
+            ))
+            .is_err()
+        );
+        Ok(Value::Null)
+    })
+    .unwrap();
     let params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_input","requestId":"image-attempt","params":input}});
     let mut dispatched = 0;
     let mut admission_detail = String::new();
@@ -449,6 +487,107 @@ fn native_image_public_completion_case(
     })
     .unwrap();
     assert_eq!(dispatched, 1);
+    if rounds && acknowledged {
+        let first_round = readback["operation"].clone();
+        let mut fresh = observation.clone();
+        fresh["tileImageSha256s"] = json!(vec!["c".repeat(64); 9]);
+        fresh["frameSha256"] = json!("c".repeat(64));
+        fresh["observedAtMs"] = json!(now + 1);
+        for (index, candidate) in fresh["candidates"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .enumerate()
+        {
+            candidate["candidateId"] = json!(format!("tile:{}:{}", index + 1, "c".repeat(16)));
+        }
+        fresh["puzzleSha256"] = json!(image::digest(&(
+            &fresh["frameSha256"],
+            &fresh["candidates"],
+            &fresh["verify"],
+            profile
+        ))
+        .unwrap());
+        if round_fault == Some("partial") {
+            fresh["tileImageSha256s"][4] = json!("a".repeat(64));
+        }
+        if round_fault == Some("context") {
+            fresh["windowId"] = json!(8);
+        }
+        let mut second_capture = capture_params.clone();
+        second_capture["arguments"]["requestId"] = json!("image-observation-2");
+        task_operations::with_context(Some(&second_capture), || {
+            let response = task_operations::transport(json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":profile}), |_| Ok(crate::connection::Response { success:true, data:Some(json!({"nativeImageObservation":fresh})), ..Default::default() })).unwrap();
+            assert!(response.success);
+            Ok(Value::Null)
+        }).unwrap();
+        let mut second_input = json!({"action":"native_input","imageAttempt":{"originalRequestId":"image-attempt","observationRequestId":"image-observation-2","selectedCandidateIds":[format!("tile:2:{}", "c".repeat(16))]}});
+        if round_fault == Some("stale") {
+            second_input["imageAttempt"]["selectedCandidateIds"] =
+                input["imageAttempt"]["selectedCandidateIds"].clone();
+        }
+        if round_fault == Some("original") {
+            second_input["imageAttempt"]["originalRequestId"] = json!("different-attempt");
+        }
+        let second_params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_input","requestId":"image-attempt-2","params":second_input}});
+        task_operations::with_context(Some(&second_params), || {
+            let response = task_operations::transport(second_input.clone(), |command| {
+                let binding = crate::native::browser_task_operations::native_site_policy(
+                    &command,
+                    "https://owned.example.test",
+                )?;
+                crate::native::browser_task_operations::retain_native_site_policy(
+                    &command, &binding,
+                )?;
+                dispatched += 1;
+                Ok(crate::connection::Response {
+                    success: true,
+                    data: Some(json!({"source":"remote_view_native","delivery":"dispatched"})),
+                    ..Default::default()
+                })
+            });
+            if round_fault.is_some() {
+                assert!(response.is_err());
+            } else {
+                assert!(response.unwrap().success);
+            }
+            Ok(Value::Null)
+        })
+        .unwrap();
+        if round_fault.is_some() {
+            assert_eq!(dispatched, 1);
+            assert_eq!(
+                task_operations::lookup("task", "image-attempt").unwrap()["operation"],
+                first_round
+            );
+            return;
+        }
+        assert_eq!(dispatched, 2);
+        assert_eq!(
+            task_operations::lookup("task", "image-attempt").unwrap()["operation"],
+            first_round
+        );
+        let second = task_operations::lookup("task", "image-attempt-2").unwrap();
+        let second_round: Value = serde_json::from_str(
+            second["operation"]["evidenceReferences"]["nativeImageRound"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(second_round["snapshot"]["attemptId"], "image-attempt");
+        assert_eq!(second_round["snapshot"]["totalPointerEvents"], 15);
+        assert_eq!(second_round["snapshot"]["totalSelections"], 3);
+        assert_eq!(second_round["deadlineAtMs"], round["deadlineAtMs"]);
+        task_operations::with_context(Some(&second_params), || {
+            let replay = task_operations::transport(second_input.clone(), |_| {
+                panic!("second round replayed")
+            })
+            .unwrap();
+            assert_eq!(replay.data.unwrap()["dispatchAttempted"], false);
+            Ok(Value::Null)
+        })
+        .unwrap();
+    }
     let mut another = params.clone();
     another["arguments"]["requestId"] = json!("new-image-attempt");
     task_operations::with_context(Some(&another), || {
@@ -460,6 +599,19 @@ fn native_image_public_completion_case(
         Ok(Value::Null)
     })
     .unwrap();
+}
+
+#[test]
+fn native_image_rounds_public_original_retains_shared_budget() {
+    native_image_public_completion_case(true, true, None, true, None);
+}
+
+#[test]
+fn native_image_rounds_public_refusals_preserve_first_original() {
+    for fault in ["partial", "context", "stale", "original"] {
+        native_image_public_completion_case(true, true, None, true, Some(fault));
+    }
+    native_image_public_completion_case(false, true, None, true, None);
 }
 
 #[test]
