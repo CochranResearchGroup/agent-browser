@@ -102,12 +102,19 @@ export async function qualifyNativeImage({workflow,task,nextTask,primary,site,pr
   async function run(label,options={}) {
     const current=label==='success'?task:await nextTask(label),scene=label+'-'+randomUUID();oracle.create(scene,options);await stage(scene,options.unsupported);
     await waitForNativeCheckboxStability({readCapture:()=>workflow('browser_command',{taskId:current.taskId,action:'native_capture'}),save:value=>save('image471-'+label+'-readiness.json',value)});
-    const originalId='image471:'+randomUUID();let inputCalls=0;
+    const originalId='image471:'+randomUUID();let inputCalls=0,workflowErrorSequence=0;
     const client=createNativeImageChallengeClient({
       callTool:async(name,args)=>{
         const input=name==='browser_command'&&args.action==='native_input';if(input){inputCalls++;if(options.changedFrame){await primary.evaluate(()=>{document.querySelector('#image471-marker').style.background='#ff0000'});await primary.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));}}
         let value;
-        try{value=await workflow(name,args)}catch(error){if(input)await save('image471-'+label+'-input-error.json',{requestId:originalId,code:error?.code??error?.name,message:String(error?.message??error).slice(0,2048),application:oracle.state(scene),retryPerformed:false});throw error;}
+        try{value=await workflow(name,args)}catch(error){
+          // Preserve the public failure before the client's bounded fallback
+          // interprets it. This observer grants no retry or input authority.
+          try{
+            await save('image471-'+label+'-workflow-error-'+(++workflowErrorSequence)+'.json',{name,action:args.action??null,taskId:current.taskId,requestId:args.requestId??args.params?.requestId??null,code:error?.code??error?.name,message:String(error?.message??error).slice(0,2048),retryPerformed:false});
+            if(input)await save('image471-'+label+'-input-error.json',{requestId:originalId,code:error?.code??error?.name,message:String(error?.message??error).slice(0,2048),application:oracle.state(scene),retryPerformed:false});
+          }finally{throw error;}
+        }
         const content=[{type:'text',text:JSON.stringify({success:true,data:value})}];
         if(name==='browser_command'&&args.action==='native_capture'&&args.params?.classifyChallenges===true){
           const sha=value.capture?.capture?.sha256;assert.match(sha??'',/^[a-f0-9]{64}$/);
