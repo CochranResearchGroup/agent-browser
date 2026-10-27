@@ -47,6 +47,7 @@ export async function createOwnerAuthFixture({source=process.env.AUTH_RECEIPTS_S
  return {root,state,auth,browser,checkpoints,options,receiver,
   respond(action='allow_once',{actor='slack:owner',payload={}}={}){const prompt=state.prompts.at(-1);if(!prompt)throw Error('No synthetic prompt');state.decisions.push({id:'decision-'+state.decisions.length,requestId:prompt.requestId,applicationId:prompt.applicationId,actionSet:prompt.actionSet,version:prompt.version,actor,action,payload});},
   ownerCall:(operation,args={})=>authority.call({role:'approver',id:'owner'},operation,args),
+  async connectClient(taskId){const previous=process.env.CODEX_THREAD_ID;process.env.CODEX_THREAD_ID=taskId;try{return await connectHostedAuthHelper({installationRoot:candidate,discoveryFile});}finally{if(previous===undefined)delete process.env.CODEX_THREAD_ID;else process.env.CODEX_THREAD_ID=previous;}},
   async restart(){await host.close();await start();},
   async close(){await host?.close();relay.close();hub.close();await rm(root,{recursive:true,force:true});}
  };
