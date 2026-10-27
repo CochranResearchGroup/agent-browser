@@ -1,0 +1,65 @@
+# One static image round
+
+Use this opt-in profile only for a visible static 3×3 hCaptcha grid with the
+English instruction “Select all images containing buses” and one Verify button.
+It supports one round, at most four selected tiles and one Verify click. Other
+instructions, dynamic replacement, hidden/partial/duplicate grids and ambiguous
+images require the existing human-assistance path. Recognition alone grants no
+input authority.
+
+The task owner requires the exact profile/SitePolicy membership and one enabled
+`captcha_solve` provider with
+`configRef: agent-browser:remote-view-native-image-static-3x3:v1`.
+The SitePolicy must explicitly list that provider ID in `allowedChallengeProviders`;
+an empty list grants no image authority. The checkbox provider configuration
+does not authorize this image profile.
+Current verified CDP origin qualification remains required; Native perception
+and input use Remote View, and CDP-free tasks retain human assistance.
+
+## Observe, select, attempt
+
+Create one stable original observation ID through public `browser_command`:
+
+```json
+{"taskId":"TASK","action":"native_capture","requestId":"image:observation","params":{"classifyChallenges":true,"registeredActionId":"hcaptcha-image-grid-3x3-v1"}}
+```
+
+Inspect the actual returned Native image. `nativeImageObservation` contains the
+frame/puzzle identities and nine candidate IDs with owner-observed bounds. An
+image reader may propose candidate IDs, never coordinates or input instructions.
+Do not infer the selected IDs from fixture labels, application internals or a
+prearranged provider response. Unsupported or ambiguous content needs assistance.
+
+Submit the selected IDs once with a distinct stable original attempt ID:
+
+```json
+{"taskId":"TASK","action":"native_input","requestId":"image:attempt","params":{"imageAttempt":{"observationRequestId":"image:observation","selectedCandidateIds":["OWNER-OBSERVED-ID"]}}}
+```
+
+Do not combine `imageAttempt` with `actions`, `nativeAttempt` or a caller control
+epoch. The owner derives the tile centers and final Verify point, admits the
+selection through the existing visual-round kernel, retains the original before
+effects and revalidates exact task/process/window/frame/control evidence. The
+static image profile has a separate bounded 60-second observation/deadline;
+checkbox timing is unchanged. A changed frame still fails the Native owner's
+original `expectedVisual` guard. No recapture substitutes a new frame into an
+already admitted attempt.
+
+Image and checkbox actions share the same taskwide attempt budget. Another
+request ID, capture or family cannot renew a consumed attempt. A checkbox that
+opens an image puzzle therefore remains assistance under its already consumed
+budget; this profile can start directly at an eligible image puzzle.
+
+## Verify and recover
+
+Dispatch is not clearance. Independently observe puzzle clearance and the
+intended protected site's access, preserving the original task and operation
+identity. Access denial remains intervention even if the puzzle cleared. A
+rejection, unexpected next puzzle, expired observation or uncertain delivery
+requires bounded assistance/reconciliation. Inspect `task_operation` with the
+original attempt ID; pending and uncertain input never permits replay.
+
+Image bytes and raw OCR stay ephemeral. Durable evidence contains only bound
+identities, digests, geometry, budget and owner receipts. Source tests and owned
+synthetic Native qualification do not establish universal hCaptcha accuracy,
+real-account authorization, installation or production readiness.

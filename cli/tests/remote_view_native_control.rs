@@ -1,5 +1,9 @@
+// The durable round helpers are tested through the production MCP/store seam.
 #[path = "../src/native/browser_native_control.rs"]
 mod browser_native_control;
+#[allow(dead_code)]
+#[path = "../src/native/browser_native_image.rs"]
+mod browser_native_image;
 #[path = "../src/native/remote_view_application_http.rs"]
 mod remote_view_application_http;
 #[path = "../src/test_utils.rs"]
@@ -403,5 +407,482 @@ fn native_challenge_attempt_binds_original_visual_epoch_window_and_single_derive
             assert!(result.is_err(), "{condition}");
             assert!(inputs.is_empty(), "{condition}");
         }
+    }
+}
+
+struct ImagePuzzleOwner {
+    fixture: NativeFixture,
+}
+impl browser_native_control::NativeOwner for ImagePuzzleOwner {
+    fn request(
+        &mut self,
+        operation: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        use base64::Engine;
+        use sha2::Digest;
+        if operation == "observe" {
+            return self.fixture.request(operation, body);
+        }
+        if operation == "control" {
+            return Ok(
+                serde_json::json!({"desktopId":"viewing","generation":9,"owner":"agent","epoch":4}),
+            );
+        }
+        if operation == "input" {
+            return self.fixture.request(operation, body);
+        }
+        assert_eq!(operation, "ocr");
+        let mut image = image::RgbImage::from_pixel(1024, 768, image::Rgb([255, 255, 255]));
+        for row in 0..3 {
+            for column in 0..3 {
+                let (left, top) = (100 + column * 66, 200 + row * 66);
+                for y in top..top + 64 {
+                    for x in left..left + 64 {
+                        if x < left + 2 || x >= left + 62 || y < top + 2 || y >= top + 62 {
+                            image.put_pixel(x, y, image::Rgb([20, 20, 20]));
+                        }
+                    }
+                }
+            }
+        }
+        for y in 414..444 {
+            for x in 100..180 {
+                if x < 102 || x >= 178 || y < 416 || y >= 442 {
+                    image.put_pixel(x, y, image::Rgb([20, 20, 20]));
+                }
+            }
+        }
+        let mut encoded = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgb8(image)
+            .write_to(&mut encoded, image::ImageFormat::Png)
+            .unwrap();
+        let bytes = encoded.into_inner();
+        Ok(
+            serde_json::json!({"schemaVersion":1,"desktopId":"viewing","generation":9,"windowId":7,
+            "processIdentity":body["expectedProcessIdentity"],"region":body["region"],
+            "image":{"mimeType":"image/png","data":base64::engine::general_purpose::STANDARD.encode(&bytes)},
+            "capture":{"sha256":format!("{:x}",sha2::Sha256::digest(&bytes)),"width":1024,"height":768},
+            "ocr":{"state":"observed","engine":"tesseract","modelSha256":"b".repeat(64),"lines":[
+                {"text":"Select all images containing buses","confidence":95,"bounds":{"x":100,"y":160,"width":350,"height":20}},
+                {"text":"hCaptcha","confidence":95,"bounds":{"x":400,"y":170,"width":80,"height":20}},
+                {"text":"Verify","confidence":95,"bounds":{"x":114,"y":421,"width":50,"height":16}}
+            ]}}),
+        )
+    }
+}
+
+#[test]
+fn native_image_capture_registers_same_frame_candidates_without_input() {
+    let original = agent_browser_service_model::RecordedProcessIdentity {
+        pid: 42,
+        start_token: "linux:boot:11".into(),
+        executable_path: Some("/synthetic/chrome".into()),
+        browser_family: Some("chrome".into()),
+    };
+    let target = agent_browser_service_model::RemoteViewApplicationTarget {
+        assignment_id: "assignment".into(),
+        registration_id: "registration".into(),
+        desktop_id: "lifecycle".into(),
+        lifecycle_generation: 2,
+        viewing_desktop_id: "viewing".into(),
+        viewing_generation: 9,
+    };
+    let mut owner = ImagePuzzleOwner {
+        fixture: NativeFixture { calls: vec![] },
+    };
+    let result=browser_native_control::execute(&original,&target,&serde_json::json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":"hcaptcha-image-grid-3x3-v1"}),&mut owner).expect("supported static image grid must produce owner evidence");
+    assert_eq!(result["challenge"]["kind"], "image_puzzle");
+    assert_eq!(
+        result["nativeImageObservation"]["candidates"]
+            .as_array()
+            .unwrap()
+            .len(),
+        9
+    );
+    assert_eq!(
+        result["nativeImageObservation"]["frameSha256"],
+        result["capture"]["capture"]["sha256"]
+    );
+    assert!(!owner
+        .fixture
+        .calls
+        .iter()
+        .any(|(operation, _)| operation == "input"));
+    assert!(result["capture"].get("ocr").is_none());
+}
+
+#[test]
+fn native_image_attempt_derives_only_current_candidate_and_verify_points() {
+    let original = agent_browser_service_model::RecordedProcessIdentity {
+        pid: 42,
+        start_token: "linux:boot:11".into(),
+        executable_path: Some("/synthetic/chrome".into()),
+        browser_family: Some("chrome".into()),
+    };
+    let target = agent_browser_service_model::RemoteViewApplicationTarget {
+        assignment_id: "assignment".into(),
+        registration_id: "registration".into(),
+        desktop_id: "lifecycle".into(),
+        lifecycle_generation: 2,
+        viewing_desktop_id: "viewing".into(),
+        viewing_generation: 9,
+    };
+    let capture=browser_native_control::execute(&original,&target,&serde_json::json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":browser_native_image::PROFILE_ID}),&mut ImagePuzzleOwner{fixture:NativeFixture{calls:vec![]}}).unwrap();
+    let observed: browser_native_image::NativeImageObservation =
+        serde_json::from_value(capture["nativeImageObservation"].clone()).unwrap();
+    struct Owner {
+        fixture: NativeFixture,
+        evidence: browser_native_image::NativeImageObservation,
+        epoch: u64,
+    }
+    impl browser_native_control::NativeOwner for Owner {
+        fn native_image_attempt(
+            &mut self,
+            command: &serde_json::Value,
+        ) -> Result<browser_native_image::NativeImageObservation, String> {
+            let selected: Vec<String> =
+                serde_json::from_value(command["imageAttempt"]["selectedCandidateIds"].clone())
+                    .unwrap();
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64;
+            let plan = browser_native_image::plan(
+                "task",
+                "attempt",
+                &self.evidence,
+                &selected,
+                &serde_json::json!({"providerId":"native-image-provider","digest":"c".repeat(64)}),
+                now,
+            )?;
+            assert_eq!(plan.policy.max_rounds, 1);
+            assert_eq!(plan.intent.planned_pointer_events, 9);
+            assert_eq!(plan.snapshot.total_pointer_events, 0);
+            Ok(self.evidence.clone())
+        }
+        fn request(
+            &mut self,
+            operation: &str,
+            body: &serde_json::Value,
+        ) -> Result<serde_json::Value, String> {
+            if operation == "control" {
+                return Ok(
+                    serde_json::json!({"desktopId":"viewing","generation":9,"owner":"agent","epoch":self.epoch}),
+                );
+            }
+            self.fixture.request(operation, body)
+        }
+    }
+    let selected = vec![
+        observed.candidates[0].candidate_id.clone(),
+        observed.candidates[2].candidate_id.clone(),
+    ];
+    let mut owner = Owner {
+        fixture: NativeFixture { calls: vec![] },
+        evidence: observed.clone(),
+        epoch: 4,
+    };
+    let response=browser_native_control::execute(&original,&target,&serde_json::json!({"action":"native_input","imageAttempt":{"observationRequestId":"capture","selectedCandidateIds":selected}}),&mut owner).unwrap();
+    assert_eq!(response["delivery"], "dispatched");
+    let inputs = owner
+        .fixture
+        .calls
+        .iter()
+        .filter(|(operation, _)| operation == "input")
+        .collect::<Vec<_>>();
+    assert_eq!(inputs.len(), 1);
+    assert_eq!(
+        inputs[0].1["actions"],
+        serde_json::json!([{"kind":"click","x":132,"y":232,"button":1,"count":1},{"kind":"click","x":264,"y":232,"button":1,"count":1},{"kind":"click","x":140,"y":429,"button":1,"count":1}])
+    );
+    assert_eq!(
+        inputs[0].1["expectedVisual"]["sha256"],
+        observed.frame_sha256
+    );
+    assert_eq!(inputs[0].1["controlEpoch"], 4);
+    for condition in [
+        "changed_control",
+        "changed_window",
+        "expired",
+        "unknown_candidate",
+    ] {
+        let mut evidence = observed.clone();
+        if condition == "changed_window" {
+            evidence.window_id += 1;
+        }
+        if condition == "expired" {
+            evidence.observed_at_ms -= 60_001;
+        }
+        let mut selected = selected.clone();
+        if condition == "unknown_candidate" {
+            selected[0] = "tile:unknown:aaaaaaaaaaaaaaaa".into();
+        }
+        let mut owner = Owner {
+            fixture: NativeFixture { calls: vec![] },
+            evidence,
+            epoch: if condition == "changed_control" { 5 } else { 4 },
+        };
+        let result = browser_native_control::execute(
+            &original,
+            &target,
+            &serde_json::json!({"action":"native_input","imageAttempt":{"observationRequestId":"capture","selectedCandidateIds":selected}}),
+            &mut owner,
+        );
+        assert!(result.is_err(), "{condition}");
+        assert!(
+            !owner
+                .fixture
+                .calls
+                .iter()
+                .any(|(operation, _)| operation == "input"),
+            "{condition}"
+        );
+    }
+}
+
+#[test]
+fn native_image_malformed_attempt_never_falls_back_to_legacy_input() {
+    let original = agent_browser_service_model::RecordedProcessIdentity {
+        pid: 42,
+        start_token: "linux:boot:11".into(),
+        executable_path: Some("/synthetic/chrome".into()),
+        browser_family: Some("chrome".into()),
+    };
+    let target = agent_browser_service_model::RemoteViewApplicationTarget {
+        assignment_id: "assignment".into(),
+        registration_id: "registration".into(),
+        desktop_id: "lifecycle".into(),
+        lifecycle_generation: 2,
+        viewing_desktop_id: "viewing".into(),
+        viewing_generation: 9,
+    };
+    let valid = serde_json::json!({"observationRequestId":"capture","selectedCandidateIds":["tile:1:aaaaaaaaaaaaaaaa"]});
+    let mut cases=vec![serde_json::Value::Null,serde_json::json!(false),serde_json::json!("caller"),serde_json::json!({}),serde_json::json!({"observationRequestId":"capture","selectedCandidateIds":[]}),serde_json::json!({"observationRequestId":"capture","selectedCandidateIds":["one","one"]}),serde_json::json!({"observationRequestId":"capture","selectedCandidateIds":["one"],"x":99})].into_iter().map(|attempt|serde_json::json!({"action":"native_input","imageAttempt":attempt,"actions":[{"kind":"click","x":900,"y":700,"button":1,"count":1}]})).collect::<Vec<_>>();
+    for (key, value) in [
+        (
+            "actions",
+            serde_json::json!([{ "kind":"click","x":900,"y":700,"button":1,"count":1}]),
+        ),
+        (
+            "nativeAttempt",
+            serde_json::json!({"observationRequestId":"capture","registeredActionId":"hcaptcha-checkbox-p181-v2"}),
+        ),
+        ("controlEpoch", serde_json::json!(4)),
+    ] {
+        let mut command = serde_json::json!({"action":"native_input","imageAttempt":valid});
+        command[key] = value;
+        cases.push(command);
+    }
+    let bare = cases
+        .iter()
+        .map(|command| {
+            let mut command = command.clone();
+            command.as_object_mut().unwrap().remove("actions");
+            command
+        })
+        .collect::<Vec<_>>();
+    cases.extend(bare);
+    for command in cases {
+        let mut owner = NativeFixture { calls: vec![] };
+        assert!(
+            browser_native_control::execute(&original, &target, &command, &mut owner).is_err(),
+            "{command}"
+        );
+        assert!(
+            owner.calls.is_empty(),
+            "Malformed/mixed image input cannot reach legacy Native transport"
+        );
+    }
+}
+
+#[test]
+fn native_image_capture_offsets_absolute_ocr_and_local_pixels_exactly_once() {
+    struct OffsetOwner(ImagePuzzleOwner);
+    impl browser_native_control::NativeOwner for OffsetOwner {
+        fn request(
+            &mut self,
+            operation: &str,
+            body: &serde_json::Value,
+        ) -> Result<serde_json::Value, String> {
+            let mut value = self.0.request(operation, body)?;
+            if operation == "observe" {
+                value["geometry"]["current"] = serde_json::json!({"width":1200,"height":900});
+                value["windows"]["windows"][0]["x"] = serde_json::json!(20);
+                value["windows"]["windows"][0]["y"] = serde_json::json!(30);
+            }
+            if operation == "ocr" {
+                for line in value["ocr"]["lines"].as_array_mut().unwrap() {
+                    line["bounds"]["x"] =
+                        serde_json::json!(line["bounds"]["x"].as_u64().unwrap() + 20);
+                    line["bounds"]["y"] =
+                        serde_json::json!(line["bounds"]["y"].as_u64().unwrap() + 30);
+                }
+            }
+            Ok(value)
+        }
+    }
+    let original = agent_browser_service_model::RecordedProcessIdentity {
+        pid: 42,
+        start_token: "linux:boot:11".into(),
+        executable_path: Some("/synthetic/chrome".into()),
+        browser_family: Some("chrome".into()),
+    };
+    let target = agent_browser_service_model::RemoteViewApplicationTarget {
+        assignment_id: "assignment".into(),
+        registration_id: "registration".into(),
+        desktop_id: "lifecycle".into(),
+        lifecycle_generation: 2,
+        viewing_desktop_id: "viewing".into(),
+        viewing_generation: 9,
+    };
+    let capture=browser_native_control::execute(&original,&target,&serde_json::json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":browser_native_image::PROFILE_ID}),&mut OffsetOwner(ImagePuzzleOwner{fixture:NativeFixture{calls:vec![]}})).unwrap();
+    let observation: browser_native_image::NativeImageObservation =
+        serde_json::from_value(capture["nativeImageObservation"].clone()).unwrap();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    observation.validate(now).unwrap();
+    assert_eq!(observation.candidates[0].bounds.x, 120);
+    assert_eq!(observation.candidates[0].bounds.y, 230);
+    let actions = observation
+        .actions(&[observation.candidates[0].candidate_id.clone()])
+        .unwrap();
+    assert_eq!(actions[0]["x"], 152);
+    assert_eq!(actions[0]["y"], 262);
+    assert_eq!(actions[1]["x"], 160);
+    assert_eq!(actions[1]["y"], 459);
+}
+
+#[test]
+fn native_image_capture_refuses_unsupported_ambiguous_partial_or_changed_pixels() {
+    struct ChangedOwner {
+        inner: ImagePuzzleOwner,
+        case: &'static str,
+    }
+    impl browser_native_control::NativeOwner for ChangedOwner {
+        fn request(
+            &mut self,
+            operation: &str,
+            body: &serde_json::Value,
+        ) -> Result<serde_json::Value, String> {
+            use base64::Engine;
+            use sha2::Digest;
+            let mut value = self.inner.request(operation, body)?;
+            if operation != "ocr" {
+                return Ok(value);
+            }
+            if self.case == "unsupported" {
+                value["ocr"]["lines"][0]["text"] =
+                    serde_json::json!("Select all images containing cars");
+            }
+            if self.case == "low-score" {
+                value["ocr"]["lines"][0]["confidence"] = serde_json::json!(69);
+            }
+            if self.case == "dynamic" {
+                value["ocr"]["lines"].as_array_mut().unwrap().push(serde_json::json!({"text":"New images replace selected images","confidence":95,"bounds":{"x":100,"y":460,"width":250,"height":18}}));
+            }
+            if self.case == "wrong-frame" {
+                value["capture"]["sha256"] = serde_json::json!("f".repeat(64));
+            }
+            if matches!(self.case, "duplicate-grid" | "occluded" | "transparent") {
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(value["image"]["data"].as_str().unwrap())
+                    .unwrap();
+                let mut pixels = image::load_from_memory(&bytes).unwrap().to_rgba8();
+                if self.case == "duplicate-grid" {
+                    for row in 0..3 {
+                        for column in 0..3 {
+                            let (left, top) = (500 + column * 66, 200 + row * 66);
+                            for y in top..top + 64 {
+                                for x in left..left + 64 {
+                                    if x < left + 2
+                                        || x >= left + 62
+                                        || y < top + 2
+                                        || y >= top + 62
+                                    {
+                                        pixels.put_pixel(x, y, image::Rgba([20, 20, 20, 255]));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if self.case == "occluded" {
+                    for y in 200..202 {
+                        for x in 100..164 {
+                            pixels.put_pixel(x, y, image::Rgba([255, 255, 255, 255]));
+                        }
+                    }
+                }
+                if self.case == "transparent" {
+                    pixels.put_pixel(100, 200, image::Rgba([20, 20, 20, 0]));
+                }
+                let mut encoded = std::io::Cursor::new(Vec::new());
+                image::DynamicImage::ImageRgba8(pixels)
+                    .write_to(&mut encoded, image::ImageFormat::Png)
+                    .unwrap();
+                let bytes = encoded.into_inner();
+                value["image"]["data"] =
+                    serde_json::json!(base64::engine::general_purpose::STANDARD.encode(&bytes));
+                value["capture"]["sha256"] =
+                    serde_json::json!(format!("{:x}", sha2::Sha256::digest(&bytes)));
+            }
+            Ok(value)
+        }
+    }
+    let original = agent_browser_service_model::RecordedProcessIdentity {
+        pid: 42,
+        start_token: "linux:boot:11".into(),
+        executable_path: Some("/synthetic/chrome".into()),
+        browser_family: Some("chrome".into()),
+    };
+    let target = agent_browser_service_model::RemoteViewApplicationTarget {
+        assignment_id: "assignment".into(),
+        registration_id: "registration".into(),
+        desktop_id: "lifecycle".into(),
+        lifecycle_generation: 2,
+        viewing_desktop_id: "viewing".into(),
+        viewing_generation: 9,
+    };
+    for case in [
+        "unsupported",
+        "low-score",
+        "dynamic",
+        "wrong-frame",
+        "duplicate-grid",
+        "occluded",
+        "transparent",
+        "partial",
+    ] {
+        let mut owner = ChangedOwner {
+            inner: ImagePuzzleOwner {
+                fixture: NativeFixture { calls: vec![] },
+            },
+            case,
+        };
+        let mut command = serde_json::json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":browser_native_image::PROFILE_ID});
+        if case == "partial" {
+            command["region"] = serde_json::json!({"x":0,"y":0,"width":500,"height":480});
+        }
+        let result = browser_native_control::execute(&original, &target, &command, &mut owner);
+        if case == "wrong-frame" {
+            assert!(result.is_err());
+        } else {
+            assert!(
+                result.unwrap().get("nativeImageObservation").is_none(),
+                "{case}"
+            );
+        }
+        assert!(
+            !owner
+                .inner
+                .fixture
+                .calls
+                .iter()
+                .any(|(operation, _)| operation == "input"),
+            "{case}"
+        );
     }
 }

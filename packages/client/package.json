@@ -55,6 +55,10 @@
       "types": "./src/challenge-assistance.d.ts",
       "import": "./src/challenge-assistance.js"
     },
+    "./native-image-challenge": {
+      "types": "./src/native-image-challenge.d.ts",
+      "import": "./src/native-image-challenge.js"
+    },
     "./teaching-grilling": {
       "types": "./src/teaching-grilling.d.ts",
       "import": "./src/teaching-grilling.js"

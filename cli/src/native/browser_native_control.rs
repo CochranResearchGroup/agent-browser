@@ -105,6 +105,13 @@ pub trait NativeOwner {
     fn native_attempt(&mut self, _command: &Value) -> Result<NativeChallengeObservation, String> {
         Err("browser_native_original_operation_unavailable".into())
     }
+    /// Separate owner-minted static image evidence, never a checkbox envelope.
+    fn native_image_attempt(
+        &mut self,
+        _command: &Value,
+    ) -> Result<super::browser_native_image::NativeImageObservation, String> {
+        Err("browser_native_original_operation_unavailable".into())
+    }
 }
 /// The caller retains browser ownership and establishes current mode. The native
 /// owner independently fences the process, window, geometry and input epoch.
@@ -134,6 +141,11 @@ pub fn execute(
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|_| "browser_native_observation_clock_invalid")?
         .as_millis() as u64;
+    let image_selected = if command.get("imageAttempt").is_some() {
+        Some(super::browser_native_image::selection(command)?)
+    } else {
+        None
+    };
     let attempt = if command.get("nativeAttempt").is_some() {
         if command["action"] != "native_input" {
             return Err("browser_native_attempt_requires_input".into());
@@ -144,21 +156,34 @@ pub fn execute(
     } else {
         None
     };
+    let image_attempt = if image_selected.is_some() {
+        let evidence = owner.native_image_attempt(command)?;
+        evidence.validate(observed_at_ms)?;
+        Some(evidence)
+    } else {
+        None
+    };
     let registered_action = command
         .get("registeredActionId")
         .map(|value| {
             value
                 .as_str()
-                .filter(|id| agent_browser_challenge_control::challenge_profile(id).is_some())
+                .filter(|id| {
+                    agent_browser_challenge_control::challenge_profile(id).is_some()
+                        || *id == super::browser_native_image::PROFILE_ID
+                })
                 .ok_or("browser_native_registered_action_invalid")
         })
         .transpose()?;
     if registered_action.is_some() && !classify {
         return Err("browser_native_registered_action_requires_classification".into());
     }
-    let derived_actions = attempt.as_ref().map(|evidence| {
+    let mut derived_actions = attempt.as_ref().map(|evidence| {
         vec![json!({"kind":"click","x":evidence.x,"y":evidence.y,"button":1,"count":1})]
     });
+    if let (Some(evidence), Some(selected)) = (&image_attempt, &image_selected) {
+        derived_actions = Some(evidence.actions(selected)?);
+    }
     let actions = if let Some(actions) = derived_actions.as_ref() {
         Some(actions)
     } else if command["action"] == "native_input" {
@@ -280,6 +305,29 @@ pub fn execute(
         body["controlEpoch"] = json!(evidence.native_control_epoch);
         body["expectedVisual"] = json!({"region":evidence.region,"sha256":evidence.frame_sha256});
     }
+    if let Some(evidence) = &image_attempt {
+        if evidence.desktop_id != target.viewing_desktop_id
+            || evidence.generation != target.viewing_generation
+            || window["id"] != evidence.window_id
+            || body["expectedWindow"] != serde_json::to_value(&evidence.window).unwrap()
+            || width != u64::from(evidence.display_width)
+            || height != u64::from(evidence.display_height)
+            || super::browser_native_image::digest(&window["processIdentity"])?
+                != evidence.process_digest
+        {
+            return Err("browser_native_original_observation_context_changed".into());
+        }
+        let control=owner.request("control",&json!({"desktopId":target.viewing_desktop_id,"expectedGeneration":target.viewing_generation,"operation":"status"}))?;
+        if control["desktopId"] != target.viewing_desktop_id
+            || control["generation"] != target.viewing_generation
+            || control["owner"] != "agent"
+            || control["epoch"] != evidence.native_control_epoch
+        {
+            return Err("browser_native_original_observation_control_changed".into());
+        }
+        body["controlEpoch"] = json!(evidence.native_control_epoch);
+        body["expectedVisual"] = json!({"region":evidence.region,"sha256":evidence.frame_sha256});
+    }
     if command["action"] == "native_close" {
         // Remote View window.close destroys the window. Normal WM close is
         // requested through native input; exit remains independent evidence.
@@ -325,6 +373,7 @@ pub fn execute(
         let mut classification = None;
         let mut recognition = None;
         let mut native_observation = None;
+        let mut native_image_observation = None;
         let mut registered_target = None;
         let mut corroborated_target = None;
         if classify {
@@ -454,7 +503,21 @@ pub fn execute(
             recognition = Some(json!({"engine":capture["ocr"]["engine"],
                 "modelSha256":capture["ocr"]["modelSha256"],"lineCount":lines.len(),
                 "scoreMeaning":"OCR engine score, not a probability"}));
-            if let Some(action) = registered_action {
+            if registered_action == Some(super::browser_native_image::PROFILE_ID) {
+                if classification.as_ref().is_some_and(|value| {
+                    value.kind == agent_browser_challenge_control::NativeChallengeKind::ImagePuzzle
+                        && value.family == Some("hcaptcha")
+                        && value.complete_window
+                }) {
+                    native_image_observation = super::browser_native_image::observe(&bytes, &capture["ocr"], serde_json::from_value(json!({
+                        "desktopId":target.viewing_desktop_id,"generation":target.viewing_generation,"windowId":window["id"],
+                        "processDigest":super::browser_native_image::digest(&window["processIdentity"] )?,
+                        "window":body["expectedWindow"],"displayWidth":width,"displayHeight":height,"region":body["region"],
+                        "frameSha256":digest,"nativeControlEpoch":body["controlEpoch"],"observedAtMs":observed_at_ms,
+                        "registeredActionId":super::browser_native_image::PROFILE_ID,"puzzleSha256":"", "candidates":[],"verify":{"x":0,"y":0,"width":0,"height":0}
+                    })).map_err(|_| "browser_native_image_observation_invalid")?)?;
+                }
+            } else if let Some(action) = registered_action {
                 let located = match corroborated_target.as_ref().filter(|_| {
                     action == agent_browser_challenge_control::HCAPTCHA_PROFILE.profile_id
                 }) {
@@ -505,6 +568,10 @@ pub fn execute(
         if let Some(located) = registered_target {
             result["registeredTarget"] = located;
         }
+        if let Some(evidence) = native_image_observation {
+            result["nativeImageObservation"] = serde_json::to_value(evidence)
+                .map_err(|_| "browser_native_image_observation_invalid")?;
+        }
         if let Some(evidence) = native_observation {
             result["nativeObservation"] = serde_json::to_value(evidence)
                 .map_err(|_| "browser_native_original_observation_invalid")?;
@@ -515,6 +582,13 @@ pub fn execute(
         if let Some(epoch) = command.get("controlEpoch") {
             body["controlEpoch"] = epoch.clone();
         }
+    }
+    if let Some(evidence) = &image_attempt {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| "browser_native_observation_clock_invalid")?
+            .as_millis() as u64;
+        evidence.validate(now)?;
     }
     if let Some(evidence) = &attempt {
         let now = std::time::SystemTime::now()

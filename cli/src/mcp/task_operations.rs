@@ -178,6 +178,11 @@ pub(super) fn completion_failure_cause(error: &str) -> &'static str {
         "browser_native_original_observation_expired" => {
             "browser_native_original_observation_expired"
         }
+        "browser_native_image_observation_invalid" => "browser_native_image_observation_invalid",
+        "browser_native_image_observation_expired" => "browser_native_image_observation_expired",
+        "browser_native_image_round_invalid" => "browser_native_image_round_invalid",
+        "browser_native_image_round_changed" => "browser_native_image_round_changed",
+        "browser_native_image_round_missing" => "browser_native_image_round_missing",
         "browser_task_operation_original_missing" => "browser_task_operation_original_missing",
         "browser_task_operation_completion_conflict" => {
             "browser_task_operation_completion_conflict"
