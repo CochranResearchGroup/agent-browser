@@ -43,7 +43,7 @@ def native_owner_failure_diagnostic(failure):
         'native_x11_control_unavailable', 'native_x11_request', 'native_x11_reply',
         'native_x11_grab', 'native_x11_ungrab', 'native_x11_key_state',
         'native_x11_pointer_state', 'native_x11_hold_already_pressed',
-        'native_x11_lock_poisoned', 'native_x11_cleanup_uncertain',
+        'native_x11_lock_poisoned', 'native_x11_cleanup_uncertain', 'native_x11_release_unconfirmed',
         'input_control_busy', 'input_control_conflict', 'input_control_state_invalid',
         'input_control_lock', 'input_argv_empty', 'input_argv_limit',
         'input_command_incomplete', 'input_argument_invalid',
