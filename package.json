@@ -324,7 +324,7 @@
     "test:windows-browser-setup-powershell-live": "bash scripts/smoke-windows-browser-setup-powershell.sh",
     "test:wsl-windows-chromium-profile-live": "bash scripts/smoke-wsl-windows-chromium-profile.sh",
     "smoke:mcp-supported-client": "node scripts/smoke-mcp-supported-client.js",
-    "test:hosted-auth-helper": "node scripts/test-hosted-auth-helper.js && node scripts/test-hosted-credential-follow.js",
+    "test:hosted-auth-helper": "node scripts/test-hosted-auth-helper.js && node scripts/test-hosted-credential-follow.js && pnpm --dir docs exec tsc --noEmit --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext ../scripts/hosted-auth-follow-types.ts",
     "test:hosted-login-receiver": "node scripts/test-hosted-login-receiver.js && pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext ../packages/client/src/hosted-login-receiver.js",
     "test:native-receiving-browser": "node scripts/test-native-receiving-browser.js && pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext ../packages/client/src/native-receiving-browser.js",
     "test:hosted-auth-fixtures": "node scripts/test-native-fixture-custody.js && node scripts/test-hosted-auth-fixture-environment.js && node --check scripts/hosted-auth-native-fixture-host.mjs && node --check scripts/smoke-hosted-login-playbook.js",
