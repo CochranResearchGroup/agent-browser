@@ -248,20 +248,30 @@ fn native_completion_failure_causes_never_expose_unreviewed_details() {
 
 #[test]
 fn native_image_public_original_reserves_one_taskwide_attempt_and_never_replays() {
-    native_image_public_completion_case(false, false);
+    native_image_public_completion_case(false, false, None);
 }
 
 #[test]
 fn native_image_public_acknowledged_original_retains_typed_batch_budget() {
-    native_image_public_completion_case(true, false);
+    native_image_public_completion_case(true, false, None);
 }
 
 #[test]
 fn native_image_public_region_original_retains_scope_and_one_attempt() {
-    native_image_public_completion_case(true, true);
-    native_image_public_completion_case(false, true);
+    native_image_public_completion_case(true, true, None);
+    native_image_public_completion_case(false, true, None);
 }
-fn native_image_public_completion_case(acknowledged: bool, region: bool) {
+#[test]
+fn native_image_public_capture_expiry_reports_only_bounded_clock_values() {
+    for reason in ["future_timestamp", "age_exceeded"] {
+        native_image_public_completion_case(false, true, Some(reason));
+    }
+}
+fn native_image_public_completion_case(
+    acknowledged: bool,
+    region: bool,
+    clock_fault: Option<&str>,
+) {
     use crate::native::{
         browser_native_image as image, browser_session_store::BrowserSessionSqliteStore,
     };
@@ -339,6 +349,41 @@ fn native_image_public_completion_case(acknowledged: bool, region: bool) {
     ))
     .unwrap());
     let capture_params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_capture","requestId":"image-observation","params":{"classifyChallenges":true,"registeredActionId":image::PROFILE_ID}}});
+    if let Some(reason) = clock_fault {
+        let observed = if reason == "future_timestamp" {
+            now + 120_000
+        } else {
+            now - 120_000
+        };
+        observation["observedAtMs"] = json!(observed);
+        let mut failure = String::new();
+        task_operations::with_context(Some(&capture_params),||{
+            failure=match task_operations::transport(json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":image::PROFILE_ID}),|_|Ok(crate::connection::Response{success:true,data:Some(json!({"nativeImageObservation":observation})),..Default::default()})){Err(error)=>error,Ok(_)=>panic!("expired image observation must refuse completion")};Ok(Value::Null)
+        }).unwrap();
+        assert!(failure.contains("cause=browser_native_image_observation_expired"));
+        let safe: Value = serde_json::from_str(
+            failure
+                .split(";observationClock=")
+                .nth(1)
+                .expect("public completion must retain only bounded image clock diagnostics"),
+        )
+        .unwrap();
+        assert_eq!(safe["reason"], reason);
+        assert_eq!(safe["observedAtMs"], observed);
+        assert_eq!(safe.as_object().unwrap().len(), 4);
+        let validated = safe["validationNowMs"].as_u64().unwrap();
+        assert_eq!(safe["ageMs"], validated.saturating_sub(observed));
+        assert_eq!(reason == "future_timestamp", validated < observed);
+        assert_eq!(
+            task_operations::lookup("task", "image-observation").unwrap()["operation"]["state"],
+            "pending"
+        );
+        task_operations::with_context(Some(&capture_params),||{
+            let repeated=task_operations::transport(json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":image::PROFILE_ID}),|_|panic!("expired original must never redispatch capture")).unwrap();
+            assert!(!repeated.success);assert_eq!(repeated.data.unwrap()["replayed"],true);Ok(Value::Null)
+        }).unwrap();
+        return;
+    }
     task_operations::with_context(Some(&capture_params),||{
         let response=task_operations::transport(json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":image::PROFILE_ID}),|_|Ok(crate::connection::Response{success:true,data:Some(json!({"nativeImageObservation":observation})),..Default::default()})).expect("public image observation must complete");
         assert!(response.success);Ok(Value::Null)
@@ -346,14 +391,15 @@ fn native_image_public_completion_case(acknowledged: bool, region: bool) {
     let input = json!({"action":"native_input","imageAttempt":{"observationRequestId":"image-observation","selectedCandidateIds":[format!("tile:1:{}","a".repeat(16)),format!("tile:3:{}","a".repeat(16))]}});
     let params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_input","requestId":"image-attempt","params":input}});
     let mut dispatched = 0;
+    let mut admission_detail = String::new();
     task_operations::with_context(Some(&params), || {
         let response = task_operations::transport(input.clone(), |command| {
             dispatched += 1;
             let binding = crate::native::browser_task_operations::native_site_policy(
                 &command,
                 "https://owned.example.test",
-            )?;
-            crate::native::browser_task_operations::retain_native_site_policy(&command, &binding)?;
+            ).map_err(|error| {admission_detail=format!("policy:{} clock={:?}",error.split(':').next().unwrap_or("unknown"),task_operations::completion_failure_clock(&error));error})?;
+            crate::native::browser_task_operations::retain_native_site_policy(&command, &binding).map_err(|error| {admission_detail=format!("publication:{} clock={:?}",error.split(':').next().unwrap_or("unknown"),task_operations::completion_failure_clock(&error));error})?;
             Ok(crate::connection::Response {
                 success: acknowledged,
                 data: Some(json!({"source":"remote_view_native","delivery":"dispatched"})),
@@ -361,7 +407,7 @@ fn native_image_public_completion_case(acknowledged: bool, region: bool) {
                 ..Default::default()
             })
         })
-        .expect("completed original must remain readable");
+        .unwrap_or_else(|error|panic!("completed original must remain readable: {error}; owner admission={admission_detail}"));
         assert_eq!(response.success, acknowledged);
         Ok(Value::Null)
     })
@@ -436,5 +482,51 @@ fn native_image_completion_diagnostics_discard_every_private_suffix() {
             task_operations::completion_failure_cause(&format!("unknown-{code}:private")),
             "unclassified"
         );
+    }
+}
+
+#[test]
+fn native_image_completion_clock_diagnostics_are_exact_and_content_free() {
+    let future =
+        json!({"reason":"future_timestamp","observedAtMs":100,"validationNowMs":99,"ageMs":0});
+    let old =
+        json!({"reason":"age_exceeded","observedAtMs":100,"validationNowMs":60101,"ageMs":60001});
+    for valid in [&future, &old] {
+        assert_eq!(
+            task_operations::completion_failure_clock(&format!(
+                "browser_native_image_observation_expired:{valid}"
+            )),
+            Some(valid.clone())
+        );
+    }
+    let mut bads = vec![
+        json!({}),
+        json!("/private/path SELECT password"),
+        json!({"reason":"future_timestamp","observedAtMs":100,"validationNowMs":101,"ageMs":0}),
+        json!({"reason":"age_exceeded","observedAtMs":100,"validationNowMs":60100,"ageMs":60000}),
+    ];
+    for key in ["reason", "observedAtMs", "validationNowMs", "ageMs"] {
+        let mut bad = future.clone();
+        bad[key] = json!("/private/path SELECT password");
+        bads.push(bad);
+    }
+    let mut extra = future.clone();
+    extra["privatePath"] = json!("/private/path SELECT password");
+    bads.push(extra);
+    let mut inconsistent = old.clone();
+    inconsistent["ageMs"] = json!(60002);
+    bads.push(inconsistent);
+    for bad in bads {
+        assert!(task_operations::completion_failure_clock(&format!(
+            "browser_native_image_observation_expired:{bad}"
+        ))
+        .is_none());
+    }
+    for bad in [
+        format!("browser_native_image_observation_expired:{future}:SELECT password"),
+        format!("unknown:{future}"),
+        "browser_native_image_observation_expired:/private/path SELECT password".into(),
+    ] {
+        assert!(task_operations::completion_failure_clock(&bad).is_none());
     }
 }

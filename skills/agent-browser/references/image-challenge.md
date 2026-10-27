@@ -86,3 +86,11 @@ SHA verbatim in `expectedVisual`; whole-window/process/control fences remain.
 Subsequent observation uses the same region. Partial unknown classification
 alone proves no clearance: both independent clearance and protected-access
 checks remain mandatory. Never crop a retained original or refresh its guard.
+
+A refused capture completion can report the static expiry cause with a bounded
+`observationClock` diagnostic: `reason`, `observedAtMs`, `validationNowMs`, and
+`ageMs`. Reasons distinguish `future_timestamp` from `age_exceeded`. Age is
+nonnegative elapsed milliseconds, clamped to zero for a future timestamp; use
+the two timestamps to inspect that direction. These values grant no authority
+and do not alter the 60-second limit. Inspect the retained original without
+replaying capture or input.
