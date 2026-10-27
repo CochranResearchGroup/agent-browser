@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P296 Native checkbox qualification](0296-native-checkbox-470-source-receipt.md): both families, passive and bounded refusal/no-replay cases qualify on actual Native controls with independent HTTPS checks and exact cleanup; installation and production remain separate.
+
 [P295 standalone Auth installed qualification](0295-2026-10-26-installed-owner-auth.md): isolated default SDK/discovery, physically enrolled Chrome, actual capture fences, same-target password/TOTP and restart; production and real-provider acceptance remain separate.
 
 [P293 paired asset delivery](0293-2026-10-25-dashboard-asset-delivery.md):170 requests pass with stable serving identity; original timeout remains unreproduced under422.

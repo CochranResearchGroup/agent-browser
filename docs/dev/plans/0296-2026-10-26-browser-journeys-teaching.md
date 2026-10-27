@@ -5,7 +5,7 @@ Status: OPEN
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/466
 Integration branch: recipes/spec466-integration
 Integration base: 5770d693b23d51c9932574fa68e012a98029ce73
-Validated source tip:5a9f53ebdc09b1c591604a191999bc3e673ae1b0; latest documentation checkpoint follows on recipes/spec466-integration / draft PR480.
+Validated source tip:fe6a3ddeef3b3a926aaa2165e6d9aa2b8025419c; latest documentation checkpoint follows on recipes/spec466-integration / draft PR480.
 
 ## Custody and scope
 
@@ -20,7 +20,7 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 | 467 | none | validated | root | recipes/spec466-integration / duplicate-403 | Reopened regression repairedff812bf0f; model2/MCP151/strictClippy/fmt PASS34d400f0e; tracker CLOSED after requalification |
 | 468 | 467 | validated | root | recipes/spec466-integration / duplicate-403 | worker045dd85a; integration96fad35a2; combined HTTPS + repaired Native019 PASS; tracker reclosed |
 | 469 | 467 | validated | implement_469 | challenge/native-assistance-469 / spec466-469 | workeref57c4a0; combinedb7 Native019 attached/CDP-free PASS; tracker CLOSED |
-| 470 | 468,469 | running | root | recipes/spec466-integration + frozen native-checkbox-470 fixture | workerb574 integrated; combined0adf gates/build PASS; actual qualification pending, tracker OPEN |
+| 470 | 468,469 | validated | root | recipes/spec466-integration + native-checkbox-470 auxiliary | fe6a/ef948 source gates and actual037 bounded checkbox lane PASS; peer-preserving cleanup and940-generation census qualified; tracker closure follows source receipt |
 | 471 | 470 | pending | unassigned | pending | none |
 | 472 | 471 | pending | unassigned | pending | none |
 | 473 | none | validated | implement_473 | recipes/teaching-evidence-473 / profile-proof | worker ea0e2f42ab59; integration67780a8b1; synthetic cases and shared docs validation pass; tracker CLOSED with explicit source/synthetic receipt |
