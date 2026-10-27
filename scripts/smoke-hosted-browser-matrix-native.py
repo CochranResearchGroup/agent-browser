@@ -587,7 +587,9 @@ def main():
               'deadlineSeconds': workload_seconds, 'cleanupDeadlineSeconds': 180,
               'installationId': fixture.installation_id if fixture else None,
               'fixtureImageDisposition': 'Native fixture retains uniquely tagged build images as artifacts; no image-absence claim',
-              'scope': ('Native input diagnosis only; no full-matrix acceptance' if args.input_diagnostic else
+              'actualNativeInput': False if args.checkbox_observe_only else None,
+              'challengeInputDispatched': False if args.checkbox_observe_only else None,
+              'scope': ('Read-only owned synthetic Native capture/rendered-state diagnosis; no checkbox acceptance' if args.checkbox_observe_only else 'Native input diagnosis only; no full-matrix acceptance' if args.input_diagnostic else
                         'One same-pair synthetic matrix on isolated Native resources; no production/account/relocation acceptance')}
     h.private_json(args.results / 'combined-matrix-receipt.json', result)
     print(json.dumps(result))

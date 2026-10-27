@@ -628,7 +628,9 @@ try{workload:{
   await qualifyNativeCheckbox({workflow:publicWorkflow,task:opened,nextTask:async label=>{
     const current=await attachInBots(bot,'checkbox470-'+label+'-'+randomUUID(),'Owned Native checkbox '+label);borrowedTasks.push(current);return current;
   },primary,site,profilePath,configFile:join(agentHome,'config.json'),faultFile:join(evidence,'native-checkbox-fault.json'),oracle:checkboxOracle,save,continuity,observeOnly:process.env.HOSTED_SMOKE_NATIVE_CHECKBOX_OBSERVE_ONLY==='1'});
-  await save('native-input-diagnostic.json',{passed:true,fullMatrix:false,scope:'Owned Native checkbox/passive assistance, owner policy and independent HTTPS oracle'});break workload;
+  await save('native-input-diagnostic.json',process.env.HOSTED_SMOKE_NATIVE_CHECKBOX_OBSERVE_ONLY==='1'
+    ?{passed:true,fullMatrix:false,diagnosticKind:'read_only_native_checkbox_capture',actualNativeInput:false,challengeInputDispatched:false,scope:'Owned synthetic Native capture/rendered-state diagnosis only; no checkbox acceptance'}
+    :{passed:true,fullMatrix:false,scope:'Owned Native checkbox/passive assistance, owner policy and independent HTTPS oracle'});break workload;
  }
  if(process.env.HOSTED_SMOKE_OBSERVATION_AGE_PROBE==='1'){
   step='current-native-observation-age';await probeCurrentNativeObservationAge({workflow:publicWorkflow,task:opened,consumerControl,save});
