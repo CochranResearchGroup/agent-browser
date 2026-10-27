@@ -1207,7 +1207,7 @@ Owner login takes service/account intent, exact target and operation identity,
 then discovers bounded records and preserves owner review before private use.
 Routine metadata must carry the current task/profile/browser/tab/generation;
 missing or changed evidence holds rather than being filled with caller guesses.
-TOTP can start after SSO without a password request. After password use, pass the original request ID so Auth can bind an account-less factor screen to that exact attempt. The helper requests the factor through Auth's observed continuation action. Number matching follows an
+TOTP can start after SSO without a password request. After password use, pass the original request ID so Auth can bind an account-less factor screen to that exact attempt. The helper requests the factor through Auth's observed continuation action. If several factors match, `factor_choice_required` retains bounded issuer/account/source labels alongside each record ID. Select a returned `recordId` and resume the same checkpoint; the helper does not guess or repeat discovery. Number matching follows an
 existing private attempt; an ordinary caller cannot supply a number or decision.
 All factories retain original request custody and independently verify identity.
 `reconcile: true` on owner login is readback-only and requires an existing checkpoint.

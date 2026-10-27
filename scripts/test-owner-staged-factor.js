@@ -12,7 +12,7 @@ if(!source)throw Error('Set reviewed AUTH_RECEIPTS_SOURCE');
 const load=file=>import(pathToFileURL(join(source,file)).href);
 const [{openKeePassBackend},{createKeePassSource},{openNativeBrowserReceiver}]=await Promise.all([load('src/keepass-backend.mjs'),load('src/credential-sources.mjs'),load('src/native-browser-receiver.mjs')]);
 const seed='GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ',account='owner@example.test',origin='https://billing.example';
-async function fixture({format='legacy',loseSubmit=false,materials=true,staleHeader=false}={}){
+async function fixture({format='legacy',loseSubmit=false,materials=true,staleHeader=false,extraFactor=false}={}){
  let backend,archive;
  const f=await createOwnerAuthFixture({configure:async({root,state,receiving,sourcePort,now})=>{
   state.time=45000;state.password=true;state.factorInputs=0;state.factorSubmits=0;state.providerAccepted=false;state.proofVisible=!loseSubmit;state.focused=false;
@@ -20,6 +20,7 @@ async function fixture({format='legacy',loseSubmit=false,materials=true,staleHea
   backend=await openKeePassBackend({directory,password:async()=>'SYNTHETIC-VAULT-ONLY'});const authorize=async()=>true;
   await backend.initialize({authorize});const expectedVersion=await backend.version(),uri=`otpauth://totp/Example:%20${account}?secret=${seed}&issuer=Example`;
   archive=format==='legacy'?await backend.archiveMfa({uri},{authorize,expectedVersion,attemptId:'synthetic-archive'}):await backend.archiveMaterials({fingerprint:'a'.repeat(64),records:[{kind:'mfa',name:'Example',input:{kind:'uri',value:uri}}]},{authorize,expectedVersion,attemptId:'synthetic-archive'});
+  if(extraFactor)await backend.archiveMfa({uri:`otpauth://totp/Alternate:${account}?secret=${seed}&issuer=Alternate`},{authorize,expectedVersion:await backend.version(),attemptId:'extra-archive'});
   const box=(x,y,width,height)=>({x,y,width,height});
   const element=(path,role,name,bounds,parentPath)=>({path,role,name,text:name,bounds,parentPath,states:['showing','visible',...(path==='code'&&state.focused?['focused']:[])]});
   const elements=()=>[
@@ -91,3 +92,21 @@ console.log('Normal owner helper binds and privately validates both archived MFA
  }finally{await f.close();}
 }
 console.log('Lost native validation acknowledgement recovers the original helper request without another code or submit');
+
+{
+ const f=await fixture({extraFactor:true});
+ try{
+  const auth={callerTaskId:f.auth.callerTaskId,async helper(operation,args){const value=await f.auth.helper(operation,args);return operation==='observe_authentication'?{...value,candidates:value.candidates.map(c=>({...c,seed,unreviewedField:'SYNTHETIC-EXTRA'}))}:value;}};
+  const flow=createOwnerTotpContinuation({auth,browser:f.browser,checkpoints:f.checkpoints}),choice=await flow.advance(f.options);
+  assert.equal(choice.reasonCode,'factor_choice_required');assert.equal(choice.candidates.length,2);
+  assert.deepEqual(choice.candidates.map(c=>c.issuer).sort(),['Alternate','Example']);
+  assert.ok(choice.candidates.every(c=>c.account===account&&c.method==='totp'&&c.staged===true));
+  assert.equal(JSON.stringify(choice).includes(seed),false);assert.equal(JSON.stringify(choice).includes('SYNTHETIC-EXTRA'),false);assert.equal(f.state.factorInputs,0);
+  const recordId=choice.candidates.find(c=>c.issuer==='Example').recordId;await f.restart();
+  const resumed=createOwnerTotpContinuation({auth:f.auth,browser:f.browser,checkpoints:f.checkpoints}),options={...f.options,recordId};
+  const pending=await resumed.advance(options);assert.equal(pending.reasonCode,'approval_required');
+  f.respond();const complete=await resumed.advance(options);assert.equal(complete.status,'completed');
+  const selected=await f.auth.helper('inspect_credential_request',{requestId:pending.requestId});assert.equal(selected.recordId,recordId);assert.equal(f.state.factorInputs,1);
+ }finally{await f.close();}
+}
+console.log('Ambiguous archived authenticators retain issuer/account labels for one explicit choice');

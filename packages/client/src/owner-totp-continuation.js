@@ -66,7 +66,10 @@ export function createOwnerTotpContinuation({auth,browser,checkpoints}){
      let need;try{need=await auth.helper('observe_authentication',{origin:options.origin,targetId:options.targetId,...(originalRequest?{originalRequestId:originalRequest.requestId}:{})});}catch(error){return result('waiting',errorCode(error),'no_effect');}
      if(need.method!=='totp')return result('waiting',need.method?'authentication_method_unsupported':need.heldFor??'authentication_observation_unavailable','no_effect');
      if(need.state!=='authentication_required'||need.nextAction?.operation!=='continue_authentication'||!nonempty(need.continuationId)||need.nextAction.args?.continuationId!==need.continuationId||!Number.isSafeInteger(need.expiresAt)||need.expiresAt>Math.min(options.expiresAt,originalDeadline??options.expiresAt))return result('waiting',need.heldFor??'authentication_continuation_unavailable','no_effect');
-     const candidates=Array.isArray(need.candidates)?need.candidates.filter(candidate=>nonempty(candidate.recordId)).map(candidate=>({recordId:candidate.recordId})):[];
+     const candidates=Array.isArray(need.candidates)?need.candidates.filter(candidate=>nonempty(candidate.recordId)).map(candidate=>({recordId:candidate.recordId,
+      // Preserve only bounded choice labels, never arbitrary producer fields.
+      ...Object.fromEntries(['sourceId','issuer','account','name'].filter(field=>typeof candidate[field]==='string'&&candidate[field].length<=512&&!/[\x00-\x1f\x7f]/.test(candidate[field])).map(field=>[field,candidate[field]])),
+      ...(['totp','hotp'].includes(candidate.method)?{method:candidate.method}:{}),...(candidate.staged===true?{staged:true}:{})})):[];
      if(!candidates.length)return result('waiting','credential_unavailable','no_effect');
      checkpoint={contract,intent,receiving:Object.fromEntries(receivingFields.map(field=>[field,observed[field]])),preparedPlan:preparation.plan,continuationId:need.continuationId,expiresAt:need.expiresAt,candidates};
      await checkpoints.save(key,checkpoint);
