@@ -5,6 +5,185 @@ use super::*;
 use std::cell::RefCell;
 use std::path::Path;
 
+#[test]
+fn native_policy_publication_focus_reuses_exact_owner_activity_snapshot() {
+    use super::super::browser_task_operations as operations;
+    for case in ["own", "foreign_before", "foreign_after", "epoch_after"] {
+        let root =
+            std::env::temp_dir().join(format!("native-focus-policy-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join(".agent-browser/service")).unwrap();
+        let environment = crate::test_utils::EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+            "AGENT_BROWSER_CONFIG",
+        ]);
+        environment.set("HOME", root.to_str().unwrap());
+        environment.set("AGENT_BROWSER_HOME", root.to_str().unwrap());
+        environment.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        environment.remove("AGENT_BROWSER_CONFIG");
+        let fixture = Fixture::with_root(root.join(".agent-browser/service"), true);
+        assert_eq!(
+            BrowserSessionSqliteStore::default_sqlite_path().unwrap(),
+            fixture.root.join("runtime.sqlite3")
+        );
+        let provider = Rc::new(RefCell::new(Provider::default()));
+        let calls = Rc::new(Cell::new(0));
+        let mut consumer = host(&fixture, provider.clone(), calls.clone());
+        let opened = consumer
+            .open(OpenBrowserSession::exact_profile(
+                "Native",
+                "profile-a",
+                100,
+            ))
+            .unwrap();
+        consumer
+            .tab_for_navigation(&opened.session_id, 101)
+            .unwrap();
+        let mut state = consumer.state().clone();
+        drop(consumer);
+        let session = state.sessions[&opened.session_id].clone();
+        let browser = state.browsers[&opened.browser_id].clone();
+        let tab = state.tabs[session.current_tab_id.as_ref().unwrap()].clone();
+        let epoch = super::super::browser_host_control::read(&browser.id)
+            .unwrap()
+            .epoch;
+        let identity = fixture
+            .store(false)
+            .original_browser_identity(&state, &browser);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        let observation = serde_json::json!({"desktopId":"viewing","generation":9,"windowId":7,"window":{"x":0,"y":0,"width":320,"height":200},"displayWidth":320,"displayHeight":200,"region":{"x":0,"y":0,"width":320,"height":200},"frameSha256":"a".repeat(64),"nativeControlEpoch":4,"observedAtMs":now,"registeredActionId":"hcaptcha-checkbox-p181-v2","family":"hcaptcha","candidateSha256":"b".repeat(64),"x":50,"y":50});
+        let row = |id: &str, action: &str, status: &str, refs: Value| {
+            serde_json::from_value::<BrowserTaskOperation>(serde_json::json!({"requestId":id,"taskId":session.id,"profileId":session.profile_id,"browserId":browser.id,"tabId":tab.id,"targetId":tab.target_id,"processPid":browser.pid,"processIdentity":identity,"controlEpoch":epoch,"action":action,"fingerprint":"private-fixture","state":status,"createdAtMs":now,"completedAtMs":null,"evidenceReferences":refs})).unwrap()
+        };
+        state.task_operations.insert(session.id.clone(),std::collections::BTreeMap::from([
+        ("capture".into(),row("capture","native_capture","owner_acknowledged",serde_json::json!({"nativeObservation":observation.to_string()}))),
+        ("attempt".into(),row("attempt","native_input","pending",serde_json::json!({"nativeObservationRequestId":"capture","nativeRegisteredActionId":"hcaptcha-checkbox-p181-v2"})))
+    ]));
+        fixture.store(false).save_session_state(&state).unwrap();
+        provider.borrow_mut().window_pid = Some(browser.pid);
+        let launches_before = calls.get();
+        let mut effects = RemoteViewSessionEffects::new(
+            Process {
+                mode: Mode::Success,
+                root: fixture.root.clone(),
+                calls: calls.clone(),
+            },
+            adapter(&fixture, provider),
+            fixture.store(false),
+            Vec::new(),
+            || uuid::Uuid::new_v4().to_string(),
+        )
+        .unwrap();
+        effects.begin_operation(&state).unwrap();
+        let mut consumer = BrowserSessionHost::load(
+            fixture.store(false),
+            effects,
+            &fixture.root.join("unused.json"),
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_view_desktops: Vec::new(),
+                default_disposable_policy: None,
+                exact_url_history_maximum_bytes: 1024,
+            },
+        )
+        .unwrap();
+        let command = serde_json::json!({"id":"attempt","action":"native_input","sessionId":session.id,"nativeAttempt":{"observationRequestId":"capture","registeredActionId":"hcaptcha-checkbox-p181-v2"}});
+        let binding = serde_json::json!({"sitePolicyId":"owned-site","digest":"d".repeat(64),"providerId":"owned-native-provider","family":"hcaptcha","registeredActionId":"hcaptcha-checkbox-p181-v2"});
+        if case == "foreign_before" {
+            fixture
+                .store(false)
+                .mutate_session_state(|current| {
+                    current.tabs.get_mut(&tab.id).unwrap().target_id = "competing-target".into();
+                    Ok(())
+                })
+                .unwrap();
+            assert!(operations::retain_native_site_policy_for_owner(
+                &mut fixture.store(false),
+                &command,
+                &binding,
+                &state
+            )
+            .err()
+            .unwrap()
+            .contains("publication_conflict"));
+            let current = fixture.store(false).load_session_state().unwrap();
+            assert!(!current.task_operations[&session.id]["attempt"]
+                .evidence_references
+                .contains_key("nativeSitePolicy"));
+            assert_eq!(calls.get(), launches_before);
+            continue;
+        }
+        let publication = operations::retain_native_site_policy_for_owner(
+            &mut fixture.store(false),
+            &command,
+            &binding,
+            &state,
+        )
+        .unwrap();
+        if case == "foreign_after" {
+            fixture
+                .store(false)
+                .mutate_session_state(|current| {
+                    current.tabs.get_mut(&tab.id).unwrap().target_id = "competing-target".into();
+                    Ok(())
+                })
+                .unwrap();
+        }
+        if case == "epoch_after" {
+            super::super::browser_host_control::change(
+                &browser.id,
+                "takeover",
+                epoch,
+                "owned-test",
+                "foreign control change after policy publication",
+                false,
+            )
+            .unwrap();
+        }
+        let target = RemoteViewTabHandoffTarget {
+            session,
+            browser,
+            tab,
+        };
+        let result = consumer.focus_native_policy_publication(&target, &publication);
+        if case == "own" {
+            assert!(result.is_ok(),"Exact own policy publication must not invalidate legitimate focus admission: {result:?}");
+        } else {
+            assert!(
+                result.unwrap_err().contains("publication_conflict"),
+                "{case}"
+            );
+            assert!(
+                fixture
+                    .store(false)
+                    .browser_activity_records()
+                    .unwrap()
+                    .is_empty(),
+                "A rejected context cannot gain focus activity"
+            );
+        }
+        assert_eq!(
+            calls.get(),
+            launches_before,
+            "Native focus must not launch or replace a browser"
+        );
+        let current = fixture.store(false).load_session_state().unwrap();
+        assert_eq!(
+            current.task_operations[&target.session.id]["attempt"].state,
+            BrowserTaskOperationState::Pending
+        );
+        assert_eq!(
+            current.task_operations[&target.session.id]["attempt"].evidence_references
+                ["nativeChallengeState"],
+            "solving"
+        );
+    }
+}
+
 #[derive(Default)]
 struct Provider {
     assignments: Vec<RemoteViewAssignmentRecord>,

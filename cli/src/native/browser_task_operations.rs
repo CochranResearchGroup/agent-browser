@@ -739,15 +739,70 @@ pub(crate) fn native_site_policy(command: &Value, verified_origin: &str) -> Resu
 /// Bind verified owner policy to the already-pending original before focus or
 /// input. Later checks tolerate unrelated Service State activity, never policy
 /// or origin changes. No recognized page text or URL path is retained.
+#[cfg(test)]
 pub(crate) fn retain_native_site_policy(command: &Value, binding: &Value) -> Result<(), String> {
+    let mut store = BrowserSessionSqliteStore::default_sqlite()?;
+    let expected = store.load_session_state()?;
+    retain_native_site_policy_for_owner(&mut store, command, binding, &expected).map(|_| ())
+}
+
+/// Process-local proof of one exact owner journal publication. It cannot be
+/// supplied by a browser command or reconstructed from a caller label.
+pub(crate) struct NativePolicyPublication {
+    before: BrowserSessionState,
+    after: BrowserSessionState,
+    context: RetainedContext,
+}
+
+impl NativePolicyPublication {
+    pub(crate) fn check_before(&self, state: &BrowserSessionState) -> Result<(), String> {
+        if state != &self.before {
+            return Err("browser_native_policy_publication_conflict".into());
+        }
+        Ok(())
+    }
+    pub(crate) fn check_current(&self, state: &BrowserSessionState) -> Result<(), String> {
+        if state != &self.after || context(state, &self.context.task_id)? != self.context {
+            return Err("browser_native_policy_publication_conflict".into());
+        }
+        Ok(())
+    }
+    pub(crate) fn snapshot(&self) -> &BrowserSessionState {
+        &self.after
+    }
+}
+
+pub(crate) fn retain_native_site_policy_for_owner(
+    store: &mut BrowserSessionSqliteStore,
+    command: &Value,
+    binding: &Value,
+    expected: &BrowserSessionState,
+) -> Result<NativePolicyPublication, String> {
     let task = command["sessionId"]
         .as_str()
         .ok_or("browser_native_original_operation_invalid")?;
     let request = command["id"]
         .as_str()
         .ok_or("browser_native_original_operation_invalid")?;
-    BrowserSessionSqliteStore::default_sqlite()?.mutate_session_state(|state| {
+    let after = store.mutate_session_state(|state| {
+        if state != expected {
+            return Err("browser_native_policy_publication_conflict".into());
+        }
         check_expected(state, command)?;
+        let original = state
+            .task_operations
+            .get(task)
+            .and_then(|rows| rows.get(request))
+            .filter(|row| {
+                row.action == "native_input"
+                    && row.state == BrowserTaskOperationState::Pending
+                    && row.request_id == request
+                    && row.task_id == task
+            })
+            .ok_or("browser_native_original_operation_missing")?;
+        if RetainedContext::from_operation(original) != context(state, task)? {
+            return Err("browser_native_original_observation_context_changed".into());
+        }
         let observation = original_native_observation(state, task, command)?;
         if let Some(prior) = state
             .task_operations
@@ -758,7 +813,7 @@ pub(crate) fn retain_native_site_policy(command: &Value, binding: &Value) -> Res
             let prior: Value =
                 serde_json::from_str(prior).map_err(|_| "browser_native_site_policy_invalid")?;
             return if prior["digest"] == binding["digest"] {
-                Ok(())
+                Ok(state.clone())
             } else {
                 Err("browser_native_site_policy_changed".into())
             };
@@ -791,7 +846,13 @@ pub(crate) fn retain_native_site_policy(command: &Value, binding: &Value) -> Res
             "nativeChallengeDeadlineAtMs".into(),
             policy.deadline_at_ms.to_string(),
         );
-        Ok(())
+        Ok(state.clone())
+    })?;
+    let retained = RetainedContext::from_operation(&after.task_operations[task][request]);
+    Ok(NativePolicyPublication {
+        before: expected.clone(),
+        after,
+        context: retained,
     })
 }
 

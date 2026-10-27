@@ -47,7 +47,20 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             command,
         )?;
         let binding = super::super::browser_task_operations::native_site_policy(command, &origin)?;
-        super::super::browser_task_operations::retain_native_site_policy(command, &binding)?;
+        let database = self.persistence.runtime_database_path()?;
+        let publication =
+            super::super::browser_task_operations::retain_native_site_policy_for_owner(
+                &mut BrowserSessionSqliteStore::open(
+                    database
+                        .parent()
+                        .ok_or("browser_session_service_directory_missing")?,
+                )?,
+                command,
+                &binding,
+                &self.persisted_state,
+            )?;
+        publication.check_before(&self.persisted_state)?;
+        publication.check_current(&self.persistence.load_session_state()?)?;
         self.refresh_before_ordinary_command()?;
         let observation =
             super::super::browser_task_operations::native_attempt_observation(command)?;
@@ -74,8 +87,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         observation.validate(current_unix_ms())?;
         // Existing focus owner: one exact target, no browser/tab creation or
         // recovery. A changed Native frame later refuses the checkbox effect.
-        self.effects
-            .focus_browser(&target.browser, Some(&target.tab))?;
+        self.focus_native_policy_publication(target, &publication)?;
         let origin = qualified_origin(
             &self.persistence,
             &self.persisted_state,
@@ -155,6 +167,37 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         Ok(Some(
             json!({"success":true,"data":data,"browserSession":{"sessionId":target.session.id,"browserId":target.browser.id,"profileId":target.session.profile_id,"tabId":target.tab.id}}),
         ))
+    }
+}
+
+/// Focus is part of the already-pending Native attempt, after the exact owner
+/// policy publication. Current state and target joins must still match it.
+impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<P, E> {
+    pub(crate) fn focus_native_policy_publication(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+        publication: &super::super::browser_task_operations::NativePolicyPublication,
+    ) -> Result<(), String> {
+        let current = self.persistence.load_session_state()?;
+        publication.check_current(&current)?;
+        if current.browsers.get(&target.browser.id) != Some(&target.browser)
+            || current.sessions.get(&target.session.id) != Some(&target.session)
+            || current.tabs.get(&target.tab.id) != Some(&target.tab)
+        {
+            return Err("browser_native_target_changed:refresh task".into());
+        }
+        // Reseed the same adapter only from the exact owner-authored publication;
+        // never refresh it from arbitrary current state. Durable activity and
+        // retirement journals retain their existing admission/readback fences.
+        if self.state != self.persisted_state
+            || self.effects.pending_launch_intent().is_some()
+            || !self.effects.pending_idle_retirement_ids().is_empty()
+        {
+            return Err("browser_session_publication_conflict".into());
+        }
+        self.effects.begin_operation(publication.snapshot())?;
+        self.effects
+            .focus_browser(&target.browser, Some(&target.tab))
     }
 }
 
