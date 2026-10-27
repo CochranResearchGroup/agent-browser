@@ -158,6 +158,32 @@ without a scope remain complete-window evidence and cannot become regional proof
 
 Image expiry completion errors can include `observationClock`: a validated reason, observation and validation timestamps, and age. Future timestamps and evidence older than 60 seconds remain refused. Inspect the original operation without replay.
 
+The separate `hcaptcha-image-grid-3x3-two-round-v1` profile requires exact provider
+configuration `agent-browser:remote-view-native-image-static-3x3-two-round:v1`
+and explicit site-policy membership. It supports at most two complete static
+bus grids, four tiles plus Verify each, ten clicks and thirty pointer events
+in total, within the first observation's original 60-second deadline.
+
+For this profile, `imageAttempt` has exactly three fields:
+`observationRequestId`, `selectedCandidateIds` and `originalRequestId`.
+The first input's `originalRequestId` equals its own outer request ID. A later
+input has its own request ID and fresh observation, but retains the first
+`originalRequestId`. The first result stays immutable; later operation rows
+retain accumulated round state. Never replay an uncertain operation.
+
+The owner requires all nine image interiors to change, with the same region,
+window/process/generation/control and policy context. Borders or highlights
+alone are not progress. Partial refresh, loading, visible rejection or ambiguous
+progress require intervention. A new observation or changed task cannot renew
+the original attempt. Independent clearance and protected access still gate
+success after the final round.
+
+`createNativeImageRoundsChallengeClient` from
+`@agent-browser/client/native-image-challenge` uses the existing image callback
+ports, adding `roundIndex` to each fresh selection request. Its callback deadline
+is bounded by the remaining original deadline. `roundOperations` reports the
+retained round results while `originalOperation` remains the first result.
+
 Reason from those pixels and use only returned candidate IDs. A selection is
 untrusted input to the owner, not authority to send coordinates:
 
