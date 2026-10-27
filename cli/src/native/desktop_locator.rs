@@ -3039,7 +3039,7 @@ mod native_frame_tests {
             }
         }
         let word = |text: &str, x: u32, width: u32, line: u32| json!({"text":text,"confidence":95,"lineId":[1,1,1,line],"bounds":{"x":x,"y":80,"width":width,"height":14}});
-        let ocr = json!({"engine":"tesseract","lines":[{"text":"Tam human","confidence":95},{"text":"hCaptcha","confidence":95}],"words":[word("Tam",110,25,1),word("human",145,40,1),word("hCaptcha",250,60,2)]});
+        let ocr = json!({"state":"observed","engine":"tesseract","lines":[{"text":"Tam human","confidence":95},{"text":"hCaptcha","confidence":95}],"words":[word("Tam",110,25,1),word("human",145,40,1),word("hCaptcha",250,60,2)]});
         let original = agent_browser_service_model::RecordedProcessIdentity {
             pid: 42,
             start_token: "linux:boot:11".into(),
@@ -3093,6 +3093,9 @@ mod native_frame_tests {
             "conflicting",
             "partial",
             "invalid_lines",
+            "unavailable_state",
+            "missing_state",
+            "not_found_state",
             "new_pipe_alias",
         ] {
             let mut frame = image.clone();
@@ -3162,6 +3165,11 @@ mod native_frame_tests {
                     command["region"] = json!({"x":0,"y":0,"width":320,"height":179});
                 }
                 "invalid_lines" => evidence["lines"][0]["confidence"] = json!(101),
+                "unavailable_state" => evidence["state"] = json!("unavailable"),
+                "missing_state" => {
+                    evidence.as_object_mut().unwrap().remove("state");
+                }
+                "not_found_state" => evidence["state"] = json!("not_found"),
                 "new_pipe_alias" => {
                     evidence["lines"][0]["text"] = json!("| am human");
                     evidence["words"][0]["text"] = json!("|");
@@ -3206,7 +3214,18 @@ mod native_frame_tests {
                     "Retain the exact already-corroborated candidate"
                 );
             }
-            if ["denial", "image", "conflicting", "partial", "invalid_lines"].contains(&condition) {
+            if [
+                "denial",
+                "image",
+                "conflicting",
+                "partial",
+                "invalid_lines",
+                "unavailable_state",
+                "missing_state",
+                "not_found_state",
+            ]
+            .contains(&condition)
+            {
                 assert_eq!(owner.locator_calls, 0, "{condition}");
             }
             assert!(result["capture"].get("ocr").is_none());

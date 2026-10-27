@@ -380,24 +380,28 @@ pub fn execute(
             // Existing hCaptcha TSV normalization already recognizes these
             // joined glyphs. Text alone remains unknown: only this same owner
             // frame's unique registered checkbox can corroborate the join.
-            if classification.as_ref().is_some_and(|value| {
-                value.kind == agent_browser_challenge_control::NativeChallengeKind::Unknown
-                    && value.complete_window
-                    && value.rule_ids.is_empty()
-            }) && words.iter().any(|line| {
-                line.confidence >= 70.0 && line.text.trim().eq_ignore_ascii_case("hcaptcha")
-            }) && words.iter().any(|line| {
-                line.confidence >= 70.0
-                    && matches!(
-                        line.text
-                            .split_whitespace()
-                            .collect::<Vec<_>>()
-                            .join(" ")
-                            .to_ascii_lowercase()
-                            .as_str(),
-                        "iam human" | "lam human" | "tam human"
-                    )
-            }) {
+            if capture["ocr"]["state"] == "observed"
+                && classification.as_ref().is_some_and(|value| {
+                    value.kind == agent_browser_challenge_control::NativeChallengeKind::Unknown
+                        && value.complete_window
+                        && value.rule_ids.is_empty()
+                })
+                && words.iter().any(|line| {
+                    line.confidence >= 70.0 && line.text.trim().eq_ignore_ascii_case("hcaptcha")
+                })
+                && words.iter().any(|line| {
+                    line.confidence >= 70.0
+                        && matches!(
+                            line.text
+                                .split_whitespace()
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                                .to_ascii_lowercase()
+                                .as_str(),
+                            "iam human" | "lam human" | "tam human"
+                        )
+                })
+            {
                 let mut bounded_ocr = capture["ocr"].clone();
                 if let Some(words) = bounded_ocr["words"].as_array_mut() {
                     // This lift requires every contributing word at the current
@@ -423,6 +427,7 @@ pub fn execute(
                 {
                     let value = classification.as_mut().unwrap();
                     value.corpus_version = "native-challenge-corpus.v2";
+                    value.limitation = "Bounded English OCR plus same-frame registered hCaptcha pixels; classification is not attempt authority, clearance or site admission; OCR scores are not probabilities";
                     value.kind = agent_browser_challenge_control::NativeChallengeKind::Checkbox;
                     value.family = Some("hcaptcha");
                     value.registered_profile_id =

@@ -8,7 +8,7 @@ classification is not attempt authority or protected-site admission.
 `registered_hcaptcha_joined_prompt_visual_v1`. The sealed registered hCaptcha
 normalizer already recognizes joined `iam`, `lam`, and `tam` followed by
 `human`. Only a fresh, complete, otherwise unknown frame can use this rule.
-The whole prompt and exact hCaptcha brand must score at least 70, and the
+The owner OCR state must be `observed`. The whole prompt and exact hCaptcha brand must score at least 70, and the
 same returned PNG and OCR must yield one visible registered checkbox. Words
 below 70 cannot corroborate this rule, including the brand. Registered
 geometry, scales, profiles and template thresholds remain unchanged.
