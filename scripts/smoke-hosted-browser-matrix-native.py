@@ -25,6 +25,33 @@ import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
+
+def native_owner_failure_reason(failure):
+    """Keep only reviewed infrastructure codes, never the owner's raw suffix."""
+    if (not isinstance(failure, dict)
+            or type(failure.get('schemaVersion')) is not int
+            or failure['schemaVersion'] != 1
+            or failure.get('code') != 'input_effect_uncertain'
+            or failure.get('retryable') is not False
+            or not isinstance(failure.get('message'), str)
+            or len(failure['message']) > 4096):
+        return 'unclassified'
+    token = failure['message'].split(':', 1)[0]
+    allowed = {
+        'capability_not_configured', 'generation_conflict', 'input_failed',
+        'native_x11_display_missing', 'native_x11_auth_missing',
+        'native_x11_control_unavailable', 'native_x11_request', 'native_x11_reply',
+        'native_x11_grab', 'native_x11_ungrab', 'native_x11_key_state',
+        'native_x11_pointer_state', 'native_x11_hold_already_pressed',
+        'native_x11_lock_poisoned', 'native_x11_cleanup_uncertain',
+        'input_control_busy', 'input_control_conflict', 'input_control_state_invalid',
+        'input_control_lock', 'input_argv_empty', 'input_argv_limit',
+        'input_command_incomplete', 'input_argument_invalid',
+        'input_command_unsupported', 'input_search_unused',
+    }
+    return token if token in allowed else 'unclassified'
+
+
 def load_file(name, path):
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
@@ -428,7 +455,8 @@ def main():
                                         guard_observation('native-guard-after-refusal')
                                         result, forwarded_status = failure, error.code
                                     else:
-                                        adapter_errors.append({'transport':'native-owner','path':request.path,'status':error.code,'code':code})
+                                        adapter_errors.append({'transport':'native-owner','path':request.path,'status':error.code,'code':code,
+                                            'reasonCode':native_owner_failure_reason(failure)})
                                         h.private_json(args.results / 'matrix-adapter-errors.json', adapter_errors)
                                         raise
                                 if (args.checkbox_assistance or args.image_assistance) and request.path.endswith('/input') and forwarded_status == 200:
