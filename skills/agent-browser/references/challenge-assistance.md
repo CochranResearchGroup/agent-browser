@@ -4,6 +4,21 @@ Use `browser_command` with `action: native_capture` and
 `params: {classifyChallenges: true}` for current bounded Native evidence. A
 classification is not attempt authority or protected-site admission.
 
+`native-challenge-corpus.v2` adds one Native visual rule,
+`registered_hcaptcha_joined_prompt_visual_v1`. The sealed registered hCaptcha
+normalizer already recognizes joined `iam`, `lam`, and `tam` followed by
+`human`. Only a fresh, complete, otherwise unknown frame can use this rule.
+The whole prompt and exact hCaptcha brand must score at least 70, and the
+same returned PNG and OCR must yield one visible registered checkbox. Words
+below 70 cannot corroborate this rule, including the brand. Registered
+geometry, scales, profiles and template thresholds remain unchanged.
+Missing or duplicate boxes, partial or changed frames, conflicting signals,
+and low-confidence glyphs still require assistance. Pure text classification
+does not accept these joined forms. The existing text corpus remains v1;
+the client accepts v2 only for this declared hCaptcha rule. Neither version
+authorizes input. Native OCR font failures retained during qualification are
+refusals, not evidence of a solved challenge or general provider accuracy.
+
 The optional receiving-backend helper
 `@agent-browser/client/challenge-assistance` exposes `resolve({taskId,
 requestId})`. Its trusted `resolvePolicy` port reads actual existing SitePolicy

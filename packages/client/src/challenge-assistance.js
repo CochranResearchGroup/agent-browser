@@ -31,9 +31,13 @@ export function createChallengeAssistanceClient({callTool,verifyClearance,verify
     const after=await briefing(taskId);
     if(!same(before,after)||before.control?.epoch!==after.control?.epoch||before.control?.owner!==after.control?.owner)fail('challenge_context_changed');
     const c=frame.capture,sha=c?.capture?.sha256;
+    const declaredVisual=frame.challenge?.corpusVersion==='native-challenge-corpus.v2'&&frame.challenge.kind==='checkbox'&&
+      frame.challenge.family==='hcaptcha'&&frame.challenge.registeredProfileId==='hcaptcha-checkbox-p181-v2'&&
+      frame.challenge.completeWindow===true&&frame.challenge.minimumOcrConfidence===70&&frame.challenge.automatedAttemptAuthorized===false&&
+      Array.isArray(frame.challenge.ruleIds)&&frame.challenge.ruleIds.length===1&&frame.challenge.ruleIds[0]==='registered_hcaptcha_joined_prompt_visual_v1';
     if(frame.source!=='remote_view_native'||!c||typeof c.desktopId!=='string'||!Number.isSafeInteger(c.generation)||
       !Number.isSafeInteger(c.windowId)||!c.processIdentity||!/^([a-f0-9]{64})$/.test(sha??'')||
-      frame.challenge?.frameSha256!==sha||frame.challenge?.corpusVersion!=='native-challenge-corpus.v1'||
+      frame.challenge?.frameSha256!==sha||frame.challenge?.corpusVersion!=='native-challenge-corpus.v1'&&!declaredVisual||
       !Number.isFinite(frame.evidenceAgeMs)||frame.evidenceAgeMs<0||frame.evidenceAgeMs>10000)fail('challenge_native_evidence_unverified');
     return {binding:identity(after),physical:physical(frame),classification:frame.challenge,
       frameSha256:sha,observedAtMs:frame.observedAtMs??null,control:after.control,

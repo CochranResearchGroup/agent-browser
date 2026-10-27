@@ -2994,6 +2994,226 @@ mod native_frame_tests {
     use super::*;
 
     #[test]
+    fn public_native_capture_corroborates_existing_hcaptcha_join_with_registered_pixels() {
+        use super::super::browser_native_control::{self, NativeOwner};
+        use base64::Engine;
+        use serde_json::json;
+        struct Owner {
+            png: Vec<u8>,
+            ocr: Value,
+            wrong_frame: bool,
+            locator_calls: usize,
+        }
+        impl NativeOwner for Owner {
+            fn challenge_target(
+                &mut self,
+                png: &[u8],
+                ocr: &Value,
+                action: &str,
+                region: &Value,
+            ) -> Result<Value, String> {
+                self.locator_calls += 1;
+                locate_native_frame(png, ocr, action, region)
+            }
+            fn request(&mut self, operation: &str, body: &Value) -> Result<Value, String> {
+                Ok(match operation {
+                    "observe" => {
+                        json!({"desktopId":"viewing","generation":9,"geometry":{"current":{"width":320,"height":180}},"windows":{"windows":[{"id":7,"pid":42,"x":0,"y":0,"width":320,"height":180,"active":true,"processIdentity":{"pid":42,"boot_id":"boot","start_token":"11","executable":"/synthetic/chrome","uid":1000,"cgroup":"fixture"}}]}})
+                    }
+                    "control" => {
+                        json!({"desktopId":"viewing","generation":9,"owner":"agent","epoch":4})
+                    }
+                    "ocr" => {
+                        json!({"desktopId":"viewing","generation":9,"windowId":7,"processIdentity":body["expectedProcessIdentity"],"image":{"data":base64::engine::general_purpose::STANDARD.encode(&self.png)},"capture":{"sha256":if self.wrong_frame {"f".repeat(64)} else {digest_bytes(&self.png)}},"ocr":self.ocr})
+                    }
+                    _ => panic!("Capture must never dispatch input"),
+                })
+            }
+        }
+        let mut image = RgbaImage::from_pixel(320, 180, image::Rgba([255, 255, 255, 255]));
+        for y in 72..102 {
+            for x in 64..94 {
+                if !(66..92).contains(&x) || !(74..100).contains(&y) {
+                    image.put_pixel(x, y, image::Rgba([16, 16, 16, 255]));
+                }
+            }
+        }
+        let word = |text: &str, x: u32, width: u32, line: u32| json!({"text":text,"confidence":95,"lineId":[1,1,1,line],"bounds":{"x":x,"y":80,"width":width,"height":14}});
+        let ocr = json!({"engine":"tesseract","lines":[{"text":"Tam human","confidence":95},{"text":"hCaptcha","confidence":95}],"words":[word("Tam",110,25,1),word("human",145,40,1),word("hCaptcha",250,60,2)]});
+        let original = agent_browser_service_model::RecordedProcessIdentity {
+            pid: 42,
+            start_token: "linux:boot:11".into(),
+            executable_path: Some("/synthetic/chrome".into()),
+            browser_family: Some("chrome".into()),
+        };
+        let target = agent_browser_service_model::RemoteViewApplicationTarget {
+            assignment_id: "assignment".into(),
+            registration_id: "registration".into(),
+            desktop_id: "lifecycle".into(),
+            lifecycle_generation: 2,
+            viewing_desktop_id: "viewing".into(),
+            viewing_generation: 9,
+        };
+        assert_eq!(
+            agent_browser_challenge_control::classify_native_challenge(
+                &[
+                    agent_browser_challenge_control::NativeChallengeText {
+                        text: "Tam human",
+                        confidence: 95.0
+                    },
+                    agent_browser_challenge_control::NativeChallengeText {
+                        text: "hCaptcha",
+                        confidence: 95.0
+                    }
+                ],
+                &"a".repeat(64),
+                true,
+                true
+            )
+            .kind,
+            agent_browser_challenge_control::NativeChallengeKind::Unknown,
+            "Pure text must not gain glyph authority"
+        );
+        for condition in [
+            "matched",
+            "registered",
+            "iam",
+            "lam",
+            "low_actual_026",
+            "low_actual_027",
+            "low_6999",
+            "missing_brand",
+            "low_brand",
+            "low_brand_word",
+            "blank",
+            "duplicate",
+            "wrong_frame",
+            "denial",
+            "image",
+            "conflicting",
+            "partial",
+            "invalid_lines",
+            "new_pipe_alias",
+        ] {
+            let mut frame = image.clone();
+            let mut evidence = ocr.clone();
+            let mut command = json!({"action":"native_capture","classifyChallenges":true});
+            match condition {
+                "registered" => {
+                    command["registeredActionId"] =
+                        json!(agent_browser_challenge_control::HCAPTCHA_PROFILE.profile_id)
+                }
+                "iam" | "lam" => {
+                    let joined = if condition == "iam" { "Iam" } else { "lam" };
+                    evidence["lines"][0]["text"] = json!(format!("{joined} human"));
+                    evidence["words"][0]["text"] = json!(joined);
+                }
+                "low_actual_026" | "low_6999" => {
+                    let score = if condition == "low_actual_026" {
+                        50.902313
+                    } else {
+                        69.99
+                    };
+                    evidence["lines"][0]["confidence"] = json!(score);
+                    evidence["words"][0]["confidence"] = json!(score);
+                }
+                "low_actual_027" => {
+                    evidence["lines"][0] = json!({"text":"1am human","confidence":30.880775});
+                    evidence["words"][0]["text"] = json!("1am");
+                    evidence["words"][0]["confidence"] = json!(30.880775);
+                }
+                "missing_brand" => {
+                    evidence["lines"][1]["text"] = json!("unrelated");
+                    evidence["words"][2]["text"] = json!("unrelated");
+                }
+                "low_brand" => evidence["lines"][1]["confidence"] = json!(69.99),
+                "low_brand_word" => evidence["words"][2]["confidence"] = json!(69.99),
+                "blank" => {
+                    frame = RgbaImage::from_pixel(320, 180, image::Rgba([255, 255, 255, 255]))
+                }
+                "duplicate" => {
+                    for y in 122..152 {
+                        for x in 64..94 {
+                            if !(66..92).contains(&x) || !(124..150).contains(&y) {
+                                frame.put_pixel(x, y, image::Rgba([16, 16, 16, 255]));
+                            }
+                        }
+                    }
+                    let mut extra = evidence["words"].as_array().unwrap().clone();
+                    for item in &mut extra {
+                        item["bounds"]["y"] = json!(130);
+                        item["lineId"][1] = json!(2);
+                    }
+                    evidence["words"].as_array_mut().unwrap().extend(extra);
+                }
+                "denial" | "image" | "conflicting" => {
+                    let lines = evidence["lines"].as_array_mut().unwrap();
+                    if condition != "image" {
+                        lines.push(json!({"text":"Access denied","confidence":95}));
+                    }
+                    if condition != "denial" {
+                        lines.push(
+                            json!({"text":"Select all images containing buses","confidence":95}),
+                        );
+                    }
+                }
+                "partial" => {
+                    frame = image::imageops::crop_imm(&frame, 0, 0, 320, 179).to_image();
+                    command["region"] = json!({"x":0,"y":0,"width":320,"height":179});
+                }
+                "invalid_lines" => evidence["lines"][0]["confidence"] = json!(101),
+                "new_pipe_alias" => {
+                    evidence["lines"][0]["text"] = json!("| am human");
+                    evidence["words"][0]["text"] = json!("|");
+                }
+                _ => (),
+            }
+            let mut owner = Owner {
+                png: encode_ocr_png(&frame).unwrap(),
+                ocr: evidence,
+                wrong_frame: condition == "wrong_frame",
+                locator_calls: 0,
+            };
+            let result = browser_native_control::execute(&original, &target, &command, &mut owner);
+            if condition == "wrong_frame" {
+                assert!(result.unwrap_err().contains("frame_changed"));
+                assert_eq!(owner.locator_calls, 0);
+                continue;
+            }
+            let result = result.unwrap();
+            let expected = match condition {
+                "matched" | "registered" | "iam" | "lam" => "checkbox",
+                "denial" => "access_denied",
+                "image" => "image_puzzle",
+                "conflicting" => "ambiguous",
+                _ => "unknown",
+            };
+            assert_eq!(result["challenge"]["kind"], expected, "{condition}");
+            assert_eq!(result["challenge"]["automatedAttemptAuthorized"], false);
+            assert_eq!(result["taskCompleted"], false);
+            if expected == "checkbox" {
+                assert_eq!(
+                    result["challenge"]["corpusVersion"],
+                    "native-challenge-corpus.v2"
+                );
+            }
+            if condition == "registered" {
+                assert!(result["nativeObservation"]["candidateSha256"]
+                    .as_str()
+                    .is_some());
+                assert_eq!(
+                    owner.locator_calls, 1,
+                    "Retain the exact already-corroborated candidate"
+                );
+            }
+            if ["denial", "image", "conflicting", "partial", "invalid_lines"].contains(&condition) {
+                assert_eq!(owner.locator_calls, 0, "{condition}");
+            }
+            assert!(result["capture"].get("ocr").is_none());
+        }
+    }
+
+    #[test]
     fn native_registered_locator_requires_pixels_and_bound_owner_words() {
         let mut image = RgbaImage::from_pixel(320, 180, image::Rgba([255, 255, 255, 255]));
         for y in 72..102 {

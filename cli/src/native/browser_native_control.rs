@@ -326,6 +326,7 @@ pub fn execute(
         let mut recognition = None;
         let mut native_observation = None;
         let mut registered_target = None;
+        let mut corroborated_target = None;
         if classify {
             use base64::Engine;
             use sha2::{Digest, Sha256};
@@ -376,12 +377,73 @@ pub fn execute(
                 body["region"]
                     == json!({"x":window["x"],"y":window["y"],"width":full_width,"height":full_height}),
             ));
+            // Existing hCaptcha TSV normalization already recognizes these
+            // joined glyphs. Text alone remains unknown: only this same owner
+            // frame's unique registered checkbox can corroborate the join.
+            if classification.as_ref().is_some_and(|value| {
+                value.kind == agent_browser_challenge_control::NativeChallengeKind::Unknown
+                    && value.complete_window
+                    && value.rule_ids.is_empty()
+            }) && words.iter().any(|line| {
+                line.confidence >= 70.0 && line.text.trim().eq_ignore_ascii_case("hcaptcha")
+            }) && words.iter().any(|line| {
+                line.confidence >= 70.0
+                    && matches!(
+                        line.text
+                            .split_whitespace()
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                            .to_ascii_lowercase()
+                            .as_str(),
+                        "iam human" | "lam human" | "tam human"
+                    )
+            }) {
+                let mut bounded_ocr = capture["ocr"].clone();
+                if let Some(words) = bounded_ocr["words"].as_array_mut() {
+                    // This lift requires every contributing word at the current
+                    // Native confidence floor, including the brand. Do not
+                    // inherit the older detector's permissive brand threshold.
+                    words.retain(|word| {
+                        word["confidence"].as_f64().is_some_and(|score| {
+                            score.is_finite() && (70.0..=100.0).contains(&score)
+                        })
+                    });
+                }
+                corroborated_target = owner
+                    .challenge_target(
+                        &bytes,
+                        &bounded_ocr,
+                        agent_browser_challenge_control::HCAPTCHA_PROFILE.profile_id,
+                        &body["region"],
+                    )
+                    .ok()
+                    .filter(|located| located["status"] == "matched" && located["visible"] == true);
+                if corroborated_target.is_some()
+                    && observation_started.elapsed().as_millis() <= 10_000
+                {
+                    let value = classification.as_mut().unwrap();
+                    value.corpus_version = "native-challenge-corpus.v2";
+                    value.kind = agent_browser_challenge_control::NativeChallengeKind::Checkbox;
+                    value.family = Some("hcaptcha");
+                    value.registered_profile_id =
+                        Some(agent_browser_challenge_control::HCAPTCHA_PROFILE.profile_id);
+                    value
+                        .rule_ids
+                        .push("registered_hcaptcha_joined_prompt_visual_v1");
+                }
+            }
             recognition = Some(json!({"engine":capture["ocr"]["engine"],
                 "modelSha256":capture["ocr"]["modelSha256"],"lineCount":lines.len(),
                 "scoreMeaning":"OCR engine score, not a probability"}));
             if let Some(action) = registered_action {
-                let located =
-                    owner.challenge_target(&bytes, &capture["ocr"], action, &body["region"])?;
+                let located = match corroborated_target.as_ref().filter(|_| {
+                    action == agent_browser_challenge_control::HCAPTCHA_PROFILE.profile_id
+                }) {
+                    Some(located) => located.clone(),
+                    None => {
+                        owner.challenge_target(&bytes, &capture["ocr"], action, &body["region"])?
+                    }
+                };
                 if classification.as_ref().is_some_and(|value| {
                     value.kind == agent_browser_challenge_control::NativeChallengeKind::Checkbox
                         && value.complete_window

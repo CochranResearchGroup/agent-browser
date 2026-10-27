@@ -27,6 +27,7 @@ async function scenario(condition,family=families[1]) {
       const kind=condition==='image'?'image_puzzle':condition==='passive'?(captures===1?'passive_check':'unknown'):(inputs?'unknown':'checkbox');
       const frame={source:'remote_view_native',nativeControlEpoch:4,capture:{desktopId:'desktop',generation:9,windowId:7,processIdentity:{pid:42,start_token:'original'},capture:{sha256:'a'.repeat(64)}},
         challenge:{corpusVersion:'native-challenge-corpus.v1',kind,family:family.startsWith('turnstile')?'turnstile':'hcaptcha',registeredProfileId:family,frameSha256:'a'.repeat(64),automatedAttemptAuthorized:false},evidenceAgeMs:condition==='stale'?10001:10,observedAtMs:clock};
+      if(['visual_v2','unknown_v2_rule'].includes(condition)&&kind==='checkbox'){frame.challenge.corpusVersion='native-challenge-corpus.v2';frame.challenge.completeWindow=true;frame.challenge.minimumOcrConfidence=70;frame.challenge.ruleIds=[condition==='visual_v2'?'registered_hcaptcha_joined_prompt_visual_v1':'unregistered_rule'];}
       if(args.params.registeredActionId) {
         assert.equal(args.params.classifyChallenges,true);
         assert(args.requestId,'Capture original must be retained with stable ID');
@@ -56,7 +57,7 @@ async function scenario(condition,family=families[1]) {
     verifyAccess:async context=>{accessReads++;return {state:condition==='access_denied'?'unverified':'verified',taskId:context.taskId,frameSha256:context.frameSha256,evidenceRef:'https-server-protected-report'};},
   });
   const result=await client.resolve({taskId:'task',requestId:'original-attempt'});
-  if(['success','passive','manual_login','profile_manual','rpc_not_found'].includes(condition)) {
+  if(['success','passive','manual_login','profile_manual','rpc_not_found','visual_v2'].includes(condition)) {
     assert.equal(result.status,condition==='passive'?'verified_access_after_passive_wait':'verified_access_after_native');
     assert.equal(result.taskCompleted,false);assert(clearanceReads>0&&accessReads>0);
     assert.equal(inputs,condition==='passive'?0:1);
@@ -73,5 +74,5 @@ async function scenario(condition,family=families[1]) {
 }
 const receipts=[];
 for(const family of families)receipts.push(await scenario('success',family));
-for(const condition of ['rpc_not_found','passive','image','manual','requires_cdp_free','manual_mode','manual_login','profile_manual','provider_denied','provider_disabled','wrong_backend','missing_capability','policy_denied','policy_changed','stale','control_changed','access_denied','clearance_denied','uncertain'])receipts.push(await scenario(condition));
+for(const condition of ['visual_v2','unknown_v2_rule','rpc_not_found','passive','image','manual','requires_cdp_free','manual_mode','manual_login','profile_manual','provider_denied','provider_disabled','wrong_backend','missing_capability','policy_denied','policy_changed','stale','control_changed','access_denied','clearance_denied','uncertain'])receipts.push(await scenario(condition));
 console.log(JSON.stringify({passed:true,publicClient:true,receipts}));

@@ -16,6 +16,19 @@ process, current viewing generation, window and frame digest. Recognized page
 text remains process-local and is omitted from the result. Capture remains subject
 to the existing control/read admission and private-input boundaries.
 
+The Native visual extension declares `native-challenge-corpus.v2` with the
+single rule `registered_hcaptcha_joined_prompt_visual_v1`. It corroborates
+the existing registered normalizer's joined `iam`, `lam`, or `tam` plus
+`human` only when the whole prompt and exact hCaptcha brand score at least
+70 and the same returned PNG/OCR identifies one visible registered checkbox.
+Sub-70 words cannot contribute. Existing profile bytes, geometry, scales and
+template thresholds remain unchanged. The extension applies only to a fresh,
+complete frame otherwise classified as unknown; it cannot override denial,
+image, ambiguous, stale or incomplete evidence. Pure text classification
+remains v1 and refuses those joined forms without visual corroboration.
+The client accepts v2 only for this exact declared hCaptcha rule, and neither
+corpus version authorizes input or proves clearance.
+
 The versioned English text-signature corpus distinguishes passive checks,
 registered Turnstile/hCaptcha checkbox signatures, image instructions, ordinary
 login, loading and denial. It also reports unknown, ambiguous and stale evidence.
