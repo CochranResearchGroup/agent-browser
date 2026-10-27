@@ -88,7 +88,25 @@ export async function qualifyNativeCheckbox({workflow,task,nextTask,primary,site
     const originalId='native470:'+randomUUID();let passiveAdvanced=false;
     const client=createChallengeAssistanceClient({
       callTool:async(name,args)=>{
-        const value=await workflow(name,args);
+        const input=name==='browser_command'&&args.action==='native_input';
+        const originalRequestId=args.requestId??originalId;
+        const readOriginal=async()=>{
+          try{return await workflow('browser_command',{taskId:current.taskId,action:'task_operation',params:{requestId:originalRequestId}});}
+          catch(error){return {readbackUnavailable:true,message:String(error?.message??error).slice(0,1024)};}
+        };
+        const before=input?await readOriginal():null;
+        let value;
+        try{value=await workflow(name,args);}
+        catch(error){
+          if(input){
+            try{await save('checkbox470-'+label+'-native-input-error.json',{
+              taskId:current.taskId,requestId:originalRequestId,
+              error:{name:String(error?.name??'Error'),code:error?.code??null,message:String(error?.message??error).slice(0,2048)},
+              before,after:await readOriginal(),application:oracle.state(scene),retryPerformed:false,
+            });}finally{throw error;}
+          }
+          throw error;
+        }
         if(options.passive&&name==='browser_command'&&args.action==='native_capture'&&value.challenge?.kind==='passive_check'&&!passiveAdvanced){
           await save('checkbox470-passive-initial.json',{classification:value.challenge,frameSha256:value.capture.capture.sha256,actualNative:true,productInputEvents:0});
           passiveAdvanced=true;oracle.passive(scene);await primary.evaluate(()=>window.completePassive470());
