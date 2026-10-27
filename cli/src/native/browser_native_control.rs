@@ -408,9 +408,23 @@ pub fn execute(
                     // Native confidence floor, including the brand. Do not
                     // inherit the older detector's permissive brand threshold.
                     words.retain(|word| {
-                        word["confidence"].as_f64().is_some_and(|score| {
-                            score.is_finite() && (70.0..=100.0).contains(&score)
-                        })
+                        let text = word["text"].as_str().unwrap_or("");
+                        let normalized = text
+                            .chars()
+                            .filter(char::is_ascii_alphabetic)
+                            .collect::<String>()
+                            .to_ascii_lowercase();
+                        // Only the exact strong brand may participate in the
+                        // matched candidate's existing spatial contract. An
+                        // unrelated exact brand elsewhere cannot sponsor a
+                        // nearby legacy captcha/hhcaptcha alias.
+                        let exact_brand = !["hcaptcha", "hhcaptcha", "captcha"]
+                            .contains(&normalized.as_str())
+                            || text.trim().eq_ignore_ascii_case("hcaptcha");
+                        exact_brand
+                            && word["confidence"].as_f64().is_some_and(|score| {
+                                score.is_finite() && (70.0..=100.0).contains(&score)
+                            })
                     });
                 }
                 corroborated_target = owner

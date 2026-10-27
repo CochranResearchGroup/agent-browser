@@ -13,7 +13,10 @@ same returned PNG and OCR must yield one visible registered checkbox. Words
 below 70 cannot corroborate this rule, including the brand. Registered
 geometry, scales, profiles and template thresholds remain unchanged.
 Missing or duplicate boxes, partial or changed frames, conflicting signals,
-and low-confidence glyphs still require assistance. Pure text classification
+and low-confidence glyphs still require assistance. The visual rule requires
+the matched checkbox's own spatial brand anchor to be exact hCaptcha;
+legacy `captcha` or `hhcaptcha` aliases cannot borrow an unrelated exact brand.
+Pure text classification
 does not accept these joined forms. The existing text corpus remains v1;
 the client accepts v2 only for this declared hCaptcha rule. Neither version
 authorizes input. Native OCR font failures retained during qualification are

@@ -3085,6 +3085,7 @@ mod native_frame_tests {
             "missing_brand",
             "low_brand",
             "low_brand_word",
+            "distant_exact_brand",
             "blank",
             "duplicate",
             "wrong_frame",
@@ -3131,6 +3132,12 @@ mod native_frame_tests {
                 }
                 "low_brand" => evidence["lines"][1]["confidence"] = json!(69.99),
                 "low_brand_word" => evidence["words"][2]["confidence"] = json!(69.99),
+                "distant_exact_brand" => {
+                    evidence["words"][2]["text"] = json!("captcha");
+                    let mut distant = word("hCaptcha", 250, 60, 3);
+                    distant["bounds"]["y"] = json!(5);
+                    evidence["words"].as_array_mut().unwrap().push(distant);
+                }
                 "blank" => {
                     frame = RgbaImage::from_pixel(320, 180, image::Rgba([255, 255, 255, 255]))
                 }
