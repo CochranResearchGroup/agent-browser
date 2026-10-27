@@ -29,8 +29,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 def native_owner_failure_reason(failure):
     """Keep only reviewed infrastructure codes, never the owner's raw suffix."""
     if (not isinstance(failure, dict)
-            or type(failure.get('schemaVersion')) is not int
-            or failure['schemaVersion'] != 1
+            or type(failure.get('schema_version')) is not int
+            or failure['schema_version'] != 1
             or failure.get('code') != 'input_effect_uncertain'
             or failure.get('retryable') is not False
             or not isinstance(failure.get('message'), str)
