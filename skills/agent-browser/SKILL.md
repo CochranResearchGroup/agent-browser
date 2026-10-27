@@ -135,7 +135,7 @@ Use `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_
 
 Diagnostics retain selection query fields. Rail presence revalidates at 250/500/1000 ms, then polls every three seconds.
 
-### Retained tasks and teaching
+### Tasks and teaching
 
 Use browser_command task_briefing or task_operation (params.requestId) for
 context/receipts. Keep requestId stable; never replay pending/uncertain input.
@@ -145,4 +145,4 @@ inert [drafts](references/teaching-drafts.md), [review](references/teaching-revi
 [grilling](references/teaching-grilling.md), [repeat](references/report-repeat.md).
 Keep gaps; proposals are not consent. Promotion needs fresh-repeat proof.
 Dates use YYYY-MM-DD; downloads need live local process proof.
-Native attempts/return: [challenge assistance](references/challenge-assistance.md).
+Native OCR/attempts/return: [challenge assistance](references/challenge-assistance.md).
