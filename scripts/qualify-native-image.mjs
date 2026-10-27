@@ -40,12 +40,13 @@ export function createNativeImageOracle() {
 
 export async function qualifyNativeImage({workflow,task,nextTask,primary,site,profilePath,configFile,faultFile,oracle,save,continuity,selectionDirectory}) {
   assert.equal(new URL(site).protocol,'https:');
-  async function prepareWindow(label) {
+  async function prepareWindow(label,current) {
     // Match the owned task's focus preparation before making its original
     // observation. Any later frame change still refuses the original guard.
+    await workflow('browser_tab',{taskId:current.taskId,operation:'select',tabId:current.tabId});
     await primary.bringToFront();
     const staging=await primary.context().newCDPSession(primary);
-    try{const window=await staging.send('Browser.getWindowForTarget');await staging.send('Browser.setWindowBounds',{windowId:window.windowId,bounds:{windowState:'maximized'}});await save('image471-'+label+'-window-preparation.json',{appOwnedCdp:true,pageBroughtToFront:true,windowId:window.windowId,windowState:'maximized',challengeInputDispatched:false});}finally{await staging.detach();}
+    try{const window=await staging.send('Browser.getWindowForTarget');await staging.send('Browser.setWindowBounds',{windowId:window.windowId,bounds:{windowState:'maximized'}});await save('image471-'+label+'-window-preparation.json',{publicTaskTabSelected:true,taskId:current.taskId,tabId:current.tabId,appOwnedCdp:true,pageBroughtToFront:true,windowId:window.windowId,windowState:'maximized',challengeInputDispatched:false});}finally{await staging.detach();}
   }
 
   const provider={id:'owned-static-image-provider',kind:'captcha',enabled:true,capabilities:['captcha_solve'],configRef:'agent-browser:remote-view-native-image-static-3x3:v1'};
@@ -106,7 +107,7 @@ export async function qualifyNativeImage({workflow,task,nextTask,primary,site,pr
   }
   async function run(label,options={}) {
     const current=label==='success'?task:await nextTask(label),scene=label+'-'+randomUUID();oracle.create(scene,options);await stage(scene,options.unsupported);
-    await prepareWindow(label);
+    await prepareWindow(label,current);
     await waitForNativeCheckboxStability({readCapture:()=>workflow('browser_command',{taskId:current.taskId,action:'native_capture'}),save:value=>save('image471-'+label+'-readiness.json',value)});
     const originalId='image471:'+randomUUID();let inputCalls=0,workflowErrorSequence=0;
     const client=createNativeImageChallengeClient({
