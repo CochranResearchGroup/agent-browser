@@ -257,3 +257,151 @@ fn native_capture_classifies_same_fenced_frame_without_projecting_private_ocr_te
     assert!(!result.to_string().contains("private unrelated body"));
     assert_eq!(result["taskCompleted"], false);
 }
+
+fn challenge_observation() -> browser_native_control::NativeChallengeObservation {
+    use browser_native_control::{NativeChallengeBounds, NativeChallengeObservation};
+    NativeChallengeObservation {
+        desktop_id: "viewing".into(),
+        generation: 9,
+        window_id: 7,
+        window: NativeChallengeBounds {
+            x: 0,
+            y: 0,
+            width: 1024,
+            height: 768,
+        },
+        display_width: 1024,
+        display_height: 768,
+        region: NativeChallengeBounds {
+            x: 0,
+            y: 0,
+            width: 1024,
+            height: 768,
+        },
+        frame_sha256: "a".repeat(64),
+        native_control_epoch: 4,
+        observed_at_ms: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64,
+        registered_action_id: "hcaptcha-checkbox-p181-v2".into(),
+        family: "hcaptcha".into(),
+        candidate_sha256: "b".repeat(64),
+        x: 12,
+        y: 13,
+    }
+}
+
+#[test]
+fn native_challenge_attempt_requires_original_owner_evidence_not_caller_points() {
+    let original = agent_browser_service_model::RecordedProcessIdentity {
+        pid: 42,
+        start_token: "linux:boot:11".into(),
+        executable_path: Some("/synthetic/chrome".into()),
+        browser_family: Some("chrome".into()),
+    };
+    let target = agent_browser_service_model::RemoteViewApplicationTarget {
+        assignment_id: "assignment".into(),
+        registration_id: "registration".into(),
+        desktop_id: "lifecycle".into(),
+        lifecycle_generation: 2,
+        viewing_desktop_id: "viewing".into(),
+        viewing_generation: 9,
+    };
+    let mut owner = NativeFixture { calls: vec![] };
+    let result = browser_native_control::execute(
+        &original,
+        &target,
+        &serde_json::json!({"action":"native_input","nativeAttempt":{"observationRequestId":"forged"},"actions":[{"kind":"click","x":900,"y":700,"button":1,"count":1}]}),
+        &mut owner,
+    );
+    assert!(result
+        .unwrap_err()
+        .contains("original_operation_unavailable"));
+    assert!(
+        owner.calls.is_empty(),
+        "Caller labels cannot reach an observation or input without original owner evidence"
+    );
+}
+
+#[test]
+fn native_challenge_attempt_binds_original_visual_epoch_window_and_single_derived_click() {
+    struct AttemptOwner {
+        fixture: NativeFixture,
+        evidence: browser_native_control::NativeChallengeObservation,
+        epoch: u64,
+    }
+    impl browser_native_control::NativeOwner for AttemptOwner {
+        fn native_attempt(
+            &mut self,
+            _: &serde_json::Value,
+        ) -> Result<browser_native_control::NativeChallengeObservation, String> {
+            Ok(self.evidence.clone())
+        }
+        fn request(
+            &mut self,
+            operation: &str,
+            body: &serde_json::Value,
+        ) -> Result<serde_json::Value, String> {
+            if operation == "control" {
+                self.fixture.calls.push((operation.into(), body.clone()));
+                return Ok(
+                    serde_json::json!({"desktopId":"viewing","generation":9,"owner":"agent","epoch":self.epoch}),
+                );
+            }
+            self.fixture.request(operation, body)
+        }
+    }
+    let original = agent_browser_service_model::RecordedProcessIdentity {
+        pid: 42,
+        start_token: "linux:boot:11".into(),
+        executable_path: Some("/synthetic/chrome".into()),
+        browser_family: Some("chrome".into()),
+    };
+    let target = agent_browser_service_model::RemoteViewApplicationTarget {
+        assignment_id: "assignment".into(),
+        registration_id: "registration".into(),
+        desktop_id: "lifecycle".into(),
+        lifecycle_generation: 2,
+        viewing_desktop_id: "viewing".into(),
+        viewing_generation: 9,
+    };
+    let command = serde_json::json!({"action":"native_input","nativeAttempt":{"observationRequestId":"original"},"controlEpoch":999,"actions":[{"kind":"click","x":900,"y":700,"button":3,"count":2}]});
+    for condition in ["current", "changed_control", "changed_window", "expired"] {
+        let mut evidence = challenge_observation();
+        if condition == "changed_window" {
+            evidence.window_id = 99;
+        }
+        if condition == "expired" {
+            evidence.observed_at_ms -= 10_001;
+        }
+        let mut owner = AttemptOwner {
+            fixture: NativeFixture { calls: vec![] },
+            evidence,
+            epoch: if condition == "changed_control" { 5 } else { 4 },
+        };
+        let result = browser_native_control::execute(&original, &target, &command, &mut owner);
+        let inputs: Vec<_> = owner
+            .fixture
+            .calls
+            .iter()
+            .filter(|(operation, _)| operation == "input")
+            .collect();
+        if condition == "current" {
+            assert_eq!(result.unwrap()["delivery"], "dispatched");
+            assert_eq!(inputs.len(), 1);
+            assert_eq!(
+                inputs[0].1["actions"],
+                serde_json::json!([{"kind":"click","x":12,"y":13,"button":1,"count":1}])
+            );
+            assert_eq!(inputs[0].1["controlEpoch"], 4);
+            assert_eq!(
+                inputs[0].1["expectedVisual"],
+                serde_json::json!({"region":{"x":0,"y":0,"width":1024,"height":768},"sha256":"a".repeat(64)})
+            );
+        } else {
+            assert!(result.is_err(), "{condition}");
+            assert!(inputs.is_empty(), "{condition}");
+        }
+    }
+}

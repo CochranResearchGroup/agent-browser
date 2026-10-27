@@ -104,9 +104,20 @@ pub(super) fn with_context(
         && crate::native::browser_task_operations::eligible_action(
             arguments["action"].as_str().unwrap_or_default(),
         );
+    let native = name == "browser_command"
+        && crate::native::browser_task_operations::eligible_native(
+            arguments["action"].as_str().unwrap_or_default(),
+            &arguments["params"],
+        );
+    let eligible = eligible || native;
     let addressed = arguments["taskId"]
         .as_str()
         .is_some_and(|id| !id.trim().is_empty());
+    if native && !addressed {
+        return Err(JsonRpcError::invalid_params(
+            "Native challenge observation/attempt requires taskId",
+        ));
+    }
     let next = if eligible && addressed {
         let request_id = match arguments.get("requestId") {
             None => None,
@@ -122,6 +133,11 @@ pub(super) fn with_context(
                     .into(),
             ),
         };
+        if native && request_id.is_none() {
+            return Err(JsonRpcError::invalid_params(
+                "Native challenge observation/attempt requires stable requestId",
+            ));
+        }
         arguments["taskId"]
             .as_str()
             .filter(|id| !id.trim().is_empty())
@@ -159,16 +175,23 @@ pub(super) fn transport(
 ) -> Result<crate::connection::Response, String> {
     use crate::native::browser_task_operations::{self as operations, Admission};
     let context = REQUEST_CONTEXT.with(|context| context.borrow().clone());
-    let Some(context) = context
-        .filter(|_| operations::eligible_action(command["action"].as_str().unwrap_or_default()))
-    else {
+    let Some(context) = context.filter(|_| {
+        operations::eligible_action(command["action"].as_str().unwrap_or_default())
+            || operations::eligible_native(command["action"].as_str().unwrap_or_default(), &command)
+    }) else {
         return run(command);
     };
     if let Some(request_id) = context.request_id {
         command["id"] = json!(request_id);
     }
     super::workflow::address_task_command(&mut command, &context.task_id)?;
-    match operations::begin(&context.task_id, &mut command)? {
+    let admitted =
+        if operations::eligible_native(command["action"].as_str().unwrap_or_default(), &command) {
+            operations::begin_native(&context.task_id, &mut command)?
+        } else {
+            operations::begin(&context.task_id, &mut command)?
+        };
+    match admitted {
         Admission::Existing(original) => {
             let mut response = crate::connection::Response {
                 success: original.state

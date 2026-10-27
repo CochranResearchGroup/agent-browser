@@ -539,6 +539,171 @@ fn locate_bound_frame(
     })
 }
 
+/// Apply the existing registered templates and TSV normalizers to one current
+/// Native-owner PNG/OCR pair. No legacy lease/context is fabricated. Coordinates
+/// from Native OCR are desktop pixels and are translated into this exact crop.
+pub(crate) fn locate_native_frame(
+    png: &[u8],
+    ocr: &Value,
+    registered_action_id: &str,
+    region: &Value,
+) -> Result<Value, String> {
+    use std::fmt::Write as _;
+    let registered = agent_browser_challenge_control::challenge_profile(registered_action_id)
+        .ok_or("browser_native_registered_action_invalid")?;
+    let profile = locator_profile(registered.locator_id).map_err(|error| error.to_string())?;
+    if png.len() > 4_194_304 || !png.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Err("browser_native_registered_frame_invalid".into());
+    }
+    let image = image::load_from_memory_with_format(png, image::ImageFormat::Png)
+        .map_err(|_| "browser_native_registered_frame_invalid")?
+        .to_rgba8();
+    let left = region["x"]
+        .as_u64()
+        .ok_or("browser_native_registered_region_invalid")?;
+    let top = region["y"]
+        .as_u64()
+        .ok_or("browser_native_registered_region_invalid")?;
+    if region["width"] != image.width()
+        || region["height"] != image.height()
+        || u64::from(image.width()) * u64::from(image.height()) > 1_000_000
+    {
+        return Err("browser_native_registered_region_invalid".into());
+    }
+    let words = ocr["words"]
+        .as_array()
+        .filter(|words| words.len() <= 4096)
+        .ok_or("browser_native_registered_ocr_unavailable")?;
+    let mut tsv = String::from("level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n");
+    for word in words {
+        let text = word["text"]
+            .as_str()
+            .filter(|text| text.len() <= 256 && !text.chars().any(char::is_control))
+            .ok_or("browser_native_registered_ocr_invalid")?;
+        let confidence = word["confidence"]
+            .as_f64()
+            .filter(|value| value.is_finite() && (0.0..=100.0).contains(value))
+            .ok_or("browser_native_registered_ocr_invalid")?;
+        let line = word["lineId"]
+            .as_array()
+            .filter(|line| line.len() == 4)
+            .ok_or("browser_native_registered_ocr_invalid")?;
+        let ids = line
+            .iter()
+            .map(|value| {
+                value
+                    .as_u64()
+                    .filter(|n| *n <= u64::from(u32::MAX))
+                    .ok_or("browser_native_registered_ocr_invalid")
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let number = |key: &str| {
+            word["bounds"][key]
+                .as_u64()
+                .ok_or("browser_native_registered_ocr_invalid")
+        };
+        let x = number("x")?
+            .checked_sub(left)
+            .ok_or("browser_native_registered_ocr_invalid")?;
+        let y = number("y")?
+            .checked_sub(top)
+            .ok_or("browser_native_registered_ocr_invalid")?;
+        let width = number("width")?;
+        let height = number("height")?;
+        if width == 0
+            || height == 0
+            || x.checked_add(width)
+                .is_none_or(|n| n > u64::from(image.width()))
+            || y.checked_add(height)
+                .is_none_or(|n| n > u64::from(image.height()))
+        {
+            return Err("browser_native_registered_ocr_invalid".into());
+        }
+        writeln!(
+            tsv,
+            "5\t{}\t{}\t{}\t{}\t1\t{x}\t{y}\t{width}\t{height}\t{confidence}\t{text}",
+            ids[0], ids[1], ids[2], ids[3]
+        )
+        .map_err(|_| "browser_native_registered_ocr_invalid")?;
+    }
+    let tokens = match profile.kind {
+        LocatorKind::CloudflareTurnstile => normalized_turnstile_tokens(&tsv),
+        LocatorKind::Hcaptcha => normalized_hcaptcha_tokens(&tsv),
+        _ => return Err("browser_native_registered_action_invalid".into()),
+    }
+    .map_err(|error| error.to_string())?;
+    validate_ocr_evidence(
+        &OcrEvidence {
+            provider_version: "tesseract-tsv-5-v1".into(),
+            evidence_hash: digest_text(&tsv),
+            tokens: tokens.clone(),
+        },
+        image.width(),
+        image.height(),
+    )
+    .map_err(|error| error.to_string())?;
+    if tokens
+        .iter()
+        .any(|token| token.token_id == HCAPTCHA_CHALLENGE_TOKEN_ID)
+    {
+        return Ok(
+            serde_json::json!({"status":"unsupported_challenge_open","registeredActionId":registered_action_id}),
+        );
+    }
+    let mut matches = Vec::new();
+    // The same finite scales supported by the registered locator. No caller
+    // supplies a scale, template, threshold or point to this adapter.
+    for scale in [1000, 1250, 1500] {
+        let size = scaled(
+            if profile.kind == LocatorKind::CloudflareTurnstile {
+                24
+            } else {
+                30
+            },
+            scale,
+        )
+        .map_err(|error| error.to_string())?;
+        let candidates = if profile.kind == LocatorKind::CloudflareTurnstile {
+            turnstile_candidates(&image, &tokens, size, scale)
+        } else {
+            hcaptcha_candidates(&image, &tokens, size, scale)
+        }
+        .map_err(|error| error.to_string())?;
+        matches.extend(candidates.into_iter().filter(|candidate| {
+            candidate.visible
+                && (candidate.score * 4 + 60_000) / 10 >= u32::from(registered.threshold)
+        }));
+    }
+    matches.sort_by(|a, b| b.score.cmp(&a.score));
+    let mut unique: Vec<TemplateMatch> = Vec::new();
+    for candidate in matches {
+        if !unique
+            .iter()
+            .any(|prior| overlap_ratio(prior.bounds, candidate.bounds) >= 8000)
+        {
+            unique.push(candidate);
+        }
+    }
+    if unique.len() != 1 {
+        return Ok(
+            serde_json::json!({"status":if unique.is_empty(){"not_found"}else{"ambiguous"},"registeredActionId":registered_action_id}),
+        );
+    }
+    let candidate = &unique[0];
+    let center = candidate.bounds.center();
+    let x = u16::try_from(left + u64::from(center.x))
+        .map_err(|_| "browser_native_registered_region_invalid")?;
+    let y = u16::try_from(top + u64::from(center.y))
+        .map_err(|_| "browser_native_registered_region_invalid")?;
+    let evidence = serde_json::json!({"registeredActionId":registered_action_id,"locatorId":profile.locator_id,
+        "profileSha256":profile.profile_sha256,"frameSha256":digest_bytes(png),"region":region,"bounds":candidate.bounds,"score":candidate.score});
+    Ok(
+        serde_json::json!({"status":"matched","visible":true,"registeredActionId":registered_action_id,
+        "locatorId":profile.locator_id,"profileSha256":profile.profile_sha256,"x":x,"y":y,
+        "candidateSha256":digest_text(&evidence.to_string())}),
+    )
+}
+
 /// Capture and locate in one blocking transaction. The request never accepts
 /// caller pixels, paths, display identities, coordinates, or detector tuning.
 pub(crate) async fn handle_desktop_locate(cmd: &Value) -> Result<Value, String> {
@@ -2821,5 +2986,68 @@ mod tests {
             )
             .unwrap();
         bytes
+    }
+}
+
+#[cfg(test)]
+mod native_frame_tests {
+    use super::*;
+
+    #[test]
+    fn native_registered_locator_requires_pixels_and_bound_owner_words() {
+        let mut image = RgbaImage::from_pixel(320, 180, image::Rgba([255, 255, 255, 255]));
+        for y in 72..102 {
+            for x in 64..94 {
+                if x < 66 || x >= 92 || y < 74 || y >= 100 {
+                    image.put_pixel(x, y, image::Rgba([16, 16, 16, 255]));
+                }
+            }
+        }
+        let png = encode_ocr_png(&image).unwrap();
+        let word = |text: &str, x: u32, y: u32, width: u32, line: u32| serde_json::json!({"text":text,"confidence":95,"lineId":[1,1,1,line],"bounds":{"x":x+20,"y":y+30,"width":width,"height":14}});
+        let ocr = serde_json::json!({"words":[word("I",110,80,5,1),word("am",120,80,15,1),word("human",145,80,40,1),word("hCaptcha",250,95,60,2)]});
+        let region = serde_json::json!({"x":20,"y":30,"width":320,"height":180});
+        let target = locate_native_frame(
+            &png,
+            &ocr,
+            agent_browser_challenge_control::HCAPTCHA_PROFILE.profile_id,
+            &region,
+        )
+        .unwrap();
+        assert_eq!(target["status"], "matched");
+        assert_eq!(target["x"], 99);
+        assert_eq!(target["y"], 117);
+        assert_eq!(target["visible"], true);
+        assert!(
+            !target.to_string().contains("human"),
+            "Raw OCR words never leave the local detector"
+        );
+        let blank = encode_ocr_png(&RgbaImage::from_pixel(
+            320,
+            180,
+            image::Rgba([255, 255, 255, 255]),
+        ))
+        .unwrap();
+        assert_eq!(
+            locate_native_frame(
+                &blank,
+                &ocr,
+                agent_browser_challenge_control::HCAPTCHA_PROFILE.profile_id,
+                &region
+            )
+            .unwrap()["status"],
+            "not_found",
+            "Text alone cannot authorize a point"
+        );
+        let mut outside = ocr.clone();
+        outside["words"][0]["bounds"]["x"] = serde_json::json!(19);
+        assert!(locate_native_frame(
+            &png,
+            &outside,
+            agent_browser_challenge_control::HCAPTCHA_PROFILE.profile_id,
+            &region
+        )
+        .is_err());
+        assert!(locate_native_frame(&png, &ocr, "caller-template", &region).is_err());
     }
 }
