@@ -215,6 +215,40 @@ pub(super) fn completion_failure_cause(error: &str) -> &'static str {
     }
 }
 
+/// Only the locally declared image clock shape may accompany a static cause.
+/// Never forward raw suffixes, arbitrary JSON fields or provider error content.
+pub(super) fn completion_failure_clock(error: &str) -> Option<Value> {
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct Clock {
+        reason: String,
+        observed_at_ms: u64,
+        validation_now_ms: u64,
+        age_ms: u64,
+    }
+    let encoded = error.strip_prefix("browser_native_image_observation_expired:")?;
+    if encoded.len() > 512 {
+        return None;
+    }
+    let clock: Clock = serde_json::from_str(encoded).ok()?;
+    if clock.age_ms != clock.validation_now_ms.saturating_sub(clock.observed_at_ms) {
+        return None;
+    }
+    let reason = match clock.reason.as_str() {
+        "future_timestamp" if clock.validation_now_ms < clock.observed_at_ms => "future_timestamp",
+        "age_exceeded"
+            if clock.validation_now_ms >= clock.observed_at_ms
+                && clock.age_ms > crate::native::browser_native_image::MAX_AGE_MS =>
+        {
+            "age_exceeded"
+        }
+        _ => return None,
+    };
+    Some(
+        json!({"reason":reason,"observedAtMs":clock.observed_at_ms,"validationNowMs":clock.validation_now_ms,"ageMs":clock.age_ms}),
+    )
+}
+
 /// The marker is durable before this closure can ensure a transport or send.
 pub(super) fn transport(
     mut command: Value,
@@ -254,8 +288,10 @@ pub(super) fn transport(
         }
         Admission::Dispatch(original) => match run(command) {
             Ok(mut response) => {
-                let completed=operations::finish(&original,Some(&response)).map_err(|error|format!(
-                        "browser_task_operation_completion_unavailable:{}:inspect original; no retry;cause={}",original.request_id,completion_failure_cause(&error)))?;
+                let completed=operations::finish(&original,Some(&response)).map_err(|error| {
+                    let clock=completion_failure_clock(&error).map(|value|format!(";observationClock={value}")).unwrap_or_default();
+                    format!("browser_task_operation_completion_unavailable:{}:inspect original; no retry;cause={}{}",original.request_id,completion_failure_cause(&error),clock)
+                })?;
                 response_data(&mut response, &completed, false);
                 Ok(response)
             }

@@ -413,9 +413,16 @@ impl NativeImageObservation {
             return Err("browser_native_image_observation_invalid".into());
         }
         if now_ms < self.observed_at_ms || now_ms - self.observed_at_ms > MAX_AGE_MS {
-            return Err(
-                "browser_native_image_observation_expired:human assistance required".into(),
-            );
+            // Preserve both clocks without relaxing the refusal. MCP admits only
+            // this exact numeric diagnostic shape into public completion errors.
+            return Err(format!(
+                "browser_native_image_observation_expired:{}",
+                serde_json::json!({
+                    "reason":if now_ms < self.observed_at_ms {"future_timestamp"} else {"age_exceeded"},
+                    "observedAtMs":self.observed_at_ms,"validationNowMs":now_ms,
+                    "ageMs":now_ms.saturating_sub(self.observed_at_ms)
+                })
+            ));
         }
         Ok(())
     }
