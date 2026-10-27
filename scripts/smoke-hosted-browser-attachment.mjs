@@ -857,6 +857,11 @@ finally{
   cleanup.processesBefore=result.owned;
   cleanup.processesAfter=result.remaining;
   assert.equal(result.qualified,true,'Exact fixture cleanup remains unresolved; assignment cannot be released');
+  cleanup.processesTerminated=true;
+ });
+ await clean('app-process-absence',async()=>{
+  assert.equal(cleanup.errors.length,0,'Unresolved teardown blocks the application absence fence');
+  assert.equal(cleanup.processesTerminated,true,'Exact fixture cleanup must complete before the application absence fence');
   await cleanupPhase('app-absence-fence',()=>appAbsenceFence());cleanup.processesClear=true;
  });
  if(remote&&baseline)await clean('assignment-cleanup',async()=>{
