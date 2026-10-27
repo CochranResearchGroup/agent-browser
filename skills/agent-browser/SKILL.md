@@ -145,4 +145,4 @@ inert [drafts](references/teaching-drafts.md), [review](references/teaching-revi
 [grilling](references/teaching-grilling.md), [repeat](references/report-repeat.md).
 Keep gaps; proposals are not consent. Promotion needs fresh-repeat proof.
 Dates use YYYY-MM-DD; downloads need live local process proof.
-Native OCR/attempts/return: [challenge assistance](references/challenge-assistance.md).
+[Native OCR](references/challenge-assistance.md), [images](references/image-challenge.md).

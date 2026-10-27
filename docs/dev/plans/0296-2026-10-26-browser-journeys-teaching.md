@@ -19,15 +19,15 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 | --- | --- | --- | --- | --- | --- |
 | 467 | none | validated | root | recipes/spec466-integration / duplicate-403 | Reopened regression repairedff812bf0f; model2/MCP151/strictClippy/fmt PASS34d400f0e; tracker CLOSED after requalification |
 | 468 | 467 | validated | root | recipes/spec466-integration / duplicate-403 | worker045dd85a; integration96fad35a2; combined HTTPS + repaired Native019 PASS; tracker reclosed |
-| 469 | 467 | validated | implement_469 | challenge/native-assistance-469 / spec466-469 | workeref57c4a0; combinedb7 Native019 attached/CDP-free PASS; tracker CLOSED |
+| 469 | 467 | validated | implement_469 | challenge/native-assistance-469 retained / auxiliary reused by471 | workeref57c4a0; combinedb7 Native019 attached/CDP-free PASS; tracker CLOSED |
 | 470 | 468,469 | validated | root | recipes/spec466-integration; native-checkbox-470 branch retained | fe6a/ef948 source gates and actual037 bounded checkbox lane PASS; peer-preserving cleanup and940-generation census qualified; tracker CLOSED |
 | 471 | 470 | running | implement_471 | challenge/single-round-image-471 / reused spec466-469 auxiliary | admitted from validatedfc607ad2c; source work only until separately pinned/scoped runtime |
 | 472 | 471 | pending | unassigned | pending | none |
-| 473 | none | validated | implement_473 | recipes/teaching-evidence-473 / profile-proof | worker ea0e2f42ab59; integration67780a8b1; synthetic cases and shared docs validation pass; tracker CLOSED with explicit source/synthetic receipt |
-| 474 | 473 | validated | implement_473 | recipes/teaching-draft-474 / profile-proof | worker243b7405; integration25dd69054; combinedMCP151/strict/docs/client PASS; tracker CLOSED after source qualification |
-| 475 | 474 | validated | implement_473 | recipes/teaching-review-475 / profile-proof | worker5e226f17+89da499b; source9436460eb gates PASS; tracker CLOSED |
-| 476 | 475 | validated | implement_473 | recipes/teaching-grilling-476 / profile-proof | workerace432be; integratione39dc8dae; combinedb7a4a6a3f gates PASS; tracker CLOSED |
-| 477 | 475 | validated | implement_468 | recipes/report-repeat-477 / spec466-468 | worker0d83b36a7; merge4a68271a3; d270 gates + actual22a/dfe report PASS; tracker CLOSED |
+| 473 | none | validated | implement_473 | recipes/teaching-evidence-473 retained / auxiliary removed | worker ea0e2f42ab59; integration67780a8b1; synthetic cases and shared docs validation pass; tracker CLOSED with explicit source/synthetic receipt |
+| 474 | 473 | validated | implement_473 | recipes/teaching-draft-474 retained / auxiliary removed | worker243b7405; integration25dd69054; combinedMCP151/strict/docs/client PASS; tracker CLOSED after source qualification |
+| 475 | 474 | validated | implement_473 | recipes/teaching-review-475 retained / auxiliary removed | worker5e226f17+89da499b; source9436460eb gates PASS; tracker CLOSED |
+| 476 | 475 | validated | implement_473 | recipes/teaching-grilling-476 retained / auxiliary removed | workerace432be; integratione39dc8dae; combinedb7a4a6a3f gates PASS; tracker CLOSED |
+| 477 | 475 | validated | implement_468 | recipes/report-repeat-477 retained / auxiliary removed | worker0d83b36a7; merge4a68271a3; d270 gates + actual22a/dfe report PASS; tracker CLOSED |
 | 478 | 468,469,476,477 | blocked | unassigned | no execution custody | validated prerequisites; missing actual recording/portal/task authority |
 
 ## Validation and bounded review
@@ -415,3 +415,11 @@ Runtime qualification will use root reasoning from an actual private Native PNG 
 While471 source work continued, root inspected the completed profile-proof auxiliary at cleanace432be6786257fff7b87448a529141d530165f. No pinned candidates or active candidate builds remained. Git cherry proves its sole unmatched commit is patch-equivalent in the published integration branch; no exact-ancestor claim is made. Fresh readable-cwd projection found no positive process match; unreadable entries were not promoted to global absence proof. The active471 Cargo target is independent of this checkout.
 
 Governed operation worktree-closeout-31f54fa3-3d86-4979-8fd7-41711d88a7ee previewed and committed removal of exact incarnationab2bf7a2bc6f309cf8ae61e98afe936cc91baa0f50a4a4ddc840410bd2e53931. The recipes/teaching-grilling-476 branch and its exact commit remain retained. Registered population fell from eight to seven; the active471 auxiliary, dirty original Auth and other lane checkouts were preserved. Terminal receipt and supporting inspection/readbacks remain in user-scoped coordination artifacts.
+
+Teaching auxiliary closeout memory disposition: queued. Group agent_browser_main accepted source-anchored jobab285cfc-2a21-4e7b-bc41-686b4448f187 from the canonical ledger. Queue acceptance is not persistence/retrieval proof; no retry was attempted.
+
+## Ticket471 source integrated, actual image selection pending
+
+Worker clean3f38aa3c26d371b65949eddb879f35f925d0e97e integrated as1b2d70914. Separate typed image observation/input, explicit static provider membership, owner-derived tile/Verify points, original frame/control/task fences, same taskwide attempt budget, durable ACK/uncertain effect accounting, safe static completion diagnostics, and dedicated typed client/harness/reference are present. Worker gates: full MCP160, Native integration21, image focus5, checkbox policy/focus2, strict workspace Clippy, format, service client and dedicated JS/declaration checks PASS. These are source/provider-free gates, not model selection or actual Native acceptance.
+
+Root supplied shared metadata, user guidance, package command and exact-target fixture hooks. The image wire allows only two through five single-click actions with the original visual/control guard; both actual extracted bridge guards passed bounded/malformed/foreign/read-only negatives. Image acceptance additionally requires a real Native owner acknowledgement, independent application checks and exact cleanup. Each of four selection phases uses a fresh nonce and actual private PNG; root will publish an atomic digest-bound untrusted candidate-ID response after image inspection. The private helper contains no classifier or oracle answers. Combined source gates and immutable pin are pending; no actual Native image run or471 closure is claimed.472 stays blocked and final review/remediation remain0/0.

@@ -7345,6 +7345,8 @@ Commands:
   Native OCR: high-confidence hCaptcha variants require same-frame brand and registered pixels
   Native input: stable original requestId; uncertain delivery forbids replay
   Native completion errors: inspect the original requestId and safe cause; never replay
+  Native image: explicit provider membership; static 3x3 bus grid; returned IDs only
+  Native image budget: one attempt, at most four tiles plus Verify, 60 seconds
   Native policy: verified CDP origin/provider required; CDP-free uses human assistance
   Native return: original opaque handoff, explicit takeover/return, separate access checks
   browser-mode TASK Inspect mode

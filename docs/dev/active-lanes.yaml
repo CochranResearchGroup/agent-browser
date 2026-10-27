@@ -15,7 +15,7 @@ lanes:
     overlaps: [P295]
     reconciled_overlaps: ["Preserve separate Auth owner; serialize shared public contracts with teaching worker473"]
     limitations: ["No production effects; real narration and portal scope pending", "One broad review and one bounded remediation"]
-    updated_at: 2026-10-26
+    updated_at: 2026-10-27
   - id: P295
     product_lane: PL-AUTH
     objective: Integrate standalone Auth Receipts and qualify browser continuation

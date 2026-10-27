@@ -124,6 +124,40 @@ Completion errors retain the original request ID and a safe diagnostic cause.
 Inspect that original rather than sending another attempt. The cause excludes
 raw storage errors and does not grant retry authority.
 
+## Static image round
+
+The registered `hcaptcha-image-grid-3x3-v1` profile supports one static 3×3
+English bus-selection round. It requires the existing `captcha_solve` capability,
+exact provider configuration reference
+`agent-browser:remote-view-native-image-static-3x3:v1`, and owner-verified site
+policy explicitly listing that provider. An empty provider list does not enable
+image input. Generic checkbox permission does not authorize image input.
+
+Observe the actual Native image before proposing tile IDs:
+
+```json
+{"taskId":"TASK","action":"native_capture","requestId":"image:observation","params":{"classifyChallenges":true,"registeredActionId":"hcaptcha-image-grid-3x3-v1"}}
+```
+
+Reason from those pixels and use only returned candidate IDs. A selection is
+untrusted input to the owner, not authority to send coordinates:
+
+```json
+{"taskId":"TASK","action":"native_input","requestId":"image:attempt","params":{"imageAttempt":{"observationRequestId":"image:observation","selectedCandidateIds":["RETURNED_CANDIDATE_ID"]}}}
+```
+
+The owner derives tile and Verify coordinates and revalidates the exact current
+frame, task, window, control, site policy and cumulative attempt budget. This
+new image profile permits one round and one attempt, at most four tiles plus
+Verify, five clicks/fifteen pointer events/zero keys, within 60 seconds of its
+bound evidence. Existing checkbox limits are unchanged. A new image or family
+does not renew a consumed task attempt. Independent clearance and protected-site
+checks remain necessary after dispatch.
+
+Dynamic, partial, ambiguous or unsupported puzzles require assistance. Lost
+acknowledgement preserves the original operation and forbids replay. This
+profile does not promise universal hCaptcha solving or production admission.
+
 `resolve` requires distinct `verifyClearance` and `verifyAccess` results before
 reporting verified access. It does not mark the larger browser task complete.
 Unsupported challenges, refused policy and uncertain outcomes use the same
