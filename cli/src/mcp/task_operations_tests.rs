@@ -245,3 +245,187 @@ fn native_completion_failure_causes_never_expose_unreviewed_details() {
         assert!(!cause.contains('/'));
     }
 }
+
+#[test]
+fn native_image_public_original_reserves_one_taskwide_attempt_and_never_replays() {
+    native_image_public_completion_case(false);
+}
+
+#[test]
+fn native_image_public_acknowledged_original_retains_typed_batch_budget() {
+    native_image_public_completion_case(true);
+}
+
+fn native_image_public_completion_case(acknowledged: bool) {
+    use crate::native::{
+        browser_native_image as image, browser_session_store::BrowserSessionSqliteStore,
+    };
+    use agent_browser_service_model::BrowserSessionState;
+    struct OwnedProcess(std::process::Child);
+    impl Drop for OwnedProcess {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let directory = std::env::temp_dir().join(format!("image-original-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let chrome = directory.join("chrome");
+    std::fs::copy("/bin/sleep", &chrome).unwrap();
+    let child = OwnedProcess(
+        std::process::Command::new(chrome)
+            .arg("60")
+            .spawn()
+            .unwrap(),
+    );
+    let crate::process_identity::ProcessObservation::Observed(process) =
+        crate::process_identity::observe_process(child.0.id())
+    else {
+        panic!("fixture process missing")
+    };
+    let guard = crate::test_utils::EnvGuard::new(&[
+        "HOME",
+        "AGENT_BROWSER_HOME",
+        "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+        "AGENT_BROWSER_CONFIG",
+    ]);
+    guard.set("HOME", directory.to_str().unwrap());
+    guard.set("AGENT_BROWSER_HOME", directory.to_str().unwrap());
+    guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+    guard.remove("AGENT_BROWSER_CONFIG");
+    let mut value = serde_json::to_value(BrowserSessionState::default()).unwrap();
+    value["sessions"] = json!({"task":{"id":"task","name":"image-lane","profileId":"profile","browserId":"browser","createdAtMs":1,"lastActivityAtMs":1,"expiresAtMs":0,"currentTabId":"tab"}});
+    value["browsers"] = json!({"browser":{"id":"browser","profileId":"profile","pid":child.0.id(),"cdpEndpoint":"","desktop":null,"activeSessionIds":["task"]}});
+    value["tabs"] = json!({"tab":{"id":"tab","targetId":"target","browserId":"browser","sessionId":"task","createdAtMs":1,"lastActivityAtMs":1}});
+    value["sharedBrowserIds"] = json!(["browser"]);
+    value["adoptedBrowserProcessIdentities"] = json!({"browser":{"profileId":"profile","cdpEndpoint":"","process":{"pid":process.pid,"startToken":process.start_token,"executablePath":process.executable_path,"browserFamily":process.browser_family}}});
+    let store = BrowserSessionSqliteStore::default_sqlite().unwrap();
+    store
+        .save_session_state(&serde_json::from_value(value).unwrap())
+        .unwrap();
+    use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
+    let profile_path = directory.join("profile");
+    std::fs::create_dir_all(&profile_path).unwrap();
+    let catalog=serde_json::from_value(json!({"schemaVersion":"agent-browser.browser-profile-catalog.v1","profiles":{"profile":{"id":"profile","name":"Image fixture","userDataDir":profile_path,"kind":"named"}}})).unwrap();
+    store.save_profile_catalog(&catalog).unwrap();
+    let mut service =
+        serde_json::to_value(agent_browser_service_model::ServiceState::default()).unwrap();
+    service["profiles"] = json!({"profile":{"id":"profile","name":"Image fixture","userDataDir":profile_path,"sitePolicyIds":["image-site"]}});
+    service["sitePolicies"] = json!({"image-site":{"id":"image-site","originPattern":"https://owned.example.test","challengePolicy":"provider_allowed","allowedChallengeProviders":["image-provider"]}});
+    service["providers"] = json!({"image-provider":{"id":"image-provider","kind":"captcha","enabled":true,"capabilities":["captcha_solve"],"configRef":image::CONFIG_REF}});
+    JsonServiceStateStore::new(crate::native::service_store::default_service_state_path().unwrap())
+        .save(&serde_json::from_value(service).unwrap())
+        .unwrap();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    let candidates=(0..9).map(|index|json!({"candidateId":format!("tile:{}:{}",index+1,"a".repeat(16)),"bounds":{"x":100+(index%3)*66,"y":200+(index/3)*66,"width":64,"height":64}})).collect::<Vec<_>>();
+    let mut observation = json!({"desktopId":"viewing","generation":9,"windowId":7,"processDigest":"b".repeat(64),"window":{"x":0,"y":0,"width":640,"height":480},"displayWidth":640,"displayHeight":480,"region":{"x":0,"y":0,"width":640,"height":480},"frameSha256":"a".repeat(64),"nativeControlEpoch":4,"observedAtMs":now,"registeredActionId":image::PROFILE_ID,"puzzleSha256":"","candidates":candidates,"verify":{"x":100,"y":414,"width":80,"height":30}});
+    observation["puzzleSha256"] = json!(image::digest(&(
+        &observation["frameSha256"],
+        &observation["candidates"],
+        &observation["verify"],
+        image::PROFILE_ID
+    ))
+    .unwrap());
+    let capture_params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_capture","requestId":"image-observation","params":{"classifyChallenges":true,"registeredActionId":image::PROFILE_ID}}});
+    task_operations::with_context(Some(&capture_params),||{
+        let response=task_operations::transport(json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":image::PROFILE_ID}),|_|Ok(crate::connection::Response{success:true,data:Some(json!({"nativeImageObservation":observation})),..Default::default()})).expect("public image observation must complete");
+        assert!(response.success);Ok(Value::Null)
+    }).unwrap();
+    let input = json!({"action":"native_input","imageAttempt":{"observationRequestId":"image-observation","selectedCandidateIds":[format!("tile:1:{}","a".repeat(16)),format!("tile:3:{}","a".repeat(16))]}});
+    let params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_input","requestId":"image-attempt","params":input}});
+    let mut dispatched = 0;
+    task_operations::with_context(Some(&params), || {
+        let response = task_operations::transport(input.clone(), |command| {
+            dispatched += 1;
+            let binding = crate::native::browser_task_operations::native_site_policy(
+                &command,
+                "https://owned.example.test",
+            )?;
+            crate::native::browser_task_operations::retain_native_site_policy(&command, &binding)?;
+            Ok(crate::connection::Response {
+                success: acknowledged,
+                data: Some(json!({"source":"remote_view_native","delivery":"dispatched"})),
+                error: (!acknowledged).then(|| "external Native reply unavailable".into()),
+                ..Default::default()
+            })
+        })
+        .expect("completed original must remain readable");
+        assert_eq!(response.success, acknowledged);
+        Ok(Value::Null)
+    })
+    .unwrap();
+    let readback = task_operations::lookup("task", "image-attempt").unwrap();
+    assert_eq!(
+        readback["operation"]["state"],
+        if acknowledged {
+            "owner_acknowledged"
+        } else {
+            "uncertain"
+        }
+    );
+    let round: Value = serde_json::from_str(
+        readback["operation"]["evidenceReferences"]["nativeImageRound"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(round["snapshot"]["totalPointerEvents"], 9);
+    assert_eq!(round["snapshot"]["totalSelections"], 2);
+    assert_eq!(
+        readback["operation"]["evidenceReferences"]["nativeImageBudgetAccounting"],
+        if acknowledged {
+            "derived_batch_acknowledged"
+        } else {
+            "reserved_maximum_on_uncertain"
+        }
+    );
+    assert_eq!(readback["operation"]["retryAllowed"], false);
+    task_operations::with_context(Some(&params), || {
+        let replay = task_operations::transport(input.clone(), |_| {
+            dispatched += 1;
+            panic!("image original replayed")
+        })
+        .unwrap();
+        assert_eq!(replay.data.unwrap()["dispatchAttempted"], false);
+        Ok(Value::Null)
+    })
+    .unwrap();
+    assert_eq!(dispatched, 1);
+    let mut another = params.clone();
+    another["arguments"]["requestId"] = json!("new-image-attempt");
+    task_operations::with_context(Some(&another), || {
+        let failure =
+            task_operations::transport(input.clone(), |_| panic!("taskwide image budget reset"))
+                .err()
+                .unwrap();
+        assert!(failure.contains("attempt_budget_exhausted"), "{failure}");
+        Ok(Value::Null)
+    })
+    .unwrap();
+}
+
+#[test]
+fn native_image_completion_diagnostics_discard_every_private_suffix() {
+    for code in [
+        "browser_native_image_observation_invalid",
+        "browser_native_image_observation_expired",
+        "browser_native_image_round_invalid",
+        "browser_native_image_round_changed",
+        "browser_native_image_round_missing",
+    ] {
+        assert_eq!(task_operations::completion_failure_cause(code), code);
+        assert_eq!(
+            task_operations::completion_failure_cause(&format!(
+                "{code}:SELECT password FROM private; /private/path"
+            )),
+            code
+        );
+        assert_eq!(
+            task_operations::completion_failure_cause(&format!("unknown-{code}:private")),
+            "unclassified"
+        );
+    }
+}

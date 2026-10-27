@@ -7,6 +7,15 @@ use std::path::Path;
 
 #[test]
 fn native_policy_publication_focus_reuses_exact_owner_activity_snapshot() {
+    native_policy_focus_cases(false);
+}
+
+#[test]
+fn native_image_policy_publication_focus_reuses_exact_owner_activity_snapshot() {
+    native_policy_focus_cases(true);
+}
+
+fn native_policy_focus_cases(image: bool) {
     use super::super::browser_task_operations as operations;
     for case in ["own", "foreign_before", "foreign_after", "epoch_after"] {
         let root =
@@ -55,13 +64,25 @@ fn native_policy_publication_focus_reuses_exact_owner_activity_snapshot() {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_millis() as u64;
-        let observation = serde_json::json!({"desktopId":"viewing","generation":9,"windowId":7,"window":{"x":0,"y":0,"width":320,"height":200},"displayWidth":320,"displayHeight":200,"region":{"x":0,"y":0,"width":320,"height":200},"frameSha256":"a".repeat(64),"nativeControlEpoch":4,"observedAtMs":now,"registeredActionId":"hcaptcha-checkbox-p181-v2","family":"hcaptcha","candidateSha256":"b".repeat(64),"x":50,"y":50});
+        let mut observation = serde_json::json!({"desktopId":"viewing","generation":9,"windowId":7,"window":{"x":0,"y":0,"width":320,"height":200},"displayWidth":320,"displayHeight":200,"region":{"x":0,"y":0,"width":320,"height":200},"frameSha256":"a".repeat(64),"nativeControlEpoch":4,"observedAtMs":now,"registeredActionId":"hcaptcha-checkbox-p181-v2","family":"hcaptcha","candidateSha256":"b".repeat(64),"x":50,"y":50});
+        if image {
+            let candidates=(0..9).map(|index|serde_json::json!({"candidateId":format!("tile:{}:{}",index+1,"a".repeat(16)),"bounds":{"x":100+(index%3)*66,"y":200+(index/3)*66,"width":64,"height":64}})).collect::<Vec<_>>();
+            observation = serde_json::json!({"desktopId":"viewing","generation":9,"windowId":7,"processDigest":"b".repeat(64),"window":{"x":0,"y":0,"width":640,"height":480},"displayWidth":640,"displayHeight":480,"region":{"x":0,"y":0,"width":640,"height":480},"frameSha256":"a".repeat(64),"nativeControlEpoch":4,"observedAtMs":now,"registeredActionId":super::super::browser_native_image::PROFILE_ID,"puzzleSha256":"","candidates":candidates,"verify":{"x":100,"y":414,"width":80,"height":30}});
+            observation["puzzleSha256"] =
+                serde_json::json!(super::super::browser_native_image::digest(&(
+                    &observation["frameSha256"],
+                    &observation["candidates"],
+                    &observation["verify"],
+                    super::super::browser_native_image::PROFILE_ID
+                ))
+                .unwrap());
+        }
         let row = |id: &str, action: &str, status: &str, refs: Value| {
             serde_json::from_value::<BrowserTaskOperation>(serde_json::json!({"requestId":id,"taskId":session.id,"profileId":session.profile_id,"browserId":browser.id,"tabId":tab.id,"targetId":tab.target_id,"processPid":browser.pid,"processIdentity":identity,"controlEpoch":epoch,"action":action,"fingerprint":"private-fixture","state":status,"createdAtMs":now,"completedAtMs":null,"evidenceReferences":refs})).unwrap()
         };
         state.task_operations.insert(session.id.clone(),std::collections::BTreeMap::from([
-        ("capture".into(),row("capture","native_capture","owner_acknowledged",serde_json::json!({"nativeObservation":observation.to_string()}))),
-        ("attempt".into(),row("attempt","native_input","pending",serde_json::json!({"nativeObservationRequestId":"capture","nativeRegisteredActionId":"hcaptcha-checkbox-p181-v2"})))
+        ("capture".into(),row("capture","native_capture","owner_acknowledged",if image {serde_json::json!({"nativeImageObservation":observation.to_string()})} else {serde_json::json!({"nativeObservation":observation.to_string()})})),
+        ("attempt".into(),row("attempt","native_input","pending",serde_json::json!({"nativeObservationRequestId":"capture","nativeRegisteredActionId":if image {super::super::browser_native_image::PROFILE_ID}else{"hcaptcha-checkbox-p181-v2"}})))
     ]));
         fixture.store(false).save_session_state(&state).unwrap();
         provider.borrow_mut().window_pid = Some(browser.pid);
@@ -91,8 +112,11 @@ fn native_policy_publication_focus_reuses_exact_owner_activity_snapshot() {
             },
         )
         .unwrap();
-        let command = serde_json::json!({"id":"attempt","action":"native_input","sessionId":session.id,"nativeAttempt":{"observationRequestId":"capture","registeredActionId":"hcaptcha-checkbox-p181-v2"}});
-        let binding = serde_json::json!({"sitePolicyId":"owned-site","digest":"d".repeat(64),"providerId":"owned-native-provider","family":"hcaptcha","registeredActionId":"hcaptcha-checkbox-p181-v2"});
+        let mut command = serde_json::json!({"id":"attempt","action":"native_input","sessionId":session.id,"nativeAttempt":{"observationRequestId":"capture","registeredActionId":"hcaptcha-checkbox-p181-v2"}});
+        let binding = serde_json::json!({"sitePolicyId":"owned-site","digest":"d".repeat(64),"providerId":"owned-native-provider","family":"hcaptcha","registeredActionId":if image {super::super::browser_native_image::PROFILE_ID}else{"hcaptcha-checkbox-p181-v2"}});
+        if image {
+            command = serde_json::json!({"id":"attempt","action":"native_input","sessionId":session.id,"imageAttempt":{"observationRequestId":"capture","selectedCandidateIds":[format!("tile:1:{}","a".repeat(16))]}});
+        }
         if case == "foreign_before" {
             fixture
                 .store(false)

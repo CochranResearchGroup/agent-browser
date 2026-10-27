@@ -4,6 +4,15 @@ use super::*;
 
 #[test]
 fn native_challenge_owner_policy_requires_current_profile_origin_and_enabled_bound_provider() {
+    native_policy_cases(false);
+}
+
+#[test]
+fn native_image_owner_policy_requires_explicit_static_provider_and_shared_budget() {
+    native_policy_cases(true);
+}
+
+fn native_policy_cases(image: bool) {
     let root = std::env::temp_dir().join(format!("native-policy-{}", uuid::Uuid::new_v4()));
     let profile_path = root.join("profile");
     std::fs::create_dir_all(&profile_path).unwrap();
@@ -21,9 +30,20 @@ fn native_challenge_owner_policy_requires_current_profile_origin_and_enabled_bou
     let epoch = super::super::browser_host_control::read("browser")
         .unwrap()
         .epoch;
-    let observation = json!({"desktopId":"desktop","generation":9,"windowId":7,"window":{"x":0,"y":0,"width":320,"height":200},
+    let mut observation = json!({"desktopId":"desktop","generation":9,"windowId":7,"window":{"x":0,"y":0,"width":320,"height":200},
         "displayWidth":320,"displayHeight":200,"region":{"x":0,"y":0,"width":320,"height":200},"frameSha256":"a".repeat(64),
         "nativeControlEpoch":4,"observedAtMs":now_ms().unwrap(),"registeredActionId":"hcaptcha-checkbox-p181-v2","family":"hcaptcha","candidateSha256":"b".repeat(64),"x":50,"y":50});
+    if image {
+        let candidates=(0..9).map(|index|json!({"candidateId":format!("tile:{}:{}",index+1,"a".repeat(16)),"bounds":{"x":100+(index%3)*66,"y":200+(index/3)*66,"width":64,"height":64}})).collect::<Vec<_>>();
+        observation = json!({"desktopId":"desktop","generation":9,"windowId":7,"processDigest":"b".repeat(64),"window":{"x":0,"y":0,"width":640,"height":480},"displayWidth":640,"displayHeight":480,"region":{"x":0,"y":0,"width":640,"height":480},"frameSha256":"a".repeat(64),"nativeControlEpoch":4,"observedAtMs":now_ms().unwrap(),"registeredActionId":super::super::browser_native_image::PROFILE_ID,"puzzleSha256":"","candidates":candidates,"verify":{"x":100,"y":414,"width":80,"height":30}});
+        observation["puzzleSha256"] = json!(super::super::browser_native_image::digest(&(
+            &observation["frameSha256"],
+            &observation["candidates"],
+            &observation["verify"],
+            super::super::browser_native_image::PROFILE_ID
+        ))
+        .unwrap());
+    }
     let row = |request: &str, action: &str, state: &str, refs: Value| {
         json!({"requestId":request,"taskId":"task","profileId":"profile","browserId":"browser","tabId":"tab","targetId":"target",
         "processPid":std::process::id(),"processIdentity":null,"controlEpoch":epoch,"action":action,"fingerprint":"synthetic-private-mac","state":state,"createdAtMs":1,"completedAtMs":null,"evidenceReferences":refs})
@@ -33,8 +53,8 @@ fn native_challenge_owner_policy_requires_current_profile_origin_and_enabled_bou
     value["browsers"] = json!({"browser":{"id":"browser","profileId":"profile","pid":std::process::id(),"cdpEndpoint":"","desktop":null,"activeSessionIds":["task"]}});
     value["tabs"] = json!({"tab":{"id":"tab","targetId":"target","browserId":"browser","sessionId":"task","createdAtMs":1,"lastActivityAtMs":1}});
     value["taskOperations"] = json!({"task":{
-        "capture":row("capture","native_capture","owner_acknowledged",json!({"nativeObservation":observation.to_string()})),
-        "attempt":row("attempt","native_input","pending",json!({"nativeObservationRequestId":"capture","nativeRegisteredActionId":"hcaptcha-checkbox-p181-v2"}))}});
+        "capture":row("capture","native_capture","owner_acknowledged",if image {json!({"nativeImageObservation":observation.to_string()})} else {json!({"nativeObservation":observation.to_string()})}),
+        "attempt":row("attempt","native_input","pending",json!({"nativeObservationRequestId":"capture","nativeRegisteredActionId":if image {super::super::browser_native_image::PROFILE_ID}else{"hcaptcha-checkbox-p181-v2"}}))}});
     let base: BrowserSessionState = serde_json::from_value(value.clone()).unwrap();
     store.save_session_state(&base).unwrap();
     let catalog:agent_browser_service_model::BrowserProfileCatalog=serde_json::from_value(json!({"schemaVersion":"agent-browser.browser-profile-catalog.v1","profiles":{"profile":{"id":"profile","name":"Fixture","userDataDir":profile_path,"kind":"named"}}})).unwrap();
@@ -53,7 +73,12 @@ fn native_challenge_owner_policy_requires_current_profile_origin_and_enabled_bou
             .unwrap()
     };
     save(&service);
-    let command = json!({"id":"attempt","action":"native_input","sessionId":"task","nativeAttempt":{"observationRequestId":"capture","registeredActionId":"hcaptcha-checkbox-p181-v2"}});
+    let mut command = json!({"id":"attempt","action":"native_input","sessionId":"task","nativeAttempt":{"observationRequestId":"capture","registeredActionId":"hcaptcha-checkbox-p181-v2"}});
+    if image {
+        service["providers"]["native-provider"]["configRef"] =
+            json!(super::super::browser_native_image::CONFIG_REF);
+        command = json!({"id":"attempt","action":"native_input","sessionId":"task","imageAttempt":{"observationRequestId":"capture","selectedCandidateIds":[format!("tile:1:{}","a".repeat(16)),format!("tile:3:{}","a".repeat(16))]}});
+    }
     let mut outcomes = Vec::new();
     for case in [
         "current",
@@ -70,10 +95,32 @@ fn native_challenge_owner_policy_requires_current_profile_origin_and_enabled_bou
         "missing-capability",
         "wrong-binding",
         "ambiguous-provider",
-    ] {
+    ]
+    .into_iter()
+    .chain(image.then_some("wrong-original-profile"))
+    .chain(image.then_some("missing-provider-membership"))
+    {
         store.save_session_state(&base).unwrap();
+        if case == "wrong-original-profile" {
+            let mut changed = base.clone();
+            changed
+                .task_operations
+                .get_mut("task")
+                .unwrap()
+                .get_mut("attempt")
+                .unwrap()
+                .evidence_references
+                .insert(
+                    "nativeRegisteredActionId".into(),
+                    "hcaptcha-checkbox-p181-v2".into(),
+                );
+            store.save_session_state(&changed).unwrap();
+        }
         let mut source = service.clone();
         match case {
+            "missing-provider-membership" => {
+                source["sitePolicies"]["owned-site"]["allowedChallengeProviders"] = json!([])
+            }
             "unbound-profile" => source["profiles"]["profile"]["sitePolicyIds"] = json!([]),
             "ambiguous-site" => {
                 source["profiles"]["profile"]["sitePolicyIds"] = json!(["owned-site", "other"]);
@@ -102,7 +149,11 @@ fn native_challenge_owner_policy_requires_current_profile_origin_and_enabled_bou
                 source["providers"]["native-provider"]["capabilities"] = json!(["human_approval"])
             }
             "wrong-binding" => {
-                source["providers"]["native-provider"]["configRef"] = json!("vendor-other")
+                source["providers"]["native-provider"]["configRef"] = if image {
+                    json!("agent-browser:remote-view-native:v1")
+                } else {
+                    json!("vendor-other")
+                }
             }
             "ambiguous-provider" => {
                 source["sitePolicies"]["owned-site"]["allowedChallengeProviders"] = json!([]);
@@ -142,7 +193,7 @@ fn native_challenge_owner_policy_requires_current_profile_origin_and_enabled_bou
     for state_name in ["pending", "uncertain", "owner_acknowledged"] {
         let mut state = value.clone();
         state["taskOperations"]["task"]["attempt"]["state"] = json!(state_name);
-        let mut fresh = observation.clone();
+        let mut fresh = json!({"desktopId":"desktop","generation":9,"windowId":7,"window":{"x":0,"y":0,"width":320,"height":200},"displayWidth":320,"displayHeight":200,"region":{"x":0,"y":0,"width":320,"height":200},"frameSha256":"a".repeat(64),"nativeControlEpoch":4,"observedAtMs":now_ms().unwrap(),"registeredActionId":"hcaptcha-checkbox-p181-v2","family":"hcaptcha","candidateSha256":"b".repeat(64),"x":50,"y":50});
         fresh["registeredActionId"] = json!("turnstile-checkbox-p169-v1");
         fresh["family"] = json!("turnstile");
         fresh["observedAtMs"] = json!(now_ms().unwrap());
@@ -180,7 +231,14 @@ fn native_challenge_owner_policy_requires_current_profile_origin_and_enabled_bou
             let result = result.unwrap();
             assert_eq!(result["providerId"], "native-provider");
             assert_eq!(result["family"], "hcaptcha");
-            assert_eq!(result["registeredActionId"], "hcaptcha-checkbox-p181-v2");
+            assert_eq!(
+                result["registeredActionId"],
+                if image {
+                    super::super::browser_native_image::PROFILE_ID
+                } else {
+                    "hcaptcha-checkbox-p181-v2"
+                }
+            );
         } else {
             assert!(result.is_err(), "{case}:{result:?}");
         }
@@ -204,6 +262,21 @@ fn native_challenge_owner_policy_requires_current_profile_origin_and_enabled_bou
         uncertain.evidence_references["nativeChallengeState"],
         "human_intervention_required"
     );
+    if image {
+        let completed: Value =
+            serde_json::from_str(&acknowledged.evidence_references["nativeImageRound"]).unwrap();
+        assert_eq!(
+            completed["snapshot"]["totalPointerEvents"], 9,
+            "The acknowledged tile+Verify batch must not use checkbox counts"
+        );
+        assert_eq!(completed["snapshot"]["totalSelections"], 2);
+        let unknown: Value =
+            serde_json::from_str(&uncertain.evidence_references["nativeImageRound"]).unwrap();
+        assert_eq!(
+            unknown["snapshot"]["totalPointerEvents"], 9,
+            "Uncertain delivery consumes its complete reserved budget"
+        );
+    }
     for (state, error) in budget {
         assert!(error.unwrap().contains("budget_exhausted"), "{state}");
     }

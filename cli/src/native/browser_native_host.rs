@@ -33,6 +33,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         };
         self.effects.begin_operation(&self.persisted_state)?;
         let assignment = self.effects.native_handoff_assignment_target(target)?;
+        if command.get("imageAttempt").is_some() {
+            return self.native_image_browser_command(target, &original, &assignment, command);
+        }
         if command.get("nativeAttempt").is_none() {
             return self.native_process_command(&original, &assignment, command);
         }
@@ -111,6 +114,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             &assignment,
             command,
             Some(&mut check),
+            None,
         )
     }
 
@@ -128,6 +132,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             original,
             assignment,
             command,
+            None,
             None,
         )
     }
@@ -256,6 +261,9 @@ type NativeAttemptAdmission<'a> = dyn FnMut(
     ) -> Result<super::super::browser_native_control::NativeChallengeObservation, String>
     + 'a;
 
+type NativeImageAttemptAdmission<'a> = dyn FnMut(&Value) -> Result<super::super::browser_native_image::NativeImageObservation, String>
+    + 'a;
+
 fn run_native_owner<'a, P: BrowserSessionPersistence>(
     persistence: &'a P,
     expected: &'a BrowserSessionState,
@@ -263,6 +271,7 @@ fn run_native_owner<'a, P: BrowserSessionPersistence>(
     assignment: &agent_browser_service_model::RemoteViewApplicationTarget,
     command: &'a Value,
     admission: Option<&'a mut NativeAttemptAdmission<'a>>,
+    image_admission: Option<&'a mut NativeImageAttemptAdmission<'a>>,
 ) -> Result<Value, String> {
     let origin = std::env::var("AGENT_BROWSER_REMOTE_VIEW_ORIGIN")
         .map_err(|_| "browser_native_owner_unconfigured")?;
@@ -274,6 +283,7 @@ fn run_native_owner<'a, P: BrowserSessionPersistence>(
     struct Owner<'a, P> {
         command: &'a Value,
         admission: Option<&'a mut NativeAttemptAdmission<'a>>,
+        image_admission: Option<&'a mut NativeImageAttemptAdmission<'a>>,
         http: super::super::remote_view_application_http::RemoteViewApplicationHttp,
         persistence: &'a P,
         expected: &'a BrowserSessionState,
@@ -309,9 +319,33 @@ fn run_native_owner<'a, P: BrowserSessionPersistence>(
             check(command)
         }
 
+        fn native_image_attempt(
+            &mut self,
+            command: &Value,
+        ) -> Result<super::super::browser_native_image::NativeImageObservation, String> {
+            if self.persistence.load_session_state()? != *self.expected {
+                return Err("browser_native_target_changed:refresh task".into());
+            }
+            self.image_admission
+                .as_deref_mut()
+                .ok_or("browser_native_site_policy_origin_unverified:human assistance required")?(
+                command,
+            )
+        }
+
         fn request(&mut self, operation: &str, body: &Value) -> Result<Value, String> {
             if self.persistence.load_session_state()? != *self.expected {
                 return Err("browser_native_target_changed:refresh task".into());
+            }
+            if operation == "input" && self.command.get("imageAttempt").is_some() {
+                self.image_admission
+                    .as_deref_mut()
+                    .ok_or("browser_native_site_policy_origin_unverified")?(
+                    self.command
+                )?;
+                if self.persistence.load_session_state()? != *self.expected {
+                    return Err("browser_native_target_changed:refresh task".into());
+                }
             }
             if operation == "input" && self.command.get("nativeAttempt").is_some() {
                 let check = self
@@ -333,6 +367,10 @@ fn run_native_owner<'a, P: BrowserSessionPersistence>(
         expected,
         command,
         admission,
+        image_admission,
     };
     super::super::browser_native_control::execute(original, assignment, command, &mut owner)
 }
+
+#[path = "browser_native_host_image.rs"]
+mod image;

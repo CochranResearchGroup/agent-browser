@@ -93,7 +93,8 @@ pub(crate) fn eligible_action(action: &str) -> bool {
 /// Opt-in only: generic Native input keeps its existing owner contract.
 pub(crate) fn eligible_native(action: &str, params: &Value) -> bool {
     action == "native_capture" && params.get("registeredActionId").is_some()
-        || action == "native_input" && params.get("nativeAttempt").is_some()
+        || action == "native_input"
+            && (params.get("nativeAttempt").is_some() || params.get("imageAttempt").is_some())
 }
 
 pub(crate) fn begin_native(task_id: &str, command: &mut Value) -> Result<Admission, String> {
@@ -105,6 +106,9 @@ pub(crate) fn begin_native(task_id: &str, command: &mut Value) -> Result<Admissi
             return Err("browser_native_registered_action_requires_classification".into());
         }
         command["registeredActionId"].as_str()
+    } else if command.get("imageAttempt").is_some() {
+        image_attempt_selection(command)?;
+        Some(super::browser_native_image::PROFILE_ID)
     } else {
         let attempt = command["nativeAttempt"]
             .as_object()
@@ -122,10 +126,10 @@ pub(crate) fn begin_native(task_id: &str, command: &mut Value) -> Result<Admissi
         }
         attempt["registeredActionId"].as_str()
     };
-    if action_id
-        .and_then(agent_browser_challenge_control::challenge_profile)
-        .is_none()
-    {
+    if !action_id.is_some_and(|id| {
+        id == super::browser_native_image::PROFILE_ID
+            || agent_browser_challenge_control::challenge_profile(id).is_some()
+    }) {
         return Err("browser_native_registered_action_invalid".into());
     }
     begin_inner(task_id, command, true)
@@ -307,7 +311,12 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
     // Resolve an original capture before transport or process recovery. Missing
     // evidence is never replaced by a caller timestamp or guessed coordinates.
     let observation = if native && action == "native_input" {
-        Some(original_native_observation(&state, task_id, command)?)
+        if command.get("imageAttempt").is_some() {
+            original_native_image_observation(&state, task_id, command)?;
+        } else {
+            original_native_observation(&state, task_id, command)?;
+        }
+        Some(())
     } else {
         None
     };
@@ -351,17 +360,23 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
             BTreeMap::from([
                 (
                     "nativeObservationRequestId".into(),
-                    command["nativeAttempt"]["observationRequestId"]
+                    command
+                        .get("imageAttempt")
+                        .unwrap_or(&command["nativeAttempt"])["observationRequestId"]
                         .as_str()
                         .unwrap()
                         .into(),
                 ),
                 (
                     "nativeRegisteredActionId".into(),
-                    command["nativeAttempt"]["registeredActionId"]
-                        .as_str()
-                        .unwrap()
-                        .into(),
+                    if command.get("imageAttempt").is_some() {
+                        super::browser_native_image::PROFILE_ID
+                    } else {
+                        command["nativeAttempt"]["registeredActionId"]
+                            .as_str()
+                            .unwrap()
+                    }
+                    .into(),
                 ),
             ])
         } else {
@@ -383,7 +398,11 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
         }
         let admitted = original.clone();
         if observation.is_some() {
-            original_native_observation(state, task_id, command)?;
+            if command.get("imageAttempt").is_some() {
+                original_native_image_observation(state, task_id, command)?;
+            } else {
+                original_native_observation(state, task_id, command)?;
+            }
             super::browser_host_policy::check_state(state, task_id, command)?;
             if state.task_operations.get(task_id).is_some_and(|rows| {
                 rows.values().any(|row| {
@@ -559,6 +578,26 @@ pub(crate) fn native_attempt_observation(
     original_native_observation(&state, task, command)
 }
 
+struct NativePolicyObservation {
+    family: String,
+    registered_action_id: String,
+}
+fn native_policy_observation(command: &Value) -> Result<NativePolicyObservation, String> {
+    if command.get("imageAttempt").is_some() {
+        let observation = native_image_attempt_observation(command)?;
+        Ok(NativePolicyObservation {
+            family: "hcaptcha".into(),
+            registered_action_id: observation.registered_action_id,
+        })
+    } else {
+        let observation = native_attempt_observation(command)?;
+        Ok(NativePolicyObservation {
+            family: observation.family,
+            registered_action_id: observation.registered_action_id,
+        })
+    }
+}
+
 fn native_profile_sources(
     command: &Value,
 ) -> Result<
@@ -569,7 +608,7 @@ fn native_profile_sources(
     ),
     String,
 > {
-    native_attempt_observation(command)?;
+    native_policy_observation(command)?;
     let task_id = command["sessionId"]
         .as_str()
         .ok_or("browser_native_site_policy_task_missing")?;
@@ -638,7 +677,7 @@ pub(crate) fn native_site_mode_preflight(command: &Value) -> Result<(), String> 
 /// origin. Only the Native runtime adapter supplies this observation; public
 /// input parameters cannot select a policy, origin or digest.
 pub(crate) fn native_site_policy(command: &Value, verified_origin: &str) -> Result<Value, String> {
-    let observation = native_attempt_observation(command)?;
+    let observation = native_policy_observation(command)?;
     let (service, profile_id, state) = native_profile_sources(command)?;
     let task_id = command["sessionId"]
         .as_str()
@@ -713,8 +752,15 @@ pub(crate) fn native_site_policy(command: &Value, verified_origin: &str) -> Resu
                 && provider
                     .capabilities
                     .contains(&agent_browser_service_model::ProviderCapability::CaptchaSolve)
-                && provider.config_ref.as_deref() == Some("agent-browser:remote-view-native:v1")
+                && provider.config_ref.as_deref()
+                    == Some(if command.get("imageAttempt").is_some() {
+                        super::browser_native_image::CONFIG_REF
+                    } else {
+                        "agent-browser:remote-view-native:v1"
+                    })
                 && decision.challenge_provider_ids.contains(&provider.id)
+                && (command.get("imageAttempt").is_none()
+                    || policy.allowed_challenge_providers.contains(&provider.id))
         })
         .collect::<Vec<_>>();
     let [provider] = native.as_slice() else {
@@ -803,7 +849,16 @@ pub(crate) fn retain_native_site_policy_for_owner(
         if RetainedContext::from_operation(original) != context(state, task)? {
             return Err("browser_native_original_observation_context_changed".into());
         }
-        let observation = original_native_observation(state, task, command)?;
+        let image_plan = if command.get("imageAttempt").is_some() {
+            Some(native_image_kernel_plan(state, task, command, binding)?)
+        } else {
+            None
+        };
+        let observation = if image_plan.is_none() {
+            Some(original_native_observation(state, task, command)?)
+        } else {
+            None
+        };
         if let Some(prior) = state
             .task_operations
             .get(task)
@@ -818,7 +873,23 @@ pub(crate) fn retain_native_site_policy_for_owner(
                 Err("browser_native_site_policy_changed".into())
             };
         }
-        let policy = native_kernel_admit(state, task, command, &observation, binding)?;
+        let (family, policy_digest, deadline) = if let Some(plan) = &image_plan {
+            (
+                "hcaptcha".to_owned(),
+                plan.policy.policy_digest.clone(),
+                plan.policy.deadline_at_ms,
+            )
+        } else {
+            let observation = observation
+                .as_ref()
+                .ok_or("browser_native_original_observation_unqualified")?;
+            let policy = native_kernel_admit(state, task, command, observation, binding)?;
+            (
+                observation.family.clone(),
+                policy.policy_digest,
+                policy.deadline_at_ms,
+            )
+        };
         let original = state
             .task_operations
             .get_mut(task)
@@ -839,13 +910,16 @@ pub(crate) fn retain_native_site_policy_for_owner(
                 .ok_or("browser_native_site_policy_provider_missing")?
                 .into(),
         );
-        refs.insert("nativeChallengeFamily".into(), observation.family);
+        refs.insert("nativeChallengeFamily".into(), family);
         refs.insert("nativeChallengeState".into(), "solving".into());
-        refs.insert("nativeChallengePolicyDigest".into(), policy.policy_digest);
-        refs.insert(
-            "nativeChallengeDeadlineAtMs".into(),
-            policy.deadline_at_ms.to_string(),
-        );
+        refs.insert("nativeChallengePolicyDigest".into(), policy_digest);
+        refs.insert("nativeChallengeDeadlineAtMs".into(), deadline.to_string());
+        if let Some(plan) = image_plan {
+            refs.insert(
+                "nativeImageRound".into(),
+                super::browser_native_image::retain_plan(&plan)?,
+            );
+        }
         Ok(state.clone())
     })?;
     let retained = RetainedContext::from_operation(&after.task_operations[task][request]);
@@ -996,6 +1070,21 @@ pub(crate) fn finish(
             if let Some(value) = response
                 .data
                 .as_ref()
+                .and_then(|data| data.get("nativeImageObservation"))
+            {
+                let observation: super::browser_native_image::NativeImageObservation =
+                    serde_json::from_value(value.clone())
+                        .map_err(|_| "browser_native_image_observation_invalid")?;
+                observation.validate(now_ms()?)?;
+                references.insert(
+                    "nativeImageObservation".into(),
+                    serde_json::to_string(&observation)
+                        .map_err(|_| "browser_native_image_observation_invalid")?,
+                );
+            }
+            if let Some(value) = response
+                .data
+                .as_ref()
                 .and_then(|data| data.get("nativeObservation"))
             {
                 let observation: super::browser_native_control::NativeChallengeObservation =
@@ -1013,7 +1102,26 @@ pub(crate) fn finish(
             references.insert("nativeDelivery".into(), "dispatched".into());
         }
     }
-    if original.action == "native_input" && references.contains_key("nativeChallengePolicyDigest") {
+    if original.action == "native_input" && references.contains_key("nativeImageRound") {
+        let (state, round) = super::browser_native_image::finish_round(
+            &references["nativeImageRound"],
+            acknowledged,
+            &original.request_id,
+        )?;
+        references.insert("nativeChallengeState".into(), state);
+        references.insert("nativeImageRound".into(), round);
+        references.insert(
+            "nativeImageBudgetAccounting".into(),
+            if acknowledged {
+                "derived_batch_acknowledged"
+            } else {
+                "reserved_maximum_on_uncertain"
+            }
+            .into(),
+        );
+    } else if original.action == "native_input"
+        && references.contains_key("nativeChallengePolicyDigest")
+    {
         use agent_browser_challenge_control::{
             decide, ChallengeDecision, ChallengeEvent, ChallengePolicy, ChallengeSnapshot,
             ChallengeState, DeliveryState,
@@ -1106,4 +1214,130 @@ pub(crate) fn finish(
         current.evidence_references.extend(references);
         Ok(current.clone())
     })
+}
+
+fn image_attempt_selection(command: &Value) -> Result<Vec<String>, String> {
+    super::browser_native_image::selection(command)
+}
+
+fn original_native_image_observation(
+    state: &BrowserSessionState,
+    task: &str,
+    command: &Value,
+) -> Result<super::browser_native_image::NativeImageObservation, String> {
+    let selected = image_attempt_selection(command)?;
+    let request = command["imageAttempt"]["observationRequestId"]
+        .as_str()
+        .ok_or("browser_native_original_observation_request_invalid")?;
+    let capture = state
+        .task_operations
+        .get(task)
+        .and_then(|rows| rows.get(request))
+        .ok_or("browser_native_original_observation_missing")?;
+    let encoded = capture
+        .evidence_references
+        .get("nativeImageObservation")
+        .filter(|v| v.len() <= 4096)
+        .ok_or("browser_native_original_observation_unqualified")?;
+    let observation: super::browser_native_image::NativeImageObservation =
+        serde_json::from_str(encoded).map_err(|_| "browser_native_image_observation_invalid")?;
+    if capture.action != "native_capture"
+        || capture.state != BrowserTaskOperationState::OwnerAcknowledged
+        || RetainedContext::from_operation(capture) != context(state, task)?
+    {
+        return Err("browser_native_original_observation_context_changed".into());
+    }
+    observation.validate(now_ms()?)?;
+    observation.actions(&selected)?;
+    Ok(observation)
+}
+
+/// Reopen the exact pending image original immediately before current Native
+/// owner admission. A caller envelope can neither replace its frame nor reset it.
+pub(crate) fn native_image_attempt_observation(
+    command: &Value,
+) -> Result<super::browser_native_image::NativeImageObservation, String> {
+    let task = command["sessionId"]
+        .as_str()
+        .ok_or("browser_native_original_operation_invalid")?;
+    let request = command["id"]
+        .as_str()
+        .ok_or("browser_native_original_operation_invalid")?;
+    let state = BrowserSessionSqliteStore::open_read_only(
+        &BrowserSessionSqliteStore::default_sqlite_path()?,
+    )?
+    .load_session_state()?;
+    check_expected(&state, command)?;
+    let original = state
+        .task_operations
+        .get(task)
+        .and_then(|rows| rows.get(request))
+        .ok_or("browser_native_original_operation_missing")?;
+    if original.action != "native_input"
+        || original.state != BrowserTaskOperationState::Pending
+        || original
+            .evidence_references
+            .get("nativeRegisteredActionId")
+            .map(String::as_str)
+            != Some(super::browser_native_image::PROFILE_ID)
+        || original
+            .evidence_references
+            .get("nativeObservationRequestId")
+            .map(String::as_str)
+            != command["imageAttempt"]["observationRequestId"].as_str()
+        || RetainedContext::from_operation(original) != context(&state, task)?
+    {
+        return Err("browser_native_original_operation_context_changed".into());
+    }
+    let observation = original_native_image_observation(&state, task, command)?;
+    if let Some(binding) = original.evidence_references.get("nativeSitePolicy") {
+        let binding: Value =
+            serde_json::from_str(binding).map_err(|_| "browser_native_site_policy_invalid")?;
+        let plan = native_image_kernel_plan(&state, task, command, &binding)?;
+        let retained = original
+            .evidence_references
+            .get("nativeImageRound")
+            .ok_or("browser_native_image_round_missing")?;
+        super::browser_native_image::check_retained_plan(retained, &plan)?;
+    }
+    Ok(observation)
+}
+
+fn native_image_kernel_plan(
+    state: &BrowserSessionState,
+    task: &str,
+    command: &Value,
+    binding: &Value,
+) -> Result<super::browser_native_image::NativeImagePlan, String> {
+    super::browser_host_policy::check_state(state, task, command)?;
+    if binding["registeredActionId"] != super::browser_native_image::PROFILE_ID
+        || binding["family"] != "hcaptcha"
+    {
+        return Err("browser_native_site_policy_invalid".into());
+    }
+    if state.task_operations.get(task).is_some_and(|rows| {
+        rows.values().any(|row| {
+            row.request_id != command["id"]
+                && row.action == "native_input"
+                && row
+                    .evidence_references
+                    .contains_key("nativeObservationRequestId")
+        })
+    }) {
+        return Err(
+            "browser_native_challenge_attempt_budget_exhausted:human assistance required".into(),
+        );
+    }
+    let observation = original_native_image_observation(state, task, command)?;
+    let selected = image_attempt_selection(command)?;
+    super::browser_native_image::plan(
+        task,
+        command["id"]
+            .as_str()
+            .ok_or("browser_native_original_operation_invalid")?,
+        &observation,
+        &selected,
+        binding,
+        now_ms()?,
+    )
 }
