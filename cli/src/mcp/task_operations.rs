@@ -168,6 +168,48 @@ fn response_data(
     response.data = Some(Value::Object(data));
 }
 
+/// Return only reviewed static completion diagnostics. Store errors can contain
+/// SQL, paths or private values; their details never enter the public envelope.
+pub(super) fn completion_failure_cause(error: &str) -> &'static str {
+    match error.split(':').next().unwrap_or_default() {
+        "browser_native_original_observation_invalid" => {
+            "browser_native_original_observation_invalid"
+        }
+        "browser_native_original_observation_expired" => {
+            "browser_native_original_observation_expired"
+        }
+        "browser_task_operation_original_missing" => "browser_task_operation_original_missing",
+        "browser_task_operation_completion_conflict" => {
+            "browser_task_operation_completion_conflict"
+        }
+        "browser_task_operation_clock_unavailable" => "browser_task_operation_clock_unavailable",
+        "browser_session_publication_idle_retirement_fenced" => {
+            "browser_session_publication_idle_retirement_fenced"
+        }
+        "browser_session_mutation_begin_failed"
+        | "browser_session_mutation_commit_failed"
+        | "browser_runtime_database_open_failed"
+        | "browser_runtime_database_read_only_unavailable"
+        | "browser_runtime_database_read_only_open_failed"
+        | "browser_runtime_database_busy_timeout_failed"
+        | "browser_runtime_database_pragma_failed"
+        | "browser_runtime_database_schema_failed"
+        | "browser_runtime_database_schema_read_failed"
+        | "browser_runtime_document_serialize_failed"
+        | "browser_runtime_document_save_failed"
+        | "browser_runtime_document_read_failed"
+        | "browser_runtime_document_invalid"
+        | "browser_runtime_document_schema_unsupported"
+        | "terminal_history_previous_read_failed"
+        | "terminal_history_previous_invalid"
+        | "terminal_history_archive_unavailable"
+        | "terminal_history_archive_write_failed"
+        | "terminal_history_document_invalid"
+        | "terminal_history_document_serialize_failed" => "store_unavailable",
+        _ => "unclassified",
+    }
+}
+
 /// The marker is durable before this closure can ensure a transport or send.
 pub(super) fn transport(
     mut command: Value,
@@ -207,8 +249,8 @@ pub(super) fn transport(
         }
         Admission::Dispatch(original) => match run(command) {
             Ok(mut response) => {
-                let completed=operations::finish(&original,Some(&response)).map_err(|_|format!(
-                        "browser_task_operation_completion_unavailable:{}:inspect original; no retry",original.request_id))?;
+                let completed=operations::finish(&original,Some(&response)).map_err(|error|format!(
+                        "browser_task_operation_completion_unavailable:{}:inspect original; no retry;cause={}",original.request_id,completion_failure_cause(&error)))?;
                 response_data(&mut response, &completed, false);
                 Ok(response)
             }

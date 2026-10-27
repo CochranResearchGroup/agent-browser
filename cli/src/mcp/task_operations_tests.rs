@@ -104,3 +104,144 @@ fn public_original_task_operation_readback_does_not_start_transport() {
     unseal_owned_directories(&directory);
     std::fs::remove_dir_all(directory).unwrap();
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn native_capture_completion_failure_keeps_pending_original_without_replay() {
+    use crate::native::browser_session_store::BrowserSessionSqliteStore;
+    use agent_browser_service_model::BrowserSessionState;
+    struct OwnedProcess(std::process::Child);
+    impl Drop for OwnedProcess {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let directory =
+        std::env::temp_dir().join(format!("native-completion-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let chrome = directory.join("chrome");
+    std::fs::copy("/bin/sleep", &chrome).unwrap();
+    let child = OwnedProcess(
+        std::process::Command::new(&chrome)
+            .arg("60")
+            .spawn()
+            .unwrap(),
+    );
+    let crate::process_identity::ProcessObservation::Observed(process) =
+        crate::process_identity::observe_process(child.0.id())
+    else {
+        panic!("Owned fixture process unavailable")
+    };
+    let guard = crate::test_utils::EnvGuard::new(&[
+        "HOME",
+        "AGENT_BROWSER_HOME",
+        "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+    ]);
+    guard.set("HOME", directory.to_str().unwrap());
+    guard.set("AGENT_BROWSER_HOME", directory.to_str().unwrap());
+    guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+    let mut value = serde_json::to_value(BrowserSessionState::default()).unwrap();
+    value["sessions"] = json!({"task":{"id":"task","name":"capture-lane","profileId":"profile","browserId":"browser","createdAtMs":1,"lastActivityAtMs":1,"expiresAtMs":0,"currentTabId":"tab"}});
+    value["browsers"] = json!({"browser":{"id":"browser","profileId":"profile","pid":child.0.id(),"cdpEndpoint":"","desktop":null,"activeSessionIds":["task"]}});
+    value["tabs"] = json!({"tab":{"id":"tab","targetId":"target","browserId":"browser","sessionId":"task","createdAtMs":1,"lastActivityAtMs":1}});
+    value["sharedBrowserIds"] = json!(["browser"]);
+    value["adoptedBrowserProcessIdentities"] = json!({"browser":{"profileId":"profile","cdpEndpoint":"","process":{"pid":process.pid,"startToken":process.start_token,"executablePath":process.executable_path,"browserFamily":process.browser_family}}});
+    let state: BrowserSessionState = serde_json::from_value(value).unwrap();
+    let store = BrowserSessionSqliteStore::default_sqlite().unwrap();
+    store.save_session_state(&state).unwrap();
+    let params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_capture","requestId":"original-capture","params":{"classifyChallenges":true,"registeredActionId":"hcaptcha-checkbox-p181-v2"}}});
+    let command = json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":"hcaptcha-checkbox-p181-v2"});
+    let mut dispatched = 0;
+    let mut failure = None;
+    task_operations::with_context(Some(&params), || {
+        failure = Some(
+            task_operations::transport(command.clone(), |_| {
+                dispatched += 1;
+                Ok(crate::connection::Response {
+                    success: true,
+                    data: Some(json!({"nativeObservation":{"private":"canary"}})),
+                    ..Default::default()
+                })
+            })
+            .err()
+            .expect("Invalid observation must fail completion"),
+        );
+        Ok(Value::Null)
+    })
+    .unwrap();
+    let failure = failure.unwrap();
+    assert!(
+        failure.contains("cause=browser_native_original_observation_invalid"),
+        "{failure}"
+    );
+    assert!(failure.contains("original-capture:inspect original; no retry"));
+    assert!(!failure.contains("canary"));
+    let readback = task_operations::lookup("task", "original-capture").unwrap();
+    assert_eq!(readback["operation"]["state"], "pending");
+    assert_eq!(readback["operation"]["retryAllowed"], false);
+    task_operations::with_context(Some(&params), || {
+        let replay = task_operations::transport(command, |_| {
+            dispatched += 1;
+            panic!("Original capture replayed")
+        })
+        .unwrap();
+        assert!(!replay.success);
+        assert_eq!(replay.data.unwrap()["dispatchAttempted"], false);
+        Ok(Value::Null)
+    })
+    .unwrap();
+    assert_eq!(dispatched, 1);
+}
+
+#[test]
+fn native_completion_failure_causes_never_expose_unreviewed_details() {
+    for (raw, expected) in [
+        (
+            "browser_native_original_observation_invalid:private-canary",
+            "browser_native_original_observation_invalid",
+        ),
+        (
+            "browser_native_original_observation_expired:human assistance required",
+            "browser_native_original_observation_expired",
+        ),
+        (
+            "browser_task_operation_original_missing",
+            "browser_task_operation_original_missing",
+        ),
+        (
+            "browser_task_operation_completion_conflict",
+            "browser_task_operation_completion_conflict",
+        ),
+        (
+            "browser_session_mutation_begin_failed:SELECT private-canary FROM /private/path",
+            "store_unavailable",
+        ),
+        (
+            "browser_runtime_document_invalid:browser_session_state:private-canary",
+            "store_unavailable",
+        ),
+        (
+            "terminal_history_archive_write_failed:private-canary",
+            "store_unavailable",
+        ),
+        (
+            "private-canary:browser_native_original_observation_invalid",
+            "unclassified",
+        ),
+        (
+            "browser_native_original_observation_invalid_private-canary",
+            "unclassified",
+        ),
+        (
+            "browser_runtime_database_unreviewed_private-canary",
+            "unclassified",
+        ),
+    ] {
+        let cause = task_operations::completion_failure_cause(raw);
+        assert_eq!(cause, expected);
+        assert!(!cause.contains("private-canary"));
+        assert!(!cause.contains("SELECT"));
+        assert!(!cause.contains('/'));
+    }
+}
