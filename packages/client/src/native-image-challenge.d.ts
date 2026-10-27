@@ -1,6 +1,7 @@
 import type {NativeChallengePolicySource,ChallengeVerificationContext,ChallengeVerification,ChallengeBinding} from './challenge-assistance.js';
 export interface NativeImageBounds {x:number;y:number;width:number;height:number;}
 export interface NativeImageObservation {
+  captureScope?:'complete_window'|'complete_puzzle_region';
   desktopId:string;generation:number;windowId:number;processDigest:string;
   window:NativeImageBounds;displayWidth:number;displayHeight:number;region:NativeImageBounds;
   frameSha256:string;nativeControlEpoch:number;observedAtMs:number;registeredActionId:'hcaptcha-image-grid-3x3-v1';
@@ -21,6 +22,7 @@ export interface NativeImageOptions {
   resolvePolicy:(context:{taskId:string;binding:ChallengeBinding;frameSha256:string;classification:Record<string,unknown>})=>Promise<NativeChallengePolicySource>;
   verifyClearance:(context:ChallengeVerificationContext)=>Promise<ChallengeVerification>;
   verifyAccess:(context:ChallengeVerificationContext)=>Promise<ChallengeVerification>;
+  captureRegion?:NativeImageBounds;
   now?:()=>number;
 }
 export interface NativeImageResult {

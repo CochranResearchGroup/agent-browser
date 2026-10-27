@@ -16,11 +16,23 @@ pub struct NativeImageCandidate {
     pub bounds: NativeChallengeBounds,
 }
 
+/// The default preserves the historical complete-window contract. A region is
+/// accepted only when explicitly requested before this owner observation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CaptureScope {
+    #[default]
+    CompleteWindow,
+    CompletePuzzleRegion,
+}
+
 /// Owner-observed static grid, bound to one exact full Native frame. No OCR,
 /// image bytes, URL, executable path or provider-selected coordinates persist.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeImageObservation {
+    #[serde(default)]
+    pub capture_scope: CaptureScope,
     pub desktop_id: String,
     pub generation: u64,
     pub window_id: u64,
@@ -325,12 +337,12 @@ impl NativeImageObservation {
         let contains = |b: &NativeChallengeBounds| {
             b.width > 0
                 && b.height > 0
-                && b.x >= self.window.x
-                && b.y >= self.window.y
+                && b.x >= self.region.x
+                && b.y >= self.region.y
                 && i64::from(b.x) + i64::from(b.width)
-                    <= i64::from(self.window.x) + i64::from(self.window.width)
+                    <= i64::from(self.region.x) + i64::from(self.region.width)
                 && i64::from(b.y) + i64::from(b.height)
-                    <= i64::from(self.window.y) + i64::from(self.window.height)
+                    <= i64::from(self.region.y) + i64::from(self.region.height)
         };
         if self.registered_action_id != PROFILE_ID
             || self.desktop_id.is_empty()
@@ -338,14 +350,22 @@ impl NativeImageObservation {
             || !hex(&self.frame_sha256)
             || !hex(&self.process_digest)
             || !hex(&self.puzzle_sha256)
-            || self.region != self.window
+            || (self.capture_scope == CaptureScope::CompleteWindow && self.region != self.window)
+            || self.region.width == 0
+            || self.region.height == 0
+            || self.region.x < self.window.x
+            || self.region.y < self.window.y
+            || i64::from(self.region.x) + i64::from(self.region.width)
+                > i64::from(self.window.x) + i64::from(self.window.width)
+            || i64::from(self.region.y) + i64::from(self.region.height)
+                > i64::from(self.window.y) + i64::from(self.window.height)
             || self.window.x < 0
             || self.window.y < 0
             || self.display_width > u32::from(u16::MAX)
             || self.display_height > u32::from(u16::MAX)
             || self.window.width == 0
             || self.window.height == 0
-            || u64::from(self.window.width) * u64::from(self.window.height) > 1_000_000
+            || u64::from(self.region.width) * u64::from(self.region.height) > 1_000_000
             || i64::from(self.window.x) + i64::from(self.window.width)
                 > i64::from(self.display_width)
             || i64::from(self.window.y) + i64::from(self.window.height)
@@ -476,6 +496,25 @@ pub fn plan(
         .iter()
         .map(|c| c.candidate_id.clone())
         .collect::<Vec<_>>();
+    let geometry_digest = if observation.capture_scope == CaptureScope::CompletePuzzleRegion {
+        digest(&(
+            observation.capture_scope,
+            &observation.region,
+            &observation.window,
+            observation.display_width,
+            observation.display_height,
+            &observation.candidates,
+            &observation.verify,
+        ))?
+    } else {
+        digest(&(
+            &observation.window,
+            observation.display_width,
+            observation.display_height,
+            &observation.candidates,
+            &observation.verify,
+        ))?
+    };
     let mut evidence = VisualRoundEvidence {
         task_id: task.into(),
         attempt_id: attempt.into(),
@@ -492,13 +531,7 @@ pub fn plan(
             &observation.process_digest,
             observation.native_control_epoch,
         ))?,
-        geometry_digest: digest(&(
-            &observation.window,
-            observation.display_width,
-            observation.display_height,
-            &observation.candidates,
-            &observation.verify,
-        ))?,
+        geometry_digest,
         candidate_set_digest: visual_candidate_set_digest(&candidate_ids),
         candidate_ids,
         observed_at_ms: observation.observed_at_ms,
