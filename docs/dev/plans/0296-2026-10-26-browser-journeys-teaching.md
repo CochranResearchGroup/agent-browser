@@ -5,7 +5,7 @@ Status: OPEN
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/466
 Integration branch: recipes/spec466-integration
 Integration base: 5770d693b23d51c9932574fa68e012a98029ce73
-Validated source tip:d27092b68a1ba865ea52de7133290a82ace1f8cf; latest documentation checkpoint follows on recipes/spec466-integration / draft PR480.
+Validated source tip:344d979e3d589160452b38303911e039e1c3201c; latest documentation checkpoint follows on recipes/spec466-integration / draft PR480.
 
 ## Custody and scope
 
@@ -279,3 +279,9 @@ Ticket477 closeout memory disposition: queued. Graphiti group agent_browser_main
 ## Ticket470 source integrated, runtime pending
 
 Clean workerfc21702e4f33606976581e0e9cbbbd941da57ed6 merged without conflicts asadd11438c. Worker final gates:155 MCP, strict workspace Clippy, format, service client, docs build,21 automatic assistance client scenarios, existing human assistance,16 Native transport/control, one locator and two owner-policy tests PASS. Root shared guidance is now supplied alongside the dedicated reference and test script. This is integrated source, not actual checkbox qualification. Root will build one clean immutable combined candidate, then the worker will qualify frozen namespace025 against that pin. Historical001–024 cleanup has558 recorded process generations absent, remaining0/unknown0, private processes/Docker/owned units0. No470 closure or471 admission yet.
+
+## Ticket470 combined source qualification and immutable runtime candidate
+
+Clean combined344d979e3d589160452b38303911e039e1c3201c passed cargo-safe format, strict workspace Clippy, all155 MCP tests, automatic and human challenge clients, strong implementation/declaration type checks, review-repeat/grilling and full service-client checks, API/MCP parity, handoff guidance, changed-link validation and docs build. Initial link invocation omitted required base and exited before checking; corrected command with basecfc9de779 passed. No code failure was concealed. Main skill9999 bytes passed parity. Candidate MCP help independently includes bounded attempts, uncertain-delivery no-replay and CDP-free human guidance.
+
+The optimized Cargo ci build passed under the matched8GiB hard cgroup/admission claim without changing the16GiB reserve. Its immutable executable SHA256 is6fb10accc517132bde68a965ddc6419ff1d4cbea6e82e21c6e134918b727025e. Source was clean before pinning; frozen worker client and qualification script are byte-identical to integration. This candidate is not installed. Worker received explicit scope to run only fresh owned synthetic namespace025 after exact external pin, ownership, port/display and current runtime-policy checks. Actual checkbox/expectedVisual refusal/lost-reply acceptance remains outstanding; ticket470 stays OPEN and471 remains pending.
