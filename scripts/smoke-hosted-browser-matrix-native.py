@@ -86,6 +86,7 @@ def main():
     parser.add_argument('--challenge-assistance', action='store_true', help='Add owned HTTPS challenge/native assistance to bounded input diagnostic')
     parser.add_argument('--observation-age-probe', action='store_true', help='Characterize current Native motion across the archived observation-age boundary; no checkbox click')
     parser.add_argument('--checkbox-assistance', action='store_true', help='Qualify owned Native checkbox/passive inputs and independent HTTPS admission')
+    parser.add_argument('--image-rounds-assistance', action='store_true', help='Qualify two complete owned Native image grids under one original budget')
     parser.add_argument('--image-assistance', action='store_true', help='Qualify one owned static Native image round with agent-inspected pixels')
     parser.add_argument('--checkbox-observe-only', action='store_true', help='Capture the owned synthetic checkbox without challenge input')
     parser.add_argument('--mode-preflight', action='store_true', help='Read public browser mode before first fill; unverified evidence stops the fixture')
@@ -101,6 +102,7 @@ def main():
     assert not args.checkbox_assistance or args.challenge_assistance, 'Checkbox lane requires owned HTTPS challenge fixture'
     assert not args.checkbox_observe_only or args.checkbox_assistance
     assert not (args.checkbox_assistance and args.observation_age_probe), 'Probe and checkbox effects are separate bounded lanes'
+    assert not args.image_rounds_assistance or args.image_assistance
     assert not args.image_assistance or args.challenge_assistance
     assert not args.image_assistance or not (args.checkbox_assistance or args.observation_age_probe or args.checkbox_observe_only)
     for commit in (args.agent_source_commit, args.native_binary_source_commit):
@@ -159,6 +161,8 @@ def main():
         fixture_files += ('scripts/qualify-native-image.mjs', 'scripts/qualify-native-checkbox.mjs',
                           'scripts/probe-native-pointer.py', 'scripts/test-native-owner-failure-diagnostics.py',
                           'packages/client/src/native-image-challenge.js', 'packages/client/src/native-image-challenge.d.ts')
+    if args.image_rounds_assistance:
+        fixture_files += ('scripts/qualify-native-image-rounds.mjs',)
     for name in fixture_files:
         h.run('git', '-C', repo, 'ls-files', '--error-unmatch', name)
     source_pair = {'agentBinarySha256': h.sha(args.agent_binary), 'agentBinarySourceCommit': args.agent_source_commit,
@@ -175,7 +179,7 @@ def main():
     plan = {'version': 1, 'runId': secrets.token_hex(16), 'pairDigest': pair_digest, 'sourcePair': source_pair,
             'coldContexts': 5, 'publicControlPairs': 10, 'nativeControlPairs': 3, 'warmTargetMs': 250,
             'functionalUiPairs': 1, 'nativeTextEdits': 1, 'deadlineSeconds': 1200, 'cleanupDeadlineSeconds': 180, 'challengeAssistance': args.challenge_assistance, 'modePreflight':args.mode_preflight, 'modeDiagnosticOnly':args.mode_diagnostic_only}
-    plan.update(checkboxAssistance=args.checkbox_assistance, imageAssistance=args.image_assistance, checkboxObserveOnly=args.checkbox_observe_only, observationAgeProbe=args.observation_age_probe)
+    plan.update(checkboxAssistance=args.checkbox_assistance, imageAssistance=args.image_assistance, imageRoundsAssistance=args.image_rounds_assistance, checkboxObserveOnly=args.checkbox_observe_only, observationAgeProbe=args.observation_age_probe)
     if args.input_diagnostic:
         plan.update(mode='native_input_diagnostic', coldContexts=1, publicControlPairs=0,
                     nativeControlPairs=0, deadlineSeconds=300)
@@ -559,6 +563,8 @@ def main():
                 environment['HOSTED_SMOKE_NATIVE_CHECKBOX']='1'
             if args.image_assistance:
                 environment['HOSTED_SMOKE_NATIVE_IMAGE']='1'
+            if args.image_rounds_assistance:
+                environment['HOSTED_SMOKE_NATIVE_IMAGE_ROUNDS']='1'
             if args.checkbox_observe_only:
                 environment['HOSTED_SMOKE_NATIVE_CHECKBOX_OBSERVE_ONLY']='1'
             if args.mode_preflight:
@@ -581,7 +587,7 @@ def main():
                     assert any(item['code'] == 'visual_observation_conflict' for item in native_refusals), 'Actual pinned Native must refuse a changed frame'
                     assert json.loads((args.results / 'agent/native-checkbox-fault.json').read_text())['state'] == 'consumed'
                 if args.image_assistance:
-                    image = json.loads((args.results / 'agent/image471-acceptance.json').read_text())
+                    image = json.loads((args.results / ('agent/image472-acceptance.json' if args.image_rounds_assistance else 'agent/image471-acceptance.json')).read_text())
                     assert image['passed'] is True and image['actualNativeInput'] is True
                     assert any(event.get('ownerDelivery') == 'dispatched' for event in native_input_events), 'Image acceptance requires an actual Native owner acknowledgement'
             else:
@@ -701,7 +707,7 @@ def main():
               'fixtureImageDisposition': 'Native fixture retains uniquely tagged build images as artifacts; no image-absence claim',
               'actualNativeInput': True if accepted and args.image_assistance else False if args.checkbox_observe_only else None,
               'challengeInputDispatched': True if accepted and args.image_assistance else False if args.checkbox_observe_only else None,
-              'scope': ('Owned static Native image round with actual agent visual selection; no full-matrix acceptance' if args.image_assistance else 'Read-only owned synthetic Native capture/rendered-state diagnosis; no checkbox acceptance' if args.checkbox_observe_only else 'Native input diagnosis only; no full-matrix acceptance' if args.input_diagnostic else
+              'scope': ('Owned two-round Native image grids with actual visual selection; no full-matrix acceptance' if args.image_rounds_assistance else 'Owned static Native image round with actual agent visual selection; no full-matrix acceptance' if args.image_assistance else 'Read-only owned synthetic Native capture/rendered-state diagnosis; no checkbox acceptance' if args.checkbox_observe_only else 'Native input diagnosis only; no full-matrix acceptance' if args.input_diagnostic else
                         'One same-pair synthetic matrix on isolated Native resources; no production/account/relocation acceptance')}
     h.private_json(args.results / 'combined-matrix-receipt.json', result)
     print(json.dumps(result))

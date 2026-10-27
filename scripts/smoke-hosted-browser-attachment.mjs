@@ -23,6 +23,7 @@ import {qualifyNativeChallengeAssistance,probeCurrentNativeObservationAge} from 
 import {qualifyNativeNoCdpChallenge} from './qualify-native-no-cdp-challenge.mjs';
 import {createNativeCheckboxOracle,qualifyNativeCheckbox} from './qualify-native-checkbox.mjs';
 import {createNativeImageOracle,qualifyNativeImage} from './qualify-native-image.mjs';
+import {createNativeImageRoundsOracle,qualifyNativeImageRounds} from './qualify-native-image-rounds.mjs';
 import {mkdir,mkdtemp,readFile,readdir,realpath,stat,writeFile} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -414,7 +415,7 @@ try{workload:{
  step='register-disposable-named-profile';const createdProfile=JSON.parse((await runCli(context,['--json','runtime','create','borrowed-profile','--browser-family','chromium'])).stdout);assert.equal(createdProfile.created,true);const profilePath=await realpath(createdProfile.userDataDir);assert(profilePath.startsWith(root+'/'),'Named fixture profile must remain inside its private home');
  const challenge469=process.env.HOSTED_SMOKE_CHALLENGE_469==='1';
  const nativeCheckbox=process.env.HOSTED_SMOKE_NATIVE_CHECKBOX==='1',checkboxOracle=createNativeCheckboxOracle();
- const nativeImage=process.env.HOSTED_SMOKE_NATIVE_IMAGE==='1',imageOracle=createNativeImageOracle();
+ const nativeImage=process.env.HOSTED_SMOKE_NATIVE_IMAGE==='1',nativeImageRounds=process.env.HOSTED_SMOKE_NATIVE_IMAGE_ROUNDS==='1',imageOracle=nativeImageRounds?createNativeImageRoundsOracle():createNativeImageOracle();
  assert(!nativeImage||!nativeCheckbox,'Image and checkbox fixtures have separate bounded lanes');
  const challengeState={completionRequests:0,protectedRequests:0};
  const nativeChallengeState={completionRequests:0,protectedRequests:0,pageRequests:0};
@@ -632,10 +633,10 @@ try{workload:{
  const beforeUi=await consumerControl();assert.equal(beforeUi.control.owner,'agent');assert.equal(beforeUi.native.owner,'agent');
  if(nativeImage){
   step='native-image-assistance';
-  await qualifyNativeImage({workflow:publicWorkflow,task:opened,nextTask:async label=>{
+  await (nativeImageRounds?qualifyNativeImageRounds:qualifyNativeImage)({workflow:publicWorkflow,task:opened,nextTask:async label=>{
     const current=await attachInBots(bot,'image471-'+label+'-'+randomUUID(),'Owned Native image '+label);borrowedTasks.push(current);return current;
   },primary,site,profilePath,configFile:join(agentHome,'config.json'),faultFile:join(evidence,'native-image-fault.json'),oracle:imageOracle,save,continuity,selectionDirectory:evidence});
-  await save('native-input-diagnostic.json',{passed:true,fullMatrix:false,scope:'Owned static Native image round with actual agent visual selection and independent HTTPS oracle'});break workload;
+  await save('native-input-diagnostic.json',{passed:true,fullMatrix:false,scope:nativeImageRounds?'Owned two-round Native images under one original budget with actual visual selection':'Owned static Native image round with actual agent visual selection and independent HTTPS oracle'});break workload;
  }
  if(nativeCheckbox){
   step='native-checkbox-assistance';
