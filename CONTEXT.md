@@ -470,7 +470,7 @@ window evidence. Native provider reads run in one background worker. A cached
 sample retains its original identity and elapsed age; serving it does not renew
 confidence, tab lifetime or viewing authority. Unknown evidence stays unknown.
 
-**Native challenge assistance**: Bounded current OCR classification and explicit human takeover/return through the existing Native handoff. Clearance and protected application admission are separate checks; classification grants no attempt authority.
+**Native challenge assistance**: Bounded current OCR classification and explicit human takeover/return through the existing Native handoff. Clearance and protected application admission are separate checks; classification grants no attempt authority. Optional automatic assistance adds bounded passive observation and one owner-derived registered checkbox attempt per task in the existing task-operation journal. It requires a verified CDP origin, exact profile/SitePolicy membership and one enabled captcha_solve provider whose configRef is agent-browser:remote-view-native:v1. Family, action and provider identities remain distinct. CDP-free tasks use human assistance; pending or uncertain originals cannot replay.
 
 **Clarification question**: An unresolved source-linked material choice whose
 prerequisite answers must be verified before it is ready to ask.

@@ -7341,7 +7341,10 @@ Commands:
   Teaching review: client teaching-review edits/reviews; MCP candidate validation stays inert
   Teaching repeat: recordFreshRepeat / promote; trusted review plus actual report proof
   Teaching grilling: client teaching-grilling; source-linked questions, authenticated answers
-  Native challenge: native_capture classifyChallenges; explicit takeover/return, separate access checks
+  Native challenge: bounded passive wait or one registered checkbox attempt per task
+  Native input: stable original requestId; uncertain delivery forbids replay
+  Native policy: verified CDP origin/provider required; CDP-free uses human assistance
+  Native return: original opaque handoff, explicit takeover/return, separate access checks
   browser-mode TASK Inspect mode
   browser-native TASK ACTION JSON Input/capture <=1Mpx
   browser-build JSON Inspect/select/open profile build

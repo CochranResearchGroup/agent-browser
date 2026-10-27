@@ -7453,7 +7453,7 @@ separate review and fresh-repeat qualification. See the
 
 ### Native challenge assistance
 
-Use native_capture with classifyChallenges to classify bounded same-frame OCR without exposing raw recognized text. The challenge-assistance client reuses the original opaque handoff and explicit Native takeover/return. Challenge clearance and protected-site admission require independent checks. See the [challenge assistance guide](docs/src/app/challenge-assistance/page.mdx).
+Use native_capture with classifyChallenges for bounded same-frame OCR. The challenge-assistance client supports a bounded passive wait or one registered checkbox attempt per task, with owner-verified policy, provider capability and current Native evidence. Automatic origin qualification requires an existing verified CDP task; CDP-free tasks use human assistance. Pending or uncertain input never permits replay. Clearance and protected-site admission require independent checks. Human assistance reuses the original opaque handoff and explicit Native takeover/return. See the [challenge assistance guide](docs/src/app/challenge-assistance/page.mdx).
 
 ### Clarify teaching candidates
 

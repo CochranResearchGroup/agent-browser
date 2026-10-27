@@ -20,7 +20,7 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 | 467 | none | validated | root | recipes/spec466-integration / duplicate-403 | Reopened regression repairedff812bf0f; model2/MCP151/strictClippy/fmt PASS34d400f0e; tracker CLOSED after requalification |
 | 468 | 467 | validated | root | recipes/spec466-integration / duplicate-403 | worker045dd85a; integration96fad35a2; combined HTTPS + repaired Native019 PASS; tracker reclosed |
 | 469 | 467 | validated | implement_469 | challenge/native-assistance-469 / spec466-469 | workeref57c4a0; combinedb7 Native019 attached/CDP-free PASS; tracker CLOSED |
-| 470 | 468,469 | running | implement_469 | challenge/native-checkbox-470 / spec466-469 | baseb7a4a6a3f; bounded current Native fixture |
+| 470 | 468,469 | integrated | implement_469 | challenge/native-checkbox-470 / spec466-469 | workerfc21702e4; mergeadd11438c; combined gates/runtime pending, tracker OPEN |
 | 471 | 470 | pending | unassigned | pending | none |
 | 472 | 471 | pending | unassigned | pending | none |
 | 473 | none | validated | implement_473 | recipes/teaching-evidence-473 / profile-proof | worker ea0e2f42ab59; integration67780a8b1; synthetic cases and shared docs validation pass; tracker CLOSED with explicit source/synthetic receipt |
@@ -269,3 +269,13 @@ Shared sourced27092b68a1ba865ea52de7133290a82ace1f8cf passes154 MCP, strict work
 ## Ticket477 governed auxiliary closeout
 
 Fresh inspection of worker0d83b36a77eea98fac058eeff2c2c2ae5651578d found clean tracked state, no pinned candidates and no active candidate builds. Its exact commit is an ancestor of the integration tip. Fresh OS readback found zero processes with this checkout as their working directory; the prior runtime receipt separately proves owned fixture cleanup. Governed operation worktree-closeout-7f1e129f-4586-4303-a1c9-83099ed3e087 previewed then committed removal of the exact auxiliary incarnation ff5d2e924e03c4c96f1a70a2c2b52c3d3fe1bee78982d50b51e08ed7e810d7e4. The recipes/report-repeat-477 branch, integrated source and private runtime receipts remain retained. No other checkout, branch or installed runtime was removed. Eight registered checkouts remain; Native470 retains its active auxiliary.
+
+## Ticket470 shared guidance preparation
+
+Root prepared uncommitted README, CLI help, main skill, CONTEXT vocabulary and package-test pointers for the worker's opt-in Native checkbox path. These depend on the worker's not-yet-integrated dedicated source/reference/test script. They are not a qualified publication checkpoint. The main skill remains within the existing10000-byte bound at9999 bytes; opaque handoff guidance remains unchanged. Worker reports provider-free policy/journal/transport/client checks passing, with clean candidate build and actual checkbox runtime still outstanding. No470 closure or471 admission follows from those partial checks.
+
+Ticket477 closeout memory disposition: queued. Graphiti group agent_browser_main accepted one source-anchored job aeabc719-befb-4114-b246-836d684747ad, stable name p296-report-repeat477-qualified-20261027, from the curated report-repeat source receipt. Queue acceptance is not persistence or retrieval proof. The compact episode distinguishes synthetic qualification and retained worker branch from production, physical narration and unfinished tickets. No retry was attempted.
+
+## Ticket470 source integrated, runtime pending
+
+Clean workerfc21702e4f33606976581e0e9cbbbd941da57ed6 merged without conflicts asadd11438c. Worker final gates:155 MCP, strict workspace Clippy, format, service client, docs build,21 automatic assistance client scenarios, existing human assistance,16 Native transport/control, one locator and two owner-policy tests PASS. Root shared guidance is now supplied alongside the dedicated reference and test script. This is integrated source, not actual checkbox qualification. Root will build one clean immutable combined candidate, then the worker will qualify frozen namespace025 against that pin. Historical001–024 cleanup has558 recorded process generations absent, remaining0/unknown0, private processes/Docker/owned units0. No470 closure or471 admission yet.
