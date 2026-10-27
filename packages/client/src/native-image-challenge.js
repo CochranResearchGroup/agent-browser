@@ -8,8 +8,10 @@ const fields=['taskId','profileId','browserId','tabId','targetId'];
  * @param {import('./native-image-challenge.d.ts').NativeImageOptions} options
  * @returns {import('./native-image-challenge.d.ts').NativeImageClient}
  */
-export function createNativeImageChallengeClient({callTool,selectCandidates,resolvePolicy,verifyClearance,verifyAccess,now=Date.now}) {
+export function createNativeImageChallengeClient({callTool,selectCandidates,resolvePolicy,verifyClearance,verifyAccess,captureRegion,now=Date.now}) {
   if([callTool,selectCandidates,resolvePolicy,verifyClearance,verifyAccess].some(port=>typeof port!=='function'))throw TypeError('native_image_ports_required');
+  if(captureRegion && (!['x','y','width','height'].every(key=>Number.isSafeInteger(captureRegion[key])) || captureRegion.width<=0 || captureRegion.height<=0 || captureRegion.x<0 || captureRegion.y<0))throw TypeError('native_image_capture_region_invalid');
+  const regionRequest=captureRegion?structuredClone(captureRegion):null;
   const human=createChallengeAssistanceClient({callTool,resolvePolicy,verifyClearance,verifyAccess,now});
   const fail=code=>{throw Error(code)};
   const identity=value=>({taskId:value.taskId,profileId:value.profileId,browserId:value.browserId,tabId:value.tabId,targetId:value.targetId});
@@ -44,7 +46,8 @@ export function createNativeImageChallengeClient({callTool,selectCandidates,reso
   function physical(frame){const c=frame.capture;return {desktopId:c?.desktopId,generation:c?.generation,windowId:c?.windowId,processIdentity:c?.processIdentity};}
   function image(frame,images) {
     const sha=frame.capture?.capture?.sha256,region=frame.region??frame.capture?.region;
-    if(frame.source!=='remote_view_native'||typeof frame.capture?.desktopId!=='string'||!Number.isSafeInteger(frame.capture?.generation)||!Number.isSafeInteger(frame.capture?.windowId)||!frame.capture?.processIdentity||frame.partialWindow!==false||!/^([a-f0-9]{64})$/.test(sha??'')||images.length!==1||images[0].mimeType!=='image/png'||typeof images[0].data!=='string'||images[0].data.length>5592408||!/^[A-Za-z0-9+/]*={0,2}$/.test(images[0].data))fail('native_image_frame_unverified');
+    if(frame.source!=='remote_view_native'||typeof frame.capture?.desktopId!=='string'||!Number.isSafeInteger(frame.capture?.generation)||!Number.isSafeInteger(frame.capture?.windowId)||!frame.capture?.processIdentity||(regionRequest?!isDeepStrictEqual(region,regionRequest):frame.partialWindow!==false)||!/^([a-f0-9]{64})$/.test(sha??'')||images.length!==1||images[0].mimeType!=='image/png'||typeof images[0].data!=='string'||images[0].data.length>5592408||!/^[A-Za-z0-9+/]*={0,2}$/.test(images[0].data))fail('native_image_frame_unverified');
+    if(regionRequest && (frame.partialWindow!==!isDeepStrictEqual(region,frame.windowBounds) || region.x<frame.windowBounds?.x || region.y<frame.windowBounds?.y || region.x+region.width>frame.windowBounds.x+frame.windowBounds.width || region.y+region.height>frame.windowBounds.y+frame.windowBounds.height))fail('native_image_frame_unverified');
     const bytes=Buffer.from(images[0].data,'base64');
     if(bytes.length<33||bytes.length>4194304||!bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))||bytes.readUInt32BE(16)!==region?.width||bytes.readUInt32BE(20)!==region?.height||createHash('sha256').update(bytes).digest('hex')!==sha)fail('native_image_frame_unverified');
     return sha;
@@ -65,10 +68,10 @@ export function createNativeImageChallengeClient({callTool,selectCandidates,reso
       try {
         retained=await original(taskId,requestId);if(retained)return assist('native_image_original_exists_do_not_replay');
         const before=await briefing(taskId),observationRequestId=requestId+':observation';
-        const captured=await call('browser_command',{taskId,action:'native_capture',requestId:observationRequestId,params:{classifyChallenges:true,registeredActionId:PROFILE}});
+        const captured=await call('browser_command',{taskId,action:'native_capture',requestId:observationRequestId,params:{classifyChallenges:true,registeredActionId:PROFILE,...(regionRequest?{imageCaptureScope:"complete_puzzle_region",region:regionRequest}:{})}});
         const frame=captured.data,sha=image(frame,captured.images),observation=frame.nativeImageObservation;
         const after=await briefing(taskId);
-        if(!same(before,after)||before.control.epoch!==after.control.epoch||frame.challenge?.kind!=='image_puzzle'||frame.challenge.family!=='hcaptcha'||frame.challenge.completeWindow!==true||frame.challenge.frameSha256!==sha||frame.challenge.automatedAttemptAuthorized!==false||observation?.registeredActionId!==PROFILE||observation.frameSha256!==sha||!/^([a-f0-9]{64})$/.test(observation.puzzleSha256??'')||observation.desktopId!==physical(frame).desktopId||observation.generation!==physical(frame).generation||observation.windowId!==physical(frame).windowId||!Number.isSafeInteger(observation.nativeControlEpoch)||!Number.isFinite(observation.observedAtMs)||now()<observation.observedAtMs||now()-observation.observedAtMs>=60000||!Array.isArray(observation.candidates)||observation.candidates.length!==9||observation.candidates.some(candidate=>typeof candidate.candidateId!=='string'||candidate.candidateId.length>128)||new Set(observation.candidates.map(candidate=>candidate.candidateId)).size!==9||!isDeepStrictEqual(observation.window,frame.windowBounds)||!isDeepStrictEqual(observation.region,frame.windowBounds))fail('native_image_observation_unqualified');
+        if(!same(before,after)||before.control.epoch!==after.control.epoch||frame.challenge?.kind!=='image_puzzle'||frame.challenge.family!=='hcaptcha'||(regionRequest?observation?.captureScope!=='complete_puzzle_region':frame.challenge.completeWindow!==true)||frame.challenge.frameSha256!==sha||frame.challenge.automatedAttemptAuthorized!==false||observation?.registeredActionId!==PROFILE||observation.frameSha256!==sha||!/^([a-f0-9]{64})$/.test(observation.puzzleSha256??'')||observation.desktopId!==physical(frame).desktopId||observation.generation!==physical(frame).generation||observation.windowId!==physical(frame).windowId||!Number.isSafeInteger(observation.nativeControlEpoch)||!Number.isFinite(observation.observedAtMs)||now()<observation.observedAtMs||now()-observation.observedAtMs>=60000||!Array.isArray(observation.candidates)||observation.candidates.length!==9||observation.candidates.some(candidate=>typeof candidate.candidateId!=='string'||candidate.candidateId.length>128)||new Set(observation.candidates.map(candidate=>candidate.candidateId)).size!==9||!isDeepStrictEqual(observation.window,frame.windowBounds)||!isDeepStrictEqual(observation.region,regionRequest??frame.windowBounds)||(!regionRequest&&(observation.captureScope??'complete_window')!=='complete_window'))fail('native_image_observation_unqualified');
         await sourcePolicy(taskId,after,frame);
         const selectionBudget=Math.min(45000,observation.observedAtMs+60000-now());
         if(selectionBudget<=0)fail('native_image_selection_expired');
@@ -84,8 +87,8 @@ export function createNativeImageChallengeClient({callTool,selectCandidates,reso
         const input=await call('browser_command',{taskId,action:'native_input',requestId,params:{imageAttempt:{observationRequestId,selectedCandidateIds:selected}}});
         retained=await original(taskId,requestId);
         if(input.data?.source!=='remote_view_native'||input.data.delivery!=='dispatched'||retained?.state!=='owner_acknowledged')return assist('native_image_input_uncertain_or_refused');
-        const observed=await call('browser_command',{taskId,action:'native_capture',params:{classifyChallenges:true}}),fresh=observed.data,freshSha=image(fresh,observed.images);
-        if(!isDeepStrictEqual(physical(frame),physical(fresh))||fresh.nativeControlEpoch!==observation.nativeControlEpoch||fresh.challenge?.kind!=='unknown'||fresh.challenge.completeWindow!==true||fresh.challenge.frameSha256!==freshSha||fresh.challenge.automatedAttemptAuthorized!==false)fail('native_image_after_state_unverified');
+        const observed=await call('browser_command',{taskId,action:'native_capture',params:{classifyChallenges:true,...(regionRequest?{region:regionRequest}:{})}}),fresh=observed.data,freshSha=image(fresh,observed.images);
+        if(!isDeepStrictEqual(physical(frame),physical(fresh))||!isDeepStrictEqual(frame.windowBounds,fresh.windowBounds)||fresh.nativeControlEpoch!==observation.nativeControlEpoch||fresh.challenge?.kind!=='unknown'||(!regionRequest&&fresh.challenge.completeWindow!==true)||fresh.challenge.frameSha256!==freshSha||fresh.challenge.automatedAttemptAuthorized!==false)fail('native_image_after_state_unverified');
         const context={taskId,binding:identity(after),frameSha256:freshSha,classification:fresh.challenge};
         const clearance=await verifyClearance(context);if(!verified(clearance,context))fail('native_image_clearance_unverified');
         const access=await verifyAccess(context);if(!verified(access,context)||access.evidenceRef===clearance.evidenceRef)fail('native_image_site_access_unverified');

@@ -248,15 +248,20 @@ fn native_completion_failure_causes_never_expose_unreviewed_details() {
 
 #[test]
 fn native_image_public_original_reserves_one_taskwide_attempt_and_never_replays() {
-    native_image_public_completion_case(false);
+    native_image_public_completion_case(false, false);
 }
 
 #[test]
 fn native_image_public_acknowledged_original_retains_typed_batch_budget() {
-    native_image_public_completion_case(true);
+    native_image_public_completion_case(true, false);
 }
 
-fn native_image_public_completion_case(acknowledged: bool) {
+#[test]
+fn native_image_public_region_original_retains_scope_and_one_attempt() {
+    native_image_public_completion_case(true, true);
+    native_image_public_completion_case(false, true);
+}
+fn native_image_public_completion_case(acknowledged: bool, region: bool) {
     use crate::native::{
         browser_native_image as image, browser_session_store::BrowserSessionSqliteStore,
     };
@@ -322,6 +327,10 @@ fn native_image_public_completion_case(acknowledged: bool) {
         .as_millis() as u64;
     let candidates=(0..9).map(|index|json!({"candidateId":format!("tile:{}:{}",index+1,"a".repeat(16)),"bounds":{"x":100+(index%3)*66,"y":200+(index/3)*66,"width":64,"height":64}})).collect::<Vec<_>>();
     let mut observation = json!({"desktopId":"viewing","generation":9,"windowId":7,"processDigest":"b".repeat(64),"window":{"x":0,"y":0,"width":640,"height":480},"displayWidth":640,"displayHeight":480,"region":{"x":0,"y":0,"width":640,"height":480},"frameSha256":"a".repeat(64),"nativeControlEpoch":4,"observedAtMs":now,"registeredActionId":image::PROFILE_ID,"puzzleSha256":"","candidates":candidates,"verify":{"x":100,"y":414,"width":80,"height":30}});
+    if region {
+        observation["captureScope"] = json!("complete_puzzle_region");
+        observation["region"] = json!({"x":80,"y":140,"width":440,"height":320});
+    }
     observation["puzzleSha256"] = json!(image::digest(&(
         &observation["frameSha256"],
         &observation["candidates"],

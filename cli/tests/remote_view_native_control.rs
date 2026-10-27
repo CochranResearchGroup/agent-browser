@@ -886,3 +886,179 @@ fn native_image_capture_refuses_unsupported_ambiguous_partial_or_changed_pixels(
         );
     }
 }
+
+#[test]
+fn native_image_complete_puzzle_region_is_explicit_fresh_and_fully_contained() {
+    struct RegionOwner(ImagePuzzleOwner);
+    impl browser_native_control::NativeOwner for RegionOwner {
+        fn request(
+            &mut self,
+            operation: &str,
+            body: &serde_json::Value,
+        ) -> Result<serde_json::Value, String> {
+            use base64::Engine;
+            use sha2::Digest;
+            let mut reply = self.0.request(operation, body)?;
+            if operation == "ocr" {
+                let r = &body["region"];
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(reply["image"]["data"].as_str().unwrap())
+                    .unwrap();
+                let image = image::load_from_memory(&bytes).unwrap().crop_imm(
+                    r["x"].as_u64().unwrap() as u32,
+                    r["y"].as_u64().unwrap() as u32,
+                    r["width"].as_u64().unwrap() as u32,
+                    r["height"].as_u64().unwrap() as u32,
+                );
+                let mut out = std::io::Cursor::new(Vec::new());
+                image.write_to(&mut out, image::ImageFormat::Png).unwrap();
+                let bytes = out.into_inner();
+                reply["image"]["data"] =
+                    serde_json::json!(base64::engine::general_purpose::STANDARD.encode(&bytes));
+                reply["capture"] = serde_json::json!({"sha256":format!("{:x}",sha2::Sha256::digest(&bytes)),"width":r["width"],"height":r["height"]});
+            }
+            Ok(reply)
+        }
+    }
+    let original = agent_browser_service_model::RecordedProcessIdentity {
+        pid: 42,
+        start_token: "linux:boot:11".into(),
+        executable_path: Some("/synthetic/chrome".into()),
+        browser_family: Some("chrome".into()),
+    };
+    let target = agent_browser_service_model::RemoteViewApplicationTarget {
+        assignment_id: "assignment".into(),
+        registration_id: "registration".into(),
+        desktop_id: "lifecycle".into(),
+        lifecycle_generation: 2,
+        viewing_desktop_id: "viewing".into(),
+        viewing_generation: 9,
+    };
+    let region = serde_json::json!({"x":80,"y":140,"width":440,"height":340});
+    let command = serde_json::json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":browser_native_image::PROFILE_ID,"imageCaptureScope":"complete_puzzle_region","region":region});
+    for bad in [
+        serde_json::json!({"imageCaptureScope":null}),
+        serde_json::json!({"imageCaptureScope":"complete_window"}),
+        serde_json::json!({"imageCaptureScope":"complete_puzzle_region","action":"native_input"}),
+        serde_json::json!({"imageCaptureScope":"complete_puzzle_region","registeredActionId":"hcaptcha-checkbox-p181-v2"}),
+    ] {
+        let mut invalid = command.clone();
+        for (key, value) in bad.as_object().unwrap() {
+            invalid[key] = value.clone();
+        }
+        let mut owner = RegionOwner(ImagePuzzleOwner {
+            fixture: NativeFixture { calls: vec![] },
+        });
+        assert!(browser_native_control::execute(&original, &target, &invalid, &mut owner).is_err());
+        assert!(owner.0.fixture.calls.is_empty());
+    }
+    let result = browser_native_control::execute(
+        &original,
+        &target,
+        &command,
+        &mut RegionOwner(ImagePuzzleOwner {
+            fixture: NativeFixture { calls: vec![] },
+        }),
+    )
+    .unwrap();
+    assert_eq!(result["partialWindow"], true);
+    assert_eq!(result["challenge"]["completeWindow"], false);
+    assert_eq!(
+        result["nativeImageObservation"]["captureScope"],
+        "complete_puzzle_region"
+    );
+    assert_eq!(result["nativeImageObservation"]["region"], region);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    let obs: browser_native_image::NativeImageObservation =
+        serde_json::from_value(result["nativeImageObservation"].clone()).unwrap();
+    obs.validate(now).unwrap();
+    struct InputOwner {
+        inner: RegionOwner,
+        evidence: browser_native_image::NativeImageObservation,
+    }
+    impl browser_native_control::NativeOwner for InputOwner {
+        fn native_image_attempt(
+            &mut self,
+            _: &serde_json::Value,
+        ) -> Result<browser_native_image::NativeImageObservation, String> {
+            Ok(self.evidence.clone())
+        }
+        fn request(
+            &mut self,
+            operation: &str,
+            body: &serde_json::Value,
+        ) -> Result<serde_json::Value, String> {
+            self.inner.request(operation, body)
+        }
+    }
+    for case in ["current", "control", "window", "stale", "frame"] {
+        let mut evidence = obs.clone();
+        match case {
+            "control" => evidence.native_control_epoch += 1,
+            "window" => evidence.window_id += 1,
+            "stale" => evidence.observed_at_ms -= 60_001,
+            "frame" => evidence.frame_sha256 = "f".repeat(64),
+            _ => {}
+        }
+        let mut owner = InputOwner {
+            inner: RegionOwner(ImagePuzzleOwner {
+                fixture: NativeFixture { calls: vec![] },
+            }),
+            evidence,
+        };
+        let input = serde_json::json!({"action":"native_input","imageAttempt":{"observationRequestId":"roi-original","selectedCandidateIds":[obs.candidates[0].candidate_id]}});
+        let reply = browser_native_control::execute(&original, &target, &input, &mut owner);
+        let inputs = owner
+            .inner
+            .0
+            .fixture
+            .calls
+            .iter()
+            .filter(|(op, _)| op == "input")
+            .collect::<Vec<_>>();
+        if case == "current" {
+            assert!(reply.is_ok());
+            assert_eq!(inputs.len(), 1);
+            assert_eq!(inputs[0].1["expectedVisual"]["region"], region);
+            assert_eq!(inputs[0].1["expectedVisual"]["sha256"], obs.frame_sha256);
+            assert_eq!(inputs[0].1["expectedWindow"], result["windowBounds"]);
+            assert_eq!(inputs[0].1["actions"][0]["x"], 132);
+            assert_eq!(inputs[0].1["actions"][0]["y"], 232);
+        } else {
+            assert!(reply.is_err(), "{case}");
+            assert!(inputs.is_empty(), "{case}");
+        }
+    }
+    for field in ["x", "width"] {
+        let mut bad = result["nativeImageObservation"].clone();
+        bad["region"][field] = serde_json::json!(2000);
+        let obs: browser_native_image::NativeImageObservation =
+            serde_json::from_value(bad).unwrap();
+        assert!(obs.validate(now).is_err());
+    }
+    let mut legacy = result["nativeImageObservation"].clone();
+    legacy.as_object_mut().unwrap().remove("captureScope");
+    let obs: browser_native_image::NativeImageObservation = serde_json::from_value(legacy).unwrap();
+    assert!(obs.validate(now).is_err());
+    for region in [
+        serde_json::json!({"x":80,"y":180,"width":440,"height":300}),
+        serde_json::json!({"x":80,"y":140,"width":300,"height":340}),
+        serde_json::json!({"x":80,"y":140,"width":440,"height":290}),
+    ] {
+        let mut command = command.clone();
+        command["region"] = region;
+        let result = browser_native_control::execute(
+            &original,
+            &target,
+            &command,
+            &mut RegionOwner(ImagePuzzleOwner {
+                fixture: NativeFixture { calls: vec![] },
+            }),
+        )
+        .unwrap();
+        assert!(result.get("nativeImageObservation").is_none());
+    }
+}

@@ -136,6 +136,19 @@ pub fn execute(
     if classify && command["action"] != "native_capture" {
         return Err("browser_native_classification_requires_capture".into());
     }
+    let image_scope = match command.get("imageCaptureScope") {
+        None => super::browser_native_image::CaptureScope::CompleteWindow,
+        Some(value)
+            if value == "complete_puzzle_region"
+                && command["action"] == "native_capture"
+                && classify
+                && command["registeredActionId"] == super::browser_native_image::PROFILE_ID
+                && command.get("region").is_some() =>
+        {
+            super::browser_native_image::CaptureScope::CompletePuzzleRegion
+        }
+        Some(_) => return Err("browser_native_image_capture_scope_invalid".into()),
+    };
     let observation_started = std::time::Instant::now();
     let observed_at_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -507,14 +520,16 @@ pub fn execute(
                 if classification.as_ref().is_some_and(|value| {
                     value.kind == agent_browser_challenge_control::NativeChallengeKind::ImagePuzzle
                         && value.family == Some("hcaptcha")
-                        && value.complete_window
+                        && (value.complete_window
+                            || image_scope
+                                == super::browser_native_image::CaptureScope::CompletePuzzleRegion)
                 }) {
                     native_image_observation = super::browser_native_image::observe(&bytes, &capture["ocr"], serde_json::from_value(json!({
                         "desktopId":target.viewing_desktop_id,"generation":target.viewing_generation,"windowId":window["id"],
                         "processDigest":super::browser_native_image::digest(&window["processIdentity"] )?,
                         "window":body["expectedWindow"],"displayWidth":width,"displayHeight":height,"region":body["region"],
                         "frameSha256":digest,"nativeControlEpoch":body["controlEpoch"],"observedAtMs":observed_at_ms,
-                        "registeredActionId":super::browser_native_image::PROFILE_ID,"puzzleSha256":"", "candidates":[],"verify":{"x":0,"y":0,"width":0,"height":0}
+                        "captureScope":image_scope,"registeredActionId":super::browser_native_image::PROFILE_ID,"puzzleSha256":"", "candidates":[],"verify":{"x":0,"y":0,"width":0,"height":0}
                     })).map_err(|_| "browser_native_image_observation_invalid")?)?;
                 }
             } else if let Some(action) = registered_action {

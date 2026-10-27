@@ -63,3 +63,26 @@ Image bytes and raw OCR stay ephemeral. Durable evidence contains only bound
 identities, digests, geometry, budget and owner receipts. Source tests and owned
 synthetic Native qualification do not establish universal hCaptcha accuracy,
 real-account authorization, installation or production readiness.
+
+## Explicit complete-puzzle region
+
+The default capture scope remains `complete_window`. A partial capture without
+an explicit image scope never becomes a registered image observation.
+
+For a site/provider contract declaring a complete static puzzle inside an owned
+page viewport, the client may set `captureRegion: {x, y, width, height}` before
+creating the original. The initial capture sends the existing `region` plus
+`imageCaptureScope: "complete_puzzle_region"`. The owner requires the complete
+prompt, brand, nine unique aligned cells and Verify control in that same PNG/OCR
+region. The response and original retain `captureScope: "complete_puzzle_region"`.
+An old serialized observation with no scope means only `complete_window` and
+still requires its region to equal the whole window.
+
+`partialWindow` and the generic classification's `completeWindow` describe the
+actual window coverage. They do not change to claim a full window for this mode.
+Every point must lie inside the retained region, which must lie inside the
+unchanged whole window and display. Native input uses the original region and
+SHA verbatim in `expectedVisual`; whole-window/process/control fences remain.
+Subsequent observation uses the same region. Partial unknown classification
+alone proves no clearance: both independent clearance and protected-access
+checks remain mandatory. Never crop a retained original or refresh its guard.
