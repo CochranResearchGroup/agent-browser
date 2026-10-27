@@ -353,7 +353,7 @@ def main():
                         assert 0 < length <= 65536
                         body = json.loads(request.rfile.read(length))
                         with lock:
-                            if request.path in ('/v1/agent-desktop/observe', '/v1/agent-desktop/ocr', '/v1/agent-desktop/control', '/v1/agent-desktop/input'):
+                            if request.path in ('/v1/agent-desktop/observe', '/v1/agent-desktop/ocr', '/v1/agent-desktop/capture_region', '/v1/agent-desktop/control', '/v1/agent-desktop/input'):
                                 assert args.challenge_assistance
                                 assert not request.path.endswith('/control') or body.get('operation') == 'status'
                                 assert body['desktopId'] == outer.target['viewingDesktopId'] and body['expectedGeneration'] == outer.target['viewingGeneration']
