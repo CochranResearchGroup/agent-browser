@@ -26,16 +26,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 
-def native_owner_failure_reason(failure):
+def native_owner_failure_diagnostic(failure):
     """Keep only reviewed infrastructure codes, never the owner's raw suffix."""
     if (not isinstance(failure, dict)
             or type(failure.get('schema_version')) is not int
             or failure['schema_version'] != 1
             or failure.get('code') != 'input_effect_uncertain'
-            or failure.get('retryable') is not False
-            or not isinstance(failure.get('message'), str)
-            or len(failure['message']) > 4096):
-        return 'unclassified'
+            or failure.get('retryable') is not False):
+        return {'reasonCode': 'unclassified', 'parserStage': 'schema_rejected'}
+    if not isinstance(failure.get('message'), str) or len(failure['message']) > 4096:
+        return {'reasonCode': 'unclassified', 'parserStage': 'message_rejected'}
     token = failure['message'].split(':', 1)[0]
     allowed = {
         'capability_not_configured', 'generation_conflict', 'input_failed',
@@ -49,7 +49,8 @@ def native_owner_failure_reason(failure):
         'input_command_incomplete', 'input_argument_invalid',
         'input_command_unsupported', 'input_search_unused',
     }
-    return token if token in allowed else 'unclassified'
+    return {'reasonCode': token, 'parserStage': 'classified'} if token in allowed else {
+        'reasonCode': 'unclassified', 'parserStage': 'unknown_token'}
 
 
 def load_file(name, path):
@@ -456,7 +457,7 @@ def main():
                                         result, forwarded_status = failure, error.code
                                     else:
                                         adapter_errors.append({'transport':'native-owner','path':request.path,'status':error.code,'code':code,
-                                            'reasonCode':native_owner_failure_reason(failure)})
+                                            **native_owner_failure_diagnostic(failure)})
                                         h.private_json(args.results / 'matrix-adapter-errors.json', adapter_errors)
                                         raise
                                 if (args.checkbox_assistance or args.image_assistance) and request.path.endswith('/input') and forwarded_status == 200:
