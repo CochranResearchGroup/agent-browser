@@ -489,6 +489,23 @@ fn native_image_public_completion_case(
     assert_eq!(dispatched, 1);
     if rounds && acknowledged {
         let first_round = readback["operation"].clone();
+        if matches!(round_fault, Some("revision" | "policy")) {
+            let service_store = JsonServiceStateStore::new(
+                crate::native::service_store::default_service_state_path().unwrap(),
+            );
+            let mut updated = service_store.load().unwrap();
+            updated.state_revision = updated.state_revision().checked_add(1).unwrap();
+            if round_fault == Some("policy") {
+                updated
+                    .site_policies
+                    .get_mut("image-site")
+                    .unwrap()
+                    .challenge_policy =
+                    agent_browser_service_model::ChallengePolicy::ProviderPreferred;
+            }
+            service_store.save(&updated).unwrap();
+        }
+
         let mut fresh = observation.clone();
         fresh["tileImageSha256s"] = json!(vec!["c".repeat(64); 9]);
         fresh["frameSha256"] = json!("c".repeat(64));
@@ -536,6 +553,22 @@ fn native_image_public_completion_case(
                     &command,
                     "https://owned.example.test",
                 )?;
+                if matches!(round_fault, Some("revision" | "policy")) {
+                    let prior: Value = serde_json::from_str(
+                        first_round["evidenceReferences"]["nativeSitePolicy"]
+                            .as_str()
+                            .unwrap(),
+                    )
+                    .unwrap();
+                    assert_ne!(
+                        prior["observedServiceRevision"],
+                        binding["observedServiceRevision"]
+                    );
+                    assert_eq!(
+                        prior["digest"] == binding["digest"],
+                        round_fault == Some("revision")
+                    );
+                }
                 crate::native::browser_task_operations::retain_native_site_policy(
                     &command, &binding,
                 )?;
@@ -546,7 +579,7 @@ fn native_image_public_completion_case(
                     ..Default::default()
                 })
             });
-            if round_fault.is_some() {
+            if round_fault.is_some() && round_fault != Some("revision") {
                 assert!(response.is_err());
             } else {
                 assert!(response.unwrap().success);
@@ -554,7 +587,7 @@ fn native_image_public_completion_case(
             Ok(Value::Null)
         })
         .unwrap();
-        if round_fault.is_some() {
+        if round_fault.is_some() && round_fault != Some("revision") {
             assert_eq!(dispatched, 1);
             assert_eq!(
                 task_operations::lookup("task", "image-attempt").unwrap()["operation"],
@@ -604,6 +637,12 @@ fn native_image_public_completion_case(
 #[test]
 fn native_image_rounds_public_original_retains_shared_budget() {
     native_image_public_completion_case(true, true, None, true, None);
+}
+
+#[test]
+fn native_image_rounds_public_policy_revision_drift_preserves_stable_authority() {
+    native_image_public_completion_case(true, true, None, true, Some("revision"));
+    native_image_public_completion_case(true, true, None, true, Some("policy"));
 }
 
 #[test]
