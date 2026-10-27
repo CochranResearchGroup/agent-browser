@@ -57,6 +57,7 @@ def main():
     parser.add_argument('--challenge-assistance', action='store_true', help='Add owned HTTPS challenge/native assistance to bounded input diagnostic')
     parser.add_argument('--observation-age-probe', action='store_true', help='Characterize current Native motion across the archived observation-age boundary; no checkbox click')
     parser.add_argument('--checkbox-assistance', action='store_true', help='Qualify owned Native checkbox/passive inputs and independent HTTPS admission')
+    parser.add_argument('--checkbox-observe-only', action='store_true', help='Capture the owned synthetic checkbox without challenge input')
     parser.add_argument('--mode-preflight', action='store_true', help='Read public browser mode before first fill; unverified evidence stops the fixture')
     parser.add_argument('--mode-diagnostic-only', action='store_true', help='Stop before fill after the read-only mode preflight regardless of result')
     parser.add_argument('--input-diagnostic', action='store_true', help='Bounded Native input diagnosis only; never full-matrix acceptance')
@@ -68,6 +69,7 @@ def main():
     assert not args.challenge_assistance or args.input_diagnostic, 'Challenge lane requires bounded input diagnostic'
     assert not args.observation_age_probe or args.challenge_assistance, 'Age probe requires owned challenge fixture'
     assert not args.checkbox_assistance or args.challenge_assistance, 'Checkbox lane requires owned HTTPS challenge fixture'
+    assert not args.checkbox_observe_only or args.checkbox_assistance
     assert not (args.checkbox_assistance and args.observation_age_probe), 'Probe and checkbox effects are separate bounded lanes'
     for commit in (args.agent_source_commit, args.native_binary_source_commit):
         assert commit is None or len(commit) == 40 and all(character in '0123456789abcdef' for character in commit)
@@ -137,7 +139,7 @@ def main():
     plan = {'version': 1, 'runId': secrets.token_hex(16), 'pairDigest': pair_digest, 'sourcePair': source_pair,
             'coldContexts': 5, 'publicControlPairs': 10, 'nativeControlPairs': 3, 'warmTargetMs': 250,
             'functionalUiPairs': 1, 'nativeTextEdits': 1, 'deadlineSeconds': 1200, 'cleanupDeadlineSeconds': 180, 'challengeAssistance': args.challenge_assistance, 'modePreflight':args.mode_preflight, 'modeDiagnosticOnly':args.mode_diagnostic_only}
-    plan.update(checkboxAssistance=args.checkbox_assistance, observationAgeProbe=args.observation_age_probe)
+    plan.update(checkboxAssistance=args.checkbox_assistance, checkboxObserveOnly=args.checkbox_observe_only, observationAgeProbe=args.observation_age_probe)
     if args.input_diagnostic:
         plan.update(mode='native_input_diagnostic', coldContexts=1, publicControlPairs=0,
                     nativeControlPairs=0, deadlineSeconds=300)
@@ -355,6 +357,7 @@ def main():
                                 assert not request.path.endswith('/control') or body.get('operation') == 'status'
                                 assert body['desktopId'] == outer.target['viewingDesktopId'] and body['expectedGeneration'] == outer.target['viewingGeneration']
                                 if request.path.endswith('/input'):
+                                    assert not args.checkbox_observe_only
                                     actions = body['actions']
                                     motion = args.observation_age_probe and 0 < len(actions) <= 16 and all(set(action) == {'kind', 'x', 'y'} and action['kind'] == 'move' for action in actions)
                                     action = actions[0] if len(actions) == 1 else {}
@@ -372,6 +375,8 @@ def main():
                                 from urllib.error import HTTPError
                                 try:
                                     with build_opener(NoRedirect).open(forwarded, timeout=15) as result: result=json.load(result)
+                                    if args.checkbox_observe_only and request.path.endswith('/ocr'):
+                                        h.private_json(args.results / 'synthetic-checkbox-ocr.json', result)
                                 except HTTPError as error:
                                     # Retain only the owner's bounded diagnostic code,
                                     # never recognized application text or credentials.
@@ -446,6 +451,8 @@ def main():
                 environment['HOSTED_SMOKE_OBSERVATION_AGE_PROBE']='1'
             if args.checkbox_assistance:
                 environment['HOSTED_SMOKE_NATIVE_CHECKBOX']='1'
+            if args.checkbox_observe_only:
+                environment['HOSTED_SMOKE_NATIVE_CHECKBOX_OBSERVE_ONLY']='1'
             if args.mode_preflight:
                 environment['HOSTED_SMOKE_MODE_PREFLIGHT']='1'
             if args.mode_diagnostic_only:
@@ -461,7 +468,7 @@ def main():
             if args.input_diagnostic:
                 diagnostic = json.loads((args.results / 'agent/native-input-diagnostic.json').read_text())
                 assert diagnostic['passed'] is True and diagnostic['fullMatrix'] is False
-                if args.checkbox_assistance:
+                if args.checkbox_assistance and not args.checkbox_observe_only:
                     assert json.loads((args.results / 'agent/checkbox470-acceptance.json').read_text())['passed'] is True
                     assert any(item['code'] == 'visual_observation_conflict' for item in native_refusals), 'Actual pinned Native must refuse a changed frame'
                     assert json.loads((args.results / 'agent/native-checkbox-fault.json').read_text())['state'] == 'consumed'

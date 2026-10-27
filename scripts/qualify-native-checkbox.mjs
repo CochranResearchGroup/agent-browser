@@ -29,7 +29,7 @@ export function createNativeCheckboxOracle() {
   };
 }
 
-export async function qualifyNativeCheckbox({workflow,task,nextTask,primary,site,profilePath,configFile,faultFile,oracle,save,continuity}) {
+export async function qualifyNativeCheckbox({workflow,task,nextTask,primary,site,profilePath,configFile,faultFile,oracle,save,continuity,observeOnly=false}) {
   // Prepare the owned app's existing window before observation. Product focus
   // must be idempotent here; a changed frame in the attempt still refuses.
   const staging=await primary.context().newCDPSession(primary);
@@ -66,6 +66,12 @@ export async function qualifyNativeCheckbox({workflow,task,nextTask,primary,site
       document.body.append(panel);
       window.completePassive470=async()=>{const report=await fetch('/checkbox470/'+scene+'/protected',{headers:{'x-synthetic-browser':'1'}});if(report.ok)panel.innerHTML='<h1>Report ready</h1>';};
     },{scene,family,passive});
+    await primary.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    await save('checkbox470-rendered-state.json',await primary.evaluate(()=>{
+      const panel=document.querySelector('#checkbox470'),box=panel?.querySelector('button');
+      const rect=element=>element?Object.fromEntries(['x','y','width','height'].map(key=>[key,element.getBoundingClientRect()[key]])):null;
+      return {synthetic:true,ready:!!panel,text:panel?.textContent?.slice(0,512),panel:rect(panel),box:rect(box),visibility:document.visibilityState,viewport:{width:innerWidth,height:innerHeight}};
+    }));
   }
   async function sourcePolicy(context) {
     const bytes=await readFile(configFile),current=JSON.parse(bytes);
@@ -106,6 +112,14 @@ export async function qualifyNativeCheckbox({workflow,task,nextTask,primary,site
     assert.equal(result.retryAllowed,false);await continuity('checkbox470-'+label);
     receipts.push({label,taskId:current.taskId,status:result.status,inputEvents:application.inputEvents,cleared:application.cleared,accessAllowed:application.allowAccess,originalId});
     return {task:current,scene,originalId};
+  }
+  if(observeOnly){
+    const scene='observe-only-'+randomUUID();oracle.create(scene,{});await stage(scene);
+    const capture=await workflow('browser_command',{taskId:task.taskId,action:'native_capture',params:{classifyChallenges:true}});
+    const png=Buffer.from(capture.capture?.image?.data??'','base64');assert(png.length>0&&png.length<=4194304);
+    await writeFile(new URL('checkbox470-observed.png','file://'+faultFile),png,{mode:0o600});
+    await save('checkbox470-observed.json',{capture,application:oracle.state(scene),observeOnly:true,challengeInputDispatched:false});
+    assert.equal(oracle.state(scene).inputEvents,0);return;
   }
   const first=await run('hcaptcha-success');
   await run('turnstile-success','turnstile');

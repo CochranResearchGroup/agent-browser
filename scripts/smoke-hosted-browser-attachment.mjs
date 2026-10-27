@@ -186,6 +186,7 @@ async function startScopedBroker(){
     const body=JSON.parse(raw),allowed=acquired.some(binding=>{const target=nativeTargets.get(binding.assignmentId);return target&&body.desktopId===target.viewingDesktopId&&body.expectedGeneration===target.viewingGeneration;});
     if(!allowed||process.env.HOSTED_SMOKE_CHALLENGE_469!=='1'||req.url.endsWith('/control')&&body.operation!=='status')return denied();
     if(req.url.endsWith('/input')){
+      if(process.env.HOSTED_SMOKE_NATIVE_CHECKBOX_OBSERVE_ONLY==='1')return denied();
       const motion=process.env.HOSTED_SMOKE_OBSERVATION_AGE_PROBE==='1'&&Array.isArray(body.actions)&&body.actions.length>0&&body.actions.length<=16&&
         body.actions.every(action=>action.kind==='move'&&Object.keys(action).sort().join(',')==='kind,x,y');
       const action=body.actions?.[0],visual=body.expectedVisual;
@@ -626,7 +627,7 @@ try{workload:{
   step='native-checkbox-assistance';
   await qualifyNativeCheckbox({workflow:publicWorkflow,task:opened,nextTask:async label=>{
     const current=await attachInBots(bot,'checkbox470-'+label+'-'+randomUUID(),'Owned Native checkbox '+label);borrowedTasks.push(current);return current;
-  },primary,site,profilePath,configFile:join(agentHome,'config.json'),faultFile:join(evidence,'native-checkbox-fault.json'),oracle:checkboxOracle,save,continuity});
+  },primary,site,profilePath,configFile:join(agentHome,'config.json'),faultFile:join(evidence,'native-checkbox-fault.json'),oracle:checkboxOracle,save,continuity,observeOnly:process.env.HOSTED_SMOKE_NATIVE_CHECKBOX_OBSERVE_ONLY==='1'});
   await save('native-input-diagnostic.json',{passed:true,fullMatrix:false,scope:'Owned Native checkbox/passive assistance, owner policy and independent HTTPS oracle'});break workload;
  }
  if(process.env.HOSTED_SMOKE_OBSERVATION_AGE_PROBE==='1'){
