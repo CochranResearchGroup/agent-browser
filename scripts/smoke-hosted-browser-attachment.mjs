@@ -42,7 +42,7 @@ let coldPixels;
 const stageTimings=[];
 async function timedStage(stage,operation){const start=performance.now();let outcome='failed_or_unknown';try{const result=await operation();outcome='response';return result;}finally{stageTimings.push({stage,startedMs:start,durationMs:performance.now()-start,outcome});}}
 async function boundedTeardown(stage,operation){
- let timer;try{return await Promise.race([operation(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Teardown deadline: '+stage)),30000);})]);}
+ let timer;try{return await Promise.race([operation(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Object.assign(Error('Teardown deadline: '+stage),{code:'fixture_teardown_deadline'})),30000);})]);}
  finally{clearTimeout(timer);}
 }
 const required=name=>{const value=process.env[name];assert(value,`Missing ${name}`);return value;};
@@ -818,6 +818,14 @@ try{workload:{
 }}catch(error){if(!uiControlSettled)ambiguous=true;await save('failure.json',{...safeError(error),ambiguous});process.exitCode=1;}
 finally{
  async function clean(name,action){try{await boundedTeardown(name,action);}catch(error){cleanup.errors.push({...safeError(error),step:name});process.exitCode=1;}}
+ const cleanupPhases=[];
+ async function cleanupPhase(name,action){
+  const phase={name,startedMs:performance.now(),state:'running'};cleanupPhases.push(phase);
+  await save('cleanup-phases.json',{clock:'performance.now monotonic milliseconds',phases:cleanupPhases});
+  try{const value=await action();phase.state='completed';return value;}
+  catch(error){phase.state='failed';phase.code=errorCode(error);throw error;}
+  finally{phase.durationMs=performance.now()-phase.startedMs;await save('cleanup-phases.json',{clock:'performance.now monotonic milliseconds',phases:cleanupPhases});}
+ }
  await clean('record-stage-timings',()=>save('stage-timings.json',{clock:'performance.now monotonic milliseconds',samples:stageTimings}));
  if(coldPixels)await clean('record-cold-pixel-evidence',()=>save('cold-first-pixels.json',coldPixels.receipt()));
  if(uiHandoffId&&uiTakeoverDispatched&&!uiReturnDispatched)await clean('return-known-native-control',async()=>{
@@ -845,11 +853,11 @@ finally{
  await clean('owned-process-cleanup',async()=>{
   cleanup.processesBefore=[...observedOwnedProcesses.values()];
   cleanup.processCleanup={};
-  const result=await cleanupExactOwnedProcesses({known:observedOwnedProcesses,census:()=>census({collectUnresolved:true}),readIdentity:cleanupProcessIdentity,signal:(pid,selected)=>process.kill(pid,selected),sleep:ms=>new Promise(resolve=>setTimeout(resolve,ms)),allowSigkill:true,graceMs:3000,killMs:3000,pollMs:100,receipt:cleanup.processCleanup,record:async()=>save('cleanup.json',cleanup)});
+  const result=await cleanupPhase('exact-owned-process-cleanup',()=>cleanupExactOwnedProcesses({known:observedOwnedProcesses,census:()=>cleanupPhase('owned-process-census',()=>census({collectUnresolved:true})),readIdentity:cleanupProcessIdentity,signal:(pid,selected)=>process.kill(pid,selected),sleep:ms=>new Promise(resolve=>setTimeout(resolve,ms)),allowSigkill:true,graceMs:3000,killMs:3000,pollMs:100,receipt:cleanup.processCleanup,record:async()=>save('cleanup.json',cleanup)}));
   cleanup.processesBefore=result.owned;
   cleanup.processesAfter=result.remaining;
   assert.equal(result.qualified,true,'Exact fixture cleanup remains unresolved; assignment cannot be released');
-  await appAbsenceFence();cleanup.processesClear=true;
+  await cleanupPhase('app-absence-fence',()=>appAbsenceFence());cleanup.processesClear=true;
  });
  if(remote&&baseline)await clean('assignment-cleanup',async()=>{
   assert.equal(cleanup.errors.length,0,'Unresolved teardown blocks assignment release');
