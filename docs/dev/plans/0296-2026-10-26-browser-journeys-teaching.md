@@ -5,7 +5,7 @@ Status: OPEN
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/466
 Integration branch: recipes/spec466-integration
 Integration base: 5770d693b23d51c9932574fa68e012a98029ce73
-Validated source tip:344d979e3d589160452b38303911e039e1c3201c; latest documentation checkpoint follows on recipes/spec466-integration / draft PR480.
+Validated source tip:0adf8dfa9c66e5df89db04ecf9531e5abb094922; latest documentation checkpoint follows on recipes/spec466-integration / draft PR480.
 
 ## Custody and scope
 
@@ -20,7 +20,7 @@ Stage1 issue453 and draft454 remain historical planning inputs; their former P29
 | 467 | none | validated | root | recipes/spec466-integration / duplicate-403 | Reopened regression repairedff812bf0f; model2/MCP151/strictClippy/fmt PASS34d400f0e; tracker CLOSED after requalification |
 | 468 | 467 | validated | root | recipes/spec466-integration / duplicate-403 | worker045dd85a; integration96fad35a2; combined HTTPS + repaired Native019 PASS; tracker reclosed |
 | 469 | 467 | validated | implement_469 | challenge/native-assistance-469 / spec466-469 | workeref57c4a0; combinedb7 Native019 attached/CDP-free PASS; tracker CLOSED |
-| 470 | 468,469 | running | implement_469 | challenge/native-checkbox-470 / spec466-469 | workerfc21702e4; mergeadd11438c; combined gates/runtime pending, tracker OPEN |
+| 470 | 468,469 | running | root | recipes/spec466-integration + frozen native-checkbox-470 fixture | workerb574 integrated; combined0adf gates/build PASS; actual qualification pending, tracker OPEN |
 | 471 | 470 | pending | unassigned | pending | none |
 | 472 | 471 | pending | unassigned | pending | none |
 | 473 | none | validated | implement_473 | recipes/teaching-evidence-473 / profile-proof | worker ea0e2f42ab59; integration67780a8b1; synthetic cases and shared docs validation pass; tracker CLOSED with explicit source/synthetic receipt |
@@ -327,3 +327,27 @@ Worker7b64f929a integrated asf46d3f2cf; observed-state followup7523d9382 as46e38
 Strict client acceptance of the one declared v2 rule required its own observed RED-to-GREEN; unknown rules remain refused. Root reran23 automatic scenarios, human assistance, strong implementation/declaration types and service-client checks PASS. Initial docs/parity/link/handoff checks passed after7b integration; final docs checks follow current tip. No actual Native input or automatic acceptance is claimed. Root shared guidance is prepared and one clean combined candidate must pass full source gates before one read-only confirmation.
 
 Preparation cleanup readback found zero readable exact browser/helper/profile matches, with six unreadable generations predating the preparation preserved as unknown/foreign. No global executable absence or reconstructed initial lineage is claimed. Exact model digest and engine version from actual027 match local preparation; this corrects the earlier model-identity limitation without promoting local screenshots or Native executable/source equivalence.
+
+## Resumed470 qualification custody and reused final source gates
+
+User explicitly resumed implement-spec after the handoff. Root takes remaining470 qualification; other pending image tickets stay blocked by validated integration readiness. Worker remains frozen cleanb574. Combined clean0adf8dfa9c66e5df89db04ecf9531e5abb094922 passed fmt, strict workspace Clippy, MCP155, updated client23/human/strong types/service-client, final parity/handoff/links/docs and optimized ci build. Immutable executable SHA256f08fe91f78545b393a872988e7189383da49450940fa9185c4e58e2acecbbe65 is not installed. No rebuild is needed for unchanged source.
+
+Root obtained full current implementation/runtime packets and refreshed the650-generation Native historical census with remaining0/unknown0/positive owned resources0. One read-only028 is released under existing owned synthetic authority after exact candidate/external source/browser pins, frozen consumer bytes, absent namespace, free displays7000/7001 and VNC62200/62201, and nonoverlapping isolated subnet checks. Both input denial layers remain active. No full automatic attempt or new Native acceptance follows from source readiness. Actual028 result and cleanup pending.
+
+## Native028 positive actual visual corroboration
+
+Read-only028 against immutable0adf/f08 returned DIAGNOSTIC_ACCEPT. Root independently verified actual hCaptcha Checkbox classification, explicit corpusv2 registered visual rule, engine/model identity and unchanged70 floor. The pinned owner observed joined prompt score95.239861 and exact brand88.276283; original low-confidence cases remain refused. Application inputEvents0, no input dispatch or protected access is claimed. Fresh001–028 census qualified680 recorded generations absent, unknown0 and positive owned runtime resources0; exact X11 locks/sockets and kernel TCP listeners were absent. An auxiliary TCP-connect readback was interrupted and replaced by direct kernel listener inspection, not promoted to success.
+
+Root released one fresh automatic029 under a current runtime packet for the frozen470 acceptance. Initial planned port62210 was occupied, so preflight stopped before namespace/effects and preserved the foreign socket; fresh port62300/62301 passed. Displays7010/7011 and isolated nonoverlapping subnet were checked. Exact0adf/f08 and external pins/consumer bytes remain unchanged. Actual automatic result and cleanup pending;470 stays OPEN.
+
+## Native029 primary failure and fresh030 observability
+
+Full029 stopped at the first hCaptcha attempt. Actual v2 classification succeeded, but the helper returned awaiting_operator/native_input_uncertain_or_refused. The saved original is uncertain, retryAllowed:false and siteOutcome unverified; owner policy/provider refs were retained. Independent application counters were inputEvents0, cleared:false and browser/backend access0. No provider input intent/ack receipt exists, so its absence is not claimed as complete delivery proof. The precise backend reason was swallowed by the client and remains unproven. The parent missing diagnostic file is secondary. Fresh001–029 cleanup qualified710 recorded generations absent, no positive owned runtime resources and exact X11/kernel listeners absent.
+
+Fixture-only commits9230c782e/7b339612f now retain bounded public input errors and returned responses plus before/after original-operation readbacks, preserving the original thrown error and unchanged product/client behavior. Worker copy is frozenfa4afe4d1. Node syntax/hygiene passed; runtime Rust/client bytes remain identical to0adf, so no rebuild. Root released one fresh030 owned instance after current policy/pin/namespace/display/port/subnet preflight. It does not replay the029 original or relax any input guard. Actual result and cleanup pending.
+
+## Native030 exact activity-admission failure
+
+Fresh030 reproduced the first automatic hCaptcha refusal. The new fixture captured exact public error browser_session_activity_admission_conflict. Before input the original was absent; afterwards it was uncertain/noRetry with owner site/provider refs retained. Application input0 and no protected access remain independently recorded. No029 original was replayed. Root requested a narrow source-grounded activity ownership repair with public regression from the worker, preserving pending-before-focus and foreign/competing activity exclusion. No bypass or input-policy relaxation is authorized. Fresh Native historical census and exact030 X11/kernel-listener readback are retained privately; no new runtime starts before source/gates and a new candidate.
+
+Source diagnosis corrected the initial nested-activity hypothesis: focus admission compares the current complete session document to effects.expected. Native policy evidence publication advances the owner document; refreshing the host cache left the existing effects baseline stale. Approved bounded repair adds exact expected-before atomic owner publication returning its exact post-own-update snapshot, then updates the same effects operation from that proof before exact retained-only focus. Arbitrary fresh reloads, foreign context/epoch/target changes and retirement remain rejected. Worker owns narrow Native host/task-operation mutation plus production-consumed adapter regression; no shared model/store relaxation or new caller bypass. Actual030 is the public RED; persistent provider-free RED/GREEN and a new qualified candidate are required before another Native run. Source/gates pending.
