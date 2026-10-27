@@ -369,8 +369,9 @@ def main():
                                 if (args.image_assistance and call.get('name') == 'remote_view_consumer'
                                         and consumer.get('operation') == 'launch_environment'):
                                     launch = outer.rpc._value(response)
-                                    assert launch['target']['desktopId'] == outer.target['desktopId']
-                                    assert launch['target']['viewingGeneration'] == outer.target['viewingGeneration']
+                                    assert launch['schemaVersion'] == 1 and launch['readinessScope'] == 'live_resource'
+                                    for field in ('assignmentId','desktopId','lifecycleGeneration','viewingDesktopId','viewingGeneration'):
+                                        assert launch['target'][field] == outer.target[field]
                                     # Reuse the same scoped public Native response as
                                     # the child; cookie-file locators stay memory-only.
                                     outer.image_pointer_environment = {key:launch['environment'][key]

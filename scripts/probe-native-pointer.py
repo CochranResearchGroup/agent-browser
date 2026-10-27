@@ -55,6 +55,11 @@ finally:x.XCloseDisplay(d)
     assert result.returncode == 0, 'owned_pointer_query_failed'
     assert len(result.stdout) < 1024
     value = json.loads(result.stdout)
+    stage = 'process_identity_after_query'
+    current = (process / 'stat').read_text()
+    assert current[current.rfind(')') + 2:].split()[19] == identity['start_token']
+    assert os.readlink(process / 'exe') == identity['executable']
+    assert process.stat().st_uid == identity['uid']
     value.update(status='observed', windowId=request['windowId'], processIdentityVerified=True, windowProcessVerified=True, inputSent=False, device="core_pointer")
     print(json.dumps(value))
 except Exception:
