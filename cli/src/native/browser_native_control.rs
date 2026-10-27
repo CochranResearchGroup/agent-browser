@@ -2,8 +2,109 @@
 use agent_browser_service_model::{RecordedProcessIdentity, RemoteViewApplicationTarget};
 use serde_json::{json, Value};
 
+/// Bounded, owner-minted evidence retained in the existing task-operation store.
+/// It contains neither pixels, OCR text nor process executable paths.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NativeChallengeObservation {
+    pub desktop_id: String,
+    pub generation: u64,
+    pub window_id: u64,
+    pub window: NativeChallengeBounds,
+    pub display_width: u32,
+    pub display_height: u32,
+    pub region: NativeChallengeBounds,
+    pub frame_sha256: String,
+    pub native_control_epoch: u64,
+    pub observed_at_ms: u64,
+    pub registered_action_id: String,
+    pub family: String,
+    pub candidate_sha256: String,
+    pub x: u16,
+    pub y: u16,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NativeChallengeBounds {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl NativeChallengeObservation {
+    /// Use the existing Native classification age bound. No historical desktop
+    /// transaction clock or controller lease is imported into this authority.
+    pub fn validate(&self, now_ms: u64) -> Result<(), String> {
+        let digest =
+            |value: &str| value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit());
+        let contains = |bounds: &NativeChallengeBounds| {
+            i64::from(self.x) >= i64::from(bounds.x)
+                && i64::from(self.y) >= i64::from(bounds.y)
+                && i64::from(self.x) < i64::from(bounds.x) + i64::from(bounds.width)
+                && i64::from(self.y) < i64::from(bounds.y) + i64::from(bounds.height)
+        };
+        if self.desktop_id.is_empty()
+            || self.desktop_id.len() > 256
+            || self.region.width == 0
+            || self.region.height == 0
+            || u64::from(self.region.width) * u64::from(self.region.height) > 1_000_000
+            || !digest(&self.frame_sha256)
+            || !digest(&self.candidate_sha256)
+            || agent_browser_challenge_control::challenge_profile(&self.registered_action_id)
+                .is_none()
+            || !((self.family == "hcaptcha"
+                && self.registered_action_id
+                    == agent_browser_challenge_control::HCAPTCHA_PROFILE.profile_id)
+                || (self.family == "turnstile"
+                    && self.registered_action_id
+                        == agent_browser_challenge_control::TURNSTILE_PROFILE.profile_id))
+            || !contains(&self.region)
+            || !contains(&self.window)
+            || u32::from(self.x) >= self.display_width
+            || u32::from(self.y) >= self.display_height
+            || self.region.x < 0
+            || self.region.y < 0
+            || self.region.x < self.window.x
+            || self.region.y < self.window.y
+            || i64::from(self.region.x) + i64::from(self.region.width)
+                > i64::from(self.window.x) + i64::from(self.window.width)
+            || i64::from(self.region.y) + i64::from(self.region.height)
+                > i64::from(self.window.y) + i64::from(self.window.height)
+            || i64::from(self.region.x) + i64::from(self.region.width)
+                > i64::from(self.display_width)
+            || i64::from(self.region.y) + i64::from(self.region.height)
+                > i64::from(self.display_height)
+        {
+            return Err("browser_native_original_observation_invalid".into());
+        }
+        if now_ms < self.observed_at_ms || now_ms - self.observed_at_ms > 10_000 {
+            return Err(
+                "browser_native_original_observation_expired:human assistance required".into(),
+            );
+        }
+        Ok(())
+    }
+}
+
 pub trait NativeOwner {
     fn request(&mut self, operation: &str, body: &Value) -> Result<Value, String>;
+    /// Local adapter for the existing registered detector, not provider input.
+    fn challenge_target(
+        &mut self,
+        _png: &[u8],
+        _ocr: &Value,
+        _action: &str,
+        _region: &Value,
+    ) -> Result<Value, String> {
+        Err("browser_native_registered_locator_unavailable".into())
+    }
+    /// Reopen the pending original operation and its owner-minted capture. The
+    /// default cannot turn caller parameters into an input permit.
+    fn native_attempt(&mut self, _command: &Value) -> Result<NativeChallengeObservation, String> {
+        Err("browser_native_original_operation_unavailable".into())
+    }
 }
 /// The caller retains browser ownership and establishes current mode. The native
 /// owner independently fences the process, window, geometry and input epoch.
@@ -33,7 +134,34 @@ pub fn execute(
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|_| "browser_native_observation_clock_invalid")?
         .as_millis() as u64;
-    let actions = if command["action"] == "native_input" {
+    let attempt = if command.get("nativeAttempt").is_some() {
+        if command["action"] != "native_input" {
+            return Err("browser_native_attempt_requires_input".into());
+        }
+        let observation = owner.native_attempt(command)?;
+        observation.validate(observed_at_ms)?;
+        Some(observation)
+    } else {
+        None
+    };
+    let registered_action = command
+        .get("registeredActionId")
+        .map(|value| {
+            value
+                .as_str()
+                .filter(|id| agent_browser_challenge_control::challenge_profile(id).is_some())
+                .ok_or("browser_native_registered_action_invalid")
+        })
+        .transpose()?;
+    if registered_action.is_some() && !classify {
+        return Err("browser_native_registered_action_requires_classification".into());
+    }
+    let derived_actions = attempt.as_ref().map(|evidence| {
+        vec![json!({"kind":"click","x":evidence.x,"y":evidence.y,"button":1,"count":1})]
+    });
+    let actions = if let Some(actions) = derived_actions.as_ref() {
+        Some(actions)
+    } else if command["action"] == "native_input" {
         Some(
             command["actions"]
                 .as_array()
@@ -131,6 +259,27 @@ pub fn execute(
     let mut body = json!({"desktopId":target.viewing_desktop_id,"expectedGeneration":target.viewing_generation,
         "windowId":window["id"],"expectedProcessIdentity":window["processIdentity"],"expectedWidth":width,"expectedHeight":height,
         "expectedWindow":{"x":window["x"],"y":window["y"],"width":window["width"],"height":window["height"]},"actions":actions});
+    if let Some(evidence) = &attempt {
+        if evidence.desktop_id != target.viewing_desktop_id
+            || evidence.generation != target.viewing_generation
+            || window["id"] != evidence.window_id
+            || body["expectedWindow"] != serde_json::to_value(&evidence.window).unwrap()
+            || width != u64::from(evidence.display_width)
+            || height != u64::from(evidence.display_height)
+        {
+            return Err("browser_native_original_observation_context_changed".into());
+        }
+        let control = owner.request("control", &json!({"desktopId":target.viewing_desktop_id,"expectedGeneration":target.viewing_generation,"operation":"status"}))?;
+        if control["desktopId"] != target.viewing_desktop_id
+            || control["generation"] != target.viewing_generation
+            || control["owner"] != "agent"
+            || control["epoch"] != evidence.native_control_epoch
+        {
+            return Err("browser_native_original_observation_control_changed".into());
+        }
+        body["controlEpoch"] = json!(evidence.native_control_epoch);
+        body["expectedVisual"] = json!({"region":evidence.region,"sha256":evidence.frame_sha256});
+    }
     if command["action"] == "native_close" {
         // Remote View window.close destroys the window. Normal WM close is
         // requested through native input; exit remains independent evidence.
@@ -175,6 +324,8 @@ pub fn execute(
         let mut capture = owner.request(if classify { "ocr" } else { "capture_region" }, &body)?;
         let mut classification = None;
         let mut recognition = None;
+        let mut native_observation = None;
+        let mut registered_target = None;
         if classify {
             use base64::Engine;
             use sha2::{Digest, Sha256};
@@ -228,6 +379,29 @@ pub fn execute(
             recognition = Some(json!({"engine":capture["ocr"]["engine"],
                 "modelSha256":capture["ocr"]["modelSha256"],"lineCount":lines.len(),
                 "scoreMeaning":"OCR engine score, not a probability"}));
+            if let Some(action) = registered_action {
+                let located =
+                    owner.challenge_target(&bytes, &capture["ocr"], action, &body["region"])?;
+                if classification.as_ref().is_some_and(|value| {
+                    value.kind == agent_browser_challenge_control::NativeChallengeKind::Checkbox
+                        && value.complete_window
+                        && value.registered_profile_id == Some(action)
+                }) && located["status"] == "matched"
+                    && located["visible"] == true
+                {
+                    let evidence: NativeChallengeObservation = serde_json::from_value(json!({
+                        "desktopId":target.viewing_desktop_id,"generation":target.viewing_generation,"windowId":window["id"],
+                        "window":body["expectedWindow"],"displayWidth":width,"displayHeight":height,"region":body["region"],
+                        "frameSha256":digest,"nativeControlEpoch":body["controlEpoch"],"observedAtMs":observed_at_ms,
+                        "registeredActionId":action,"family":classification.as_ref().and_then(|value| value.family),"candidateSha256":located["candidateSha256"],"x":located["x"],"y":located["y"]
+                    })).map_err(|_| "browser_native_registered_target_invalid")?;
+                    evidence.validate(
+                        observed_at_ms + observation_started.elapsed().as_millis() as u64,
+                    )?;
+                    native_observation = Some(evidence);
+                }
+                registered_target = Some(located);
+            }
             // Text stays process-local. The returned image and redacted rule IDs
             // describe this one Native-fenced frame, never task/site completion.
             capture
@@ -245,11 +419,28 @@ pub fn execute(
             result["recognition"] = recognition.unwrap_or(Value::Null);
             result["observedAtMs"] = json!(observed_at_ms);
             result["evidenceAgeMs"] = json!(observation_started.elapsed().as_millis() as u64);
+            result["nativeControlEpoch"] = body["controlEpoch"].clone();
+        }
+        if let Some(located) = registered_target {
+            result["registeredTarget"] = located;
+        }
+        if let Some(evidence) = native_observation {
+            result["nativeObservation"] = serde_json::to_value(evidence)
+                .map_err(|_| "browser_native_original_observation_invalid")?;
         }
         return Ok(result);
     }
-    if let Some(epoch) = command.get("controlEpoch") {
-        body["controlEpoch"] = epoch.clone();
+    if attempt.is_none() {
+        if let Some(epoch) = command.get("controlEpoch") {
+            body["controlEpoch"] = epoch.clone();
+        }
+    }
+    if let Some(evidence) = &attempt {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| "browser_native_observation_clock_invalid")?
+            .as_millis() as u64;
+        evidence.validate(now)?;
     }
     let reply = owner.request("input", &body)?;
     Ok(

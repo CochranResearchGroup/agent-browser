@@ -19,8 +19,9 @@ import {performance} from 'node:perf_hooks';
 import {createServer} from 'node:http';
 import {createServer as createHttpsServer} from 'node:https';
 import {createPublicKey} from 'node:crypto';
-import {qualifyNativeChallengeAssistance} from './qualify-native-challenge-assistance.mjs';
+import {qualifyNativeChallengeAssistance,probeCurrentNativeObservationAge} from './qualify-native-challenge-assistance.mjs';
 import {qualifyNativeNoCdpChallenge} from './qualify-native-no-cdp-challenge.mjs';
+import {createNativeCheckboxOracle,qualifyNativeCheckbox} from './qualify-native-checkbox.mjs';
 import {mkdir,mkdtemp,readFile,readdir,realpath,stat,writeFile} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -180,10 +181,19 @@ async function startScopedBroker(){
   const denied=async()=>{brokerOperations.push({operation,denied:true});await save('broker-operations.json',brokerOperations);reply(400,{schema_version:1,code:'fixture_target_denied',message:'Operation outside exact fixture assignment',retryable:false});};
   let operation='invalid';
   try{
-   if(req.method==='POST'&&['/v1/agent-desktop/observe','/v1/agent-desktop/ocr','/v1/agent-desktop/control'].includes(req.url)){
+   if(req.method==='POST'&&['/v1/agent-desktop/observe','/v1/agent-desktop/ocr','/v1/agent-desktop/control','/v1/agent-desktop/input'].includes(req.url)){
     let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>65536)return denied();}
     const body=JSON.parse(raw),allowed=acquired.some(binding=>{const target=nativeTargets.get(binding.assignmentId);return target&&body.desktopId===target.viewingDesktopId&&body.expectedGeneration===target.viewingGeneration;});
     if(!allowed||process.env.HOSTED_SMOKE_CHALLENGE_469!=='1'||req.url.endsWith('/control')&&body.operation!=='status')return denied();
+    if(req.url.endsWith('/input')){
+      const motion=process.env.HOSTED_SMOKE_OBSERVATION_AGE_PROBE==='1'&&Array.isArray(body.actions)&&body.actions.length>0&&body.actions.length<=16&&
+        body.actions.every(action=>action.kind==='move'&&Object.keys(action).sort().join(',')==='kind,x,y');
+      const action=body.actions?.[0],visual=body.expectedVisual;
+      const checkbox=process.env.HOSTED_SMOKE_NATIVE_CHECKBOX==='1'&&Array.isArray(body.actions)&&body.actions.length===1&&
+        action.kind==='click'&&action.button===1&&action.count===1&&Object.keys(action).sort().join(',')==='button,count,kind,x,y'&&
+        Number.isSafeInteger(body.controlEpoch)&&body.controlEpoch>=0&&/^[a-f0-9]{64}$/.test(visual?.sha256??'')&&visual.region;
+      if(!motion&&!checkbox)return denied();
+    }
     const upstream=await fetch(controlOrigin+req.url,{method:'POST',headers:{'content-type':'application/json',...(controlAuthorization?{authorization:controlAuthorization}:{})},body:raw,redirect:'error',signal:AbortSignal.timeout(15000)});
     return reply(upstream.status,await upstream.json());
    }
@@ -398,6 +408,7 @@ try{workload:{
  await send('initialize',{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'hosted-native-smoke',version:'1'}});client.notify('notifications/initialized');
  step='register-disposable-named-profile';const createdProfile=JSON.parse((await runCli(context,['--json','runtime','create','borrowed-profile','--browser-family','chromium'])).stdout);assert.equal(createdProfile.created,true);const profilePath=await realpath(createdProfile.userDataDir);assert(profilePath.startsWith(root+'/'),'Named fixture profile must remain inside its private home');
  const challenge469=process.env.HOSTED_SMOKE_CHALLENGE_469==='1';
+ const nativeCheckbox=process.env.HOSTED_SMOKE_NATIVE_CHECKBOX==='1',checkboxOracle=createNativeCheckboxOracle();
  const challengeState={completionRequests:0,protectedRequests:0};
  const nativeChallengeState={completionRequests:0,protectedRequests:0,pageRequests:0};
  let challengeTls,challengeSpki;
@@ -408,6 +419,7 @@ try{workload:{
  }
  const html='<!doctype html><title>App-owned attachment synthetic marker</title><body style="margin:0;background:#165dcc"><div style="height:75vh;background:#ff00aa;color:white;font:48px sans-serif">ATTACHMENT SYNTHETIC MARKER</div><input id="draft"><input id="control"><span id="peer">PREEXISTING PEER</span></body>';
  const fixtureHandler=(req,res)=>{
+  if(nativeCheckbox&&checkboxOracle.handle(req,res))return;
   if(challenge469&&req.url==='/native-no-cdp'){
    nativeChallengeState.pageRequests++;
    res.writeHead(200,{'content-type':'text/html'});res.end('<!doctype html><title>Owned Native challenge</title><body style="background:white;color:black;padding:20px;font:24px sans-serif"><div style="position:absolute;right:10px;bottom:10px;background:#00ff00;width:80px;height:40px"></div><h1 style="font-size:26px">Select all images containing buses</h1><p>Owned unsupported image puzzle</p><div style="height:80px;background:#ddd">Synthetic image grid</div><button style="font:22px sans-serif" onclick="completeChallenge()">Complete verification</button><script>async function completeChallenge(){const result=await fetch("/native/challenge/complete",{method:"POST"});if(!result.ok)return;const report=await fetch("/native/protected-report");if(report.ok)document.body.innerHTML="<h1>Report ready</h1>";}</script>');return;
@@ -610,6 +622,18 @@ try{workload:{
  async function consumerControl(){const response=await fetch(service.url+`/api/agent-browser/handoffs/${uiHandoffId}/control`,{signal:AbortSignal.timeout(15000)});assert.equal(response.status,200);return response.json();}
  const controlReceipt=value=>({control:Object.fromEntries(['owner','epoch','pauseReads','pendingOutcomeCount'].filter(key=>key in value.control).map(key=>[key,value.control[key]])),native:Object.fromEntries(['owner','state','epoch','hostedOperationId'].filter(key=>key in value.native).map(key=>[key,value.native[key]]))});
  const beforeUi=await consumerControl();assert.equal(beforeUi.control.owner,'agent');assert.equal(beforeUi.native.owner,'agent');
+ if(nativeCheckbox){
+  step='native-checkbox-assistance';
+  await qualifyNativeCheckbox({workflow:publicWorkflow,task:opened,nextTask:async label=>{
+    const current=await attachInBots(bot,'checkbox470-'+label+'-'+randomUUID(),'Owned Native checkbox '+label);borrowedTasks.push(current);return current;
+  },primary,site,profilePath,configFile:join(agentHome,'config.json'),faultFile:join(evidence,'native-checkbox-fault.json'),oracle:checkboxOracle,save,continuity});
+  await save('native-input-diagnostic.json',{passed:true,fullMatrix:false,scope:'Owned Native checkbox/passive assistance, owner policy and independent HTTPS oracle'});break workload;
+ }
+ if(process.env.HOSTED_SMOKE_OBSERVATION_AGE_PROBE==='1'){
+  step='current-native-observation-age';await probeCurrentNativeObservationAge({workflow:publicWorkflow,task:opened,consumerControl,save});
+  await continuity('after-native-motion-age-probe');
+  await save('native-input-diagnostic.json',{passed:true,fullMatrix:false,scope:'Current Native motion-only observation-age characterization; no click or operator takeover'});break workload;
+ }
  if(workloadPlan){
   const desktop=await remote.observation(binding),windows=desktop.windows.windows.filter(window=>window.pid===original.pid);
   assert.equal(windows.length,1,'The owned browser requires one positively observed Native window');

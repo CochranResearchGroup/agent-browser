@@ -11,6 +11,8 @@ mod host_policy;
 mod host_reconnect;
 mod hosted;
 #[cfg(all(test, unix))]
+mod native_challenge_tests;
+#[cfg(all(test, unix))]
 mod native_policy_tests;
 mod playbooks;
 mod profile_duplicate;

@@ -55,6 +55,8 @@ def main():
     parser.add_argument('--agent-source-commit', required=True)
     parser.add_argument('--native-binary-source-commit')
     parser.add_argument('--challenge-assistance', action='store_true', help='Add owned HTTPS challenge/native assistance to bounded input diagnostic')
+    parser.add_argument('--observation-age-probe', action='store_true', help='Characterize current Native motion across the archived observation-age boundary; no checkbox click')
+    parser.add_argument('--checkbox-assistance', action='store_true', help='Qualify owned Native checkbox/passive inputs and independent HTTPS admission')
     parser.add_argument('--mode-preflight', action='store_true', help='Read public browser mode before first fill; unverified evidence stops the fixture')
     parser.add_argument('--mode-diagnostic-only', action='store_true', help='Stop before fill after the read-only mode preflight regardless of result')
     parser.add_argument('--input-diagnostic', action='store_true', help='Bounded Native input diagnosis only; never full-matrix acceptance')
@@ -64,6 +66,9 @@ def main():
     args = parser.parse_args()
     assert not args.mode_diagnostic_only or args.mode_preflight, 'Mode diagnostic requires read-only preflight'
     assert not args.challenge_assistance or args.input_diagnostic, 'Challenge lane requires bounded input diagnostic'
+    assert not args.observation_age_probe or args.challenge_assistance, 'Age probe requires owned challenge fixture'
+    assert not args.checkbox_assistance or args.challenge_assistance, 'Checkbox lane requires owned HTTPS challenge fixture'
+    assert not (args.checkbox_assistance and args.observation_age_probe), 'Probe and checkbox effects are separate bounded lanes'
     for commit in (args.agent_source_commit, args.native_binary_source_commit):
         assert commit is None or len(commit) == 40 and all(character in '0123456789abcdef' for character in commit)
     repo = Path(__file__).resolve().parents[1]
@@ -114,6 +119,8 @@ def main():
                      'scripts/smoke-hosted-browser-attachment.mjs', 'scripts/hosted-performance.mjs')
     if args.challenge_assistance:
         fixture_files += ('scripts/qualify-native-challenge-assistance.mjs', 'scripts/qualify-native-no-cdp-challenge.mjs', 'packages/client/src/challenge-assistance.js')
+    if args.checkbox_assistance:
+        fixture_files += ('scripts/qualify-native-checkbox.mjs',)
     for name in fixture_files:
         h.run('git', '-C', repo, 'ls-files', '--error-unmatch', name)
     source_pair = {'agentBinarySha256': h.sha(args.agent_binary), 'agentBinarySourceCommit': args.agent_source_commit,
@@ -130,6 +137,7 @@ def main():
     plan = {'version': 1, 'runId': secrets.token_hex(16), 'pairDigest': pair_digest, 'sourcePair': source_pair,
             'coldContexts': 5, 'publicControlPairs': 10, 'nativeControlPairs': 3, 'warmTargetMs': 250,
             'functionalUiPairs': 1, 'nativeTextEdits': 1, 'deadlineSeconds': 1200, 'cleanupDeadlineSeconds': 180, 'challengeAssistance': args.challenge_assistance, 'modePreflight':args.mode_preflight, 'modeDiagnosticOnly':args.mode_diagnostic_only}
+    plan.update(checkboxAssistance=args.checkbox_assistance, observationAgeProbe=args.observation_age_probe)
     if args.input_diagnostic:
         plan.update(mode='native_input_diagnostic', coldContexts=1, publicControlPairs=0,
                     nativeControlPairs=0, deadlineSeconds=300)
@@ -139,6 +147,7 @@ def main():
     websocket_lock = threading.Lock()
     websocket_connections = set()
     exchange_events, bridge_events, adapter_errors = [], [], []
+    native_input_events, native_refusals = [], []
     bridge_token = secrets.token_hex(32)
     socket_root = Path(tempfile.mkdtemp(prefix='p279-native-rpc-'))
     socket_root.chmod(0o700)
@@ -335,27 +344,59 @@ def main():
                     pass
                 def do_POST(request):
                     try:
+                        forwarded_status = 200
                         assert request.headers.get('Authorization') == 'Bearer ' + bridge_token
                         length = int(request.headers.get('Content-Length', '0'))
                         assert 0 < length <= 65536
                         body = json.loads(request.rfile.read(length))
                         with lock:
-                            if request.path in ('/v1/agent-desktop/observe', '/v1/agent-desktop/ocr', '/v1/agent-desktop/control'):
+                            if request.path in ('/v1/agent-desktop/observe', '/v1/agent-desktop/ocr', '/v1/agent-desktop/control', '/v1/agent-desktop/input'):
                                 assert args.challenge_assistance
                                 assert not request.path.endswith('/control') or body.get('operation') == 'status'
                                 assert body['desktopId'] == outer.target['viewingDesktopId'] and body['expectedGeneration'] == outer.target['viewingGeneration']
-                                from urllib.request import Request, urlopen
+                                if request.path.endswith('/input'):
+                                    actions = body['actions']
+                                    motion = args.observation_age_probe and 0 < len(actions) <= 16 and all(set(action) == {'kind', 'x', 'y'} and action['kind'] == 'move' for action in actions)
+                                    action = actions[0] if len(actions) == 1 else {}
+                                    visual = body.get('expectedVisual', {})
+                                    checkbox = args.checkbox_assistance and len(actions) == 1 and set(action) == {'kind', 'x', 'y', 'button', 'count'} and action['kind'] == 'click' and action['button'] == 1 and action['count'] == 1 and type(body.get('controlEpoch')) is int and body['controlEpoch'] >= 0 and isinstance(visual.get('sha256'), str) and len(visual['sha256']) == 64 and all(c in '0123456789abcdef' for c in visual['sha256']) and isinstance(visual.get('region'), dict)
+                                    assert motion or checkbox
+                                    native_input_events.append({'state':'forwarding_once','windowId':body['windowId'],'nativeControlEpoch':body.get('controlEpoch'),
+                                        'generation':body['expectedGeneration'],'actionKinds':[action['kind'] for action in actions],'expectedVisualSha256':visual.get('sha256')})
+                                    h.private_json(args.results / 'native-input-forwarding.json', native_input_events)
+                                from urllib.request import Request, build_opener, HTTPRedirectHandler
+                                class NoRedirect(HTTPRedirectHandler):
+                                    def redirect_request(self, *_args, **_kwargs):
+                                        return None
                                 forwarded = Request(f'http://127.0.0.1:{outer.control_port}'+request.path, data=json.dumps(body).encode(), method='POST', headers={'Authorization':'Bearer '+outer.token,'Content-Type':'application/json'})
                                 from urllib.error import HTTPError
                                 try:
-                                    with urlopen(forwarded, timeout=15) as result: result=json.load(result)
+                                    with build_opener(NoRedirect).open(forwarded, timeout=15) as result: result=json.load(result)
                                 except HTTPError as error:
                                     # Retain only the owner's bounded diagnostic code,
                                     # never recognized application text or credentials.
                                     failure = json.load(error)
-                                    adapter_errors.append({'transport':'native-read','path':request.path,'status':error.code,'code':failure.get('code')})
-                                    h.private_json(args.results / 'matrix-adapter-errors.json', adapter_errors)
-                                    raise
+                                    code = failure.get('code', failure.get('error', {}).get('code'))
+                                    if args.checkbox_assistance and request.path.endswith('/input') and code == 'visual_observation_conflict':
+                                        native_refusals.append({'path':request.path,'status':error.code,'code':code,'effectsAcknowledged':False})
+                                        h.private_json(args.results / 'native-owner-refusals.json', native_refusals)
+                                        result, forwarded_status = failure, error.code
+                                    else:
+                                        adapter_errors.append({'transport':'native-owner','path':request.path,'status':error.code,'code':code})
+                                        h.private_json(args.results / 'matrix-adapter-errors.json', adapter_errors)
+                                        raise
+                                if args.checkbox_assistance and request.path.endswith('/input') and forwarded_status == 200:
+                                    native_input_events[-1]['ownerDelivery'] = result.get('delivery')
+                                    h.private_json(args.results / 'native-input-forwarding.json', native_input_events)
+                                    fault_path = args.results / 'agent/native-checkbox-fault.json'
+                                    if fault_path.exists():
+                                        assert not fault_path.is_symlink() and fault_path.resolve().is_relative_to(args.results.resolve())
+                                        fault = json.loads(fault_path.read_text())
+                                        if fault == {'state':'armed','kind':'drop_input_reply_once'}:
+                                            assert result.get('delivery') == 'dispatched'
+                                            h.private_json(fault_path, {'state':'consumed','kind':'drop_input_reply_once','ownerDelivery':'dispatched'})
+                                            request.close_connection = True
+                                            return
                             elif request.path == '/v1/consumer':
                                 assert set(body) == {'application', 'request'} and body['application'] == 'fixture'
                                 result = outer.rpc.handle_consumer(body['request'])
@@ -366,7 +407,7 @@ def main():
                                 result = outer.bridge(operation, body)
                                 result = {'ok': True, 'value': result}
                         encoded = json.dumps(result).encode()
-                        request.send_response(200)
+                        request.send_response(forwarded_status)
                     except transport.ConsumerRefused as error:
                         encoded = json.dumps(error.value).encode()
                         request.send_response(400)
@@ -401,6 +442,10 @@ def main():
                  'HOSTED_SMOKE_EVIDENCE_DIR': str(args.results / 'agent'), 'NODE_EXTRA_CA_CERTS': str(self.certificate)})
             if args.challenge_assistance:
                 environment.update({'HOSTED_SMOKE_CHALLENGE_469':'1','HOSTED_SMOKE_CHALLENGE_SITE_CERT':str(self.certificate),'HOSTED_SMOKE_CHALLENGE_SITE_KEY':str(args.results/'fixture.key')})
+            if args.observation_age_probe:
+                environment['HOSTED_SMOKE_OBSERVATION_AGE_PROBE']='1'
+            if args.checkbox_assistance:
+                environment['HOSTED_SMOKE_NATIVE_CHECKBOX']='1'
             if args.mode_preflight:
                 environment['HOSTED_SMOKE_MODE_PREFLIGHT']='1'
             if args.mode_diagnostic_only:
@@ -416,6 +461,10 @@ def main():
             if args.input_diagnostic:
                 diagnostic = json.loads((args.results / 'agent/native-input-diagnostic.json').read_text())
                 assert diagnostic['passed'] is True and diagnostic['fullMatrix'] is False
+                if args.checkbox_assistance:
+                    assert json.loads((args.results / 'agent/checkbox470-acceptance.json').read_text())['passed'] is True
+                    assert any(item['code'] == 'visual_observation_conflict' for item in native_refusals), 'Actual pinned Native must refuse a changed frame'
+                    assert json.loads((args.results / 'agent/native-checkbox-fault.json').read_text())['state'] == 'consumed'
             else:
                 assert self.restart_backend is not None and self.restart_admitted
                 summary = json.loads((args.results / 'agent/qualification-summary.json').read_text())

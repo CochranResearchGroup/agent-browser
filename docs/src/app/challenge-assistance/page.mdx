@@ -9,6 +9,8 @@ debugger:
 
 The supported `browser_command` response keeps its existing PNG image and adds
 `challenge`, `recognition`, `observedAtMs` and `evidenceAgeMs` metadata.
+It also reports `nativeControlEpoch`, which belongs to Remote View and is
+distinct from the cooperative task-control epoch.
 Classification uses the Remote View owner's current OCR capture, exact original
 process, current viewing generation, window and frame digest. Recognized page
 text remains process-local and is omitted from the result. Capture remains subject
@@ -21,6 +23,95 @@ OCR scores are engine scores, not probabilities. A partial window or unknown
 classification never proves absence of a challenge. A recognized signature grants
 no automated attempt, and it never proves protected-site admission. The declared
 synthetic corpus is a regression suite, not a provider accuracy benchmark.
+
+## Bounded passive waits and registered checkbox attempts
+
+The optional backend method `resolve({taskId, requestId})` waits through an
+eligible passive check for at most three observations and ten seconds. A
+registered checkbox can receive one policy-authorized attempt for the entire
+task. Taking another capture, changing registered families or changing profile
+versions does not renew that budget. Pending and uncertain originals consume it.
+
+Configure `resolvePolicy` to read the receiving application's existing
+`SitePolicy` source and the current public `browser_policy` status. Return the
+exact task binding, canonical HTTPS origin, source reference, SitePolicy record
+and task-policy record, plus its existing provider record. This is a trusted receiving-backend port. An allow label,
+policy digest or origin supplied by a browser caller is not authority.
+
+The runtime owner independently resolves the exact profile's existing
+`site_policy_ids` against a verified current origin. Exactly one applicable
+policy must allow providers through the existing provider/capability decision. Missing,
+ambiguous, manual-only, denied or changed policy requires human assistance.
+Existing task rules must also permit input and focus.
+An explicit manual interaction mode or `requiresCdpFree` requirement refuses
+this automatic path. `manual_login_preferred` remains a seeding preference;
+it does not prohibit an already-qualified CDP task with an explicitly permitted
+provider policy.
+
+Configure the existing `ServiceProvider` catalog with one enabled CAPTCHA
+provider advertising `captcha_solve`. This feature introduces the explicit
+versioned adapter reference `agent-browser:remote-view-native:v1` in that
+existing row's `configRef` field. It resolves only to the current existing
+Remote View Native backend; it supplies no endpoint, credential or new viewer
+authority. For example:
+
+```json
+{"id":"native-checkbox-provider","kind":"captcha","enabled":true,"capabilities":["captcha_solve"],"configRef":"agent-browser:remote-view-native:v1"}
+```
+
+`SitePolicy.allowedChallengeProviders` contains configured provider IDs such as
+`native-checkbox-provider`. It does not contain detected families or registered
+action IDs. The owner requires exactly one eligible Native-bound row and retains
+its provider ID separately from `family` and `registeredActionId`. Disabled,
+missing-capability, wrong-binding or ambiguous provider rows require assistance.
+The existing provider decision retains its empty-allowlist semantics; an absent
+Native-bound provider never becomes an implicit permission.
+
+Automatic checkbox admission currently requires a verified CDP task. The owner
+reads that existing target's current URL, checks policy, focuses that exact task
+once under the durable original attempt and rechecks the URL and policy. Native
+window, generation, frame and control fences still govern the actual click.
+CDP-free tasks explicitly require human assistance for this automatic path; the
+owner never attaches a debugger to discover their origin. Native classification
+and the human journey below continue to support CDP-free browsers.
+
+The low-level opt-in requests use existing `browser_command` actions:
+
+```json
+{"taskId":"TASK","action":"native_capture","requestId":"attempt:observation","params":{"classifyChallenges":true,"registeredActionId":"hcaptcha-checkbox-p181-v2"}}
+```
+
+```json
+{"taskId":"TASK","action":"native_input","requestId":"attempt","params":{"nativeAttempt":{"observationRequestId":"attempt:observation","registeredActionId":"hcaptcha-checkbox-p181-v2"}}}
+```
+
+The other registered ID is `turnstile-checkbox-p169-v1`. The existing detector
+must find one visible, corroborated target in the exact Native PNG/OCR capture.
+The owner retains bounded evidence in the existing task-operation journal and
+derives the click. Callers supply no target point. Before input, the owner checks
+observation age, original task/process/window, current viewing generation,
+geometry, task policy, current Native agent control and the captured region's
+digest through Remote View's existing `expectedVisual` guard. A changed frame,
+hidden or duplicate target, rejection, expiry or uncertain delivery ends the
+attempt and requires assistance.
+
+Use the stable original ID to inspect an interrupted attempt:
+
+```json
+{"taskId":"TASK","action":"task_operation","params":{"requestId":"attempt"}}
+```
+
+This ID identifies an Agent Browser operation, not a Remote View provider
+receipt. `dispatched` acknowledges dispatch only. The Challenge Control kernel
+keeps it awaiting independent verification, and original-operation readback
+always forbids replay. Public retained evidence excludes pixels, raw OCR text,
+URL paths and executable paths.
+
+`resolve` requires distinct `verifyClearance` and `verifyAccess` results before
+reporting verified access. It does not mark the larger browser task complete.
+Unsupported challenges, refused policy and uncertain outcomes use the same
+Native human assistance flow below. There is no automatic retry or another
+viewer grant.
 
 ## Continue through the existing Native viewer
 
