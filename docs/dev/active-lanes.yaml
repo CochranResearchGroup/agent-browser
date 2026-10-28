@@ -14,7 +14,7 @@ lanes:
     dependencies: []
     overlaps: [P295]
     reconciled_overlaps: ["Preserve separate Auth owner; serialize shared public contracts with teaching worker473"]
-    limitations: ["No production effects; real narration and portal scope pending;484 clock repair active under new user4hour/3failed bound;472 qualification pending", "One broad review and one bounded remediation"]
+    limitations: ["No production effects;472/484 actual054 qualified;11/12 original children closed;478 real narration and exact portal/account/task/effect scope pending", "One broad review and one bounded remediation"]
     updated_at: 2026-10-28
   - id: P295
     product_lane: PL-AUTH

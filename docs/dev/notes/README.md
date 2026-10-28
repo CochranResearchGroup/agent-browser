@@ -1,6 +1,6 @@
 # Agent Browser Notes Index
 
-[P296 image rounds checkpoint](0296-native-image-rounds-472-checkpoint.md): source-qualified two-round behavior; repaired-candidate runtime blocked by repeated future-timestamp refusal tracked in484.
+[P296 image rounds checkpoint](0296-native-image-rounds-472-checkpoint.md): same-boot elapsed clock repair and actual054 two-round Native qualification;472/484 accepted,478 actual media and scope remain pending.
 
 [P296 Native image qualification](0296-native-image-471-source-receipt.md): actual image selection, Native dispatch and independent access qualify; source-pinned Native pointer-replay repair, refusal/no-replay and exact cleanup remain separately bounded.
 

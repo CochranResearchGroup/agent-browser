@@ -1,9 +1,34 @@
 # P296 image rounds472 source checkpoint
 
-Status: SOURCE QUALIFIED, RUNTIME BLOCKED
+Status: SOURCE AND OWNED SYNTHETIC RUNTIME QUALIFIED (2026-10-28)
 Product lane: PL-CHALLENGE, integrated under PL-RECIPES P296
-Tracker: [472](https://github.com/CochranResearchGroup/agent-browser/issues/472), blocker [484](https://github.com/CochranResearchGroup/agent-browser/issues/484)
+Tracker: [472](https://github.com/CochranResearchGroup/agent-browser/issues/472), clock repair [484](https://github.com/CochranResearchGroup/agent-browser/issues/484)
 Integration: recipes/spec466-integration / draft PR480
+
+## Current accepted checkpoint,2026-10-28
+
+The user explicitly resumed diagnosing-bugs and TDD for at most four hours from03:28UTC, stopping before three consecutive failed attempts on one task. The prior053 stop remains the earlier packet boundary. The current packet established the cause, repaired the product and qualified fresh054. No host clock, production runtime or private account was changed.
+
+Read-only adjacent-clock probes reproduced realtime moving backward2.869seconds while monotonic advanced5milliseconds, then minimized the inversion to478milliseconds in1.57seconds. Two further2.87second reversals coincided with changed timesyncd NTP messages. Application freshness and original deadlines incorrectly used wall time. Same-boot Linux BOOTTIME now governs Native image age and the first immutable deadline; diagnostic Unix timestamps remain available. Clock identity changes, boot changes, missing elapsed evidence after qualification, actual future/expired elapsed evidence and context changes refuse. Legacy receipts and unsupported platforms retain strict wall checks. The client uses an elapsed receiving budget and supplies timeoutMs rather than asking a visual selector to reconstruct duration from wall time. The host's underlying clock configuration was not repaired or attributed to an actor.
+
+Exact repaired source: bc1e503117c87d6591fc9cdd9c5baeb3e9717071. Private uninstalled ci candidate SHA256bc5072bebf6ef98b5c3ce18e53cb038489006129214df3f04873540d2f6eb708. Durable private pin: ~/.local/state/agent-browser/spec466-484-diagnosis-20261028/candidate-pin.json. Native remains a530a970/98ec819840ba, producer fixture dff90d0c and consumer3d258be0. The historical /tmp candidate locators below were absent after a host reboot; historical receipts remain, but those old executable bytes are not claimed currently available. The new candidate and diagnostic helpers are in durable user state.
+
+Causal RED/GREEN: capture-through-validation0.42s/0.43s; durable MCP0.07s/0.31s; client wall-correction and explicit duration45000/40000ms cases. Consolidated168 MCP and24 Native-control tests pass, alongside client protocol/strong types, strict workspace Clippy, format, docs build, parity, handoff docs, policy wiring and links. One old Native fixture initially supplied diagnostic Unix time to the now-elapsed planner; corrected to the selected domain and all24 passed. Earlier failed command/fixtures remain recorded. Final consecutive task failures0.
+
+Fresh054 uses actual Native owner screenshots/input and coordinator reasoning from six exact PNGs, without oracle answers or canned provider success. Parent DIAGNOSTIC_ACCEPT, workload153.26seconds, elapsed156.89seconds, failure and cleanupFailure null, adapterErrors empty. This is the declared two-round synthetic lane, not a full matrix, production installation or universal hCaptcha qualification.
+
+| Scenario | Actual application inputs | Verified result |
+| --- | --- | --- |
+| Two complete rounds |8clicks |6tile selections and2Verify actions; independent browser and backend protected-access checks pass |
+| Partial refresh |4clicks |First round retained; partial changed grid requests operator assistance without second input |
+| Explicit rejection |4clicks |Rejection requests operator assistance without second input |
+| Lost second reply |8clicks |Drop fault consumed after actual dispatch; first result acknowledged, second uncertain, original reconciliation/repeated workflow sends no additional input |
+
+Exact acquired assignment is released in both final inventory and authoritative Native pools; its peer remains active in that readback. After fixture shutdown, fresh001–054 census proves1450 recorded generations absent, unknown0, no positively owned processes, Docker resources or units. Reused PIDs and unrelated processes were preserved; retained build image tags and earlier offline assignment obligations are not erased. Private qualification receipt: ~/.local/state/agent-browser/spec466-484-diagnosis-20261028/qualification-054.json.
+
+These gates satisfy472 and484. Original spec466 closure advances to11/12 children.478 still needs actual operator narration/media and exact portal/account/task/effect scope. Parent466 and PR480 remain open/draft; no merge readiness, installation or real-account claim. Reserved final broad review and post-review remediation remain0/0 until the original child graph closes and the fixed review point is selected. Source auxiliaries and candidates remain retained pending canonical integration or governed disposition.
+
+## Earlier retained checkpoint
 
 ## Changed behavior
 
