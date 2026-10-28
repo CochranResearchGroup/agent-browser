@@ -544,10 +544,7 @@ fn native_image_attempt_derives_only_current_candidate_and_verify_points() {
             let selected: Vec<String> =
                 serde_json::from_value(command["imageAttempt"]["selectedCandidateIds"].clone())
                     .unwrap();
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as u64;
+            let now = self.evidence.current_time_ms()?;
             let plan = browser_native_image::plan(
                 "task",
                 "attempt",
@@ -612,7 +609,8 @@ fn native_image_attempt_derives_only_current_candidate_and_verify_points() {
             evidence.window_id += 1;
         }
         if condition == "expired" {
-            evidence.observed_at_ms -= 60_001;
+            evidence.clock = None;
+            evidence.observed_at_ms -= 120_000;
         }
         let mut selected = selected.clone();
         if condition == "unknown_candidate" {
@@ -739,11 +737,7 @@ fn native_image_capture_offsets_absolute_ocr_and_local_pixels_exactly_once() {
     let capture=browser_native_control::execute(&original,&target,&serde_json::json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":browser_native_image::PROFILE_ID}),&mut OffsetOwner(ImagePuzzleOwner{fixture:NativeFixture{calls:vec![]}})).unwrap();
     let observation: browser_native_image::NativeImageObservation =
         serde_json::from_value(capture["nativeImageObservation"].clone()).unwrap();
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u64;
-    observation.validate(now).unwrap();
+    observation.validate_current().unwrap();
     assert_eq!(observation.candidates[0].bounds.x, 120);
     assert_eq!(observation.candidates[0].bounds.y, 230);
     let actions = observation
@@ -968,13 +962,9 @@ fn native_image_complete_puzzle_region_is_explicit_fresh_and_fully_contained() {
         "complete_puzzle_region"
     );
     assert_eq!(result["nativeImageObservation"]["region"], region);
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u64;
     let obs: browser_native_image::NativeImageObservation =
         serde_json::from_value(result["nativeImageObservation"].clone()).unwrap();
-    obs.validate(now).unwrap();
+    obs.validate_current().unwrap();
     struct InputOwner {
         inner: RegionOwner,
         evidence: browser_native_image::NativeImageObservation,
@@ -999,7 +989,10 @@ fn native_image_complete_puzzle_region_is_explicit_fresh_and_fully_contained() {
         match case {
             "control" => evidence.native_control_epoch += 1,
             "window" => evidence.window_id += 1,
-            "stale" => evidence.observed_at_ms -= 60_001,
+            "stale" => {
+                evidence.clock = None;
+                evidence.observed_at_ms -= 120_000;
+            }
             "frame" => evidence.frame_sha256 = "f".repeat(64),
             _ => {}
         }
@@ -1037,12 +1030,12 @@ fn native_image_complete_puzzle_region_is_explicit_fresh_and_fully_contained() {
         bad["region"][field] = serde_json::json!(2000);
         let obs: browser_native_image::NativeImageObservation =
             serde_json::from_value(bad).unwrap();
-        assert!(obs.validate(now).is_err());
+        assert!(obs.validate_current().is_err());
     }
     let mut legacy = result["nativeImageObservation"].clone();
     legacy.as_object_mut().unwrap().remove("captureScope");
     let obs: browser_native_image::NativeImageObservation = serde_json::from_value(legacy).unwrap();
-    assert!(obs.validate(now).is_err());
+    assert!(obs.validate_current().is_err());
     for region in [
         serde_json::json!({"x":80,"y":180,"width":440,"height":300}),
         serde_json::json!({"x":80,"y":140,"width":300,"height":340}),
@@ -1152,7 +1145,11 @@ fn native_image_rounds_owner_hashes_interiors_and_vetoes_rejection_at_any_confid
         serde_json::from_value(baseline["nativeImageObservation"].clone()).unwrap();
     let mut fresh: browser_native_image::NativeImageObservation =
         serde_json::from_value(interiors["nativeImageObservation"].clone()).unwrap();
-    fresh.observed_at_ms = first.observed_at_ms + 1;
+    fresh.observed_at_ms = if fresh.clock.is_some() {
+        first.observed_at_ms.saturating_sub(3_000)
+    } else {
+        first.observed_at_ms + 1
+    };
     let binding =
         serde_json::json!({"digest":"d".repeat(64),"providerId":"explicit-two-round-provider"});
     let selected = vec![first.candidates[0].candidate_id.clone()];
@@ -1162,7 +1159,7 @@ fn native_image_rounds_owner_hashes_interiors_and_vetoes_rejection_at_any_confid
         &first,
         &selected,
         &binding,
-        first.observed_at_ms,
+        first.current_time_ms().unwrap(),
     )
     .unwrap();
     let (_, finished) = browser_native_image::finish_round(
@@ -1178,7 +1175,7 @@ fn native_image_rounds_owner_hashes_interiors_and_vetoes_rejection_at_any_confid
         &fresh,
         &selected,
         &binding,
-        fresh.observed_at_ms,
+        fresh.current_time_ms().unwrap(),
         (&finished, &first),
     )
     .unwrap();
@@ -1190,7 +1187,7 @@ fn native_image_rounds_owner_hashes_interiors_and_vetoes_rejection_at_any_confid
         &fresh,
         &selected,
         &binding,
-        first.observed_at_ms + 60000,
+        plan.policy.deadline_at_ms,
         (&finished, &first)
     )
     .is_err());
@@ -1204,4 +1201,99 @@ fn native_image_rounds_owner_hashes_interiors_and_vetoes_rejection_at_any_confid
             .get("tileImageSha256s")
             .is_none()
     );
+}
+
+#[test]
+fn native_image_capture_completes_after_wall_clock_steps_back() {
+    use browser_native_image::{
+        NativeImageClockReading, NativeImageElapsedClock, NativeImageObservation,
+    };
+    struct ClockOwner(ImagePuzzleOwner);
+    impl browser_native_control::NativeOwner for ClockOwner {
+        fn image_observation_clock(&mut self) -> Result<NativeImageClockReading, String> {
+            Ok(NativeImageClockReading {
+                wall_time_ms: 1_000_000,
+                elapsed: Some(NativeImageElapsedClock {
+                    kind: "linux-boottime-v1".into(),
+                    boot_id: "11111111-1111-4111-8111-111111111111".into(),
+                    observed_at_ms: 200_000,
+                }),
+            })
+        }
+        fn request(
+            &mut self,
+            operation: &str,
+            body: &serde_json::Value,
+        ) -> Result<serde_json::Value, String> {
+            self.0.request(operation, body)
+        }
+    }
+    let original = agent_browser_service_model::RecordedProcessIdentity {
+        pid: 42,
+        start_token: "linux:boot:11".into(),
+        executable_path: Some("/synthetic/chrome".into()),
+        browser_family: Some("chrome".into()),
+    };
+    let target = agent_browser_service_model::RemoteViewApplicationTarget {
+        assignment_id: "assignment".into(),
+        registration_id: "registration".into(),
+        desktop_id: "lifecycle".into(),
+        lifecycle_generation: 2,
+        viewing_desktop_id: "viewing".into(),
+        viewing_generation: 9,
+    };
+    let mut owner = ClockOwner(ImagePuzzleOwner {
+        fixture: NativeFixture { calls: vec![] },
+    });
+    let result = browser_native_control::execute(&original, &target, &serde_json::json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":browser_native_image::PROFILE_ID}), &mut owner).unwrap();
+    let observation: NativeImageObservation =
+        serde_json::from_value(result["nativeImageObservation"].clone()).unwrap();
+    assert_eq!(observation.observed_at_ms, 1_000_000);
+    let completion_clock = NativeImageClockReading {
+        wall_time_ms: 997_000,
+        elapsed: Some(NativeImageElapsedClock {
+            kind: "linux-boottime-v1".into(),
+            boot_id: "11111111-1111-4111-8111-111111111111".into(),
+            observed_at_ms: 200_010,
+        }),
+    };
+    observation
+        .validate_at(&completion_clock)
+        .expect("Same-boot capture aged10ms must complete despite a3second wall-clock correction");
+    let mut forward = completion_clock.clone();
+    forward.wall_time_ms = 1_120_000;
+    observation
+        .validate_at(&forward)
+        .expect("A forward wall correction cannot expire10ms elapsed evidence");
+    for case in ["expired", "future", "boot", "domain", "missing"] {
+        let mut clock = completion_clock.clone();
+        match case {
+            "expired" => clock.elapsed.as_mut().unwrap().observed_at_ms = 260_001,
+            "future" => clock.elapsed.as_mut().unwrap().observed_at_ms = 199_999,
+            "boot" => {
+                clock.elapsed.as_mut().unwrap().boot_id =
+                    "22222222-2222-4222-8222-222222222222".into()
+            }
+            "domain" => clock.elapsed.as_mut().unwrap().kind = "unknown".into(),
+            "missing" => clock.elapsed = None,
+            _ => unreachable!(),
+        }
+        assert!(
+            observation.validate_at(&clock).is_err(),
+            "{case} must never downgrade to wall time"
+        );
+    }
+    let mut legacy = observation.clone();
+    legacy.clock = None;
+    assert!(
+        legacy.validate_at(&completion_clock).is_err(),
+        "Legacy wall-time future evidence remains refused"
+    );
+
+    assert!(!owner
+        .0
+        .fixture
+        .calls
+        .iter()
+        .any(|(operation, _)| operation == "input"));
 }

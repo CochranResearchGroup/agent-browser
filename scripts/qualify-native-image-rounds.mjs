@@ -107,9 +107,15 @@ export async function qualifyNativeImageRounds({workflow,task,nextTask,primary,s
   }
   async function selection(context,label) {
     const nonce=randomUUID(),responseFile='image472-selection-response-'+nonce+'.json';
-    const request={schemaVersion:'agent-browser.native-image-selection-request.v1',selectionRequestId:nonce,label,roundIndex:context.roundIndex,originalRequestId:context.requestId,taskId:context.taskId,observationRequestId:context.observationRequestId,frameSha256:context.observation.frameSha256,puzzleSha256:context.observation.puzzleSha256,captureScope:context.observation.captureScope,region:context.observation.region,windowBounds:context.observation.window,candidates:context.observation.candidates,pngPath:join(dirname(selectionDirectory),'native-original-ocr-'+context.observation.frameSha256+'.png'),responseFile:join(selectionDirectory,responseFile),deadlineAtMs:Math.min(context.deadlineAtMs-1000,context.observation.observedAtMs+59000),responseMustBeAtomic:true,requiredProvenance:{kind:'agent_visual_inspection',actor:'root',sourceFrameSha256:context.observation.frameSha256}};
+    assert(Number.isFinite(context.timeoutMs)&&context.timeoutMs>1000&&context.timeoutMs<=45000);
+    const timeoutMs=Math.floor(context.timeoutMs);
+    const deadlineNs=process.hrtime.bigint()+BigInt(timeoutMs-1000)*1000000n;
+    const selectionBootId=(await readFile('/proc/sys/kernel/random/boot_id','utf8')).trim();
+    if(context.observation.clock)assert.equal(context.observation.clock.bootId,selectionBootId);
+
+    const request={schemaVersion:'agent-browser.native-image-selection-request.v1',selectionRequestId:nonce,label,clock:context.observation.clock??null,roundIndex:context.roundIndex,originalRequestId:context.requestId,taskId:context.taskId,observationRequestId:context.observationRequestId,frameSha256:context.observation.frameSha256,puzzleSha256:context.observation.puzzleSha256,captureScope:context.observation.captureScope,region:context.observation.region,windowBounds:context.observation.window,candidates:context.observation.candidates,pngPath:join(dirname(selectionDirectory),'native-original-ocr-'+context.observation.frameSha256+'.png'),responseFile:join(selectionDirectory,responseFile),deadlineAtMs:Date.now()+timeoutMs-1000,selectionClock:{kind:'linux-monotonic-v1',bootId:selectionBootId,deadlineAtNs:deadlineNs.toString()},responseMustBeAtomic:true,requiredProvenance:{kind:'agent_visual_inspection',actor:'root',sourceFrameSha256:context.observation.frameSha256}};
     await save('image472-selection-request-'+nonce+'.json',request);await save('image472-selection-request.json',request);
-    while(Date.now()<request.deadlineAtMs&&!context.signal.aborted) {
+    while(process.hrtime.bigint()<deadlineNs&&!context.signal.aborted) {
       let info;try{info=await lstat(request.responseFile)}catch(error){if(error.code!=='ENOENT')throw error;}
       if(info){
         assert(info.isFile()&&!info.isSymbolicLink()&&info.uid===process.getuid()&&!(info.mode&0o077)&&info.size<=16384);
@@ -141,6 +147,9 @@ export async function qualifyNativeImageRounds({workflow,task,nextTask,primary,s
             await save('image472-'+label+'-workflow-error-'+(++workflowErrorSequence)+'.json',{name,action:args.action??null,taskId:current.taskId,requestId:args.requestId??args.params?.requestId??null,code:error?.code??error?.name,message:String(error?.message??error).slice(0,2048),retryPerformed:false});
             if(input)await save('image472-'+label+'-input-error.json',{requestId:originalId,code:error?.code??error?.name,message:String(error?.message??error).slice(0,2048),application:oracle.state(scene),retryPerformed:false});
           }finally{throw error;}
+        }
+        if(name==='browser_command'&&args.action==='native_capture'&&value.nativeImageObservation){
+          await save('image472-'+label+'-clock-'+args.requestId.replace(/[^-A-Za-z0-9_.:]/g,'_')+'.json',{observationRequestId:args.requestId,clock:value.nativeImageObservation.clock??null,observedAtMs:value.nativeImageObservation.observedAtMs,returnedWallMs:Date.now(),evidenceAgeMs:value.evidenceAgeMs,frameSha256:value.capture.capture.sha256,captureOperationDispatchedInput:false});
         }
         const content=[{type:'text',text:JSON.stringify({success:true,data:value})}];
         if(name==='browser_command'&&args.action==='native_capture'&&args.params?.classifyChallenges===true){

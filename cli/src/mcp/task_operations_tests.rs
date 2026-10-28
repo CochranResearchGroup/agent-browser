@@ -262,6 +262,18 @@ fn native_image_public_region_original_retains_scope_and_one_attempt() {
     native_image_public_completion_case(false, true, None, false, None);
 }
 #[test]
+#[cfg(target_os = "linux")]
+fn native_image_public_completion_and_input_survive_wall_clock_correction() {
+    native_image_public_completion_case(true, true, Some("wall_correction"), false, None);
+    native_image_public_completion_case(true, true, Some("wall_correction"), true, None);
+}
+
+#[test]
+fn native_image_public_legacy_receipt_keeps_wall_clock_contract() {
+    native_image_public_completion_case(true, true, Some("legacy"), false, None);
+}
+
+#[test]
 fn native_image_public_capture_expiry_reports_only_bounded_clock_values() {
     for reason in ["future_timestamp", "age_exceeded"] {
         native_image_public_completion_case(false, true, Some(reason), false, None);
@@ -364,7 +376,20 @@ fn native_image_public_completion_case(
     ))
     .unwrap());
     let capture_params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_capture","requestId":"image-observation","params":{"classifyChallenges":true,"registeredActionId":profile}}});
-    if let Some(reason) = clock_fault {
+    if clock_fault.is_none() || clock_fault == Some("wall_correction") {
+        if let Some(clock) = image::NativeImageClockReading::read().unwrap().elapsed {
+            observation["clock"] = serde_json::to_value(clock).unwrap();
+        }
+    }
+    if clock_fault == Some("wall_correction") {
+        observation["observedAtMs"] = json!(now + 3_000);
+    }
+    if clock_fault == Some("legacy") {
+        observation["observedAtMs"] = json!(now - 5_000);
+    }
+    if let Some(reason) =
+        clock_fault.filter(|reason| !matches!(*reason, "wall_correction" | "legacy"))
+    {
         let observed = if reason == "future_timestamp" {
             now + 120_000
         } else {
@@ -459,6 +484,26 @@ fn native_image_public_completion_case(
             "uncertain"
         }
     );
+    if let Some(elapsed) = observation["clock"]["observedAtMs"].as_u64() {
+        assert_eq!(
+            readback["operation"]["evidenceReferences"]["nativeChallengeDeadlineAtMs"],
+            (elapsed + 60_000).to_string(),
+            "Original deadline is elapsed authority, not its diagnostic wall timestamp"
+        );
+    }
+    if clock_fault == Some("legacy") {
+        let captured = task_operations::lookup("task", "image-observation").unwrap();
+        let evidence: Value = serde_json::from_str(
+            captured["operation"]["evidenceReferences"]["nativeImageObservation"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(
+            evidence.get("clock").is_none(),
+            "Legacy serialized receipt remains unchanged"
+        );
+    }
     let round: Value = serde_json::from_str(
         readback["operation"]["evidenceReferences"]["nativeImageRound"]
             .as_str()
@@ -510,6 +555,15 @@ fn native_image_public_completion_case(
         fresh["tileImageSha256s"] = json!(vec!["c".repeat(64); 9]);
         fresh["frameSha256"] = json!("c".repeat(64));
         fresh["observedAtMs"] = json!(now + 1);
+        if fresh.get("clock").is_some() {
+            fresh["clock"] = serde_json::to_value(
+                image::NativeImageClockReading::read()
+                    .unwrap()
+                    .elapsed
+                    .unwrap(),
+            )
+            .unwrap();
+        }
         for (index, candidate) in fresh["candidates"]
             .as_array_mut()
             .unwrap()

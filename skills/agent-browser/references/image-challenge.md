@@ -135,3 +135,12 @@ without replay. The client never creates a replacement task. Independent future
 authorized tasks remain possible; this is not a browser-lifetime challenge ban.
 Success still requires independent clearance and protected application access.
 Provider-free protocol tests do not qualify actual Native input or real sites.
+
+
+## Image evidence time
+
+Linux image captures carry an owner-minted elapsed clock bound to the current boot. Evidence age and the original 60-second deadline use that clock, so wall-clock corrections cannot make a fresh capture appear future-dated or renew its budget. Wall `observedAtMs` remains diagnostic. Changed boots or clock domains, future elapsed readings and expired evidence stop automation; legacy receipts and unsupported platforms retain strict wall-clock checks. The client uses an elapsed receiving timer (`steadyNow`, default `performance.now()`) while `now` and callback `deadlineAtMs` remain wall-clock projections. Selection callbacks receive `timeoutMs` as an elapsed maximum and must obey `signal`; the wall deadline cannot extend that duration. Neither clock metadata nor a fresh capture grants another attempt.
+
+The optional observation `clock` contains exactly `kind: linux-boottime-v1`, `bootId` and elapsed `observedAtMs`. It is minted by the Native adapter, retained by the original-operation owner and fenced at input. Do not synthesize it in a selector, copy it between tasks, convert diagnostic wall time into elapsed authority or downgrade a clock-domain error to wall time. The same first elapsed deadline governs both rounds. Inspect the original operation and use the existing operator handoff when time/context qualification fails.
+
+The retained image receipt `nativeChallengeDeadlineAtMs` uses the first observation's authority clock domain. An elapsed deadline is not a Unix date. Selection callbacks must obey `signal`; the projected wall `deadlineAtMs` cannot override that signal or the owner's original budget.

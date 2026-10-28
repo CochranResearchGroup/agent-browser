@@ -52,7 +52,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         {
             return Err("browser_native_original_observation_control_changed".into());
         }
-        observation.validate(current_unix_ms())?;
+        observation.validate_current()?;
         self.focus_native_policy_publication(target, &publication)?;
         let origin = qualified_origin(
             &self.persistence,

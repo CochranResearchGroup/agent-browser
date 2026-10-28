@@ -70,23 +70,25 @@ async function roundsCase(fault) {
   const {createNativeImageRoundsChallengeClient}=await import('../packages/client/src/native-image-challenge.js');
   const records=new Map(),frames=[png(255),png(240),png(225)];
   const hashes=frames.map(bytes=>createHash('sha256').update(bytes).digest('hex'));
-  let inputs=0,selections=0,clock=now,deadlines=[];
+  let inputs=0,selections=0,clock=now,steady=5000,deadlines=[],durations=[];
+  const elapsedClock=['clock-correction','clock-expired','clock-boot','clock-malformed'].includes(fault);
   const payload=(data,images=[])=>({content:[{type:'text',text:JSON.stringify({success:true,data})},...images]});
   const frame=()=>{
     const index=inputs,obs=structuredClone(observation);
     obs.registeredActionId='hcaptcha-image-grid-3x3-two-round-v1';obs.frameSha256=hashes[index];obs.puzzleSha256=(index?'e':'c').repeat(64);obs.observedAtMs=now+index;
     obs.tileImageSha256s=Array(9).fill((index?'f':'a').repeat(64));
+    if(elapsedClock){obs.observedAtMs=clock;obs.clock={kind:'linux-boottime-v1',bootId:fault==='clock-boot'&&index===1?'22222222-2222-4222-8222-222222222222':'11111111-1111-4111-8111-111111111111',observedAtMs:steady};if(fault==='clock-malformed')obs.clock.kind='unknown';}
     if(fault==='partial'&&index===1)obs.tileImageSha256s[4]='a'.repeat(64);
     obs.candidates.forEach((candidate,tile)=>candidate.candidateId=`tile:${tile+1}:${hashes[index].slice(0,16)}`);
-    return {source:'remote_view_native',partialWindow:false,windowBounds:obs.window,capture:{desktopId:'desktop',generation:9,windowId:7,processIdentity:{pid:42,start_token:'owned'},region:obs.region,capture:{sha256:hashes[index],width:640,height:480}},challenge:{kind:index<2?'image_puzzle':'unknown',family:index<2?'hcaptcha':null,frameSha256:hashes[index],completeWindow:true,automatedAttemptAuthorized:false},nativeControlEpoch:4,...(index<2&&!(fault==='rejection'&&index===1)?{nativeImageObservation:obs}:{})};
+    return {source:'remote_view_native',evidenceAgeMs:0,partialWindow:false,windowBounds:obs.window,capture:{desktopId:'desktop',generation:9,windowId:7,processIdentity:{pid:42,start_token:'owned'},region:obs.region,capture:{sha256:hashes[index],width:640,height:480}},challenge:{kind:index<2?'image_puzzle':'unknown',family:index<2?'hcaptcha':null,frameSha256:hashes[index],completeWindow:true,automatedAttemptAuthorized:false},nativeControlEpoch:4,...(index<2&&!(fault==='rejection'&&index===1)?{nativeImageObservation:obs}:{})};
   };
   const config=structuredClone(policy);config.provider.configRef='agent-browser:remote-view-native-image-static-3x3-two-round:v1';
   if(fault==='empty-policy')config.sitePolicy.allowedChallengeProviders=[];
   if(fault==='single-provider')config.provider.configRef=provider.configRef;
-  const client=createNativeImageRoundsChallengeClient({now:()=>clock,callTool:async(name,args)=>{
+  const client=createNativeImageRoundsChallengeClient({now:()=>clock,steadyNow:()=>steady,callTool:async(name,args)=>{
     if(name==='browser_command'&&args.action==='task_operation'){const operation=records.get(args.params.requestId);if(!operation)throw {code:'browser_task_operation_not_found'};return payload({operation});}
     if(name==='browser_command'&&args.action==='task_briefing')return payload(binding);
-    if(name==='browser_command'&&args.action==='native_capture'){clock=now+inputs;return payload(frame(),[{type:'image',mimeType:'image/png',data:frames[inputs].toString('base64')}]);}
+    if(name==='browser_command'&&args.action==='native_capture'){if(!elapsedClock)clock=now+inputs;return payload(frame(),[{type:'image',mimeType:'image/png',data:frames[inputs].toString('base64')}]);}
     if(name==='browser_command'&&args.action==='native_input'){
       assert.equal(args.params.imageAttempt.originalRequestId,'round-attempt');
       assert.equal(args.params.imageAttempt.observationRequestId,inputs===0?'round-attempt:observation':'round-attempt:observation2');
@@ -98,16 +100,22 @@ async function roundsCase(fault) {
     if(name==='browser_continue'){assert.equal(inputs,2);return payload(identity);}
     throw Error('assistance transport unavailable');
   },resolvePolicy:async()=>config,selectCandidates:async context=>{
-    selections++;deadlines.push(context.deadlineAtMs);assert.equal(context.roundIndex,selections);
+    selections++;deadlines.push(context.deadlineAtMs);durations.push(context.timeoutMs);assert.equal(context.roundIndex,selections);
+    if(elapsedClock&&selections===1){clock-=3000;steady+=20000;}
     if(fault==='cancel-second'&&selections===2)throw Error('selection cancelled');
     if(fault==='expired-second'&&selections===2)clock=now+60000;
+    if(fault==='clock-expired'&&selections===2)steady=65000;
     return {taskId:'task',observationRequestId:context.observationRequestId,frameSha256:context.observation.frameSha256,puzzleSha256:context.observation.puzzleSha256,selectedCandidateIds:[`tile:1:${hashes[fault==='stale-second'&&selections===2?0:selections-1].slice(0,16)}`]};
   },verifyClearance:async context=>{assert.equal(inputs,2);return {taskId:'task',state:'verified',frameSha256:context.frameSha256,evidenceRef:'independent-clearance'}},verifyAccess:async context=>{assert.equal(inputs,2);return {taskId:'task',state:fault==='denied'?'unknown':'verified',frameSha256:context.frameSha256,evidenceRef:'independent-protected-access'}}});
   const result=await client.resolve({taskId:'task',requestId:'round-attempt'});
-  if(!fault){assert.equal(result.status,'verified_access_after_native_image');assert.equal(inputs,2);assert.equal(result.roundOperations.length,2);assert.ok(deadlines.every(value=>value<=now+60000));}
-  else {assert.equal(result.status,'intervention');assert.equal(result.retryAllowed,false);assert.equal(inputs,['empty-policy','single-provider'].includes(fault)?0:['lost-second','denied'].includes(fault)?2:1);}
+  if(fault==='clock-correction')assert.deepEqual(durations,[45000,40000],'Selectors receive remaining elapsed durations, never renewed wall budgets');
+  if(!fault||fault==='clock-correction'){assert.equal(result.status,'verified_access_after_native_image');assert.equal(inputs,2);assert.equal(result.roundOperations.length,2);assert.ok(deadlines.every(value=>value<=now+60000));}
+  else {assert.equal(result.status,'intervention');assert.equal(result.retryAllowed,false);assert.equal(inputs,['empty-policy','single-provider','clock-malformed'].includes(fault)?0:['lost-second','denied'].includes(fault)?2:1);}
+  if(fault==='clock-correction')assert.ok(deadlines[1]<=deadlines[0],'Wall correction must not renew original selection deadline');
   const before=inputs;await client.resolve({taskId:'task',requestId:'round-attempt'});assert.equal(inputs,before);
 }
 await roundsCase();
+await roundsCase('clock-correction');
+for(const fault of ['clock-expired','clock-boot','clock-malformed'])await roundsCase(fault);
 for(const fault of ['partial','rejection','empty-policy','single-provider','stale-second','cancel-second','expired-second','lost-second','denied'])await roundsCase(fault);
 console.log('Two-round public image protocol PASS: fresh evidence, original deadline, stale/partial/rejected/cancelled/uncertain no-replay and independent protected access');

@@ -184,6 +184,8 @@ ports, adding `roundIndex` to each fresh selection request. Its callback deadlin
 is bounded by the remaining original deadline. `roundOperations` reports the
 retained round results while `originalOperation` remains the first result.
 
+Linux image captures carry an owner-minted elapsed clock bound to the current boot. Evidence age and the original 60-second deadline use that clock, so wall-clock corrections cannot make a fresh capture appear future-dated or renew its budget. Wall `observedAtMs` remains diagnostic. Changed boots or clock domains, future elapsed readings and expired evidence stop automation; legacy receipts and unsupported platforms retain strict wall-clock checks. The client uses an elapsed receiving timer (`steadyNow`, default `performance.now()`) while `now` and callback `deadlineAtMs` remain wall-clock projections. Selection callbacks receive `timeoutMs` as an elapsed maximum and must obey `signal`; the wall deadline cannot extend that duration. Neither clock metadata nor a fresh capture grants another attempt.
+
 Reason from those pixels and use only returned candidate IDs. A selection is
 untrusted input to the owner, not authority to send coordinates:
 

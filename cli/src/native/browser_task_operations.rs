@@ -1067,7 +1067,7 @@ pub(crate) fn finish(
                 let observation: super::browser_native_image::NativeImageObservation =
                     serde_json::from_value(value.clone())
                         .map_err(|_| "browser_native_image_observation_invalid")?;
-                observation.validate(now_ms()?)?;
+                observation.validate_current()?;
                 references.insert(
                     "nativeImageObservation".into(),
                     serde_json::to_string(&observation)
@@ -1239,7 +1239,7 @@ fn original_native_image_observation(
     {
         return Err("browser_native_original_observation_context_changed".into());
     }
-    observation.validate(now_ms()?)?;
+    observation.validate_current()?;
     if observation.registered_action_id != super::browser_native_image::command_profile(command) {
         return Err("browser_native_image_round_changed".into());
     }
@@ -1354,7 +1354,7 @@ fn native_image_kernel_plan(
             &observation,
             &selected,
             binding,
-            now_ms()?,
+            observation.current_time_ms()?,
             (&prior.evidence_references["nativeImageRound"], &old),
         );
     }
@@ -1366,7 +1366,7 @@ fn native_image_kernel_plan(
         &observation,
         &selected,
         binding,
-        now_ms()?,
+        observation.current_time_ms()?,
     )
 }
 

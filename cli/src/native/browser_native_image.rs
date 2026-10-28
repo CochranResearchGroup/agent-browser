@@ -22,6 +22,65 @@ pub fn command_profile(command: &Value) -> &'static str {
 }
 pub const MAX_AGE_MS: u64 = 60_000;
 
+/// Host clock boundary. Wall time is diagnostic; elapsed readings are scoped to
+/// a Linux boot and include suspend. Unsupported platforms retain wall guards.
+#[derive(Clone, Debug)]
+pub struct NativeImageClockReading {
+    pub wall_time_ms: u64,
+    pub elapsed: Option<NativeImageElapsedClock>,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NativeImageElapsedClock {
+    pub kind: String,
+    pub boot_id: String,
+    pub observed_at_ms: u64,
+}
+impl NativeImageClockReading {
+    pub fn read() -> Result<Self, String> {
+        let wall_time_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| "browser_native_image_clock_unavailable")?
+            .as_millis() as u64;
+        #[cfg(target_os = "linux")]
+        let elapsed = {
+            let boot_id = std::fs::read_to_string("/proc/sys/kernel/random/boot_id")
+                .map_err(|_| "browser_native_image_clock_unavailable")?;
+            let boot_id = boot_id.trim().to_owned();
+            uuid::Uuid::parse_str(&boot_id)
+                .map_err(|_| "browser_native_image_clock_unavailable")?;
+            let mut value = libc::timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            };
+            // SAFETY: clock_gettime writes only to this initialized timespec.
+            if unsafe { libc::clock_gettime(libc::CLOCK_BOOTTIME, &mut value) } != 0 {
+                return Err("browser_native_image_clock_unavailable".into());
+            }
+            let observed_at_ms = u64::try_from(value.tv_sec)
+                .ok()
+                .and_then(|seconds| seconds.checked_mul(1000))
+                .and_then(|ms| {
+                    u64::try_from(value.tv_nsec)
+                        .ok()
+                        .and_then(|ns| ms.checked_add(ns / 1_000_000))
+                })
+                .ok_or("browser_native_image_clock_unavailable")?;
+            Some(NativeImageElapsedClock {
+                kind: "linux-boottime-v1".into(),
+                boot_id,
+                observed_at_ms,
+            })
+        };
+        #[cfg(not(target_os = "linux"))]
+        let elapsed = None;
+        Ok(Self {
+            wall_time_ms,
+            elapsed,
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeImageCandidate {
@@ -57,6 +116,10 @@ pub struct NativeImageObservation {
     pub frame_sha256: String,
     pub native_control_epoch: u64,
     pub observed_at_ms: u64,
+    /// Elapsed authority is owner-minted and usable only inside its exact boot.
+    /// Missing metadata preserves the historical strict wall-clock contract.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clock: Option<NativeImageElapsedClock>,
     pub registered_action_id: String,
     pub puzzle_sha256: String,
     pub candidates: Vec<NativeImageCandidate>,
@@ -389,7 +452,54 @@ pub fn observe(
 }
 
 impl NativeImageObservation {
-    pub fn validate(&self, now_ms: u64) -> Result<(), String> {
+    /// Validate at the receiving clock boundary, never at a caller timestamp.
+    pub fn validate_at(&self, clock: &NativeImageClockReading) -> Result<(), String> {
+        self.validate_in_domain(self.time_in_domain(clock)?)
+    }
+    pub fn validate_current(&self) -> Result<(), String> {
+        self.validate_at(&NativeImageClockReading::read()?)
+    }
+    pub fn current_time_ms(&self) -> Result<u64, String> {
+        self.time_in_domain(&NativeImageClockReading::read()?)
+    }
+    pub fn time_in_domain(&self, current: &NativeImageClockReading) -> Result<u64, String> {
+        match &self.clock {
+            None => Ok(current.wall_time_ms),
+            Some(observed) => {
+                let now = current
+                    .elapsed
+                    .as_ref()
+                    .ok_or("browser_native_image_clock_domain_changed")?;
+                if observed.kind != "linux-boottime-v1"
+                    || now.kind != observed.kind
+                    || uuid::Uuid::parse_str(&observed.boot_id).is_err()
+                    || observed.boot_id != now.boot_id
+                {
+                    return Err("browser_native_image_clock_domain_changed".into());
+                }
+                Ok(now.observed_at_ms)
+            }
+        }
+    }
+    fn clock_identity(&self) -> Option<(&str, &str)> {
+        self.clock
+            .as_ref()
+            .map(|clock| (clock.kind.as_str(), clock.boot_id.as_str()))
+    }
+    pub fn observed_time_ms(&self) -> u64 {
+        self.clock
+            .as_ref()
+            .map_or(self.observed_at_ms, |clock| clock.observed_at_ms)
+    }
+    pub fn age_at(&self, clock: &NativeImageClockReading) -> Result<u64, String> {
+        self.validate_at(clock)?;
+        Ok(self.time_in_domain(clock)? - self.observed_time_ms())
+    }
+    fn validate_in_domain(&self, now_ms: u64) -> Result<(), String> {
+        self.validate_observed(now_ms, self.observed_time_ms())
+    }
+
+    fn validate_observed(&self, now_ms: u64, observed_ms: u64) -> Result<(), String> {
         let hex = |v: &str| v.len() == 64 && v.bytes().all(|b| b.is_ascii_hexdigit());
         let contains = |b: &NativeChallengeBounds| {
             b.width > 0
@@ -401,7 +511,9 @@ impl NativeImageObservation {
                 && i64::from(b.y) + i64::from(b.height)
                     <= i64::from(self.region.y) + i64::from(self.region.height)
         };
-        if !is_profile(&self.registered_action_id)
+        if self.clock.as_ref().is_some_and(|clock| {
+            clock.kind != "linux-boottime-v1" || uuid::Uuid::parse_str(&clock.boot_id).is_err()
+        }) || !is_profile(&self.registered_action_id)
             || (self.registered_action_id == ROUNDS_PROFILE_ID
                 && (self.tile_image_sha256s.len() != 9
                     || self.tile_image_sha256s.iter().any(|v| !hex(v))))
@@ -473,15 +585,15 @@ impl NativeImageObservation {
         {
             return Err("browser_native_image_observation_invalid".into());
         }
-        if now_ms < self.observed_at_ms || now_ms - self.observed_at_ms > MAX_AGE_MS {
+        if now_ms < observed_ms || now_ms - observed_ms > MAX_AGE_MS {
             // Preserve both clocks without relaxing the refusal. MCP admits only
             // this exact numeric diagnostic shape into public completion errors.
             return Err(format!(
                 "browser_native_image_observation_expired:{}",
                 serde_json::json!({
-                    "reason":if now_ms < self.observed_at_ms {"future_timestamp"} else {"age_exceeded"},
-                    "observedAtMs":self.observed_at_ms,"validationNowMs":now_ms,
-                    "ageMs":now_ms.saturating_sub(self.observed_at_ms)
+                    "reason":if now_ms < observed_ms {"future_timestamp"} else {"age_exceeded"},
+                    "observedAtMs":observed_ms,"validationNowMs":now_ms,
+                    "ageMs":now_ms.saturating_sub(observed_ms)
                 })
             ));
         }
@@ -556,7 +668,7 @@ fn plan_inner(
     prior: Option<(&str, &NativeImageObservation)>,
 ) -> Result<NativeImagePlan, String> {
     use agent_browser_challenge_control::*;
-    observation.validate(now_ms)?;
+    observation.validate_in_domain(now_ms)?;
     let actions = observation.actions(selected)?;
     let policy_digest = binding["digest"]
         .as_str()
@@ -598,7 +710,7 @@ fn plan_inner(
         deadline_at_ms: prior
             .map(|(_, old)| old)
             .unwrap_or(observation)
-            .observed_at_ms
+            .observed_time_ms()
             .checked_add(MAX_AGE_MS)
             .ok_or("browser_native_image_observation_invalid")?,
     };
@@ -635,17 +747,24 @@ fn plan_inner(
         round_id: observation.puzzle_sha256.clone(),
         evidence_digest: String::new(),
         frame_digest: observation.frame_sha256.clone(),
-        context_digest: digest(&(
-            &observation.desktop_id,
-            observation.generation,
-            observation.window_id,
-            &observation.process_digest,
-            observation.native_control_epoch,
-        ))?,
+        context_digest: {
+            let context = digest(&(
+                &observation.desktop_id,
+                observation.generation,
+                observation.window_id,
+                &observation.process_digest,
+                observation.native_control_epoch,
+            ))?;
+            if let Some(clock) = observation.clock_identity() {
+                digest(&(context, clock))?
+            } else {
+                context
+            }
+        },
         geometry_digest,
         candidate_set_digest: visual_candidate_set_digest(&candidate_ids),
         candidate_ids,
-        observed_at_ms: observation.observed_at_ms,
+        observed_at_ms: observation.observed_time_ms(),
         expires_at_ms: policy.deadline_at_ms,
         provider_capability: capability.clone(),
     };
@@ -653,7 +772,10 @@ fn plan_inner(
     let initial = VisualRoundSnapshot::new(task, attempt)
         .map_err(|_| "browser_native_image_round_invalid")?;
     let initial = if let Some((encoded, old)) = prior {
-        old.validate(now_ms)?;
+        if old.clock_identity() != observation.clock_identity() {
+            return Err("browser_native_image_clock_domain_changed".into());
+        }
+        old.validate_in_domain(now_ms)?;
         if !rounds
             || old.registered_action_id != ROUNDS_PROFILE_ID
             || old.desktop_id != observation.desktop_id
@@ -679,7 +801,7 @@ fn plan_inner(
                 .iter()
                 .zip(&observation.tile_image_sha256s)
                 .any(|(a, b)| a == b)
-            || observation.observed_at_ms <= old.observed_at_ms
+            || observation.observed_time_ms() <= old.observed_time_ms()
         {
             return Err("browser_native_image_round_changed".into());
         }
@@ -705,7 +827,7 @@ fn plan_inner(
                     context_digest: evidence.context_digest.clone(),
                     geometry_digest: evidence.geometry_digest.clone(),
                     candidate_set_digest: evidence.candidate_set_digest.clone(),
-                    observed_at_ms: observation.observed_at_ms,
+                    observed_at_ms: observation.observed_time_ms(),
                     expires_at_ms: policy.deadline_at_ms,
                     outcome: VisualAfterStateOutcome::NextRound,
                     terminal_receipt_ref: None,

@@ -5,13 +5,18 @@ export interface NativeImageObservation {
   desktopId:string;generation:number;windowId:number;processDigest:string;
   window:NativeImageBounds;displayWidth:number;displayHeight:number;region:NativeImageBounds;
   frameSha256:string;nativeControlEpoch:number;observedAtMs:number;registeredActionId:'hcaptcha-image-grid-3x3-v1'|'hcaptcha-image-grid-3x3-two-round-v1';
+  /** Same-boot elapsed authority; observedAtMs above remains wall-clock diagnostics. */
+  clock?:{kind:'linux-boottime-v1';bootId:string;observedAtMs:number};
   tileImageSha256s?:string[];
   puzzleSha256:string;candidates:Array<{candidateId:string;bounds:NativeImageBounds}>;verify:NativeImageBounds;
 }
 export interface NativeImageSelectionContext {
   taskId:string;binding:ChallengeBinding;requestId:string;observationRequestId:string;
   observation:NativeImageObservation;images:Array<{type:'image';mimeType:string;data:string}>;
-  deadlineAtMs:number;roundIndex:number;signal:AbortSignal;
+  /** Wall projection for display; signal and timeoutMs bound receiving work. */
+  deadlineAtMs:number;
+  timeoutMs?:number;
+  roundIndex:number;signal:AbortSignal;
 }
 /** Untrusted proposed IDs. The owner reopens its own observation and policy. */
 export interface NativeImageSelection {
@@ -25,6 +30,8 @@ export interface NativeImageOptions {
   verifyAccess:(context:ChallengeVerificationContext)=>Promise<ChallengeVerification>;
   captureRegion?:NativeImageBounds;
   now?:()=>number;
+  /** Elapsed receiving timer, independent of wall-clock corrections. */
+  steadyNow?:()=>number;
 }
 export interface NativeImageResult {
   taskId:string;status:'verified_access_after_native_image'|'awaiting_operator'|'intervention';reason?:string;

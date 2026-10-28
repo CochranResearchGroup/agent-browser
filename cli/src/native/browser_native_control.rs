@@ -89,6 +89,13 @@ impl NativeChallengeObservation {
 }
 
 pub trait NativeOwner {
+    /// Time is an external boundary, independently of OCR and pixel fixtures.
+    fn image_observation_clock(
+        &mut self,
+    ) -> Result<super::browser_native_image::NativeImageClockReading, String> {
+        super::browser_native_image::NativeImageClockReading::read()
+    }
+
     fn request(&mut self, operation: &str, body: &Value) -> Result<Value, String>;
     /// Local adapter for the existing registered detector, not provider input.
     fn challenge_target(
@@ -152,10 +159,22 @@ pub fn execute(
         Some(_) => return Err("browser_native_image_capture_scope_invalid".into()),
     };
     let observation_started = std::time::Instant::now();
-    let observed_at_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|_| "browser_native_observation_clock_invalid")?
-        .as_millis() as u64;
+    let image_clock = if command["registeredActionId"]
+        .as_str()
+        .is_some_and(super::browser_native_image::is_profile)
+    {
+        Some(owner.image_observation_clock()?)
+    } else {
+        None
+    };
+    let observed_at_ms = if let Some(clock) = &image_clock {
+        clock.wall_time_ms
+    } else {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| "browser_native_observation_clock_invalid")?
+            .as_millis() as u64
+    };
     let image_selected = if command.get("imageAttempt").is_some() {
         Some(super::browser_native_image::selection(command)?)
     } else {
@@ -173,7 +192,7 @@ pub fn execute(
     };
     let image_attempt = if image_selected.is_some() {
         let evidence = owner.native_image_attempt(command)?;
-        evidence.validate(observed_at_ms)?;
+        evidence.validate_current()?;
         Some(evidence)
     } else {
         None
@@ -531,6 +550,7 @@ pub fn execute(
                         "processDigest":super::browser_native_image::digest(&window["processIdentity"] )?,
                         "window":body["expectedWindow"],"displayWidth":width,"displayHeight":height,"region":body["region"],
                         "frameSha256":digest,"nativeControlEpoch":body["controlEpoch"],"observedAtMs":observed_at_ms,
+                        "clock":image_clock.as_ref().and_then(|clock| clock.elapsed.clone()),
                         "captureScope":image_scope,"registeredActionId":registered_action,"puzzleSha256":"", "candidates":[],"verify":{"x":0,"y":0,"width":0,"height":0}
                     })).map_err(|_| "browser_native_image_observation_invalid")?)?;
                 }
@@ -586,6 +606,7 @@ pub fn execute(
             result["registeredTarget"] = located;
         }
         if let Some(evidence) = native_image_observation {
+            result["evidenceAgeMs"] = json!(evidence.age_at(&owner.image_observation_clock()?)?);
             result["nativeImageObservation"] = serde_json::to_value(evidence)
                 .map_err(|_| "browser_native_image_observation_invalid")?;
         }
@@ -601,11 +622,7 @@ pub fn execute(
         }
     }
     if let Some(evidence) = &image_attempt {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|_| "browser_native_observation_clock_invalid")?
-            .as_millis() as u64;
-        evidence.validate(now)?;
+        evidence.validate_current()?;
     }
     if let Some(evidence) = &attempt {
         let now = std::time::SystemTime::now()

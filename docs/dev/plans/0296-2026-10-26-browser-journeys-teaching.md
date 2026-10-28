@@ -2,6 +2,7 @@
 
 Product lane: PL-RECIPES
 Status: OPEN
+Consolidation: required
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/466
 Integration branch: recipes/spec466-integration
 Integration base: 5770d693b23d51c9932574fa68e012a98029ce73
@@ -540,3 +541,42 @@ Consolidation decision: retain the qualified revision repair, current executable
 Final053 again refused initial capture completion before selection/input, with observedAtMs1793092803710 later than validationNowMs1793092802490 by1220ms. Repaired candidate and guard were unchanged. Whole runtime is INCOMPLETE87.63seconds workload/92.18elapsed, cleanupFailure null, adapterErrors empty. Exact Native release/peer readback passes. First census retained the still-running coordinator read-only waiter and correctly failed qualification; after its exit, fresh1420-generation census qualifies all absent, unknown0, no owned processes/Docker/units. No absence claim erases old offline assignment obligations.
 
 The admitted final trial is exhausted. No fourth trial, new build or renamed diagnostic packet starts under this allowance. Blocker484 now owns the unresolved capture/completion timestamp inversion; do not assume a host-clock cause. [Curated472 source/runtime checkpoint](../notes/0296-native-image-rounds-472-checkpoint.md) binds sources, reused gates, actual limitations and stop boundary.472 remains OPEN/blocked;478 remains input-blocked. Original child closure stays10/12; broad review/remediation0/0. Clean source auxiliary, old branches and Native candidates remain retained pending canonical integration or an explicit governed disposition. Actual source work and bounded investigation are complete for this packet; full spec466 is not complete.
+
+
+## User-resumed484 diagnosis,2026-10-28
+
+User explicitly invoked diagnosing-bugs and TDD until solved, stopping before4hours or3consecutive failed attempts on one task. Start03:28UTC; hard stop07:23UTC leaves5minutes before the four-hour limit. This new explicit authority permits a bounded causal diagnosis and necessary fresh qualification, superseding the prior packet's no-fourth-trial stop only within these new limits; all old failures and cumulative history remain. No production or host-clock mutation. Preserve Auth and other worktrees; root retains the clean P296 integration checkout, no worker wave or new checkout. Fresh origin/main was fetched; integration base remains frozen and PR480 draft.
+
+First seam: existing Native capture response to original-operation completion, proving fresh producer timestamps are accepted while genuine future/expired evidence still refuses without replay. This catches timestamp lineage and integration timing; it does not establish CAPTCHA semantics. End-to-end seam, after causal RED/GREEN: the same owned two-round qualification, proving actual Native effects, independent access and lost-second-reply no-replay. Root owns this single blocker; no other unblocked feature is admitted by this diagnosis.
+
+Expected failing regression is successful reproduction evidence, not a failed repair attempt. Each experiment or repair attempt that fails its declared objective increments the same-task consecutive-failure counter; a successful reproduction/fix/validation resets that counter only for the same task's actual progress. No renaming or successor resets failures. Read-only phase1 probe first tests adjacent external clock observations, bounded120seconds, without changing host time or spawning a browser. No production hypothesis or patch precedes a red-capable minimized feedback loop. Reserved final broad review/post-review remediation remain separate0/0; user now explicitly authorizes ordinary diagnostic TDD.
+
+
+484 feedback loop is red and minimized: read-only clock-loop.py reproduced realtime moving back2.869seconds while monotonic advanced5ms in15.55seconds; minimal-clock-loop.py reduced to adjacent wall readings and reproduced478ms inversion in1.57seconds. Two more2.87second jumps each coincided with a new timesyncd NTP message whose server timestamp lagged local time accordingly. Systemd documents stepping for large offsets. A read-only adjtimex query(modes0) reports tick11000microseconds andfrequency0; no host change was made and this value alone does not establish who configured it. Three ranked predictions were shared before correlation: userspace synchronization, host/HyperV correction, or inconsistent fine-clock reads. Correlation and coarse-clock movement support realtime stepping, not application serialization or fine-clock-only skew.
+
+Chosen product repair preserves60seconds actual elapsed authority under wall-clock corrections using owner-minted same-boot Linux elapsed evidence, with explicit boot/domain fences; historical wall timestamps remain diagnostics and legacy/platform fallback retains strict wall checks. Capture-to-completion is the first regression seam, then immutable two-round budget and client receiving timer. Necessary clock-injection preparation preserves old wall validation so the first meaningful regression can fail behaviorally before the repair. No host time service, kernel tick, production or private-account mutation. Expected RED is a successful reproduction objective; consecutive failed task attempts remain0. Current control also records a conservative monotonic hard stop to avoid relying only on the very wall clock under diagnosis.
+
+Host resource admission initially blocked the baseline8GiB command; cancelled only its exact never-admitted wrapper and selected a matched7GiB claim/hard cgroup limit with6GiB high. This caps compiler memory rather than reducing the16GiB host reserve or default8jobs. Prior observed compiler RSS was below7GiB. No foreign process was reclaimed.
+
+
+484 checkpoint at04:39UTC, about71minutes into the user four-hour allowance. Native capture regression RED0.42s/GREEN0.43s; durable MCP capture/input RED0.07s/GREEN0.31s; two-round receiving client wall-correction RED/GREEN and strong types pass. Client elapsed expiry, changed boot and malformed clock negatives pass. Elapsed authority is optional, Linux same-boot scoped, and cannot downgrade after domain failure; legacy receipts retain strict wall guards. Both rounds derive their one original deadline from the first elapsed timestamp. Raw wall time remains diagnostic. No host clock change or fresh browser/provider trial has occurred. One build-command mistake was corrected and followed by successful regressions; current consecutive failed-task counter0. Full MCP test rebuild measured11m36s; test itself0.31s. Memory cgroup showed no high/max/OOM events. No more source features are admitted; next is one consolidated affected Rust/docs validation, exact private candidate and bounded actual qualification. Deadline07:23UTC and conservative monotonic backstop remain; this checkpoint does not reset elapsed effort.
+
+
+## Consolidated batch
+
+Current484 batch comprises boot-scoped elapsed Native image evidence, original owner deadline/fencing, client receiving timer, required documentation and safe owned-fixture clock receipts. It preserves all prior failed trials and the existing spec466 graph, with478 actual-media inputs separate. No global clock/tick correction, new CAPTCHA family, viewer, owner or authentication flow is included.
+
+## Delivery sequence and budget
+
+User ceiling is four hours from2026-10-28T03:28UTC, hard stop07:23UTC plus a conservative monotonic backstop; stop before three consecutive failed attempts on a single task. Reproduction, instrumentation, compilation, validation and cleanup all count. Three causal RED/GREEN seams are complete; next is one consolidated source gate/candidate and then bounded owned actual qualification. Record every failed attempt and do not reset effort by renaming. No user token budget was specified.
+
+## Worker assignments
+
+Root owns the one current484 blocker and integration/runtime; no new worker or checkout was admitted. Earlier472 worker is clean and source-integrated into the draft branch, with its auxiliary retained pending canonical integration. Preserve unrelated Auth, dashboard, enrollment, mode and pinned Native candidates.
+
+## Evidence and exit
+
+A passing source suite is source qualification only. Require unchanged clock freshness/boot/context/no-replay negative guards, exact immutable source/binary pins, actual two-round protected access, partial/rejection refusals, lost-second acknowledgement no-replay and exact release/peer/fresh census proof before closing472/484. A safe clock diagnostic receipt records the capture's elapsed authority, wall diagnostic timestamp and receive wall time without OCR or private pixels.478 and final review remain gated independently. No production installation or CI effects.
+
+
+05:22UTC source checkpoint:168 MCP and24 Native-control tests pass; strict workspace Clippy, format, client public protocol plus strong types, docs build, parity, handoff docs, policy wiring and changed links pass. Consolidated Native gate initially found one old test fixture supplying Unix diagnostic time to the now-elapsed planner; corrected that fixture to use the receipt-selected domain and retained a deliberate wall rollback, then all24 passed. Consecutive failed task attempts reset to0 by this successful same-task gate. Client callback now supplies an explicit elapsed timeoutMs so the visual selector does not reconstruct authority from a wall-clock projection; a worked two-round45000/40000millisecond regression passed RED/GREEN. Production source freezes for one exact clean private ci build. Runtime qualification remains pending; review/remediation remain0/0.

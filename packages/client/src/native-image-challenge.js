@@ -17,13 +17,21 @@ export function createNativeImageRoundsChallengeClient(options) { return createI
 /** @param {import('./native-image-challenge.d.ts').NativeImageOptions} options
  * @param {boolean} rounds
  * @returns {import('./native-image-challenge.d.ts').NativeImageClient} */
-function createImageClient({callTool,selectCandidates,resolvePolicy,verifyClearance,verifyAccess,captureRegion,now=Date.now}, rounds) {
+function createImageClient({callTool,selectCandidates,resolvePolicy,verifyClearance,verifyAccess,captureRegion,now=Date.now,steadyNow=()=>performance.now()}, rounds) {
   const PROFILE=rounds?'hcaptcha-image-grid-3x3-two-round-v1':'hcaptcha-image-grid-3x3-v1',CONFIG=rounds?'agent-browser:remote-view-native-image-static-3x3-two-round:v1':'agent-browser:remote-view-native-image-static-3x3:v1';
   if([callTool,selectCandidates,resolvePolicy,verifyClearance,verifyAccess].some(port=>typeof port!=='function'))throw TypeError('native_image_ports_required');
   if(captureRegion && (!['x','y','width','height'].every(key=>Number.isSafeInteger(captureRegion[key])) || captureRegion.width<=0 || captureRegion.height<=0 || captureRegion.x<0 || captureRegion.y<0))throw TypeError('native_image_capture_region_invalid');
   const regionRequest=captureRegion?structuredClone(captureRegion):null;
   const human=createChallengeAssistanceClient({callTool,resolvePolicy,verifyClearance,verifyAccess,now});
   const fail=code=>{throw Error(code)};
+  const clockIdentity=value=>{
+    if(value?.clock===undefined)return null;
+    const clock=value.clock;
+    if(!clock||Object.keys(clock).sort().join(',')!=='bootId,kind,observedAtMs'||clock.kind!=='linux-boottime-v1'||typeof clock.bootId!=='string'||!(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/).test(clock.bootId)||!Number.isSafeInteger(clock.observedAtMs)||clock.observedAtMs<0)fail('native_image_clock_unverified');
+    return clock.kind+':'+clock.bootId;
+  };
+  const observedTime=value=>value.clock?.observedAtMs??value.observedAtMs;
+
   const identity=value=>({taskId:value.taskId,profileId:value.profileId,browserId:value.browserId,tabId:value.tabId,targetId:value.targetId});
   const same=(a,b)=>fields.every(key=>typeof a?.[key]==='string'&&a[key]===b?.[key]);
   async function call(name,args) {
@@ -79,30 +87,35 @@ function createImageClient({callTool,selectCandidates,resolvePolicy,verifyCleara
       const assist=async reason=>{try{const {verification:_previousVerification,...capsule}=await human.prepare({taskId});return {...capsule,status:capsule.status==='awaiting_operator'?'awaiting_operator':'intervention',reason,originalOperation:retained,...(rounds?{roundOperations}:{}),retryAllowed:false}}catch{return {taskId,status:'intervention',reason,originalOperation:retained,...(rounds?{roundOperations}:{}),retryAllowed:false}}};
       try {
         retained=await original(taskId,requestId);if(retained){if(rounds){roundOperations.push(retained);const second=await original(taskId,requestId+':round2');if(second)roundOperations.push(second)}return assist('native_image_original_exists_do_not_replay');}
-        let originalDeadline=0, previous=null, nextCapture=null, originalBinding=null;
+        let originalDeadline=0, previous=null, nextCapture=null, originalBinding=null,budgetNow=now;
         for(let roundIndex=1;roundIndex<=(rounds?2:1);roundIndex++) {
         const roundRequestId=roundIndex===1?requestId:requestId+':round2';
         const before=await briefing(taskId),observationRequestId=requestId+(roundIndex===1?':observation':':observation2');
         if(originalBinding&&!same(originalBinding,before))fail('native_image_context_changed');
+        const captureStartedAt=steadyNow();
         const captured=nextCapture??await call('browser_command',{taskId,action:'native_capture',requestId:observationRequestId,params:{classifyChallenges:true,registeredActionId:PROFILE,...(regionRequest?{imageCaptureScope:"complete_puzzle_region",region:regionRequest}:{})}});
         const frame=captured.data,sha=image(frame,captured.images),observation=frame.nativeImageObservation;
         const after=await briefing(taskId);
-        if(!same(before,after)||before.control.epoch!==after.control.epoch||frame.challenge?.kind!=='image_puzzle'||frame.challenge.family!=='hcaptcha'||(regionRequest?observation?.captureScope!=='complete_puzzle_region':frame.challenge.completeWindow!==true)||frame.challenge.frameSha256!==sha||frame.challenge.automatedAttemptAuthorized!==false||observation?.registeredActionId!==PROFILE||observation.frameSha256!==sha||!/^([a-f0-9]{64})$/.test(observation.puzzleSha256??'')||observation.desktopId!==physical(frame).desktopId||observation.generation!==physical(frame).generation||observation.windowId!==physical(frame).windowId||!Number.isSafeInteger(observation.nativeControlEpoch)||!Number.isFinite(observation.observedAtMs)||now()<observation.observedAtMs||now()-observation.observedAtMs>=60000||!Array.isArray(observation.candidates)||observation.candidates.length!==9||observation.candidates.some(candidate=>typeof candidate.candidateId!=='string'||candidate.candidateId.length>128)||new Set(observation.candidates.map(candidate=>candidate.candidateId)).size!==9||!isDeepStrictEqual(observation.window,frame.windowBounds)||!isDeepStrictEqual(observation.region,regionRequest??frame.windowBounds)||(!regionRequest&&(observation.captureScope??'complete_window')!=='complete_window'))fail('native_image_observation_unqualified');
+        const clockBasis=clockIdentity(observation),evidenceAge=clockBasis===null?now()-observation?.observedAtMs:frame.evidenceAgeMs;
+        if(!same(before,after)||before.control.epoch!==after.control.epoch||frame.challenge?.kind!=='image_puzzle'||frame.challenge.family!=='hcaptcha'||(regionRequest?observation?.captureScope!=='complete_puzzle_region':frame.challenge.completeWindow!==true)||frame.challenge.frameSha256!==sha||frame.challenge.automatedAttemptAuthorized!==false||observation?.registeredActionId!==PROFILE||observation.frameSha256!==sha||!/^([a-f0-9]{64})$/.test(observation.puzzleSha256??'')||observation.desktopId!==physical(frame).desktopId||observation.generation!==physical(frame).generation||observation.windowId!==physical(frame).windowId||!Number.isSafeInteger(observation.nativeControlEpoch)||!Number.isSafeInteger(observation.observedAtMs)||observation.observedAtMs<0||!Number.isSafeInteger(evidenceAge)||evidenceAge<0||evidenceAge>=60000||!Array.isArray(observation.candidates)||observation.candidates.length!==9||observation.candidates.some(candidate=>typeof candidate.candidateId!=='string'||candidate.candidateId.length>128)||new Set(observation.candidates.map(candidate=>candidate.candidateId)).size!==9||!isDeepStrictEqual(observation.window,frame.windowBounds)||!isDeepStrictEqual(observation.region,regionRequest??frame.windowBounds)||(!regionRequest&&(observation.captureScope??'complete_window')!=='complete_window'))fail('native_image_observation_unqualified');
         if(rounds && (!Array.isArray(observation.tileImageSha256s)||observation.tileImageSha256s.length!==9||observation.tileImageSha256s.some(hash=>!/^([a-f0-9]{64})$/.test(hash))))fail('native_image_observation_unqualified');
-        if(previous && (previous.frameSha256===sha || previous.puzzleSha256===observation.puzzleSha256 || previous.observedAtMs>=observation.observedAtMs || !isDeepStrictEqual(previous.window,observation.window) || !isDeepStrictEqual(previous.region,observation.region) || previous.nativeControlEpoch!==observation.nativeControlEpoch || previous.processDigest!==observation.processDigest || previous.tileImageSha256s.some((hash,index)=>hash===observation.tileImageSha256s[index])))fail('native_image_round_changed');
-        if(!originalDeadline)originalDeadline=observation.observedAtMs+60000;
+        if(previous && (previous.frameSha256===sha || previous.puzzleSha256===observation.puzzleSha256 || clockIdentity(previous)!==clockBasis||observedTime(previous)>=observedTime(observation) || !isDeepStrictEqual(previous.window,observation.window) || !isDeepStrictEqual(previous.region,observation.region) || previous.nativeControlEpoch!==observation.nativeControlEpoch || previous.processDigest!==observation.processDigest || previous.tileImageSha256s.some((hash,index)=>hash===observation.tileImageSha256s[index])))fail('native_image_round_changed');
+        if(!originalDeadline){
+          budgetNow=clockBasis===null?now:steadyNow;
+          originalDeadline=clockBasis===null?observation.observedAtMs+60000:captureStartedAt+60000-evidenceAge;
+        }
         originalBinding??=after;
         await sourcePolicy(taskId,after,frame);
-        const selectionBudget=Math.min(45000,originalDeadline-now());
+        const selectionBudget=Math.min(45000,originalDeadline-budgetNow());
         if(selectionBudget<=0)fail('native_image_selection_expired');
         const controller=new AbortController();let timer;
         let proposal;
         try{proposal=await Promise.race([
-          Promise.resolve().then(()=>selectCandidates({taskId,binding:identity(after),requestId,observationRequestId,observation:structuredClone(observation),images:captured.images,deadlineAtMs:now()+selectionBudget,roundIndex,signal:controller.signal})),
+          Promise.resolve().then(()=>selectCandidates({taskId,binding:identity(after),requestId,observationRequestId,observation:structuredClone(observation),images:captured.images,deadlineAtMs:now()+selectionBudget,timeoutMs:selectionBudget,roundIndex,signal:controller.signal})),
           new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(Error('native_image_selection_timeout'))},selectionBudget)}),
         ])}finally{clearTimeout(timer)}
         const selected=proposal?.selectedCandidateIds;
-        if(proposal?.taskId!==taskId||proposal.observationRequestId!==observationRequestId||proposal.frameSha256!==sha||proposal.puzzleSha256!==observation.puzzleSha256||!Array.isArray(selected)||selected.length<1||selected.length>4||new Set(selected).size!==selected.length||selected.some(id=>!observation.candidates.some(candidate=>candidate.candidateId===id))||now()>=originalDeadline)fail('native_image_selection_unqualified');
+        if(proposal?.taskId!==taskId||proposal.observationRequestId!==observationRequestId||proposal.frameSha256!==sha||proposal.puzzleSha256!==observation.puzzleSha256||!Array.isArray(selected)||selected.length<1||selected.length>4||new Set(selected).size!==selected.length||selected.some(id=>!observation.candidates.some(candidate=>candidate.candidateId===id))||budgetNow()>=originalDeadline)fail('native_image_selection_unqualified');
         const current=await briefing(taskId);if(!same(after,current)||after.control.epoch!==current.control.epoch)fail('native_image_context_changed');
         attemptedRequestId=roundRequestId;
         const input=await call('browser_command',{taskId,action:'native_input',requestId:roundRequestId,params:{imageAttempt:{observationRequestId,selectedCandidateIds:selected,...(rounds?{originalRequestId:requestId}:{})}}});
@@ -111,7 +124,7 @@ function createImageClient({callTool,selectCandidates,resolvePolicy,verifyCleara
         if(input.data?.source!=='remote_view_native'||input.data.delivery!=='dispatched'||delivered?.state!=='owner_acknowledged')return assist('native_image_input_uncertain_or_refused');
         const observed=await call('browser_command',{taskId,action:'native_capture',...(rounds&&roundIndex===1?{requestId:requestId+':observation2'}:{}),params:{classifyChallenges:true,...(rounds&&roundIndex===1?{registeredActionId:PROFILE,...(regionRequest?{imageCaptureScope:'complete_puzzle_region'}:{})}:{}),...(regionRequest?{region:regionRequest}:{})}}),fresh=observed.data,freshSha=image(fresh,observed.images);
         if(rounds && roundIndex===1 && fresh.challenge?.kind==='image_puzzle') {
-          if(!isDeepStrictEqual(physical(frame),physical(fresh))||!isDeepStrictEqual(frame.windowBounds,fresh.windowBounds)||fresh.nativeControlEpoch!==observation.nativeControlEpoch||now()>=originalDeadline)fail('native_image_round_changed');
+          if(!isDeepStrictEqual(physical(frame),physical(fresh))||!isDeepStrictEqual(frame.windowBounds,fresh.windowBounds)||fresh.nativeControlEpoch!==observation.nativeControlEpoch||budgetNow()>=originalDeadline)fail('native_image_round_changed');
           previous=observation;nextCapture=observed;continue;
         }
         if(!isDeepStrictEqual(physical(frame),physical(fresh))||!isDeepStrictEqual(frame.windowBounds,fresh.windowBounds)||fresh.nativeControlEpoch!==observation.nativeControlEpoch||fresh.challenge?.kind!=='unknown'||(!regionRequest&&fresh.challenge.completeWindow!==true)||fresh.challenge.frameSha256!==freshSha||fresh.challenge.automatedAttemptAuthorized!==false)fail('native_image_after_state_unverified');
