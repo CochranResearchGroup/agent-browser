@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "recordingId": "synthetic-daily-sales-474-v1",
+  "origin": "https://teaching-report.example.invalid",
+  "durationMs": 12008,
+  "artifact": "demonstration.webm",
+  "sha256": "6d4faea1e56304b835ad00dea20b7aac4c1d0ffbdc6daeed30c5665c52c8bfc1",
+  "source": "owned synthetic browser-rendered teaching frames and explicit reference tone",
+  "audio": "Opus reference tone; no spoken narration or ASR result",
+  "frameEvidence": [
+    {
+      "artifact": "choose.png",
+      "startMs": 0,
+      "endMs": 3000,
+      "sha256": "003d5ed2c8c5be97bc007790178322341aa56b0f7b1e5f63317ab56ff745f88f"
+    },
+    {
+      "artifact": "dates.png",
+      "startMs": 3000,
+      "endMs": 6000,
+      "sha256": "e19949161a6ecec45114f7c2495bea6118a8478e9a20189fe76f2d7f1ed1b176"
+    },
+    {
+      "artifact": "verify.png",
+      "startMs": 6000,
+      "endMs": 9000,
+      "sha256": "cb4083e4a8d90bbd1ffb511bbf94abfb463df64e4738a19258662db0fa0e5c5d"
+    },
+    {
+      "artifact": "export.png",
+      "startMs": 9000,
+      "endMs": 12000,
+      "sha256": "13eddee23faadcdab62236f5625591437ab4400b4bdfb6eec4474f876363f841"
+    }
+  ],
+  "oracle": {
+    "report": "Daily sales",
+    "startDate": "2026-05-01",
+    "endDate": "2026-05-31",
+    "includeRefunds": true,
+    "currency": "USD",
+    "rows": [
+      [
+        "2026-05-01",
+        "125.00",
+        5
+      ],
+      [
+        "2026-05-31",
+        "240.00",
+        8
+      ]
+    ],
+    "deliberateAmbiguity": "future refunds policy, not the visible checked example"
+  },
+  "agentReview": "Actual model reviewed all four frames and decoded video frame at4s, then authored draft.json; schema validation does not prove semantic truth."
+}

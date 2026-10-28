@@ -4348,6 +4348,8 @@ Usage: agent-browser fill <selector> <text>
 
 Clears the input field and fills it with the specified text.
 This replaces any existing content in the field.
+Native date inputs use YYYY-MM-DD and emit input/change events.
+Invalid dates and non-writable date inputs return errors.
 
 Global Options:
   --json               Output as JSON
@@ -4516,6 +4518,8 @@ Uses the current browser process; no historical owner binding is required.
 Ordinary task continuation reconciles interrupted publication of its live browser.
 Ordinary updates ignore malformed launch history and unchanged peer release fences.
 Local browser process proof is required for artifact delivery.
+Qualified local attachments preserve original process/endpoint proof without
+child-process ownership. Changed or unverified sources remain unavailable.
 
 Arguments:
   selector             Element to click (CSS selector or @ref)
@@ -7333,6 +7337,25 @@ Commands:
   serve             Run the MCP server
   resources/read    Diagnostics
   host-task TASK    Read app metadata
+  task-briefing TASK Read retained task context without browser effects
+  task-operation TASK REQUEST Read original addressed CDP operation without retry
+  Teaching evidence: client teaching-evidence / teaching-evidence-http; recheck Saved provenance before Speech ranges
+  Teaching drafts: inspect_guide / client inspectTeachingDraft; inert until reviewed
+  Teaching review: client teaching-review edits/reviews; MCP candidate validation stays inert
+  Teaching repeat: recordFreshRepeat / promote; trusted review plus actual report proof
+  Teaching grilling: client teaching-grilling; source-linked questions, authenticated answers
+  Native challenge: bounded passive wait or one registered checkbox attempt per task
+  Native OCR: high-confidence hCaptcha variants require same-frame brand and registered pixels
+  Native input: stable original requestId; uncertain delivery forbids replay
+  Native completion errors: inspect the original requestId and safe cause; never replay
+  Native image: explicit provider membership; static 3x3 bus grid; returned IDs only
+  Native image budget: one attempt, at most four tiles plus Verify, 60 seconds
+  Native image rounds: separate two-round grant; originalRequestId anchors 60 seconds/10 clicks
+  Native image timing: Linux same-boot elapsed age; wall timestamps are diagnostic
+  Native image ROI: declare complete_puzzle_region before capture; original region/hash stay fixed
+  Native image expiry: safe observationClock timings diagnose refusal; inspect original, never replay
+  Native policy: verified CDP origin/provider required; CDP-free uses human assistance
+  Native return: original opaque handoff, explicit takeover/return, separate access checks
   browser-mode TASK Inspect mode
   browser-native TASK ACTION JSON Input/capture <=1Mpx
   browser-build JSON Inspect/select/open profile build
@@ -7351,7 +7374,7 @@ Workflow tools (16):
   browser_navigate      Navigate current page
   browser_snapshot      Read page and element references
   browser_click         Click an element
-  browser_fill          Fill an input
+  browser_fill          Fill an input; native dates use YYYY-MM-DD
   browser_screenshot    Capture current page
   browser_tab           Task tabs; reuse tabKey for new
   browser_handoff       Ready HTTPS Remote View link

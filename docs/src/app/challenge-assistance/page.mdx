@@ -1,0 +1,245 @@
+# Challenge observation and human assistance
+
+Use the existing task's Native capture for a bounded read without attaching a
+debugger:
+
+```json
+{"taskId":"TASK","action":"native_capture","params":{"classifyChallenges":true}}
+```
+
+The supported `browser_command` response keeps its existing PNG image and adds
+`challenge`, `recognition`, `observedAtMs` and `evidenceAgeMs` metadata.
+It also reports `nativeControlEpoch`, which belongs to Remote View and is
+distinct from the cooperative task-control epoch.
+Classification uses the Remote View owner's current OCR capture, exact original
+process, current viewing generation, window and frame digest. Recognized page
+text remains process-local and is omitted from the result. Capture remains subject
+to the existing control/read admission and private-input boundaries.
+
+The Native visual extension declares `native-challenge-corpus.v2` with the
+single rule `registered_hcaptcha_joined_prompt_visual_v1`. It corroborates
+the existing registered normalizer's joined `iam`, `lam`, or `tam` plus
+`human` only when the whole prompt and exact hCaptcha brand score at least
+70, the owner OCR state is `observed`, and the same returned PNG/OCR identifies one visible registered checkbox.
+Sub-70 words cannot contribute. Existing profile bytes, geometry, scales and
+template thresholds remain unchanged. The extension applies only to a fresh,
+complete frame otherwise classified as unknown; it cannot override denial,
+image, ambiguous, stale or incomplete evidence. Pure text classification
+remains v1 and refuses those joined forms without visual corroboration.
+The client accepts v2 only for this exact declared hCaptcha rule, and neither
+corpus version authorizes input or proves clearance.
+
+The versioned English text-signature corpus distinguishes passive checks,
+registered Turnstile/hCaptcha checkbox signatures, image instructions, ordinary
+login, loading and denial. It also reports unknown, ambiguous and stale evidence.
+OCR scores are engine scores, not probabilities. A partial window or unknown
+classification never proves absence of a challenge. A recognized signature grants
+no automated attempt, and it never proves protected-site admission. The declared
+synthetic corpus is a regression suite, not a provider accuracy benchmark.
+
+## Bounded passive waits and registered checkbox attempts
+
+The optional backend method `resolve({taskId, requestId})` waits through an
+eligible passive check for at most three observations and ten seconds. A
+registered checkbox can receive one policy-authorized attempt for the entire
+task. Taking another capture, changing registered families or changing profile
+versions does not renew that budget. Pending and uncertain originals consume it.
+
+Configure `resolvePolicy` to read the receiving application's existing
+`SitePolicy` source and the current public `browser_policy` status. Return the
+exact task binding, canonical HTTPS origin, source reference, SitePolicy record
+and task-policy record, plus its existing provider record. This is a trusted receiving-backend port. An allow label,
+policy digest or origin supplied by a browser caller is not authority.
+
+The runtime owner independently resolves the exact profile's existing
+`site_policy_ids` against a verified current origin. Exactly one applicable
+policy must allow providers through the existing provider/capability decision. Missing,
+ambiguous, manual-only, denied or changed policy requires human assistance.
+Existing task rules must also permit input and focus.
+An explicit manual interaction mode or `requiresCdpFree` requirement refuses
+this automatic path. `manual_login_preferred` remains a seeding preference;
+it does not prohibit an already-qualified CDP task with an explicitly permitted
+provider policy.
+
+Configure the existing `ServiceProvider` catalog with one enabled CAPTCHA
+provider advertising `captcha_solve`. This feature introduces the explicit
+versioned adapter reference `agent-browser:remote-view-native:v1` in that
+existing row's `configRef` field. It resolves only to the current existing
+Remote View Native backend; it supplies no endpoint, credential or new viewer
+authority. For example:
+
+```json
+{"id":"native-checkbox-provider","kind":"captcha","enabled":true,"capabilities":["captcha_solve"],"configRef":"agent-browser:remote-view-native:v1"}
+```
+
+`SitePolicy.allowedChallengeProviders` contains configured provider IDs such as
+`native-checkbox-provider`. It does not contain detected families or registered
+action IDs. The owner requires exactly one eligible Native-bound row and retains
+its provider ID separately from `family` and `registeredActionId`. Disabled,
+missing-capability, wrong-binding or ambiguous provider rows require assistance.
+The existing provider decision retains its empty-allowlist semantics; an absent
+Native-bound provider never becomes an implicit permission.
+
+Automatic checkbox admission currently requires a verified CDP task. The owner
+reads that existing target's current URL, checks policy, focuses that exact task
+once under the durable original attempt and rechecks the URL and policy. Native
+window, generation, frame and control fences still govern the actual click.
+CDP-free tasks explicitly require human assistance for this automatic path; the
+owner never attaches a debugger to discover their origin. Native classification
+and the human journey below continue to support CDP-free browsers.
+
+The low-level opt-in requests use existing `browser_command` actions:
+
+```json
+{"taskId":"TASK","action":"native_capture","requestId":"attempt:observation","params":{"classifyChallenges":true,"registeredActionId":"hcaptcha-checkbox-p181-v2"}}
+```
+
+```json
+{"taskId":"TASK","action":"native_input","requestId":"attempt","params":{"nativeAttempt":{"observationRequestId":"attempt:observation","registeredActionId":"hcaptcha-checkbox-p181-v2"}}}
+```
+
+The other registered ID is `turnstile-checkbox-p169-v1`. The existing detector
+must find one visible, corroborated target in the exact Native PNG/OCR capture.
+The owner retains bounded evidence in the existing task-operation journal and
+derives the click. Callers supply no target point. Before input, the owner checks
+observation age, original task/process/window, current viewing generation,
+geometry, task policy, current Native agent control and the captured region's
+digest through Remote View's existing `expectedVisual` guard. A changed frame,
+hidden or duplicate target, rejection, expiry or uncertain delivery ends the
+attempt and requires assistance.
+
+Use the stable original ID to inspect an interrupted attempt:
+
+```json
+{"taskId":"TASK","action":"task_operation","params":{"requestId":"attempt"}}
+```
+
+This ID identifies an Agent Browser operation, not a Remote View provider
+receipt. `dispatched` acknowledges dispatch only. The Challenge Control kernel
+keeps it awaiting independent verification, and original-operation readback
+always forbids replay. Public retained evidence excludes pixels, raw OCR text,
+URL paths and executable paths.
+
+Completion errors retain the original request ID and a safe diagnostic cause.
+Inspect that original rather than sending another attempt. The cause excludes
+raw storage errors and does not grant retry authority.
+
+## Static image round
+
+The registered `hcaptcha-image-grid-3x3-v1` profile supports one static 3×3
+English bus-selection round. It requires the existing `captcha_solve` capability,
+exact provider configuration reference
+`agent-browser:remote-view-native-image-static-3x3:v1`, and owner-verified site
+policy explicitly listing that provider. An empty provider list does not enable
+image input. Generic checkbox permission does not authorize image input.
+
+Observe the actual Native image before proposing tile IDs:
+
+```json
+{"taskId":"TASK","action":"native_capture","requestId":"image:observation","params":{"classifyChallenges":true,"registeredActionId":"hcaptcha-image-grid-3x3-v1"}}
+```
+
+Full-window evidence is the default. To declare a complete puzzle region before
+a **fresh** observation, add `imageCaptureScope: "complete_puzzle_region"` and
+an explicit `region` with Native desktop-pixel `x`, `y`, `width` and `height`.
+The typed client exposes this as `captureRegion`. Choose a region containing
+the entire prompt, brand, nine aligned cells and Verify. The owner derives
+completeness from those Native pixels and OCR, not from the caller's scope label.
+
+`nativeImageObservation.captureScope` distinguishes `complete_window` from
+`complete_puzzle_region`. Generic `partialWindow` and
+`challenge.completeWindow` keep their actual meaning; a complete puzzle region
+is not whole-window evidence. The original ROI and SHA remain fixed through
+selection and input, with full window/process/control/geometry fences retained.
+Subsequent observations retain that ROI. A cropped unknown classification alone
+cannot prove clearance; both independent application verifiers remain necessary.
+Never clip or refresh an old original to make its guard pass. Legacy observations
+without a scope remain complete-window evidence and cannot become regional proof.
+
+Image expiry completion errors can include `observationClock`: a validated reason, observation and validation timestamps, and age. Future timestamps and evidence older than 60 seconds remain refused. Inspect the original operation without replay.
+
+The separate `hcaptcha-image-grid-3x3-two-round-v1` profile requires exact provider
+configuration `agent-browser:remote-view-native-image-static-3x3-two-round:v1`
+and explicit site-policy membership. It supports at most two complete static
+bus grids, four tiles plus Verify each, ten clicks and thirty pointer events
+in total, within the first observation's original 60-second deadline.
+
+For this profile, `imageAttempt` has exactly three fields:
+`observationRequestId`, `selectedCandidateIds` and `originalRequestId`.
+The first input's `originalRequestId` equals its own outer request ID. A later
+input has its own request ID and fresh observation, but retains the first
+`originalRequestId`. The first result stays immutable; later operation rows
+retain accumulated round state. Never replay an uncertain operation.
+
+The owner requires all nine image interiors to change, with the same region,
+window/process/generation/control and policy context. Borders or highlights
+alone are not progress. Partial refresh, loading, visible rejection or ambiguous
+progress require intervention. A new observation or changed task cannot renew
+the original attempt. Independent clearance and protected access still gate
+success after the final round.
+
+`createNativeImageRoundsChallengeClient` from
+`@agent-browser/client/native-image-challenge` uses the existing image callback
+ports, adding `roundIndex` to each fresh selection request. Its callback deadline
+is bounded by the remaining original deadline. `roundOperations` reports the
+retained round results while `originalOperation` remains the first result.
+
+Linux image captures carry an owner-minted elapsed clock bound to the current boot. Evidence age and the original 60-second deadline use that clock, so wall-clock corrections cannot make a fresh capture appear future-dated or renew its budget. Wall `observedAtMs` remains diagnostic. Changed boots or clock domains, future elapsed readings and expired evidence stop automation; legacy receipts and unsupported platforms retain strict wall-clock checks. The client uses an elapsed receiving timer (`steadyNow`, default `performance.now()`) while `now` and callback `deadlineAtMs` remain wall-clock projections. Selection callbacks receive `timeoutMs` as an elapsed maximum and must obey `signal`; the wall deadline cannot extend that duration. Neither clock metadata nor a fresh capture grants another attempt.
+
+Reason from those pixels and use only returned candidate IDs. A selection is
+untrusted input to the owner, not authority to send coordinates:
+
+```json
+{"taskId":"TASK","action":"native_input","requestId":"image:attempt","params":{"imageAttempt":{"observationRequestId":"image:observation","selectedCandidateIds":["RETURNED_CANDIDATE_ID"]}}}
+```
+
+The owner derives tile and Verify coordinates and revalidates the exact current
+frame, task, window, control, site policy and cumulative attempt budget. This
+new image profile permits one round and one attempt, at most four tiles plus
+Verify, five clicks/fifteen pointer events/zero keys, within 60 seconds of its
+bound evidence. Existing checkbox limits are unchanged. A new image or family
+does not renew a consumed task attempt. Independent clearance and protected-site
+checks remain necessary after dispatch.
+
+Dynamic, partial, ambiguous or unsupported puzzles require assistance. Lost
+acknowledgement preserves the original operation and forbids replay. This
+profile does not promise universal hCaptcha solving or production admission.
+
+`resolve` requires distinct `verifyClearance` and `verifyAccess` results before
+reporting verified access. It does not mark the larger browser task complete.
+Unsupported challenges, refused policy and uncertain outcomes use the same
+Native human assistance flow below. There is no automatic retry or another
+viewer grant.
+
+## Continue through the existing Native viewer
+
+`@agent-browser/client/challenge-assistance` composes the public task briefing,
+Native capture, existing opaque handoff, cooperative control and continuation.
+It does not add a viewer, grant ceremony, solver or control authority.
+
+1. Call `prepare({taskId})` to inspect the current exact task and return its
+   existing ready opaque handoff. Give the operator only that complete URL.
+2. The operator opens that same link, uses existing Native authentication and
+   explicitly takes control through the application's Native toolbar. Viewing
+   alone does not count as assistance.
+3. Call `recordTakeover(capsule)` to read the retained human control epoch.
+   The capsule contains references and identity, not page text or credentials.
+4. The operator completes the unsupported or unsuccessful challenge and
+   explicitly gives control back through the same toolbar.
+5. Call `continueAfterReturn(capsule)`. The helper rechecks task, physical
+   Native target and current control, then requires separate, source-attributed
+   challenge-clearance and protected-application verifiers. It reads the original
+   task only after both checks succeed.
+
+Configure `verifyClearance` and `verifyAccess` with the existing SiteGuide or
+application-specific read verifiers. Each returns a verified/unverified state,
+exact task and source frame digest, and a distinct evidence reference. They must
+observe the application independently; a disappeared widget, delivered input,
+changed URL or caller assertion does not substitute for those checks.
+
+The current cooperative control integration is hosted. A consumer without that
+integration reports its existing unsupported-control refusal; do not invent a
+dashboard workaround or a second viewer. Changed target/control identity or
+uncertain access remains intervention. The helper does not retry effects,
+regenerate factors, navigate to reconstruct state, or claim the larger task is
+complete.

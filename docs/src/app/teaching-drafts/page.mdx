@@ -1,0 +1,54 @@
+# Draft procedures from teaching evidence
+
+An agent can prepare a SiteGuide, reusable routines and composed playbook from
+an authorized teaching recording. It inspects video frames and selected
+narration, produces a useful initial candidate, then identifies material
+ambiguities for clarification. It uses its ordinary multimodal reasoning;
+Agent Browser does not invent a procedure from a website-name heuristic.
+
+The existing SiteGuide candidate file model carries an inert `teaching` section.
+It records source hashes/time references, observed/inferred/unknown claims,
+typed parameters, page states, named controls, routines with branches/outcomes
+and recovery, and the composed playbook. This is a draft. Inspection neither
+executes nor publishes it.
+
+```js
+import {writeTeachingDraftCandidate}
+  from '@agent-browser/client/teaching-draft';
+import {createPlaybookClient} from '@agent-browser/client/playbooks';
+
+// The agent prepares this document after reviewing authorized media.
+// candidateDirectory belongs to this private candidate workflow.
+await writeTeachingDraftCandidate({
+  candidateDirectory, candidateOnly: true, guide: preparedGuide,
+});
+const browser = createPlaybookClient(callTool);
+const draft = await browser.inspectTeachingDraft(taskId, preparedGuide.guideId);
+```
+
+Configure the candidate client with `AGENT_BROWSER_SITEGUIDE_DIRECTORY` pointing
+to that same owned directory. This follows the existing SiteGuide authoring
+workflow. File creation refuses an existing guide rather than overwriting the
+canonical or accepted version. The public `browser_command` playbook
+`inspect_guide` operation returns the same teaching draft for agents and software.
+
+A useful draft distinguishes demonstration examples from future caller inputs.
+For the fixed Daily sales demonstration, it preserves May 1–May 31, 2026 as
+examples, identifies `startDate` and `endDate` parameters, records the checked
+refunds option and USD output as observations, and leaves the policy for future
+refunds choices unresolved. It checks report identity/range/content before
+claiming a verified CSV. It does not ask the operator to repeat facts already
+visible in the recording.
+
+Evidence gaps and uncertain alignment remain explicit. Narration evidence links
+the original Speech operation and source revision, keeping absolute normalized
+timestamps and the original teaching capsule for track/context bindings. Video
+evidence uses its recording-local clock. Visible captions are
+video evidence, not speech. A guessed locator remains inferred until checked on
+the live site. Credentials and codes never belong in procedures. A plausible
+draft or successful inspection is not proof of real microphone capture, ASR
+quality, authenticated site access or successful fresh execution.
+
+The detailed agent workflow is in the installed
+`references/teaching-drafts.md` guidance. Review/versioning, focused questions
+and a verified repeat are subsequent explicit steps.

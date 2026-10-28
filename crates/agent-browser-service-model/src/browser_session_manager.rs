@@ -784,9 +784,68 @@ pub struct PendingHumanTabRetention {
     pub expires_at_ms: Option<u64>,
 }
 
+/// Immutable provenance returned by qualified existing-profile adoption.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BrowserAdoptedProcessIdentity {
+    pub profile_id: String,
+    pub cdp_endpoint: String,
+    pub process: crate::RecordedProcessIdentity,
+}
+
+/// Durable original request identity for a task effect. Fingerprints remain private;
+/// public projections expose only exact identity, state and bounded references.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BrowserTaskOperation {
+    pub request_id: String,
+    pub task_id: String,
+    pub profile_id: String,
+    pub browser_id: String,
+    pub tab_id: String,
+    pub target_id: String,
+    pub process_pid: u32,
+    /// Immutable original kernel identity, private to owner fencing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_identity: Option<crate::RecordedProcessIdentity>,
+    pub control_epoch: u64,
+    pub action: String,
+    pub fingerprint: String,
+    pub state: BrowserTaskOperationState,
+    pub created_at_ms: u64,
+    pub completed_at_ms: Option<u64>,
+    pub evidence_references: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BrowserTaskOperationState {
+    Pending,
+    OwnerAcknowledged,
+    Uncertain,
+}
+
+/// A completed local artifact operation, without its path or private contents.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BrowserTaskArtifactReference {
+    pub artifact_id: String,
+    pub kind: String,
+    pub handle: String,
+    pub observed_at_ms: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserSessionState {
+    /// Original task effects are never evicted to manufacture retry permission.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub task_operations: BTreeMap<String, BTreeMap<String, BrowserTaskOperation>>,
+
+    /// References recorded only after successful task artifact capture/download.
+    /// Absence in older state means not recorded, never no artifacts existed.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub task_artifact_references: BTreeMap<String, Vec<BrowserTaskArtifactReference>>,
     /// Profile-wide owner operations retain an actionable journal identity.
     /// A competing client must resume or cancel that operation before opening.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -814,6 +873,9 @@ pub struct BrowserSessionState {
     /// Attached shared browsers retain their external lifecycle owner across restart.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub shared_browser_ids: BTreeSet<String>,
+    /// Only identities returned by qualified existing-profile adoption. No lifecycle custody transfer.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub adopted_browser_process_identities: BTreeMap<String, BrowserAdoptedProcessIdentity>,
     /// Explicit profile build choices survive other clients and owner restarts.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub profile_executables: BTreeMap<String, String>,
@@ -848,6 +910,8 @@ pub struct BrowserSessionState {
 impl Default for BrowserSessionState {
     fn default() -> Self {
         Self {
+            task_artifact_references: BTreeMap::new(),
+            task_operations: BTreeMap::new(),
             profile_operation_ids: BTreeMap::new(),
             hosted_continuity: BTreeMap::new(),
             host_policies: crate::BrowserHostPolicies::default(),
@@ -858,6 +922,7 @@ impl Default for BrowserSessionState {
             next_disposable_sequence: 0,
             browsers: BTreeMap::new(),
             shared_browser_ids: BTreeSet::new(),
+            adopted_browser_process_identities: BTreeMap::new(),
             profile_executables: BTreeMap::new(),
             host_bindings: BTreeMap::new(),
             app_browser_attachments: BTreeMap::new(),
@@ -1397,6 +1462,25 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         );
 
         if let Some(launch) = launched {
+            if self.state.shared_browser_ids.contains(&browser_id) {
+                if let Some(identity) = launch.process_identity.as_ref().filter(|identity| {
+                    identity.pid == launch.pid
+                        && !identity.start_token.is_empty()
+                        && identity
+                            .executable_path
+                            .as_deref()
+                            .is_some_and(|path| !path.is_empty())
+                }) {
+                    self.state.adopted_browser_process_identities.insert(
+                        browser_id.clone(),
+                        BrowserAdoptedProcessIdentity {
+                            profile_id: profile.id.clone(),
+                            cdp_endpoint: launch.cdp_endpoint.clone(),
+                            process: identity.clone(),
+                        },
+                    );
+                }
+            }
             self.state.browsers.insert(
                 browser_id.clone(),
                 ManagedBrowserInstance {
@@ -1524,6 +1608,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         self.publish_recovery(browser, tabs, recovered, false, false)?;
         // A positively absent replacement has fresh launch custody; prior shared attachment does not transfer.
         self.state.shared_browser_ids.remove(&browser_id);
+        self.state
+            .adopted_browser_process_identities
+            .remove(&browser_id);
         Ok(())
     }
 
@@ -1568,9 +1655,30 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     .effects
                     .pending_launch_intent()
                     .is_some_and(|intent| intent.profile_id == profile.id));
+        let adopted_launch = recovered.launch.clone();
         self.publish_recovery(browser.clone(), tabs, recovered, true, false)?;
         if !managed {
             self.state.shared_browser_ids.insert(browser.id.clone());
+            self.state
+                .adopted_browser_process_identities
+                .remove(&browser.id);
+            if let Some(identity) = adopted_launch.process_identity.filter(|identity| {
+                identity.pid == adopted_launch.pid
+                    && !identity.start_token.is_empty()
+                    && identity
+                        .executable_path
+                        .as_deref()
+                        .is_some_and(|path| !path.is_empty())
+            }) {
+                self.state.adopted_browser_process_identities.insert(
+                    browser.id.clone(),
+                    BrowserAdoptedProcessIdentity {
+                        profile_id: browser.profile_id.clone(),
+                        cdp_endpoint: adopted_launch.cdp_endpoint,
+                        process: identity,
+                    },
+                );
+            }
         }
         Ok(true)
     }
@@ -1621,6 +1729,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         self.publish_recovery(browser, tabs, recovered, false, true)?;
         self.state.app_browser_attachments.remove(browser_id);
         self.state.shared_browser_ids.remove(browser_id);
+        self.state
+            .adopted_browser_process_identities
+            .remove(browser_id);
         Ok(())
     }
 
@@ -1651,6 +1762,37 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             })
         {
             return Err("browser_session_recovery_identity_conflict".into());
+        }
+        if self.state.shared_browser_ids.contains(&browser.id) && !owner_replacement {
+            self.state
+                .adopted_browser_process_identities
+                .remove(&browser.id);
+            if let Some(identity) = recovered
+                .launch
+                .process_identity
+                .as_ref()
+                .filter(|identity| {
+                    identity.pid == recovered.launch.pid
+                        && !identity.start_token.is_empty()
+                        && identity
+                            .executable_path
+                            .as_deref()
+                            .is_some_and(|path| !path.is_empty())
+                })
+            {
+                self.state.adopted_browser_process_identities.insert(
+                    browser.id.clone(),
+                    BrowserAdoptedProcessIdentity {
+                        profile_id: browser.profile_id.clone(),
+                        cdp_endpoint: recovered.launch.cdp_endpoint.clone(),
+                        process: identity.clone(),
+                    },
+                );
+            }
+        } else {
+            self.state
+                .adopted_browser_process_identities
+                .remove(&browser.id);
         }
         let mut current = browser;
         let relocated = current.desktop != recovered.launch.desktop;
@@ -3257,6 +3399,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             }
         }
         self.state.shared_browser_ids.remove(&browser.id);
+        self.state
+            .adopted_browser_process_identities
+            .remove(&browser.id);
         let session_ids = browser.active_session_ids.clone();
         for session_id in session_ids {
             self.state.leave_open_session_ids.remove(&session_id);

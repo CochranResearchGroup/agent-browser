@@ -200,13 +200,13 @@ impl BrowserSessionSqliteStore {
         Ok(inspection)
     }
 
-    fn inspect_mode(
+    pub(crate) fn original_browser_identity(
         &self,
         state: &BrowserSessionState,
         browser: &agent_browser_service_model::ManagedBrowserInstance,
-    ) -> serde_json::Value {
+    ) -> Option<agent_browser_service_model::RecordedProcessIdentity> {
         let attached = state.app_browser_attachments.get(&browser.id);
-        let original = if let Some(attached) = attached {
+        let primary = if let Some(attached) = attached {
             (attached.profile_id == browser.profile_id
                 && attached.request.process.pid == browser.pid
                 && attached.request.cdp_endpoint == browser.cdp_endpoint
@@ -220,6 +220,31 @@ impl BrowserSessionSqliteStore {
             .ok()
             .flatten()
         };
+        let adopted = state.adopted_browser_process_identities.get(&browser.id);
+        if attached.is_some() && primary.is_none()
+            || adopted.is_some_and(|identity| {
+                identity.process.pid != browser.pid
+                    || identity.profile_id != browser.profile_id
+                    || identity.cdp_endpoint != browser.cdp_endpoint
+            })
+            || adopted.is_some() && !state.shared_browser_ids.contains(&browser.id)
+            || primary
+                .as_ref()
+                .zip(adopted)
+                .is_some_and(|(left, right)| left != &right.process)
+        {
+            return None;
+        }
+        primary.or_else(|| adopted.map(|identity| identity.process.clone()))
+    }
+
+    fn inspect_mode(
+        &self,
+        state: &BrowserSessionState,
+        browser: &agent_browser_service_model::ManagedBrowserInstance,
+    ) -> serde_json::Value {
+        let attached = state.app_browser_attachments.get(&browser.id);
+        let original = self.original_browser_identity(state, browser);
         let mut result = mode_inspection::inspect(
             browser,
             original.as_ref(),
@@ -612,7 +637,7 @@ impl BrowserSessionSqliteStore {
         self.mutate_session_state(|state| detach_remote_view_presentation(state, browser_id))
     }
 
-    fn mutate_session_state<T>(
+    pub(crate) fn mutate_session_state<T>(
         &mut self,
         mutate: impl FnOnce(&mut BrowserSessionState) -> Result<T, String>,
     ) -> Result<T, String> {
@@ -1754,6 +1779,51 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn existing_profile_original_identity_requires_exact_retained_adoption_provenance() {
+        let directory = TempDirectory::new("adoption-original-identity");
+        let connection = Connection::open(directory.0.join("runtime.sqlite3")).unwrap();
+        initialize_runtime_schema(&connection).unwrap();
+        let store = BrowserSessionSqliteStore { connection };
+        let mut state = BrowserSessionState::default();
+        let browser = ManagedBrowserInstance {
+            id: "borrowed".into(),
+            profile_id: "profile".into(),
+            pid: 42,
+            cdp_endpoint: "ws://127.0.0.1:9/devtools/browser/original".into(),
+            desktop: None,
+            active_session_ids: vec![],
+        };
+        state.browsers.insert(browser.id.clone(), browser.clone());
+        state.shared_browser_ids.insert(browser.id.clone());
+        store.save_session_state(&state).unwrap();
+        assert_eq!(store.original_browser_identity(&state, &browser), None);
+        let mut encoded = serde_json::to_value(&state).unwrap();
+        encoded["adoptedBrowserProcessIdentities"] = serde_json::json!({"borrowed":{
+            "profileId":"profile","cdpEndpoint":browser.cdp_endpoint,
+            "process":{"pid":42,"startToken":"boot:original","executablePath":"/fixture/chrome","browserFamily":"chrome"}}});
+        state = serde_json::from_value(encoded).unwrap();
+        store.save_session_state(&state).unwrap();
+        assert_eq!(
+            store
+                .original_browser_identity(&state, &browser)
+                .unwrap()
+                .start_token,
+            "boot:original"
+        );
+        let mut conflicting = browser.clone();
+        conflicting.profile_id = "peer-profile".into();
+        assert_eq!(store.original_browser_identity(&state, &conflicting), None);
+        conflicting = browser.clone();
+        conflicting.pid = 43;
+        assert_eq!(store.original_browser_identity(&state, &conflicting), None);
+        conflicting = browser.clone();
+        conflicting.cdp_endpoint.push_str("-replacement");
+        assert_eq!(store.original_browser_identity(&state, &conflicting), None);
+        state.shared_browser_ids.clear();
+        assert_eq!(store.original_browser_identity(&state, &browser), None);
     }
 
     #[test]

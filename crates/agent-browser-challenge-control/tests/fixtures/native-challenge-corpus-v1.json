@@ -1,0 +1,19 @@
+{
+  "version":"native-challenge-corpus.v1",
+  "scope":"Synthetic English native OCR observations, not a provider accuracy benchmark",
+  "cases":[
+    {"id":"hcaptcha-checkbox","text":["hCaptcha","I am human"],"confidence":95,"fresh":true,"complete":true,"expected":"checkbox"},
+    {"id":"passive-browser-check","text":["Checking your browser","Please wait"],"confidence":95,"fresh":true,"complete":true,"expected":"passive_check"},
+    {"id":"turnstile-checkbox","text":["Cloudflare","Verify you are human"],"confidence":95,"fresh":true,"complete":true,"expected":"checkbox"},
+    {"id":"image-round-with-background-checkbox","text":["hCaptcha","I am human","Select all images containing buses"],"confidence":95,"fresh":true,"complete":true,"expected":"image_puzzle"},
+    {"id":"ordinary-auth","text":["Sign in","Email address","Password"],"confidence":95,"fresh":true,"complete":true,"expected":"authentication_required"},
+    {"id":"loading","text":["Loading","Please wait"],"confidence":95,"fresh":true,"complete":true,"expected":"loading"},
+    {"id":"access-denied","text":["Access denied","403 Forbidden"],"confidence":95,"fresh":true,"complete":true,"expected":"access_denied"},
+    {"id":"unknown-dashboard","text":["Quarterly dashboard","Sales report"],"confidence":95,"fresh":true,"complete":true,"expected":"unknown"},
+    {"id":"stale-image","text":["hCaptcha","Select all images containing buses"],"confidence":95,"fresh":false,"complete":true,"expected":"stale"},
+    {"id":"uncertain-recognition","text":["hCaptcha","I am human"],"confidence":35,"fresh":true,"complete":true,"expected":"unknown"},
+    {"id":"conflicting-denial-and-puzzle","text":["Access denied","Select all images containing buses"],"confidence":95,"fresh":true,"complete":true,"expected":"ambiguous"},
+    {"id":"ordinary-password-information","text":["How to change your password","Security help center"],"confidence":95,"fresh":true,"complete":true,"expected":"unknown"},
+    {"id":"partial-observation-never-proves-clearance","text":["Sales report"],"confidence":95,"fresh":true,"complete":false,"expected":"unknown"}
+  ]
+}

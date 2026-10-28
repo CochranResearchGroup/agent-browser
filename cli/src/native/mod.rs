@@ -36,6 +36,7 @@ pub mod browser_locator;
 #[allow(dead_code)]
 pub(crate) mod browser_mode_operation;
 pub(crate) mod browser_native_control;
+pub(crate) mod browser_native_image;
 #[allow(dead_code)]
 pub mod browser_navigation;
 #[allow(dead_code)]
@@ -54,6 +55,7 @@ pub(crate) mod browser_session_runtime;
 pub(crate) mod browser_session_store;
 #[allow(dead_code)]
 pub mod browser_tabs;
+pub(crate) mod browser_task_operations;
 #[allow(dead_code)]
 pub mod browser_wait;
 #[allow(dead_code)]

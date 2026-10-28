@@ -4,6 +4,38 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Task operation receipt**: Existing-owner evidence for one original addressed
+CDP request, retained before transport. Attempt, owner acknowledgement and site
+completion are separate. Readback never dispatches; Native/Auth journals retain
+their own authority.
+
+**Candidate revision**: An immutable SiteGuide child in the existing directory,
+preserving parent, source and operation lineage while accepted versions remain.
+
+**Teaching review receipt**: A receiver-owned, attributable explicit operator
+decision bound to task, root and exact file/content digests, reverified on reopen.
+It does not establish fresh-repeat execution qualification.
+
+**Evidence availability**: Per-reference owner-bound access, distinct from overall
+recording access and retention of the accepted procedure.
+
+**Teaching draft**: Inert source-linked teaching knowledge in an existing
+SiteGuide candidate. The agent interprets video/narration into parameters,
+routines and a composed playbook before focused questions. Inspection validates
+shape and source references, not factual truth, approval or successful execution.
+
+**Teaching evidence**: Exact finalized A/V recording and selected isolated
+narration linked to Speech Saved/range receipts. Reopened references must match
+current Saved metadata, duration, revision and original selected narration.
+Exact browser task IDs retain the4000-character identity bound. Gaps, conversion alignment,
+speaker identity and critical-token uncertainty remain explicit; a sequence
+annotation does not verify recorder suppression.
+
+**Task briefing**: A read-only exact-ID projection of retained goal attribution,
+current logical identity, historical verified progress, local artifact references,
+pending assistance/control and original uncertain operations. It never launches,
+observes a live page, acknowledges human use or turns missing evidence into success.
+
 **Browser mode inspection**: Read-only current original-process debugging posture.
 CDP and no-CDP require complete current process evidence joined to immutable
 owner identity. Missing, changed or stale evidence is unverified. Executable
@@ -439,3 +471,31 @@ the original A/B/C table-placement proposals.
 window evidence. Native provider reads run in one background worker. A cached
 sample retains its original identity and elapsed age; serving it does not renew
 confidence, tab lifetime or viewing authority. Unknown evidence stays unknown.
+
+**Native challenge assistance**: Bounded current OCR classification and explicit human takeover/return through the existing Native handoff. Clearance and protected application admission are separate checks; classification grants no attempt authority. Optional automatic assistance adds bounded passive observation and one owner-derived registered checkbox attempt per task in the existing task-operation journal. It requires a verified CDP origin, exact profile/SitePolicy membership and one enabled captcha_solve provider whose configRef is agent-browser:remote-view-native:v1. Native hCaptcha OCR variants require strong same-frame branding and unique registered checkbox pixels; this visual corroboration adds no input authority. Family, action and provider identities remain distinct. CDP-free tasks use human assistance; pending or uncertain originals cannot replay.
+
+Static image rounds require the distinct opt-in configRef agent-browser:remote-view-native-image-static-3x3:v1 and explicit SitePolicy provider membership; an empty list grants no image authority. An agent reasons from current Native pixels and proposes returned candidate IDs; the owner derives coordinates and binds the original frame, task, window, control and cumulative budget. The supported static3x3 bus round permits at most four tiles plus Verify and one attempt within its60second evidence bound. Checkbox limits remain unchanged; new observations or families cannot renew consumed attempts. Unsupported or dynamic puzzles remain intervention. A separately granted hcaptcha-image-grid-3x3-two-round-v1 profile/config permits two complete refreshed grids under the same original task and60second deadline, at most10clicks/30pointerevents. Its three-field imageAttempt adds originalRequestId, anchoring immutable first-row history while later rows retain cumulative round state. All nine owner-derived interior tile hashes must change; physical/control/policy/ROI context must stay fixed. Partial, loading, rejected and ambiguous progress stop; captures and task changes cannot renew that original. The single-round authority and click limits remain unchanged.
+
+Image capture scope defaults to complete_window. Explicit complete_puzzle_region requires a declared ROI before fresh capture and owner-derived completeness of prompt, brand, nine cells and Verify inside it. Original ROI/SHA and whole-window context fences stay fixed; honest partial-window metadata is not whole-window clearance. Legacy evidence is not reinterpreted, and independent application verification remains separate.
+
+**Clarification question**: An unresolved source-linked material choice whose
+prerequisite answers must be verified before it is ready to ask.
+
+**Clarification answer**: A receiver-authenticated event bound to the exact
+question and candidate digests. It is independent of procedure approval;
+unverified answer history blocks further rounds without inventing consent.
+
+**Download source proof**: A currently verified local browser process and endpoint.
+A qualified attachment retains its original PID/start/executable proof for live
+revalidation; that proof grants no child-process lifecycle ownership.
+
+**Fresh-repeat receipt**: An existing receiving-application verifier's proof for
+an exact executed candidate/task, requested dates, report and actual artifact.
+Its verification assertions are independently read, not supplied as request labels.
+
+**Teaching promotion**: An immutable same-store lineage step selected only after
+revalidated operator review and fresh-repeat proof. Previous accepted bytes remain;
+stock MCP treats saved promotion metadata as inert.
+
+
+**Native image evidence clock**: Owner-minted Linux elapsed readings bound to the producer and receiver's exact boot. Image age and the first immutable round deadline use this domain; wall timestamps remain diagnostics. Later rounds cannot renew the deadline, change domain, cross boots or fall back to wall time after qualification fails. Legacy receipts and unsupported platforms retain their strict wall-clock guards. Client receiving timers use elapsed time; a projected wall deadline is not input authority.

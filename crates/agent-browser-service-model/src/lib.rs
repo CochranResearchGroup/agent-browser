@@ -27,6 +27,7 @@ mod browser_profile_catalog;
 mod browser_recovery;
 mod browser_retirement;
 mod browser_session_manager;
+mod browser_task_artifacts;
 mod crash_regeneration;
 mod entity_source;
 mod failure_recourse;
@@ -123,17 +124,19 @@ pub use browser_retirement::{
     BROWSER_RETIREMENT_PLAN_SCHEMA_V1, BROWSER_RETIREMENT_RECEIPT_SCHEMA_V1,
 };
 pub use browser_session_manager::{
-    BrowserDesktopBinding, BrowserHistoryCompactionEvent, BrowserIdleRetirementGuard,
-    BrowserLaunch, BrowserNavigationDailySummary, BrowserNavigationRecord, BrowserPlacement,
-    BrowserProfileIntent, BrowserRecovery, BrowserSessionEffects, BrowserSessionManager,
-    BrowserSessionManagerConfig, BrowserSessionState, BrowserTabAcquisition, BrowserTabEndReason,
-    BrowserTabLifetime, BrowserTabSource, BrowserTaskMetadata, CloseBrowserSessionResult,
-    CloseBrowserTabResult, FocusBrowserResult, ManagedBrowserCommandEffects,
-    ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab, ManagedBrowserTabRequest,
-    ManagedDisposableProfile, OpenBrowserSession, OpenBrowserSessionResult,
-    PendingHumanTabRetention, ReapBrowserSessionsResult, SessionBrowserDisposition,
-    SessionCloseDisposition, SessionEndReason, SessionRecordDisposition, TerminalBrowserSession,
-    TerminalBrowserTab, BROWSER_SESSION_STATE_SCHEMA_V1,
+    BrowserAdoptedProcessIdentity, BrowserDesktopBinding, BrowserHistoryCompactionEvent,
+    BrowserIdleRetirementGuard, BrowserLaunch, BrowserNavigationDailySummary,
+    BrowserNavigationRecord, BrowserPlacement, BrowserProfileIntent, BrowserRecovery,
+    BrowserSessionEffects, BrowserSessionManager, BrowserSessionManagerConfig, BrowserSessionState,
+    BrowserTabAcquisition, BrowserTabEndReason, BrowserTabLifetime, BrowserTabSource,
+    BrowserTaskArtifactReference, BrowserTaskMetadata, BrowserTaskOperation,
+    BrowserTaskOperationState, CloseBrowserSessionResult, CloseBrowserTabResult,
+    FocusBrowserResult, ManagedBrowserCommandEffects, ManagedBrowserInstance,
+    ManagedBrowserSession, ManagedBrowserTab, ManagedBrowserTabRequest, ManagedDisposableProfile,
+    OpenBrowserSession, OpenBrowserSessionResult, PendingHumanTabRetention,
+    ReapBrowserSessionsResult, SessionBrowserDisposition, SessionCloseDisposition,
+    SessionEndReason, SessionRecordDisposition, TerminalBrowserSession, TerminalBrowserTab,
+    BROWSER_SESSION_STATE_SCHEMA_V1,
 };
 pub use crash_regeneration::{
     apply_phase_receipt, begin_or_resume, crash_regeneration_statuses, finish_ready, interrupt,

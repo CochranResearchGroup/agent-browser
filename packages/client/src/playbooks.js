@@ -42,6 +42,16 @@ export function createPlaybookClient(callTool) {
     listGuides: taskId => run(taskId, 'siteguides'),
     /** @param {string} taskId @param {string} guideId */
     inspectGuide: (taskId, guideId) => run(taskId, 'inspect_guide', {guideId}),
+    /** Inspect an inert existing-model teaching candidate; never execute or publish it.
+     * @param {string} taskId @param {string} guideId */
+    inspectTeachingDraft: async (taskId, guideId) => {
+      const guide=await run(taskId,'inspect_guide',{guideId});
+      if(guide.teaching?.schemaVersion!=='agent-browser.teaching-draft.v1' || guide.teaching.state!=='draft') throw Error('teaching_draft_required');
+      return guide;
+    },
+    /** Validate inert candidate shape/reference integrity; never review or execute it.
+     * @param {{taskId:string, guide:Record<string, unknown>}} options */
+    validateTeachingCandidate: ({taskId,guide}) => run(taskId,'validate_teaching_candidate',{guide}),
     /** @param {VerifyLoginOptions} options @returns {Promise<RoutineResult>} */
     verifyLogin: ({taskId, ...params}) => run(taskId, 'verify_login', params),
     /** @param {VerifyLoginOptions} options */

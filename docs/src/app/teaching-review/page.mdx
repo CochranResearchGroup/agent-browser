@@ -1,0 +1,119 @@
+# Review and version a teaching candidate
+
+The teaching review client opens the existing SiteGuide candidate with each
+step's action, explanation, expected result and video/transcript references.
+It shows source gaps, unresolved critical terms and proposed interpretations.
+An inherited routine outcome is identified as such when a step has no explicit
+expected result. Opening the review changes no files and grants no approval.
+
+The receiving application's authenticated operator workflow supplies decisions.
+Configure its existing decision reader in the trusted backend; a model request
+cannot provide that reader or turn an actor label into a decision. This package
+adds no approval service or teaching application. Stock Dashboard and Native UI
+wiring is outside this source integration.
+
+```js
+import {createTeachingReviewClient} from '@agent-browser/client/teaching-review';
+
+const review = createTeachingReviewClient({
+  candidateDirectory,
+  browser, // Existing createPlaybookClient(callTool)
+  acceptedVersion: {guideId: acceptedGuideId, sha256: acceptedGuideSha256},
+  sourceStatus: async request => {
+    const source = await evidenceClient.inspect(selectedRecording);
+    return {
+      recordingId: source.recordingId, videoSha256: source.video.sha256,
+      sourceTaskId: source.taskId, state: 'available', gaps: source.gaps,
+      // Receiving-application adapter checks every exact artifact with its owner.
+      evidence: await existingEvidenceOwners.inspectReferences(request.evidence),
+    };
+  },
+  readOperatorDecision: request =>
+    existingAuthenticatedOperatorWorkflow.readDecision(request),
+});
+const view = await review.open({taskId, guideId});
+const edited = structuredClone(view.guide);
+// The operator corrects/removes steps or parameterizes knowledge in edited.
+const saved = await review.save({
+  taskId, guideId, expectedSha256: view.sha256,
+  operationId: editOperationId, guide: edited,
+});
+```
+
+Save the operation ID before sending. A successful save returns a new guide ID,
+revision and hash. Reopen that exact returned ID. It preserves its root,
+parent/hash, operation intent and original source links in the existing JSON
+candidate files. The accepted version and peers are never rewritten. The client
+uses a deterministic next revision and atomic no-replace publication, rather
+than a second registry or a mutable head pointer. Each file retains the existing
+64 KiB SiteGuide ceiling; a lineage is bounded at 256 versions without silently
+evicting earlier history.
+
+Before publication, `validate_teaching_candidate` checks the complete inline
+SiteGuide through the existing `browser_command` playbook interface. This is
+shape/reference validation. Its response explicitly does not qualify operator
+review or execution. It reads the retained task; metadata work needs no current
+browser target. Executable routines retain their current-target checks.
+
+## Explicit operator decisions
+
+After inspecting the exact content, the application's authenticated operator
+workflow records a deliberate approved/rejected decision. Bind its receipt to
+`taskId`, root guide, reviewed guide ID, exact file SHA and normalized content
+SHA. The review client reads that existing receipt using its opaque decision
+reference:
+
+```js
+const current = await review.open({taskId, guideId: saved.guideId});
+const reviewed = await review.recordDecision({
+  taskId, guideId: current.guideId, expectedSha256: current.sha256,
+  operationId: reviewOperationId, decisionRef: operatorDecisionId,
+});
+```
+
+The trusted reader returns the original decision ID, authenticated actor
+reference, source receipt reference and exact scope/digests. It must authorize
+the receiving caller, keep credentials outside model requests and reject stale,
+foreign or mismatched decisions. `recordDecision` reads an existing decision;
+it never asks for or creates an approval on the operator's behalf.
+
+With an unconfigured or unavailable reader, a stored review remains unverified.
+Static metadata, a proposed interpretation, an agent-supplied approved flag and
+viewing a review do not qualify approval. Initial candidate staging refuses
+reserved lineage/review/validation metadata. Ordinary edits invalidate prior
+review and repeat validation while preserving their original versions.
+
+Even an approved candidate returns `ordinaryReuseAllowed: false` here. Explicit
+fresh-repeat validation is a separate requirement. Approving the candidate does
+not automatically adopt proposed answers to its unresolved questions.
+
+## Stale edits, interruption and missing evidence
+
+A stale or concurrent edit returns a conflict and the observed version. It does
+not overwrite another operator's work. Same operation and intent recover the
+original version; changed intent conflicts. After interruption, use
+`lookupOperation({rootGuideId, operationId})`. A recovered publication is the
+original result, not another save or another review. An `unknown` publication
+response retains its operation ID for this lookup; it does not assert no effect.
+`not_observed` means no
+published version was observed and grants no retry authority by itself. Preserve
+uncertain caller/process state before choosing the next action.
+
+Raw file SHA is the exact edit/CAS identity. The content digest normalizes valid
+optional null fields to absence and excludes version/review metadata, so Rust
+readback and the stored candidate describe the same knowledge. It is not an
+authority token.
+
+Source availability is checked independently through its owning service. Deleted,
+expired, revoked or changed sources retain their provenance with `replayable:
+false`. No nearby recording substitutes for them. The existing accepted
+procedure has independent custody and is not erased or requalified by media
+loss. Reviewing without replayable source requires the authenticated operator's
+explicit unavailable-source acknowledgement. The review does not extend media
+retention or claim that missing content was watched.
+
+Recording access alone does not establish that Speech transcripts or derived
+frames remain available. The trusted source adapter must return each reference
+ID, artifact, hash and owner-observed state. Missing checks remain unchecked;
+deleted or changed references stay non-replayable and require explicit operator
+acknowledgement before a new review decision is recorded.

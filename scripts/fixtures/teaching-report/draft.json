@@ -1,0 +1,557 @@
+{
+  "schemaVersion": "agent-browser.siteguide.v1",
+  "guideId": "daily-sales-draft-v1",
+  "name": "Daily sales teaching candidate",
+  "allowedOrigins": [
+    "https://teaching-report.example.invalid"
+  ],
+  "states": [],
+  "teaching": {
+    "schemaVersion": "agent-browser.teaching-draft.v1",
+    "state": "draft",
+    "preparedBy": "session-agent",
+    "sourceTaskId": "task",
+    "recordingId": "synthetic-daily-sales-474-v1",
+    "videoSha256": "6d4faea1e56304b835ad00dea20b7aac4c1d0ffbdc6daeed30c5665c52c8bfc1",
+    "evidence": [
+      {
+        "id": "choose",
+        "kind": "video",
+        "artifact": "choose.png",
+        "startMs": 0,
+        "endMs": 3000,
+        "sha256": "003d5ed2c8c5be97bc007790178322341aa56b0f7b1e5f63317ab56ff745f88f",
+        "summary": "Report selector shows Daily sales and Open report. Caption explicitly instructs this choice."
+      },
+      {
+        "id": "dates",
+        "kind": "video",
+        "artifact": "dates.png",
+        "startMs": 3000,
+        "endMs": 6000,
+        "sha256": "e19949161a6ecec45114f7c2495bea6118a8478e9a20189fe76f2d7f1ed1b176",
+        "summary": "Start date 05/01/2026 and End date 05/31/2026; Include refunds checked. Caption calls dates requested period and says usual refunds choice."
+      },
+      {
+        "id": "verify",
+        "kind": "video",
+        "artifact": "verify.png",
+        "startMs": 6000,
+        "endMs": 9000,
+        "sha256": "cb4083e4a8d90bbd1ffb511bbf94abfb463df64e4738a19258662db0fa0e5c5d",
+        "summary": "Daily sales result, May 1\u2013May 31 2026, USD, Includes refunds; rows May1 $125.00/5 and May31 $240.00/8. Caption requires checking title/dates/USD before export."
+      },
+      {
+        "id": "export",
+        "kind": "video",
+        "artifact": "export.png",
+        "startMs": 9000,
+        "endMs": 12000,
+        "sha256": "13eddee23faadcdab62236f5625591437ab4400b4bdfb6eec4474f876363f841",
+        "summary": "Export CSV followed by CSV prepared marker. Caption says newly requested dates for next period and ask whether refunds policy changes."
+      }
+    ],
+    "claims": [
+      {
+        "id": "report-kind",
+        "attribution": "observed",
+        "statement": "The demonstrated report is Daily sales.",
+        "evidenceRefs": [
+          "choose",
+          "verify"
+        ]
+      },
+      {
+        "id": "dates-variable",
+        "attribution": "observed",
+        "statement": "The example period is May1\u2013May31 2026 and next runs use newly requested dates.",
+        "evidenceRefs": [
+          "dates",
+          "export"
+        ]
+      },
+      {
+        "id": "refunds-shown",
+        "attribution": "observed",
+        "statement": "Include refunds is checked in this demonstration.",
+        "evidenceRefs": [
+          "dates",
+          "verify"
+        ]
+      },
+      {
+        "id": "refunds-default",
+        "attribution": "inferred",
+        "statement": "Keeping refunds enabled may match the usual choice, but a general business rule was not demonstrated.",
+        "evidenceRefs": [
+          "dates",
+          "export"
+        ]
+      },
+      {
+        "id": "context-unverified",
+        "attribution": "unknown",
+        "statement": "The visible training account/company labels do not prove authenticated business identity.",
+        "evidenceRefs": [
+          "choose"
+        ]
+      },
+      {
+        "id": "end-boundary",
+        "attribution": "inferred",
+        "statement": "The displayed example includes rows on both requested boundaries; future portal timezone/end-boundary semantics need verification.",
+        "evidenceRefs": [
+          "verify"
+        ]
+      }
+    ],
+    "parameters": [
+      {
+        "id": "startDate",
+        "kind": "date",
+        "example": "2026-05-01",
+        "meaning": "Requested beginning of report period, not a fixed recorded date.",
+        "evidenceRefs": [
+          "dates",
+          "export"
+        ]
+      },
+      {
+        "id": "endDate",
+        "kind": "date",
+        "example": "2026-05-31",
+        "meaning": "Requested end of report period; confirm boundary/timezone before consequential reuse.",
+        "evidenceRefs": [
+          "dates",
+          "verify",
+          "export"
+        ]
+      },
+      {
+        "id": "includeRefunds",
+        "kind": "boolean",
+        "example": true,
+        "meaning": "Observed true; future policy is unresolved rather than silently fixed.",
+        "evidenceRefs": [
+          "dates",
+          "export"
+        ]
+      }
+    ],
+    "states": [
+      {
+        "id": "report-selection",
+        "description": "Reports heading, Report selector and Open report button.",
+        "evidenceRefs": [
+          "choose"
+        ]
+      },
+      {
+        "id": "report-configuration",
+        "description": "Daily sales heading, date fields, Include refunds checkbox and Run report button.",
+        "evidenceRefs": [
+          "dates"
+        ]
+      },
+      {
+        "id": "report-result",
+        "description": "Daily sales title with date-range/currency summary and dated result rows.",
+        "evidenceRefs": [
+          "verify"
+        ]
+      },
+      {
+        "id": "export-prepared",
+        "description": "CSV prepared marker; file content still needs verification.",
+        "evidenceRefs": [
+          "export"
+        ]
+      }
+    ],
+    "controls": [
+      {
+        "id": "report",
+        "role": "combobox",
+        "name": "Report",
+        "attribution": "inferred",
+        "evidenceRefs": [
+          "choose"
+        ]
+      },
+      {
+        "id": "open-report",
+        "role": "button",
+        "name": "Open report",
+        "attribution": "inferred",
+        "evidenceRefs": [
+          "choose"
+        ]
+      },
+      {
+        "id": "start-date",
+        "role": "textbox",
+        "name": "Start date",
+        "attribution": "inferred",
+        "evidenceRefs": [
+          "dates"
+        ]
+      },
+      {
+        "id": "end-date",
+        "role": "textbox",
+        "name": "End date",
+        "attribution": "inferred",
+        "evidenceRefs": [
+          "dates"
+        ]
+      },
+      {
+        "id": "include-refunds",
+        "role": "checkbox",
+        "name": "Include refunds",
+        "attribution": "inferred",
+        "evidenceRefs": [
+          "dates"
+        ]
+      },
+      {
+        "id": "run-report",
+        "role": "button",
+        "name": "Run report",
+        "attribution": "inferred",
+        "evidenceRefs": [
+          "dates"
+        ]
+      },
+      {
+        "id": "export-csv",
+        "role": "button",
+        "name": "Export CSV",
+        "attribution": "inferred",
+        "evidenceRefs": [
+          "verify"
+        ]
+      }
+    ],
+    "routines": [
+      {
+        "id": "choose-report",
+        "goal": "Select Daily sales in the intended verified business context.",
+        "inputs": [],
+        "preconditions": [
+          "Freshly verify intended account/company through existing SiteGuide/Auth predicates; a visible label alone is insufficient."
+        ],
+        "steps": [
+          {
+            "action": "observe",
+            "target": "report-selection",
+            "description": "Identify the Reports page and exact Daily sales option.",
+            "evidenceRefs": [
+              "choose"
+            ],
+            "attribution": "observed"
+          },
+          {
+            "action": "select",
+            "target": "report",
+            "description": "Choose Daily sales.",
+            "evidenceRefs": [
+              "choose"
+            ],
+            "attribution": "observed"
+          },
+          {
+            "action": "activate",
+            "target": "open-report",
+            "description": "Open the selected report.",
+            "evidenceRefs": [
+              "choose"
+            ],
+            "attribution": "observed"
+          }
+        ],
+        "branches": [
+          {
+            "condition": "Authentication or business context cannot be independently verified",
+            "next": "Request existing native human/Auth assistance before report actions.",
+            "evidenceRefs": [
+              "choose"
+            ],
+            "attribution": "inferred"
+          }
+        ],
+        "outcomes": [
+          {
+            "description": "Daily sales configuration is visible.",
+            "verification": "Observe title plus date fields and Run report, without assuming click acknowledgement proves navigation.",
+            "evidenceRefs": [
+              "dates"
+            ]
+          }
+        ],
+        "recovery": [
+          {
+            "condition": "Expected report selection or controls are missing",
+            "next": "Stop with adaptation required; inspect current page rather than guess coordinates.",
+            "evidenceRefs": [
+              "choose",
+              "dates"
+            ],
+            "attribution": "inferred"
+          }
+        ]
+      },
+      {
+        "id": "set-report-period",
+        "goal": "Apply caller dates and an explicitly settled refunds choice.",
+        "inputs": [
+          "startDate",
+          "endDate",
+          "includeRefunds"
+        ],
+        "preconditions": [
+          "Daily sales configuration visible.",
+          "Dates supplied by caller and valid ordered ISO dates.",
+          "Future refunds policy resolved before execution."
+        ],
+        "steps": [
+          {
+            "action": "fill",
+            "target": "start-date",
+            "description": "Set requested start date.",
+            "evidenceRefs": [
+              "dates",
+              "export"
+            ],
+            "attribution": "inferred",
+            "parameter": "startDate"
+          },
+          {
+            "action": "fill",
+            "target": "end-date",
+            "description": "Set requested end date.",
+            "evidenceRefs": [
+              "dates",
+              "export"
+            ],
+            "attribution": "inferred",
+            "parameter": "endDate"
+          },
+          {
+            "action": "set_checked",
+            "target": "include-refunds",
+            "description": "Apply explicit reviewed refunds parameter; demonstration showed true.",
+            "evidenceRefs": [
+              "dates",
+              "export"
+            ],
+            "attribution": "inferred",
+            "parameter": "includeRefunds"
+          }
+        ],
+        "branches": [
+          {
+            "condition": "Refunds policy remains unresolved",
+            "next": "Ask focused question about future refunds policy; do not re-ask visible recorded checkbox value.",
+            "evidenceRefs": [
+              "dates",
+              "export"
+            ],
+            "attribution": "inferred"
+          }
+        ],
+        "outcomes": [
+          {
+            "description": "Requested parameters are visible in controls.",
+            "verification": "Read back start/end and checkbox before submitting.",
+            "evidenceRefs": [
+              "dates"
+            ]
+          }
+        ],
+        "recovery": [
+          {
+            "condition": "A date or checkbox cannot be verified",
+            "next": "Do not submit; request clarification or adapt the exact changed control.",
+            "evidenceRefs": [
+              "dates"
+            ],
+            "attribution": "inferred"
+          }
+        ]
+      },
+      {
+        "id": "generate-and-check",
+        "goal": "Generate the report and verify its context before export.",
+        "inputs": [
+          "startDate",
+          "endDate",
+          "includeRefunds"
+        ],
+        "preconditions": [
+          "Inputs independently read back and business context verified."
+        ],
+        "steps": [
+          {
+            "action": "activate",
+            "target": "run-report",
+            "description": "Run report once under existing operation custody.",
+            "evidenceRefs": [
+              "dates"
+            ],
+            "attribution": "observed"
+          },
+          {
+            "action": "verify",
+            "target": "report-result",
+            "description": "Verify Daily sales title, requested range, USD and refunds status.",
+            "evidenceRefs": [
+              "verify"
+            ],
+            "attribution": "observed"
+          }
+        ],
+        "branches": [
+          {
+            "condition": "Empty report or missing currency/range metadata",
+            "next": "Return explicit empty/intervention result; the demonstration does not establish empty-report policy.",
+            "evidenceRefs": [
+              "verify"
+            ],
+            "attribution": "inferred"
+          }
+        ],
+        "outcomes": [
+          {
+            "description": "Report content corresponds to the requested period and currency.",
+            "verification": "Check displayed report identity/range and independently inspect row dates; the example shows May1 and May31.",
+            "evidenceRefs": [
+              "verify"
+            ]
+          }
+        ],
+        "recovery": [
+          {
+            "condition": "Run acknowledgement is lost",
+            "next": "Inspect original operation and visible report before any new submit; never replay merely to discover its outcome.",
+            "evidenceRefs": [
+              "dates",
+              "verify"
+            ],
+            "attribution": "inferred"
+          }
+        ]
+      },
+      {
+        "id": "export-and-verify",
+        "goal": "Export CSV and verify the resulting artifact rather than the click.",
+        "inputs": [
+          "startDate",
+          "endDate"
+        ],
+        "preconditions": [
+          "Current report title/range/currency/context verified."
+        ],
+        "steps": [
+          {
+            "action": "activate",
+            "target": "export-csv",
+            "description": "Request CSV export once with retained original operation identity.",
+            "evidenceRefs": [
+              "verify",
+              "export"
+            ],
+            "attribution": "observed"
+          },
+          {
+            "action": "verify",
+            "target": "downloaded-artifact",
+            "description": "Inspect artifact report identity, date column, numeric USD values and requested boundaries.",
+            "evidenceRefs": [
+              "verify",
+              "export"
+            ],
+            "attribution": "inferred"
+          }
+        ],
+        "branches": [
+          {
+            "condition": "Only CSV prepared or file event exists",
+            "next": "Treat artifact verification as pending; do not report successful reusable report yet.",
+            "evidenceRefs": [
+              "export"
+            ],
+            "attribution": "inferred"
+          }
+        ],
+        "outcomes": [
+          {
+            "description": "A correct CSV artifact is independently verified.",
+            "verification": "Check CSV columns and date bounds against the request; recorded example rows show 2026-05-01/125.00/5 and 2026-05-31/240.00/8.",
+            "evidenceRefs": [
+              "verify",
+              "export"
+            ]
+          }
+        ],
+        "recovery": [
+          {
+            "condition": "Export reply is lost or file cannot be attributed",
+            "next": "Retain original uncertain export operation, inspect artifact references, and request assistance if still ambiguous; no blind duplicate export.",
+            "evidenceRefs": [
+              "export"
+            ],
+            "attribution": "inferred"
+          }
+        ]
+      }
+    ],
+    "playbook": {
+      "id": "daily-sales-report-export",
+      "goal": "Produce an independently verified Daily sales CSV for caller-selected dates.",
+      "routineIds": [
+        "choose-report",
+        "set-report-period",
+        "generate-and-check",
+        "export-and-verify"
+      ],
+      "parameters": [
+        "startDate",
+        "endDate",
+        "includeRefunds"
+      ],
+      "completionVerification": "Exact intended account/company, Daily sales report, requested date range, USD/refunds semantics and attributed CSV rows are independently verified.",
+      "evidenceRefs": [
+        "choose",
+        "dates",
+        "verify",
+        "export"
+      ]
+    },
+    "unresolved": [
+      {
+        "id": "refunds-policy",
+        "question": "Should future runs always include refunds, or should the caller choose per report?",
+        "interpretation": "The observed demonstration includes refunds. Recommend exposing includeRefunds explicitly until business policy is confirmed.",
+        "evidenceRefs": [
+          "dates",
+          "export"
+        ]
+      },
+      {
+        "id": "date-boundary-policy",
+        "question": "Which reporting timezone and inclusive end-date rule govern new periods?",
+        "interpretation": "Example output visibly contains both boundary dates; do not infer every future timezone or portal rule.",
+        "evidenceRefs": [
+          "dates",
+          "verify"
+        ]
+      }
+    ],
+    "limitations": [
+      "Caption-led synthetic A/V uses a reference tone, not spoken narration or an ASR transcript.",
+      "Role/accessible-name locators are inferred from visible labels and must be checked against the live page.",
+      "Draft only: no execution or publication approval; actual operator narration/recognition and real portal repeat are separate qualification."
+    ]
+  }
+}

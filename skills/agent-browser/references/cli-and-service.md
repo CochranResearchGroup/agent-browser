@@ -4371,3 +4371,42 @@ independent copy for testing. If login is lost, stop account actions and sign
 in explicitly in the chosen browser. Never weaken encryption, export keys or
 replace credential stores to manufacture portability. Inspect another build,
 use a confirmed original, keep the copy without opening, or cancel.
+
+## Retained workflow transport
+
+For downloads, use `action: "download"` with the link selector and destination
+path in `params`. Existing-profile tasks use the current browser; clients do not
+establish ownership or repair stale internal records before downloading.
+Ordinary continuation reconciles interrupted publication using the current live
+profile browser, preserving the task and authenticated state.
+A new ordinary task command refreshes stale clean session state before acting;
+unpublished effects remain held for reconciliation without command replay.
+
+If stale transport recommends `handoff prepare` but returns `prepared=false`
+and `browserPresent=false`, there is no candidate to attach. On Linux, inspect
+`agent-browser install workstation --dry-run --runtime-replacement-policy preserve --json`
+and follow its plan before retrying. Keep profiles, peers and unresolved effect
+custody intact; this read-only plan does not authorize a reset or host restart.
+
+Retirement permits diagnostic reads but fences handoff writes. On lock timeout,
+run `agent-browser service jobs --json`, then refresh the access plan. Reconcile
+uncertain effects before retrying; never terminate the holder or reset a profile.
+
+Diagnostic and administrative discovery points to supported CLI/API operations.
+Retired lease, recovery, repair and reset MCP tools are unavailable, including
+through advanced dispatch. There is no legacy catalog mode.
+
+Return, store, and reopen only `handoffUrl`: standalone `/remote-view/<handoff-id>` or hosted app `/agent-browser/handoff/<id>`. Never send providerExternalUrl.
+
+
+### Workflow diagnostic reminders
+
+For health, inventory or viewer failures, read [Dashboard diagnostics](#dashboard-summary-diagnostics). A prepared handoff or reachable service does not prove a connected Native display. Read [embedded-page guidance](#embedded-native-desktop-failure-guidance) before retrying. Static assets use gzip and hashed caching.
+
+After upgrades, reconnect MCP clients; doctor checks `installedMcpClients`.
+
+Startup: [diagnostics](#development-host-startup).
+
+### Native challenge assistance
+
+Use native_capture params.classifyChallenges for bounded same-frame OCR classification. Unknown, ambiguous and stale evidence do not prove absence. The challenge-assistance client reuses the existing opaque handoff and explicit Native takeover/return. Require independent clearance and protected-access checks before continuation; classification grants no solving authority. See docs/src/app/challenge-assistance/page.mdx.

@@ -43,6 +43,8 @@ export function createPlaybookClient(callTool: CallTool): {
   discover(operation?: 'siteguides' | 'inspect_guide' | 'verify_login' | 'prepare_login' | 'validate_plan'|'collect_posts'): Promise<unknown>;
   listGuides(taskId: string): Promise<{guides: string[]}>;
   inspectGuide(taskId: string, guideId: string): Promise<unknown>;
+  inspectTeachingDraft(taskId: string, guideId: string): Promise<import('./teaching-draft.js').TeachingSiteGuide>;
+  validateTeachingCandidate(options: {taskId:string; guide:import('./teaching-draft.js').TeachingSiteGuide}):Promise<{valid:true;guideId:string;taskId:string;state:'draft';executionAllowed:false;operatorReviewQualified:false}>;
   verifyLogin(options: VerifyLoginOptions): Promise<RoutineResult>;
   prepareLogin(options:VerifyLoginOptions):Promise<RoutineResult>;
   validatePlan(options:VerifyLoginOptions & {plan:Record<string, unknown>}):Promise<RoutineResult>;

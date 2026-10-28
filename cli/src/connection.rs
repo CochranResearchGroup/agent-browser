@@ -1275,6 +1275,11 @@ fn connect(session: &str) -> Result<Connection, String> {
 }
 
 pub fn send_command(cmd: Value, session: &str) -> Result<Response, String> {
+    // A journaled task effect may already have reached the application when a
+    // reply is lost. Original-operation readback owns recovery, never resend.
+    if cmd["noTransportReplay"] == true {
+        return send_command_once(&cmd, session);
+    }
     // Retry logic for transient errors (EAGAIN/EWOULDBLOCK/connection issues)
     const MAX_RETRIES: u32 = 5;
     const RETRY_DELAY_MS: u64 = 200;

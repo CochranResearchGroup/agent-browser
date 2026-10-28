@@ -6,6 +6,7 @@ the Native Fixture owns its two desktops, peer application and resource cleanup.
 This adapter never retries a consumer mutation or a restart intent.
 """
 import argparse
+import base64
 import hashlib
 import importlib
 import importlib.util
@@ -22,6 +23,34 @@ import threading
 import time
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+
+def native_owner_failure_diagnostic(failure):
+    """Keep only reviewed infrastructure codes, never the owner's raw suffix."""
+    if (not isinstance(failure, dict)
+            or type(failure.get('schema_version')) is not int
+            or failure['schema_version'] != 1
+            or failure.get('code') != 'input_effect_uncertain'
+            or failure.get('retryable') is not False):
+        return {'reasonCode': 'unclassified', 'parserStage': 'schema_rejected'}
+    if not isinstance(failure.get('message'), str) or len(failure['message']) > 4096:
+        return {'reasonCode': 'unclassified', 'parserStage': 'message_rejected'}
+    token = failure['message'].split(':', 1)[0]
+    allowed = {
+        'capability_not_configured', 'generation_conflict', 'input_failed',
+        'native_x11_display_missing', 'native_x11_auth_missing',
+        'native_x11_control_unavailable', 'native_x11_request', 'native_x11_reply',
+        'native_x11_grab', 'native_x11_ungrab', 'native_x11_key_state',
+        'native_x11_pointer_state', 'native_x11_hold_already_pressed',
+        'native_x11_lock_poisoned', 'native_x11_cleanup_uncertain', 'native_x11_release_unconfirmed',
+        'input_control_busy', 'input_control_conflict', 'input_control_state_invalid',
+        'input_control_lock', 'input_argv_empty', 'input_argv_limit',
+        'input_command_incomplete', 'input_argument_invalid',
+        'input_command_unsupported', 'input_search_unused',
+    }
+    return {'reasonCode': token, 'parserStage': 'classified'} if token in allowed else {
+        'reasonCode': 'unclassified', 'parserStage': 'unknown_token'}
 
 
 def load_file(name, path):
@@ -54,11 +83,28 @@ def main():
     parser.add_argument('--browser-manifest', type=Path)
     parser.add_argument('--agent-source-commit', required=True)
     parser.add_argument('--native-binary-source-commit')
+    parser.add_argument('--challenge-assistance', action='store_true', help='Add owned HTTPS challenge/native assistance to bounded input diagnostic')
+    parser.add_argument('--observation-age-probe', action='store_true', help='Characterize current Native motion across the archived observation-age boundary; no checkbox click')
+    parser.add_argument('--checkbox-assistance', action='store_true', help='Qualify owned Native checkbox/passive inputs and independent HTTPS admission')
+    parser.add_argument('--image-rounds-assistance', action='store_true', help='Qualify two complete owned Native image grids under one original budget')
+    parser.add_argument('--image-assistance', action='store_true', help='Qualify one owned static Native image round with agent-inspected pixels')
+    parser.add_argument('--checkbox-observe-only', action='store_true', help='Capture the owned synthetic checkbox without challenge input')
+    parser.add_argument('--mode-preflight', action='store_true', help='Read public browser mode before first fill; unverified evidence stops the fixture')
+    parser.add_argument('--mode-diagnostic-only', action='store_true', help='Stop before fill after the read-only mode preflight regardless of result')
     parser.add_argument('--input-diagnostic', action='store_true', help='Bounded Native input diagnosis only; never full-matrix acceptance')
     parser.add_argument('--display', type=int, required=True)
     parser.add_argument('--vnc-port', type=int, required=True)
     parser.add_argument('--subnet', required=True)
     args = parser.parse_args()
+    assert not args.mode_diagnostic_only or args.mode_preflight, 'Mode diagnostic requires read-only preflight'
+    assert not args.challenge_assistance or args.input_diagnostic, 'Challenge lane requires bounded input diagnostic'
+    assert not args.observation_age_probe or args.challenge_assistance, 'Age probe requires owned challenge fixture'
+    assert not args.checkbox_assistance or args.challenge_assistance, 'Checkbox lane requires owned HTTPS challenge fixture'
+    assert not args.checkbox_observe_only or args.checkbox_assistance
+    assert not (args.checkbox_assistance and args.observation_age_probe), 'Probe and checkbox effects are separate bounded lanes'
+    assert not args.image_rounds_assistance or args.image_assistance
+    assert not args.image_assistance or args.challenge_assistance
+    assert not args.image_assistance or not (args.checkbox_assistance or args.observation_age_probe or args.checkbox_observe_only)
     for commit in (args.agent_source_commit, args.native_binary_source_commit):
         assert commit is None or len(commit) == 40 and all(character in '0123456789abcdef' for character in commit)
     repo = Path(__file__).resolve().parents[1]
@@ -107,6 +153,16 @@ def main():
     args.binary = args.native_binary
     fixture_files = ('scripts/smoke-hosted-browser-matrix-native.py', 'scripts/hosted-native-rpc.py',
                      'scripts/smoke-hosted-browser-attachment.mjs', 'scripts/hosted-performance.mjs')
+    if args.challenge_assistance:
+        fixture_files += ('scripts/qualify-native-challenge-assistance.mjs', 'scripts/qualify-native-no-cdp-challenge.mjs', 'packages/client/src/challenge-assistance.js')
+    if args.checkbox_assistance:
+        fixture_files += ('scripts/qualify-native-checkbox.mjs',)
+    if args.image_assistance:
+        fixture_files += ('scripts/qualify-native-image.mjs', 'scripts/qualify-native-checkbox.mjs',
+                          'scripts/probe-native-pointer.py', 'scripts/test-native-owner-failure-diagnostics.py',
+                          'packages/client/src/native-image-challenge.js', 'packages/client/src/native-image-challenge.d.ts')
+    if args.image_rounds_assistance:
+        fixture_files += ('scripts/qualify-native-image-rounds.mjs',)
     for name in fixture_files:
         h.run('git', '-C', repo, 'ls-files', '--error-unmatch', name)
     source_pair = {'agentBinarySha256': h.sha(args.agent_binary), 'agentBinarySourceCommit': args.agent_source_commit,
@@ -122,7 +178,8 @@ def main():
     pair_digest = hashlib.sha256(json.dumps(source_pair, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
     plan = {'version': 1, 'runId': secrets.token_hex(16), 'pairDigest': pair_digest, 'sourcePair': source_pair,
             'coldContexts': 5, 'publicControlPairs': 10, 'nativeControlPairs': 3, 'warmTargetMs': 250,
-            'functionalUiPairs': 1, 'nativeTextEdits': 1, 'deadlineSeconds': 1200, 'cleanupDeadlineSeconds': 180}
+            'functionalUiPairs': 1, 'nativeTextEdits': 1, 'deadlineSeconds': 1200, 'cleanupDeadlineSeconds': 180, 'challengeAssistance': args.challenge_assistance, 'modePreflight':args.mode_preflight, 'modeDiagnosticOnly':args.mode_diagnostic_only}
+    plan.update(checkboxAssistance=args.checkbox_assistance, imageAssistance=args.image_assistance, imageRoundsAssistance=args.image_rounds_assistance, checkboxObserveOnly=args.checkbox_observe_only, observationAgeProbe=args.observation_age_probe)
     if args.input_diagnostic:
         plan.update(mode='native_input_diagnostic', coldContexts=1, publicControlPairs=0,
                     nativeControlPairs=0, deadlineSeconds=300)
@@ -132,6 +189,7 @@ def main():
     websocket_lock = threading.Lock()
     websocket_connections = set()
     exchange_events, bridge_events, adapter_errors = [], [], []
+    native_input_events, native_refusals = [], []
     bridge_token = secrets.token_hex(32)
     socket_root = Path(tempfile.mkdtemp(prefix='p279-native-rpc-'))
     socket_root.chmod(0o700)
@@ -310,6 +368,19 @@ def main():
                         try:
                             with lock:
                                 response = outer.rpc.handle(message)
+                                call = message.get('params', {})
+                                consumer = call.get('arguments', {}).get('request', {})
+                                if (args.image_assistance and call.get('name') == 'remote_view_consumer'
+                                        and consumer.get('operation') == 'launch_environment'):
+                                    launch = outer.rpc._value(response)
+                                    assert launch['schemaVersion'] == 1 and launch['readinessScope'] == 'live_resource'
+                                    for field in ('assignmentId','desktopId','lifecycleGeneration','viewingDesktopId','viewingGeneration'):
+                                        assert launch['target'][field] == outer.target[field]
+                                    # Reuse the same scoped public Native response as
+                                    # the child; cookie-file locators stay memory-only.
+                                    outer.image_pointer_environment = {key:launch['environment'][key]
+                                                                       for key in ('DISPLAY','XAUTHORITY')}
+
                         except Exception as error:
                             adapter_errors.append({'transport': 'unix', 'type': type(error).__name__})
                             response = {'jsonrpc': '2.0', 'id': message.get('id'),
@@ -328,12 +399,120 @@ def main():
                     pass
                 def do_POST(request):
                     try:
+                        forwarded_status = 200
                         assert request.headers.get('Authorization') == 'Bearer ' + bridge_token
                         length = int(request.headers.get('Content-Length', '0'))
                         assert 0 < length <= 65536
                         body = json.loads(request.rfile.read(length))
                         with lock:
-                            if request.path == '/v1/consumer':
+                            if request.path in ('/v1/agent-desktop/observe', '/v1/agent-desktop/ocr', '/v1/agent-desktop/capture_region', '/v1/agent-desktop/control', '/v1/agent-desktop/input'):
+                                assert args.challenge_assistance
+                                assert not request.path.endswith('/control') or body.get('operation') == 'status'
+                                assert body['desktopId'] == outer.target['viewingDesktopId'] and body['expectedGeneration'] == outer.target['viewingGeneration']
+                                if request.path.endswith('/input'):
+                                    assert not args.checkbox_observe_only
+                                    actions = body['actions']
+                                    motion = args.observation_age_probe and 0 < len(actions) <= 16 and all(set(action) == {'kind', 'x', 'y'} and action['kind'] == 'move' for action in actions)
+                                    action = actions[0] if len(actions) == 1 else {}
+                                    visual = body.get('expectedVisual', {})
+                                    checkbox = args.checkbox_assistance and len(actions) == 1 and set(action) == {'kind', 'x', 'y', 'button', 'count'} and action['kind'] == 'click' and action['button'] == 1 and action['count'] == 1 and type(body.get('controlEpoch')) is int and body['controlEpoch'] >= 0 and isinstance(visual.get('sha256'), str) and len(visual['sha256']) == 64 and all(c in '0123456789abcdef' for c in visual['sha256']) and isinstance(visual.get('region'), dict)
+                                    image = args.image_assistance and 2 <= len(actions) <= 5 and all(set(item) == {'kind', 'x', 'y', 'button', 'count'} and item['kind'] == 'click' and item['button'] == 1 and item['count'] == 1 for item in actions) and type(body.get('controlEpoch')) is int and body['controlEpoch'] >= 0 and isinstance(visual.get('sha256'), str) and len(visual['sha256']) == 64 and all(c in '0123456789abcdef' for c in visual['sha256']) and isinstance(visual.get('region'), dict)
+                                    assert motion or checkbox or image
+                                    native_input_events.append({'state':'forwarding_once','windowId':body['windowId'],'nativeControlEpoch':body.get('controlEpoch'),
+                                        'generation':body['expectedGeneration'],'actionKinds':[action['kind'] for action in actions],'expectedVisualSha256':visual.get('sha256')})
+                                    h.private_json(args.results / 'native-input-forwarding.json', native_input_events)
+                                from urllib.request import Request, build_opener, HTTPRedirectHandler
+                                class NoRedirect(HTTPRedirectHandler):
+                                    def redirect_request(self, *_args, **_kwargs):
+                                        return None
+                                forwarded = Request(f'http://127.0.0.1:{outer.control_port}'+request.path, data=json.dumps(body).encode(), method='POST', headers={'Authorization':'Bearer '+outer.token,'Content-Type':'application/json'})
+                                from urllib.error import HTTPError
+                                def retain_visual(label, value):
+                                    png = base64.b64decode(value['image']['data'], validate=True)
+                                    assert 0 < len(png) <= 4_194_304
+                                    assert hashlib.sha256(png).hexdigest() == value['capture']['sha256']
+                                    # Each scene/observation remains recoverable when
+                                    # later scenarios use the same diagnostic label.
+                                    label += '-' + value['capture']['sha256']
+                                    h.private_json(args.results / (label + '.json'), value)
+                                    path = args.results / (label + '.png')
+                                    path.write_bytes(png)
+                                    path.chmod(0o600)
+                                def guard_observation(label):
+                                    # Observe the original guard region without changing,
+                                    # refreshing or replaying the input intent.
+                                    observation = {key:value for key,value in body.items()
+                                                   if key not in ('actions', 'leaseId', 'expectedVisual')}
+                                    observation['region'] = body['expectedVisual']['region']
+                                    query = Request(f'http://127.0.0.1:{outer.control_port}/v1/agent-desktop/capture_region',
+                                                    data=json.dumps(observation).encode(), method='POST',
+                                                    headers={'Authorization':'Bearer '+outer.token,'Content-Type':'application/json'})
+                                    with build_opener(NoRedirect).open(query, timeout=15) as response:
+                                        retain_visual(label, json.load(response))
+                                if (args.checkbox_assistance or args.image_assistance) and request.path.endswith('/input'):
+                                    h.private_json(args.results / 'native-original-input-intent.json', body)
+                                    guard_observation('native-guard-before-input')
+                                def pointer_observation(label, observation=None):
+                                    if not args.image_assistance or (observation is None and not request.path.endswith('/input')):
+                                        return
+                                    frame = observation if observation is not None else body
+                                    probe = {'processIdentity':frame['processIdentity'] if observation is not None else body['expectedProcessIdentity'],
+                                             'windowId':frame['windowId'], 'ownedRoot':str(args.results),
+                                             'environment':outer.image_pointer_environment,
+                                             'displays':[args.display,args.display+1]}
+                                    observed = subprocess.run([sys.executable, str(Path(__file__).with_name('probe-native-pointer.py'))],
+                                        input=json.dumps(probe), text=True, capture_output=True, timeout=8)
+                                    assert observed.returncode == 0, 'owned_pointer_observation_failed'
+                                    value = json.loads(observed.stdout)
+                                    value.update(desktopId=frame['desktopId'],
+                                                 generation=frame['generation'] if observation is not None else body['expectedGeneration'],
+                                                 nativeControlEpoch=body.get('controlEpoch'),phase=label)
+                                    h.private_json(args.results / (label+'.json'), value)
+                                    assert value.get('status') == 'observed', 'owned_pointer_observation_failed'
+                                    if observation is not None:
+                                        assert value['button1Down'] is False, 'owned_pointer_already_held'
+                                pointer_observation('native-pointer-before-input')
+                                try:
+                                    with build_opener(NoRedirect).open(forwarded, timeout=15) as result: result=json.load(result)
+                                    if (args.checkbox_assistance or args.image_assistance) and request.path.endswith('/ocr'):
+                                        retain_visual('native-original-ocr', result)
+                                        pointer_observation('native-pointer-original-observation', result)
+                                    if args.checkbox_observe_only and request.path.endswith('/ocr'):
+                                        h.private_json(args.results / 'synthetic-checkbox-ocr.json', result)
+                                        png = base64.b64decode(result['image']['data'], validate=True)
+                                        assert 0 < len(png) <= 4_194_304
+                                        png_path = args.results / 'synthetic-checkbox-observed.png'
+                                        png_path.write_bytes(png)
+                                        png_path.chmod(0o600)
+                                except HTTPError as error:
+                                    # Retain only the owner's bounded diagnostic code,
+                                    # never recognized application text or credentials.
+                                    failure = json.load(error)
+                                    pointer_observation('native-pointer-after-refusal')
+                                    code = failure.get('code', failure.get('error', {}).get('code'))
+                                    if (args.checkbox_assistance or args.image_assistance) and request.path.endswith('/input') and code == 'visual_observation_conflict':
+                                        native_refusals.append({'path':request.path,'status':error.code,'code':code,'effectsAcknowledged':False})
+                                        h.private_json(args.results / 'native-owner-refusals.json', native_refusals)
+                                        guard_observation('native-guard-after-refusal')
+                                        result, forwarded_status = failure, error.code
+                                    else:
+                                        adapter_errors.append({'transport':'native-owner','path':request.path,'status':error.code,'code':code,
+                                            **native_owner_failure_diagnostic(failure)})
+                                        h.private_json(args.results / 'matrix-adapter-errors.json', adapter_errors)
+                                        raise
+                                if (args.checkbox_assistance or args.image_assistance) and request.path.endswith('/input') and forwarded_status == 200:
+                                    native_input_events[-1]['ownerDelivery'] = result.get('delivery')
+                                    h.private_json(args.results / 'native-input-forwarding.json', native_input_events)
+                                    fault_path = args.results / ('agent/native-image-fault.json' if args.image_assistance else 'agent/native-checkbox-fault.json')
+                                    if fault_path.exists():
+                                        assert not fault_path.is_symlink() and fault_path.resolve().is_relative_to(args.results.resolve())
+                                        fault = json.loads(fault_path.read_text())
+                                        if fault == {'state':'armed','kind':'drop_input_reply_once'}:
+                                            assert result.get('delivery') == 'dispatched'
+                                            h.private_json(fault_path, {'state':'consumed','kind':'drop_input_reply_once','ownerDelivery':'dispatched'})
+                                            request.close_connection = True
+                                            return
+                            elif request.path == '/v1/consumer':
                                 assert set(body) == {'application', 'request'} and body['application'] == 'fixture'
                                 result = outer.rpc.handle_consumer(body['request'])
                             else:
@@ -343,7 +522,7 @@ def main():
                                 result = outer.bridge(operation, body)
                                 result = {'ok': True, 'value': result}
                         encoded = json.dumps(result).encode()
-                        request.send_response(200)
+                        request.send_response(forwarded_status)
                     except transport.ConsumerRefused as error:
                         encoded = json.dumps(error.value).encode()
                         request.send_response(400)
@@ -376,6 +555,22 @@ def main():
                  'HOSTED_SMOKE_FIXTURE_NATIVE_CONNECT_ORIGIN': self.native_connect_origin,
                  'HOSTED_SMOKE_CONTINUITY_REQUIRED': '1', 'HOSTED_SMOKE_LOSS_REQUIRED': '1',
                  'HOSTED_SMOKE_EVIDENCE_DIR': str(args.results / 'agent'), 'NODE_EXTRA_CA_CERTS': str(self.certificate)})
+            if args.challenge_assistance:
+                environment.update({'HOSTED_SMOKE_CHALLENGE_469':'1','HOSTED_SMOKE_CHALLENGE_SITE_CERT':str(self.certificate),'HOSTED_SMOKE_CHALLENGE_SITE_KEY':str(args.results/'fixture.key')})
+            if args.observation_age_probe:
+                environment['HOSTED_SMOKE_OBSERVATION_AGE_PROBE']='1'
+            if args.checkbox_assistance:
+                environment['HOSTED_SMOKE_NATIVE_CHECKBOX']='1'
+            if args.image_assistance:
+                environment['HOSTED_SMOKE_NATIVE_IMAGE']='1'
+            if args.image_rounds_assistance:
+                environment['HOSTED_SMOKE_NATIVE_IMAGE_ROUNDS']='1'
+            if args.checkbox_observe_only:
+                environment['HOSTED_SMOKE_NATIVE_CHECKBOX_OBSERVE_ONLY']='1'
+            if args.mode_preflight:
+                environment['HOSTED_SMOKE_MODE_PREFLIGHT']='1'
+            if args.mode_diagnostic_only:
+                environment['HOSTED_SMOKE_MODE_DIAGNOSTIC_ONLY']='1'
             if args.browser_manifest:
                 environment['HOSTED_SMOKE_BROWSER_MANIFEST'] = str(args.browser_manifest)
             self.agent_child = subprocess.Popen([str(args.node), str(repo / 'scripts/smoke-hosted-browser-attachment.mjs')],
@@ -387,6 +582,14 @@ def main():
             if args.input_diagnostic:
                 diagnostic = json.loads((args.results / 'agent/native-input-diagnostic.json').read_text())
                 assert diagnostic['passed'] is True and diagnostic['fullMatrix'] is False
+                if args.checkbox_assistance and not args.checkbox_observe_only:
+                    assert json.loads((args.results / 'agent/checkbox470-acceptance.json').read_text())['passed'] is True
+                    assert any(item['code'] == 'visual_observation_conflict' for item in native_refusals), 'Actual pinned Native must refuse a changed frame'
+                    assert json.loads((args.results / 'agent/native-checkbox-fault.json').read_text())['state'] == 'consumed'
+                if args.image_assistance:
+                    image = json.loads((args.results / ('agent/image472-acceptance.json' if args.image_rounds_assistance else 'agent/image471-acceptance.json')).read_text())
+                    assert image['passed'] is True and image['actualNativeInput'] is True
+                    assert any(event.get('ownerDelivery') == 'dispatched' for event in native_input_events), 'Image acceptance requires an actual Native owner acknowledgement'
             else:
                 assert self.restart_backend is not None and self.restart_admitted
                 summary = json.loads((args.results / 'agent/qualification-summary.json').read_text())
@@ -502,7 +705,9 @@ def main():
               'deadlineSeconds': workload_seconds, 'cleanupDeadlineSeconds': 180,
               'installationId': fixture.installation_id if fixture else None,
               'fixtureImageDisposition': 'Native fixture retains uniquely tagged build images as artifacts; no image-absence claim',
-              'scope': ('Native input diagnosis only; no full-matrix acceptance' if args.input_diagnostic else
+              'actualNativeInput': True if accepted and args.image_assistance else False if args.checkbox_observe_only else None,
+              'challengeInputDispatched': True if accepted and args.image_assistance else False if args.checkbox_observe_only else None,
+              'scope': ('Owned two-round Native image grids with actual visual selection; no full-matrix acceptance' if args.image_rounds_assistance else 'Owned static Native image round with actual agent visual selection; no full-matrix acceptance' if args.image_assistance else 'Read-only owned synthetic Native capture/rendered-state diagnosis; no checkbox acceptance' if args.checkbox_observe_only else 'Native input diagnosis only; no full-matrix acceptance' if args.input_diagnostic else
                         'One same-pair synthetic matrix on isolated Native resources; no production/account/relocation acceptance')}
     h.private_json(args.results / 'combined-matrix-receipt.json', result)
     print(json.dumps(result))

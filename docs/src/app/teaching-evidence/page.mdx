@@ -1,0 +1,115 @@
+# Teaching evidence
+
+The backend helper `@agent-browser/client/teaching-evidence` joins one exact
+Remote View A/V recording, its explicitly selected isolated narration source,
+and Speech Receipts timestamped transcription. It uses the existing owner
+services. It does not start recording, grant access or operate the browser.
+
+Use a single-record Remote View read grant. Keep that grant and the separate
+Speech credential in the trusted backend. The concrete HTTP adapters in
+`@agent-browser/client/teaching-evidence-http` use existing scoped recording,
+owned upload, Saved recording and transcription routes. Speech upload currently
+requires an operator principal with `speech:readiness` and `speech:transcribe`,
+an explicitly configured allowed Origin, and configured upload/Saved stores.
+Ordinary transcript/result scopes are also needed. Do not supply an installation
+master token, a private filesystem path or a credential-bearing URL.
+
+```js
+import {createTeachingEvidenceClient} from '@agent-browser/client/teaching-evidence';
+import {createTeachingRecordingReader, createTeachingSpeechAdapter}
+  from '@agent-browser/client/teaching-evidence-http';
+
+const evidence = createTeachingEvidenceClient({
+  recordings: createTeachingRecordingReader({
+    url: remoteViewControlUrl,
+    accessToken: singleRecordingReadGrant,
+  }),
+  speech: createTeachingSpeechAdapter({
+    url: speechUrl,
+    token: speechOperatorToken,
+    origin: reviewedSpeechOrigin,
+    conversionLimits: reviewedSpeechConversionLimits,
+  }),
+});
+const selection = {
+  recordingId,
+  narrationSourceId,
+  expected: {
+    owner, desktopId, contextRevision, slot, generation,
+    application: 'agent-browser', taskId, sessionId,
+  },
+};
+const inspected = await evidence.inspect(selection);
+const bundle = await evidence.importNarration(selection, {
+  requestId: 'teaching-import-1', owned: true,
+});
+const ranges = evidence.segmentRanges(bundle);
+// Admit each chosen range explicitly. Observe the original operation before
+// admitting the next range; Speech owns capacity/backpressure and ASR policy.
+const segment = await evidence.transcribeSegment(bundle, {
+  requestId: 'teaching-range-1', ...ranges[0],
+});
+const result = await evidence.readTranscript(bundle, segment);
+```
+
+Persist `bundle` and `segment` only in the authorized caller's private workspace.
+They contain references and source bindings, without grants or transcript text.
+Reconstructing the helper and reading those references never reruns recognition.
+The helper rereads Speech Saved metadata before transcription and transcript
+release, matching the artifact, revision, normalized duration and original
+selected narration hash. Changed or unavailable provenance refuses recognition
+or withholds text. Persisted references cannot relabel another recording.
+The exact task identity supports up to 4,000 characters; smaller display labels
+retain their separate bounds.
+Same import request reconciles the original Saved operation before copying more
+media. Changing its selected source conflicts. No retry loop is provided.
+
+## Evidence and limits
+
+The helper checks exact owner, task, session, native desktop/generation and
+context revision. It verifies finalized event/narration hashes through bounded
+64 KiB owner reads. Video remains an authorized bounded artifact stream with a
+finalized hash reference. It does not become a second viewer. It rejects active,
+expired, inaccessible, stale or wrong-context sources without selecting a peer.
+
+Input summaries retain time, source and transport-delivery status; they exclude
+key values and clipboard content. `sent_to_transport` does not establish an
+application action. Source bindings and gaps remain attached to the recording
+clock. A source label is not a speaker identity. Alignment is explicitly
+unverified: Opus/normalization padding and hardware clocks have not been measured.
+Speech timestamps remain absolute in its normalized recording timeline. Do not
+silently offset them into the video timeline or report sample-exact alignment.
+
+The importer preserves the original and makes a Speech-owned normalized Saved
+copy. Owner conversion, Saved quotas and retention apply. A long recording must
+fit the actual configured conversion limits; otherwise use explicitly shorter
+owner recordings. Recognition is divided into explicit ranges of at most five
+minutes. No source is silently truncated. Audio copies and derived text have
+separate deletion semantics. `deleteTranscript` invokes Speech's derived-text
+tombstone and preserves both originals. Speech's derived result expires within
+24 hours; Remote View's own pinning, quotas and configured retention remain in
+force. Reopen does not extend those limits. A revoked original makes teaching
+text unavailable through this helper even if an independent Speech copy exists.
+
+Review critical dates, numbers and units against the selected recording before
+using its narration as instructions. The helper marks critical tokens as needing
+review. Synthetic fixtures establish mapping and exact text transport, without
+claiming microphone capture or real recognition accuracy.
+
+## Excluding protected entry
+
+Before entering credentials or codes, the authenticated recording owner must
+use **Stop** in the native viewer and confirm the recording finalized. Stop
+owns local encoder and audio-reader shutdown. Server finalization alone does
+not prove the local recorder stopped. After protected entry, the owner can
+explicitly start a new recording. Preserve the two recording IDs and the gap;
+do not narrate or reconstruct protected values.
+
+`inspectSequence({selections, gaps})` verifies each exact finalized source and
+keeps an explicit `protected_input`, `operator_pause` or `source_change` gap
+between adjacent records. Each gap supplies `fromRecordingId`, `toRecordingId`
+and a private `evidenceReference`. Such annotations remain `caller_supplied`,
+with unknown duration and `captureSuppressionVerified: false`. They are lineage,
+not proof of capture suppression. A qualified operator workflow must retain the
+owner's actual stop/resume evidence. An Auth consumer hold cannot suppress
+independent viewer recordings. No automatic stop/restart control is added here.

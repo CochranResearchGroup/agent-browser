@@ -17,7 +17,15 @@ import {createHash,randomUUID} from 'node:crypto';
 import {once} from 'node:events';
 import {performance} from 'node:perf_hooks';
 import {createServer} from 'node:http';
+import {createServer as createHttpsServer} from 'node:https';
+import {createPublicKey} from 'node:crypto';
+import {qualifyNativeChallengeAssistance,probeCurrentNativeObservationAge} from './qualify-native-challenge-assistance.mjs';
+import {qualifyNativeNoCdpChallenge} from './qualify-native-no-cdp-challenge.mjs';
+import {createNativeCheckboxOracle,qualifyNativeCheckbox} from './qualify-native-checkbox.mjs';
+import {createNativeImageOracle,qualifyNativeImage} from './qualify-native-image.mjs';
+import {createNativeImageRoundsOracle,qualifyNativeImageRounds} from './qualify-native-image-rounds.mjs';
 import {mkdir,mkdtemp,readFile,readdir,realpath,stat,writeFile} from 'node:fs/promises';
+import {createReadStream} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {isAbsolute,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -36,7 +44,7 @@ let coldPixels;
 const stageTimings=[];
 async function timedStage(stage,operation){const start=performance.now();let outcome='failed_or_unknown';try{const result=await operation();outcome='response';return result;}finally{stageTimings.push({stage,startedMs:start,durationMs:performance.now()-start,outcome});}}
 async function boundedTeardown(stage,operation){
- let timer;try{return await Promise.race([operation(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Teardown deadline: '+stage)),30000);})]);}
+ let timer;try{return await Promise.race([operation(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Object.assign(Error('Teardown deadline: '+stage),{code:'fixture_teardown_deadline'})),30000);})]);}
  finally{clearTimeout(timer);}
 }
 const required=name=>{const value=process.env[name];assert(value,`Missing ${name}`);return value;};
@@ -167,7 +175,7 @@ const peerIdentity=inventory=>inventory.assignments.map(a=>Object.fromEntries(['
 // /v1/consumer. Published request fields are snake_case; response inventory is
 // camelCase (remote_view_application.rs and *_records.rs). This broker never
 // forwards acquisition, release, retirement or route/grant operations.
-const brokerOperations=[],correlations=new Map();
+const brokerOperations=[],correlations=new Map(),nativeTargets=new Map();
 async function startScopedBroker(){
  const assignmentOperations=new Set(['observe_assignment','launch_environment','windows','activate','events','observe_idle','read_idle_retirement','register_native_handoff_observation']);
  const server=createServer(async(req,res)=>{
@@ -175,6 +183,26 @@ async function startScopedBroker(){
   const denied=async()=>{brokerOperations.push({operation,denied:true});await save('broker-operations.json',brokerOperations);reply(400,{schema_version:1,code:'fixture_target_denied',message:'Operation outside exact fixture assignment',retryable:false});};
   let operation='invalid';
   try{
+   if(req.method==='POST'&&['/v1/agent-desktop/observe','/v1/agent-desktop/ocr','/v1/agent-desktop/capture_region','/v1/agent-desktop/control','/v1/agent-desktop/input'].includes(req.url)){
+    let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>65536)return denied();}
+    const body=JSON.parse(raw),allowed=acquired.some(binding=>{const target=nativeTargets.get(binding.assignmentId);return target&&body.desktopId===target.viewingDesktopId&&body.expectedGeneration===target.viewingGeneration;});
+    if(!allowed||process.env.HOSTED_SMOKE_CHALLENGE_469!=='1'||req.url.endsWith('/control')&&body.operation!=='status')return denied();
+    if(req.url.endsWith('/input')){
+      if(process.env.HOSTED_SMOKE_NATIVE_CHECKBOX_OBSERVE_ONLY==='1')return denied();
+      const motion=process.env.HOSTED_SMOKE_OBSERVATION_AGE_PROBE==='1'&&Array.isArray(body.actions)&&body.actions.length>0&&body.actions.length<=16&&
+        body.actions.every(action=>action.kind==='move'&&Object.keys(action).sort().join(',')==='kind,x,y');
+      const action=body.actions?.[0],visual=body.expectedVisual;
+      const checkbox=process.env.HOSTED_SMOKE_NATIVE_CHECKBOX==='1'&&Array.isArray(body.actions)&&body.actions.length===1&&
+        action.kind==='click'&&action.button===1&&action.count===1&&Object.keys(action).sort().join(',')==='button,count,kind,x,y'&&
+        Number.isSafeInteger(body.controlEpoch)&&body.controlEpoch>=0&&/^[a-f0-9]{64}$/.test(visual?.sha256??'')&&visual.region;
+      const image=process.env.HOSTED_SMOKE_NATIVE_IMAGE==='1'&&Array.isArray(body.actions)&&body.actions.length>=2&&body.actions.length<=5&&
+        body.actions.every(item=>item.kind==='click'&&item.button===1&&item.count===1&&Object.keys(item).sort().join(',')==='button,count,kind,x,y')&&
+        Number.isSafeInteger(body.controlEpoch)&&body.controlEpoch>=0&&/^[a-f0-9]{64}$/.test(visual?.sha256??'')&&visual.region;
+      if(!motion&&!checkbox&&!image)return denied();
+    }
+    const upstream=await fetch(controlOrigin+req.url,{method:'POST',headers:{'content-type':'application/json',...(controlAuthorization?{authorization:controlAuthorization}:{})},body:raw,redirect:'error',signal:AbortSignal.timeout(15000)});
+    return reply(upstream.status,await upstream.json());
+   }
    if(req.method!=='POST'||req.url!=='/v1/consumer')return denied();
    let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>65536)return denied();}
    const envelope=JSON.parse(raw),request=envelope.request;operation=request?.operation;
@@ -192,6 +220,11 @@ async function startScopedBroker(){
    // One forwarding attempt; no automatic retries and no redirects.
    let upstream;try{upstream=await fetch(controlOrigin+'/v1/consumer',{method:'POST',headers:{'content-type':'application/json',...(controlAuthorization?{authorization:controlAuthorization}:{})},body:raw,redirect:'error',signal:AbortSignal.timeout(120000)});}catch(error){ambiguous=true;throw error;}
    const value=await upstream.json();
+   if(upstream.ok&&operation==='observe_assignment'){
+    const binding=owned.get(request.assignment_id),target=value.target;
+    assert(target&&target.assignmentId===binding.assignmentId&&target.desktopId===binding.desktopId&&target.lifecycleGeneration===binding.generation&&target.viewingGeneration===binding.viewingGeneration);
+    nativeTargets.set(binding.assignmentId,target);
+   }
    if(upstream.ok&&operation==='inventory'){
     assert(Array.isArray(value.assignments)&&Array.isArray(value.desktops)&&Array.isArray(value.pools));
     value.assignments=value.assignments.filter(a=>owned.has(a.assignmentId)&&a.generation===owned.get(a.assignmentId).generation);
@@ -364,18 +397,61 @@ try{workload:{
  broker=await startScopedBroker();env.AGENT_BROWSER_REMOTE_VIEW_ORIGIN=`http://127.0.0.1:${broker.address().port}`;
  await save('inputs.json',{binary,binarySha256:createHash('sha256').update(await readFile(binary)).digest('hex'),chrome,chromeSha256:createHash('sha256').update(await readFile(chrome)).digest('hex'),botsRoot,botsSourceCommit,installationId,appOrigin,nativeOrigin,agentHome,socketDir});
  const desktops=new Proxy(remote,{get(target,key){if(key!=='acquire')return typeof target[key]==='function'?target[key].bind(target):target[key];return async args=>{let binding;try{binding=await target.acquire(args);}catch(error){ambiguous=true;throw error;}assert(!baseline.assignments.some(a=>a.assignmentId===binding.assignmentId),'Provider returned a baseline peer assignment');acquired.push(binding);await save('acquired.json',acquired);Object.assign(binding,await target.observe(binding));await save('acquired.json',acquired);return binding;};}});
- step='initialize-ab-mcp';client=createMcpStdioClient({context,args:['mcp','serve'],onFatal:()=>{ambiguous=true;}});
- await send('initialize',{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'hosted-native-smoke',version:'1'}});client.notify('notifications/initialized');
  const bot={id:'fixture-'+randomUUID(),name:'Synthetic attachment owner',threadId:'synthetic-'+randomUUID()},second={id:'shared-'+randomUUID(),name:'Synthetic shared participant',threadId:'shared-session-'+randomUUID()};
  step='acquire-app-desktop';const binding=await desktops.acquire({botId:bot.id,idempotencyKey:'attachment-'+randomUUID()});
  assert.equal(acquired.length,1);
  step='app-launch-environment';const launch=await remote.environment(binding);
  assert.equal(launch.target.desktopId,binding.desktopId);assert.equal(launch.target.lifecycleGeneration,binding.generation);assert.equal(launch.target.viewingGeneration,binding.viewingGeneration);
+ // The existing manual-login X11 focus adapter authenticates from its owner
+ // environment. This fixture has one exact AB desktop; copy only its Native
+ // supplied cookie-file locator before starting the private owner, never a
+ // production display or a global X11 access change.
+ if(process.env.HOSTED_SMOKE_CHALLENGE_469==='1'){
+  assert(typeof launch.environment.XAUTHORITY==='string'&&isAbsolute(launch.environment.XAUTHORITY));
+  env.XAUTHORITY=launch.environment.XAUTHORITY;
+ }
+ step='initialize-ab-mcp';client=createMcpStdioClient({context,args:['mcp','serve'],onFatal:()=>{ambiguous=true;}});
+ await send('initialize',{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'hosted-native-smoke',version:'1'}});client.notify('notifications/initialized');
  step='register-disposable-named-profile';const createdProfile=JSON.parse((await runCli(context,['--json','runtime','create','borrowed-profile','--browser-family','chromium'])).stdout);assert.equal(createdProfile.created,true);const profilePath=await realpath(createdProfile.userDataDir);assert(profilePath.startsWith(root+'/'),'Named fixture profile must remain inside its private home');
+ const challenge469=process.env.HOSTED_SMOKE_CHALLENGE_469==='1';
+ const nativeCheckbox=process.env.HOSTED_SMOKE_NATIVE_CHECKBOX==='1',checkboxOracle=createNativeCheckboxOracle();
+ const nativeImage=process.env.HOSTED_SMOKE_NATIVE_IMAGE==='1',nativeImageRounds=process.env.HOSTED_SMOKE_NATIVE_IMAGE_ROUNDS==='1',imageOracle=nativeImageRounds?createNativeImageRoundsOracle():createNativeImageOracle();
+ assert(!nativeImage||!nativeCheckbox,'Image and checkbox fixtures have separate bounded lanes');
+ const challengeState={completionRequests:0,protectedRequests:0};
+ const nativeChallengeState={completionRequests:0,protectedRequests:0,pageRequests:0};
+ let challengeTls,challengeSpki;
+ if(challenge469){
+  assert(inputDiagnostic&&fixtureNativeConnectOrigin,'Challenge fixture must remain the bounded isolated Native lane');
+  challengeTls={cert:await readFile(await absolute('HOSTED_SMOKE_CHALLENGE_SITE_CERT')),key:await readFile(await absolute('HOSTED_SMOKE_CHALLENGE_SITE_KEY'))};
+  challengeSpki=createHash('sha256').update(createPublicKey(challengeTls.cert).export({type:'spki',format:'der'})).digest('base64');
+ }
  const html='<!doctype html><title>App-owned attachment synthetic marker</title><body style="margin:0;background:#165dcc"><div style="height:75vh;background:#ff00aa;color:white;font:48px sans-serif">ATTACHMENT SYNTHETIC MARKER</div><input id="draft"><input id="control"><span id="peer">PREEXISTING PEER</span></body>';
- fixtureSite=createServer((req,res)=>{res.writeHead(200,{'content-type':'text/html'});res.end(html);});await new Promise(resolve=>fixtureSite.listen(0,'127.0.0.1',resolve));
- const site='http://127.0.0.1:'+fixtureSite.address().port;
- step='app-owned-browser-launch';appBrowser=spawn(chrome,[`--user-data-dir=${profilePath}`,'--no-first-run','--no-default-browser-check','--password-store=basic','--remote-debugging-address=127.0.0.1','--remote-debugging-port=0',site+'/primary'],{env:{...env,...launch.environment,AGENT_BROWSER_HOME:agentHome},detached:true,stdio:'ignore'});
+ const fixtureHandler=(req,res)=>{
+  if(nativeCheckbox&&checkboxOracle.handle(req,res))return;
+  if(nativeImage&&imageOracle.handle(req,res))return;
+  if(challenge469&&req.url==='/native-no-cdp'){
+   nativeChallengeState.pageRequests++;
+   res.writeHead(200,{'content-type':'text/html'});res.end('<!doctype html><title>Owned Native challenge</title><body style="background:white;color:black;padding:20px;font:24px sans-serif"><div style="position:absolute;right:10px;bottom:10px;background:#00ff00;width:80px;height:40px"></div><h1 style="font-size:26px">Select all images containing buses</h1><p>Owned unsupported image puzzle</p><div style="height:80px;background:#ddd">Synthetic image grid</div><button style="font:22px sans-serif" onclick="completeChallenge()">Complete verification</button><script>async function completeChallenge(){const result=await fetch("/native/challenge/complete",{method:"POST"});if(!result.ok)return;const report=await fetch("/native/protected-report");if(report.ok)document.body.innerHTML="<h1>Report ready</h1>";}</script>');return;
+  }
+  if(challenge469&&req.url==='/native/challenge/complete'&&req.method==='POST'){
+   nativeChallengeState.completionRequests++;res.writeHead(nativeChallengeState.completionRequests===1?200:409,{'content-type':'application/json'});res.end(JSON.stringify(nativeChallengeState));return;
+  }
+  if(challenge469&&req.url==='/native/challenge/evidence'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(nativeChallengeState));return;}
+  if(challenge469&&req.url==='/native/protected-report'){
+   nativeChallengeState.protectedRequests++;res.writeHead(nativeChallengeState.completionRequests===1?200:403,{'content-type':'application/json'});res.end(JSON.stringify({report:nativeChallengeState.completionRequests===1?'ready':'denied'}));return;
+  }
+  if(challenge469&&req.url==='/challenge/complete'&&req.method==='POST'){
+   challengeState.completionRequests++;res.writeHead(challengeState.completionRequests===1?200:409,{'content-type':'application/json'});res.end(JSON.stringify(challengeState));return;
+  }
+  if(challenge469&&req.url==='/challenge/evidence'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(challengeState));return;}
+  if(challenge469&&req.url==='/protected-report'){
+   challengeState.protectedRequests++;res.writeHead(challengeState.completionRequests===1?200:403,{'content-type':'application/json'});res.end(JSON.stringify({report:challengeState.completionRequests===1?'ready':'denied'}));return;
+  }
+  res.writeHead(200,{'content-type':'text/html'});res.end(html);
+ };
+ fixtureSite=challenge469?createHttpsServer(challengeTls,fixtureHandler):createServer(fixtureHandler);await new Promise(resolve=>fixtureSite.listen(0,'127.0.0.1',resolve));
+ const site=(challenge469?'https://127.0.0.1:':'http://127.0.0.1:')+fixtureSite.address().port;
+ step='app-owned-browser-launch';appBrowser=spawn(chrome,[...(challengeSpki?['--ignore-certificate-errors-spki-list='+challengeSpki]:[]),`--user-data-dir=${profilePath}`,'--no-first-run','--no-default-browser-check','--password-store=basic','--remote-debugging-address=127.0.0.1','--remote-debugging-port=0',site+'/primary'],{env:{...env,...launch.environment,AGENT_BROWSER_HOME:agentHome},detached:true,stdio:'ignore'});
  appBrowser.on('error',()=>{ambiguous=true;});
  await once(appBrowser,'spawn');
  appRootProof={...await processIdentity(appBrowser.pid),executable:await realpath(`/proc/${appBrowser.pid}/exe`),profilePath};
@@ -446,6 +522,34 @@ try{workload:{
  step='attach-through-bots-http';const opened=await attachInBots(bot,primaryTaskKey,'Use app-owned synthetic browser');task=opened;borrowedTasks.push(opened);
  assert.equal(typeof opened.tabId,'string');assert.notEqual(opened.tabId,primaryTarget);assert.equal(opened.host.hostId,'bots');assert.equal(opened.host.participantId,'bot:'+bot.id);await continuity('first-attach');
  step='public-page-action';const snapshotBefore=await workflow('browser_snapshot',{taskId:opened.taskId});assert(JSON.stringify(snapshotBefore).includes('ATTACHMENT SYNTHETIC MARKER'));
+ if(process.env.HOSTED_SMOKE_MODE_PREFLIGHT==='1'){
+  step='public-page-mode-preflight';
+  async function processShape(){
+   const observed=await processIdentity(original.pid),executable=await realpath(`/proc/${original.pid}/exe`),argv=await readFile(`/proc/${original.pid}/cmdline`);
+   const digest=createHash('sha256');for await(const chunk of createReadStream(`/proc/${original.pid}/exe`))digest.update(chunk);
+   const args=argv.toString('utf8').split('\0').filter(Boolean),split=args.flatMap(arg=>arg.split(/[ \t\n\r\f\v]+/).filter(Boolean));
+   const debug=values=>values.some(arg=>['--remote-debugging-port','--remote-debugging-pipe'].some(flag=>arg===flag||arg.startsWith(flag+'=')));
+   const rootType=values=>values.some(arg=>arg==='--type'||arg.startsWith('--type='));
+   const current=await processIdentity(original.pid);
+   return {pid:observed.pid,start:observed.start,executable,executableSha256:digest.digest('hex'),
+    stableDuringRead:current.start===observed.start&&current.pid===observed.pid,
+    matchesOriginal:observed.start===original.start&&executable===original.executablePath,
+    completeArgvPresent:argv.length>0&&argv.at(-1)===0,argvBytes:argv.length,argvSha256:createHash('sha256').update(argv).digest('hex'),
+    nulArgc:args.length,anyEmbeddedAsciiWhitespace:args.some(arg=>/[ \t\n\r\f\v]/.test(arg)),
+    debugWholeToken:debug(args),debugAsciiWhitespaceSplit:debug(split),rootTypeWholeToken:rootType(args),rootTypeAsciiWhitespaceSplit:rootType(split)};
+  }
+  const before=await processShape();
+  const mode=await publicWorkflow('browser_command',{taskId:opened.taskId,action:'mode'});
+  await save('pre-fill-browser-mode.json',mode);
+  const after=await processShape();
+  await save('pre-fill-owner-process-proof.json',{before,after,
+   identityStable:before.pid===after.pid&&before.start===after.start&&before.executable===after.executable&&before.executableSha256===after.executableSha256,
+   argvStable:before.argvSha256===after.argvSha256,
+   modeJoins:{task:mode.taskId===opened.taskId,browser:mode.browserId===opened.browserId,profile:mode.profileId===opened.profileId,pid:mode.pid===original.pid},
+   scope:'Current synthetic app owner parent readback; no raw argv retained or substituted for MCP mode observation'});
+  if(mode.mode==='unverified')throw Object.assign(Error('Public browser mode unverified; no fill dispatched'),{code:'fixture_browser_mode_unverified'});
+  if(process.env.HOSTED_SMOKE_MODE_DIAGNOSTIC_ONLY==='1')throw Object.assign(Error('Read-only mode diagnostic complete; no fill dispatched'),{code:'fixture_mode_diagnostic_complete'});
+ }
  await workflow('browser_fill',{taskId:opened.taskId,selector:'#control',value:'public MCP preserved app browser'});assert.equal(await primary.locator('#control').inputValue(),'public MCP preserved app browser');await continuity('public-action');
  step='shared-attach-through-bots-http';const shared=await attachInBots(second,'attachment-shared-'+randomUUID(),'Explicitly share app-owned synthetic browser');borrowedTasks.push(shared);assert.notEqual(shared.taskId,opened.taskId);assert.notEqual(shared.tabId,opened.tabId);assert.notEqual(shared.tabId,primaryTarget);assert.equal(shared.browserId,opened.browserId);assert.equal(acquired.length,1);await continuity('shared-attach');
  await save('attachment.json',{original,processProof,initialTargets,primaryTarget,peerTarget,tasks:borrowedTasks.map(t=>({taskId:t.taskId,browserId:t.browserId,tabId:t.tabId,profileId:t.profileId})),scope:'Actual Bots attach HTTP and trusted fresh attachment observation, public Agent Browser controls, app-routed durable handoff and actual Native viewer'});
@@ -527,6 +631,27 @@ try{workload:{
  async function consumerControl(){const response=await fetch(service.url+`/api/agent-browser/handoffs/${uiHandoffId}/control`,{signal:AbortSignal.timeout(15000)});assert.equal(response.status,200);return response.json();}
  const controlReceipt=value=>({control:Object.fromEntries(['owner','epoch','pauseReads','pendingOutcomeCount'].filter(key=>key in value.control).map(key=>[key,value.control[key]])),native:Object.fromEntries(['owner','state','epoch','hostedOperationId'].filter(key=>key in value.native).map(key=>[key,value.native[key]]))});
  const beforeUi=await consumerControl();assert.equal(beforeUi.control.owner,'agent');assert.equal(beforeUi.native.owner,'agent');
+ if(nativeImage){
+  step='native-image-assistance';
+  await (nativeImageRounds?qualifyNativeImageRounds:qualifyNativeImage)({workflow:publicWorkflow,task:opened,nextTask:async label=>{
+    const current=await attachInBots(bot,'image471-'+label+'-'+randomUUID(),'Owned Native image '+label);borrowedTasks.push(current);return current;
+  },primary,site,profilePath,configFile:join(agentHome,'config.json'),faultFile:join(evidence,'native-image-fault.json'),oracle:imageOracle,save,continuity,selectionDirectory:evidence});
+  await save('native-input-diagnostic.json',{passed:true,fullMatrix:false,scope:nativeImageRounds?'Owned two-round Native images under one original budget with actual visual selection':'Owned static Native image round with actual agent visual selection and independent HTTPS oracle'});break workload;
+ }
+ if(nativeCheckbox){
+  step='native-checkbox-assistance';
+  await qualifyNativeCheckbox({workflow:publicWorkflow,task:opened,nextTask:async label=>{
+    const current=await attachInBots(bot,'checkbox470-'+label+'-'+randomUUID(),'Owned Native checkbox '+label);borrowedTasks.push(current);return current;
+  },primary,site,profilePath,configFile:join(agentHome,'config.json'),faultFile:join(evidence,'native-checkbox-fault.json'),oracle:checkboxOracle,save,continuity,observeOnly:process.env.HOSTED_SMOKE_NATIVE_CHECKBOX_OBSERVE_ONLY==='1'});
+  await save('native-input-diagnostic.json',process.env.HOSTED_SMOKE_NATIVE_CHECKBOX_OBSERVE_ONLY==='1'
+    ?{passed:true,fullMatrix:false,diagnosticKind:'read_only_native_checkbox_capture',actualNativeInput:false,challengeInputDispatched:false,scope:'Owned synthetic Native capture/rendered-state diagnosis only; no checkbox acceptance'}
+    :{passed:true,fullMatrix:false,scope:'Owned Native checkbox/passive assistance, owner policy and independent HTTPS oracle'});break workload;
+ }
+ if(process.env.HOSTED_SMOKE_OBSERVATION_AGE_PROBE==='1'){
+  step='current-native-observation-age';await probeCurrentNativeObservationAge({workflow:publicWorkflow,task:opened,consumerControl,save});
+  await continuity('after-native-motion-age-probe');
+  await save('native-input-diagnostic.json',{passed:true,fullMatrix:false,scope:'Current Native motion-only observation-age characterization; no click or operator takeover'});break workload;
+ }
  if(workloadPlan){
   const desktop=await remote.observation(binding),windows=desktop.windows.windows.filter(window=>window.pid===original.pid);
   assert.equal(windows.length,1,'The owned browser requires one positively observed Native window');
@@ -581,6 +706,17 @@ try{workload:{
  const returned=await consumerControl();assert.equal(returned.control.owner,'agent');assert.equal(returned.control.epoch,human.control.epoch+1);assert.equal(returned.native.owner,'agent');assert.equal(returned.native.state,'ready');uiControlSettled=true;
  assert.equal((await readTask(opened.taskId)).controllerState.owner,'agent');await continuity('after-native-toolbar-control');
  await save('bots-native-control.json',{before:controlReceipt(beforeUi),human:controlReceipt(human),returned:controlReceipt(returned),passed:true});
+ if(challenge469){
+  await qualifyNativeChallengeAssistance({workflow:publicWorkflow,task:opened,page,primary,nativeOrigin,site,save,consumerControl});
+  await continuity('after-challenge469');
+  uiTakeoverDispatched=true;uiReturnDispatched=false;
+  await qualifyNativeNoCdpChallenge({workflow:publicWorkflow,runCli,context,chrome,service,bot,page,nativeOrigin,site,save,
+   selectHandoff:manual=>{managedLossTasks.push(manual);uiHandoffId=new URL(manual.handoffUrl).pathname.split('/').at(-1);return consumerControl;},
+   onClosed:id=>closedManagedLossTasks.add(id),
+   observeOwned:async(pid,profile)=>{const identity=await cleanupProcessIdentity(pid);assert(identity&&identity.uid===process.getuid()&&identity.executable===chrome);assert(privateProfileReferenced(await readFile(`/proc/${pid}/cmdline`,'utf8'),profile));observedOwnedProcesses.set(pid,identity);await census();return identity;}});
+  uiReturnDispatched=true;
+  await continuity('after-no-cdp-challenge469');
+ }
  if(inputDiagnostic){await save('native-input-diagnostic.json',{passed:true,fullMatrix:false,scope:'One Native text edit and return with independent app observation'});break workload;}
  // Start after all control transitions so the remaining event is scoped detach.
  if(process.env.HOSTED_SMOKE_CONTINUITY_REQUIRED==='1'){
@@ -697,6 +833,14 @@ try{workload:{
 }}catch(error){if(!uiControlSettled)ambiguous=true;await save('failure.json',{...safeError(error),ambiguous});process.exitCode=1;}
 finally{
  async function clean(name,action){try{await boundedTeardown(name,action);}catch(error){cleanup.errors.push({...safeError(error),step:name});process.exitCode=1;}}
+ const cleanupPhases=[];
+ async function cleanupPhase(name,action){
+  const phase={name,startedMs:performance.now(),state:'running'};cleanupPhases.push(phase);
+  await save('cleanup-phases.json',{clock:'performance.now monotonic milliseconds',phases:cleanupPhases});
+  try{const value=await action();phase.state='completed';return value;}
+  catch(error){phase.state='failed';phase.code=errorCode(error);throw error;}
+  finally{phase.durationMs=performance.now()-phase.startedMs;await save('cleanup-phases.json',{clock:'performance.now monotonic milliseconds',phases:cleanupPhases});}
+ }
  await clean('record-stage-timings',()=>save('stage-timings.json',{clock:'performance.now monotonic milliseconds',samples:stageTimings}));
  if(coldPixels)await clean('record-cold-pixel-evidence',()=>save('cold-first-pixels.json',coldPixels.receipt()));
  if(uiHandoffId&&uiTakeoverDispatched&&!uiReturnDispatched)await clean('return-known-native-control',async()=>{
@@ -705,7 +849,12 @@ finally{
    uiReturnDispatched=true;const response=await fetch(service.url+`/api/agent-browser/handoffs/${uiHandoffId}/control`,{method:'POST',headers:{origin:service.url,'content-type':'application/json'},body:JSON.stringify({operation:'return',operationId:randomUUID(),expectedEpoch:current.control.epoch,actor:'synthetic-operator',reason:'Explicit synthetic fixture cleanup'}),signal:AbortSignal.timeout(120000)});assert.equal(response.status,200);const returned=await response.json();assert.equal(returned.control.owner,'agent');assert.equal(returned.native.owner,'agent');cleanup.nativeControlReturned=true;
   }else assert.equal(current.control.owner,'agent','Uncertain Native takeover requires explicit readback');
  });
- await clean('close-viewer',async()=>{await viewer?.close();});
+ await clean('close-viewer',async()=>{
+  // Drain/ignore only this fixture's routes before closing their contexts;
+  // otherwise an in-flight route.fetch can terminate Node during cleanup.
+  for(const context of viewer?.contexts()??[])for(const page of context.pages())await page.unrouteAll({behavior:'ignoreErrors'});
+  await viewer?.close();
+ });
  await clean('close-viewer-server',async()=>{await viewerServer?.close();});
  await clean('stop-watch',async()=>{if(watcher&&watcher.exitCode===null&&watcher.signalCode===null){const exit=once(watcher,'exit');watcher.kill('SIGTERM');await exit;}});
  for(const borrowed of borrowedTasks)if(!closedBorrowedTasks.has(borrowed.taskId))await clean('close-borrowed-task',async()=>{closedBorrowedTasks.add(borrowed.taskId);await workflow('browser_close',{taskId:borrowed.taskId});});
@@ -719,11 +868,16 @@ finally{
  await clean('owned-process-cleanup',async()=>{
   cleanup.processesBefore=[...observedOwnedProcesses.values()];
   cleanup.processCleanup={};
-  const result=await cleanupExactOwnedProcesses({known:observedOwnedProcesses,census:()=>census({collectUnresolved:true}),readIdentity:cleanupProcessIdentity,signal:(pid,selected)=>process.kill(pid,selected),sleep:ms=>new Promise(resolve=>setTimeout(resolve,ms)),allowSigkill:true,graceMs:3000,killMs:3000,pollMs:100,receipt:cleanup.processCleanup,record:async()=>save('cleanup.json',cleanup)});
+  const result=await cleanupPhase('exact-owned-process-cleanup',()=>cleanupExactOwnedProcesses({known:observedOwnedProcesses,census:()=>cleanupPhase('owned-process-census',()=>census({collectUnresolved:true})),readIdentity:cleanupProcessIdentity,signal:(pid,selected)=>process.kill(pid,selected),sleep:ms=>new Promise(resolve=>setTimeout(resolve,ms)),allowSigkill:true,graceMs:3000,killMs:3000,pollMs:100,receipt:cleanup.processCleanup,record:async()=>save('cleanup.json',cleanup)}));
   cleanup.processesBefore=result.owned;
   cleanup.processesAfter=result.remaining;
   assert.equal(result.qualified,true,'Exact fixture cleanup remains unresolved; assignment cannot be released');
-  await appAbsenceFence();cleanup.processesClear=true;
+  cleanup.processesTerminated=true;
+ });
+ await clean('app-process-absence',async()=>{
+  assert.equal(cleanup.errors.length,0,'Unresolved teardown blocks the application absence fence');
+  assert.equal(cleanup.processesTerminated,true,'Exact fixture cleanup must complete before the application absence fence');
+  await cleanupPhase('app-absence-fence',()=>appAbsenceFence());cleanup.processesClear=true;
  });
  if(remote&&baseline)await clean('assignment-cleanup',async()=>{
   assert.equal(cleanup.errors.length,0,'Unresolved teardown blocks assignment release');

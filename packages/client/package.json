@@ -30,6 +30,38 @@
     "./native-receiving-browser": {
       "types": "./src/native-receiving-browser.d.ts",
       "import": "./src/native-receiving-browser.js"
+    },
+    "./teaching-evidence": {
+      "types": "./src/teaching-evidence.d.ts",
+      "import": "./src/teaching-evidence.js"
+    },
+    "./teaching-evidence-http": {
+      "types": "./src/teaching-evidence-http.d.ts",
+      "import": "./src/teaching-evidence-http.js"
+    },
+    "./task-briefing": {
+      "types": "./src/task-briefing.d.ts",
+      "import": "./src/task-briefing.js"
+    },
+    "./teaching-draft": {
+      "types": "./src/teaching-draft.d.ts",
+      "import": "./src/teaching-draft.js"
+    },
+    "./teaching-review": {
+      "types": "./src/teaching-review.d.ts",
+      "import": "./src/teaching-review.js"
+    },
+    "./challenge-assistance": {
+      "types": "./src/challenge-assistance.d.ts",
+      "import": "./src/challenge-assistance.js"
+    },
+    "./native-image-challenge": {
+      "types": "./src/native-image-challenge.d.ts",
+      "import": "./src/native-image-challenge.js"
+    },
+    "./teaching-grilling": {
+      "types": "./src/teaching-grilling.d.ts",
+      "import": "./src/teaching-grilling.js"
     }
   },
   "scripts": {

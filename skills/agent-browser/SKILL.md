@@ -30,22 +30,10 @@ After human input, `browser_continue` with the same `taskId` reads identity/URL 
 
 ## Standalone authentication
 
-Website credential use belongs to standalone Auth Receipts; Bots is another
-consumer. The Node `connectHostedAuthHelper()` adapter discovers Auth's verified
-SDK at its data-directory `auth-receipts/client/current` selector. Missing SDK or
-capabilities require Auth installation/enrollment diagnostics, not direct vault
-access or a legacy auth fallback. Private discovery and bearer material stay in
-the SDK. Owner decisions, required delivery and exact browser binding still gate
-input. Never repeat an unknown credential attempt.
-Before private use is attempted, owner login may renew a typed `plan_stale` hold caused by owner-review delay. Renewal requires complete, unchanged guide, control, expected-state and task/profile/browser/tab bindings with the same receiving generation. The fresh plan is validated and durably saved against the original request before dispatch intent. Missing or changed proof stays held; attempted or unknown input never renews a plan or creates replacement approval.
-
-Use `createOwnerLoginPlaybook` with trusted browser routines, connected `auth` and
-metadata checkpoints for new requests. `createOwnerTotpContinuation` composes
-Auth's observed factor action after password/SSO. Retain the original password request ID for account-less factor screens; Auth resolves its binding and creates the factor request through the observed continuation. When `factor_choice_required` is returned, use the supplied issuer/account labels to select a returned `recordId` and resume the same checkpoint. Do not rediscover or guess among opaque IDs. Number matching follows the
-original attempt with `createOwnerNumberMatchingContinuation`. Exact generation,
-privacy and identity evidence are required. Unsupported paths hold. Owner
-`reconcile: true` cannot create or repeat credential use. Legacy checkpoints keep
-their original issuer. Input/submission acknowledgement never proves login.
+Website credentials use standalone Auth Receipts through its verified SDK.
+Before login, MFA or recovery, read [Standalone Auth](references/authentication.md#standalone-auth-receipts).
+Owner decisions, delivery and exact browser binding gate input. Keep unknown
+attempts on their original requests; never replay private use.
 
 ## Hosted workflow guidance v1
 
@@ -66,29 +54,11 @@ and preserves tabs; peer tabs remain outside scope. Discover actions with `brows
 Close rejects changed selection. A pre-commit return failure keeps human control
 and epoch; inspect status and use a fresh explicit intent, never replay uncertainty.
 
-For downloads, use `action: "download"` with the link selector and destination
-path in `params`. Existing-profile tasks use the current browser; clients do not
-establish ownership or repair stale internal records before downloading.
-Ordinary continuation reconciles interrupted publication using the current live
-profile browser, preserving the task and authenticated state.
-A new ordinary task command refreshes stale clean session state before acting;
-unpublished effects remain held for reconciliation without command replay.
+Read [retained workflow transport](references/cli-and-service.md#retained-workflow-transport)
+before downloads, stale transport recovery, retirement or advanced administration.
 
-If stale transport recommends `handoff prepare` but returns `prepared=false`
-and `browserPresent=false`, there is no candidate to attach. On Linux, inspect
-`agent-browser install workstation --dry-run --runtime-replacement-policy preserve --json`
-and follow its plan before retrying. Keep profiles, peers and unresolved effect
-custody intact; this read-only plan does not authorize a reset or host restart.
-
-Retirement permits diagnostic reads but fences handoff writes. On lock timeout,
-run `agent-browser service jobs --json`, then refresh the access plan. Reconcile
-uncertain effects before retrying; never terminate the holder or reset a profile.
-
-Diagnostic and administrative discovery points to supported CLI/API operations.
-Retired lease, recovery, repair and reset MCP tools are unavailable, including
-through advanced dispatch. There is no legacy catalog mode.
-
-Return, store, and reopen only `handoffUrl`: standalone `/remote-view/<handoff-id>` or hosted app `/agent-browser/handoff/<id>`. Never send providerExternalUrl.
+Return, store, and reopen only `handoffUrl` (standalone: `/remote-view/<handoff-id>`).
+Never send providerExternalUrl or raw Guacamole URLs.
 
 ## Operator workspace
 
@@ -102,11 +72,9 @@ Use a separate task/session and tab for each workflow. Shared profiles share log
 
 ## CLI fallback
 
-If `browser_open` is absent from the client's callable tools, report missing
-Agent Browser MCP integration. Register the installed `agent-browser mcp serve`
-stdio command in that client and reconnect to refresh its cached catalog. Use
-the installed CLI to continue the task while integration is corrected; server
-`tools/list` alone does not prove client exposure.
+If browser_open is absent, report missing Agent Browser MCP integration.
+Register installed agent-browser mcp serve in that client and reconnect.
+Use the CLI while correcting integration; server tools/list does not prove client exposure.
 
 Help never launches browsers. MCP uses `success`, `data`, `error`; CLI failures add `type`. Private launch journals retain secret-free `details.phase`; unknown outcomes need readback.
 
@@ -149,16 +117,22 @@ Read the advanced reference for bounded host resource waits and retained session
 Use `browser_discover` for advanced MCP metadata.
 
 
-### Dashboard summary diagnostics
-
-For health, inventory or viewer failures, read [Dashboard diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics). A prepared handoff or reachable service does not prove a connected Native display. Read [embedded-page guidance](references/cli-and-service.md#embedded-native-desktop-failure-guidance) before retrying. Static assets use gzip and hashed caching.
-
-After upgrades, reconnect MCP clients; doctor checks `installedMcpClients`.
-
-Startup: [diagnostics](references/cli-and-service.md#development-host-startup).
+For dashboard/viewer/startup failures, read [dashboard diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics).
 
 ## Browser mode and builds
 
 Use `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build family/version and CDP mode are independent. Inspect before choosing; copy success never proves login portability. Read [controls and recovery](references/cli-and-service.md#browser-build-selection) before changing a build. Reconcile original operations after lost replies.
 
 Diagnostics retain selection query fields. Rail presence revalidates at 250/500/1000 ms, then polls every three seconds.
+
+### Tasks and teaching
+
+Read task_briefing / task_operation via browser_command (params.requestId).
+Never replay pending/uncertain input.
+See [recovery](references/session-management.md).
+Teaching: [A/V/Speech](../../docs/src/app/teaching-evidence/page.mdx),
+inert [drafts](references/teaching-drafts.md), [review](references/teaching-review.md),
+[grilling](references/teaching-grilling.md), [repeat](references/report-repeat.md).
+Recheck Saved provenance; keep gaps. Proposals are not consent. Promotion needs fresh-repeat proof.
+Dates: YYYY-MM-DD; downloads need live process proof.
+[OCR](references/challenge-assistance.md), [elapsed image timing](references/image-challenge.md).

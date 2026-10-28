@@ -124,6 +124,9 @@ pub(crate) mod action_commands {
         .await
         {
             Ok(result) => result,
+            Err(err) if cmd["retainedTaskOnly"] == true => {
+                return Err(format!("browser_task_capture_uncertain_no_recovery:{err}"));
+            }
             Err(err)
                 if err.contains("CDP response channel closed")
                     || err.contains("Trying to work with closed connection")
