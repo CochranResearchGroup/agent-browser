@@ -568,6 +568,7 @@ pub struct ReapBrowserSessionsResult {
     pub quota_evicted_session_ids: Vec<String>,
     pub closed_browser_ids: Vec<String>,
     pub deleted_disposable_profile_ids: Vec<String>,
+    pub deferred_browser_errors: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2695,6 +2696,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         now_ms: u64,
         protected_session_ids: &BTreeSet<String>,
     ) -> Result<ReapBrowserSessionsResult, String> {
+        let mut result = ReapBrowserSessionsResult::default();
         let mut externally_protected_session_ids = self
             .externally_protected_session_ids
             .union(protected_session_ids)
@@ -2736,7 +2738,16 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .cloned()
             .collect::<Vec<_>>();
         for browser in candidates {
-            if !self.effects.permits_idle_browser_close(&browser)? {
+            let permitted = match self.effects.permits_idle_browser_close(&browser) {
+                Ok(permitted) => permitted,
+                Err(error) => {
+                    result
+                        .deferred_browser_errors
+                        .insert(browser.id.clone(), error);
+                    false
+                }
+            };
+            if !permitted {
                 externally_protected_session_ids.extend(browser.active_session_ids.iter().cloned());
                 protected_session_ids.extend(browser.active_session_ids.iter().cloned());
             }
@@ -2772,7 +2783,6 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .iter()
             .map(|tab| tab.browser_id.clone())
             .collect::<BTreeSet<_>>();
-        let mut result = ReapBrowserSessionsResult::default();
         for tab in expired_tabs {
             let browser = self
                 .state

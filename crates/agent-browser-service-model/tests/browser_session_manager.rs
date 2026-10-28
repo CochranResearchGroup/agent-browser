@@ -75,6 +75,7 @@ fn exact_navigation_history_compacts_oldest_rows_into_restart_safe_daily_summari
 #[derive(Default)]
 struct FixtureEffects {
     idle_retirement_permitted: Option<bool>,
+    idle_retirement_error_browser: Option<String>,
     retirement_guard_denied_browser: Option<String>,
     profile_cleanup_permitted: Option<bool>,
     profile_cleanup_denied_profile: Option<String>,
@@ -270,8 +271,11 @@ fn open_after_expiry_ends_old_session_before_new_epoch() {
 impl BrowserSessionEffects for FixtureEffects {
     fn permits_idle_browser_close(
         &mut self,
-        _browser: &agent_browser_service_model::ManagedBrowserInstance,
+        browser: &agent_browser_service_model::ManagedBrowserInstance,
     ) -> Result<bool, String> {
+        if self.idle_retirement_error_browser.as_deref() == Some(browser.id.as_str()) {
+            return Err("synthetic_owner_observation_unavailable".into());
+        }
         Ok(self.idle_retirement_permitted.unwrap_or(true))
     }
     fn acquire_idle_retirement_guard(
@@ -1332,6 +1336,83 @@ fn catalog_with_named_profile() -> BrowserProfileCatalog {
         profiles: BTreeMap::from([(profile.id.clone(), profile)]),
         disposable_policies: BTreeMap::new(),
     }
+}
+
+#[test]
+fn uncertain_browser_observation_does_not_starve_another_tabs_lifetime() {
+    use agent_browser_service_model::{retain_remote_view_tab_handoff, BrowserTabLifetime};
+    let mut catalog = catalog_with_named_profile();
+    let mut peer = catalog.profiles["profile-a"].clone();
+    peer.id = "profile-b".into();
+    peer.user_data_dir = "/managed/profiles/profile-b".into();
+    catalog.profiles.insert(peer.id.clone(), peer);
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..FixtureEffects::default()
+    };
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 1_000,
+        remote_view_desktops: Vec::new(),
+    };
+    let mut created = Vec::new();
+    for (profile, task, tab) in [
+        ("profile-a", "uncertain", "tab-a"),
+        ("profile-b", "expired", "tab-b"),
+    ] {
+        effects.initial_tab = Some(BrowserTabAcquisition {
+            tab_id: tab.into(),
+            target_id: format!("target-{tab}"),
+            source: BrowserTabSource::SessionInitial,
+        });
+        let mut manager =
+            BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone());
+        let opened = manager
+            .open(OpenBrowserSession::exact_profile(task, profile, 100))
+            .unwrap();
+        manager.tab_for_navigation(&opened.session_id, 100).unwrap();
+        drop(manager);
+        retain_remote_view_tab_handoff(&mut state, task, &opened.session_id, tab).unwrap();
+        created.push(opened);
+    }
+    effects.idle_retirement_error_browser = Some(created[0].browser_id.clone());
+    state
+        .shared_browser_ids
+        .insert(created[1].browser_id.clone());
+    state.tab_lifetimes.insert(
+        "tab-b".into(),
+        BrowserTabLifetime {
+            inactivity_ms: Some(30),
+            pressure_inactivity_ms: None,
+        },
+    );
+
+    let observed =
+        BrowserSessionManager::new(&mut state, &catalog, &mut effects, config).reap(2_000);
+
+    assert!(
+        !state.tabs.contains_key("tab-b"),
+        "unrelated expiry was starved: {observed:?}"
+    );
+    assert_eq!(
+        observed.unwrap().deferred_browser_errors,
+        BTreeMap::from([(
+            created[0].browser_id.clone(),
+            "synthetic_owner_observation_unavailable".into()
+        )])
+    );
+    assert!(
+        state.tabs.contains_key("tab-a"),
+        "uncertain owner must remain protected"
+    );
+    assert_eq!(
+        effects.tab_closes,
+        [(created[1].browser_id.clone(), "target-tab-b".into())]
+    );
+    assert!(
+        effects.closes.is_empty(),
+        "shared or uncertain browser must remain open"
+    );
 }
 
 #[test]

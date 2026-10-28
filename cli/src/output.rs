@@ -6506,6 +6506,9 @@ by its authenticated connection, joined to the exact current target, establishes
 Private owner polling consumes qualified use; prefetch/background requests retain the hold.
 Failed native observations preserve the hold. Eligible TTL cleanup still commits before
 the observation error is reported; read current owner state after a failed reaper reply.
+Borrowed browser task expiry retains service activity guards without requiring Native
+launch custody. Only the owned task target closes; the borrowed browser remains.
+Unavailable browser ownership observations defer that browser, not unrelated expiry.
 Native remote_view_open prepares the human hold automatically. Configure its maximum
 with pendingHumanRetentionMs or AGENT_BROWSER_PENDING_HUMAN_RETENTION_MS (default 0).
 Invalid or overflowing pending deadlines are rejected before browser effects.

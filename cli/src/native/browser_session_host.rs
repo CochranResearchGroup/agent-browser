@@ -462,7 +462,12 @@ fn reap_browser_session_host<P: BrowserSessionPersistence, E: BrowserSessionEffe
         *host = load()?;
     }
     if let Some(host) = host.as_mut() {
-        host.reap_current()?;
+        let result = host.reap_current()?;
+        if let Some((browser_id, error)) = result.deferred_browser_errors.first_key_value() {
+            return Err(format!(
+                "browser_session_reap_deferred:{browser_id}:{error}"
+            ));
+        }
     }
     Ok(())
 }
@@ -2025,6 +2030,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     "quotaEvictedSessionIds": reaped.quota_evicted_session_ids,
                     "closedBrowserIds": reaped.closed_browser_ids,
                     "deletedDisposableProfileIds": reaped.deleted_disposable_profile_ids,
+                    "deferredBrowserErrors": reaped.deferred_browser_errors,
                 }))
             }
             "browser_session_status" => serde_json::to_value(self.state())

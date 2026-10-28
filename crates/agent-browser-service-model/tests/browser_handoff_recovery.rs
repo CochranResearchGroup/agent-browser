@@ -8,6 +8,7 @@ struct Evidence {
     effects: Vec<String>,
     prior: Option<RemoteViewAssignmentRecord>,
     retirement_blocked: bool,
+    allow_task_tab_retirement: bool,
     published_browser_requests: Vec<ManagedBrowserInstance>,
     retirements: Vec<BrowserIdleRetirementRecord>,
 }
@@ -95,7 +96,10 @@ impl BrowserLaunchCustodyStore for Store {
     ) -> Result<RemoteViewAssignmentRecord, LaunchCustodyStoreError> {
         let mut evidence = self.0.borrow_mut();
         evidence.published_browser_requests.push(browser.clone());
-        Ok(evidence.prior.clone().unwrap())
+        evidence
+            .prior
+            .clone()
+            .ok_or(LaunchCustodyStoreError::Conflict)
     }
     fn admit_recovery_launch_intent(
         &mut self,
@@ -375,8 +379,15 @@ impl BrowserSessionEffects for Runtime {
     fn close_tab(
         &mut self,
         _: &ManagedBrowserInstance,
-        _: &ManagedBrowserTab,
+        tab: &ManagedBrowserTab,
     ) -> Result<(), String> {
+        if self.evidence.borrow().allow_task_tab_retirement {
+            self.evidence
+                .borrow_mut()
+                .effects
+                .push(format!("close:{}", tab.id));
+            return Ok(());
+        }
         panic!("recovery cannot close retained tabs")
     }
     fn focus_browser(
@@ -828,4 +839,114 @@ fn unresolved_initial_launch_readback_never_authorizes_implicit_second_launch() 
         .reconcile_profile_browser(&peer, None, &[], &[])
         .unwrap()
         .is_none());
+}
+
+#[test]
+fn borrowed_tab_lifetime_does_not_require_native_browser_launch_custody() {
+    for blocked in [false, true] {
+        let evidence = Rc::new(RefCell::new(Evidence {
+            retirement_blocked: blocked,
+            allow_task_tab_retirement: true,
+            ..Default::default()
+        }));
+        let browser = ManagedBrowserInstance {
+            id: "borrowed-browser".into(),
+            profile_id: "borrowed-profile".into(),
+            pid: 43,
+            cdp_endpoint: "http://127.0.0.1:9222".into(),
+            desktop: None,
+            active_session_ids: vec!["task".into()],
+        };
+        let tab = ManagedBrowserTab {
+            id: "own-tab".into(),
+            target_id: "own-target".into(),
+            browser_id: browser.id.clone(),
+            session_id: "task".into(),
+            created_at_ms: 100,
+            last_activity_at_ms: 100,
+        };
+        let session = ManagedBrowserSession {
+            id: "task".into(),
+            name: "task".into(),
+            profile_id: browser.profile_id.clone(),
+            browser_id: browser.id.clone(),
+            created_at_ms: 100,
+            last_activity_at_ms: 100,
+            expires_at_ms: 300_100,
+            current_tab_id: Some(tab.id.clone()),
+        };
+        let mut state = BrowserSessionState::default();
+        state.browsers.insert(browser.id.clone(), browser.clone());
+        state.tabs.insert(tab.id.clone(), tab.clone());
+        state.sessions.insert(session.id.clone(), session);
+        state.shared_browser_ids.insert(browser.id.clone());
+        state.tab_lifetimes.insert(
+            tab.id.clone(),
+            BrowserTabLifetime {
+                inactivity_ms: Some(30),
+                pressure_inactivity_ms: None,
+            },
+        );
+        let mut effects = RemoteViewSessionEffects::new(
+            Runtime {
+                evidence: evidence.clone(),
+                absent: false,
+                fail_restoration: false,
+                next_target: 0,
+            },
+            RemoteViewApplicationAdapter::new(
+                "agent-browser".into(),
+                Transport {
+                    evidence: evidence.clone(),
+                    fixture: serde_json::json!({}),
+                },
+            )
+            .unwrap(),
+            Store(evidence.clone()),
+            vec![],
+            || "55555555-5555-4555-8555-555555555555".into(),
+        )
+        .unwrap()
+        .with_pool(RemoteViewSessionPool {
+            name: "native".into(),
+            desired_desktops: 1,
+        })
+        .unwrap();
+        effects.begin_operation(&state).unwrap();
+        let catalog = BrowserProfileCatalog {
+            schema_version: "agent-browser.browser-profile-catalog.v1".into(),
+            profiles: BTreeMap::new(),
+            disposable_policies: BTreeMap::new(),
+        };
+        let result = BrowserSessionManager::new(
+            &mut state,
+            &catalog,
+            &mut effects,
+            BrowserSessionManagerConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_view_desktops: vec![],
+            },
+        )
+        .reap(130)
+        .unwrap();
+        assert_eq!(state.tabs.contains_key(&tab.id), blocked, "task TTL must preserve authority but not require custody of the borrowed browser: {result:?}");
+        assert!(result.deferred_browser_errors.is_empty());
+        assert!(
+            evidence.borrow().published_browser_requests.is_empty(),
+            "borrowed task expiry cannot claim the host browser's native launch"
+        );
+        assert_eq!(
+            evidence
+                .borrow()
+                .effects
+                .iter()
+                .filter(|e| e.starts_with("close:"))
+                .count(),
+            usize::from(!blocked)
+        );
+        if !blocked {
+            assert_eq!(state.tab_history.last().unwrap().target_id, "own-target");
+            assert!(result.closed_browser_ids.is_empty());
+        }
+    }
 }

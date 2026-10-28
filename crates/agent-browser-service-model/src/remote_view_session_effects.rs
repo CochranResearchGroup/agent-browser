@@ -175,6 +175,9 @@ impl<
             .ok_or("browser_session_idle_custody_unavailable")?;
         let mut groups = BTreeMap::new();
         for browser in browsers {
+            if self.borrows_browser_without_native_desktop(browser) {
+                continue;
+            }
             let baseline = expected
                 .browsers
                 .get(&browser.id)
@@ -358,6 +361,17 @@ impl<
             _local: guard,
             _scope: scope,
         })))
+    }
+
+    /// Borrowed task tabs do not grant ownership of their browser process or
+    /// a Native assignment. Their retirement still requires local activity
+    /// exclusion, and the manager preserves the shared browser and peer tabs.
+    fn borrows_browser_without_native_desktop(&self, browser: &ManagedBrowserInstance) -> bool {
+        browser.desktop.is_none()
+            && self.expected.as_ref().is_some_and(|expected| {
+                expected.shared_browser_ids.contains(&browser.id)
+                    && expected.browsers.get(&browser.id) == Some(browser)
+            })
     }
 
     fn begin_retirement_effect(
@@ -1131,7 +1145,7 @@ impl<
         if !self.effects.permits_idle_browser_close(browser)? {
             return Ok(false);
         }
-        if self.pool.is_none() {
+        if self.pool.is_none() || self.borrows_browser_without_native_desktop(browser) {
             return Ok(true);
         }
         let assignment = self

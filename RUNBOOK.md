@@ -1,5 +1,7 @@
 # Runbook
 
+[P297 independent task TTL](docs/dev/plans/0297-2026-10-28-independent-tab-ttl.md), #490: live reaper fd2 evidence identifies unavailable Native launch custody for borrowed browser task expiry. Real composed model regression is red then green; source and installed gates remain pending. No production host replacement by this worker.
+
 [P294 dashboard browser commands](docs/dev/plans/0294-2026-10-25-dashboard-browser-command.md), #451, is closed: PR455 and sealed production binary `3bcc060428a5` are installed through an accepted preserve transaction. Authenticated public chooser, three selected isolated workflows and seven no-launch checks pass. All 22 observed browser roots and 147 protected Native service units are preserved. [Receipt](docs/dev/notes/0294-2026-10-25-dashboard-browser-command.md) retains the cold setup replay, slow rail sample and doctor warnings.
 
 [P283 Spec400](docs/dev/plans/0283-2026-10-24-browser-mode-inspection.md): #400–404 and repairs #424–429 remain closed as source/synthetic outcomes. P294 supersedes the historical e7a233070ded publication and resolves its live chooser defect #451. [Historical deployment evidence](docs/dev/notes/0283-2026-10-25-spec400-repairs.md) remains unchanged. Full Native viewer and private-account acceptance remain separate.
