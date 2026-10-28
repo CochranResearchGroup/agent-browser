@@ -6,7 +6,7 @@ Consolidation: required
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/466
 Integration branch: recipes/spec466-integration
 Integration base: 5770d693b23d51c9932574fa68e012a98029ce73
-Validated image executable sources: Agent Browser904439d95/e1acea and Nativea530a97/98ec819840ba; harness eb13d9606. Current documentation checkpoint follows on recipes/spec466-integration / draft PR480.
+Qualified Native image checkpoint: Agent Browserbc1e50311/bc5072bebf6e and Nativea530a97/98ec819840ba, actual054. Later teaching/Auth source composition is recorded below; no new installation is claimed.
 
 ## Custody and scope
 
@@ -592,3 +592,10 @@ Repaired clean sourcebc1e503117c87d6591fc9cdd9c5baeb3e9717071 built in3m29s; sea
 ## User-deferred narrated walkthrough and final review
 
 User explicitly deferred478 and approved the recommended comparison base5770d693. The reserved single final review of frozenb90dd882d is complete with independent read-only axes: Standards0blocking/1low duplication backlog; Spec2blocking teaching-evidence findings, highestP1. Primary confirms unrelated Saved audio can be substituted through persisted bundle references and genuine browser task IDs above128 are incorrectly rejected. One consolidated TDD pass now owns both public client regressions. [Adjudication and validation record](../notes/0296-final-review-2026-10-28.md) freezes findings and authority. Review/remediation counters1/1(active), no additional review wave. Real narration remains deferred; no production/private-media/provider/host-clock/CI effect is admitted.
+
+
+## Final review/TDD and Auth composition complete
+
+User-deferred478 remains open. One final review of5770d693...b90dd882d and one consolidated TDD pass are complete: Standards0blocking/1low canonical follow-up489; both accepted Spec blockers repaired at3d7a016d4. Public regressions prove Saved-source, transcript and recording relabeling refusals and valid long exact task identity acceptance. Actual Speech synthetic HTTP/Saved/Opus qualification passes; physical narration and real ASR quality remain unqualified.
+
+Fetched current-main7d9b4b7ad composes as773fe242f with one additive package-script conflict resolved by preserving both intents. All332 commands survive; full Auth guidance is retained verbatim in its linked reference and main skill9223bytes. Combined client/types/docs/guidance/policy/links/strict Clippy/fmt pass. Auth source suite's120second aggregate budget breach is retained; first four component scripts passed, remaining staged-factor script passed independently, and hosted-helper/follow/types pass. Clean Auth6348778ff/parentd6e07227 sources and synthetic owner/native ports were used, with no live/installed Auth effects. See [final adjudication and validation record](../notes/0296-final-review-2026-10-28.md). Review/remediation1/1(completed); no further broad pass. Original children11/12 closed,478 deferred, parent466/PR480 open/draft, production unchanged.

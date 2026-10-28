@@ -57,3 +57,8 @@ are separate qualification. This source checkpoint alone does not close issue
 
 Memory disposition: forbidden. Parent explicitly excluded Graphiti writes for
 this worker. No memory write was attempted.
+
+
+## Final review repair,2026-10-28
+
+The single P296 final review found persisted Speech references were not revalidated against Saved-owner provenance and valid browser task IDs above128 were rejected. Repair3d7a016d4 rechecks exact recording/context and Saved audio identity/revision/duration/original narration before transcription or text release, and retains the4000-character task bound separately from labels. Public RED/GREEN and actual Speech synthetic HTTP/Saved/Opus checks pass; current-main composition773fe242f retains the repair. [Full adjudication](0296-final-review-2026-10-28.md) records failures, budgets and one review/one TDD pass. Actual narration478 remains user-deferred.
