@@ -137,12 +137,12 @@ Diagnostics retain selection query fields. Rail presence revalidates at 250/500/
 
 ### Tasks and teaching
 
-Use browser_command task_briefing or task_operation (params.requestId) for
-context/receipts/errors. Keep requestId; never replay pending/uncertain input.
+Read task_briefing / task_operation via browser_command (params.requestId).
+Never replay pending/uncertain input.
 See [recovery](references/session-management.md).
 Teaching: [A/V/Speech](../../docs/src/app/teaching-evidence/page.mdx),
 inert [drafts](references/teaching-drafts.md), [review](references/teaching-review.md),
 [grilling](references/teaching-grilling.md), [repeat](references/report-repeat.md).
-Keep gaps; proposals are not consent. Promotion needs fresh-repeat proof.
+Recheck Saved provenance; keep gaps. Proposals are not consent. Promotion needs fresh-repeat proof.
 Dates: YYYY-MM-DD; downloads need live process proof.
 [OCR](references/challenge-assistance.md), [elapsed image timing](references/image-challenge.md).

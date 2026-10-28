@@ -1,7 +1,9 @@
 /** Exact retained owner context. Labels do not establish a speaker's identity. */
 export interface TeachingBinding {
   owner: string; desktopId: string; contextRevision: number;
-  slot: number; generation: number; application: string; taskId: string; sessionId: string;
+  slot: number; generation: number; application: string;
+  /** Exact opaque browser task identity, up to 4,000 characters rather than a display label. */
+  taskId: string; sessionId: string;
 }
 export interface TeachingSelection {
   recordingId: string; narrationSourceId: string; expected: TeachingBinding;
@@ -20,6 +22,7 @@ export interface TeachingRecording {
   alignment: {state: 'unverified'; recordingOriginMs: number; normalizedOriginMs: number; conversionOffsetMs: null; uncertaintyMs: null; reason: string};
   speakerIdentity: 'unverified'; criticalTokens: 'requires_review';
 }
+/** Persisted references are revalidated against current owner provenance before use. */
 export interface TeachingBundle extends TeachingRecording {
   speechSource: {artifactId: string; revision: string; durationMs: number; originalSha256: string};
 }

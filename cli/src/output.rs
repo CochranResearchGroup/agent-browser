@@ -7336,7 +7336,7 @@ Commands:
   host-task TASK    Read app metadata
   task-briefing TASK Read retained task context without browser effects
   task-operation TASK REQUEST Read original addressed CDP operation without retry
-  Teaching evidence: client teaching-evidence / teaching-evidence-http; scoped A/V and Speech ranges
+  Teaching evidence: client teaching-evidence / teaching-evidence-http; recheck Saved provenance before Speech ranges
   Teaching drafts: inspect_guide / client inspectTeachingDraft; inert until reviewed
   Teaching review: client teaching-review edits/reviews; MCP candidate validation stays inert
   Teaching repeat: recordFreshRepeat / promote; trusted review plus actual report proof

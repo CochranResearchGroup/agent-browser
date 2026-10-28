@@ -7412,7 +7412,9 @@ Backend clients can use `@agent-browser/client/teaching-evidence` and
 selected isolated narration import into Speech Saved custody, explicit ranges
 of at most five minutes and reopening original transcript operations. See the
 [teaching evidence guide](docs/src/app/teaching-evidence/page.mdx). Source, timing,
-recognition uncertainty and protected stop/resume gaps remain explicit.
+recognition uncertainty and protected stop/resume gaps remain explicit. Persisted
+references are rechecked against Speech Saved provenance before transcription
+or transcript release; exact browser task IDs may be up to 4,000 characters.
 
 ### Draft a SiteGuide from a demonstration
 

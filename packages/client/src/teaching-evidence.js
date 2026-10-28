@@ -6,6 +6,8 @@ const fail = code => {throw new Error(code);};
 const integer = value => Number.isSafeInteger(value) && value >= 0;
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const text = value => typeof value === 'string' && value.length>0 && value.length<=128 && !/[\u0000-\u001f\u007f]/.test(value);
+// Opaque task IDs use the service identity bound of4,000characters.
+const task = value => typeof value === 'string' && value.trim().length>0 && value.length<=4000 && !/\p{Cc}/u.test(value);
 const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(value);
 const MAX_EVENTS_BYTES = 8 * 1024 * 1024;
 
@@ -42,7 +44,7 @@ export function createTeachingEvidenceClient({recordings, speech}) {
   async function inspect(selection) {
     if (!selection || !/^[a-f0-9]{32}$/.test(selection.recordingId) || !id(selection.narrationSourceId)) fail('teaching_selection_invalid');
     const expected=selection.expected;
-    if(!expected || !['owner','desktopId','application','taskId','sessionId'].every(key=>text(expected[key])) ||
+    if(!expected || !['owner','desktopId','application','sessionId'].every(key=>text(expected[key])) || !task(expected.taskId) ||
         !['contextRevision','slot','generation'].every(key=>integer(expected[key]))) fail('teaching_binding_required');
     const reply=await recordings({recordingId:selection.recordingId});
     if(!Array.isArray(reply.recordings) || reply.recordings.length!==1) fail('teaching_recording_ambiguous');
@@ -86,8 +88,23 @@ export function createTeachingEvidenceClient({recordings, speech}) {
 
   async function current(bundle) {
     const observed=await inspect(bundle.selection);
-    if(['video','events','narration'].some(key=>observed[key].sha256!==bundle[key]?.sha256)) fail('teaching_source_changed');
+    if(observed.recordingId!==bundle.recordingId || observed.taskId!==bundle.taskId || observed.durationMs!==bundle.durationMs ||
+        ['owner','desktopId','contextRevision','slot','generation','application','taskId','sessionId'].some(key=>observed.binding[key]!==bundle.binding?.[key]) ||
+        observed.narration.sourceId!==bundle.narration?.sourceId ||
+        ['video','events','narration'].some(key=>observed[key].sha256!==bundle[key]?.sha256 || observed[key].artifact!==bundle[key]?.artifact)) fail('teaching_source_changed');
     return observed;
+  }
+
+  /** Revalidate persisted Speech references against the owner, never the capsule alone. */
+  async function savedSource(bundle) {
+    const observed=await current(bundle),source=clone(bundle.speechSource);
+    if(!source || !id(source.artifactId) || !hash(source.revision) || !integer(source.durationMs) || source.durationMs<1 ||
+        source.originalSha256!==observed.narration.sha256) fail('teaching_saved_source_invalid');
+    const metadata=await speech.savedRecording(source.artifactId);
+    if(metadata?.id!==source.artifactId || metadata.kind!=='recording' || metadata.mediaType!=='audio/wav' ||
+        metadata.sha256!==source.revision || metadata.provenance?.sourceRevision!==observed.narration.sha256 ||
+        metadata.provenance.durationMs!==source.durationMs) fail('teaching_saved_source_invalid');
+    return {observed,source:clone(source)};
   }
 
   return {
@@ -147,8 +164,7 @@ export function createTeachingEvidenceClient({recordings, speech}) {
     },
     async transcribeSegment(bundle,{requestId,startMs,endMs}) {
       if(!id(requestId) || !integer(startMs) || !integer(endMs) || endMs<=startMs || endMs-startMs>300000 || endMs>bundle.speechSource?.durationMs) fail('teaching_range_invalid');
-      await current(bundle);
-      const source=bundle.speechSource;
+      const {source}=await savedSource(bundle);
       const request={requestId,artifactId:source.artifactId,revision:source.revision,startMs,endMs,language:'en-US'};
       const receipt=await speech.transcribe(request);
       if(!id(receipt.id)) fail('teaching_operation_invalid');
@@ -156,7 +172,7 @@ export function createTeachingEvidenceClient({recordings, speech}) {
     },
     /** Reopen reads original operations; it never resubmits recognition. */
     async readTranscript(bundle,segment) {
-      try {await current(bundle);} catch {return {status:'source_unavailable',recordingId:bundle.recordingId,operationId:segment.operationId};}
+      try {await savedSource(bundle);} catch {return {status:'source_unavailable',recordingId:bundle.recordingId,operationId:segment.operationId};}
       if(segment.recordingId!==bundle.recordingId || segment.narrationSha256!==bundle.narration.sha256 ||
           segment.request.artifactId!==bundle.speechSource?.artifactId || segment.request.revision!==bundle.speechSource?.revision) fail('teaching_segment_binding_changed');
       const receipt=await speech.recordingStatus(segment.operationId);
@@ -165,8 +181,8 @@ export function createTeachingEvidenceClient({recordings, speech}) {
       let transcript;
       try {transcript=await speech.transcript(segment.operationId);} catch {return {status:'transcript_unavailable',operationId:segment.operationId};}
       if(transcript.operationId!==segment.operationId || ['artifactId','revision','startMs','endMs'].some(key=>transcript.source?.[key]!==segment.request[key])) fail('teaching_transcript_source_changed');
-      await current(bundle);
-      return {status:'available',operationId:segment.operationId,transcript,alignment:bundle.alignment,gaps:bundle.gaps,criticalTokens:'requires_review'};
+      const {observed}=await savedSource(bundle);
+      return {status:'available',operationId:segment.operationId,transcript,alignment:observed.alignment,gaps:observed.gaps,criticalTokens:'requires_review'};
     },
     /** Owner deletion removes derived text only, without deleting the recording or Saved audio. */
     deleteTranscript: operationId=>speech.deleteTranscript(operationId),

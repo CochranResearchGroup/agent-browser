@@ -117,3 +117,48 @@ manifest.pinned=false;manifest.expiresAtUnixMs=1;
 await assert.rejects(client.inspect(selection),/teaching_source_expired/);
 manifest.pinned=true;manifest.expiresAtUnixMs=null;
 console.log('teaching evidence: active and expired recording refusal pass');
+
+// A persisted capsule is untrusted: selected Remote View hashes cannot grant
+// transcription of a substituted Speech Saved source.
+const substituted=structuredClone(bundle);
+substituted.speechSource={artifactId:'peer-saved',revision:'c'.repeat(64),durationMs:400001,originalSha256:hash(audio)};
+let substitutedSubmits=0;
+const substitutedSpeech={...speech,
+  savedRecording:async artifactId=>artifactId==='peer-saved'?{id:artifactId,name:'Unrelated peer',kind:'recording',mediaType:'audio/wav',sha256:'c'.repeat(64),provenance:{durationMs:400001,sourceRevision:hash(Buffer.from('unrelated peer narration'))}}:speech.savedRecording(artifactId),
+  transcribe:async request=>{substitutedSubmits++;return {id:'peer-operation',state:'completed',request};},
+};
+const substitutedClient=createTeachingEvidenceClient({recordings,speech:substitutedSpeech});
+await assert.rejects(substitutedClient.transcribeSegment(substituted,{requestId:'substituted-source',startMs:0,endMs:1000}),/teaching_saved_source_invalid/);
+assert.equal(substitutedSubmits,0,'Unrelated Saved audio must never be transcribed');
+
+let substitutedTranscriptReads=0;
+const peerSegment={operationId:'peer-operation',recordingId,narrationSha256:hash(audio),request:{requestId:'peer-request',artifactId:'peer-saved',revision:'c'.repeat(64),startMs:0,endMs:1000,language:'en-US'}};
+const substitutedReader=createTeachingEvidenceClient({recordings,speech:{...substitutedSpeech,
+  recordingStatus:async operationId=>({id:operationId,state:'completed'}),
+  transcript:async operationId=>{substitutedTranscriptReads++;return {operationId,source:{artifactId:'peer-saved',revision:'c'.repeat(64),startMs:0,endMs:1000},text:'unrelated peer narration'};},
+}});
+const refusedPeerTranscript=await substitutedReader.readTranscript(substituted,peerSegment);
+assert.equal(refusedPeerTranscript.status,'source_unavailable');
+assert.equal('transcript' in refusedPeerTranscript,false);
+assert.equal(substitutedTranscriptReads,0,'Reopen must recheck Saved provenance before reading text');
+
+// Hash equality does not allow relabeling a selected recording as its peer.
+const relabeled=structuredClone(bundle);relabeled.recordingId='d'.repeat(32);
+const priorSubmits=submits;
+await assert.rejects(client.transcribeSegment(relabeled,{requestId:'relabeled-source',startMs:0,endMs:1000}),/teaching_source_changed/);
+assert.equal(submits,priorSubmits);
+
+// Ordinary exact Agent Browser task IDs may be longer than a display label.
+const longTaskId='session:workflow-'+ 'e'.repeat(140)+':borrowed-profile:1';
+const longSelection=structuredClone(selection);longSelection.expected.taskId=longTaskId;
+const longClient=createTeachingEvidenceClient({speech,recordings:async input=>{
+  const response=await recordings(input);
+  if(!input.artifact)response.recordings[0].start.context.taskId=longTaskId;
+  return response;
+}});
+const longRecording=await longClient.inspect(longSelection);
+assert.equal(longRecording.taskId,longTaskId);
+await assert.rejects(longClient.inspect({...longSelection,expected:{...longSelection.expected,taskId:longTaskId+'peer'}}),/teaching_binding_changed/);
+for(const taskId of ['x'.repeat(4001),'task\u0085break','   '])
+  await assert.rejects(longClient.inspect({...longSelection,expected:{...longSelection.expected,taskId}}),/teaching_binding_required/);
+console.log('teaching evidence: persisted source substitution refuses and long exact task identity passes');

@@ -9,7 +9,8 @@ website-specific generator, default procedure template or new model endpoint.
 
 1. Use the teaching-evidence helper to inspect the exact authorized recording,
    selected isolated narration, context revision and original Speech operations.
-   Refuse a stale, revoked or substituted source. Keep private artifacts and
+   Recheck Speech Saved provenance before transcription and text release. Refuse
+   a stale, revoked, relabeled or substituted source. Keep private artifacts and
    transcripts in the authorized workspace; do not copy real media into Git.
 2. Inspect representative video frames and transitions, not only a transcript.
    Read visible labels, selected options, date/number/unit values, result states

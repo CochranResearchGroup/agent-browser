@@ -55,6 +55,12 @@ const result = await evidence.readTranscript(bundle, segment);
 Persist `bundle` and `segment` only in the authorized caller's private workspace.
 They contain references and source bindings, without grants or transcript text.
 Reconstructing the helper and reading those references never reruns recognition.
+The helper rereads Speech Saved metadata before transcription and transcript
+release, matching the artifact, revision, normalized duration and original
+selected narration hash. Changed or unavailable provenance refuses recognition
+or withholds text. Persisted references cannot relabel another recording.
+The exact task identity supports up to 4,000 characters; smaller display labels
+retain their separate bounds.
 Same import request reconciles the original Saved operation before copying more
 media. Changing its selected source conflicts. No retry loop is provided.
 

@@ -25,7 +25,9 @@ routines and a composed playbook before focused questions. Inspection validates
 shape and source references, not factual truth, approval or successful execution.
 
 **Teaching evidence**: Exact finalized A/V recording and selected isolated
-narration linked to Speech Saved/range receipts. Gaps, conversion alignment,
+narration linked to Speech Saved/range receipts. Reopened references must match
+current Saved metadata, duration, revision and original selected narration.
+Exact browser task IDs retain the4000-character identity bound. Gaps, conversion alignment,
 speaker identity and critical-token uncertainty remain explicit; a sequence
 annotation does not verify recorder suppression.
 
