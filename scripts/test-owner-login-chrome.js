@@ -17,14 +17,14 @@ const artifacts=await mkdtemp(join(tmpdir(),'owner-chrome-evidence-'));
 try{await withBrowserAcceptanceFixture({chromium,artifacts},async chrome=>{
  const {page,origin,counts,targetId,generation}=chrome,urls=[];page.on('request',r=>urls.push(r.url()));
  const fields='<input name="username" autocomplete="username"><input type="password" name="password" autocomplete="current-password">';
- for(const kind of ['click','submit','native','lost-submit','lost-fill','unhandled','wrong-account','wrong-organization','changed-target']){
+ for(const kind of ['click','click-button','button-to-submit','replaced-password-action','late-replaced-password-action','submit','native','lost-submit','lost-fill','unhandled','wrong-account','wrong-organization','changed-target']){
   await page.goto(origin);
   const send=`const r=await fetch('/password',{method:'POST',body:new URLSearchParams(new FormData(document.querySelector('form')))});if(r.ok)document.body.innerHTML='<p>Signed in</p>';`;
   const event=kind==='unhandled'?'document.querySelector("button").addEventListener("click",e=>e.preventDefault());':kind==='submit'?'document.querySelector("form").addEventListener("submit",async e=>{e.preventDefault();'+send+'});':kind==='lost-fill'?'document.querySelector("input[type=password]").addEventListener("input",async()=>{'+send+'});':'document.querySelector("button").addEventListener("click",async e=>{e.preventDefault();'+send+'});';
-  await page.setContent(kind==='native'?`<!doctype html><form method="post" action="/password">${fields}<button>Sign in</button></form>`:`<!doctype html><form>${fields}<button>Sign in</button></form><script>${event}</script>`);
+  await page.setContent(kind==='native'?`<!doctype html><form method="post" action="/password">${fields}<button>Sign in</button></form>`:`<!doctype html><form>${fields}<button${['click-button','button-to-submit','replaced-password-action','late-replaced-password-action'].includes(kind)?' type="button"':''}>Sign in</button></form><script>${event}${kind==='button-to-submit'?'document.querySelector("input[type=password]").addEventListener("input",()=>{document.querySelector("button").type="submit";});':''}${kind==='replaced-password-action'?'document.querySelector("input[type=password]").addEventListener("input",()=>{const previous=document.querySelector("button");const replacement=previous.cloneNode(true);replacement.type="submit";replacement.addEventListener("click",async e=>{e.preventDefault();'+send+'});previous.replaceWith(replacement);});':''}</script>`);
   let held=false,receiver,receiverConfig,lost=false;
   let currentTarget=targetId,currentGeneration=generation;
-  const originalPage={url:()=>page.url(),evaluate:async(fn,args)=>{const result=await page.evaluate(fn,args);if(kind==='lost-submit'&&fn.name==='submitForm'&&!lost){lost=true;throw Error('Synthetic lost submit acknowledgement');}return result;},locator(selector){const locator=page.locator(selector);if(kind!=='lost-fill'||selector!=='input')return locator;return {nth(index){const field=locator.nth(index);return {async fill(value){await field.fill(value);if(index===1&&!lost){lost=true;throw Error('Synthetic lost fill acknowledgement');}}};}};}};
+  const originalPage={url:()=>page.url(),evaluate:async(fn,args)=>{if(kind==='late-replaced-password-action'&&fn.name==='submitForm')await page.evaluate(send=>{const previous=document.querySelector('button'),replacement=previous.cloneNode(true);replacement.addEventListener('click',new Function('e','e.preventDefault();(async()=>{'+send+'})();'));previous.replaceWith(replacement);},send);const result=await page.evaluate(fn,args);if(kind==='lost-submit'&&fn.name==='submitForm'&&!lost){lost=true;throw Error('Synthetic lost submit acknowledgement');}return result;},locator(selector){const locator=page.locator(selector);if(kind!=='lost-fill'||selector!=='input')return locator;return {nth(index){const field=locator.nth(index);return {async fill(value){await field.fill(value);if(index===1&&!lost){lost=true;throw Error('Synthetic lost fill acknowledgement');}}};}};}};
   const identity=async()=>{
    if(await page.locator('input[type=password],input[autocomplete=one-time-code]').count())return null;
    const principal=await page.evaluate(async()=>await(await fetch('/whoami')).json());
@@ -45,8 +45,8 @@ try{await withBrowserAcceptanceFixture({chromium,artifacts},async chrome=>{
    const pending=await playbook.advance(f.options);assert.equal(pending.reasonCode,'approval_required');assert.equal(f.state.reads,0);
    f.respond();await playbook.advance(f.options);
    for(let i=0;i<30&&counts.password===before;i++)await page.waitForTimeout(50);
-   assert.equal(counts.password,before+(kind==='unhandled'?0:1),kind+': actual server authentication operation required');
-   if(kind!=='native'&&kind!=='unhandled')await page.waitForSelector('p');
+   assert.equal(counts.password,before+(['unhandled','replaced-password-action','late-replaced-password-action'].includes(kind)?0:1),kind+': actual server authentication operation required');
+   if(!['native','unhandled','replaced-password-action','late-replaced-password-action'].includes(kind))await page.waitForSelector('p');
    if(kind==='wrong-account'||kind==='wrong-organization')assert.deepEqual(await identity(),{origin,username:'synthetic-user',organization:'fixture-org'},'Independent server identifies the account and company that differ from intended identity');
    if(kind==='changed-target'){const session=await page.context().newCDPSession(chrome.peer);currentTarget=(await session.send('Target.getTargetInfo')).targetInfo.targetId;assert.notEqual(currentTarget,targetId);currentGeneration=generation+':replacement';await session.detach();}
    await f.restart();receiver=await createGenericBrowserReceiver(receiverConfig);
@@ -57,12 +57,12 @@ try{await withBrowserAcceptanceFixture({chromium,artifacts},async chrome=>{
    assert.equal(original.browserActionEvidence?.contractVersion,1,kind+': versioned input/submission evidence');
    assert.equal(resumed.browserActionEvidence?.contractVersion,1,kind+': consumer exposes bounded action evidence');
    assert.equal(original.browserActionEvidence.generation,generation);
-   assert.equal(original.browserActionEvidence.submission,kind==='lost-submit'?'unknown':kind==='lost-fill'?'not_attempted':'acknowledged');
-   assert.equal(counts.password,before+(kind==='unhandled'?0:1),kind+': restart cannot repeat submission');assert.equal(f.state.reads,1,kind+': no replacement credential read');
-   if(['native','unhandled','wrong-account','wrong-organization','changed-target'].includes(kind))assert.notEqual(resumed.status,'completed',kind+': incomplete, mismatched or changed actual browser cannot complete');
+   assert.equal(original.browserActionEvidence.submission,['lost-submit','late-replaced-password-action'].includes(kind)?'unknown':['lost-fill','replaced-password-action'].includes(kind)?'not_attempted':'acknowledged');
+   assert.equal(counts.password,before+(['unhandled','replaced-password-action','late-replaced-password-action'].includes(kind)?0:1),kind+': restart cannot repeat submission');assert.equal(f.state.reads,1,kind+': no replacement credential read');
+   if(['native','unhandled','replaced-password-action','late-replaced-password-action','wrong-account','wrong-organization','changed-target'].includes(kind))assert.notEqual(resumed.status,'completed',kind+': incomplete, mismatched or changed actual browser cannot complete');
    else assert.equal(resumed.status,'completed',kind+': independent identity reconciles the original attempt');
    assert.equal(urls.some(url=>url.includes('SYNTHETIC')||url.includes('synthetic-user')),false,'No protected fields in native GET URLs');
   }finally{await f.close();}
  }
- console.log('Actual Chrome: native POST, JavaScript submit/click, fresh OS-process lost fill/submit recovery and held unhandled/account/company/target negatives retain original requests without repeated effects');
+ console.log('Actual Chrome: native POST, JavaScript submit/submit-button/semantic-button click, exact-node button transition and replacement hold, fresh OS-process lost fill/submit recovery and held unhandled/account/company/target negatives retain original requests without repeated effects');
 });}finally{await rm(artifacts,{recursive:true,force:true});}

@@ -35,7 +35,10 @@ export interface OwnerLoginDependencies {
  };
  checkpoints:{load(key:string):Promise<OwnerLoginCheckpoint|null>;save(key:string,value:OwnerLoginCheckpoint):Promise<void>};
 }
-/** Owner-authority login; legacy checkpoints remain under their original issuer. */
+/** Owner-authority login; legacy checkpoints remain under their original issuer.
+ * Before any use intent, a typed age-only plan_stale may renew a complete
+ * unchanged SiteGuide plan, freshly validated and durably saved on the same request.
+ * Attempted/unknown requests and missing or changed semantic proof never renew. */
 export function createOwnerLoginPlaybook(dependencies:OwnerLoginDependencies):{
  advance(options:OwnerLoginOptions):Promise<Record<string,any>>;
 };

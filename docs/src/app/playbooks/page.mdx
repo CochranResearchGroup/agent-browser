@@ -75,12 +75,19 @@ existing owner review and private-use lifecycle. Exact task/profile/browser/tab/
 generation and current account/company evidence are required. Typed holds preserve
 missing prerequisites; a profile name is not identity proof.
 
-TOTP uses Auth's observed continuation, including after SSO. Number matching uses
+TOTP uses Auth's observed continuation, including after SSO. After password use,
+retain `originalRequestId` so Auth can bind an account-less factor screen to the
+original attempt. The helper creates the factor request through that observed
+continuation, preserving Auth's account and receiving checks. If multiple factors
+match, `factor_choice_required` returns issuer/account/source labels with the
+record IDs. Select a returned `recordId` and resume the same checkpoint. Number matching uses
 an existing private attempt and Auth's owner-only reverse-input path. Capabilities
 are receiving-path-specific: a browser-client TOTP route does not establish native
 number-matching or accessibility qualification. Neither factory returns codes or
 creates policy. Unknown input is retained without a new credential request.
 Owner login `reconcile: true` only reads an existing checkpoint/request.
+
+Before private use is attempted, owner login may renew a typed `plan_stale` hold caused by owner-review delay. Renewal requires complete, unchanged guide, control, expected-state and task/profile/browser/tab bindings with the same receiving generation. The fresh plan is validated and durably saved against the original request before dispatch intent. Missing or changed proof stays held; attempted or unknown input never renews a plan or creates replacement approval.
 
 Optional `browserActionEvidence` v1 describes protected input and submission
 acknowledgement for the exact request/attempt/generation. Dispatch is not server

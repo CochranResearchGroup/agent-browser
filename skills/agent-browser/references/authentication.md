@@ -6,6 +6,8 @@ Login flows, session persistence, OAuth, 2FA, and authenticated browsing.
 
 ## Contents
 
+- [Standalone Auth Receipts](#standalone-auth-receipts)
+
 - [Managed Runtime Profiles](#managed-runtime-profiles)
 - [Import Auth from Your Browser](#import-auth-from-your-browser)
 - [Persistent Profiles](#persistent-profiles)
@@ -19,6 +21,25 @@ Login flows, session persistence, OAuth, 2FA, and authenticated browsing.
 - [Cookie-Based Auth](#cookie-based-auth)
 - [Token Refresh Handling](#token-refresh-handling)
 - [Security Best Practices](#security-best-practices)
+
+## Standalone Auth Receipts
+
+Website credential use belongs to standalone Auth Receipts; Bots is another
+consumer. The Node `connectHostedAuthHelper()` adapter discovers Auth's verified
+SDK at its data-directory `auth-receipts/client/current` selector. Missing SDK or
+capabilities require Auth installation/enrollment diagnostics, not direct vault
+access or a legacy auth fallback. Private discovery and bearer material stay in
+the SDK. Owner decisions, required delivery and exact browser binding still gate
+input. Never repeat an unknown credential attempt.
+Before private use is attempted, owner login may renew a typed `plan_stale` hold caused by owner-review delay. Renewal requires complete, unchanged guide, control, expected-state and task/profile/browser/tab bindings with the same receiving generation. The fresh plan is validated and durably saved against the original request before dispatch intent. Missing or changed proof stays held; attempted or unknown input never renews a plan or creates replacement approval.
+
+Use `createOwnerLoginPlaybook` with trusted browser routines, connected `auth` and
+metadata checkpoints for new requests. `createOwnerTotpContinuation` composes
+Auth's observed factor action after password/SSO. Retain the original password request ID for account-less factor screens; Auth resolves its binding and creates the factor request through the observed continuation. When `factor_choice_required` is returned, use the supplied issuer/account labels to select a returned `recordId` and resume the same checkpoint. Do not rediscover or guess among opaque IDs. Number matching follows the
+original attempt with `createOwnerNumberMatchingContinuation`. Exact generation,
+privacy and identity evidence are required. Unsupported paths hold. Owner
+`reconcile: true` cannot create or repeat credential use. Legacy checkpoints keep
+their original issuer. Input/submission acknowledgement never proves login.
 
 ## Managed Runtime Profiles
 

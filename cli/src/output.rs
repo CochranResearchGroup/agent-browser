@@ -5335,6 +5335,9 @@ agent-browser auth - Manage authentication profiles
 
 Standalone website login helpers consume the verified Auth Receipts client SDK.
 Bots is not required; private discovery stays inside Auth Receipts.
+Owner login can renew an unchanged age-stale plan before any private-use intent.
+Fresh validation and durable metadata preserve the original owner request;
+changed proof or attempted/unknown input remains held without replacement approval.
 
 Usage: agent-browser auth <subcommand> [args]
 

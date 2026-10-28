@@ -23,6 +23,8 @@ export function createOwnerTotpContinuation({auth,browser,checkpoints}){
  return {
   /** Request no password and expose no factor value. The optional recordId must
    * select an Auth-returned candidate before a factor request has been created.
+   * Auth binds account-less observations to the original password request and
+   * creates the factor request through its observed continuation action.
    * @param {OwnerTotpOptions} options
    */
   async advance(options){
@@ -61,10 +63,13 @@ export function createOwnerTotpContinuation({auth,browser,checkpoints}){
      if(observed.status==='completed')return result('completed',observed.reasonCode,'verified');
      let preparation;try{preparation=await browser.prepareLogin(options);}catch{return result('waiting','receiving_unavailable','no_effect');}
      if(!preparation.plan)return result(preparation.status,preparation.reasonCode,'no_effect');
-     let need;try{need=await auth.helper('observe_authentication',{origin:options.origin,targetId:options.targetId});}catch(error){return result('waiting',errorCode(error),'no_effect');}
+     let need;try{need=await auth.helper('observe_authentication',{origin:options.origin,targetId:options.targetId,...(originalRequest?{originalRequestId:originalRequest.requestId}:{})});}catch(error){return result('waiting',errorCode(error),'no_effect');}
      if(need.method!=='totp')return result('waiting',need.method?'authentication_method_unsupported':need.heldFor??'authentication_observation_unavailable','no_effect');
      if(need.state!=='authentication_required'||need.nextAction?.operation!=='continue_authentication'||!nonempty(need.continuationId)||need.nextAction.args?.continuationId!==need.continuationId||!Number.isSafeInteger(need.expiresAt)||need.expiresAt>Math.min(options.expiresAt,originalDeadline??options.expiresAt))return result('waiting',need.heldFor??'authentication_continuation_unavailable','no_effect');
-     const candidates=Array.isArray(need.candidates)?need.candidates.filter(candidate=>nonempty(candidate.recordId)).map(candidate=>({recordId:candidate.recordId})):[];
+     const candidates=Array.isArray(need.candidates)?need.candidates.filter(candidate=>nonempty(candidate.recordId)).map(candidate=>({recordId:candidate.recordId,
+      // Preserve only bounded choice labels, never arbitrary producer fields.
+      ...Object.fromEntries(['sourceId','issuer','account','name'].filter(field=>typeof candidate[field]==='string'&&candidate[field].length<=512&&!/[\x00-\x1f\x7f]/.test(candidate[field])).map(field=>[field,candidate[field]])),
+      ...(['totp','hotp'].includes(candidate.method)?{method:candidate.method}:{}),...(candidate.staged===true?{staged:true}:{})})):[];
      if(!candidates.length)return result('waiting','credential_unavailable','no_effect');
      checkpoint={contract,intent,receiving:Object.fromEntries(receivingFields.map(field=>[field,observed[field]])),preparedPlan:preparation.plan,continuationId:need.continuationId,expiresAt:need.expiresAt,candidates};
      await checkpoints.save(key,checkpoint);
@@ -76,7 +81,7 @@ export function createOwnerTotpContinuation({auth,browser,checkpoints}){
      checkpoint={...checkpoint,recordId:selected};await checkpoints.save(key,checkpoint);
     }
     if(!checkpoint.requestId){
-     let requested;try{requested=originalRequest?await auth.helper('request_credential',{continuationOf:originalRequest.requestId,idempotencyKey:options.idempotencyKey,sourceId:'mfa',recordId:checkpoint.recordId,origin:options.origin,credentialType:'otp',operation:'login',mode:'private',targetId:options.targetId,purpose:options.purpose,expiresAt:checkpoint.expiresAt,...Object.fromEntries(['organization','group','delegation'].filter(field=>originalRequest?.[field]!==undefined).map(field=>[field,originalRequest?.[field]]))}):await auth.helper('continue_authentication',{continuationId:checkpoint.continuationId,idempotencyKey:options.idempotencyKey,purpose:options.purpose,recordId:checkpoint.recordId});}catch(error){return result('waiting',errorCode(error),'no_effect');}
+     let requested;try{requested=await auth.helper('continue_authentication',{continuationId:checkpoint.continuationId,idempotencyKey:options.idempotencyKey,purpose:options.purpose,recordId:checkpoint.recordId});}catch(error){return result('waiting',errorCode(error),'no_effect');}
      checkpoint={...checkpoint,requestId:requested.requestId};if(!bound(requested))throw Error('owner_factor_binding_mismatch');
      checkpoint={...checkpoint,...(requested.authenticationBinding?{authenticationBinding:structuredClone(requested.authenticationBinding)}:{})};await checkpoints.save(key,checkpoint);
     }

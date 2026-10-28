@@ -30,20 +30,10 @@ After human input, `browser_continue` with the same `taskId` reads identity/URL 
 
 ## Standalone authentication
 
-Website credential use belongs to standalone Auth Receipts; Bots is another
-consumer. The Node `connectHostedAuthHelper()` adapter discovers Auth's verified
-SDK at its data-directory `auth-receipts/client/current` selector. Missing SDK or
-capabilities require Auth installation/enrollment diagnostics, not direct vault
-access or a legacy auth fallback. Private discovery and bearer material stay in
-the SDK. Owner decisions, required delivery and exact browser binding still gate
-input. Never repeat an unknown credential attempt.
-Use `createOwnerLoginPlaybook` with trusted browser routines, connected `auth` and
-metadata checkpoints for new requests. `createOwnerTotpContinuation` composes
-Auth's observed factor action after password/SSO; number matching follows the
-original attempt with `createOwnerNumberMatchingContinuation`. Exact generation,
-privacy and identity evidence are required. Unsupported paths hold. Owner
-`reconcile: true` cannot create or repeat credential use. Legacy checkpoints keep
-their original issuer. Input/submission acknowledgement never proves login.
+Website credentials use standalone Auth Receipts through its verified SDK.
+Before login, MFA or recovery, read [Standalone Auth](references/authentication.md#standalone-auth-receipts).
+Owner decisions, delivery and exact browser binding gate input. Keep unknown
+attempts on their original requests; never replay private use.
 
 ## Hosted workflow guidance v1
 
