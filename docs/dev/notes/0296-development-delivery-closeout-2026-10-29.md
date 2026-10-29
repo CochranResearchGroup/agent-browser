@@ -33,7 +33,7 @@ Doctor then isolated one remaining failure: local ingress. The raw dashboard
 manifest was healthy, the local hostname returned404, and Traefik could reach
 the upstream. Adding the missing local-only Cooper inventory repaired the route.
 External and Tailscale publication remain disabled. No application code change
-was required. [Cooper PR6](https://github.com/ecochran76/cooper-webservices/pull/6) retains the inventory and generated
+was required. [Cooper PR29](https://github.com/CochranResearchGroup/cooper-webservices/pull/29) retains the inventory and generated
 local router/upstream, excluding unrelated checkout edits.
 
 During earlier diagnosis, invoking the Cooper renderer with a help argument
