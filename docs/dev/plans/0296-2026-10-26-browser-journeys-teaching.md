@@ -2,11 +2,11 @@
 
 Product lane: PL-RECIPES
 Status: OPEN
-Consolidation: required
+Consolidation: source merged through PR480; narrated acceptance deferred
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/466
-Integration branch: recipes/spec466-integration
+Integration branch: recipes/spec466-integration (merged); closeout branch: recipes/p296-delivery-closeout
 Integration base: 5770d693b23d51c9932574fa68e012a98029ce73
-Qualified Native image checkpoint: Agent Browserbc1e50311/bc5072bebf6e and Nativea530a97/98ec819840ba, actual054. Later teaching/Auth source composition is recorded below; no new installation is claimed.
+Qualified Native image checkpoint: Agent Browserbc1e50311/bc5072bebf6e and Nativea530a97/98ec819840ba, actual054. Later teaching/Auth source composition and isolated development installation are recorded below. Native image acceptance remains bound to its exact qualified checkpoint.
 
 ## Custody and scope
 
@@ -599,3 +599,20 @@ User explicitly deferred478 and approved the recommended comparison base5770d693
 User-deferred478 remains open. One final review of5770d693...b90dd882d and one consolidated TDD pass are complete: Standards0blocking/1low canonical follow-up489; both accepted Spec blockers repaired at3d7a016d4. Public regressions prove Saved-source, transcript and recording relabeling refusals and valid long exact task identity acceptance. Actual Speech synthetic HTTP/Saved/Opus qualification passes; physical narration and real ASR quality remain unqualified.
 
 Fetched current-main7d9b4b7ad composes as773fe242f with one additive package-script conflict resolved by preserving both intents. All332 commands survive; full Auth guidance is retained verbatim in its linked reference and main skill9223bytes. Combined client/types/docs/guidance/policy/links/strict Clippy/fmt pass. Auth source suite's120second aggregate budget breach is retained; first four component scripts passed, remaining staged-factor script passed independently, and hosted-helper/follow/types pass. Clean Auth6348778ff/parentd6e07227 sources and synthetic owner/native ports were used, with no live/installed Auth effects. See [final adjudication and validation record](../notes/0296-final-review-2026-10-28.md). Review/remediation1/1(completed); no further broad pass. Original children11/12 closed,478 deferred, parent466/PR480 open/draft, production unchanged.
+
+
+## Delivery closeout, 2026-10-29
+
+PR480 merged at `6c596cc648c6ee85adc95c665e19e5943c5b4514`. The exact merged
+optimized development candidate `cc5c41faa991033509aeb2ebf86f46c8b28a88e5d57be0fd5dbf1cdb81b408bc`
+was published only to the isolated p296 namespace. Doctor passes every check,
+including the repaired local ingress. Three disposable browser launch, URL-read,
+close and residue iterations passed on 2026-10-28; doctor was rechecked on
+2026-10-29. [Delivery evidence and limits](../notes/0296-development-delivery-closeout-2026-10-29.md).
+
+Original children remain11/12 closed. Narrated walkthrough478 is explicitly
+deferred, so parent466 remains open. The reserved final review and remediation
+remain completed1/1; this closeout adds no broad review. Production publication,
+formal release and provider/narrated acceptance are not claimed. Earlier open/draft
+statements above describe their historical checkpoints and are superseded by this
+merged-source delivery record.
