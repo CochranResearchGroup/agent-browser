@@ -150,20 +150,56 @@ pub async fn fill(
     )
     .await?;
 
-    // Focus the element
-    client
+    // Native date controls do not accept Input.insertText. Fill them in the
+    // resolved element's realm, retaining the ordinary keyboard path for text.
+    let focused: Value = client
         .send_command_typed::<_, Value>(
             "Runtime.callFunctionOn",
             &CallFunctionOnParams {
-                function_declaration: "function() { this.focus(); }".to_string(),
+                function_declaration: r#"function(value) {
+                    this.focus();
+                    if (this.tagName !== 'INPUT' || this.type !== 'date') {
+                        return { dateFilled: false };
+                    }
+                    if (this.matches(':disabled') || this.readOnly) {
+                        return { error: 'Date input is not writable' };
+                    }
+                    if (value !== '' && !/^\d{4,}-\d{2}-\d{2}$/.test(value)) {
+                        return { error: 'Invalid date value; expected YYYY-MM-DD' };
+                    }
+                    const view = this.ownerDocument.defaultView;
+                    const setValue = Object.getOwnPropertyDescriptor(view.HTMLInputElement.prototype, 'value').set;
+                    const previous = this.value;
+                    setValue.call(this, value);
+                    if (this.value !== value) {
+                        setValue.call(this, previous);
+                        return { error: 'Invalid date value; expected YYYY-MM-DD' };
+                    }
+                    this.dispatchEvent(new view.Event('input', { bubbles: true, composed: true }));
+                    this.dispatchEvent(new view.Event('change', { bubbles: true }));
+                    return { dateFilled: true };
+                }"#.to_string(),
                 object_id: Some(object_id.clone()),
-                arguments: None,
+                arguments: Some(vec![CallArgument {
+                    value: Some(serde_json::json!(value)),
+                    object_id: None,
+                }]),
                 return_by_value: Some(true),
                 await_promise: Some(false),
             },
             Some(&effective_session_id),
         )
         .await?;
+    if focused.get("exceptionDetails").is_some() {
+        return Err("Could not focus or fill the input".into());
+    }
+    let outcome = &focused["result"]["value"];
+    if let Some(error) = outcome["error"].as_str() {
+        return Err(error.to_owned());
+    }
+    if outcome["dateFilled"] == true {
+        return Ok(());
+    }
 
     // Select all + delete to clear
     client

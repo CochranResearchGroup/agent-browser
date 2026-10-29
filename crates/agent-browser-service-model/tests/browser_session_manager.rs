@@ -74,6 +74,7 @@ fn exact_navigation_history_compacts_oldest_rows_into_restart_safe_daily_summari
 
 #[derive(Default)]
 struct FixtureEffects {
+    qualified_adoption: Option<agent_browser_service_model::BrowserRecovery>,
     idle_retirement_permitted: Option<bool>,
     idle_retirement_error_browser: Option<String>,
     retirement_guard_denied_browser: Option<String>,
@@ -359,6 +360,15 @@ impl BrowserSessionEffects for FixtureEffects {
                 .map(|tab| (tab.id.clone(), format!("recovered-{}", tab.target_id)))
                 .collect(),
         })
+    }
+    fn reconcile_profile_browser(
+        &mut self,
+        _profile: &BrowserProfileCatalogEntry,
+        _browser: Option<&agent_browser_service_model::ManagedBrowserInstance>,
+        _tabs: &[agent_browser_service_model::ManagedBrowserTab],
+        _navigation: &[BrowserNavigationRecord],
+    ) -> Result<Option<agent_browser_service_model::BrowserRecovery>, String> {
+        Ok(self.qualified_adoption.take())
     }
     fn browser_is_live(
         &mut self,
@@ -3019,4 +3029,53 @@ fn borrowed_close_failure_protects_the_failed_tasks_remaining_expired_tabs() {
         Some("synthetic_tab_close_unknown")
     );
     assert!(effects.closes.is_empty());
+}
+
+#[test]
+fn public_existing_profile_adoption_retains_original_kernel_identity_across_restart() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let identity = agent_browser_service_model::RecordedProcessIdentity {
+        pid: 7123,
+        start_token: "boot:original".into(),
+        executable_path: Some("/fixture/chrome".into()),
+        browser_family: Some("chrome".into()),
+    };
+    let mut effects = FixtureEffects {
+        qualified_adoption: Some(agent_browser_service_model::BrowserRecovery {
+            launch: BrowserLaunch {
+                browser_id: "borrowed-browser".into(),
+                pid: identity.pid,
+                cdp_endpoint: "ws://127.0.0.1:9999/devtools/browser/original".into(),
+                desktop: None,
+                process_identity: Some(identity.clone()),
+            },
+            target_ids: BTreeMap::new(),
+        }),
+        ..FixtureEffects::default()
+    };
+    let opened = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_view_desktops: vec![],
+        },
+    )
+    .open(OpenBrowserSession::exact_profile(
+        "original",
+        "profile-a",
+        1000,
+    ))
+    .unwrap();
+    assert!(effects.launches.is_empty());
+    assert!(state.shared_browser_ids.contains(&opened.browser_id));
+    let restored: serde_json::Value =
+        serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+    assert_eq!(
+        restored["adoptedBrowserProcessIdentities"][&opened.browser_id]["process"],
+        serde_json::to_value(identity).unwrap(),
+        "Qualified public existing-profile adoption must retain its original immutable identity"
+    );
 }

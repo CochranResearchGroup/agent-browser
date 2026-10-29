@@ -15,9 +15,11 @@ with installed source `9d782cb3c` and binary `0ed64bf6a1754cbf` accepted through
 supported preserve transaction. Fresh borrowed-task expiry publishes truthful
 terminal state and preserves protected peers; ordinary owner status is responsive.
 The installed batch helper is positively qualified with the limits below. The
-primary owns the remaining cross-repository acceptance and the reserved single
-post-closure review/remediation. Keep the branch and sealed artifact custody;
-this outcome does not claim integration into the independently advanced main.
+primary completed cross-repository acceptance, the single review with zero
+findings, and the findings-TDD disposition with zero code changes. Current source
+composition brings pinned main `6c596cc6` into this branch for PR491 integration;
+keep sealed artifact custody. Installed runtime remains the accepted hotfix and
+does not claim the new Auth/journey source as installed.
 
 ## Initial evidence
 
@@ -400,3 +402,43 @@ the validated integration branch; canonical main and the installed binary remain
 separate identities. No code, test or support bytes change in this documentation
 reconciliation, no rebuild is required, and no reserved broad review or worker
 memory closeout has run.
+
+
+## Canonical main composition
+
+The primary authorized merging exact main
+`6c596cc648c6ee85adc95c665e19e5943c5b4514` into the owned branch after all three
+tickets closed and the single consolidated Standards/Spec review returned zero
+findings. The findings-TDD phase concluded with zero changes; no second broad
+review is opened for this routine composition. Conflicts are limited to retaining
+both P296/P297 runbook entries and both additive model tests: failed borrowed-task
+suffix protection and original adopted kernel identity across restart.
+
+The targeted closed-world guard check verifies that normal `manager` is identical
+to pinned main, both manager factories use the same current model constructor,
+and borrowed expiry unions its retained-handoff, leave-open and profile-operation
+protections rather than replacing them. Production enum/runtime forwarding stays
+explicit; only unrelated Native recovery remains deferred from the borrowed
+phase. Model, selected native TTL/namespace/resource and MCP task-operation,
+workflow, teaching/challenge checks, provider-free client contracts, format and
+strict workspace Clippy qualify this actual composition before its merge commit.
+No runtime installation or provider action is part of this integration.
+
+
+Actual composed-source validation passes: all 400 service-model checks and 60
+challenge-control checks; native consumer/pool 127 passed with one existing
+viewer case ignored; runtime 29 passed with eight existing Chrome cases ignored;
+all selected host, namespace, cleanup guard, resources, identity, dispatcher,
+strict close and MCP task-operation/workflow/teaching/challenge groups passed.
+Across those native selections, 289 passing executions represent 288 distinct
+checks (one policy case occurs in two selectors). Ten provider-free client
+contract scripts, Rust format, strict workspace Clippy and diff checks pass.
+The exact combined native test binary SHA256 is
+`59788908cde1f85343bd153bfb600bbdddf442b25ca328c77d448d8c86871952`.
+The consumer gate completed in 290.91 seconds under the 4 GiB aggregate scope.
+No passing source result is promoted to installed new-main/Auth acceptance.
+The inherited full catalog YAML error remains unchanged in content: original
+base line644 is line659 in pinned main and this composition,
+and both parent runbooks already exceed the historical 200-line budget; this
+bounded merge preserves their entries rather than performing an unrelated
+catalog or archive migration.

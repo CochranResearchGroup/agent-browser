@@ -6,6 +6,9 @@
 use agent_browser_desktop_services::{HCAPTCHA_RECIPE_ID, TURNSTILE_RECIPE_ID};
 use serde::{Deserialize, Serialize};
 
+mod perception;
+pub use perception::*;
+
 mod task;
 mod visual_desktop;
 mod visual_provider;

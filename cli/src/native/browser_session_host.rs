@@ -2094,8 +2094,16 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     "deferredBrowserErrors": reaped.deferred_browser_errors,
                 }))
             }
-            "browser_session_status" => serde_json::to_value(self.state())
-                .map_err(|error| format!("browser_session_status_serialize_failed:{error}")),
+            "browser_session_status" => {
+                let mut status = serde_json::to_value(self.state())
+                    .map_err(|error| format!("browser_session_status_serialize_failed:{error}"))?;
+                // Fingerprints belong to private persistence, never raw status.
+                if let Some(object) = status.as_object_mut() {
+                    object.remove("taskOperations");
+                    object.remove("adoptedBrowserProcessIdentities");
+                }
+                Ok(status)
+            }
             _ => Err(format!("browser_session_action_unsupported:{action}")),
         }
     }
@@ -2188,6 +2196,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .clone();
         if self.effects.browser_is_live(&browser)? {
             return Ok(());
+        }
+        if command["retainedTaskOnly"] == true {
+            return Err("browser_task_transient_state_lost: observe current task and choose explicit recovery; unsaved page state is not reconstructed".into());
         }
         // Explicit return observation must never recover a different physical
         // browser, including while atomic return still retains human ownership.
@@ -2828,6 +2839,7 @@ where
         super::browser_host_policy::prepare_command(&self.state, session_name, &mut prepared)?;
         let command = &prepared;
         let exact_task_id = self.exact_task_selector(session_name, command)?;
+        super::browser_task_operations::check_expected(&self.state, command)?;
         for task in self
             .state
             .sessions

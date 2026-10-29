@@ -1423,6 +1423,10 @@ agent-browser chat "<instruction>"    # AI chat: natural language browser contro
 agent-browser chat                    # AI chat: interactive REPL mode
 ```
 
+Native date inputs use YYYY-MM-DD. Filling an editable date emits input and
+change events; invalid dates and non-writable date inputs return errors.
+
+
 `candidate build --dry-run` reports the exact isolated build plan without
 writing state or compiling. Build apply requires explicit `--apply`, claims one
 exact request, invokes Cargo through `scripts/ci/cargo-safe.sh`, derives the
@@ -3095,6 +3099,9 @@ correlated to the requested target. The path is a delivery destination; existing
 files are preserved. Delivery requires a proven local browser process and reports
 cancellation or missing identity explicitly. Existing-profile tasks download through
 their current browser without a historical owner binding or manual recovery.
+Qualified local attachments retain original process/endpoint proof for download
+verification without taking child-process ownership. Changed or unverified sources
+remain unavailable.
 Ordinary continuation reconnects to the live profile browser and reconciles an
 interrupted publication without replacing it or resetting its authenticated state.
 
@@ -7378,3 +7385,106 @@ independent copy for testing. If login is lost, stop account actions and sign
 in explicitly in the chosen browser. Never weaken encryption, export keys or
 replace credential stores to manufacture portability. Inspect another build,
 use a confirmed original, keep the copy without opening, or cancel.
+
+### Inspect a retained task
+
+Use `browser_command` with `taskId` and `action: "task_briefing"`, or
+`agent-browser --json mcp task-briefing TASK`. Both return the same compact
+briefing from existing owner stores without starting a daemon, opening a
+browser, navigating, focusing, taking control or acknowledging human use.
+
+The briefing includes exact retained profile/browser/target identity, original
+caller-supplied goal attribution, last recorded verified navigation, recorded
+artifact references, pending human assistance and original uncertain operation
+IDs. Retained context is not a live page observation or proof of task completion.
+Missing evidence stays missing; ambiguous legacy lane requests are excluded.
+URLs, page bodies, artifact paths and credentials are omitted. Artifact references
+recorded by `browser_artifact` describe completed operations, not continuing file
+availability. Older artifacts without recorded references remain unknown.
+
+Software clients can use `getTaskBriefing({baseUrl, taskId, headers})` from
+`@agent-browser/client/task-briefing`. Its authenticated read endpoint is
+`GET /api/browser/tasks/{encoded-task-id}/briefing`; supply the existing dashboard
+session cookie in the request headers. The helper rejects redirects and identity
+mismatches without retrying. A task retains at most 256 artifact references;
+new capture/download requests fail before browser effects when this capacity is full.
+
+Backend clients can use `@agent-browser/client/teaching-evidence` and
+`@agent-browser/client/teaching-evidence-http` for exact scoped A/V evidence,
+selected isolated narration import into Speech Saved custody, explicit ranges
+of at most five minutes and reopening original transcript operations. See the
+[teaching evidence guide](docs/src/app/teaching-evidence/page.mdx). Source, timing,
+recognition uncertainty and protected stop/resume gaps remain explicit. Persisted
+references are rechecked against Speech Saved provenance before transcription
+or transcript release; exact browser task IDs may be up to 4,000 characters.
+
+### Draft a SiteGuide from a demonstration
+
+An agent first interprets authorized video and selected narration, then prepares
+a useful evidence-linked SiteGuide candidate through the existing candidate model.
+Use `inspect_guide` or client `inspectTeachingDraft` to inspect typed parameters,
+routines/playbook, observed facts, inferred intent and unresolved questions.
+Drafts remain inert and cannot execute. See [teaching drafts](docs/src/app/teaching-drafts/page.mdx).
+
+### Recover original task operations
+
+Addressed MCP navigation, click, fill, screenshot and eligible single page commands
+accept a stable requestId (1–128 ASCII letters, digits, underscore, period, colon
+or hyphen). Identical requests return the original operation; changed arguments
+conflict before dispatch. Inspect with browser_command action task_operation and
+params.requestId, CLI agent-browser mcp task-operation TASK REQUEST, or
+getTaskOperation from @agent-browser/client/task-briefing.
+
+The software helper reads authenticated
+GET /api/browser/tasks/{task}/operations/{request} with the existing dashboard
+cookie. Pending/uncertain operations require observation; owner acknowledgement
+is separate from site completion. The 256-operation task limit retains history
+and refuses new effects when full. Continuation observes the retained current
+target or returns intervention for lost/changed state without navigation restore.
+Legacy unscoped CLI effects and Native/Auth journals retain their own contracts.
+Operation-backed screenshot references require availability readback before reuse.
+
+### Review teaching candidates
+
+@agent-browser/client/teaching-review edits/reopens immutable SiteGuide child
+revisions and records existing authenticated operator decisions against exact
+content. The receiver supplies trusted decision and per-evidence access readers.
+Opening, proposed interpretations and schema validation create no approval.
+Accepted procedures remain available when source media expires; each frame or
+transcript has its own access state. Ordinary reuse remains disabled until
+separate review and fresh-repeat qualification. See the
+[teaching review guide](docs/src/app/teaching-review/page.mdx).
+
+### Native challenge assistance
+
+Native completion errors retain the original request ID and a safe diagnostic cause. Inspect that original; a diagnostic cause never permits replay.
+
+The opt-in static image profile supports one 3×3 bus-selection round. It requires a provider with `captcha_solve`, exact configuration reference `agent-browser:remote-view-native-image-static-3x3:v1`, and owner-verified site policy explicitly listing that provider. An empty provider list does not enable image input. Request `native_capture` with registered action `hcaptcha-image-grid-3x3-v1`, reason from the actual returned image, and submit only returned candidate IDs through `native_input` `imageAttempt`. The owner derives coordinates and enforces the original frame, task, window, control, policy and cumulative attempt budget. At most four tiles and Verify are allowed within the new image profile's 60-second bound. Checkbox limits remain unchanged. Dynamic, ambiguous, unsupported or uncertain cases require assistance; a fresh image does not renew a spent attempt.
+
+A separate two-round profile uses `agent-browser:remote-view-native-image-static-3x3-two-round:v1` and registered action `hcaptcha-image-grid-3x3-two-round-v1`. It permits at most two complete static grids under one original task and 60-second deadline, with at most four tiles plus Verify per round and ten clicks overall. It requires its own explicit provider/site-policy grant. `imageAttempt` also requires `originalRequestId`: the first input uses its own request ID; later input retains that original while using a fresh observation and candidate IDs. The owner requires all nine image interiors to change, retains the same physical/control/policy/region context, and refuses partial, loading, rejected or ambiguous progress. Each operation result remains immutable. `createNativeImageRoundsChallengeClient` from `@agent-browser/client/native-image-challenge` supplies the current `roundIndex` to its selection callback and preserves the original remaining deadline. A fresh capture or task cannot continue a spent original.
+
+Linux image captures carry an owner-minted elapsed clock bound to the current boot. Evidence age and the original 60-second deadline use that clock, so wall-clock corrections cannot make a fresh capture appear future-dated or renew its budget. Wall `observedAtMs` remains diagnostic. Changed boots or clock domains, future elapsed readings and expired evidence stop automation; legacy receipts and unsupported platforms retain strict wall-clock checks. The client uses an elapsed receiving timer (`steadyNow`, default `performance.now()`) while `now` and callback `deadlineAtMs` remain wall-clock projections. Selection callbacks receive `timeoutMs` as an elapsed maximum and must obey `signal`; the wall deadline cannot extend that duration. Neither clock metadata nor a fresh capture grants another attempt.
+
+Full-window image evidence remains the default. For a fresh complete puzzle region, supply `imageCaptureScope: "complete_puzzle_region"` and `region` before capture, or configure the image client's `captureRegion`. The owner must find the complete prompt, brand, nine cells and Verify inside that region. The original region and hash remain unchanged through input, alongside full-window identity and geometry fences. Partial-window metadata stays honest; regional puzzle evidence never proves whole-window clearance. Independent clearance and protected-site checks remain required.
+
+Image expiry errors may include `observationClock` with a validated reason, observation and validation timestamps, and age. These diagnostics distinguish a future timestamp from evidence older than 60 seconds. Inspect the original operation; the error does not permit replay.
+
+Use native_capture with classifyChallenges for bounded same-frame OCR. The challenge-assistance client supports a bounded passive wait or one registered checkbox attempt per task, with owner-verified policy, provider capability and current Native evidence. Automatic origin qualification requires an existing verified CDP task; CDP-free tasks use human assistance. Known hCaptcha OCR variants require strong same-frame branding and registered checkbox geometry; uncertain text requires assistance. Pending or uncertain input never permits replay. Clearance and protected-site admission require independent checks. Human assistance reuses the original opaque handoff and explicit Native takeover/return. See the [challenge assistance guide](docs/src/app/challenge-assistance/page.mdx).
+
+### Clarify teaching candidates
+
+Prepare a useful draft first, then use @agent-browser/client/teaching-grilling
+for source-linked dependency-ready questions and authenticated operator answers
+in the existing versioned candidate. Recommendations are not consent; ordinary
+review and fresh-repeat validation remain required. See the
+[teaching grilling guide](docs/src/app/teaching-grilling/page.mdx).
+
+### Repeat reviewed reports
+
+Use existing routines and public browser controls to run the reviewed report for
+new dates. The receiving application independently verifies report identity,
+dates and actual CSV bytes before `recordFreshRepeat` retains its proof.
+`promote` rechecks that proof, explicit operator review and any clarification
+answers before selecting the reusable version; the previous accepted bytes stay
+unchanged. Stored labels remain inert in stock MCP. See the
+[report repeat guide](docs/src/app/report-repeat/page.mdx).

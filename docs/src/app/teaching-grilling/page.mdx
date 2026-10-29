@@ -1,0 +1,103 @@
+# Clarify a teaching candidate
+
+Prepare a useful [teaching draft](/teaching-drafts) before interviewing the
+operator. Read the selected video frames and available timestamped transcript,
+then inspect the existing candidate through the public playbook client. Explain
+what the agent already understands before asking about genuine gaps.
+
+Use `@agent-browser/client/teaching-grilling` with the existing private SiteGuide
+candidate directory and [review client](/teaching-review). It adds clarification
+knowledge to the same immutable candidate files. It never promotes or executes a
+procedure and introduces no viewer, interview application or separate answer store.
+
+## Prepare the questions
+
+The agent performs the reasoning using its normal media/text understanding. This
+helper does not infer a website model or generate a plausible questionnaire from
+a report name. For each routine, compare observed actions, stated intent, inferred
+rules, variable inputs, expected results, alternate branches and recovery. Add an
+unresolved question through `review.save` only when the evidence leaves a material
+choice. Preserve known observations and remaining uncertainty.
+
+For the fixed Daily sales demonstration, the report type, May example dates,
+USD, checked refunds box and CSV prepared marker are visible facts. Do not ask
+the operator to repeat them. The next period uses newly requested dates; the May
+rows are examples. The word “usual” does not establish a future refunds policy.
+Ask whether each caller chooses refunds, with the recommendation to expose an
+explicit choice until policy is settled. Separately ask which timezone and end
+boundary govern future periods. A question about unavailable refunds controls
+depends on the policy answer; do not ask it in the first round. The CSV marker
+also does not establish file delivery or contents: ask about those outcomes when
+they matter and remain unknown.
+
+Check contradictions explicitly: cite both conflicting passages rather than
+silently picking one. Separate missing intent from missing portal evidence. Ask
+what result establishes completion, which exceptions are allowed, when to stop,
+and what recovery preserves the intended business meaning. Do not invent these
+branches as observed behavior. A justified recommendation is a proposal, never a
+human decision. If no recommendation is justified, say why the interpretation
+remains unknown.
+
+Every prepared question must identify an existing unresolved ID and at least one
+existing routine step reference (`routineId:index`). Its text, interpretation and
+evidence references come from that unresolved entry. The response includes exact
+artifact hashes and timestamp ranges. Dependencies must refer to earlier
+questions, preventing cycles. Independent questions form the next ready round;
+settled answers are never repeated.
+
+```js
+import {createTeachingGrillingClient} from '@agent-browser/client/teaching-grilling';
+
+const grilling = createTeachingGrillingClient({
+  review,
+  // Trusted receiving-application configuration, never model request data.
+  readOperatorAnswer: request =>
+    existingAuthenticatedOperatorWorkflow.readAnswer(request),
+});
+const prepared = await grilling.prepare({
+  taskId, guideId: draft.guideId, expectedSha256: draft.sha256,
+  operationId: prepareOperationId,
+  questions: [
+    {id: 'refunds-policy', category: 'missing_intent',
+      stepRefs: ['set-report-period:2'], dependsOn: []},
+    {id: 'date-boundary-policy', category: 'variable_input',
+      stepRefs: ['set-report-period:1'], dependsOn: []},
+  ],
+});
+const round = await grilling.open({taskId, guideId: prepared.guideId});
+```
+
+## Record an actual answer
+
+The receiving application's authenticated operator interaction records an
+explicit answer to the exact question, question hash, task, root candidate,
+current version, raw file hash and content hash. Its trusted reader returns the
+existing answer reference, answer text, authenticated actor and source-event
+references with `provenance: authenticated_operator`. The helper checks all those
+bindings. A model recommendation, arbitrary actor label, unconfigured reader or
+stale answer cannot supply that authority. Stock Dashboard and Native UI wiring
+are not implied.
+
+The agent reads the actual answer and prepares the useful correction in a copy of
+`round.guide`: update parameter meaning, preconditions, steps, branches or outcomes
+as appropriate. Keep recording observations unchanged and distinguish operator
+instructions from observed media. Pass that copy to `grilling.answer` with the
+question ID, existing `answerRef`, expected hash and saved operation ID. The helper
+preserves question/answer history, appends the attributable answer, removes only
+that resolved question from `unresolved`, and publishes through `review.save`.
+An answer is clarification, not procedure approval. Review and fresh-repeat
+validation remain required before ordinary reuse.
+
+Save operation IDs before dispatch. After interruption, use
+`grilling.lookupOperation({rootGuideId, operationId})` and reopen its original
+returned version. A same-operation retry with the original intent recovers the
+same immutable publication; `not_observed` is not permission to retry a possibly
+running caller. Reopening checks the original candidate bytes and question hash as well as the
+existing answer receipt. The authority request contains binding references only,
+never stored actor/provenance labels that a mirror could pass off as a response. If the reader is
+unavailable or the receipt changed, answers remain visible as unverified and
+further rounds stop. Do not fabricate consent, erase history or ask those settled
+questions again to work around an outage.
+
+Source and synthetic HTTP qualification do not prove physical human participation
+or real narrated-portal acceptance. Those need their own actual operator evidence.

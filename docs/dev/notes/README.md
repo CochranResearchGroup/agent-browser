@@ -1,5 +1,13 @@
 # Agent Browser Notes Index
 
+[P296 final review](0296-final-review-2026-10-28.md): one Standards/Spec review, two teaching-evidence repairs and one bounded TDD pass; narrated walkthrough deferred.
+
+[P296 image rounds checkpoint](0296-native-image-rounds-472-checkpoint.md): same-boot elapsed clock repair and actual054 two-round Native qualification;472/484 accepted,478 actual media and scope remain pending.
+
+[P296 Native image qualification](0296-native-image-471-source-receipt.md): actual image selection, Native dispatch and independent access qualify; source-pinned Native pointer-replay repair, refusal/no-replay and exact cleanup remain separately bounded.
+
+[P296 Native checkbox qualification](0296-native-checkbox-470-source-receipt.md): both families, passive and bounded refusal/no-replay cases qualify on actual Native controls with independent HTTPS checks and exact cleanup; installation and production remain separate.
+
 [P295 standalone Auth installed qualification](0295-2026-10-26-installed-owner-auth.md): isolated default SDK/discovery, physically enrolled Chrome, actual capture fences, same-target password/TOTP and restart; production and real-provider acceptance remain separate.
 
 [P293 paired asset delivery](0293-2026-10-25-dashboard-asset-delivery.md):170 requests pass with stable serving identity; original timeout remains unreproduced under422.
@@ -246,3 +254,16 @@ active backlog.
 - [P237 bounded integration review](0237-2026-10-15-bounded-review.md): frozen Standards/Spec adjudication and one bounded remediation pass.
 
 - [Dashboard summary response overflow](2026-10-17-dashboard-summary-overflow.md) records the bounded UX301 incident repair and qualification boundary.
+
+- [P296 teaching evidence source checkpoint](0296-teaching-evidence-473-source-receipt.md): scoped Remote View and Speech client qualification, with explicit physical-media limits.
+
+- [P296 teaching draft source checkpoint](0296-teaching-draft-474-source-receipt.md): interpreted synthetic demonstration, useful inert SiteGuide candidate and public inspection qualification.
+
+- [P296 task recovery checkpoint](0296-task-recovery-468-source-receipt.md): original operations and owned HTTPS reply-loss/restart proof.
+- [P296 teaching review checkpoint](0296-teaching-review-475-source-receipt.md): immutable lineage, operator decisions and per-evidence availability.
+
+- [P296 Native challenge checkpoint](0296-challenge-assistance-469-source-receipt.md): same-frame classification and owned attached/CDP-free human assistance.
+
+- [P296 focused grilling checkpoint](0296-teaching-grilling-476-source-receipt.md): source-linked rounds, attributable answers and interruption recovery.
+
+- [P296 reviewed report repeat](0296-report-repeat-477-source-receipt.md): independent CSV/date verification, refusal, original effects and immutable promotion.

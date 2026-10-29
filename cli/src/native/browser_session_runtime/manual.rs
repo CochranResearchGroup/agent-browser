@@ -15,6 +15,21 @@ pub(super) struct ManualBrowsers {
 }
 
 impl ManualBrowsers {
+    #[cfg(target_os = "linux")]
+    fn display(&mut self, browser: &ManagedBrowserInstance) -> Result<String, String> {
+        // The exact owned child retains the provider's trusted launch display.
+        // Sandboxed Chrome may make environ unreadable after launch. Adopted
+        // paths without that owned child must still establish current context.
+        let owned = self
+            .owned
+            .get(&browser.id)
+            .map(|(child, _)| child.display_name().map(str::to_owned));
+        resolve_display(
+            owned.as_ref().map(|value| value.as_deref()),
+            || self.verify(browser),
+            || process_display(browser),
+        )
+    }
     /// Reap only retained owned children during idle runtime polling. A zombie
     /// must not survive because no later task command happens to verify it.
     pub(super) fn poll_owned_exits(&mut self) {
@@ -147,7 +162,7 @@ impl ManualBrowsers {
         {
             // Read only this verified process's launch display. Remote View then
             // independently verifies the assignment and foreground window.
-            let display = process_display(browser)?;
+            let display = self.display(browser)?;
             if !self.verify(browser)? {
                 return Err("manual_login_process_exited".into());
             }
@@ -181,7 +196,7 @@ impl ManualBrowsers {
         }
         #[cfg(target_os = "linux")]
         {
-            let display = process_display(browser)?;
+            let display = self.display(browser)?;
             if !self.verify(browser)? {
                 self.owned.remove(&browser.id);
                 return Ok(());
@@ -253,6 +268,28 @@ impl ManualBrowsers {
 }
 
 #[cfg(target_os = "linux")]
+fn resolve_display(
+    owned: Option<Option<&str>>,
+    verify: impl FnOnce() -> Result<bool, String>,
+    read: impl FnOnce() -> Result<String, String>,
+) -> Result<String, String> {
+    if !verify()? {
+        return Err("manual_login_process_exited".into());
+    }
+    match owned {
+        Some(Some(display))
+            if !display.is_empty()
+                && !display.chars().any(char::is_whitespace)
+                && !display.chars().any(char::is_control) =>
+        {
+            Ok(display.into())
+        }
+        Some(_) => Err("manual_login_owned_display_unavailable".into()),
+        None => read(),
+    }
+}
+
+#[cfg(target_os = "linux")]
 fn process_display(browser: &ManagedBrowserInstance) -> Result<String, String> {
     let env = fs::read(format!("/proc/{}/environ", browser.pid))
         .map_err(|_| "manual_login_display_unavailable")?;
@@ -278,6 +315,29 @@ pub(super) fn window_tab(browser: &ManagedBrowserInstance) -> BrowserTabAcquisit
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn owned_manual_display_survives_unreadable_process_environment() {
+        let result = resolve_display(
+            Some(Some(":6850")),
+            || Ok(true),
+            || Err("environ_unreadable".into()),
+        );
+        assert_eq!(result.unwrap(), ":6850");
+        for owned in [Some(Some(":6850")), None] {
+            assert_eq!(
+                resolve_display(
+                    owned,
+                    || Err("original_context_changed".into()),
+                    || panic!("must not borrow display")
+                )
+                .unwrap_err(),
+                "original_context_changed"
+            );
+        }
+        assert!(resolve_display(Some(None), || Ok(true), || Ok(":9999".into())).is_err());
+    }
 
     #[test]
     fn manual_login_guard_rejects_debugging_arguments_before_spawn() {

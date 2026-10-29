@@ -331,7 +331,19 @@
     "test:dashboard-workspace-startup": "node scripts/test-dashboard-workspace-startup.cjs",
     "test:standalone-auth-bootstrap": "node scripts/test-standalone-auth-bootstrap.js",
     "test:owner-auth-source": "node scripts/test-owner-login-playbook.js && node scripts/test-owner-login-recovery.js && node scripts/test-owner-totp-continuation.js && node scripts/test-owner-number-matching.js && node scripts/test-owner-staged-factor.js",
-    "test:owner-auth-chrome": "node scripts/test-owner-login-chrome.js"
+    "test:owner-auth-chrome": "node scripts/test-owner-login-chrome.js",
+    "test:task-briefing-client": "node scripts/test-task-briefing-client.js && pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext ../packages/client/src/task-briefing.js",
+    "test:teaching-evidence": "node scripts/test-teaching-evidence.js",
+    "test:teaching-draft": "node scripts/test-teaching-draft.js",
+    "test:task-operation-client": "node scripts/test-task-operation-client.js",
+    "smoke:task-operation-recovery": "node scripts/smoke-task-operation-recovery.mjs",
+    "test:teaching-review": "node scripts/test-teaching-review.js",
+    "test:challenge-assistance": "node scripts/test-challenge-assistance.js",
+    "test:native-checkbox-assistance": "node scripts/test-native-checkbox-assistance.js",
+    "test:native-image-challenge": "node scripts/test-native-image-challenge.js && pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --module NodeNext --moduleResolution NodeNext --target ES2022 --types node ../packages/client/src/native-image-challenge.js ../packages/client/src/native-image-challenge.d.ts",
+    "test:teaching-grilling": "node scripts/test-teaching-grilling.js",
+    "test:teaching-report-repeat-client": "node scripts/test-teaching-review.js && pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --types node ../packages/client/src/teaching-review.js ../packages/client/src/teaching-review.d.ts",
+    "smoke:teaching-report-repeat": "node scripts/smoke-teaching-report-repeat.mjs"
   },
   "keywords": [
     "browser",

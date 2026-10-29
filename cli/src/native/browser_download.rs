@@ -53,12 +53,17 @@ pub(crate) mod action_commands {
         );
         let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
         let session_id = mgr.active_session_id()?.to_string();
-        let pid = mgr
-            .browser_pid()
-            .or(state.attached_browser_pid)
-            .ok_or("download_source_identity_unproven: local browser PID unavailable")?;
-        let owner = crate::process_identity::capture_process_identity(pid, None, None)
-            .ok_or("download_source_identity_unproven: local browser identity unavailable")?;
+        let owner = if let Some(original) = mgr.verified_local_download_source()? {
+            crate::native::service_download_artifact::verify_process(&original)?;
+            original
+        } else {
+            let pid = mgr
+                .browser_pid()
+                .or(state.attached_browser_pid)
+                .ok_or("download_source_identity_unproven: local browser PID unavailable")?;
+            crate::process_identity::capture_process_identity(pid, None, None)
+                .ok_or("download_source_identity_unproven: local browser identity unavailable")?
+        };
         // Current task process evidence identifies the source. Historical owner
         // bindings are not permission to download through this browser.
         let tree = mgr

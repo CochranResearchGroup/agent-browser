@@ -2558,13 +2558,36 @@ pub(super) async fn attach_verified_browser_endpoint(
                 process["type"] == "browser" && process["id"].as_u64() == Some(u64::from(pid))
             })
         });
+    let download_source = before
+        .start_token
+        .as_ref()
+        .filter(|token| !token.is_empty())
+        .zip(
+            before
+                .executable_path
+                .as_ref()
+                .filter(|path| Path::new(path).is_absolute()),
+        )
+        .map(
+            |(start, executable)| agent_browser_service_model::RecordedProcessIdentity {
+                pid,
+                start_token: start.clone(),
+                executable_path: Some(executable.clone()),
+                browser_family: before.browser_family.clone(),
+            },
+        );
     if !matches
         || crate::process_identity::observe_process(pid)
             != crate::process_identity::ProcessObservation::Observed(before)
     {
         return Err("browser_session_profile_endpoint_identity_conflict".into());
     }
-    BrowserManager::connect_cdp_background(endpoint, client).await
+    let mut manager = BrowserManager::connect_cdp_background(endpoint, client).await?;
+    if let Some(source) = download_source {
+        super::service_download_artifact::verify_process(&source)?;
+        manager.retain_verified_local_download_source(source);
+    }
+    Ok(manager)
 }
 
 async fn attach_recorded_browser(

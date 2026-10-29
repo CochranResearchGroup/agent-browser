@@ -1,6 +1,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P296
+    product_lane: PL-RECIPES
+    objective: Deliver dependable browser journeys and narrated teaching spec466
+    plan: docs/dev/plans/0296-2026-10-26-browser-journeys-teaching.md
+    branch: recipes/spec466-integration
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#466, CochranResearchGroup/agent-browser#467, CochranResearchGroup/agent-browser#473, CochranResearchGroup/agent-browser#474, CochranResearchGroup/agent-browser#468, CochranResearchGroup/agent-browser#469, CochranResearchGroup/agent-browser#475, CochranResearchGroup/agent-browser#476, CochranResearchGroup/agent-browser#477, CochranResearchGroup/agent-browser#470, CochranResearchGroup/agent-browser#471, CochranResearchGroup/agent-browser#472, CochranResearchGroup/agent-browser#478, CochranResearchGroup/agent-browser#484]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [P295]
+    reconciled_overlaps: ["Preserve separate Auth owner; serialize shared public contracts with teaching worker473"]
+    limitations: ["No production effects;472/484 actual054 qualified;11/12 original children closed;478 narrated walkthrough explicitly deferred; review repairs and current-main Auth source composition qualified", "One final broad review and one bounded TDD remediation completed; low follow-up489 separate"]
+    updated_at: 2026-10-28
   - id: P295
     product_lane: PL-AUTH
     objective: Integrate standalone Auth Receipts and qualify browser continuation
@@ -1225,6 +1240,6 @@ lanes:
     dependencies: []
     overlaps: [P240, P237]
     reconciled_overlaps: ["Reuse clean integrated P240 checkout with prior branch and candidate custody preserved", "Own borrowed task TTL and per-browser reaper deferral only; Native custody protections remain"]
-    validation_status: Installed source9d and binary0ed qualify fresh borrowed expiry, protected peers, responsive owner and bounded helper smoke
-    limitations: ["CI excluded", "No eligible batch opportunity in normal observation; helper positive and caller source-test qualified", "Branch and artifacts retained for primary shared acceptance and reserved review; later main not integrated"]
+    validation_status: Installed hotfix accepted; canonical main6c composes with full model, selected native-MCP, provider-free contracts and strict Rust gates passed
+    limitations: ["CI excluded", "No eligible batch opportunity in normal observation; helper positive and caller source-test qualified", "Branch and artifacts retained for PR491 integration; canonical main source composition is not installed"]
     updated_at: 2026-10-29

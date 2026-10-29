@@ -1094,6 +1094,82 @@ async fn e2e_form_interaction() {
 }
 
 // ---------------------------------------------------------------------------
+// Native date fill: actual values and events, with ordinary text preserved.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+#[ignore]
+async fn e2e_date_fill_preserves_value_events_and_writability() {
+    let home = e2e_temp_home("date-fill");
+    let (profile_dir, profile) = e2e_temp_profile("date-fill");
+    let guard = EnvGuard::new(&["AGENT_BROWSER_HOME", "AGENT_BROWSER_SESSION"]);
+    guard.set("AGENT_BROWSER_HOME", home.to_str().unwrap());
+    guard.set("AGENT_BROWSER_SESSION", "e2e-date-fill");
+    let mut state = DaemonState::new();
+    let html = "<input id='date' type='date'><input id='text'><input id='locked' type='date' readonly value='2026-05-01'><fieldset disabled><input id='fieldset-date' type='date' value='2026-05-02'></fieldset><script>window.events=[]; for(const name of ['input','change']) document.querySelector('#date').addEventListener(name,e=>events.push({type:e.type,value:e.target.value}));</script>";
+    let commands = [
+        (
+            json!({"id":"launch","action":"launch","headless":true,"profile":profile}),
+            true,
+        ),
+        (
+            json!({"id":"open","action":"navigate","url":format!("data:text/html;base64,{}", STANDARD.encode(html))}),
+            true,
+        ),
+        (
+            json!({"id":"date","action":"fill","selector":"#date","value":"2026-06-01"}),
+            true,
+        ),
+        (
+            json!({"id":"text","action":"fill","selector":"#text","value":"ordinary text"}),
+            true,
+        ),
+        (
+            json!({"id":"invalid","action":"fill","selector":"#date","value":"2026-02-31"}),
+            false,
+        ),
+        (
+            json!({"id":"locked","action":"fill","selector":"#locked","value":"2026-06-01"}),
+            false,
+        ),
+        (
+            json!({"id":"fieldset","action":"fill","selector":"#fieldset-date","value":"2026-06-01"}),
+            false,
+        ),
+        (
+            json!({"id":"read","action":"evaluate","script":"({date:document.querySelector('#date').value,text:document.querySelector('#text').value,locked:document.querySelector('#locked').value,fieldset:document.querySelector('#fieldset-date').value,events})"}),
+            true,
+        ),
+    ];
+    // Close the owned browser before asserting, including on a failed command.
+    let mut observed = Ok(Value::Null);
+    for (command, expected_success) in commands {
+        let reply = execute_command(&command, &mut state).await;
+        if reply["success"] != expected_success {
+            observed = Err(format!("Unexpected date-fill command outcome: {reply}"));
+            break;
+        }
+        if command["id"] == "read" {
+            observed = Ok(reply["data"]["result"].clone());
+        }
+    }
+    let closed = execute_command(&json!({"id":"close","action":"close"}), &mut state).await;
+    drop(state);
+    if closed["success"] == true {
+        std::fs::remove_dir_all(&profile_dir).unwrap();
+        std::fs::remove_dir_all(&home).unwrap();
+    }
+    assert_success(&closed);
+    assert_eq!(
+        observed.unwrap(),
+        json!({
+            "date":"2026-06-01", "text":"ordinary text", "locked":"2026-05-01", "fieldset":"2026-05-02",
+            "events":[{"type":"input","value":"2026-06-01"},{"type":"change","value":"2026-06-01"}]
+        })
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Navigation: back, forward, reload
 // ---------------------------------------------------------------------------
 

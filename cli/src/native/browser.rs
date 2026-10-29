@@ -523,11 +523,18 @@ impl BrowserProcess {
     }
 }
 
+struct VerifiedLocalDownloadSource {
+    endpoint: String,
+    process: crate::process_identity::RecordedProcessIdentity,
+}
+
 pub struct BrowserManager {
     pub client: Arc<CdpClient>,
     browser_process: Option<BrowserProcess>,
     /// Profile metadata authenticated by retained service-owner recovery.
     retained_profile: Option<crate::runtime_profile::ResolvedProfile>,
+    /// Current local endpoint/process proof, without lifecycle ownership.
+    verified_local_download_source: Option<VerifiedLocalDownloadSource>,
     ws_url: String,
     pages: Vec<PageInfo>,
     active_page_index: usize,
@@ -658,6 +665,7 @@ impl BrowserManager {
                 browser_process: Some(process),
 
                 retained_profile: None,
+                verified_local_download_source: None,
                 ws_url,
                 pages: Vec::new(),
                 active_page_index: 0,
@@ -752,6 +760,7 @@ impl BrowserManager {
             client,
             browser_process: None,
             retained_profile: None,
+            verified_local_download_source: None,
             ws_url,
             pages: Vec::new(),
             active_page_index: 0,
@@ -806,6 +815,7 @@ impl BrowserManager {
             browser_process: None,
 
             retained_profile: Some(verified_profile),
+            verified_local_download_source: None,
             ws_url,
             pages: vec![PageInfo {
                 target_id: target.target_id,
@@ -837,6 +847,7 @@ impl BrowserManager {
             browser_process: None,
 
             retained_profile: None,
+            verified_local_download_source: None,
             ws_url,
             pages: Vec::new(),
             active_page_index: 0,
@@ -878,6 +889,7 @@ impl BrowserManager {
             browser_process: None,
 
             retained_profile: None,
+            verified_local_download_source: None,
             ws_url,
             pages: Vec::new(),
             active_page_index: 0,
@@ -2520,6 +2532,32 @@ impl BrowserManager {
         self.browser_process.as_ref().and_then(|p| p.pid())
     }
 
+    /// Called only after the existing local endpoint/kernel attachment checks.
+    /// This does not turn an attached browser into an owned child.
+    pub(super) fn retain_verified_local_download_source(
+        &mut self,
+        process: crate::process_identity::RecordedProcessIdentity,
+    ) {
+        self.verified_local_download_source = Some(VerifiedLocalDownloadSource {
+            endpoint: self.ws_url.clone(),
+            process,
+        });
+    }
+
+    /// A changed connection cannot fall back to another PID's authority.
+    /// The download adapter must also revalidate this original process live.
+    pub(super) fn verified_local_download_source(
+        &self,
+    ) -> Result<Option<crate::process_identity::RecordedProcessIdentity>, String> {
+        match &self.verified_local_download_source {
+            Some(source) if source.endpoint != self.ws_url => Err(
+                "download_source_identity_unproven: verified attachment endpoint changed".into(),
+            ),
+            Some(source) => Ok(Some(source.process.clone())),
+            None => Ok(None),
+        }
+    }
+
     pub fn runtime_profile_name(&self) -> Option<&str> {
         self.browser_process
             .as_ref()
@@ -2698,6 +2736,7 @@ async fn initialize_lightpanda_manager(
             browser_process: None,
 
             retained_profile: None,
+            verified_local_download_source: None,
             ws_url: ws_url.clone(),
             pages: Vec::new(),
             active_page_index: 0,
@@ -3596,6 +3635,7 @@ mod tests {
                 browser_process: None,
 
                 retained_profile: None,
+                verified_local_download_source: None,
                 ws_url: format!("ws://{address}"),
                 pages: vec![PageInfo {
                     target_id: "owned".into(),
@@ -3725,6 +3765,7 @@ mod tests {
             browser_process: None,
 
             retained_profile: None,
+            verified_local_download_source: None,
             ws_url: "ws://fixture".to_string(),
             pages: Vec::new(),
             active_page_index: 0,
@@ -3907,6 +3948,7 @@ mod tests {
             browser_process: None,
 
             retained_profile: None,
+            verified_local_download_source: None,
             ws_url: format!("ws://{address}"),
             pages: vec![PageInfo {
                 target_id: "target-1".to_string(),
