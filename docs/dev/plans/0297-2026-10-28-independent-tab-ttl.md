@@ -220,3 +220,78 @@ failed missing-target reconciliation, then passed it; the cached continuation
 then failed returning the absent original target, and finally passed new-target
 acquisition plus malformed-inventory and post-attachment PID-mismatch denials.
 The primary owns the next supported preserve install and installed acceptance.
+
+
+## Native readback and late-maintenance isolation
+
+The `399ded40b` candidate built as binary `b969060d610f` and was installed through
+accepted preserve transaction `upgrade-ddb72273-4a11-4f7a-a490-390463b2e398`.
+Its passive 95-second prior-task reconciliation failed: both owned targets were
+physically absent but still active without terminal history. Owner memory equaled
+SQLite, proving phase rollback rather than another unpublished memory leak.
+Bounded fd2-only observation captured `browser_session_idle_readback_required`.
+
+A real public host plus SQLite regression reproduced that exact error using an
+older Native prepared/settled-unpublished scope and a separate eligible borrowed
+task. Guard failures now defer their browser and remain observable; failed or
+denied qualification restores only transient publication eligibility, preserving
+the original durable journal/fence. The red failed in 3.21 seconds; green passed
+in 3.48 seconds with independent terminal publication, protected peer, exact old
+Native projection and unchanged unpublished journal.
+
+A second real host/SQLite test table reproduced the later-error rollback class.
+It covers Native close failure after a settled prefix, a later profile deletion
+failure, and a later borrowed close failure. The first red lost independent
+terminal history. All three green rows pass with exact Native state restoration,
+unpublished effect journals, failed-task/peer preservation and no second-phase
+retry of the unknown borrowed close.
+
+The host now publishes borrowed/shared/no-Native task expiry before Native viewer
+observation, preparation recovery and disposable maintenance. The second phase
+keeps the existing atomic Native rollback, whose durable baseline already holds
+the qualified borrowed outcome. This changes no quota selection or cleanup
+authority and uses no per-tab/global-state undo snapshots. Borrowed close methods
+write logical changes only after their effects qualify; later failed borrowed
+tasks defer while earlier qualified prefixes remain publishable. Deferred scopes
+are protected in the second phase. Cleanup-expiry arithmetic is validated before
+physical effects.
+
+The new phase is explicitly forwarded by both `RuntimeSessionEffects` arms,
+`BrowserSessionEffectAdapter`, and `BrowserRuntimeDriver`; concrete Remote View
+effects propagate the borrowed mode and defer Native preparation recovery. The
+existing dispatcher fixture cannot distinguish phase ordering without a new
+Native preparation fixture, so the primary selected exact source routing, full
+native gates and installed acceptance rather than a forwarding-only proxy test.
+`native-readback-red.log`, `native-readback-green.log`,
+`late-maintenance-red.log`, and `late-maintenance-green.log` retain the synthetic
+real-store receipts in the private worker evidence directory. The raw failed live
+verdicts and traces remain outside Git. Final gates and the next installed verdict
+follow at the new source checkpoint. No reserved post-closure broad review ran.
+
+
+### Final deferred-task and production-wired qualification
+
+The cheap public model seam also qualifies the precomputed expiry list: after a
+borrowed task's first close fails, both of that task's tabs and its session must
+remain exact. Red showed a later tab still removed; dynamic protection is now
+rechecked when consuming tab/session lists. A distinct later expired task on the
+same borrowed browser must still retire after a fresh guard. Red showed
+browser-wide target-error protection starving it; target errors now protect only
+the failed task, while guard errors retain whole-browser protection. Green keeps
+the failed two-tab task exact, retires both independent tasks, and sends no
+failed-task suffix attempt. The second phase protects all remaining sessions
+under the browser-scoped error key, avoiding same-pass retries. Receipts:
+`deferred-task-{red,green}.log` and
+`deferred-independent-task-{red,green}.log`.
+
+Final frozen-batch gates: all 397 model checks pass; native consumer/pool 125 pass,
+one existing live viewer fixture ignored, in 313.27 seconds; host 11 pass; runtime
+29 pass and eight existing disposable-Chrome cases ignored; production dispatcher
+three pass; strict generic-close preservation passes. Workspace format, strict
+Clippy and diff checks pass. Exact native test binary SHA256:
+`8e48406dceb80e2b06730dbc47e7011b9dd733db6cca01f04c80cac74f639356`.
+Native fixtures use 16 MiB test-thread stack with 4 GiB enforced scopes; the
+reviewed four-job resource profile keeps the 16 GiB host reserve. No ignored
+Chrome/viewer case or source-only success is promoted to installed acceptance.
+The primary owns the next sealed preserve installation and real shared-browser
+proof. CI remains excluded; the reserved post-closure review has not run.

@@ -77,6 +77,12 @@ pub(crate) trait BrowserRuntimeDriver {
     ) -> Result<(), String> {
         Ok(())
     }
+    fn begin_borrowed_retirement_operation(
+        &mut self,
+        expected: &agent_browser_service_model::BrowserSessionState,
+    ) -> Result<(), String> {
+        self.begin_operation(expected)
+    }
     fn pending_launch_intent(&self) -> Option<BrowserLaunchIntent> {
         None
     }
@@ -298,6 +304,12 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
         expected: &agent_browser_service_model::BrowserSessionState,
     ) -> Result<(), String> {
         self.runtime.begin_operation(expected)
+    }
+    fn begin_borrowed_retirement_operation(
+        &mut self,
+        expected: &agent_browser_service_model::BrowserSessionState,
+    ) -> Result<(), String> {
+        self.runtime.begin_borrowed_retirement_operation(expected)
     }
     fn pending_launch_intent(&self) -> Option<BrowserLaunchIntent> {
         self.runtime.pending_launch_intent()

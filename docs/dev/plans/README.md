@@ -1,6 +1,6 @@
 # Active plan index
 
-[P297 independent task TTL](0297-2026-10-28-independent-tab-ttl.md), #490: exact borrowed-browser expiry root qualified; source checks and installed acceptance pending.
+[P297 independent task TTL](0297-2026-10-28-independent-tab-ttl.md), #490: actual host/SQLite failure isolation and all source gates pass; sealed replacement installation and live acceptance remain pending.
 
 [P295 standalone Auth integration](0295-2026-10-26-standalone-auth-449.md): approved457–464 graph, source integration and separate installed/provider gates.
 

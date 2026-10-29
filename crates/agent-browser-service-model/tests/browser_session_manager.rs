@@ -96,6 +96,7 @@ struct FixtureEffects {
     new_tab: Option<BrowserTabAcquisition>,
     new_tab_requests: Vec<String>,
     tab_closes: Vec<(String, String)>,
+    tab_close_failure_target: Option<String>,
     disposable_allocations: Vec<String>,
     disposable_deletions: Vec<String>,
     disposable_sizes: BTreeMap<String, u64>,
@@ -436,6 +437,9 @@ impl BrowserSessionEffects for FixtureEffects {
     ) -> Result<(), String> {
         self.tab_closes
             .push((browser.id.clone(), tab.target_id.clone()));
+        if self.tab_close_failure_target.as_ref() == Some(&tab.target_id) {
+            return Err("synthetic_tab_close_unknown".into());
+        }
         Ok(())
     }
 
@@ -2915,4 +2919,104 @@ fn persisted_profile_pin_preserves_unpinned_default_in_both_launch_orders_and_re
             );
         }
     }
+}
+
+#[test]
+fn borrowed_close_failure_protects_the_failed_tasks_remaining_expired_tabs() {
+    use agent_browser_service_model::{
+        BrowserTabLifetime, ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab,
+    };
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let browser = ManagedBrowserInstance {
+        id: "borrowed".into(),
+        profile_id: "profile-a".into(),
+        pid: 42,
+        cdp_endpoint: "http://127.0.0.1:9222".into(),
+        desktop: None,
+        active_session_ids: vec!["good".into(), "failed".into(), "later".into()],
+    };
+    state.browsers.insert(browser.id.clone(), browser.clone());
+    state.shared_browser_ids.insert(browser.id.clone());
+    for (id, tabs) in [
+        ("good", vec!["a-good"]),
+        ("failed", vec!["b-failed-0", "b-failed-1"]),
+        ("later", vec!["c-good"]),
+    ] {
+        state.sessions.insert(
+            id.into(),
+            ManagedBrowserSession {
+                id: id.into(),
+                name: id.into(),
+                profile_id: browser.profile_id.clone(),
+                browser_id: browser.id.clone(),
+                created_at_ms: 100,
+                last_activity_at_ms: 100,
+                expires_at_ms: 1100,
+                current_tab_id: Some(tabs[0].into()),
+            },
+        );
+        for tab in tabs {
+            state.tabs.insert(
+                tab.into(),
+                ManagedBrowserTab {
+                    id: tab.into(),
+                    target_id: tab.into(),
+                    browser_id: browser.id.clone(),
+                    session_id: id.into(),
+                    created_at_ms: 100,
+                    last_activity_at_ms: 100,
+                },
+            );
+            state.tab_lifetimes.insert(
+                tab.into(),
+                BrowserTabLifetime {
+                    inactivity_ms: Some(30),
+                    pressure_inactivity_ms: None,
+                },
+            );
+        }
+    }
+    let before = state.clone();
+    let mut effects = FixtureEffects {
+        tab_close_failure_target: Some("b-failed-0".into()),
+        ..Default::default()
+    };
+    let result = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig::default(),
+    )
+    .reap(130)
+    .unwrap();
+    assert!(!state.sessions.contains_key("good"));
+    assert_eq!(state.sessions["failed"], before.sessions["failed"]);
+    assert_eq!(state.tabs["b-failed-0"], before.tabs["b-failed-0"]);
+    assert_eq!(
+        state.tabs.get("b-failed-1"),
+        before.tabs.get("b-failed-1"),
+        "newly protected task projection must survive the precomputed expiry list"
+    );
+    assert!(
+        !state.sessions.contains_key("later"),
+        "a failed task cannot starve a distinct later eligible task on the same borrowed browser"
+    );
+    assert_eq!(state.tab_history.len(), 2);
+    assert_eq!(
+        effects.tab_closes,
+        vec![
+            ("borrowed".into(), "a-good".into()),
+            ("borrowed".into(), "b-failed-0".into()),
+            ("borrowed".into(), "c-good".into())
+        ]
+    );
+    assert_eq!(
+        result
+            .deferred_browser_errors
+            .get("borrowed")
+            .map(String::as_str),
+        Some("synthetic_tab_close_unknown")
+    );
+    assert!(effects.closes.is_empty());
 }

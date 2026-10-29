@@ -553,6 +553,15 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
             Self::Remote(effects) => effects.begin_operation(expected),
         }
     }
+    fn begin_borrowed_retirement_operation(
+        &mut self,
+        expected: &BrowserSessionState,
+    ) -> Result<(), String> {
+        match self {
+            Self::Local(effects) => effects.begin_borrowed_retirement_operation(expected),
+            Self::Remote(effects) => effects.begin_borrowed_retirement_operation(expected),
+        }
+    }
     fn pending_browser_activity_ids(&self) -> Vec<String> {
         match self {
             Self::Local(effects) => effects.pending_browser_activity_ids(),
