@@ -2,6 +2,11 @@
 
 Login flows, session persistence, OAuth, 2FA, and authenticated browsing.
 
+For Google/Microsoft native sign-in or an enrolled credential helper, read
+[governed authentication](governed-authentication.md) first. The generic examples
+below do not replace the installed approval, private receiving or MFA delivery
+workflow.
+
 **Related**: [session-management.md](session-management.md) for state persistence details, [SKILL.md](../SKILL.md) for quick start.
 
 ## Contents

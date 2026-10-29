@@ -59,6 +59,20 @@ receiving browser task and requires no Bots roster enrollment.
 tab tuple where a hosted authentication request may act. The same request
 preserves that binding across interruption and independent readback.
 
+**Private login follow-up**: Bounded observation of an existing owner-authority
+private attempt through MFA and independent authentication reconciliation. It
+creates no credential request, policy or private input. Timeout/abort stops
+following, without cancelling the original authority request.
+
+**Standalone Auth bootstrap**: Discovery and verification of Auth Receipts' own
+supported installed client and service capabilities. Bots is another consumer;
+compatibility transport/state names do not make it a service dependency.
+
+**Authentication action evidence**: Separate observations of protected input,
+sign-in dispatch/acknowledgement, MFA need and independently verified identity,
+bound to the original Auth attempt and receiving browser generation. Dispatch or
+missing network history does not establish authentication or absence of effect.
+
 **Current protected-field emptiness**: Trusted current evidence that protected
 controls are empty, combined with independently verified clean-login/native
 safety. It may release capture after a failed attempt, but never erases input

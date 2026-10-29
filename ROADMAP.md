@@ -1,5 +1,9 @@
 # Roadmap
 
+[#449 standalone Auth integration](docs/dev/contracts/standalone-auth-integration.v1.md), PL-AUTH: migrate browser authentication helpers from deprecated Bots wiring to standalone Auth Receipts. The core specification consumes P279 source and current provider contracts; implementation and installed acceptance remain open.
+
+[P279 governed authentication journeys](docs/dev/plans/0279-2026-10-24-auth-receipts-journeys.md), Auth #81/#79 under PL-AUTH: preserve verified provider steps while requiring the installed credential authority and deterministic MFA delivery. Source guidance only.
+
 [P270 hosted continuity](docs/dev/plans/0270-2026-10-22-hosted-continuity.md) retains bounded Native14 warm/function evidence and P277 actual restart/reopen proof. #355 remains open for the unknown Native8 launch outcome and same-pair combined coordination/cold evidence. [P278 diagnosis](docs/dev/plans/0278-2026-10-23-reopen-launch-diagnosis355.md) owns the bounded causal probe and secret-free phase diagnostics. Native578 relocation remains explicitly deferred; no production effects.
 
 [P268 attachment](docs/dev/plans/0268-2026-10-22-hosted-attachment.md) and [P267/#350 takeover](docs/dev/plans/0267-2026-10-22-hosted-takeover.md) close as integrated source outcomes. [Acceptance](docs/dev/notes/0268-2026-10-22-hosted-attachment-control.md) records actual Native04 workflow and corrected cleanup; Native05 cookie continuity and independent cleanup also pass. No deployment; wider #347 remains open.

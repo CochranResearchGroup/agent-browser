@@ -1,5 +1,7 @@
 # Active plan index
 
+
+[P279 governed authentication journeys](0279-2026-10-24-auth-receipts-journeys.md): source skill/reference work for Auth #81/#79; installed integration remains open.
 [P278 reopen diagnosis](0278-2026-10-23-reopen-launch-diagnosis355.md) owns the bounded probe and private launch phase diagnostics; original Native8 remains unexplained.
 
 [P277 Native restart acceptance](0277-2026-10-23-native-restart-acceptance355.md) records ordinary functional recovery, the lifecycle/viewing distinction and unresolved launch/cold/coordination gates for355.

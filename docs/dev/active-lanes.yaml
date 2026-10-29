@@ -1,6 +1,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P279
+    product_lane: PL-AUTH
+    objective: Distill governed Google and Microsoft sign-in journeys
+    plan: docs/dev/plans/0279-2026-10-24-auth-receipts-journeys.md
+    branch: auth/receipts-journeys
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/auth-receipts#81, CochranResearchGroup/auth-receipts#79]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: []
+    reconciled_overlaps: ["Source guidance only in reused clean primary; peer dashboard and enrollment checkouts, branches and candidates preserved"]
+    limitations: ["Installed native authority and provider acceptance remain open", "No shared skill publication"]
+    updated_at: 2026-10-24
   - id: P277
     product_lane: PL-PLATFORM
     objective: Qualify explicit rebind after an isolated real Native restart

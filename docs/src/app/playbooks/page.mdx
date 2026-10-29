@@ -71,7 +71,28 @@ identifies its work, while taskId addresses the browser. Version2 independently
 freezes the exact receiving provider/task/profile/browser/tab. The hosted path
 uses request_login, inspect_request and begin_authentication; legacy callbacks
 retain authenticate. Credentials and factors stay inside trusted host receiving
-ports. The existing Bots service continues to own auth; no new service is made.
+ports. Auth-receipts owns credential policy, requests and private use; parent Receipts
+owns notification and approval-channel delivery. Bots is a client. The operations
+above describe the legacy playbook contract and are fenced by a shared-owner Auth
+host until the supported credential-request path is integrated.
+
+For the owner-authority path, use `requestLogin` with sourceId, recordId, origin,
+owner-enrolled targetId, purpose, expiresAt and a stable idempotencyKey. Retain that
+complete binding and returned request ID. `advanceLogin({requestId})` polls the
+correlated approval and performs private use only when approved without an
+existing attempt. Repeated advancement of an unknown attempt does not submit
+credentials again. A lost request acknowledgement uses the same idempotency key
+and arguments, rather than a replacement request. These methods neither create
+policy nor translate legacy scope labels into credential references.
+
+For an existing owner-authority private attempt, the source hosted adapter exposes
+`followLogin({requestId, maxObservations, intervalMs, signal, onUpdate})`. It calls
+the verified installed SDK and checks the shared-owner credential capability
+before following. Missing support returns `auth_authority_migration_required`,
+with no legacy fallback. Following observes MFA and reconciles original-attempt
+identity; it never requests or repeats credential input. Timeout/abort stops
+observation rather than cancelling the request. Installed adoption and real
+Google/Microsoft/Slack acceptance remain separate gates.
 
 Each advance returns the next actionable state. Preserve the original scope,
 task and expiry when continuing. The adapter records intent before submission
@@ -176,3 +197,14 @@ pages and partial output have distinct reasons. Coverage includes pagesUsed,
 scrollsUsed and observations; partial records do not establish complete coverage.
 The Reddit guide is a starter and the owned fixture is the qualified target.
 Research/ranking policy stays downstream; no live social requests are included.
+
+## Governed authentication journeys
+
+Google and Microsoft native sign-in must use the enrolled credential authority.
+Missing native enrollment or an authority migration error is a capability gap;
+creating another live authority or a standing rule is not a login fallback.
+Number matching requires parent-routed instructions and a safe screenshot, with
+delivery separate from owner approval and verified account identity. Preserve the
+original request, attempt and persistent profile. The bundled Agent Browser skill
+links to its governed-authentication reference for provider-specific steps and
+current installed acceptance limits.

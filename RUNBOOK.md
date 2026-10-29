@@ -1,5 +1,17 @@
 # Runbook
 
+### 2026-10-25 Standalone Auth specification
+
+[#449 specification](docs/dev/contracts/standalone-auth-integration.v1.md) synthesizes the readiness assessment and owner requirements into40 user stories, provider/consumer ownership, verified standalone bootstrap, exact receiving and actual submission evidence, linked MFA, legacy-checkpoint custody and no-replay recovery. It retains the issue's existing hosted composition and real Chrome/synthetic HTTPS test boundaries. Concrete Auth SDK locator/verification metadata and jointly versioned submission evidence are provider prerequisites; spec110 extensions and installed/provider acceptance remain separate. Published to the existing issue with original report/acceptance text preserved, category enhancement and ready-for-agent. Source remains uncommitted; no product implementation or runtime effect is included. Documentation links, specification structure and patch hygiene pass.
+
+### 2026-10-25 Standalone Auth integration readiness
+
+[#449 contract-readiness research](docs/dev/notes/0279-2026-10-25-auth-integration-contract-readiness.md) reconciles fetched Agent Browser, Auth and parent Receipts main with retained developing source. Core owner request/use/recovery and parent contracts are ready to specify; standalone verified SDK discovery and actual sign-in-action evidence need explicit agreement. Spec110 methods remain provisional. Fresh pinned browser-owner and owner-parent compositions pass; parent interoperation36/36 and existing adapter/playbook checks pass with synthetic effects. Existing P279 edits are preserved. No product code, checkout assignment, installed runtime or live attempt changed.
+
+### 2026-10-24 Governed authentication journey guidance
+
+P279 reuses the clean primary from cc981b2be after proving its previous40900dec4 is integrated and issue365 CLOSED. Both peer checkouts remain clean and untouched. No additional checkout, candidate replacement or runtime effect. The [governed sign-in reference](skills/agent-browser/references/governed-authentication.md) now includes the actual synthetic Native/Chrome receiving findings: full HTTPS display, observed field focus before private typing, dispatched acknowledgement limits and original-request timeout recovery. Auth independently qualified one synthetic form submission; installed owner, real MFA and Slack gates remain open. Credential/notification authority remains with Auth/parent Receipts. Handoff documentation and the full docs-site build pass; source remains uncommitted and shared skills are unchanged.
+
 [P278 reopen diagnosis](docs/dev/plans/0278-2026-10-23-reopen-launch-diagnosis355.md) ends with the original Native8 cause unresolved: three reduced and three actual Native diagnostic cases pass. [Evidence](docs/dev/notes/0278-2026-10-23-reopen-launch-diagnosis355.md) qualifies fixed secret-free launch phases and exact cleanup, retaining all failures. Candidate29370244 is source-qualified only; production is unchanged. #355 remains open; relocation578 deferred.
 
 [P277 Native restart acceptance](docs/dev/plans/0277-2026-10-23-native-restart-acceptance355.md) records ordinary Native10 functional recovery across viewing1 to2, stable assignment lifecycle1, same task/profile blank reopen, independently observed Native window and exact cleanup. Public warm20/20 p9547.20ms passes. [Evidence](docs/dev/notes/0277-2026-10-23-native-restart-acceptance355.md) retains Native8 unknown reopen; #355 remains open for that disposition and the combined coordination/cold matrix. No production effects; relocation578 remains deferred.
@@ -319,3 +331,45 @@ acceptance are unverified. P237's separate dirty lifecycle/UI work is preserved.
 ### 2026-10-17 P247 selected planning completeness
 
 [P247](docs/dev/plans/0247-2026-10-17-planning-completeness.md) completes bounded selected-lane documentation checks. The [evidence](docs/dev/notes/0247-2026-10-17-planning-completeness.md) records 67 tests, selected P245/P247, policy/docs gates and corrected legacy-header failure. PR300 owns canonical integration; no runtime effects.
+
+P279 source guidance now links Google/Microsoft native journeys from the existing
+skill, authentication reference, playbook reference, README and MDX routine page.
+All seven new relative links resolve. Existing handoff documentation and plain/
+hosted login fixtures pass, including exact identity and lost-ack no-replay. The
+review retains separate Standards and Spec findings; installed native Auth and
+MFA delivery acceptance remain open. Source remains uncommitted and shared skill
+publication was not performed.
+
+P279 changed-file secret scan reports zero findings across11source documents.
+The broader preexisting tree scan has130findings, none in changed files; they
+were not reclassified as new issues or silently suppressed. The added reference
+contains no personal account/profile bindings. Full provider and installed Auth
+qualification remain open. Source and peer checkout custody are unchanged.
+
+
+### 2026-10-24 P279 source hosted follow-up adapter
+
+The existing Node adapter now delegates followLogin for an original private attempt
+to Auth's supported SDK after checking shared-owner capabilities. Missing support
+returns auth_authority_migration_required with no legacy fallback. Synthetic adapter
+contract, existing installed-SDK discovery against an isolated synthetic host, and
+both login playbook fixtures pass. No installed source, profile, vault, parent route
+or Slack message changed. The legacy request/use playbook migration remains open.
+
+
+P279 adapter review preserves genuine authority/transport errors; only unknown
+operation becomes a migration gap. Wired hosted adapter checks, JS type checks,
+service-client no-launch suite, legacy login fixtures, MDX compile, handoff docs
+and Cargo format pass. Source remains uncommitted; no installed skill sync or
+runtime replacement. Standards finding fixed; full-journey Spec blockers remain.
+
+
+### 2026-10-24 P279 owner request/use/follow source composition
+
+The source hosted adapter now exposes private requestLogin, original-request
+advanceLogin and followLogin under shared-owner SDK preflight. Auth's pinned
+opt-in source composition proves pending approval and queued notifications hold
+before source reads, one mapped Allow Once plus delivered notification permits
+one input, unknown advancement does not replay and follow-up verifies the same
+owner request. Candidate verification metadata and effect ports are synthetic.
+No installation, real secret use, profile mutation or Slack send occurred.

@@ -7151,3 +7151,11 @@ upgrade does not guess a missing historical choice from profile contents.
 Retained browser recovery reconciles an unobserved launch claim after proving the exact profile has no live process. The original claim remains in history. Provider environment checks run before process admission, so unavailable desktops do not create new launch claims.
 
 Configure the native Remote View origin, pool, application and public origin in `~/.agent-browser/.env` or the process environment. When native Remote View settings are present, workstation installation and reconciliation verify the native application inventory, admitted pool, and existing protected lease authority. They do not provision RDP users, the RDP privileged helper, XRDP, Docker, or Guacamole. Partial native settings fail validation. Missing authority readiness requires a separate authority repair; a native upgrade does not install or replace that service. Live-browser upgrades prepare retained source owners before verifying that source writers are quiet. Candidate startup remains blocked until that stability check passes.
+
+### Governed Google and Microsoft sign-in
+
+The [authentication journey reference](skills/agent-browser/references/governed-authentication.md) covers the verified headed/native provider steps, persistent-profile continuity, installed Auth authority, deterministic MFA delivery and exact account verification. Provider success and installed workflow acceptance remain separate. This source guidance does not deploy or enroll a native receiver.
+
+The source Node hosted-auth adapter exposes `followLogin({requestId})` for an existing owner-authority private attempt. It delegates delayed MFA observation and identity reconciliation to the verified installed Auth SDK, without repeating input. Missing shared-owner SDK support returns `auth_authority_migration_required`; this does not deploy the adapter or qualify installed acceptance.
+
+The same source adapter exposes `requestLogin` for a private owner-policy request and `advanceLogin({requestId})` for correlated approval and the first private use. Retain the original request/idempotency binding; unknown attempts are observed rather than submitted again. These methods require the supported SDK/shared-owner contract and do not create policy or enroll receivers.

@@ -4,6 +4,10 @@ Use one existing taskId for software and agent work. A SiteGuide supplies site
 knowledge; routines execute subtasks; playbooks compose routines. A browser
 window at a login page is not an authenticated intended account/company.
 
+For Google/Microsoft native sign-in and the current installed Auth authority
+gates, read [governed authentication](governed-authentication.md). A routine
+implementation does not prove the installed receiving mode is enrolled.
+
 ## Discover and verify
 
 1. `browser_discover({category:"playbooks"})` lists operations.

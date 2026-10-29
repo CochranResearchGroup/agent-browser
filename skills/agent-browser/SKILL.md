@@ -106,6 +106,10 @@ agent-browser --session editing fill @e1 "Draft text"
 agent-browser --session editing click @e2
 ```
 
+## Governed sign-in
+
+Before Google/Microsoft login, credential-helper use, number matching or saved-profile authentication, read [governed authentication](references/governed-authentication.md). Use the enrolled authority and preserve the original request; missing native enrollment is a capability gap, not permission to create a local live authority. The source hosted adapter offers `requestLogin` and `advanceLogin` under existing owner policy, then `followLogin({requestId})` for the original private attempt; missing installed support returns `auth_authority_migration_required` without legacy fallback.
+
 ## SiteGuide routines
 
 Discover `category:"playbooks"` and use `browser_command` in the existing task. Before login, hosted-helper use, guide development or bounded collection, read [SiteGuide routines](references/cli-and-service.md#siteguide-routines) and [the routine guide](references/playbooks.md). Verify the intended account/company; browser login and OAuth/API readiness are separate.

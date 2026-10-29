@@ -1,5 +1,9 @@
 # Agent Browser Notes Index
 
+[#449 standalone Auth specification](../contracts/standalone-auth-integration.v1.md) synthesizes the P279 readiness findings into consumer/provider behavior, test boundaries and separate installed acceptance.
+
+[P279 standalone Auth contract readiness](0279-2026-10-25-auth-integration-contract-readiness.md): core contracts can be specified now; verified SDK bootstrap and actual submit evidence need agreement, while spec110 methods remain provisional.
+
 [P278 reopen diagnosis](0278-2026-10-23-reopen-launch-diagnosis355.md): six bounded passes, unresolved Native8 cause, qualified phase-only diagnostics and exact cleanup; production unchanged.
 
 [P277 actual Native restart acceptance](0277-2026-10-23-native-restart-acceptance355.md): ordinary functional pass, generation-domain distinction and retained unknown reopen; full355 remains open.
