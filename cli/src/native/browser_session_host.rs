@@ -1,5 +1,6 @@
 //! Durable host for the ordinary Browser Session Manager path.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -462,7 +463,12 @@ fn reap_browser_session_host<P: BrowserSessionPersistence, E: BrowserSessionEffe
         *host = load()?;
     }
     if let Some(host) = host.as_mut() {
-        host.reap_current()?;
+        let result = host.reap_current()?;
+        if let Some((browser_id, error)) = result.deferred_browser_errors.first_key_value() {
+            return Err(format!(
+                "browser_session_reap_deferred:{browser_id}:{error}"
+            ));
+        }
     }
     Ok(())
 }
@@ -1320,7 +1326,52 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         )
     }
 
+    fn reap_phase(
+        &mut self,
+        now_ms: u64,
+        borrowed_only: bool,
+        protected: &BTreeSet<String>,
+    ) -> Result<ReapBrowserSessionsResult, String> {
+        let result = if borrowed_only {
+            self.borrowed_retirement_manager()
+                .and_then(|mut manager| manager.reap_borrowed_task_tabs(now_ms))
+        } else {
+            self.manager()
+                .and_then(|mut manager| manager.reap_with_protected_sessions(now_ms, protected))
+        };
+        match result.and_then(|result| {
+            self.commit_state()?;
+            Ok(result)
+        }) {
+            Ok(result) => Ok(result),
+            Err(reason) => {
+                // Restore only this phase. Earlier qualified task outcomes are
+                // already durable; physical-effect journals/fences are retained.
+                self.state = self
+                    .persistence
+                    .load_session_state()
+                    .unwrap_or_else(|_| self.persisted_state.clone());
+                self.persisted_state = self.state.clone();
+                Err(reason)
+            }
+        }
+    }
+
     pub(crate) fn reap(&mut self, now_ms: u64) -> Result<ReapBrowserSessionsResult, String> {
+        // Borrowed targets have no Native operation journal to recover. Publish
+        // their qualified outcomes before unrelated Native/viewer/profile work.
+        let mut result = self.reap_phase(now_ms, true, &BTreeSet::new())?;
+        let deferred_sessions = self
+            .state
+            .sessions
+            .values()
+            .filter(|session| {
+                result
+                    .deferred_browser_errors
+                    .contains_key(&session.browser_id)
+            })
+            .map(|session| session.id.clone())
+            .collect();
         // One handoff per pass bounds private transport work under the host
         // mutex. Refresh pending context through the owner, so a perpetual
         // public link does not depend on dashboard navigation for registration.
@@ -1360,8 +1411,23 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 Err(reason) => observation_error = Some(reason),
             }
         }
-        let result = self.manager()?.reap(now_ms)?;
-        self.commit_state()?;
+        let maintenance = self.reap_phase(now_ms, false, &deferred_sessions)?;
+        result.expired_tab_ids.extend(maintenance.expired_tab_ids);
+        result
+            .expired_session_ids
+            .extend(maintenance.expired_session_ids);
+        result
+            .quota_evicted_session_ids
+            .extend(maintenance.quota_evicted_session_ids);
+        result
+            .closed_browser_ids
+            .extend(maintenance.closed_browser_ids);
+        result
+            .deleted_disposable_profile_ids
+            .extend(maintenance.deleted_disposable_profile_ids);
+        result
+            .deferred_browser_errors
+            .extend(maintenance.deferred_browser_errors);
         // A provider observation failure must remain visible, but cannot
         // starve unrelated eligible expiry. Existing manager/publication fences
         // still reject conflicting state before any cleanup is published.
@@ -2025,6 +2091,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     "quotaEvictedSessionIds": reaped.quota_evicted_session_ids,
                     "closedBrowserIds": reaped.closed_browser_ids,
                     "deletedDisposableProfileIds": reaped.deleted_disposable_profile_ids,
+                    "deferredBrowserErrors": reaped.deferred_browser_errors,
                 }))
             }
             "browser_session_status" => {
@@ -2061,6 +2128,20 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         self.state = current.clone();
         self.persisted_state = current;
         Ok(())
+    }
+
+    fn borrowed_retirement_manager(&mut self) -> Result<BrowserSessionManager<'_, E>, String> {
+        if self.persistence.load_session_state()? != self.persisted_state {
+            return Err("browser_session_publication_conflict".into());
+        }
+        self.effects
+            .begin_borrowed_retirement_operation(&self.persisted_state)?;
+        Ok(BrowserSessionManager::new(
+            &mut self.state,
+            &self.catalog,
+            &mut self.effects,
+            self.manager_config.clone(),
+        ))
     }
 
     fn manager(&mut self) -> Result<BrowserSessionManager<'_, E>, String> {

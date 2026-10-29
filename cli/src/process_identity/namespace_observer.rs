@@ -10,7 +10,9 @@ use std::time::{Duration, Instant};
 
 const ENTRY: &str = "--internal-process-observation";
 const MAX_BYTES: u64 = 8192;
+mod census;
 mod profile;
+pub(crate) use census::observe as observe_census;
 pub(crate) use profile::observe_profile_files;
 
 pub(super) fn run_entry(args: &[String]) -> Option<Result<(), String>> {
@@ -18,6 +20,9 @@ pub(super) fn run_entry(args: &[String]) -> Option<Result<(), String>> {
         return None;
     }
     Some((|| {
+        if args.len() == 3 && args[2] == "census" {
+            return census::run_entry();
+        }
         if args.len() == 4 {
             return profile::run_profile_entry(args);
         }

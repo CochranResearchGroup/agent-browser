@@ -68,6 +68,8 @@ Read [Workspace](references/cli-and-service.md#operator-workspace) for tabs, sha
 
 ## Sharing a profile between tasks
 
+Automatic tab expiry in a shared browser without an Agent Browser Native desktop uses the existing service activity guards and closes only the task-owned target; it does not claim or close the borrowed browser. An unavailable ownership observation defers that browser while independent eligible tabs continue.
+
 Use a separate task/session and tab for each workflow. Shared profiles share login and persistent site state. Read [Sharing a profile between tasks](references/cli-and-service.md#sharing-a-profile-between-tasks) before coordinating shared-profile work, foreground input or closing a peer task.
 
 ## CLI fallback

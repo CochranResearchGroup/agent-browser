@@ -175,6 +175,9 @@ impl<
             .ok_or("browser_session_idle_custody_unavailable")?;
         let mut groups = BTreeMap::new();
         for browser in browsers {
+            if self.borrows_browser_without_native_desktop(browser) {
+                continue;
+            }
             let baseline = expected
                 .browsers
                 .get(&browser.id)
@@ -360,6 +363,25 @@ impl<
         })))
     }
 
+    /// Borrowed task tabs do not grant ownership of their browser process or
+    /// a Native assignment. Their retirement still requires local activity
+    /// exclusion, and the manager preserves the shared browser and peer tabs.
+    /// Logical session membership changes during retirement; frozen physical
+    /// browser identity remains the custody boundary throughout that pass.
+    fn borrows_browser_without_native_desktop(&self, browser: &ManagedBrowserInstance) -> bool {
+        browser.desktop.is_none()
+            && self.expected.as_ref().is_some_and(|expected| {
+                expected.shared_browser_ids.contains(&browser.id)
+                    && expected.browsers.get(&browser.id).is_some_and(|baseline| {
+                        baseline.id == browser.id
+                            && baseline.profile_id == browser.profile_id
+                            && baseline.pid == browser.pid
+                            && baseline.cdp_endpoint == browser.cdp_endpoint
+                            && baseline.desktop == browser.desktop
+                    })
+            })
+    }
+
     fn begin_retirement_effect(
         &mut self,
         browser: &ManagedBrowserInstance,
@@ -437,6 +459,168 @@ impl<
         next.settle_effect(effect)
             .map_err(|_| "browser_session_idle_readback_required")?;
         self.update_retirement(&record, next)
+    }
+
+    fn begin_operation_scope(
+        &mut self,
+        expected: &BrowserSessionState,
+        reconcile_native: bool,
+    ) -> Result<(), String>
+    where
+        E: BrowserSessionEffects,
+    {
+        // A failed earlier operation leaves its observation in the durable
+        // journal. It must not poison another task through process-local state.
+        // Current profile reconciliation can join that observation again.
+        self.pending = None;
+        let activities = self
+            .store
+            .browser_activity_records()
+            .map_err(|_| "browser_session_activity_readback_unavailable")?;
+        // Only atomic publication removes transient acknowledged rows. A lost
+        // reply may leave local IDs after that commit, even with unchanged
+        // session JSON. Ended resources likewise keep history, not local vetoes.
+        self.activities.retain(|id| {
+            activities
+                .iter()
+                .any(|record| &record.id == id && !record.original_ended)
+        });
+        // Several interrupted commands can retain the same original process.
+        // Share its observation only inside this operation and only for an
+        // exactly equal scope. Unknown evidence still retains every obligation;
+        // positive original exit settles each durable activity independently.
+        let mut observations: Vec<(BrowserIdleRetirementScope, bool)> = Vec::new();
+        for activity in activities
+            .into_iter()
+            .filter(|activity| !activity.original_ended)
+        {
+            let scope = BrowserIdleRetirementScope {
+                browser: activity.browser.clone(),
+                process_identity: activity.process_identity.clone(),
+                tabs: Vec::new(),
+            };
+            // No target inventory, attachment or effect. Unavailable evidence
+            // retains the veto; only positive original exit settles resources.
+            let original_ended = match observations.iter().find(|(seen, _)| seen == &scope) {
+                Some((_, ended)) => *ended,
+                None => {
+                    let ended =
+                        self.effects.observe_idle_retirement_effect(&scope, None) == Ok(true);
+                    observations.push((scope, ended));
+                    ended
+                }
+            };
+            if original_ended {
+                match self.store.settle_browser_activity_resource(&activity) {
+                    Ok(()) | Err(BrowserIdleRetirementStoreError::Conflict) => (),
+                    Err(_) => return Err("browser_session_activity_readback_unavailable".into()),
+                }
+            }
+        }
+        self.retirements = self
+            .store
+            .idle_retirement_records()
+            .map_err(|_| "browser_session_idle_custody_unavailable")?
+            .into_iter()
+            .filter(|record| !record.is_terminal())
+            .map(|record| (record.intent.id.clone(), record))
+            .collect();
+        if reconcile_native {
+            // Recover exact native preparation before attempting any new effect.
+            // A known prepared operation with no admitted effects can publish an
+            // unchanged state atomically. That publication fences a delayed actor's
+            // future effect admission before native exclusion is completed.
+            let reconcilable = self
+                .retirements
+                .values()
+                .filter(|record| {
+                    record.published_state_digest.is_some()
+                        || (record.preparation_started() && !record.has_effect_attempts())
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            for original in reconcilable {
+                let Ok(observed) = self.adapter.reconcile_idle_retirement(
+                    &original.intent.provider,
+                    original.prepared.as_ref(),
+                ) else {
+                    continue;
+                };
+                let mut record = self
+                    .store
+                    .idle_retirement_records()
+                    .map_err(|_| "browser_session_idle_custody_unavailable")?
+                    .into_iter()
+                    .find(|record| record.intent == original.intent)
+                    .ok_or("browser_session_idle_readback_required")?;
+                self.retirements
+                    .insert(record.intent.id.clone(), record.clone());
+                if record.is_terminal() {
+                    continue;
+                }
+                if record.published_state_digest.is_none() {
+                    if record.has_effect_attempts()
+                        || observed.state != RemoteViewIdleRetirementReceiptState::Prepared
+                    {
+                        continue;
+                    }
+                    if record.prepared.is_none() {
+                        let mut next = record.clone();
+                        next.record_prepared(observed.clone())
+                            .map_err(|_| "browser_session_idle_readback_required")?;
+                        match self.store.update_idle_retirement(&record, &next) {
+                            Ok(()) => record = next,
+                            Err(BrowserIdleRetirementStoreError::Conflict) => continue,
+                            Err(_) => return Err("browser_session_idle_custody_unavailable".into()),
+                        }
+                    }
+                    match self.store.publish_idle_retirement_state(
+                        expected,
+                        expected,
+                        std::slice::from_ref(&record.intent.id),
+                    ) {
+                        Ok(()) => (),
+                        Err(BrowserIdleRetirementStoreError::Conflict) => continue,
+                        Err(_) => return Err("browser_session_idle_custody_unavailable".into()),
+                    }
+                    record = self
+                        .store
+                        .idle_retirement_records()
+                        .map_err(|_| "browser_session_idle_custody_unavailable")?
+                        .into_iter()
+                        .find(|current| current.intent == record.intent)
+                        .ok_or("browser_session_idle_readback_required")?;
+                }
+                let completed = if observed.state == RemoteViewIdleRetirementReceiptState::Completed
+                {
+                    Ok(observed)
+                } else {
+                    self.adapter.complete_idle_retirement(
+                        &record.intent.provider,
+                        record
+                            .prepared
+                            .as_ref()
+                            .ok_or("browser_session_idle_readback_required")?,
+                        true,
+                    )
+                };
+                if let Ok(completed) = completed {
+                    let mut next = record.clone();
+                    next.record_completed(completed)
+                        .map_err(|_| "browser_session_idle_readback_required")?;
+                    self.update_retirement(&record, next)?;
+                }
+            }
+        }
+        self.operation_retirements.clear();
+
+        if reconcile_native {
+            self.effects.begin_operation(expected)?;
+        } else {
+            self.effects.begin_borrowed_retirement_operation(expected)?;
+        }
+        self.expected = Some(expected.clone());
+        Ok(())
     }
 
     fn require_operation(&self) -> Result<(), String> {
@@ -864,151 +1048,13 @@ impl<
     }
 
     fn begin_operation(&mut self, expected: &BrowserSessionState) -> Result<(), String> {
-        // A failed earlier operation leaves its observation in the durable
-        // journal. It must not poison another task through process-local state.
-        // Current profile reconciliation can join that observation again.
-        self.pending = None;
-        let activities = self
-            .store
-            .browser_activity_records()
-            .map_err(|_| "browser_session_activity_readback_unavailable")?;
-        // Only atomic publication removes transient acknowledged rows. A lost
-        // reply may leave local IDs after that commit, even with unchanged
-        // session JSON. Ended resources likewise keep history, not local vetoes.
-        self.activities.retain(|id| {
-            activities
-                .iter()
-                .any(|record| &record.id == id && !record.original_ended)
-        });
-        // Several interrupted commands can retain the same original process.
-        // Share its observation only inside this operation and only for an
-        // exactly equal scope. Unknown evidence still retains every obligation;
-        // positive original exit settles each durable activity independently.
-        let mut observations: Vec<(BrowserIdleRetirementScope, bool)> = Vec::new();
-        for activity in activities
-            .into_iter()
-            .filter(|activity| !activity.original_ended)
-        {
-            let scope = BrowserIdleRetirementScope {
-                browser: activity.browser.clone(),
-                process_identity: activity.process_identity.clone(),
-                tabs: Vec::new(),
-            };
-            // No target inventory, attachment or effect. Unavailable evidence
-            // retains the veto; only positive original exit settles resources.
-            let original_ended = match observations.iter().find(|(seen, _)| seen == &scope) {
-                Some((_, ended)) => *ended,
-                None => {
-                    let ended =
-                        self.effects.observe_idle_retirement_effect(&scope, None) == Ok(true);
-                    observations.push((scope, ended));
-                    ended
-                }
-            };
-            if original_ended {
-                match self.store.settle_browser_activity_resource(&activity) {
-                    Ok(()) | Err(BrowserIdleRetirementStoreError::Conflict) => (),
-                    Err(_) => return Err("browser_session_activity_readback_unavailable".into()),
-                }
-            }
-        }
-        self.retirements = self
-            .store
-            .idle_retirement_records()
-            .map_err(|_| "browser_session_idle_custody_unavailable")?
-            .into_iter()
-            .filter(|record| !record.is_terminal())
-            .map(|record| (record.intent.id.clone(), record))
-            .collect();
-        // Recover exact native preparation before attempting any new effect.
-        // A known prepared operation with no admitted effects can publish an
-        // unchanged state atomically. That publication fences a delayed actor's
-        // future effect admission before native exclusion is completed.
-        let reconcilable = self
-            .retirements
-            .values()
-            .filter(|record| {
-                record.published_state_digest.is_some()
-                    || (record.preparation_started() && !record.has_effect_attempts())
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        for original in reconcilable {
-            let Ok(observed) = self
-                .adapter
-                .reconcile_idle_retirement(&original.intent.provider, original.prepared.as_ref())
-            else {
-                continue;
-            };
-            let mut record = self
-                .store
-                .idle_retirement_records()
-                .map_err(|_| "browser_session_idle_custody_unavailable")?
-                .into_iter()
-                .find(|record| record.intent == original.intent)
-                .ok_or("browser_session_idle_readback_required")?;
-            self.retirements
-                .insert(record.intent.id.clone(), record.clone());
-            if record.is_terminal() {
-                continue;
-            }
-            if record.published_state_digest.is_none() {
-                if record.has_effect_attempts()
-                    || observed.state != RemoteViewIdleRetirementReceiptState::Prepared
-                {
-                    continue;
-                }
-                if record.prepared.is_none() {
-                    let mut next = record.clone();
-                    next.record_prepared(observed.clone())
-                        .map_err(|_| "browser_session_idle_readback_required")?;
-                    match self.store.update_idle_retirement(&record, &next) {
-                        Ok(()) => record = next,
-                        Err(BrowserIdleRetirementStoreError::Conflict) => continue,
-                        Err(_) => return Err("browser_session_idle_custody_unavailable".into()),
-                    }
-                }
-                match self.store.publish_idle_retirement_state(
-                    expected,
-                    expected,
-                    std::slice::from_ref(&record.intent.id),
-                ) {
-                    Ok(()) => (),
-                    Err(BrowserIdleRetirementStoreError::Conflict) => continue,
-                    Err(_) => return Err("browser_session_idle_custody_unavailable".into()),
-                }
-                record = self
-                    .store
-                    .idle_retirement_records()
-                    .map_err(|_| "browser_session_idle_custody_unavailable")?
-                    .into_iter()
-                    .find(|current| current.intent == record.intent)
-                    .ok_or("browser_session_idle_readback_required")?;
-            }
-            let completed = if observed.state == RemoteViewIdleRetirementReceiptState::Completed {
-                Ok(observed)
-            } else {
-                self.adapter.complete_idle_retirement(
-                    &record.intent.provider,
-                    record
-                        .prepared
-                        .as_ref()
-                        .ok_or("browser_session_idle_readback_required")?,
-                    true,
-                )
-            };
-            if let Ok(completed) = completed {
-                let mut next = record.clone();
-                next.record_completed(completed)
-                    .map_err(|_| "browser_session_idle_readback_required")?;
-                self.update_retirement(&record, next)?;
-            }
-        }
-        self.operation_retirements.clear();
-
-        self.effects.begin_operation(expected)?;
-        self.expected = Some(expected.clone());
-        Ok(())
+        self.begin_operation_scope(expected, true)
+    }
+    fn begin_borrowed_retirement_operation(
+        &mut self,
+        expected: &BrowserSessionState,
+    ) -> Result<(), String> {
+        self.begin_operation_scope(expected, false)
     }
     fn pending_browser_activity_ids(&self) -> Vec<String> {
         self.activities.iter().cloned().collect()
@@ -1131,7 +1177,7 @@ impl<
         if !self.effects.permits_idle_browser_close(browser)? {
             return Ok(false);
         }
-        if self.pool.is_none() {
+        if self.pool.is_none() || self.borrows_browser_without_native_desktop(browser) {
             return Ok(true);
         }
         let assignment = self
@@ -1156,9 +1202,16 @@ impl<
         browsers: &[ManagedBrowserInstance],
     ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
         self.require_operation()?;
-        self.qualify_idle_viewers(browsers, |effects| {
+        let publication_before = self.operation_retirements.clone();
+        let result = self.qualify_idle_viewers(browsers, |effects| {
             effects.acquire_idle_retirement_guard(browsers)
-        })
+        });
+        if !matches!(&result, Ok(Some(_))) {
+            // Retain every durable attempt/fence, but an unqualified scope must
+            // not join another browser's atomic state publication.
+            self.operation_retirements = publication_before;
+        }
+        result
     }
     fn acquire_disposable_retirement_guard(
         &mut self,
@@ -1166,9 +1219,14 @@ impl<
         browsers: &[ManagedBrowserInstance],
     ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
         self.require_operation()?;
-        self.qualify_idle_viewers(browsers, |effects| {
+        let publication_before = self.operation_retirements.clone();
+        let result = self.qualify_idle_viewers(browsers, |effects| {
             effects.acquire_disposable_retirement_guard(allocations, browsers)
-        })
+        });
+        if !matches!(&result, Ok(Some(_))) {
+            self.operation_retirements = publication_before;
+        }
+        result
     }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         self.require_operation()?;

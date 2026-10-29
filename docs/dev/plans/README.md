@@ -1,5 +1,7 @@
 # Active plan index
 
+[P297 independent task TTL](0297-2026-10-28-independent-tab-ttl.md), #490 closed: installed source `9d782cb3c` qualifies fresh logical/physical expiry, peer preservation, responsive owner status and the bounded helper smoke. Shared acceptance and the single zero-finding review are complete; canonical main composition passes source gates for PR491 integration while installed runtime remains the accepted hotfix.
+
 [P295 standalone Auth integration](0295-2026-10-26-standalone-auth-449.md): approved457–464 graph, source integration and separate installed/provider gates.
 
 [P294 dashboard browser commands](0294-2026-10-25-dashboard-browser-command.md), #451 closed: authenticated ingress repaired, exact candidate qualified and preserve deployment/public chooser verified.

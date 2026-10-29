@@ -454,6 +454,15 @@ impl BrowserSessionEffects for Process {
         Ok(self.root.join("idle-process-absent").exists())
     }
     fn close_browser(&mut self, _browser: &ManagedBrowserInstance) -> Result<(), String> {
+        if self.root.join("count-retirement-closes").exists() {
+            let path = self.root.join("retirement-effect-count");
+            let count =
+                std::fs::read_to_string(&path).map_or(0, |count| count.parse::<u32>().unwrap());
+            std::fs::write(path, (count + 1).to_string()).unwrap();
+        }
+        if self.root.join("fail-retirement-close").exists() {
+            return Err("synthetic_close_outcome_unknown".into());
+        }
         if self.root.join("require-retirement-custody").exists() {
             let count_path = self.root.join("retirement-close-count");
             let count = std::fs::read_to_string(&count_path)
@@ -524,8 +533,18 @@ impl BrowserSessionEffects for Process {
     fn close_tab(
         &mut self,
         _browser: &ManagedBrowserInstance,
-        _tab: &ManagedBrowserTab,
+        tab: &ManagedBrowserTab,
     ) -> Result<(), String> {
+        if std::fs::read_to_string(self.root.join("fail-task-close-target"))
+            .ok()
+            .as_deref()
+            == Some(&tab.target_id)
+        {
+            let path = self.root.join("failed-task-close-count");
+            let count = std::fs::read_to_string(&path).map_or(0, |n| n.parse::<u32>().unwrap());
+            std::fs::write(path, (count + 1).to_string()).unwrap();
+            return Err("synthetic_task_close_outcome_unknown".into());
+        }
         Ok(())
     }
     fn navigate(
@@ -597,6 +616,9 @@ impl BrowserSessionEffects for Process {
         &mut self,
         allocation: &ManagedDisposableProfile,
     ) -> Result<(), String> {
+        if self.root.join("fail-profile-delete").exists() {
+            return Err("synthetic_profile_delete_failed".into());
+        }
         std::fs::write(
             self.root.join("deleted-disposable-profile"),
             &allocation.profile.id,
