@@ -1365,8 +1365,26 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 Err(reason) => observation_error = Some(reason),
             }
         }
-        let result = self.manager()?.reap(now_ms)?;
-        self.commit_state()?;
+        let result = self.manager().and_then(|mut manager| manager.reap(now_ms));
+        let result = match result.and_then(|result| {
+            self.commit_state()?;
+            Ok(result)
+        }) {
+            Ok(result) => result,
+            Err(reason) => {
+                // Physical effects retain their exact durable custody journal.
+                // Failed logical publication must not carry its proposed state
+                // into another command after begin_operation resets local IDs.
+                // A lost reply may already have committed: adopt durable truth
+                // without repeating any effect or weakening publication fences.
+                self.state = self
+                    .persistence
+                    .load_session_state()
+                    .unwrap_or_else(|_| self.persisted_state.clone());
+                self.persisted_state = self.state.clone();
+                return Err(reason);
+            }
+        };
         // A provider observation failure must remain visible, but cannot
         // starve unrelated eligible expiry. Existing manager/publication fences
         // still reject conflicting state before any cleanup is published.

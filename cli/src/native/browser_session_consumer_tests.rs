@@ -454,6 +454,12 @@ impl BrowserSessionEffects for Process {
         Ok(self.root.join("idle-process-absent").exists())
     }
     fn close_browser(&mut self, _browser: &ManagedBrowserInstance) -> Result<(), String> {
+        if self.root.join("count-retirement-closes").exists() {
+            let path = self.root.join("retirement-effect-count");
+            let count =
+                std::fs::read_to_string(&path).map_or(0, |count| count.parse::<u32>().unwrap());
+            std::fs::write(path, (count + 1).to_string()).unwrap();
+        }
         if self.root.join("require-retirement-custody").exists() {
             let count_path = self.root.join("retirement-close-count");
             let count = std::fs::read_to_string(&count_path)

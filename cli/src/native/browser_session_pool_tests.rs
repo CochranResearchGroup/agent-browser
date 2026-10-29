@@ -5216,6 +5216,11 @@ impl BrowserSessionPersistence for NativeUseReplyFailure {
         retirement_ids: &[String],
         activity_ids: &[String],
     ) -> Result<(), String> {
+        if self.mode.get() == 5 && !retirement_ids.is_empty() {
+            self.mode.set(0);
+            self.attempts.set(self.attempts.get() + 1);
+            return Err("synthetic_retirement_publication_unavailable".into());
+        }
         if self.mode.get() == 3 && !activity_ids.is_empty() {
             self.mode.set(0);
             self.attempts.set(self.attempts.get() + 1);
@@ -7760,4 +7765,97 @@ fn activity_readback_observes_each_exact_scope_once_per_operation() {
         13,
         "positively ended history needs no further observation"
     );
+}
+
+#[test]
+fn failed_retirement_publication_does_not_poison_an_unrelated_task() {
+    let fixture = Fixture::new();
+    std::fs::write(fixture.root.join("count-retirement-closes"), "check").unwrap();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mode = Rc::new(Cell::new(0));
+    let attempts = Rc::new(Cell::new(0));
+    let mut consumer = host_with_persistence(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::Success,
+        || 2001,
+        NativeUseReplyFailure {
+            store: fixture.store(false),
+            mode: mode.clone(),
+            attempts: attempts.clone(),
+        },
+    );
+    let first = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let before = fixture.store(false).load_session_state().unwrap();
+    mode.set(5);
+    assert_eq!(
+        consumer.reap(300_101).unwrap_err(),
+        "synthetic_retirement_publication_unavailable"
+    );
+    assert_eq!(attempts.get(), 1);
+    let records = fixture.store(false).idle_retirement_records().unwrap();
+    assert_eq!(records.len(), 1);
+    assert!(records[0].has_settled_browser_close(&first.browser_id));
+    assert!(records[0].published_state_digest.is_none());
+    assert_eq!(
+        *consumer.state(),
+        before,
+        "failed cleanup cannot leak unpublished state into another task"
+    );
+    provider.borrow_mut().window_pid = Some(44);
+    let peer = consumer
+        .open(OpenBrowserSession::exact_profile(
+            "Bob",
+            "profile-b",
+            300_102,
+        ))
+        .unwrap();
+    assert_ne!(peer.browser_id, first.browser_id);
+    assert!(fixture
+        .store(false)
+        .load_session_state()
+        .unwrap()
+        .sessions
+        .contains_key(&peer.session_id));
+    assert_eq!(
+        fixture.store(false).idle_retirement_records().unwrap(),
+        records,
+        "unrelated publication must preserve the original settled close journal"
+    );
+    let opened = consumer
+        .execute_managed_command(
+            "Bob",
+            &serde_json::json!({
+                "action":"navigate", "url":"https://synthetic.example/independent-expiry",
+                "profileId":"profile-b", "activityAtMs":300_102
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    let lifetime = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":opened["browserSession"]["handoffId"],
+        "handoffOperation":"set_tab_lifetime", "tabInactivityMs":30, "activityAtMs":300_102
+    }));
+    assert_eq!(lifetime["success"], true, "{lifetime}");
+    let reaped = consumer.reap(300_132).unwrap();
+    assert!(reaped.expired_session_ids.contains(&peer.session_id));
+    let durable = fixture.store(false).load_session_state().unwrap();
+    assert!(!durable.sessions.contains_key(&first.session_id));
+    assert!(!durable.sessions.contains_key(&peer.session_id));
+    assert_eq!(
+        std::fs::read_to_string(fixture.root.join("retirement-effect-count")).unwrap(),
+        "2",
+        "each browser closes once; recovery must not replay the settled original close"
+    );
+    let completed = fixture.store(false).idle_retirement_records().unwrap();
+    assert!(completed
+        .iter()
+        .find(|r| r.intent.id == records[0].intent.id)
+        .unwrap()
+        .completed
+        .is_some());
 }
