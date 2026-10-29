@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P296 delivery closeout](0296-development-delivery-closeout-2026-10-29.md): PR480 merged; exact isolated development doctor and three-launch smoke pass; production unchanged and478 deferred.
+
 [P296 final review](0296-final-review-2026-10-28.md): one Standards/Spec review, two teaching-evidence repairs and one bounded TDD pass; narrated walkthrough deferred.
 
 [P296 image rounds checkpoint](0296-native-image-rounds-472-checkpoint.md): same-boot elapsed clock repair and actual054 two-round Native qualification;472/484 accepted,478 actual media and scope remain pending.

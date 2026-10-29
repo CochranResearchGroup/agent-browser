@@ -1,6 +1,6 @@
 # Roadmap
 
-[P296 dependable browser journeys and narrated teaching](docs/dev/plans/0296-2026-10-26-browser-journeys-teaching.md), #466, PL-RECIPES, owns the approved delivery graph through draft PR480. Preserve standalone Auth P295 and historical Stage1 #453/draft454. See [current execution](RUNBOOK.md).
+[P296 dependable browser journeys and narrated teaching](docs/dev/plans/0296-2026-10-26-browser-journeys-teaching.md), #466, PL-RECIPES, has merged its approved source graph through PR480 and qualified the isolated development candidate. Narrated acceptance #478 remains deferred. Preserve standalone Auth P295 and historical Stage1 #453/draft454. See [current execution](RUNBOOK.md).
 
 [P295 standalone Auth integration](docs/dev/plans/0295-2026-10-26-standalone-auth-449.md), #449, PL-AUTH: execute457–464 from the approved standalone Auth specification.
 
