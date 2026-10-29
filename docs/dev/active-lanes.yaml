@@ -1219,12 +1219,12 @@ lanes:
     plan_ref: refs/heads/fix/issue488-tab-ttl
     branch: fix/issue488-tab-ttl
     target: main
-    plan_state: OPEN
+    plan_state: CLOSED
     custody_state: ACTIVE_WORKTREE
     work_items: [CochranResearchGroup/agent-browser#490]
     dependencies: []
     overlaps: [P240, P237]
     reconciled_overlaps: ["Reuse clean integrated P240 checkout with prior branch and candidate custody preserved", "Own borrowed task TTL and per-browser reaper deferral only; Native custody protections remain"]
-    validation_status: Installed borrowed publication qualifies; bounded fresh census source gates pass; sealed replacement and installed responsiveness pending
-    limitations: ["CI excluded", "Primary owns preserve installation; previous installed acceptance failure retained", "Primary owns one post-closure broad review and one bounded remediation"]
+    validation_status: Installed source9d and binary0ed qualify fresh borrowed expiry, protected peers, responsive owner and bounded helper smoke
+    limitations: ["CI excluded", "No eligible batch opportunity in normal observation; helper positive and caller source-test qualified", "Branch and artifacts retained for primary shared acceptance and reserved review; later main not integrated"]
     updated_at: 2026-10-29

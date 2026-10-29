@@ -1,6 +1,6 @@
 # Active plan index
 
-[P297 independent task TTL](0297-2026-10-28-independent-tab-ttl.md), #490: prior borrowed retirement is installed-qualified; bounded cleanup census follow-up source gates pass; next sealed installation and installed owner responsiveness/fresh-task acceptance remain pending.
+[P297 independent task TTL](0297-2026-10-28-independent-tab-ttl.md), #490 closed: installed source `9d782cb3c` qualifies fresh logical/physical expiry, peer preservation, responsive owner status and the bounded helper smoke. Shared acceptance and the reserved review remain coordinated by the primary.
 
 [P295 standalone Auth integration](0295-2026-10-26-standalone-auth-449.md): approved457–464 graph, source integration and separate installed/provider gates.
 

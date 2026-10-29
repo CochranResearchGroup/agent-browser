@@ -1,6 +1,6 @@
 # Plan0297: Independent task tab expiry
 
-State: OPEN
+State: CLOSED
 Product lane: PL-BUGFIX
 Work item: CochranResearchGroup/agent-browser#490
 Related intake: CochranResearchGroup/agent-browser#488
@@ -10,11 +10,14 @@ Base: 7d9b4b7ad41114f313b4329743904b9181b10b29
 
 ## Current State
 
-Installed source `53fd459` durably reconciled the two prior eligible borrowed
-tasks. Later whole-process namespace observation blocked ordinary owner status;
-the bounded batch follow-up now passes its final source gates. The primary owns
-the next sealed preserve installation and installed owner responsiveness plus
-fresh-task expiry acceptance. The ticket remains open.
+[#490](https://github.com/CochranResearchGroup/agent-browser/issues/490) is closed
+with installed source `9d782cb3c` and binary `0ed64bf6a1754cbf` accepted through the
+supported preserve transaction. Fresh borrowed-task expiry publishes truthful
+terminal state and preserves protected peers; ordinary owner status is responsive.
+The installed batch helper is positively qualified with the limits below. The
+primary owns the remaining cross-repository acceptance and the reserved single
+post-closure review/remediation. Keep the branch and sealed artifact custody;
+this outcome does not claim integration into the independently advanced main.
 
 ## Initial evidence
 
@@ -361,3 +364,39 @@ stack; strict workspace Clippy, format and diff checks pass. Prior 397 model
 checks remain applicable because this follow-up changes no model source. These
 are source and fixture results, not installed responsiveness or fresh TTL proof.
 CI remains excluded; no reserved broad review has run.
+
+
+## Installed acceptance and closure, 2026-10-29
+
+The primary accepted source
+`9d782cb3c463135fd83c3d37d83ea15f50b5133a`, sealed binary
+`0ed64bf6a1754cbf31d612cc327770e449639cdeacb6e0ed1767061754edce07`,
+through preserve transaction `upgrade-c3e851d4-510b-44bb-b4da-498e4f90a8a8`.
+A fresh eligible task's physical target disappeared and its truthful terminal
+`heartbeat_expired` state was published 50.759 seconds after unchanged activity.
+Four protected peer targets and all four original Chrome root generations
+survived. AuraCall recorded zero closure events for the task; there was no manual
+closure. Three ordinary owner status reads took 55, 36 and 23 milliseconds.
+
+A bounded 90-second read-only observation classified all 18 observed runner
+executions as single-PID reads; two sampled live helpers positively shared the
+owner PID namespace. Both retained disposable allocations lacked cleanup eligibility timestamps,
+so this window had no batch opportunity and does not establish a comparative
+whole-census latency result. A separate bounded read-only smoke positively ran
+the installed `census` helper through the same trusted user-manager transport in
+113 milliseconds. Exactly two explicit owned PIDs returned once each; helper,
+target and owner namespace, executable and before/response/after boot-start
+identities matched. No argv was exported, stderr was empty, and the owned runner
+exited and was reaped. No reaper, cleanup, allocation or browser effect was
+invoked by that smoke. This qualifies actual installed helper support/freshness;
+production cleanup-caller behavior remains source/test-qualified.
+
+The primary retained private raw evidence and published the
+[acceptance and closure](https://github.com/CochranResearchGroup/agent-browser/issues/490#issuecomment-6505597049).
+The final live verdict SHA256 is
+`44edf0bb18ee25a092cafe3fe217b9b5f94d34689f15b95490165940d7ec1826`.
+Worker readback confirms the issue is CLOSED/COMPLETED. PR491 remains a draft on
+the validated integration branch; canonical main and the installed binary remain
+separate identities. No code, test or support bytes change in this documentation
+reconciliation, no rebuild is required, and no reserved broad review or worker
+memory closeout has run.
