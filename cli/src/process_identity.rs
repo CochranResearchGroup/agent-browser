@@ -1,7 +1,7 @@
 #[cfg(target_os = "linux")]
 mod namespace_observer;
 #[cfg(target_os = "linux")]
-pub(crate) use namespace_observer::observe_profile_files;
+pub(crate) use namespace_observer::{observe_census, observe_profile_files};
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;

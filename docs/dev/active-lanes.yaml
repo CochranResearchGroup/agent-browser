@@ -1202,7 +1202,7 @@ lanes:
     branch: platform/resource-bounds-105
     target: main
     plan_state: COMPLETED
-    custody_state: ACTIVE_WORKTREE
+    custody_state: PAUSED_REF
     work_items: [CochranResearchGroup/agent-browser#105]
     dependencies: []
     overlaps: [P237, P239]
@@ -1226,3 +1226,20 @@ lanes:
     reconciled_overlaps: ["Bounded profile reuse maintenance only; preserve unrelated authentication edits and existing production browsers"]
     checkpoint: 127f798502bd8ce507a98b31069e382753f0a7b6
     limitations: ["Original installed MCP acceptance and preserved-runtime adoption pending", "Broader untouched-test stack overflow retained with unqualified cause"]
+
+  - id: P297
+    product_lane: PL-BUGFIX
+    objective: Retire eligible task tabs independently while preserving borrowed browsers
+    plan: docs/dev/plans/0297-2026-10-28-independent-tab-ttl.md
+    plan_ref: refs/heads/fix/issue488-tab-ttl
+    branch: fix/issue488-tab-ttl
+    target: main
+    plan_state: CLOSED
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#490]
+    dependencies: []
+    overlaps: [P240, P237]
+    reconciled_overlaps: ["Reuse clean integrated P240 checkout with prior branch and candidate custody preserved", "Own borrowed task TTL and per-browser reaper deferral only; Native custody protections remain"]
+    validation_status: Installed hotfix accepted; canonical main6c composes with full model, selected native-MCP, provider-free contracts and strict Rust gates passed
+    limitations: ["CI excluded", "No eligible batch opportunity in normal observation; helper positive and caller source-test qualified", "Branch and artifacts retained for PR491 integration; canonical main source composition is not installed"]
+    updated_at: 2026-10-29

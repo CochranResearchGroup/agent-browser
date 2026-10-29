@@ -29,6 +29,7 @@
         "lane/platform": { "provider_label": "lane/platform" },
         "state/triage": { "provider_label": "state/triage" },
         "state/ready": { "provider_label": "state/ready" },
+        "triage/ready-for-agent": { "provider_label": "ready-for-agent" },
         "state/in-progress": { "provider_label": "state/in-progress" },
         "state/blocked": { "provider_label": "state/blocked" },
         "type/governance": { "provider_label": "type/governance" },
