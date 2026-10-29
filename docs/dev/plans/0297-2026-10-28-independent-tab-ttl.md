@@ -10,6 +10,14 @@ Base: 7d9b4b7ad41114f313b4329743904b9181b10b29
 
 ## Current State
 
+Installed source `53fd459` durably reconciled the two prior eligible borrowed
+tasks. Later whole-process namespace observation blocked ordinary owner status;
+the bounded batch follow-up now passes its final source gates. The primary owns
+the next sealed preserve installation and installed owner responsiveness plus
+fresh-task expiry acceptance. The ticket remains open.
+
+## Initial evidence
+
 The operator-authorized ChatGPT task accepted a thirty-second per-tab lifetime,
 had no pending-human hold and retained an unchanged activity timestamp, but
 remained live throughout a ninety-four-second passive observation. AuraCall
@@ -295,3 +303,61 @@ reviewed four-job resource profile keeps the 16 GiB host reserve. No ignored
 Chrome/viewer case or source-only success is promoted to installed acceptance.
 The primary owns the next sealed preserve installation and real shared-browser
 proof. CI remains excluded; the reserved post-closure review has not run.
+
+
+### Installed borrowed publication and cleanup census latency
+
+The sealed source `53fd459` installed through the primary's supported preserve
+transaction and durably retired both prior eligible borrowed tasks. Ordinary
+owner status then exceeded both 10-second and 30-second bounds while later
+maintenance held the shared host lock. Read-only diagnostics showed repeated
+namespace-observer launches for unrelated processes. Disposable cleanup's full
+process census called `capture_process_identity` for every PID, including its
+up-to-ten retry loop, before profile relevance was evaluated. The inherited
+per-PID observer had a bounded individual request but no aggregate census bound.
+The source and first installed candidate remain preserved; this partial installed
+success does not close the ticket or satisfy fresh-task acceptance.
+
+Cleanup now gathers the same complete local process/argument census and requests
+fresh executable/start evidence in one bounded identity-only batch when direct
+namespace observation is unavailable. The helper accepts at most 8192 unique
+positive PIDs, emits at most 4 MiB, cannot recursively delegate, and retains the
+existing local-user namespace and runtime limits. The caller drains stdout while
+the helper runs, limits the exchange to four seconds, and reaps its owned runner
+on errors. Response sets must match exactly; duplicate, missing, extra, changed
+PID, boot or kernel-start evidence cannot grant cleanup eligibility. Command lines
+stay local and are reread after the batch: changed or unreadable arguments refuse
+cleanup because kernel start identity alone survives execve. Unknown processes
+retain their blocker metadata and cannot establish a selected browser tree.
+Every effect guard still gathers fresh evidence; no census is cached across
+allocation or effect boundaries.
+
+The original installed status timeouts and helper stream are the latency red
+receipt. External observer protocol tests qualify exact response identity and
+bounded owned-child transport, including output beyond pipe capacity, overflow
+and timeout. Existing public cleanup eligibility and foreign-process protections,
+native consumer gates, strict workspace lint/format, and a new installed owner
+responsiveness/fresh TTL proof are required before closure. Source gate results
+and the next sealed identity will follow; no runtime change or reserved broad
+review is performed by the worker.
+
+
+The final census source gates pass after repairing one non-hermetic pre-existing
+public guard fixture. That fixture had implicitly read host namespaces despite
+the unit lane prohibiting namespace services. It now supplies complete synthetic
+process-table evidence, retains job/claim and foreign-process cases, and explicitly
+proves that a census timeout refuses admission, preserves the profile and releases
+exclusion. The failed intermediate runtime receipt is retained. Production
+transport failure remains a deferred error, never a complete empty census.
+
+Final selected native gates: consumer/pool 125 passed, one existing viewer case
+ignored, in 283.06 seconds; runtime 29 passed and eight existing Chrome cases
+ignored; host 11, observer/protocol five, public cleanup guard four, resources 32,
+process identity 22, dispatcher three and strict generic close one passed. The
+exact native test binary SHA256 is
+`71e66d9a4b480892622b423f1de8c8ef831c86011d2116ce71f141cbc81a20e7`.
+The 4 GiB aggregate test scope peaked at 1,058,197,504 bytes with 16 MiB thread
+stack; strict workspace Clippy, format and diff checks pass. Prior 397 model
+checks remain applicable because this follow-up changes no model source. These
+are source and fixture results, not installed responsiveness or fresh TTL proof.
+CI remains excluded; no reserved broad review has run.

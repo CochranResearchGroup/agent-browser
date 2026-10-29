@@ -3895,6 +3895,16 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn native_disposable_group_guard_checks_profile_jobs_and_releases_exclusion() {
+        // This guard fixture proves current jobs/lease exclusion, not host
+        // process discovery. Supply a complete synthetic unrelated process table
+        // rather than implicitly reading peer namespaces or starting services.
+        let process_census = super::super::service_resources::CleanupCensusFixture::new(vec![
+            super::super::service_resources::ProcessSample {
+                pid: 42,
+                command: vec!["synthetic-unrelated-worker".into()],
+                ..Default::default()
+            },
+        ]);
         use super::super::service_store::{
             default_service_state_path, JsonServiceStateStore, ServiceStateStore,
         };
@@ -4021,6 +4031,16 @@ mod tests {
         // Restore the independent unclaimed fixture, not a simulated claim release.
         state = unclaimed;
         store.save(&state).unwrap();
+        process_census.fail("process_observer_timeout");
+        assert_eq!(
+            effects
+                .acquire_disposable_retirement_guard(&allocations, &[])
+                .err()
+                .unwrap(),
+            "process_observer_timeout"
+        );
+        assert!(Path::new(&allocations[0].profile.user_data_dir).is_dir());
+        process_census.restore();
         let guard = effects
             .acquire_disposable_retirement_guard(&allocations, &[])
             .unwrap()

@@ -1,6 +1,6 @@
 # Runbook
 
-[P297 independent task TTL](docs/dev/plans/0297-2026-10-28-independent-tab-ttl.md), #490: real host/SQLite readback, Native-close-prefix, late-profile and borrowed-close-prefix regressions qualify an explicit borrowed-expiry publication boundary. All required source gates pass; the next sealed preserve installation and live acceptance are pending. Retain existing browser generations and all unknown Native journals; CI is excluded.
+[P297 independent task TTL](docs/dev/plans/0297-2026-10-28-independent-tab-ttl.md), #490: installed source53 durably retires prior borrowed tasks, but later full-process namespace observation blocks ordinary owner status. A bounded fresh identity-only census batch and local argv freshness fence pass final source gates; the next sealed preserve installation and installed responsiveness/fresh-task acceptance remain pending. Preserve all browser generations and uncertain Native journals; CI is excluded.
 
 [P294 dashboard browser commands](docs/dev/plans/0294-2026-10-25-dashboard-browser-command.md), #451, is closed: PR455 and sealed production binary `3bcc060428a5` are installed through an accepted preserve transaction. Authenticated public chooser, three selected isolated workflows and seven no-launch checks pass. All 22 observed browser roots and 147 protected Native service units are preserved. [Receipt](docs/dev/notes/0294-2026-10-25-dashboard-browser-command.md) retains the cold setup replay, slow rail sample and doctor warnings.
 

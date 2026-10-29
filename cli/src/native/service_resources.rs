@@ -1083,7 +1083,59 @@ fn profile_cleanup_process_command(path: &std::path::Path) -> Result<Option<Vec<
     }
 }
 
+/// Kernel start identity survives execve. Keep argv local and refuse a census
+/// whose command changed while delegated executable evidence was in flight.
+fn profile_cleanup_process_command_unchanged(
+    path: &Path,
+    before: &[String],
+) -> Result<bool, String> {
+    match profile_cleanup_process_command(path)? {
+        Some(after) if after == before => Ok(true),
+        None => Ok(false),
+        _ => Err("browser_disposable_cleanup_process_command_changed".into()),
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static CLEANUP_CENSUS_FIXTURE: std::cell::RefCell<Option<Result<Vec<ProcessSample>, String>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Test-only external process-table evidence. Keep public guard tests hermetic;
+/// production namespace transport remains unavailable in the unit lane.
+#[cfg(test)]
+pub(crate) struct CleanupCensusFixture {
+    initial: Vec<ProcessSample>,
+}
+#[cfg(test)]
+impl CleanupCensusFixture {
+    pub(crate) fn new(samples: Vec<ProcessSample>) -> Self {
+        CLEANUP_CENSUS_FIXTURE.with(|slot| {
+            assert!(slot.borrow().is_none(), "nested process census fixture");
+            *slot.borrow_mut() = Some(Ok(samples.clone()));
+        });
+        Self { initial: samples }
+    }
+    pub(crate) fn fail(&self, reason: &str) {
+        CLEANUP_CENSUS_FIXTURE.with(|slot| *slot.borrow_mut() = Some(Err(reason.into())));
+    }
+    pub(crate) fn restore(&self) {
+        CLEANUP_CENSUS_FIXTURE.with(|slot| *slot.borrow_mut() = Some(Ok(self.initial.clone())));
+    }
+}
+#[cfg(test)]
+impl Drop for CleanupCensusFixture {
+    fn drop(&mut self) {
+        CLEANUP_CENSUS_FIXTURE.with(|slot| *slot.borrow_mut() = None);
+    }
+}
+
 fn profile_cleanup_process_census() -> Result<Vec<ProcessSample>, String> {
+    #[cfg(test)]
+    if let Some(samples) = CLEANUP_CENSUS_FIXTURE.with(|slot| slot.borrow().clone()) {
+        return samples;
+    }
+
     #[cfg(target_os = "linux")]
     {
         let mut samples = Vec::new();
@@ -1104,23 +1156,34 @@ fn profile_cleanup_process_census() -> Result<Vec<ProcessSample>, String> {
                     linux_process_sample(pid, None, None, 1, boot_id.clone()).unwrap_or_default();
                 sample.pid = pid;
                 sample.command = command;
-                let stable = crate::process_identity::capture_process_identity(pid, None, None)
-                    .is_some_and(|identity| {
-                        sample.start_token.as_ref() == Some(&identity.start_token)
-                            && sample.executable == identity.executable_path
-                    });
-                if !stable {
-                    // An incomplete or raced observation remains a potential
-                    // profile blocker, but cannot establish tree membership.
-                    sample.ppid = None;
-                    sample.start_token = None;
-                    sample.executable = None;
-                }
                 samples.push(sample);
             }
         }
         if samples.is_empty() {
             return Err("browser_disposable_cleanup_process_census_empty".into());
+        }
+        let expected = samples
+            .iter()
+            .filter_map(|sample| sample.start_token.clone().map(|start| (sample.pid, start)))
+            .collect::<BTreeMap<_, _>>();
+        let observations = crate::process_identity::observe_census(&expected)?;
+        for sample in &mut samples {
+            let command_unchanged = profile_cleanup_process_command_unchanged(
+                Path::new(&format!("/proc/{}", sample.pid)),
+                &sample.command,
+            )?;
+            let stable = command_unchanged
+                && matches!(observations.get(&sample.pid),
+                Some(crate::process_identity::ProcessObservation::Observed(identity))
+                    if sample.start_token == identity.start_token
+                        && sample.executable == identity.executable_path);
+            if !stable {
+                // Keep every command as a possible profile blocker. Unknown
+                // identity still cannot establish a selected browser tree.
+                sample.ppid = None;
+                sample.start_token = None;
+                sample.executable = None;
+            }
         }
         Ok(samples)
     }
@@ -5201,13 +5264,24 @@ mod profile_cleanup_guard_tests {
             profile_cleanup_process_command(&root).unwrap().unwrap(),
             ["chrome", "--user-data-dir=/owned/profile"]
         );
+        let before = profile_cleanup_process_command(&root).unwrap().unwrap();
+        assert!(profile_cleanup_process_command_unchanged(&root, &before).unwrap());
+        fs::write(
+            root.join("cmdline"),
+            b"chrome\0--user-data-dir=/different/profile\0",
+        )
+        .unwrap();
+        assert!(profile_cleanup_process_command_unchanged(&root, &before).is_err());
         fs::write(root.join("cmdline"), b"").unwrap();
+        assert!(profile_cleanup_process_command_unchanged(&root, &before).is_err());
         assert!(profile_cleanup_process_command(&root)
             .unwrap()
             .unwrap()
             .is_empty());
         fs::remove_file(root.join("cmdline")).unwrap();
+        assert!(profile_cleanup_process_command_unchanged(&root, &before).is_err());
         fs::remove_dir(&root).unwrap();
+        assert!(!profile_cleanup_process_command_unchanged(&root, &before).unwrap());
         assert!(profile_cleanup_process_command(&root).unwrap().is_none());
     }
     #[test]

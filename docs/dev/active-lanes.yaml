@@ -1225,6 +1225,6 @@ lanes:
     dependencies: []
     overlaps: [P240, P237]
     reconciled_overlaps: ["Reuse clean integrated P240 checkout with prior branch and candidate custody preserved", "Own borrowed task TTL and per-browser reaper deferral only; Native custody protections remain"]
-    validation_status: Actual host/SQLite and deferred-task failure isolation plus all final source gates pass; replacement installation and live acceptance pending
+    validation_status: Installed borrowed publication qualifies; bounded fresh census source gates pass; sealed replacement and installed responsiveness pending
     limitations: ["CI excluded", "Primary owns preserve installation; previous installed acceptance failure retained", "Primary owns one post-closure broad review and one bounded remediation"]
     updated_at: 2026-10-29
