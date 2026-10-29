@@ -366,11 +366,19 @@ impl<
     /// Borrowed task tabs do not grant ownership of their browser process or
     /// a Native assignment. Their retirement still requires local activity
     /// exclusion, and the manager preserves the shared browser and peer tabs.
+    /// Logical session membership changes during retirement; frozen physical
+    /// browser identity remains the custody boundary throughout that pass.
     fn borrows_browser_without_native_desktop(&self, browser: &ManagedBrowserInstance) -> bool {
         browser.desktop.is_none()
             && self.expected.as_ref().is_some_and(|expected| {
                 expected.shared_browser_ids.contains(&browser.id)
-                    && expected.browsers.get(&browser.id) == Some(browser)
+                    && expected.browsers.get(&browser.id).is_some_and(|baseline| {
+                        baseline.id == browser.id
+                            && baseline.profile_id == browser.profile_id
+                            && baseline.pid == browser.pid
+                            && baseline.cdp_endpoint == browser.cdp_endpoint
+                            && baseline.desktop == browser.desktop
+                    })
             })
     }
 

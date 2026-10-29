@@ -149,3 +149,74 @@ env RUST_MIN_STACK=16777216 cli/target/debug/deps/agent_browser-3104eecfbe9c33ba
 The commands ran in separate user systemd scopes with MemoryHigh=3G,
 MemoryMax=4G and MemorySwapMax=1G. The primary owns the replacement candidate
 installation and final live acceptance. Draft implementation PR: #491.
+
+
+## Installed multi-session acceptance repair
+
+The supported follow-up candidate from `c3a83438b` was installed successfully.
+The passive live check still failed truthful lifecycle publication: the eligible
+target disappeared, all four protected peers and its browser generation survived
+150 seconds, and AuraCall recorded no competing closure, but Agent Browser
+retained an active task with no terminal history. Physical disappearance was
+first observed 52.64 seconds after unchanged activity. This does not qualify
+Agent Browser TTL acceptance.
+
+A bounded fd2-only observation then captured the exact missing-target error. The
+first-pass error was not captured. Equivalent public manager/real pool-effects
+state reproduces a deterministic first-pass failure: after one same-browser
+task retires, its changed logical `active_session_ids` made the borrowed-browser
+helper reject the next expired task as if physical browser identity changed.
+The regression covers an expired heartbeat peer and a second expired TTL peer,
+including local-authority denial. Red returned
+`browser_session_idle_custody_unavailable`; green passes with both task outcomes
+and without whole-browser close authority. Frozen PID, profile, endpoint, browser
+ID and Native desktop still must match; only logical task membership can change.
+
+The already-absent owned target also reproduced through the public
+`BrowserManagerRuntime::close_tab` seam with real CDP transport and current
+process binding. Red returned the installed missing-attached-target error. The
+scoped runtime path now reconciles only a fresh complete target census plus
+matching CDP browser PID and unchanged kernel identity. Malformed inventory and
+a changed PID fail closed; ordinary generic release stays strict. A second red
+showed the absent cached target reused as a new task's bootstrap. The existing
+cache-removal boundary now runs only after positive absence, and the same public
+runtime continuation acquires a new owned target without touching its physical
+peer. Inventory and PID reads each have a two-second bound.
+
+Receipts: `multi-session-red.log` / `multi-session-green.log`,
+`absent-target-red.log` / `absent-target-green.log`, and
+`absent-cache-red.log` / `absent-cache-green.log` in the worker's private
+issue490 evidence directory. They contain synthetic inputs, not copied private
+browser payloads. Final combined runtime regression passed in 0.09 seconds.
+The private raw live failure and fd2 trace remain outside Git.
+
+This is required live-acceptance remediation. No reserved post-closure broad
+review has run; the original full-descriptor equality review hypothesis is now
+reproduced and repaired rather than an untested future finding.
+
+
+Final source gate for the multi-session/absence repair: all 396 service-model
+checks passed. Native runtime: 29 passed, eight existing local-Chrome cases
+ignored, 49.99 seconds. Native consumer/pool: 123 passed, one existing live
+viewer fixture ignored, 295.12 seconds. Native host: 11 passed. Strict generic
+close preservation: one table-driven check passed in 2.14 seconds. Workspace
+format, strict workspace Clippy and diff checks passed. Native gates used the
+compiled binary with SHA256
+`9649c7e72c6b4c351e5f00ee849340be085e971e6631934433254e461335ee39`,
+a 16 MiB test-thread stack and 4 GiB enforced scopes. No live Chrome/viewer
+behavior is inferred from ignored cases. CI remains excluded.
+
+Focused new regression commands use the same reviewed four-job, 4 GiB maximum
+Cargo profile shown above and the unchanged 16 GiB host reserve:
+
+```sh
+scripts/ci/cargo-safe.sh test -p agent-browser-service-model --test browser_handoff_recovery borrowed_tab_lifetime_does_not_require_native_browser_launch_custody -- --test-threads=1
+scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml --bin agent-browser owned_tab_retirement_reconciles_only_verified_fresh_absence -- --test-threads=1
+```
+
+The model invocation first failed on unavailable Native custody, then passed
+both expired-peer variants and authority denials. The runtime invocation first
+failed missing-target reconciliation, then passed it; the cached continuation
+then failed returning the absent original target, and finally passed new-target
+acquisition plus malformed-inventory and post-attachment PID-mismatch denials.
+The primary owns the next supported preserve install and installed acceptance.

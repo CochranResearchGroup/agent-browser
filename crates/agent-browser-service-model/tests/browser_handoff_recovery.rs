@@ -843,110 +843,138 @@ fn unresolved_initial_launch_readback_never_authorizes_implicit_second_launch() 
 
 #[test]
 fn borrowed_tab_lifetime_does_not_require_native_browser_launch_custody() {
-    for blocked in [false, true] {
-        let evidence = Rc::new(RefCell::new(Evidence {
-            retirement_blocked: blocked,
-            allow_task_tab_retirement: true,
-            ..Default::default()
-        }));
-        let browser = ManagedBrowserInstance {
-            id: "borrowed-browser".into(),
-            profile_id: "borrowed-profile".into(),
-            pid: 43,
-            cdp_endpoint: "http://127.0.0.1:9222".into(),
-            desktop: None,
-            active_session_ids: vec!["task".into()],
-        };
-        let tab = ManagedBrowserTab {
-            id: "own-tab".into(),
-            target_id: "own-target".into(),
-            browser_id: browser.id.clone(),
-            session_id: "task".into(),
-            created_at_ms: 100,
-            last_activity_at_ms: 100,
-        };
-        let session = ManagedBrowserSession {
-            id: "task".into(),
-            name: "task".into(),
-            profile_id: browser.profile_id.clone(),
-            browser_id: browser.id.clone(),
-            created_at_ms: 100,
-            last_activity_at_ms: 100,
-            expires_at_ms: 300_100,
-            current_tab_id: Some(tab.id.clone()),
-        };
-        let mut state = BrowserSessionState::default();
-        state.browsers.insert(browser.id.clone(), browser.clone());
-        state.tabs.insert(tab.id.clone(), tab.clone());
-        state.sessions.insert(session.id.clone(), session);
-        state.shared_browser_ids.insert(browser.id.clone());
-        state.tab_lifetimes.insert(
-            tab.id.clone(),
-            BrowserTabLifetime {
-                inactivity_ms: Some(30),
-                pressure_inactivity_ms: None,
-            },
-        );
-        let mut effects = RemoteViewSessionEffects::new(
-            Runtime {
-                evidence: evidence.clone(),
-                absent: false,
-                fail_restoration: false,
-                next_target: 0,
-            },
-            RemoteViewApplicationAdapter::new(
-                "agent-browser".into(),
-                Transport {
+    for peer_uses_ttl in [false, true] {
+        for blocked in [false, true] {
+            let evidence = Rc::new(RefCell::new(Evidence {
+                retirement_blocked: blocked,
+                allow_task_tab_retirement: true,
+                ..Default::default()
+            }));
+            let browser = ManagedBrowserInstance {
+                id: "borrowed-browser".into(),
+                profile_id: "borrowed-profile".into(),
+                pid: 43,
+                cdp_endpoint: "http://127.0.0.1:9222".into(),
+                desktop: None,
+                active_session_ids: vec!["task".into(), "peer-task".into()],
+            };
+            let tab = ManagedBrowserTab {
+                id: "own-tab".into(),
+                target_id: "own-target".into(),
+                browser_id: browser.id.clone(),
+                session_id: "task".into(),
+                created_at_ms: 100,
+                last_activity_at_ms: 100,
+            };
+            let session = ManagedBrowserSession {
+                id: "task".into(),
+                name: "task".into(),
+                profile_id: browser.profile_id.clone(),
+                browser_id: browser.id.clone(),
+                created_at_ms: 100,
+                last_activity_at_ms: 100,
+                expires_at_ms: 300_100,
+                current_tab_id: Some(tab.id.clone()),
+            };
+            let mut state = BrowserSessionState::default();
+            state.browsers.insert(browser.id.clone(), browser.clone());
+            state.tabs.insert(tab.id.clone(), tab.clone());
+            let peer_tab = ManagedBrowserTab {
+                id: "peer-tab".into(),
+                target_id: "peer-target".into(),
+                session_id: "peer-task".into(),
+                ..tab.clone()
+            };
+            let peer_session = ManagedBrowserSession {
+                id: "peer-task".into(),
+                name: "peer-task".into(),
+                expires_at_ms: if peer_uses_ttl { 300_100 } else { 129 },
+                current_tab_id: Some(peer_tab.id.clone()),
+                ..session.clone()
+            };
+            state.sessions.insert(session.id.clone(), session);
+            state.sessions.insert(peer_session.id.clone(), peer_session);
+            state.tabs.insert(peer_tab.id.clone(), peer_tab.clone());
+            if peer_uses_ttl {
+                state.tab_lifetimes.insert(
+                    peer_tab.id.clone(),
+                    BrowserTabLifetime {
+                        inactivity_ms: Some(30),
+                        pressure_inactivity_ms: None,
+                    },
+                );
+            }
+            state.shared_browser_ids.insert(browser.id.clone());
+            state.tab_lifetimes.insert(
+                tab.id.clone(),
+                BrowserTabLifetime {
+                    inactivity_ms: Some(30),
+                    pressure_inactivity_ms: None,
+                },
+            );
+            let mut effects = RemoteViewSessionEffects::new(
+                Runtime {
                     evidence: evidence.clone(),
-                    fixture: serde_json::json!({}),
+                    absent: false,
+                    fail_restoration: false,
+                    next_target: 0,
+                },
+                RemoteViewApplicationAdapter::new(
+                    "agent-browser".into(),
+                    Transport {
+                        evidence: evidence.clone(),
+                        fixture: serde_json::json!({}),
+                    },
+                )
+                .unwrap(),
+                Store(evidence.clone()),
+                vec![],
+                || "55555555-5555-4555-8555-555555555555".into(),
+            )
+            .unwrap()
+            .with_pool(RemoteViewSessionPool {
+                name: "native".into(),
+                desired_desktops: 1,
+            })
+            .unwrap();
+            effects.begin_operation(&state).unwrap();
+            let catalog = BrowserProfileCatalog {
+                schema_version: "agent-browser.browser-profile-catalog.v1".into(),
+                profiles: BTreeMap::new(),
+                disposable_policies: BTreeMap::new(),
+            };
+            let result = BrowserSessionManager::new(
+                &mut state,
+                &catalog,
+                &mut effects,
+                BrowserSessionManagerConfig {
+                    session_idle_timeout_ms: 300_000,
+                    remote_view_desktops: vec![],
                 },
             )
-            .unwrap(),
-            Store(evidence.clone()),
-            vec![],
-            || "55555555-5555-4555-8555-555555555555".into(),
-        )
-        .unwrap()
-        .with_pool(RemoteViewSessionPool {
-            name: "native".into(),
-            desired_desktops: 1,
-        })
-        .unwrap();
-        effects.begin_operation(&state).unwrap();
-        let catalog = BrowserProfileCatalog {
-            schema_version: "agent-browser.browser-profile-catalog.v1".into(),
-            profiles: BTreeMap::new(),
-            disposable_policies: BTreeMap::new(),
-        };
-        let result = BrowserSessionManager::new(
-            &mut state,
-            &catalog,
-            &mut effects,
-            BrowserSessionManagerConfig {
-                session_idle_timeout_ms: 300_000,
-                remote_view_desktops: vec![],
-            },
-        )
-        .reap(130)
-        .unwrap();
-        assert_eq!(state.tabs.contains_key(&tab.id), blocked, "task TTL must preserve authority but not require custody of the borrowed browser: {result:?}");
-        assert!(result.deferred_browser_errors.is_empty());
-        assert!(
-            evidence.borrow().published_browser_requests.is_empty(),
-            "borrowed task expiry cannot claim the host browser's native launch"
-        );
-        assert_eq!(
-            evidence
-                .borrow()
-                .effects
-                .iter()
-                .filter(|e| e.starts_with("close:"))
-                .count(),
-            usize::from(!blocked)
-        );
-        if !blocked {
-            assert_eq!(state.tab_history.last().unwrap().target_id, "own-target");
-            assert!(result.closed_browser_ids.is_empty());
+            .reap(130)
+            .unwrap();
+            assert_eq!(state.tabs.contains_key(&tab.id), blocked, "task TTL must preserve authority but not require custody of the borrowed browser: {result:?}");
+            assert_eq!(state.tabs.contains_key(&peer_tab.id), blocked);
+            assert!(state.browsers.contains_key(&browser.id));
+            assert!(result.deferred_browser_errors.is_empty());
+            assert!(
+                evidence.borrow().published_browser_requests.is_empty(),
+                "borrowed task expiry cannot claim the host browser's native launch"
+            );
+            assert_eq!(
+                evidence
+                    .borrow()
+                    .effects
+                    .iter()
+                    .filter(|e| e.starts_with("close:"))
+                    .count(),
+                2 * usize::from(!blocked)
+            );
+            if !blocked {
+                assert_eq!(state.tab_history.len(), 2);
+                assert!(result.closed_browser_ids.is_empty());
+            }
         }
     }
 }

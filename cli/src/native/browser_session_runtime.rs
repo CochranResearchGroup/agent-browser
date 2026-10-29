@@ -1841,9 +1841,7 @@ fn run_browser_worker(
                         .get_mut(&browser.id)
                         .and_then(|state| state.browser.as_mut())
                         .ok_or("browser_session_runtime_browser_missing")?;
-                    manager
-                        .tab_close_target_id_for_release(&tab.target_id)
-                        .await?;
+                    close_owned_task_tab(manager, &browser, &tab).await?;
                     if let Some(targets) = shared_browser_tabs.get_mut(&browser.id) {
                         targets.remove(&tab.target_id);
                     }
@@ -2090,6 +2088,86 @@ fn run_browser_worker(
             manager.relinquish_browser_for_handoff();
         }
     }
+}
+
+/// Reconcile only the owner-selected task target through the verified browser.
+/// Fresh absence is outcome evidence, never authority to act on another target.
+async fn close_owned_task_tab(
+    manager: &mut BrowserManager,
+    browser: &ManagedBrowserInstance,
+    tab: &ManagedBrowserTab,
+) -> Result<(), String> {
+    if tab.browser_id != browser.id
+        || tab.target_id.is_empty()
+        || manager.get_cdp_url() != browser.cdp_endpoint
+    {
+        return Err("browser_session_owned_target_identity_conflict".into());
+    }
+    let before = match crate::process_identity::observe_process(browser.pid) {
+        crate::process_identity::ProcessObservation::Observed(identity)
+            if identity.start_token.is_some() && identity.executable_path.is_some() =>
+        {
+            identity
+        }
+        _ => return Err("browser_session_recorded_process_missing".into()),
+    };
+    let inventory = tokio::time::timeout(
+        Duration::from_secs(2),
+        manager
+            .client
+            .send_command_no_params("Target.getTargets", None),
+    )
+    .await
+    .map_err(|_| "browser_session_target_inventory_unavailable")??;
+    let targets = inventory
+        .get("targetInfos")
+        .and_then(Value::as_array)
+        .ok_or("browser_session_target_inventory_unavailable")?;
+    let mut present = false;
+    for target in targets {
+        let id = target
+            .get("targetId")
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty())
+            .ok_or("browser_session_target_inventory_unavailable")?;
+        target
+            .get("type")
+            .and_then(Value::as_str)
+            .filter(|kind| !kind.is_empty())
+            .ok_or("browser_session_target_inventory_unavailable")?;
+        present |= id == tab.target_id;
+    }
+    if present {
+        return manager
+            .tab_close_target_id_for_release(&tab.target_id)
+            .await
+            .map(|_| ());
+    }
+    let processes = tokio::time::timeout(
+        Duration::from_secs(2),
+        manager
+            .client
+            .send_command_no_params("SystemInfo.getProcessInfo", None),
+    )
+    .await
+    .map_err(|_| "browser_session_profile_endpoint_identity_conflict")??;
+    let bound = processes
+        .get("processInfo")
+        .and_then(Value::as_array)
+        .is_some_and(|processes| {
+            processes.iter().any(|process| {
+                process["type"] == "browser"
+                    && process["id"].as_u64() == Some(u64::from(browser.pid))
+            })
+        });
+    if !bound
+        || crate::process_identity::observe_process(browser.pid)
+            != crate::process_identity::ProcessObservation::Observed(before)
+    {
+        return Err("browser_session_profile_endpoint_identity_conflict".into());
+    }
+    manager.remove_page_by_target_id(&tab.target_id);
+    Ok(())
 }
 
 /// Attach a freshly attributed popup through the existing browser transport.
@@ -3480,6 +3558,135 @@ mod tests {
         );
         assert_eq!(*methods.lock().unwrap(), vec!["SystemInfo.getProcessInfo"]);
         server.abort();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn owned_tab_retirement_reconciles_only_verified_fresh_absence() {
+        use futures_util::{SinkExt, StreamExt};
+        use tokio_tungstenite::tungstenite::Message;
+        for scenario in ["absent", "cached_absent", "malformed", "wrong_pid"] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let endpoint = format!("ws://{}", listener.local_addr().unwrap());
+            let methods = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+            let recorded = methods.clone();
+            let server = tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.unwrap();
+                let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
+                let mut inventories = 0;
+                let mut process_observations = 0;
+                while let Some(Ok(message)) = socket.next().await {
+                    if !message.is_text() {
+                        continue;
+                    }
+                    let command: Value = serde_json::from_str(message.to_text().unwrap()).unwrap();
+                    let method = command["method"].as_str().unwrap();
+                    recorded.lock().unwrap().push(method.into());
+                    let result = match method {
+                        "SystemInfo.getProcessInfo" => {
+                            process_observations += 1;
+                            serde_json::json!({"processInfo":[{
+                                "type":"browser", "id":u64::from(std::process::id())
+                                    + u64::from(scenario == "wrong_pid" && process_observations > 1)
+                            }]})
+                        }
+                        "Page.enable"
+                        | "Runtime.enable"
+                        | "Network.enable"
+                        | "Runtime.runIfWaitingForDebugger"
+                        | "Target.setAutoAttach" => serde_json::json!({}),
+                        "Target.attachToTarget" => {
+                            assert!(matches!(
+                                command["params"]["targetId"].as_str(),
+                                Some("owned-target" | "replacement-owned")
+                            ));
+                            serde_json::json!({"sessionId":"owned-session"})
+                        }
+                        "Target.createTarget" => {
+                            assert_eq!(scenario, "cached_absent");
+                            serde_json::json!({"targetId":"replacement-owned"})
+                        }
+                        "Target.activateTarget" => {
+                            assert_eq!(command["params"]["targetId"], "replacement-owned");
+                            serde_json::json!({})
+                        }
+                        "Target.setDiscoverTargets" | "Browser.getVersion" => serde_json::json!({}),
+                        "Target.getTargets" => {
+                            inventories += 1;
+                            if inventories == 1 && scenario == "cached_absent" {
+                                serde_json::json!({"targetInfos":[{
+                                    "targetId":"owned-target", "type":"page", "title":"", "url":"about:blank", "attached":false
+                                }]})
+                            } else if inventories == 1 {
+                                serde_json::json!({"targetInfos":[]})
+                            } else if scenario == "malformed" {
+                                serde_json::json!({"unverified":true})
+                            } else {
+                                serde_json::json!({"targetInfos":[{
+                                    "targetId":"protected-peer", "type":"page", "title":"", "url":"about:blank", "attached":false
+                                }]})
+                            }
+                        }
+                        other => panic!(
+                            "retirement must not close, activate or manufacture a peer: {other}"
+                        ),
+                    };
+                    socket
+                        .send(Message::Text(
+                            serde_json::json!({"id":command["id"],"result":result}).to_string(),
+                        ))
+                        .await
+                        .unwrap();
+                }
+            });
+            let browser = ManagedBrowserInstance {
+                id: "borrowed-browser".into(),
+                profile_id: "borrowed-profile".into(),
+                pid: std::process::id(),
+                cdp_endpoint: endpoint,
+                desktop: None,
+                active_session_ids: vec!["task".into()],
+            };
+            let tab = ManagedBrowserTab {
+                id: "owned-tab".into(),
+                target_id: "owned-target".into(),
+                browser_id: browser.id.clone(),
+                session_id: "task".into(),
+                created_at_ms: 100,
+                last_activity_at_ms: 100,
+            };
+            let mut runtime =
+                BrowserManagerRuntime::start(BrowserManagerRuntimeConfig::default()).unwrap();
+            let result = runtime.close_tab(&browser, &tab);
+            assert_eq!(
+                result.is_ok(),
+                scenario.ends_with("absent"),
+                "{scenario}: {result:?}"
+            );
+            let methods = methods.lock().unwrap().clone();
+            assert!(!methods.iter().any(|m| matches!(
+                m.as_str(),
+                "Target.closeTarget" | "Target.activateTarget" | "Target.createTarget"
+            )));
+            if scenario == "absent" {
+                assert!(
+                    methods
+                        .iter()
+                        .filter(|m| m.as_str() == "Target.getTargets")
+                        .count()
+                        >= 2,
+                    "cached absence cannot replace fresh physical inventory"
+                );
+            }
+            if scenario == "cached_absent" {
+                let acquired = runtime.acquire_initial_tab(&browser, &[]).unwrap();
+                assert_eq!(
+                    acquired.target_id, "replacement-owned",
+                    "a positively absent cached task target cannot become another task's bootstrap"
+                );
+            }
+            drop(runtime);
+            server.abort();
+        }
     }
 
     #[derive(Default)]
