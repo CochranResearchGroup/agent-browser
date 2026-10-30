@@ -41,6 +41,7 @@ pub(crate) fn check_state(
             "browser_session_reconnect"
                 | "browser_session_close"
                 | "browser_session_status"
+                | "browser_session_retention"
                 | "browser_session_reap"
         )
     ) {

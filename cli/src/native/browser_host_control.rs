@@ -247,6 +247,7 @@ fn status(action: &str) -> bool {
     matches!(
         action,
         "browser_session_status"
+            | "browser_session_retention"
             | "service_status"
             | "ping"
             | "status"

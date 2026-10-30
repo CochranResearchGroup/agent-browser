@@ -78,6 +78,7 @@ pub fn policy_status_action(action: &str) -> bool {
             | "ping"
             | "service_status"
             | "browser_session_status"
+            | "browser_session_retention"
             | "browser_control"
             | "browser_policy"
             | "browser_session_policy"

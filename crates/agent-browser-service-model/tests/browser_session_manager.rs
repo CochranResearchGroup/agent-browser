@@ -3079,3 +3079,191 @@ fn public_existing_profile_adoption_retains_original_kernel_identity_across_rest
         "Qualified public existing-profile adoption must retain its original immutable identity"
     );
 }
+
+#[test]
+fn authentication_retention_survives_restart_and_releases_only_its_own_claim() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..FixtureEffects::default()
+    };
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 100,
+        remote_view_desktops: vec![],
+    };
+    let opened = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::exact_profile(
+            "Auth wait",
+            "profile-a",
+            1000,
+        ))
+        .unwrap();
+    let browser = state.browsers[&opened.browser_id].clone();
+    let request = agent_browser_service_model::BrowserSessionRetentionRequest {
+        operation: "acquire".into(),
+        claim_id: "auth:request-one".into(),
+        owner_id: "auth-receipts".into(),
+        session_id: opened.session_id.clone(),
+        browser_id: browser.id.clone(),
+        browser_pid: browser.pid,
+        ttl_ms: Some(1000),
+        generation: None,
+    };
+    let receipt = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .retain_session(request.clone(), 1050)
+        .unwrap();
+    state = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+    let result = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .reap(1500)
+        .unwrap();
+    assert!(result.closed_browser_ids.is_empty());
+    assert!(state.leave_open_session_ids.is_empty());
+    let mut released = request.clone();
+    released.operation = "release".into();
+    released.generation = Some(receipt.generation.clone());
+    let mut wrong_owner = released.clone();
+    wrong_owner.owner_id = "another-service".into();
+    assert!(
+        BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+            .retain_session(wrong_owner, 1600)
+            .is_err()
+    );
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .retain_session(released, 1600)
+        .unwrap();
+    assert!(
+        BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+            .retain_session(request.clone(), 1601)
+            .is_err()
+    );
+    let result = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .reap(1602)
+        .unwrap();
+    assert_eq!(result.closed_browser_ids, vec![browser.id]);
+    let mut terminal = request;
+    terminal.operation = "release".into();
+    terminal.generation = Some(receipt.generation);
+    let done = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig::default(),
+    )
+    .retain_session(terminal, 1700)
+    .unwrap();
+    assert!(done.released);
+}
+
+#[test]
+fn authentication_retention_expires_after_owner_crash_and_cannot_rebind_a_process() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..FixtureEffects::default()
+    };
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 100,
+        remote_view_desktops: vec![],
+    };
+    let opened = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::exact_profile(
+            "Auth wait",
+            "profile-a",
+            1000,
+        ))
+        .unwrap();
+    let browser = state.browsers[&opened.browser_id].clone();
+    let request = agent_browser_service_model::BrowserSessionRetentionRequest {
+        operation: "acquire".into(),
+        claim_id: "auth:request-one".into(),
+        owner_id: "auth-receipts".into(),
+        session_id: opened.session_id.clone(),
+        browser_id: browser.id.clone(),
+        browser_pid: browser.pid,
+        ttl_ms: Some(200),
+        generation: None,
+    };
+    let receipt = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .retain_session(request.clone(), 1050)
+        .unwrap();
+    let mut bad = request.clone();
+    bad.browser_pid += 1;
+    assert!(
+        BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+            .retain_session(bad, 1100)
+            .is_err()
+    );
+    let mut renewal = request.clone();
+    renewal.operation = "renew".into();
+    renewal.generation = Some(receipt.generation);
+    state.browsers.get_mut(&browser.id).unwrap().pid += 1;
+    assert!(
+        BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+            .retain_session(renewal, 1100)
+            .is_err()
+    );
+    state.browsers.get_mut(&browser.id).unwrap().pid = browser.pid;
+    state = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+    let result = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .reap(1250)
+        .unwrap();
+    assert_eq!(result.closed_browser_ids, vec![browser.id]);
+}
+
+#[test]
+fn authentication_retention_blocks_new_profile_quota_eviction() {
+    let mut catalog = catalog_with_disposable_policy();
+    catalog
+        .disposable_policies
+        .get_mut("default")
+        .unwrap()
+        .maximum_retained_profiles = 1;
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..FixtureEffects::default()
+    };
+    let first = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig::default(),
+    )
+    .open(OpenBrowserSession::disposable("auth", "default", 1000))
+    .unwrap();
+    let browser = state.browsers[&first.browser_id].clone();
+    let request = agent_browser_service_model::BrowserSessionRetentionRequest {
+        operation: "acquire".into(),
+        claim_id: "auth:quota-wait".into(),
+        owner_id: "auth-receipts".into(),
+        session_id: first.session_id.clone(),
+        browser_id: browser.id,
+        browser_pid: browser.pid,
+        ttl_ms: Some(5000),
+        generation: None,
+    };
+    BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig::default(),
+    )
+    .retain_session(request, 1001)
+    .unwrap();
+    let next = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig::default(),
+    )
+    .open(OpenBrowserSession::disposable("peer", "default", 2000));
+    assert_eq!(
+        next.unwrap_err(),
+        "browser_disposable_profile_count_quota_protected"
+    );
+    assert!(state.sessions.contains_key(&first.session_id));
+    assert!(effects.disposable_deletions.is_empty());
+    assert_eq!(effects.disposable_allocations.len(), 1);
+}
