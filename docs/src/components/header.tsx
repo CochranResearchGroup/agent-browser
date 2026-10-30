@@ -9,41 +9,8 @@ export async function Header() {
     <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-sm dark:bg-neutral-950/90">
       <div className="flex h-14 items-center justify-between px-4 gap-6">
         <div className="flex items-center gap-2">
-          <Link href="https://vercel.com" title="Made with love by Vercel">
-            <svg
-              data-testid="geist-icon"
-              height="18"
-              strokeLinejoin="round"
-              viewBox="0 0 16 16"
-              width="18"
-              style={{ color: "currentcolor" }}
-            >
-              <path
-                fillRule="evenodd"
-                clipRule="evenodd"
-                d="M8 1L16 15H0L8 1Z"
-                fill="currentColor"
-              />
-            </svg>
-          </Link>
-          <span className="text-neutral-300 dark:text-neutral-700">
-            <svg
-              data-testid="geist-icon"
-              height="16"
-              strokeLinejoin="round"
-              viewBox="0 0 16 16"
-              width="16"
-              style={{ color: "currentcolor" }}
-            >
-              <path
-                fillRule="evenodd"
-                clipRule="evenodd"
-                d="M4.01526 15.3939L4.3107 14.7046L10.3107 0.704556L10.6061 0.0151978L11.9849 0.606077L11.6894 1.29544L5.68942 15.2954L5.39398 15.9848L4.01526 15.3939Z"
-                fill="currentColor"
-              />
-            </svg>
-          </span>
-          <Link href="/">
+          <Link href="/" className="flex items-center gap-2" aria-label="Agent Browser home">
+            <img src="/branding/agent-browser-logo.png" alt="" width={36} height={36} className="shrink-0" />
             <span
               className="font-medium tracking-tight text-lg"
               style={{ fontFamily: "var(--font-geist-pixel-square)" }}

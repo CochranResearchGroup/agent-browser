@@ -70,3 +70,10 @@ docs/package-lock.json
 # next
 .next/
 out/
+
+# Approved product branding assets
+!assets/branding/agent-browser-logo.png
+!docs/public/branding/agent-browser-logo.png
+!packages/dashboard/public/branding/agent-browser-logo.png
+!docs/public/apple-touch-icon.png
+!packages/dashboard/public/apple-touch-icon.png

@@ -1,6 +1,19 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: BRAND493
+    product_lane: PL-PLATFORM
+    objective: Adopt approved teal secret-agent rosette branding
+    branch: platform/agent-browser-brand
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#493]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    overlaps: []
+    validation_status: Docs and dashboard production builds, policy wiring, documentation links and icon export checks pass; source-only adoption
+    limitations: ["Static assets and presentation only; no runtime or deployment effects", "Reuse clean canonical checkout on scoped branch; other six checkouts retained"]
+    updated_at: 2026-10-30
   - id: P296
     product_lane: PL-RECIPES
     objective: Deliver dependable browser journeys and narrated teaching spec466

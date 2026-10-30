@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { useAtomValue, useSetAtom } from "jotai/react";
 import {
   Activity,
-  Bot,
   ChevronDown,
   CircleDot,
   Compass,
@@ -123,7 +122,7 @@ export function AppShell({
       <header className="dashboard-topbar">
         <div className="flex min-w-0 items-center gap-3">
           <div className="dashboard-mark">
-            <Bot className="size-5" />
+            <img src="/branding/agent-browser-logo.png" alt="" width={32} height={32} />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">

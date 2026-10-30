@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/branding/agent-browser-logo.png" alt="Agent Browser: teal rosette wearing a secret-agent hat and sunglasses" width="180" height="180" />
+</p>
+
 # agent-browser
 
 Make real browser work easier to complete, hand to a person, and continue afterward.
