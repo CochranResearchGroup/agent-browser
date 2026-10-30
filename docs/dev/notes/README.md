@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[Dashboard rail scrolling](2026-10-30-dashboard-rail-scroll.md): viewport-bound inventory, desktop/mobile wheel and focus checks; broader mode fixture failures retained, no runtime changes.
+
 [P296 delivery closeout](0296-development-delivery-closeout-2026-10-29.md): PR480 merged; exact isolated development doctor and three-launch smoke pass; production unchanged and478 deferred.
 
 [P296 final review](0296-final-review-2026-10-28.md): one Standards/Spec review, two teaching-evidence repairs and one bounded TDD pass; narrated walkthrough deferred.

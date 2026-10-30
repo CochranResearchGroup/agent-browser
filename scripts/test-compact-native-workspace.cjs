@@ -9,7 +9,9 @@ const { execFileSync } = require('node:child_process');
 const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-browser-fixture.cjs');
 (async () => {
   const root = path.resolve(__dirname, '..');
-  execFileSync(process.execPath, [path.join(__dirname, 'test-browser-mode-inspection.cjs')], { stdio: 'inherit' });
+  if (!process.argv.includes('--rail-scroll-only')) {
+    execFileSync(process.execPath, [path.join(__dirname, 'test-browser-mode-inspection.cjs')], { stdio: 'inherit' });
+  }
   const artifacts = fs.mkdtempSync(path.join(os.tmpdir(), 'p237-compact-workspace-'));
   // Use the existing TSX harness and the real workspace CSS below.
   await buildWorkspaceViewportFixture(root, path.join(root, 'scripts/fixtures/compact-native-workspace.tsx'), artifacts);
@@ -110,6 +112,49 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     const unknownMode = page.getByRole('button', { name: 'Browser mode for Analysis: Unverified', exact: true });
     await unknownMode.waitFor({ timeout: 3000 });
+    // A long inventory must scroll inside the viewport, not enlarge the grid row.
+    const inventory = page.getByRole('navigation', { name: 'Browser inventory' });
+    for (const viewport of [{ width: 1280, height: 480 }, { width: 390, height: 360 }]) {
+      await page.setViewportSize(viewport);
+      await inventory.evaluate(node => {
+        for (let i = 0; i < 80; i++) {
+          const row = document.createElement('button');
+          row.className = 'native-workspace-tab';
+          row.dataset.scrollFixture = 'true';
+          row.textContent = `Overflow browser tab ${i}`;
+          node.append(row);
+        }
+      });
+      const bounds = await inventory.boundingBox();
+      assert.ok(bounds && bounds.y + bounds.height <= viewport.height,
+        'long inventory must remain bounded by the viewport');
+      assert.equal(await inventory.evaluate(node => node.scrollHeight > node.clientHeight), true);
+      const headerBefore = await page.locator('.native-workspace-rail-header').boundingBox();
+      const viewerBefore = await page.locator('.native-workspace-main').boundingBox();
+      await inventory.hover();
+      await page.mouse.wheel(0, 500);
+      await page.waitForFunction(() => document.querySelector('.native-workspace-inventory').scrollTop > 0);
+      await inventory.locator('[data-scroll-fixture]').last().focus();
+      assert.equal(await inventory.locator('[data-scroll-fixture]').last().evaluate(node => {
+        const row = node.getBoundingClientRect();
+        const list = node.parentElement.getBoundingClientRect();
+        return row.bottom <= list.bottom && row.top >= list.top;
+      }), true, 'keyboard focus must reveal the last tab');
+      assert.deepEqual(await page.locator('.native-workspace-rail-header').boundingBox(), headerBefore);
+      assert.deepEqual(await page.locator('.native-workspace-main').boundingBox(), viewerBefore);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight), true);
+      await inventory.evaluate(node => {
+        node.querySelectorAll('[data-scroll-fixture]').forEach(row => row.remove());
+        node.scrollTop = 0;
+      });
+    }
+    await page.setViewportSize({ width: 1280, height: 720 });
+    if (process.argv.includes('--rail-scroll-only')) {
+      assert.deepEqual(errors, []);
+      await page.screenshot({ path: path.join(artifacts, 'rail-scroll.png') });
+      console.log(JSON.stringify({ success: true, seam: 'bounded browser inventory; desktop/mobile wheel and focus scrolling', artifacts }));
+      return;
+    }
     const beforeModeRequests = requests.length;
     await unknownMode.hover();
     await page.getByRole('menu', { name: 'Browser mode details' }).waitFor({ timeout: 3000 });
