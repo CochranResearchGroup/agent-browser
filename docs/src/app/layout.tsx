@@ -23,6 +23,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  icons: { apple: "/apple-touch-icon.png" },
   metadataBase: new URL("https://agent-browser.dev"),
   title: {
     default: "agent-browser | Browser Automation for AI",
