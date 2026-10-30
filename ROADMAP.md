@@ -2,7 +2,7 @@
 
 [P296 dependable browser journeys and narrated teaching](docs/dev/plans/0296-2026-10-26-browser-journeys-teaching.md), #466, PL-RECIPES, has merged its approved source graph through PR480 and qualified the isolated development candidate. Narrated acceptance #478 remains deferred. Preserve standalone Auth P295 and historical Stage1 #453/draft454. See [current execution](RUNBOOK.md).
 
-[P295 standalone Auth integration](docs/dev/plans/0295-2026-10-26-standalone-auth-449.md), #449, PL-AUTH: execute457–464 from the approved standalone Auth specification.
+[P295 standalone Auth integration](docs/dev/plans/0295-2026-10-26-standalone-auth-449.md), #449, PL-AUTH: migration acceptance is complete;457–464, parent449 and Auth81/91 are closed against distinct source, installed and real-provider evidence. The requested final review found one fixed-clock fixture issue; its single bounded remediation and source verification pass.
 
 [P294 dashboard browser commands](docs/dev/plans/0294-2026-10-25-dashboard-browser-command.md), #451, is closed: PR455 and sealed production binary `3bcc060428a5` are installed through an accepted preserve transaction. Authenticated public chooser, three selected isolated workflows and seven no-launch checks pass. All 22 observed browser roots and 147 protected Native service units are preserved. [Receipt](docs/dev/notes/0294-2026-10-25-dashboard-browser-command.md) retains the cold setup replay, slow rail sample and doctor warnings.
 
