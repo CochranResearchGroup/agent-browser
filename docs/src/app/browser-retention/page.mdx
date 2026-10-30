@@ -11,11 +11,14 @@ explicit `released` boolean. Renew requires that generation. Release uses the
 original scope, including when the browser has since disappeared. If an acquire
 reply is lost, retry the same claim; never allocate another claim as recovery.
 
-<table><thead><tr><th>Operation</th><th>Behavior</th></tr></thead><tbody>
+<table>
+<thead><tr><th>Operation</th><th>Behavior</th></tr></thead>
+<tbody>
 <tr><td>acquire</td><td>Bind one original claim to the current live task/browser.</td></tr>
 <tr><td>renew</td><td>Extend only that exact original claim within the bounded TTL.</td></tr>
 <tr><td>release</td><td>Idempotently mark the claim spent; delayed renewal cannot revive it.</td></tr>
-</tbody></table>
+</tbody>
+</table>
 
 Claims are stored in the existing browser-session SQLite aggregate and survive
 owner restart. They protect task/tab expiry, physical idle cleanup and new-profile quota eviction until

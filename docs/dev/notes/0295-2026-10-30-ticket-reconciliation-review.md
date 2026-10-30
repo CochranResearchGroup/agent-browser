@@ -81,7 +81,14 @@ Fresh canonical main advanced to `fcb0e33cb5c6ac42041f8cdd3a7d97e9b769d240`
 through independent retention PR500 during this review. Its Rust/runtime changes
 are not findings remediation and do not alter this fixture or its source closure.
 The frozen review head remains unchanged; integration will preserve that merged
-work without restarting the broad review.
+work without restarting the broad review. Its newly added retention MDX page
+failed the integration docs build because the table, head and body tags shared
+one line and MDX closed a paragraph before the body ended. Separating the
+existing HTML tags onto distinct lines is a documentation-only integration
+repair, with table content and retention behavior unchanged. Initial failure:
+`/tmp/p295-final-docs.log`. Corrected full documentation production build passes, exit0:
+`pnpm --dir docs build`, log `/tmp/p295-final-docs-green.log`.
+Changed-link and patch hygiene checks also pass after the MDX repair.
 
 Accepted findings: Standards1blockingP2 and1nonblocking judgement; Spec1blockingP2
 (the same fixture issue). The one bounded remediation is complete; focused and aggregate verification pass.
@@ -89,3 +96,10 @@ Policy wiring11/11, changed documentation links, JavaScript syntax and patch
 hygiene pass. The prior documentation production build passed with unchanged
 docs application source; integration documentation verification remains scoped
 separately. No Rust source is changed by this remediation.
+
+Integration: PR501 owns the final fixture and documentation checkpoint. Reviewed
+source commit `2ca12092b`; merge of canonical retention main at `ae81b33cb`
+leaves all Auth fixture/client executable inputs byte-identical, so the passing
+source-composition evidence is reused within that exact closure. This slice has
+no Rust changes relative to canonical main; PR500 retains its own published
+local Rust validation. No hosted CI or runtime adoption occurred.
