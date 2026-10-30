@@ -7492,3 +7492,14 @@ dates and actual CSV bytes before `recordFreshRepeat` retains its proof.
 answers before selecting the reusable version; the previous accepted bytes stay
 unchanged. Stored labels remain inert in stock MCP. See the
 [report repeat guide](docs/src/app/report-repeat/page.mdx).
+
+### Service-owned authentication waits
+
+An owner service can keep an existing task and browser alive while waiting for
+a person, without page polling or changing explicit leave-open preferences. The
+MCP `browser_retention` tool acquires, renews and releases one stable claim bound
+to the exact task, browser and PID. `ttlMs` is 1–300000; renew with the original
+`generation` receipt. The service owns renewal and terminal release. Claims
+survive owner restart, expire without renewal and cannot be reacquired after
+release. Explicit task close remains terminal. Retention grants no page input,
+control takeover or credential authority. See [retention](docs/src/app/browser-retention/page.mdx).

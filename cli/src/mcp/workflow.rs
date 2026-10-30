@@ -45,6 +45,15 @@ pub(super) fn tools() -> Vec<Value> {
                 }, "required":["taskKey","serviceName","agentName","taskName"],"oneOf":[{"required":["url"],"not":{"required":["attachment"]}},{"required":["attachment","hostBinding","profile"],"properties":{"mode":{"enum":["automation"]}},"not":{"required":["url"]}}]}
         }),
         json!({
+            "name":"browser_retention", "title":"Retain a browser task for an owner service",
+            "description":"Acquire, renew or release a bounded owner-scoped context hold. Prevents idle cleanup only; does not navigate, take control, extend authentication permission or change explicit leave-open. Renew using the original generation receipt. Released claims cannot be reacquired.",
+            "inputSchema":{"type":"object","additionalProperties":false,"properties":{
+                "taskId":{"type":"string"},"browserId":{"type":"string"},"browserPid":{"type":"integer","minimum":1},
+                "claimId":{"type":"string"},"ownerId":{"type":"string"},"operation":{"enum":["acquire","renew","release"]},
+                "ttlMs":{"type":"integer","minimum":1,"maximum":300000},"generation":{"type":"string"}},
+                "required":["taskId","browserId","browserPid","claimId","ownerId","operation"]}
+        }),
+        json!({
             "name":"browser_close", "title":"Close a browser task",
             "description":"End only the addressed task and its tabs. Preserve peers, borrowed browsers and persistent profile data.",
             "inputSchema":{"type":"object","additionalProperties":false,
@@ -650,6 +659,36 @@ pub(super) fn forward_policy_override(
         command["id"] = json!(required_string_argument(arguments, "requestId")?);
     }
     Ok(())
+}
+
+/// Service heartbeats own bounded context retention, independently of page activity.
+pub(super) fn retention(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let task_id = required_string_argument(arguments, "taskId")?;
+    if arguments["operation"] != "release" {
+        task_session(task_id)?;
+    }
+    let mut command = json!({"id":uuid::Uuid::new_v4().to_string(),"action":"browser_session_retention","sessionId":task_id});
+    for key in [
+        "operation",
+        "claimId",
+        "ownerId",
+        "browserId",
+        "browserPid",
+        "ttlMs",
+        "generation",
+    ] {
+        if let Some(value) = arguments.get(key) {
+            command[key] = value.clone();
+        }
+    }
+    let data = execute(command, session)?;
+    Ok(super::tool_response_from_payload(
+        "browser_retention",
+        session,
+        json!({}),
+        data,
+        false,
+    ))
 }
 
 pub(super) fn close(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {

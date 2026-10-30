@@ -1,0 +1,32 @@
+# Service-owned browser retention
+
+An authentication service can preserve an existing browser context while its
+owner is busy. Its background lifecycle renews a bounded claim instead of
+reading the page repeatedly or setting permanent leave-open.
+
+Call MCP `browser_retention` with `taskId`, `browserId`, `browserPid`, a stable
+`claimId`, `ownerId`, and `operation`. Acquire and renew accept `ttlMs` from 1 to
+300000. The receipt contains the original `generation`, `expiresAtMs`, and an
+explicit `released` boolean. Renew requires that generation. Release uses the
+original scope, including when the browser has since disappeared. If an acquire
+reply is lost, retry the same claim; never allocate another claim as recovery.
+
+<table><thead><tr><th>Operation</th><th>Behavior</th></tr></thead><tbody>
+<tr><td>acquire</td><td>Bind one original claim to the current live task/browser.</td></tr>
+<tr><td>renew</td><td>Extend only that exact original claim within the bounded TTL.</td></tr>
+<tr><td>release</td><td>Idempotently mark the claim spent; delayed renewal cannot revive it.</td></tr>
+</tbody></table>
+
+Claims are stored in the existing browser-session SQLite aggregate and survive
+owner restart. They protect task/tab expiry, physical idle cleanup and new-profile quota eviction until
+release or expiry. Other claims and explicit leave-open remain independent.
+A changed process or desktop generation cannot inherit a claim. Explicit close
+still ends the task and clears its claims. At 4096 retained claims, end old tasks
+before creating more; unresolved identities are not silently evicted.
+
+This is cooperative same-OS-user service coordination, not a sandbox or a bearer
+grant. It authorizes no credential use, navigation, browser relaunch, control
+takeover or authentication-deadline extension. The owning authentication service
+remains responsible for reminder delivery and original-effect reconciliation.
+Lease expiry only restores ordinary cleanup eligibility; it does not establish
+that an uncertain authentication effect never occurred.

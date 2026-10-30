@@ -3508,7 +3508,7 @@ fn service_mcp_tools() -> Vec<Value> {
 fn with_browser_target_profile_hint_properties(mut tool: Value) -> Value {
     if matches!(
         tool["name"].as_str(),
-        Some("browser_open" | "browser_close")
+        Some("browser_open" | "browser_close" | "browser_retention")
     ) {
         return tool;
     }
@@ -5587,6 +5587,9 @@ fn call_service_mcp_tool_inner(
     }
     if name == "browser_open" {
         return workflow::open(arguments, session, configured_service_state);
+    }
+    if name == "browser_retention" {
+        return workflow::retention(arguments, session);
     }
     if name == "browser_close" {
         return workflow::close(arguments, session);

@@ -1956,6 +1956,37 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     "sessionDisposition": format!("{:?}", opened.session_disposition).to_lowercase(),
                 }))
             }
+            "browser_session_retention" => {
+                let fields = [
+                    "operation",
+                    "claimId",
+                    "ownerId",
+                    "sessionId",
+                    "browserId",
+                    "browserPid",
+                    "ttlMs",
+                    "generation",
+                ];
+                let value = serde_json::Value::Object(
+                    fields
+                        .into_iter()
+                        .filter_map(|key| {
+                            command
+                                .get(key)
+                                .map(|value| (key.to_string(), value.clone()))
+                        })
+                        .collect(),
+                );
+                let request = serde_json::from_value::<
+                    agent_browser_service_model::BrowserSessionRetentionRequest,
+                >(value)
+                .map_err(|_| "browser_retention_request_invalid")?;
+                // Retention uses owner time, never caller-supplied activity timestamps.
+                let receipt = self.manager()?.retain_session(request, current_unix_ms())?;
+                self.commit_state()?;
+                serde_json::to_value(receipt)
+                    .map_err(|_| "browser_retention_receipt_invalid".into())
+            }
             "browser_session_close" => {
                 let session_id = self.session_id_from_command(command)?;
                 let scope = command["scope"].as_str().unwrap_or("task");
