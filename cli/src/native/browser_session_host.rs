@@ -442,7 +442,9 @@ pub(crate) async fn resolve_shared_handoff_command(
 
 /// Reaping loads retained physical ownership after restart, without admitting
 /// launches or creating an empty session host in an unused environment.
-pub(crate) fn reap_shared_browser_sessions(shared: SharedBrowserSessionHost) -> Result<(), String> {
+pub(crate) fn reap_shared_browser_sessions(
+    shared: SharedBrowserSessionHost,
+) -> Result<ReapBrowserSessionsResult, String> {
     let mut host = shared
         .lock()
         .map_err(|_| "browser_session_host_lock_poisoned")?;
@@ -458,19 +460,14 @@ pub(crate) fn reap_shared_browser_sessions(shared: SharedBrowserSessionHost) -> 
 fn reap_browser_session_host<P: BrowserSessionPersistence, E: BrowserSessionEffects>(
     host: &mut Option<BrowserSessionHost<P, E>>,
     load: impl FnOnce() -> Result<Option<BrowserSessionHost<P, E>>, String>,
-) -> Result<(), String> {
+) -> Result<ReapBrowserSessionsResult, String> {
     if host.is_none() {
         *host = load()?;
     }
-    if let Some(host) = host.as_mut() {
-        let result = host.reap_current()?;
-        if let Some((browser_id, error)) = result.deferred_browser_errors.first_key_value() {
-            return Err(format!(
-                "browser_session_reap_deferred:{browser_id}:{error}"
-            ));
-        }
+    match host.as_mut() {
+        Some(host) => host.reap_current(),
+        None => Ok(ReapBrowserSessionsResult::default()),
     }
-    Ok(())
 }
 
 pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessionHost, String> {

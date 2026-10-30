@@ -1668,7 +1668,7 @@ fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T, String> {
         .map_err(|error| format!("browser_session_json_invalid:{}:{error}", path.display()))
 }
 
-fn write_private_json_atomic(path: &Path, value: &impl Serialize) -> Result<(), String> {
+pub(super) fn write_private_json_atomic(path: &Path, value: &impl Serialize) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| "browser_session_json_parent_missing".to_string())?;

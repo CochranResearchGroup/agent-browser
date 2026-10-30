@@ -82,7 +82,11 @@ Help never launches browsers. MCP uses `success`, `data`, `error`; CLI failures 
 
 Read `agent-browser.runtime-health.v1` for drift and bounded recourse. Consult
 advanced runtime custody diagnostics before maintenance, retirement or unknown
-effect interpretation. Compact logs; scrub exported URLs.
+effect interpretation. For TTL diagnosis, inspect the private latest-pass
+`~/.agent-browser/service/browser-session-reaper.json`: a running/stale receipt
+is not completed cleanup. Session expiry, tab inactivity and human holds are
+separate. Retired history and closed legacy orphan records are not live targets;
+unknown original-process evidence still protects peers. Compact logs; scrub exported URLs.
 
 
 Use the installed `agent-browser` executable when MCP is unavailable. Read

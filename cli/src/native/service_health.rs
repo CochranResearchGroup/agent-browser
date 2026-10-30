@@ -2086,7 +2086,10 @@ pub fn merge_reconciled_service_state(
         // CDP observations cannot overwrite custody granted or narrowed while
         // the probe was in flight, nor resurrect a concurrently removed tab.
         // Preserve the newer record; a subsequent probe can refresh its view.
-        if target.tabs.get(id) == before.tabs.get(id) {
+        let owner_registered_during_observation =
+            !before.browsers.contains_key(&reconciled_tab.browser_id)
+                && target.browsers.contains_key(&reconciled_tab.browser_id);
+        if target.tabs.get(id) == before.tabs.get(id) && !owner_registered_during_observation {
             target.tabs.insert(id.clone(), reconciled_tab.clone());
         }
     }
@@ -2441,6 +2444,15 @@ async fn refresh_browser_endpoint_health(browser: &mut BrowserProcess, endpoint:
 }
 
 async fn reconcile_live_browser_targets(state: &mut ServiceState) {
+    // Missing owners cannot be visited by the per-browser target census. Retire
+    // only their live projections; keep identity and history without CDP effects.
+    for tab in state.tabs.values_mut() {
+        if !state.browsers.contains_key(&tab.browser_id)
+            && !matches!(tab.lifecycle, TabLifecycle::Closed | TabLifecycle::Crashed)
+        {
+            tab.lifecycle = TabLifecycle::Closed;
+        }
+    }
     let browser_records = state
         .browsers
         .iter()
@@ -3778,6 +3790,85 @@ mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
     use tokio::sync::oneshot;
+
+    #[tokio::test]
+    async fn reconciliation_retires_orphan_tab_records_without_erasing_history() {
+        let mut state = ServiceState::default();
+        state.tabs.insert(
+            "orphan".into(),
+            BrowserTab {
+                id: "orphan".into(),
+                browser_id: "missing-browser".into(),
+                target_id: Some("old-target".into()),
+                lifecycle: TabLifecycle::Ready,
+                url: Some("https://synthetic.test/work".into()),
+                ..Default::default()
+            },
+        );
+        state.tabs.insert(
+            "terminal".into(),
+            BrowserTab {
+                id: "terminal".into(),
+                browser_id: "missing-browser".into(),
+                lifecycle: TabLifecycle::Closed,
+                ..Default::default()
+            },
+        );
+        reconcile_service_state(&mut state).await;
+        assert_eq!(state.tabs["orphan"].lifecycle, TabLifecycle::Closed);
+        assert_eq!(
+            state.tabs["orphan"].target_id.as_deref(),
+            Some("old-target")
+        );
+        assert_eq!(
+            state.tabs["orphan"].url.as_deref(),
+            Some("https://synthetic.test/work")
+        );
+        assert_eq!(
+            state.tabs.len(),
+            2,
+            "reconciliation preserves attributable history"
+        );
+        assert_eq!(state.tabs["terminal"].lifecycle, TabLifecycle::Closed);
+        let first_tabs = state.tabs.clone();
+        reconcile_service_state(&mut state).await;
+        assert_eq!(
+            state.tabs, first_tabs,
+            "a repeated census does not change terminal records"
+        );
+    }
+
+    #[tokio::test]
+    async fn orphan_reconciliation_preserves_concurrently_registered_owner() {
+        let mut before = ServiceState::default();
+        before.tabs.insert(
+            "tab".into(),
+            BrowserTab {
+                id: "tab".into(),
+                browser_id: "late-owner".into(),
+                target_id: Some("target".into()),
+                lifecycle: TabLifecycle::Ready,
+                ..Default::default()
+            },
+        );
+        let mut observed = before.clone();
+        reconcile_service_state(&mut observed).await;
+        let mut current = before.clone();
+        current.browsers.insert(
+            "late-owner".into(),
+            BrowserProcess {
+                id: "late-owner".into(),
+                health: BrowserHealth::Ready,
+                ..Default::default()
+            },
+        );
+        merge_reconciled_service_state(&mut current, &before, &observed);
+        assert_eq!(
+            current.tabs["tab"].lifecycle,
+            TabLifecycle::Ready,
+            "a newer owner registration invalidates the orphan observation"
+        );
+    }
 
     fn service_state_with_browser(browser: BrowserProcess) -> ServiceState {
         ServiceState {

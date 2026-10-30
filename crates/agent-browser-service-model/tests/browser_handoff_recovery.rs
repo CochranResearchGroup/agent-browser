@@ -11,6 +11,9 @@ struct Evidence {
     allow_task_tab_retirement: bool,
     published_browser_requests: Vec<ManagedBrowserInstance>,
     retirements: Vec<BrowserIdleRetirementRecord>,
+    missing_identities: std::collections::BTreeSet<String>,
+    assignments: BTreeMap<String, RemoteViewAssignmentRecord>,
+    original_ended: BTreeMap<String, Result<bool, String>>,
 }
 struct Store(Rc<RefCell<Evidence>>);
 impl BrowserIdleRetirementCustodyStore for Store {
@@ -25,6 +28,17 @@ impl BrowserIdleRetirementCustodyStore for Store {
         state: &BrowserSessionState,
     ) -> Result<BrowserIdleRetirementAdmission, BrowserIdleRetirementStoreError> {
         intent.matches_baseline(state)?;
+        for scope in &intent.scopes {
+            if self
+                .0
+                .borrow()
+                .assignments
+                .get(&scope.browser.id)
+                .is_some_and(|assignment| assignment != &intent.provider.assignment)
+            {
+                return Err(BrowserIdleRetirementStoreError::Conflict);
+            }
+        }
         self.0
             .borrow_mut()
             .retirements
@@ -77,6 +91,9 @@ impl BrowserLaunchCustodyStore for Store {
         &mut self,
         browser: &ManagedBrowserInstance,
     ) -> Result<Option<RecordedProcessIdentity>, LaunchCustodyStoreError> {
+        if self.0.borrow().missing_identities.contains(&browser.id) {
+            return Ok(None);
+        }
         Ok(Some(RecordedProcessIdentity {
             pid: browser.pid,
             start_token: "synthetic-original".into(),
@@ -97,8 +114,10 @@ impl BrowserLaunchCustodyStore for Store {
         let mut evidence = self.0.borrow_mut();
         evidence.published_browser_requests.push(browser.clone());
         evidence
-            .prior
-            .clone()
+            .assignments
+            .get(&browser.id)
+            .cloned()
+            .or_else(|| evidence.prior.clone())
             .ok_or(LaunchCustodyStoreError::Conflict)
     }
     fn admit_recovery_launch_intent(
@@ -321,6 +340,27 @@ impl RemoteViewBrowserProcessEffects for Runtime {
     }
 }
 impl BrowserSessionEffects for Runtime {
+    fn observe_idle_retirement_effect(
+        &mut self,
+        scope: &BrowserIdleRetirementScope,
+        tab: Option<&ManagedBrowserTab>,
+    ) -> Result<bool, String> {
+        assert!(
+            tab.is_none(),
+            "historical qualification must not observe or close a target"
+        );
+        assert_eq!(
+            scope.process_identity.as_ref().unwrap().pid,
+            scope.browser.pid
+        );
+        self.evidence
+            .borrow()
+            .original_ended
+            .get(&scope.browser.id)
+            .cloned()
+            .unwrap_or_else(|| Err("synthetic observation unavailable".into()))
+    }
+
     fn permits_idle_browser_close(&mut self, _: &ManagedBrowserInstance) -> Result<bool, String> {
         self.evidence
             .borrow_mut()
@@ -977,4 +1017,205 @@ fn borrowed_tab_lifetime_does_not_require_native_browser_launch_custody() {
             }
         }
     }
+}
+
+// Public retirement admission with synthetic provider and durable-custody boundaries.
+fn retirement_peer_fixture() -> (
+    RemoteViewSessionEffects<Runtime, Transport, Store>,
+    BrowserSessionState,
+    ManagedBrowserInstance,
+    Rc<RefCell<Evidence>>,
+) {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
+    ))
+    .unwrap();
+    let assignment: RemoteViewAssignmentRecord =
+        serde_json::from_value(fixture["assignment"].clone()).unwrap();
+    let evidence = Rc::new(RefCell::new(Evidence {
+        prior: Some(assignment.clone()),
+        ..Default::default()
+    }));
+    let browser = ManagedBrowserInstance {
+        id: "current".into(),
+        profile_id: "current-profile".into(),
+        pid: 42,
+        cdp_endpoint: "ws://127.0.0.1:9222/devtools/browser/current".into(),
+        desktop: Some(RemoteViewFixedDesktop {
+            desktop_id: assignment.desktop_id.clone(),
+            generation: assignment.generation,
+            friendly_route_label: "synthetic".into(),
+        }),
+        active_session_ids: vec![],
+    };
+    let state = BrowserSessionState {
+        browsers: BTreeMap::from([(browser.id.clone(), browser.clone())]),
+        ..Default::default()
+    };
+    let effects = RemoteViewSessionEffects::new(
+        Runtime {
+            evidence: evidence.clone(),
+            absent: false,
+            fail_restoration: false,
+            next_target: 0,
+        },
+        RemoteViewApplicationAdapter::new(
+            "agent-browser".into(),
+            Transport {
+                evidence: evidence.clone(),
+                fixture,
+            },
+        )
+        .unwrap(),
+        Store(evidence.clone()),
+        vec![],
+        || "33333333-3333-3333-3333-333333333333".into(),
+    )
+    .unwrap()
+    .with_pool(RemoteViewSessionPool {
+        name: "synthetic".into(),
+        desired_desktops: 1,
+    })
+    .unwrap();
+    (effects, state, browser, evidence)
+}
+
+#[test]
+fn idle_closed_history_without_identity_does_not_block_current_retirement() {
+    let (mut effects, mut state, browser, evidence) = retirement_peer_fixture();
+    let mut old = browser.clone();
+    old.id = "retired".into();
+    old.pid = 41;
+    state.browsers.insert(old.id.clone(), old.clone());
+    state.idle_closed_browsers.insert(old.id.clone(), 1);
+    evidence
+        .borrow_mut()
+        .missing_identities
+        .insert(old.id.clone());
+    effects.begin_operation(&state).unwrap();
+    let guard = effects
+        .acquire_idle_retirement_guard(std::slice::from_ref(&browser))
+        .unwrap();
+    assert!(
+        guard.is_some(),
+        "already retired history must not veto current cleanup"
+    );
+    let e = evidence.borrow();
+    assert_eq!(e.retirements.len(), 1);
+    assert_eq!(
+        e.retirements[0]
+            .intent
+            .scopes
+            .iter()
+            .map(|s| s.browser.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["current"]
+    );
+    assert!(!e.published_browser_requests.iter().any(|b| b.id == old.id));
+}
+
+#[test]
+fn ended_peer_from_previous_assignment_does_not_block_current_retirement() {
+    let (mut effects, mut state, browser, evidence) = retirement_peer_fixture();
+    let mut old = browser.clone();
+    old.id = "old-assignment".into();
+    old.pid = 41;
+    old.profile_id = "old-profile".into();
+    state.browsers.insert(old.id.clone(), old.clone());
+    let mut previous = evidence.borrow().prior.clone().unwrap();
+    previous.assignment_id = "historical-assignment".into();
+    evidence
+        .borrow_mut()
+        .assignments
+        .insert(old.id.clone(), previous);
+    evidence
+        .borrow_mut()
+        .original_ended
+        .insert(old.id.clone(), Ok(true));
+    effects.begin_operation(&state).unwrap();
+    let guard = effects
+        .acquire_idle_retirement_guard(std::slice::from_ref(&browser))
+        .expect("positively ended history must not create a mixed-assignment claim");
+    assert!(guard.is_some());
+    let e = evidence.borrow();
+    assert_eq!(e.retirements.len(), 1);
+    assert_eq!(
+        e.retirements[0]
+            .intent
+            .scopes
+            .iter()
+            .map(|s| s.browser.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["current"]
+    );
+}
+
+#[test]
+fn live_or_uncertain_previous_assignment_remains_protected() {
+    for observation in [Ok(false), Err("observation unavailable".into())] {
+        let (mut effects, mut state, browser, evidence) = retirement_peer_fixture();
+        let mut peer = browser.clone();
+        peer.id = "previous-assignment".into();
+        peer.pid = 41;
+        state.browsers.insert(peer.id.clone(), peer.clone());
+        let mut previous = evidence.borrow().prior.clone().unwrap();
+        previous.assignment_id = "historical-assignment".into();
+        evidence
+            .borrow_mut()
+            .assignments
+            .insert(peer.id.clone(), previous);
+        evidence
+            .borrow_mut()
+            .original_ended
+            .insert(peer.id.clone(), observation);
+        effects.begin_operation(&state).unwrap();
+        assert!(effects
+            .acquire_idle_retirement_guard(std::slice::from_ref(&browser))
+            .is_err());
+        assert!(
+            evidence.borrow().retirements.is_empty(),
+            "no native preparation or claim before positive original exit"
+        );
+    }
+}
+
+#[test]
+fn current_assignment_peers_remain_in_frozen_retirement_scope() {
+    let (mut effects, mut state, browser, evidence) = retirement_peer_fixture();
+    let mut peer = browser.clone();
+    peer.id = "peer".into();
+    peer.pid = 41;
+    state.browsers.insert(peer.id.clone(), peer.clone());
+    effects.begin_operation(&state).unwrap();
+    assert!(effects
+        .acquire_idle_retirement_guard(std::slice::from_ref(&browser))
+        .unwrap()
+        .is_some());
+    let e = evidence.borrow();
+    assert_eq!(
+        e.retirements[0]
+            .intent
+            .scopes
+            .iter()
+            .map(|s| s.browser.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["current", "peer"]
+    );
+}
+
+#[test]
+fn missing_identity_on_nonretired_peer_defers_with_a_reason() {
+    let (mut effects, mut state, browser, evidence) = retirement_peer_fixture();
+    let mut peer = browser.clone();
+    peer.id = "legacy-live-or-unknown".into();
+    peer.pid = 41;
+    state.browsers.insert(peer.id.clone(), peer.clone());
+    evidence.borrow_mut().missing_identities.insert(peer.id);
+    effects.begin_operation(&state).unwrap();
+    let error = match effects.acquire_idle_retirement_guard(std::slice::from_ref(&browser)) {
+        Err(reason) => reason,
+        Ok(_) => panic!("missing original identity must remain an explained deferral"),
+    };
+    assert_eq!(error, "browser_session_idle_original_identity_missing");
+    assert!(evidence.borrow().retirements.is_empty());
 }

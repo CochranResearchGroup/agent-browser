@@ -48,6 +48,7 @@ pub(crate) mod browser_session_host;
 pub(crate) mod browser_session_pool_maintenance;
 #[cfg(target_os = "linux")]
 mod browser_session_profile_reuse;
+mod browser_session_reaper;
 pub(crate) mod browser_session_remote_view;
 #[allow(dead_code)]
 pub(crate) mod browser_session_runtime;

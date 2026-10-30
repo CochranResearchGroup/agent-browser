@@ -155,3 +155,5 @@ and failed-transaction reconciliation remain open under #183.
 [P247: selected planning completeness](0247-2026-10-17-planning-completeness.md), #299; bounded auditor repair.
 
 [P296 dependable journeys and narrated teaching](0296-2026-10-26-browser-journeys-teaching.md) owns spec466 implementation and its dependency ledger.
+
+[P298 retirement progress and tab accounting](0298-2026-10-30-ttl-reconciliation.md), #498; bounded source repair under #488.

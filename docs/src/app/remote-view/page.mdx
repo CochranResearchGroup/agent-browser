@@ -1208,3 +1208,18 @@ independent copy for testing. If login is lost, stop account actions and sign
 in explicitly in the chosen browser. Never weaken encryption, export keys or
 replace credential stores to manufacture portability. Inspect another build,
 use a confirmed original, keep the copy without opening, or cancel.
+
+### Automatic cleanup diagnostics
+
+Automatic retirement ignores already idle-closed history when forming a new
+retirement scope. A browser from an earlier desktop allocation is excluded only
+when original-process evidence proves it ended; live or uncertain peers still
+block retirement. Reconciliation marks legacy tabs whose browser record is
+missing as closed without closing a physical target or erasing their history.
+
+The background owner writes its latest maintenance pass to the private file
+`~/.agent-browser/service/browser-session-reaper.json`. It records start/completion
+times, completed/deferred/failed outcome, cleanup counts and bounded error codes.
+Browser identifiers in deferrals are hashed; page URLs and titles are omitted.
+A running or old receipt is not proof of a completed pass. This diagnostic does
+not renew activity, change TTL defaults or authorize cleanup retries.
