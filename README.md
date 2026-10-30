@@ -2450,6 +2450,15 @@ Run `pnpm test:service-profile-lease-wait-live` during manual full-CI or
 release-gating checks that touch profile selection, profile lease waiting,
 service request, trace summary, dashboard trace, or service observability
 client behavior. It intentionally stays out of ordinary CI.
+The background reaper records its latest pass in the private
+`~/.agent-browser/service/browser-session-reaper.json`, including timestamps,
+cleanup counts and bounded failure/deferral codes even when stderr is discarded.
+A running or stale receipt does not prove successful maintenance. Historical
+idle-closed peers do not veto current retirement; older allocation peers require
+positive original-process exit evidence before exclusion. Legacy orphan tab
+records are reconciled to closed while preserving history. TTL defaults and
+live/uncertain peer protection remain unchanged.
+
 Run `pnpm test:service-status-no-launch` to validate that service status remains
 read-only when launch defaults such as `AGENT_BROWSER_ARGS` are configured.
 Run `pnpm test:service-remedies-cli-no-launch` to validate that the CLI remedy

@@ -6591,6 +6591,12 @@ Search matches displayed tab labels and URLs, excluding embedded document payloa
 Native window reads refresh in one background worker. Initial reads can remain
 unverified until it completes; cached samples retain their elapsed age and failed
 refreshes do not establish presence. These observations never renew tab lifetime.
+Automatic cleanup records its latest pass in the private
+~/.agent-browser/service/browser-session-reaper.json with timestamps, counts and
+bounded error codes. A running or stale receipt is not cleanup success. Retired
+history cannot veto current retirement; earlier-allocation peers require proven
+original exit. Orphan legacy tab records become closed without physical effects.
+
 
 
 

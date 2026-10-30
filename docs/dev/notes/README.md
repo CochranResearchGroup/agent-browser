@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P298 retirement progress](0298-2026-10-30-ttl-reconciliation.md): historical-peer retirement, orphan record reconciliation and durable reaper readback; source-only local validation.
+
 [Dashboard rail scrolling](2026-10-30-dashboard-rail-scroll.md): viewport-bound inventory, desktop/mobile wheel and focus checks; broader mode fixture failures retained, no runtime changes.
 
 [P296 delivery closeout](0296-development-delivery-closeout-2026-10-29.md): PR480 merged; exact isolated development doctor and three-launch smoke pass; production unchanged and478 deferred.
