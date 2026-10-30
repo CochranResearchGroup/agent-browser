@@ -1,6 +1,20 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: SCROLL495
+    product_lane: PL-BUGFIX
+    objective: Keep long dashboard browser inventories scrollable within the viewport
+    branch: fix/dashboard-rail-scroll
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#495]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    overlaps: []
+    validation_status: Focused mounted desktop/mobile scroll checks and dashboard build pass; broader mode fixture failures retained
+    evidence: docs/dev/notes/2026-10-30-dashboard-rail-scroll.md
+    limitations: ["Source and disposable browser fixture only; no installed-runtime effects", "Reuse canonical checkout on scoped branch; retain other worktrees"]
+    updated_at: 2026-10-30
   - id: BRAND493
     product_lane: PL-PLATFORM
     objective: Adopt approved teal secret-agent rosette branding
