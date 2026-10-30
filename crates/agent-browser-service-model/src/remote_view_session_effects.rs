@@ -165,7 +165,10 @@ impl<
             &mut E,
         )
             -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String>,
-    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String>
+    where
+        E: BrowserSessionEffects,
+    {
         if self.pool.is_none() || browsers.is_empty() {
             return acquire_guard(&mut self.effects);
         }
@@ -189,6 +192,9 @@ impl<
             {
                 return Err("browser_session_idle_custody_identity_changed".into());
             }
+            if expected.idle_closed_browsers.contains_key(&baseline.id) {
+                continue;
+            }
             let assignment = self
                 .store
                 .published_launch_assignment(baseline)
@@ -199,6 +205,7 @@ impl<
         // deterministic legacy deferral must not leave an earlier group fenced.
         // Existing operations retain their exact immutable readback obligation.
         let mut original_identities = BTreeMap::new();
+        let mut assignment_browser_ids: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for assignment in groups.values() {
             if self.retirements.values().any(|record| {
                 !record.is_terminal() && record.intent.provider.assignment == *assignment
@@ -206,18 +213,41 @@ impl<
                 continue;
             }
             for browser in expected.browsers.values().filter(|browser| {
-                browser.desktop.as_ref().is_some_and(|desktop| {
-                    desktop.desktop_id == assignment.desktop_id
-                        && desktop.generation == assignment.generation
-                })
+                !expected.idle_closed_browsers.contains_key(&browser.id)
+                    && browser.desktop.as_ref().is_some_and(|desktop| {
+                        desktop.desktop_id == assignment.desktop_id
+                            && desktop.generation == assignment.generation
+                    })
             }) {
                 let Some(identity) = self
                     .store
                     .published_launch_process_identity(browser)
                     .map_err(|_| "browser_session_idle_custody_unavailable")?
                 else {
-                    return Ok(None);
+                    return Err("browser_session_idle_original_identity_missing".into());
                 };
+                let published_assignment = self
+                    .store
+                    .published_launch_assignment(browser)
+                    .map_err(|_| "browser_session_idle_custody_unavailable")?;
+                if published_assignment != *assignment {
+                    // A desktop can be allocated again within one lifecycle generation.
+                    // Exclude earlier allocation history only after original-process
+                    // readback proves it ended. Live or uncertain peers still veto.
+                    let scope = BrowserIdleRetirementScope {
+                        browser: browser.clone(),
+                        process_identity: Some(identity),
+                        tabs: Vec::new(),
+                    };
+                    if self.effects.observe_idle_retirement_effect(&scope, None) != Ok(true) {
+                        return Err("browser_session_idle_previous_assignment_unresolved".into());
+                    }
+                    continue;
+                }
+                assignment_browser_ids
+                    .entry(assignment.assignment_id.clone())
+                    .or_default()
+                    .push(browser.id.clone());
                 original_identities.insert(browser.id.clone(), identity);
             }
         }
@@ -271,17 +301,9 @@ impl<
                         .map_err(|_| "browser_session_idle_readback_required")?;
                 // Freeze every published peer on this assignment once. Sequential
                 // tab/session closes reuse one native operation and slot revision.
-                let ids = expected
-                    .browsers
-                    .values()
-                    .filter(|browser| {
-                        browser.desktop.as_ref().is_some_and(|desktop| {
-                            desktop.desktop_id == assignment.desktop_id
-                                && desktop.generation == assignment.generation
-                        })
-                    })
-                    .map(|browser| browser.id.clone())
-                    .collect::<Vec<_>>();
+                let ids = assignment_browser_ids
+                    .remove(&assignment.assignment_id)
+                    .ok_or("browser_session_idle_custody_unavailable")?;
                 let mut intent = BrowserIdleRetirementIntent::new(&id, provider, &expected, &ids)
                     .map_err(|_| "browser_session_idle_custody_unavailable")?;
                 for scope in &mut intent.scopes {

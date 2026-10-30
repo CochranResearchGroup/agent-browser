@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P298
+    product_lane: PL-BUGFIX
+    objective: Restore retirement progress and truthful tab accounting
+    plan: docs/dev/plans/0298-2026-10-30-ttl-reconciliation.md
+    branch: fix/ttl-reconciliation
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#498]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    validation_status: "PR499 source integration; strict Rust quality, model/lease suites,93 health,40 output,13 daemon,3 receipt,2 startup checks and composed128 consumer cases pass; source-pinned installer zero residue; one Standards/Spec review with zero findings"
+    evidence: docs/dev/notes/0298-2026-10-30-ttl-reconciliation.md
+    overlaps: [CochranResearchGroup/agent-browser#497]
+    reconciled_overlaps: ["Preserve separate dirty Auth-retention checkout; preserve its session manager, retention host and MCP writes; forward only existing host reap results and integrate shared documentation serially"]
+    limitations: ["Source and local synthetic validation only; no production cleanup, deployment or TTL-default changes", "Reuse canonical checkout serially; no additional worktree"]
+    updated_at: 2026-10-30
   - id: SCROLL495
     product_lane: PL-BUGFIX
     objective: Keep long dashboard browser inventories scrollable within the viewport

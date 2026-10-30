@@ -7103,10 +7103,11 @@ fn automatic_retirement_legacy_group_preflight_precedes_every_native_fence() {
         baseline.browsers[&alice.browser_id].clone(),
         baseline.browsers[&bob.browser_id].clone(),
     ];
-    assert!(effects
-        .acquire_idle_retirement_guard(&browsers)
-        .unwrap()
-        .is_none());
+    let reason = match effects.acquire_idle_retirement_guard(&browsers) {
+        Err(reason) => reason,
+        Ok(_) => panic!("legacy identity deferral must retain an inspectable reason"),
+    };
+    assert_eq!(reason, "browser_session_idle_original_identity_missing");
     assert!(
         fixture
             .store(false)
@@ -8420,5 +8421,109 @@ fn late_maintenance_failures_preserve_committed_borrowed_expiry_and_failed_scope
                 );
             }
         }
+    }
+}
+
+#[test]
+fn current_retirement_excludes_historical_peers_through_sqlite_custody() {
+    for retired_without_identity in [true, false] {
+        let fixture = Fixture::new();
+        let provider = Rc::new(RefCell::new(Provider::default()));
+        let calls = Rc::new(Cell::new(0));
+        let mut consumer = host(&fixture, provider.clone(), calls.clone());
+        let opened = consumer
+            .open(OpenBrowserSession::exact_profile(
+                "current",
+                "profile-a",
+                100,
+            ))
+            .unwrap();
+        let mut state = consumer.state().clone();
+        let browser = state.browsers[&opened.browser_id].clone();
+        drop(consumer);
+        let mut historical = browser.clone();
+        historical.id = "historical-browser".into();
+        historical.profile_id = "profile-b".into();
+        historical.pid += 100;
+        historical.active_session_ids.clear();
+        state
+            .browsers
+            .insert(historical.id.clone(), historical.clone());
+        if retired_without_identity {
+            state.idle_closed_browsers.insert(historical.id.clone(), 1);
+        } else {
+            // Synthetic process boundary qualifies the earlier original as ended.
+            std::fs::write(fixture.root.join("idle-process-absent"), "ended").unwrap();
+        }
+        let mut store = fixture.store(false);
+        store.save_session_state(&state).unwrap();
+        let connection = store.remote_view_mutation_connection();
+        let raw: String = connection
+            .query_row(
+                "SELECT json FROM state_documents WHERE kind='browser_launch_custody'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let mut ledger: Value = serde_json::from_str(&raw).unwrap();
+        let mut old = ledger["records"]
+            .as_object()
+            .unwrap()
+            .values()
+            .find(|r| r["observedBrowserId"] == browser.id)
+            .unwrap()
+            .clone();
+        let id = uuid::Uuid::new_v4().to_string();
+        old["intent"]["intentId"] = id.clone().into();
+        old["intent"]["profileId"] = historical.profile_id.clone().into();
+        old["observedBrowserId"] = historical.id.clone().into();
+        old["observedPid"] = historical.pid.into();
+        if retired_without_identity {
+            old.as_object_mut()
+                .unwrap()
+                .remove("observedProcessIdentity");
+        } else {
+            old["observedProcessIdentity"]["pid"] = historical.pid.into();
+            old["intent"]["assignment"]["assignmentId"] = "historical-allocation".into();
+        }
+        ledger["records"][&id] = old;
+        connection
+            .execute(
+                "UPDATE state_documents SET json=?1 WHERE kind='browser_launch_custody'",
+                [ledger.to_string()],
+            )
+            .unwrap();
+        drop(store);
+        let mut effects = RemoteViewSessionEffects::new(
+            Process {
+                mode: Mode::Success,
+                root: fixture.root.clone(),
+                calls,
+            },
+            adapter(&fixture, provider),
+            fixture.store(false),
+            Vec::new(),
+            || uuid::Uuid::new_v4().to_string(),
+        )
+        .unwrap()
+        .with_pool(RemoteViewSessionPool {
+            name: "main".into(),
+            desired_desktops: 1,
+        })
+        .unwrap();
+        effects.begin_operation(&state).unwrap();
+        assert!(effects
+            .acquire_idle_retirement_guard(std::slice::from_ref(&browser))
+            .unwrap()
+            .is_some());
+        let records = fixture.store(false).idle_retirement_records().unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].intent.scopes.len(), 1);
+        assert_eq!(records[0].intent.scopes[0].browser, browser);
+        assert_eq!(
+            fixture.store(false).load_session_state().unwrap(),
+            state,
+            "admission does not erase history or close targets"
+        );
     }
 }

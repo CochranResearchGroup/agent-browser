@@ -826,13 +826,17 @@ impl RuntimeHostRouter {
     async fn reap_browser_sessions(&self) -> Result<(), String> {
         let browser_sessions = self.browser_sessions.clone();
         tokio::task::spawn_blocking(move || {
-            let reaped =
-                super::browser_session_host::reap_shared_browser_sessions(browser_sessions);
+            let receipt = super::service_store::default_service_state_path()?
+                .with_file_name("browser-session-reaper.json");
+            let started_at_ms = super::browser_session_reaper::now_ms();
+            let reaped = super::browser_session_reaper::run_pass(&receipt, started_at_ms, || {
+                super::browser_session_host::reap_shared_browser_sessions(browser_sessions)
+            });
             // Provider provisioning runs after the shared host lock is released.
             // Even a failed reap must not suppress independent spare maintenance.
             let replenished =
                 super::browser_session_remote_view::replenish_configured_remote_view_pool();
-            reaped.and(replenished)
+            reaped.map(|_| ()).and(replenished)
         })
         .await
         .map_err(|error| format!("browser_session_reap_join_failed:{error}"))?
