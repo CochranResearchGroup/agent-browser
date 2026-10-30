@@ -41,3 +41,11 @@ effects, custody tests, service reconciliation, daemon receipt/reporting, and
 associated docs only. Only forward the host reaper result in its existing reap functions; preserve
 its retention-command host hunks, session manager and MCP changes.
 Canonical source integration uses a linked PR after local validation.
+
+## Completion
+
+Source outcome complete. PR #499 carries integration and closes #498. The
+[acceptance receipt](../notes/0298-2026-10-30-ttl-reconciliation.md) records
+red/green failures, local passing gates, composite consumer evidence, the
+baseline planning-audit failure, one Standards/Spec review and exact fixture
+cleanup. #488 installed acceptance remains separate and open.

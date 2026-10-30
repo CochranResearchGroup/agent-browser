@@ -7103,10 +7103,11 @@ fn automatic_retirement_legacy_group_preflight_precedes_every_native_fence() {
         baseline.browsers[&alice.browser_id].clone(),
         baseline.browsers[&bob.browser_id].clone(),
     ];
-    assert!(effects
-        .acquire_idle_retirement_guard(&browsers)
-        .unwrap()
-        .is_none());
+    let reason = match effects.acquire_idle_retirement_guard(&browsers) {
+        Err(reason) => reason,
+        Ok(_) => panic!("legacy identity deferral must retain an inspectable reason"),
+    };
+    assert_eq!(reason, "browser_session_idle_original_identity_missing");
     assert!(
         fixture
             .store(false)

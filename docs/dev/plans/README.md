@@ -156,4 +156,4 @@ and failed-transaction reconciliation remain open under #183.
 
 [P296 dependable journeys and narrated teaching](0296-2026-10-26-browser-journeys-teaching.md) owns spec466 implementation and its dependency ledger.
 
-[P298 retirement progress and tab accounting](0298-2026-10-30-ttl-reconciliation.md), #498; bounded source repair under #488.
+[P298 retirement progress and tab accounting](0298-2026-10-30-ttl-reconciliation.md), #498; source repair qualified through PR499 with local gates and one review; #488 installed acceptance remains separate.

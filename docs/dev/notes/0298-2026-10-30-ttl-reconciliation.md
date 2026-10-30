@@ -1,7 +1,7 @@
 # P298 retirement progress and tab accounting
 
 Product lane: PL-BUGFIX
-Disposition: active-input
+Disposition: accepted-evidence
 Owning plan or work item: P298, #498 under #488
 Related lanes: PL-AUTH (#497 source overlap only)
 
@@ -86,8 +86,9 @@ Passing local checks recorded so far:
   PostgreSQL durability and route-specific user-sync contracts.
 
 The original installer-fixture run selected the old bundled September binary
-because no ordinary debug CLI existed. Its live-observation assertion failed;
-qualification must use the newly built source binary explicitly.
+because no ordinary debug CLI existed. Its live-observation assertion failed.
+The source-pinned rerun passes, including source-free installation and exact
+cleanup of two owned fixture hosts with zero residue.
 The historical planning-archive audit also fails its 200-line RUNBOOK limit;
 the untouched baseline already has 416 lines. This pre-existing audit is not
 represented as passing and no unrelated archive/runbook rewrite is included.
@@ -98,5 +99,44 @@ account continuity or actual installed tab disappearance. The separate dirty
 Auth-retention patch was preserved; its future integration must compose the
 small host reaper-result hunk with its retention-command additions.
 
-Review and final integration evidence will be appended after the pending
-browser-consumer and pinned installer checks finish.
+## Review
+
+Frozen range: `c20cbb24e...e78db857f` (one source commit).
+
+### Standards
+
+Independent review reported no hard documented violations or actionable smells.
+Primary adjudication accepted no findings; highest accepted severity: none.
+
+### Spec
+
+Independent review reported no missing, incorrect or out-of-scope requirement.
+Primary adjudication accepted no findings; highest accepted severity: none.
+Both axes preserve the distinction between source validation and live acceptance.
+No review finding required a runtime change. The broader consumer gate exposed
+one existing silent-deferral expectation; it was updated to assert the explained
+`browser_session_idle_original_identity_missing` deferral while preserving all
+no-claim, no-native-preparation and unchanged-state assertions. Its focused
+rerun passes. Runtime source did not change after the broad gate or review.
+
+## Additional final checks
+
+The full browser-consumer run reported 127 pass, 1 ignored and that single stale
+expectation. Reusing its 127 unchanged passing cases and the focused corrected
+case gives 128 passing cases with 1 existing ignored case. This is composite
+local evidence, not a claim of one wholly green execution. All 13 daemon tests,
+3 receipt tests and 2 startup reaper tests pass. All 124 lease-authority tests pass.
+
+The source CLI was built locally with Cargo dev debug symbols disabled; its
+SHA256 is `24c9b549256fc4e49cb79ef18bf907025e52107349ae687da58572b9427e91f2`.
+It is a fixture binary, not an installed production candidate. The installer
+fixture pins this exact executable through `AGENT_BROWSER_FIXTURE_BIN`.
+Pinned installer command: `AGENT_BROWSER_FIXTURE_BIN=/home/ecochran76/workspace.local/agent-browser/cli/target/debug/agent-browser pnpm test:workstation-install-fixture`. It passes with zero fixture residue.
+
+PR #499 carries canonical integration; #498 owns this bounded source outcome.
+#488 remains open for separately authorized installed acceptance and wider page
+provenance. The passing gates above qualify the runtime source in `e78db857f`;
+the follow-up changes only the expected deferral assertion and this receipt.
+Git diff hygiene and Cargo format pass after that assertion change. Reuse of
+unchanged runtime clippy and test evidence follows policy 0042. No hosted CI,
+installation or production cleanup was performed by the repair.
