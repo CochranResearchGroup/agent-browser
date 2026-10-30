@@ -1214,3 +1214,44 @@ mod operation_lookup_tests;
 
 #[path = "browser_build_selection_tests.rs"]
 mod build_selection_tests;
+
+#[test]
+fn consumer_retention_claim_uses_owner_time_and_survives_sqlite_reopen() {
+    let fixture = Fixture::new();
+    let calls = Rc::new(Cell::new(0));
+    let requests = Rc::new(Cell::new(0));
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
+    let opened = host
+        .open(OpenBrowserSession::exact_profile(
+            "Auth wait",
+            "profile-a",
+            100,
+        ))
+        .unwrap();
+    let browser = host.state().browsers[&opened.browser_id].clone();
+    let mut command = serde_json::json!({"action":"browser_session_retention","operation":"acquire","claimId":"auth:one","ownerId":"auth-receipts","sessionId":opened.session_id,"browserId":browser.id,"browserPid":browser.pid,"ttlMs":90000,"activityAtMs":1});
+    let response = host.handle_command(&command);
+    assert_eq!(response["success"], true, "{response}");
+    assert_eq!(response["data"]["released"], false);
+    assert!(response["data"]["expiresAtMs"].as_u64().unwrap() > 90001);
+    assert!(host.state().leave_open_session_ids.is_empty());
+    let generation = response["data"]["generation"].clone();
+    drop(host);
+    let mut restarted = fixture.host(Mode::Success, calls, requests);
+    command["operation"] = serde_json::json!("renew");
+    command["generation"] = generation.clone();
+    let renewed = restarted.handle_command(&command);
+    assert_eq!(renewed["success"], true, "{renewed}");
+    assert_eq!(renewed["data"]["generation"], generation);
+    assert_eq!(renewed["data"]["released"], false);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    assert!(restarted.reap(now).unwrap().closed_browser_ids.is_empty());
+    command["operation"] = serde_json::json!("release");
+    command["generation"] = generation;
+    let response = restarted.handle_command(&command);
+    assert_eq!(response["success"], true, "{response}");
+    assert_eq!(response["data"]["released"], true);
+}

@@ -142,3 +142,14 @@ inert [drafts](references/teaching-drafts.md), [review](references/teaching-revi
 Recheck Saved provenance; keep gaps. Proposals are not consent. Promotion needs fresh-repeat proof.
 Dates: YYYY-MM-DD; downloads need live process proof.
 [OCR](references/challenge-assistance.md), [elapsed image timing](references/image-challenge.md).
+
+### Owner service waits
+
+For an authentication wait, use the owning service's lifecycle retention, not
+agent page polling or a permanent leave-open toggle. `browser_retention` takes
+`taskId`, `browserId`, `browserPid`, stable `claimId`, `ownerId`, and
+`operation:acquire|renew|release`; acquire/renew use `ttlMs` up to 300000. Retain the
+returned `generation` for renew/release. Release only this claim when the wait
+ends; never close peers or clear a person's explicit leave-open preference. A
+replacement browser cannot inherit the claim. Retention is not credential or
+control authority, and failed renewal does not permit relaunch or replay.

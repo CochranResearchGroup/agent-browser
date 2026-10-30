@@ -845,6 +845,31 @@ pub struct BrowserTaskArtifactReference {
     pub observed_at_ms: u64,
 }
 
+/// A service-owned, bounded context hold; never browser control or credential permission.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BrowserSessionRetentionRequest {
+    pub operation: String,
+    pub claim_id: String,
+    pub owner_id: String,
+    pub session_id: String,
+    pub browser_id: String,
+    pub browser_pid: u32,
+    pub ttl_ms: Option<u64>,
+    pub generation: Option<String>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BrowserSessionRetentionClaim {
+    pub claim_id: String,
+    pub owner_id: String,
+    pub session_id: String,
+    pub browser_id: String,
+    pub browser_pid: u32,
+    pub generation: String,
+    pub expires_at_ms: u64,
+    pub released: bool,
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserSessionState {
@@ -901,6 +926,8 @@ pub struct BrowserSessionState {
     /// until an explicit close clears the preference, including across restart.
     #[serde(skip_serializing_if = "BTreeSet::is_empty")]
     pub leave_open_session_ids: BTreeSet<String>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub retention_claims: BTreeMap<String, BrowserSessionRetentionClaim>,
     pub disposable_profiles: BTreeMap<String, ManagedDisposableProfile>,
     pub tabs: BTreeMap<String, ManagedBrowserTab>,
     #[serde(default)]
@@ -943,6 +970,7 @@ impl Default for BrowserSessionState {
             managed_tab_requests: BTreeMap::new(),
             sessions: BTreeMap::new(),
             leave_open_session_ids: BTreeSet::new(),
+            retention_claims: BTreeMap::new(),
             disposable_profiles: BTreeMap::new(),
             tabs: BTreeMap::new(),
             tab_lifetimes: BTreeMap::new(),
@@ -1189,6 +1217,134 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         self.protected_session_ids.extend(session_ids.clone());
         self.externally_protected_session_ids.extend(session_ids);
         self
+    }
+
+    /// Acquire/renew one original service claim, or idempotently release it.
+    /// Released claims stay spent until their task is explicitly ended.
+    pub fn retain_session(
+        &mut self,
+        request: BrowserSessionRetentionRequest,
+        now_ms: u64,
+    ) -> Result<BrowserSessionRetentionClaim, String> {
+        let fail = || "browser_retention_binding_invalid".to_string();
+        let valid_id = |v: &str| {
+            !v.is_empty()
+                && v.len() <= 200
+                && v.bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b":._-".contains(&b))
+        };
+        let valid_reference = |value: &str| {
+            !value.is_empty() && value.len() <= 1024 && !value.chars().any(char::is_control)
+        };
+        if !valid_id(&request.claim_id)
+            || !valid_id(&request.owner_id)
+            || !valid_reference(&request.session_id)
+            || !valid_reference(&request.browser_id)
+            || request.browser_pid == 0
+            || !matches!(request.operation.as_str(), "acquire" | "renew" | "release")
+        {
+            return Err(fail());
+        }
+        let prior = self.state.retention_claims.get(&request.claim_id).cloned();
+        if let Some(old) = &prior {
+            if old.owner_id != request.owner_id
+                || old.session_id != request.session_id
+                || old.browser_id != request.browser_id
+                || old.browser_pid != request.browser_pid
+                || request
+                    .generation
+                    .as_ref()
+                    .is_some_and(|g| g != &old.generation)
+            {
+                return Err(fail());
+            }
+            if request.operation == "release" {
+                let mut released = old.clone();
+                released.released = true;
+                self.state
+                    .retention_claims
+                    .insert(request.claim_id, released.clone());
+                return Ok(released);
+            }
+            if old.released {
+                return Err("browser_retention_claim_released".into());
+            }
+        } else if request.operation == "renew" {
+            return Err("browser_retention_claim_missing".into());
+        }
+        if request.operation == "renew" && request.generation.is_none() {
+            return Err(fail());
+        }
+        if request.operation == "release" && !self.state.sessions.contains_key(&request.session_id)
+        {
+            return Ok(BrowserSessionRetentionClaim {
+                claim_id: request.claim_id,
+                owner_id: request.owner_id,
+                session_id: request.session_id,
+                browser_id: request.browser_id,
+                browser_pid: request.browser_pid,
+                generation: request.generation.unwrap_or_else(|| "retired-task".into()),
+                expires_at_ms: now_ms,
+                released: true,
+            });
+        }
+        let session = self
+            .state
+            .sessions
+            .get(&request.session_id)
+            .ok_or_else(fail)?;
+        let browser = self
+            .state
+            .browsers
+            .get(&session.browser_id)
+            .ok_or_else(fail)?;
+        if browser.id != request.browser_id
+            || browser.pid != request.browser_pid
+            || self.state.idle_closed_browsers.contains_key(&browser.id)
+        {
+            return Err(fail());
+        }
+        let generation = retention_generation(self.state, &request.session_id).ok_or_else(fail)?;
+        if prior
+            .as_ref()
+            .is_some_and(|old| old.generation != generation)
+        {
+            return Err(fail());
+        }
+        // Unknown acquire acknowledgements can be cancelled before a delayed acquire arrives.
+        let released = request.operation == "release";
+        if !released && !self.effects.browser_is_live(browser)? {
+            return Err(fail());
+        }
+        let expires_at_ms = if released {
+            now_ms
+        } else {
+            let ttl = request
+                .ttl_ms
+                .filter(|ttl| *ttl > 0 && *ttl <= 300_000)
+                .ok_or_else(fail)?;
+            now_ms
+                .checked_add(ttl)
+                .ok_or_else(fail)?
+                .max(prior.as_ref().map_or(0, |old| old.expires_at_ms))
+        };
+        if prior.is_none() && self.state.retention_claims.len() >= 4096 {
+            return Err("browser_retention_claim_capacity".into());
+        }
+        let claim = BrowserSessionRetentionClaim {
+            claim_id: request.claim_id.clone(),
+            owner_id: request.owner_id,
+            session_id: request.session_id,
+            browser_id: request.browser_id,
+            browser_pid: request.browser_pid,
+            generation,
+            expires_at_ms,
+            released,
+        };
+        self.state
+            .retention_claims
+            .insert(request.claim_id, claim.clone());
+        Ok(claim)
     }
 
     /// Intersect all live task constraints sharing a profile. Caller omission
@@ -2192,6 +2348,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         }
         self.state.sessions.remove(session_id);
         self.state.leave_open_session_ids.remove(session_id);
+        self.state
+            .retention_claims
+            .retain(|_, claim| claim.session_id != session_id);
         for tab in tabs {
             self.state.tab_lifetimes.remove(&tab.id);
             self.state.tab_metadata.remove(&tab.id);
@@ -2936,14 +3095,19 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         disposable_maintenance: bool,
     ) -> Result<ReapBrowserSessionsResult, String> {
         let mut result = ReapBrowserSessionsResult::default();
+        let retention_sessions = active_retention_sessions(self.state, now_ms);
+        let protected_session_ids = protected_session_ids
+            .union(&retention_sessions)
+            .cloned()
+            .collect::<BTreeSet<_>>();
         let mut externally_protected_session_ids = self
             .externally_protected_session_ids
-            .union(protected_session_ids)
+            .union(&protected_session_ids)
             .cloned()
             .collect::<BTreeSet<_>>();
         let mut protected_session_ids = self
             .protected_session_ids
-            .union(protected_session_ids)
+            .union(&protected_session_ids)
             .cloned()
             .collect::<BTreeSet<_>>();
         // Qualify viewer protection before either logical expiry or physical
@@ -3349,6 +3513,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .get(policy_id)
             .cloned()
             .ok_or_else(|| format!("browser_disposable_policy_not_found:{policy_id}"))?;
+        let retention_sessions = active_retention_sessions(self.state, now_ms);
         let mut retained_count = 0_u32;
         let mut retained_bytes = 0_u64;
         let mut candidates = Vec::new();
@@ -3376,9 +3541,10 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 && sessions
                     .iter()
                     .all(|session| self.session_pressure_retirement_eligible(&session.id, now_ms));
-            let externally_protected = sessions
-                .iter()
-                .any(|session| self.externally_protected_session_ids.contains(&session.id));
+            let externally_protected = sessions.iter().any(|session| {
+                self.externally_protected_session_ids.contains(&session.id)
+                    || retention_sessions.contains(&session.id)
+            });
             let has_live_tabs = self
                 .state
                 .tabs
@@ -3621,4 +3787,36 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         self.state.idle_closed_browsers.remove(&browser.id);
         Ok(())
     }
+}
+
+fn retention_generation(state: &BrowserSessionState, session_id: &str) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let session = state.sessions.get(session_id)?;
+    let browser = state.browsers.get(&session.browser_id)?;
+    let bytes = serde_json::to_vec(&(
+        session.id.as_str(),
+        session.created_at_ms,
+        browser.id.as_str(),
+        browser.profile_id.as_str(),
+        browser.pid,
+        browser.cdp_endpoint.as_str(),
+        &browser.desktop,
+        state.adopted_browser_process_identities.get(&browser.id),
+    ))
+    .ok()?;
+    Some(format!("{:x}", Sha256::digest(bytes)))
+}
+
+fn active_retention_sessions(state: &BrowserSessionState, now_ms: u64) -> BTreeSet<String> {
+    state
+        .retention_claims
+        .values()
+        .filter(|claim| {
+            !claim.released
+                && claim.expires_at_ms > now_ms
+                && retention_generation(state, &claim.session_id).as_deref()
+                    == Some(claim.generation.as_str())
+        })
+        .map(|claim| claim.session_id.clone())
+        .collect()
 }

@@ -6438,6 +6438,9 @@ firstHumanUseAtMs records qualified first use separately from creation attributi
 Handoff cards show task and profile/session context, omitting empty identity fields.
 New remote-view tasks require --service-name, --agent-name, --task-name and --origin-kind.
 MCP browser_open requires serviceName, agentName and taskName; origin is recorded as agent.
+MCP browser_retention lets an owner service acquire, renew or release a bounded
+exact-task/browser/PID context hold. ttlMs is 1 to 300000; renew uses the original
+generation receipt. It changes neither explicit leave-open nor credential permission.
 Supply service-name, agent-name and task-name at creation; later sharing does not
 replace original provenance. Human identity is not inferred from the requester.
 Native human handoffs prepare observation before the operator opens the link.
