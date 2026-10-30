@@ -43,7 +43,8 @@ async function fixture({format='legacy',loseSubmit=false,materials=true,staleHea
   }};
   const nativeRoot=join(root,'native');await mkdir(nativeRoot,{mode:0o700});
   const native=await openNativeBrowserReceiver({root:nativeRoot,runtime,routes:[{clientId:'client',targetId:'target',profile:'synthetic',desktopId:'synthetic-desktop',desktopGeneration:1}],identityKey:Buffer.alloc(32,9),now,terminalOrigins:[origin]});
-  return {sources:[{...sourcePort,async version(){return 'synthetic-target-v1';},async catalog(){return [{sourceId:sourcePort.id,recordId:'synthetic:billing',website:origin,account,name:'Synthetic billing'}];}},createKeePassSource({backend})],receiver:native.receiver,...(materials?{materials:{key:Buffer.alloc(32,5),readClock:async()=>({synchronized:true,timeMs:state.time}),minimumRemainingMs:0}}:{})};
+  // The fixed RFC code window has no preparation delay in this synthetic desktop.
+  return {sources:[{...sourcePort,async version(){return 'synthetic-target-v1';},async catalog(){return [{sourceId:sourcePort.id,recordId:'synthetic:billing',website:origin,account,name:'Synthetic billing'}];}},createKeePassSource({backend})],receiver:native.receiver,...(materials?{materials:{key:Buffer.alloc(32,5),readClock:async()=>({synchronized:true,timeMs:state.time}),minimumRemainingMs:0,totpPreparationMs:0}}:{})};
  }});
  async function preceding(auth,key){
   f.state.password=true;f.state.focused=false;f.state.providerAccepted=false;f.state.authenticated=false;delete f.state.providerCode;
