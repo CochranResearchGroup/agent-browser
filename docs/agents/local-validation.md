@@ -61,3 +61,19 @@ Run its disposable omission and CLI fixtures with:
 python3 -m unittest discover \
   -s .codex/skills/repo-policy-selector/tests -p test_audit_planning_contract.py
 ```
+
+## Explicit Auth composition sources
+
+`pnpm test:owner-auth-source` now preflights the explicitly reviewed
+`AUTH_RECEIPTS_SOURCE`, `AUTH_RECEIPTS_SDK_SOURCE` and `RECEIPTS_SOURCE` roots
+before running the same five synthetic owner scenarios. Missing or invalid roots
+and required entry points fail together before fixture setup. There is no fallback
+to installed discovery or live authority. Service and parent require readable Git
+identity; an explicitly selected non-Git SDK copy is content-identified. Distinct
+reviewed service and SDK roots remain supported.
+
+Use `node scripts/dev/run-owner-auth-source.mjs --preflight-only` for sanitized
+JSON containing revisions, dirty state, declared source/dependency digests and
+Node/platform/architecture. Source paths and environment values are not returned.
+`--help` describes the command. The fixed-clock staged-factor fixture explicitly
+sets its synthetic preparation budget; this does not change production guards.

@@ -4410,3 +4410,11 @@ Startup: [diagnostics](#development-host-startup).
 ### Native challenge assistance
 
 Use native_capture params.classifyChallenges for bounded same-frame OCR classification. Unknown, ambiguous and stale evidence do not prove absence. The challenge-assistance client reuses the existing opaque handoff and explicit Native takeover/return. Require independent clearance and protected-access checks before continuation; classification grants no solving authority. See docs/src/app/challenge-assistance/page.mdx.
+
+## Repository validation
+
+When developing Agent Browser source, use `pnpm validation:select -- --base <ref>`
+for the complete slice and resolve reported coverage gaps. The repository's
+`docs/agents/local-validation.md` owns local receipt and explicit Auth-source
+preflight guidance. These commands are repository tooling, not installed browser
+commands or permission for hosted CI, deployment or provider effects.

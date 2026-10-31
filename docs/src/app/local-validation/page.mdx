@@ -1,0 +1,21 @@
+# Local repository validation
+
+For source work in this repository, select checks for the complete slice with
+`pnpm validation:select -- --base <ref>`. Human and JSON output identify required
+checks and unresolved path coverage. A broad tier does not prove local readiness.
+
+The existing `pnpm validation:run --plan <checks.json> --output-dir <new-directory>`
+executes trusted direct commands without a shell and retains each result, including
+failures followed by passing checks. Keep private paths and secrets out of shared
+plans and logs. An incomplete receipt is not a successful batch.
+
+Auth source qualification uses `pnpm test:owner-auth-source` with explicit
+`AUTH_RECEIPTS_SOURCE`, `AUTH_RECEIPTS_SDK_SOURCE` and `RECEIPTS_SOURCE` roots.
+Its preflight reports missing inputs before setup and returns sanitized source
+and dependency identities. `node scripts/dev/run-owner-auth-source.mjs --preflight-only`
+returns that metadata without importing selected source or starting the scenarios.
+Distinct reviewed service and SDK sources remain supported.
+
+These are synthetic source checks, separate from installed receiving and provider
+acceptance. Local checks satisfy the operator CI cost policy. No hosted CI,
+automatic merge, deployment or live browser authority is enabled.
