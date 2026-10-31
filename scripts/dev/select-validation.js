@@ -242,6 +242,10 @@ function selectRecommendations(files, base) {
     add('pnpm test:service-client', 'service client package, examples, or generated helpers changed');
   }
 
+  if (files.some(file => /^(?:scripts\/(?:dev\/(?:run-validation|validation-plan|assess-validation)|lib\/local-validation|test-local-validation))\.(?:js|mjs)$/.test(file))) {
+    add('node --test scripts/test-local-validation.mjs', 'local selection-to-receipt readiness changed');
+  }
+
   if (files.some(isRepositoryToolingSurface)) {
     add('pnpm test:repository-tooling', 'candidate, worktree closeout or local validation tooling changed');
   }
@@ -513,7 +517,7 @@ function isServiceClientSurface(file) {
 
 function isRepositoryToolingSurface(file) {
   return (
-    file === 'scripts/dev/run-validation.js' ||
+    file === 'scripts/dev/run-validation.js' || file === 'scripts/dev/validation-plan.mjs' || file === 'scripts/dev/assess-validation.mjs' || file === 'scripts/lib/local-validation.mjs' || file === 'scripts/test-local-validation.mjs' ||
     file === 'scripts/test-validation-runner.js' ||
     file === 'scripts/candidate-build.js' ||
     file.startsWith('scripts/lib/candidate-build-') ||
