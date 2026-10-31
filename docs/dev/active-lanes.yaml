@@ -1,6 +1,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P299
+    product_lane: PL-PLATFORM
+    objective: Connect local validation selection, Auth preflight and source-bound readiness
+    plan: docs/dev/plans/0299-2026-10-31-local-validation-502.md
+    branch: platform/local-validation-502-owned
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#502, CochranResearchGroup/agent-browser#503, CochranResearchGroup/agent-browser#504, CochranResearchGroup/agent-browser#505, CochranResearchGroup/agent-browser#507]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: []
+    reconciled_overlaps: ["Root owns selector/runner/package/docs; worker504 owns only Auth preflight/aggregate/new tests in one isolated auxiliary; preserve clean retention peer"]
+    limitations: ["Source-only local validation; no hosted CI or runtime/provider effects", "One final broad review and bounded findings remediation"]
+    updated_at: 2026-10-31
   - id: P298
     product_lane: PL-BUGFIX
     objective: Restore retirement progress and truthful tab accounting

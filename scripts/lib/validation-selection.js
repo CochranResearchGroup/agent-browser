@@ -71,7 +71,7 @@ function surfacesFor(file) {
   const surfaces = [];
   if (isDocsOrGovernance(file)) surfaces.push('docs');
   if (file.startsWith('packages/dashboard/')) surfaces.push('dashboard');
-  if (isServiceClient(file)) surfaces.push('service-client');
+  if (isServiceClient(file) || isAuthCompositionSurface(file)) surfaces.push('service-client');
   if (isRepositoryTooling(file)) surfaces.push('repository-tooling');
   if (isWorkstationOrRelease(file)) surfaces.push('workstation');
   if (isRustSource(file)) surfaces.push('rust');
@@ -126,3 +126,8 @@ function rustCompartmentsFor(files) {
 }
 
 function allRustCompartments() { return ['candidate', 'challenge-control', 'cli-core', 'cli-integration', 'cli-native', 'cli-workstation', 'desktop-services', 'lease-authority', 'transport']; }
+
+/** Existing Auth owner composition, including test-only inputs. */
+export function isAuthCompositionSurface(file) {
+  return /^(?:packages\/client\/src\/(?:owner-|hosted-auth-helper|login-playbook|playbooks)|scripts\/(?:test-owner-|test-installed-owner-auth|test-standalone-auth-bootstrap|test-hosted-auth-helper|test-hosted-credential-follow|test-auth-composition-preflight)|scripts\/fixtures\/owner-|scripts\/lib\/auth-composition-preflight|scripts\/dev\/run-owner-auth-source)/.test(file);
+}

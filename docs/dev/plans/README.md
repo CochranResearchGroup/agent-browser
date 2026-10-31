@@ -1,5 +1,7 @@
 # Active plan index
 
+[P299 local validation](0299-2026-10-31-local-validation-502.md), spec502: execute503/504 then505 then507 through explicit source selection and local receipts. No hosted CI or runtime effects.
+
 [P297 independent task TTL](0297-2026-10-28-independent-tab-ttl.md), #490 closed: installed source `9d782cb3c` qualifies fresh logical/physical expiry, peer preservation, responsive owner status and the bounded helper smoke. Shared acceptance and the single zero-finding review are complete; canonical main composition passes source gates for PR491 integration while installed runtime remains the accepted hotfix.
 
 [P296 journeys and teaching](0296-2026-10-26-browser-journeys-teaching.md), #466: PR480 merged; isolated development doctor and three-launch smoke pass. Narrated walkthrough #478 remains deferred; production unchanged.

@@ -1,6 +1,6 @@
 # Local validation batches
 
-Use `pnpm validation:select -- --base <ref>` to identify relevant checks, then review their scope and effects.
+Use `pnpm validation:select -- --base <ref>` to identify relevant checks for the complete slice, then review their scope and effects. Auth owner implementation, test and fixture paths select the existing owner-auth composition and default-bootstrap checks. Documentation/governance paths select policy/link checks; documentation-site paths also select its production build. JSON output adds `coverage.complete` and per-path `coverage.gaps`; human output names unresolved coverage. Unknown paths retain conservative classification, but a broad tier alone does not prove complete local coverage. Resolve gaps before claiming readiness.
 
 For workspace polling, shared-cache/API, selected-context hook/model and their focused tests or startup fixture, the selector recommends the existing coordinator, mounted workspace-startup and selected-context checks. This includes test-only and fixture-only diffs. Run these focused checks before candidate builds or publication; the mounted suite exercises the real hook and cache together. Set `AGENT_BROWSER_TEST_CHROME` to the reviewed Chrome executable when the fixture default is unavailable. Recommendations do not execute checks or authorize runtime effects; CI remains subject to its existing operator-disabled policy.
 
