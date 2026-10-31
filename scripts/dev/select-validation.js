@@ -233,7 +233,7 @@ function selectRecommendations(files, base) {
     add('pnpm test:standalone-auth-bootstrap', 'Auth default verified bootstrap changed or is composed');
   }
 
-  if (files.some(file => /^(?:docs\/|skills\/|README\.md$|ROADMAP\.md$|RUNBOOK.*\.md$|AGENTS\.md$)/.test(file))) {
+  if (files.some(file => /^(?:docs\/|skills\/|README\.md$|ROADMAP\.md$|RUNBOOK.*\.md$|AGENTS\.md$|CONTEXT\.md$)/.test(file))) {
     add('pnpm test:policy-wiring', 'documentation or governance wiring changed');
     add(`pnpm test:documentation-links -- --base ${base}`, 'changed documentation link targets');
   }

@@ -499,3 +499,21 @@ stock MCP treats saved promotion metadata as inert.
 
 
 **Native image evidence clock**: Owner-minted Linux elapsed readings bound to the producer and receiver's exact boot. Image age and the first immutable round deadline use this domain; wall timestamps remain diagnostics. Later rounds cannot renew the deadline, change domain, cross boots or fall back to wall time after qualification fails. Legacy receipts and unsupported platforms retain their strict wall-clock guards. Client receiving timers use elapsed time; a projected wall deadline is not input authority.
+
+
+**Local validation requirement**: A selected public check and its declared inputs
+for one reviewed changed slice. A broad tier or a passing caller-selected subset
+does not establish complete coverage.
+
+**Validation input closure**: The declared repository bytes, check/executable
+identity, selected external source/dependency identities and environment that a
+local check qualifies. Source HEAD and dirty status are locators, not byte proof.
+
+**Local readiness assessment**: Read-only comparison of current selected
+requirements with complete terminal source-bound evidence. Missing, failed,
+interrupted, mismatched, stale or unresolved coverage remains a hold. Readiness
+grants no merge, installation, browser or credential authority.
+
+**Validation evidence reuse**: A new attributable decision that accepts an
+existing passing result only after its requirement and relevant declared input
+closure are verifiably unchanged. The original receipt remains immutable.

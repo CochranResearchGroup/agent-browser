@@ -97,7 +97,8 @@ try {
     assert.equal(selected.coverage.complete, true);
     assert.ok(!selected.recommendations.some(check => check.reasons.includes('validation selector or CI scripts changed')));
   }
-  const governance = reportForChangedPaths(['docs/dev/notes/fixture.md']);
+  const governance = reportForChangedPaths(['docs/dev/notes/fixture.md', 'CONTEXT.md']);
+  assert.equal(governance.coverage.complete, true);
   for (const command of ['pnpm test:policy-wiring', `pnpm test:documentation-links -- --base ${governance.base}`])
     assert.ok(governance.recommendations.some(check => check.command === command));
   const mdx = reportForChangedPaths(['docs/src/app/example/page.mdx']);

@@ -81,7 +81,7 @@ function surfacesFor(file) {
 function isDocsOrGovernance(file) {
   return (
     file.startsWith('docs/') ||
-    file === 'AGENTS.md' ||
+    file === 'AGENTS.md' || file === 'CONTEXT.md' ||
     file === 'README.md' ||
     file === 'ROADMAP.md' ||
     /^RUNBOOK(?:-.+)?\.md$/.test(file) ||
