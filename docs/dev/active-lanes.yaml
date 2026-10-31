@@ -9,12 +9,12 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#502, CochranResearchGroup/agent-browser#503, CochranResearchGroup/agent-browser#504, CochranResearchGroup/agent-browser#505, CochranResearchGroup/agent-browser#507]
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    plan_state: CLOSED
+    custody_state: INTEGRATED
     dependencies: []
     overlaps: []
     reconciled_overlaps: ["Root owns selector/runner/package/docs; worker504 owns only Auth preflight/aggregate/new tests in one isolated auxiliary; preserve clean retention peer"]
-    limitations: ["Source-only local validation; no hosted CI or runtime/provider effects", "All source tickets and parent closed through PR509/main9d1a18522; actual13/13 readiness/reuse pass; final single review awaits fixed-point confirmation"]
+    limitations: ["Source-only local validation; no hosted CI or runtime/provider effects", "All source tickets and parent closed through PR509/main9d1a18522; actual13/13 readiness/reuse pass; single final review and bounded TDD completed through PR510/mainc738fb694;30/30 and actual12/12 source readiness pass"]
     updated_at: 2026-10-31
   - id: P298
     product_lane: PL-BUGFIX

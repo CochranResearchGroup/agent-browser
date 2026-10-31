@@ -2,7 +2,7 @@
 
 [P299 final review](0299-2026-10-31-final-review.md): one Standards/Spec review, two Spec blockers and one duplicate-selection finding resolved in a bounded TDD pass.
 
-[P299 local validation delivery](0299-2026-10-31-local-validation-delivery.md): PR509 merged, source tickets closed, actual13/13 readiness/reuse pass; final requested review pending boundary.
+[P299 local validation delivery](0299-2026-10-31-local-validation-delivery.md): PR509 merged, source tickets closed, initial actual13/13 readiness/reuse pass; subsequent final review and remediation complete through PR510.
 
 [P295 final ticket reconciliation review](0295-2026-10-30-ticket-reconciliation-review.md): one Standards/Spec review and a bounded fixed-clock fixture repair; existing installed acceptance remains distinct.
 
