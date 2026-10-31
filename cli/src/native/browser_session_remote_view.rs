@@ -945,7 +945,7 @@ mod tests {
 /// Remote View owns viewer authentication and lifetime; this read only joins
 /// the retained handoff to its current external desktop assignment.
 pub(crate) fn resolve_handoff_desktop_route(id: &str) -> Result<String, String> {
-    read_handoff_desktop_presentation(id, false).map(|(route, _)| route)
+    read_handoff_desktop_presentation(id, false).map(|presentation| presentation.route)
 }
 
 /// Read the owned route and current private observation together. This does not
@@ -954,12 +954,32 @@ pub(crate) fn resolve_handoff_desktop_presentation(
     id: &str,
 ) -> Result<(String, Option<String>), String> {
     read_handoff_desktop_presentation(id, true)
+        .map(|presentation| (presentation.route, presentation.correlation))
+}
+
+/// Private provider use rejoined to the current owner-confirmed physical target.
+/// This type is never deserialized from a browser or service caller.
+pub(crate) struct NativeHandoffJourney {
+    pub(crate) target: RemoteViewTabHandoffTarget,
+    pub(crate) observation: RemoteViewNativeHandoffObservation,
+}
+
+struct HandoffDesktopPresentation {
+    route: String,
+    correlation: Option<String>,
+    journey: Option<NativeHandoffJourney>,
+}
+
+pub(crate) fn resolve_native_handoff_journey(id: &str) -> Result<NativeHandoffJourney, String> {
+    read_handoff_desktop_presentation(id, true)?
+        .journey
+        .ok_or_else(|| "native_journey_use_pending".into())
 }
 
 fn read_handoff_desktop_presentation(
     id: &str,
     include_native_context: bool,
-) -> Result<(String, Option<String>), String> {
+) -> Result<HandoffDesktopPresentation, String> {
     let store = BrowserSessionSqliteStore::default_sqlite()?;
     let state = store.load_session_state()?;
     state
@@ -998,6 +1018,7 @@ fn read_handoff_desktop_presentation(
                 .as_ref()
         })
         .flatten();
+    let mut journey = None;
     let correlation = match binding {
         None => None,
         Some(binding) => {
@@ -1045,10 +1066,25 @@ fn read_handoff_desktop_presentation(
             {
                 return Err("remote_view_human_use_target_changed".into());
             }
+            if read.state == RemoteViewNativeHandoffUseState::Used
+                && current
+                    .tab_metadata
+                    .get(&target.tab.id)
+                    .is_some_and(|metadata| metadata.first_human_use_at_ms.is_some())
+            {
+                journey = Some(NativeHandoffJourney {
+                    target: current_target,
+                    observation: read.observation,
+                });
+            }
             Some(observation.correlation_id.clone())
         }
     };
-    Ok((route, correlation))
+    Ok(HandoffDesktopPresentation {
+        route,
+        correlation,
+        journey,
+    })
 }
 
 fn owned_desktop_route(

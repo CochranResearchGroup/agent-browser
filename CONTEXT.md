@@ -74,6 +74,8 @@ observation, not proof that shared-host browsers or uncertain effects are
 absent. Preserve retained evidence and inspect the existing preserve-mode
 workstation transaction before retrying.
 
+**Native operator-journey receipt**: Historical acceptance of an authenticated Native viewer connection and delivered frame acknowledgement, rejoined by the browser owner to the exact current target. The private companion receipt binds the selected backend manifest and Native lifecycle/viewing identities without rewriting legacy selection or rollback records. `operatorJourneyReady` accepts it only for that exact selected backend; route readiness and anonymous navigation are insufficient.
+
 **Embedded Native page evidence**: A prepared handoff, a readable viewer document and an authenticated Native display connection are separate observations. An unreadable frame may be an access redirect or a framing restriction; it does not prove expired authentication. A readable non-viewer page is unavailable for embedding without establishing why.
 
 **Subsystem health evidence**: Separately scoped inventory availability, runtime diagnostic readiness, Native slot readiness and observed selected-view connection state. Unchecked, stale, timed-out or malformed evidence is unverified. Service reachability and handoff preparation do not prove display delivery.

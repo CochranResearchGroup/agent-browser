@@ -377,7 +377,8 @@ pub(super) async fn resolve_location(
         url.query_pairs_mut()
             .append_pair("handoff-observation", correlation);
         location = url.to_string();
-        poll_native_handoff_use(session, id.to_string(), correlation.to_string());
+        let generation = crate::dashboard_ingress::native_journey::selected_generation();
+        poll_native_handoff_use(session, id.to_string(), correlation.to_string(), generation);
     }
     Ok(location)
 }
@@ -385,7 +386,12 @@ pub(super) async fn resolve_location(
 /// Foreground continuation reads the private owner until use or expiry, with one
 /// task per exact correlation. Restart recovery also reads durable observations
 /// from the existing session reaper; no browser-supplied success is accepted.
-fn poll_native_handoff_use(session: String, id: String, correlation: String) {
+fn poll_native_handoff_use(
+    session: String,
+    id: String,
+    correlation: String,
+    generation: Option<String>,
+) {
     static ACTIVE: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<String>>> =
         std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashSet::new()));
     let Ok(mut active) = ACTIVE.lock() else {
@@ -404,7 +410,7 @@ fn poll_native_handoff_use(session: String, id: String, correlation: String) {
                 }
             }
         }
-        let _guard = PollGuard(correlation);
+        let _guard = PollGuard(correlation.clone());
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(300);
         let command = serde_json::json!({"action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"observe_native_use"}).to_string();
         while tokio::time::Instant::now() < deadline {
@@ -420,16 +426,63 @@ fn poll_native_handoff_use(session: String, id: String, correlation: String) {
             let Ok(reply) = serde_json::from_str::<serde_json::Value>(&reply) else {
                 break;
             };
-            if reply["success"] != true || reply["data"]["status"] != "native_use_pending" {
-                break;
+            if reply["success"] == true && reply["data"]["status"] == "native_use_pending" {
+                continue;
             }
+            if native_journey_confirmed(&reply) {
+                if let Some(generation) = generation {
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::dashboard_ingress::native_journey::record(
+                            &generation,
+                            &id,
+                            &correlation,
+                        )
+                    })
+                    .await;
+                    if !matches!(result, Ok(Ok(()))) {
+                        eprintln!("Native operator-journey receipt recording failed; inspect workstation status");
+                    }
+                }
+            }
+            break;
         }
     });
+}
+
+/// Owner confirmation triggers a private evidence read, never caller-supplied success.
+fn native_journey_confirmed(reply: &serde_json::Value) -> bool {
+    reply["success"] == true
+        && matches!(
+            reply["data"]["status"].as_str(),
+            Some("human_use_confirmed" | "human_use_already_confirmed")
+        )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_journey_requires_successful_owner_use_before_private_recording() {
+        for status in [
+            "native_use_pending",
+            "native_use_expired",
+            "ready",
+            "human_use_confirmed",
+            "human_use_already_confirmed",
+        ] {
+            for success in [true, false] {
+                let reply = serde_json::json!({"success":success,"data":{"status":status}});
+                assert_eq!(
+                    native_journey_confirmed(&reply),
+                    success && status.starts_with("human_use_")
+                );
+            }
+        }
+        assert!(!native_journey_confirmed(
+            &serde_json::json!({"success":true,"data":{"operatorVisible":{"state":"ready"}}})
+        ));
+    }
 
     #[test]
     fn authenticated_user_navigation_registers_exact_target_without_acknowledging_use() {
