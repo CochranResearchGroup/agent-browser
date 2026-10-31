@@ -101,7 +101,7 @@ function isRustSource(file) { return file.startsWith('cli/src/') || file.startsW
 function isServiceSmokeSurface(file) {
   return file.startsWith('cli/src/native/service_') || file.startsWith('cli/src/native/mcp') || file === 'cli/src/native/stream/http.rs' || file === 'cli/src/mcp.rs';
 }
-function isClassifierOrWorkflow(file) { return file === 'package.json' || file === 'scripts/lib/validation-selection.js' || file === 'scripts/test-validation-selection.js' || file === 'scripts/dev/select-validation.js' || file.startsWith('.github/workflows/'); }
+function isClassifierOrWorkflow(file) { return file === 'package.json' || file === 'scripts/lib/validation-selection.js' || file === 'scripts/test-validation-selection.js' || file === 'scripts/test-validation-selector-cli.js' || file === 'scripts/dev/select-validation.js' || file.startsWith('.github/workflows/'); }
 function isMaterialDependencyOrToolchain(file) {
   return new Set(['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'Cargo.lock', 'Cargo.toml', 'cli/Cargo.toml', 'rust-toolchain', 'rust-toolchain.toml']).has(file) || /^crates\/[^/]+\/Cargo\.toml$/.test(file) || file.startsWith('.cargo/') || file.startsWith('.github/actions/');
 }

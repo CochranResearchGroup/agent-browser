@@ -107,6 +107,8 @@ try {
   assert.deepEqual(unknown.coverage.gaps, [{file:'unmapped/new-surface.txt',reason:'unknown_surface'}]);
   const unknownText = execFileSync('node', [join(process.cwd(), 'scripts/dev/select-validation.js'), '--base', unknown.base, '--ci'], {cwd:fixtureRepo,encoding:'utf8'});
   assert.ok(unknownText.includes('Unresolved coverage: unmapped/new-surface.txt'));
+  const selectorSelf = reportForChangedPaths(['scripts/test-validation-selector-cli.js']);
+  assert.equal(selectorSelf.coverage.complete, true, 'the selector public regression is a known tooling input');
   const startup = reportForChangedPaths(['packages/dashboard/src/lib/dashboard-read-coordinator.ts']);
   const commands = startup.recommendations.map(check => check.command);
   assert.ok(commands.includes('pnpm test:dashboard-workspace-startup'),
