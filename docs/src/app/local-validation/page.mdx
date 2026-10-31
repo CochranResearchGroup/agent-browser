@@ -1,0 +1,50 @@
+# Local repository validation
+
+For source work in this repository, select checks for the complete slice with
+`pnpm validation:select -- --base <ref>`. Human and JSON output identify required
+checks and unresolved path coverage. A broad tier does not prove local readiness.
+
+The existing `pnpm validation:run --plan <checks.json> --output-dir <new-directory>`
+executes trusted direct commands without a shell and retains each result, including
+failures followed by passing checks. Keep private paths and secrets out of shared
+plans and logs. An incomplete receipt is not a successful batch.
+
+Auth source qualification uses `pnpm test:owner-auth-source` with explicit
+`AUTH_RECEIPTS_SOURCE`, `AUTH_RECEIPTS_SDK_SOURCE` and `RECEIPTS_SOURCE` roots.
+Its preflight reports missing inputs before setup and returns sanitized source
+and dependency identities. `node scripts/dev/run-owner-auth-source.mjs --preflight-only`
+returns that metadata without importing selected source or starting the scenarios.
+Distinct reviewed service and SDK sources remain supported.
+
+These are synthetic source checks, separate from installed receiving and provider
+acceptance. Local checks satisfy the operator CI cost policy. No hosted CI,
+automatic merge, deployment or live browser authority is enabled.
+
+## Selected readiness
+
+Generate an explicit source-bound plan with `pnpm validation:plan --base <ref> --head HEAD --output /tmp/new-plan.json`.
+The selected head must match the checkout. Dirty source bytes are captured; a
+historical head cannot narrow the required current slice. An optional
+`--timeout-ms` sets each check's timeout. Resolve incomplete coverage and held
+commands before running.
+
+Use the existing validation runner for that plan, then inspect its terminal
+receipt with `pnpm validation:assess --plan /tmp/new-plan.json --receipt /tmp/new-results/receipt.json --json`.
+The assessment is read-only. It rejects missing requirements, passing subsets,
+failed or interrupted checks and stale source or dependency identities. Generated
+plans and results stay outside the repository. Existing caller-selected v1
+batches remain compatible, but do not prove selected completeness.
+
+## Reuse with current evidence
+
+Generate a new current-head plan, then pass `--reuse-receipt <prior-v2-receipt.json>`
+to the validation runner with a new output directory. It reuses only equivalent
+qualified checks from a fully successful terminal batch and executes affected
+checks normally. Legacy, incomplete and failed batches cannot establish reuse.
+
+Docs-build and Auth composition have conservative owner-defined input recipes;
+unfamiliar checks retain whole-repository scope. Dependency code and semantic
+settings remain bound. A known PNPM operational timestamp does not invalidate
+otherwise unchanged input content. Original receipt bytes remain unchanged, and
+the new receipt records executed or reused outcomes with original provenance.
+Readiness assessment remains read-only and grants no merge or runtime authority.

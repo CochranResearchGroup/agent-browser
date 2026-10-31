@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { closeSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { closeSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { PLAN_SCHEMA, assertOutsideSource, runBoundValidation } from '../lib/local-validation.mjs';
 
-const usage = 'Usage: pnpm validation:run --plan <checks.json> --output-dir <new-directory>';
+const usage = 'Usage: pnpm validation:run --plan <checks.json> --output-dir <new-directory> [--reuse-receipt <prior-v2-receipt.json>]\nReuse accepts a terminal successful source-bound v2 receipt only. Recomputed current input identity determines which checks are reused; invalidated checks execute in new custody.';
 
+let boundPlan = false;
 try {
   const args = process.argv.slice(2);
   if (args.length === 1 && args[0] === '--help') {
@@ -13,13 +15,25 @@ try {
   } else {
     const options = new Map();
     for (let i = 0; i < args.length; i += 2) {
-      if (!['--plan', '--output-dir'].includes(args[i]) || !args[i + 1] || options.has(args[i])) {
+      if (!['--plan', '--output-dir', '--reuse-receipt'].includes(args[i]) || !args[i + 1] || options.has(args[i])) {
         throw new Error(usage);
       }
       options.set(args[i], args[i + 1]);
     }
-    if (options.size !== 2) throw new Error(usage);
+    if (!options.has('--plan') || !options.has('--output-dir')) throw new Error(usage);
     const plan = JSON.parse(readFileSync(resolve(options.get('--plan')), 'utf8'));
+    if (plan.schemaVersion === PLAN_SCHEMA) {
+      boundPlan = true;
+      let reuseReceiptText;
+      if (options.has('--reuse-receipt')) {
+        const previous = realpathSync(resolve(options.get('--reuse-receipt')));
+        assertOutsideSource(previous);
+        reuseReceiptText = readFileSync(previous, 'utf8');
+      }
+      const receipt = await runBoundValidation(plan, resolve(options.get('--output-dir')), { reuseReceiptText });
+      process.exitCode = receipt.state === 'success' ? 0 : 1;
+    } else {
+    if (options.has('--reuse-receipt')) throw new Error('reuse requires a generated source-bound plan');
     validatePlan(plan);
     const source = {
       head: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
@@ -66,9 +80,10 @@ try {
     save();
     console.log(`Batch: ${receipt.state}; receipt: ${join(output, 'receipt.json')}`);
     process.exitCode = receipt.state === 'success' ? 0 : 1;
+    }
   }
 } catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
+  console.error(boundPlan ? JSON.stringify({ code: error.code ?? 'validation_execution_unavailable' }) : error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 }
 

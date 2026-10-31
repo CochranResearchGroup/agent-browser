@@ -7512,3 +7512,12 @@ to the exact task, browser and PID. `ttlMs` is 1–300000; renew with the origin
 survive owner restart, expire without renewal and cannot be reacquired after
 release. Explicit task close remains terminal. Retention grants no page input,
 control takeover or credential authority. See [retention](docs/src/app/browser-retention/page.mdx).
+
+## Local repository validation
+
+Use `pnpm validation:select -- --base <ref>` for the complete changed slice.
+Unknown paths are explicit coverage gaps, not a passing broad result. Local
+checks satisfy the operator CI cost policy; hosted CI stays disabled. The
+[local validation guide](docs/agents/local-validation.md) describes selection,
+private per-check receipts and explicit-source synthetic Auth preflight. This
+repository tooling does not merge, deploy or authorize live browser effects.

@@ -3,7 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, readFileSync } from 'node:fs';
 
-import { classifyValidationSelection } from '../lib/validation-selection.js';
+import { classifyValidationSelection, isAuthCompositionSurface } from '../lib/validation-selection.js';
 
 const args = process.argv.slice(2);
 const baseArgIndex = args.findIndex((arg) => arg === '--base');
@@ -25,9 +25,12 @@ if (!base || !head || (githubOutputArgIndex >= 0 && !githubOutput)) {
 }
 
 const files = changedFiles(base, head, { includeWorktree: !ci });
-const selection = classifyValidationSelection(files);
+const classified = classifyValidationSelection(files);
+const unknownFiles = [...new Set(files.flatMap(file => classifyValidationSelection([file]).unknownFiles))].sort();
+const selection = { ...classified, unknownFiles };
 const recommendations = selectRecommendations(files, base);
-const report = { base, head, ...selection, recommendations };
+const coverage = { complete: selection.unknownFiles.length === 0, gaps: selection.unknownFiles.map(file => ({file, reason: 'unknown_surface'})) };
+const report = { base, head, ...selection, recommendations, coverage };
 
 if (githubOutput) writeGithubOutputs(githubOutput, report);
 
@@ -225,8 +228,26 @@ function selectRecommendations(files, base) {
     );
   }
 
+  if (files.some(file => /auth-composition-preflight|run-owner-auth-source/.test(file))) {
+    add('pnpm test:auth-composition-preflight', 'Auth aggregate preflight or its public regressions changed');
+  }
+
+  if (files.some(isAuthCompositionSurface)) {
+    add('pnpm test:owner-auth-source', 'Auth owner implementation, fixture or composition changed');
+    add('pnpm test:standalone-auth-bootstrap', 'Auth default verified bootstrap changed or is composed');
+  }
+
+  if (files.some(file => /^(?:docs\/|skills\/|README\.md$|ROADMAP\.md$|RUNBOOK.*\.md$|AGENTS\.md$|CONTEXT\.md$)/.test(file))) {
+    add('pnpm test:policy-wiring', 'documentation or governance wiring changed');
+    add(`pnpm test:documentation-links -- --base ${base}`, 'changed documentation link targets');
+  }
+
   if (files.some(isServiceClientSurface)) {
     add('pnpm test:service-client', 'service client package, examples, or generated helpers changed');
+  }
+
+  if (files.some(file => /^(?:scripts\/(?:dev\/(?:run-validation|validation-plan|assess-validation)|lib\/local-validation|test-local-validation))\.(?:js|mjs)$/.test(file))) {
+    add('node --test scripts/test-local-validation.mjs', 'local selection-to-receipt readiness changed');
   }
 
   if (files.some(isRepositoryToolingSurface)) {
@@ -356,7 +377,7 @@ function selectRecommendations(files, base) {
     add('pnpm test:remote-view-handoff-docs', 'agent and operator remote-view handoff guidance changed');
   }
 
-  if (files.some((file) => file.startsWith('scripts/') || file === '.github/workflows/ci.yml')) {
+  if (files.some((file) => file === 'scripts/dev/select-validation.js' || file.startsWith('scripts/lib/validation-') || file.startsWith('scripts/test-validation-') || file.startsWith('.github/workflows/'))) {
     add('node scripts/dev/select-validation.js --base HEAD --json', 'validation selector or CI scripts changed');
   }
   if (files.some((file) =>
@@ -500,7 +521,7 @@ function isServiceClientSurface(file) {
 
 function isRepositoryToolingSurface(file) {
   return (
-    file === 'scripts/dev/run-validation.js' ||
+    file === 'scripts/dev/run-validation.js' || file === 'scripts/dev/validation-plan.mjs' || file === 'scripts/dev/assess-validation.mjs' || file === 'scripts/lib/local-validation.mjs' || file === 'scripts/test-local-validation.mjs' ||
     file === 'scripts/test-validation-runner.js' ||
     file === 'scripts/candidate-build.js' ||
     file.startsWith('scripts/lib/candidate-build-') ||
@@ -708,7 +729,8 @@ function mapChecks(checks) {
   }));
 }
 
-function printText({ base, head, changedFiles: files, tier, exclusions, recommendations }) {
+function printText({ base, head, changedFiles: files, tier, exclusions, recommendations, coverage }) {
+  if (!coverage.complete) console.log(`Unresolved coverage: ${coverage.gaps.map(gap => gap.file).join(', ')}`);
   console.log(`Validation base: ${base}`);
   console.log(`Validation head: ${head}`);
   console.log(`Validation tier: ${tier}`);

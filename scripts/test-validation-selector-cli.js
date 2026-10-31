@@ -87,6 +87,31 @@ try {
       '--base', before, '--head', 'HEAD', '--ci', '--json',
     ], { cwd: fixtureRepo, encoding: 'utf8' }));
   }
+  const authFixture = reportForChangedPaths(['scripts/test-owner-staged-factor.js']);
+  assert.ok(authFixture.recommendations.some(check => check.command === 'pnpm test:owner-auth-source'),
+    'staged-factor fixture must select its public Auth composition');
+  assert.deepEqual(authFixture.unknownFiles, []);
+  for (const path of ['packages/client/src/owner-login-playbook.js', 'scripts/test-owner-totp-continuation.js', 'scripts/fixtures/owner-auth-fixture.mjs']) {
+    const selected = reportForChangedPaths([path]);
+    assert.ok(selected.recommendations.some(check => check.command === 'pnpm test:owner-auth-source'));
+    assert.equal(selected.coverage.complete, true);
+    assert.ok(!selected.recommendations.some(check => check.reasons.includes('validation selector or CI scripts changed')));
+  }
+  const governance = reportForChangedPaths(['docs/dev/notes/fixture.md', 'CONTEXT.md']);
+  assert.equal(governance.coverage.complete, true);
+  for (const command of ['pnpm test:policy-wiring', `pnpm test:documentation-links -- --base ${governance.base}`])
+    assert.ok(governance.recommendations.some(check => check.command === command));
+  const mdx = reportForChangedPaths(['docs/src/app/example/page.mdx']);
+  assert.ok(mdx.recommendations.some(check => check.command === 'pnpm --dir docs build'));
+  const unknown = reportForChangedPaths(['unmapped/new-surface.txt']);
+  assert.equal(unknown.coverage.complete, false);
+  assert.deepEqual(unknown.coverage.gaps, [{file:'unmapped/new-surface.txt',reason:'unknown_surface'}]);
+  const unknownText = execFileSync('node', [join(process.cwd(), 'scripts/dev/select-validation.js'), '--base', unknown.base, '--ci'], {cwd:fixtureRepo,encoding:'utf8'});
+  assert.ok(unknownText.includes('Unresolved coverage: unmapped/new-surface.txt'));
+  const preflight = reportForChangedPaths(['scripts/lib/auth-composition-preflight.mjs']);
+  assert.ok(preflight.recommendations.some(check => check.command === 'pnpm test:auth-composition-preflight'));
+  const selectorSelf = reportForChangedPaths(['scripts/test-validation-selector-cli.js']);
+  assert.equal(selectorSelf.coverage.complete, true, 'the selector public regression is a known tooling input');
   const startup = reportForChangedPaths(['packages/dashboard/src/lib/dashboard-read-coordinator.ts']);
   const commands = startup.recommendations.map(check => check.command);
   assert.ok(commands.includes('pnpm test:dashboard-workspace-startup'),

@@ -71,7 +71,7 @@ function surfacesFor(file) {
   const surfaces = [];
   if (isDocsOrGovernance(file)) surfaces.push('docs');
   if (file.startsWith('packages/dashboard/')) surfaces.push('dashboard');
-  if (isServiceClient(file)) surfaces.push('service-client');
+  if (isServiceClient(file) || isAuthCompositionSurface(file)) surfaces.push('service-client');
   if (isRepositoryTooling(file)) surfaces.push('repository-tooling');
   if (isWorkstationOrRelease(file)) surfaces.push('workstation');
   if (isRustSource(file)) surfaces.push('rust');
@@ -81,7 +81,7 @@ function surfacesFor(file) {
 function isDocsOrGovernance(file) {
   return (
     file.startsWith('docs/') ||
-    file === 'AGENTS.md' ||
+    file === 'AGENTS.md' || file === 'CONTEXT.md' ||
     file === 'README.md' ||
     file === 'ROADMAP.md' ||
     /^RUNBOOK(?:-.+)?\.md$/.test(file) ||
@@ -92,7 +92,7 @@ function isServiceClient(file) {
   return file.startsWith('packages/client/') || file.startsWith('examples/service-client/') || file.startsWith('scripts/generate-service-') || file.startsWith('scripts/test-service-') || file.startsWith('docs/dev/contracts/') || file === 'cli/src/native/service_contracts.rs' || file === 'cli/src/native/service_request.rs' || file === 'cli/src/native/service_model.rs' || file.startsWith('cli/src/native/mcp');
 }
 function isRepositoryTooling(file) {
-  return file === 'scripts/dev/run-validation.js' || file === 'scripts/test-validation-runner.js' || file === 'scripts/candidate-build.js' || file.startsWith('scripts/lib/candidate-build-') || file.startsWith('scripts/test-candidate-build-') || file === 'scripts/dev/worktree-closeout.js' || file.startsWith('scripts/lib/worktree-closeout') || file === 'scripts/test-worktree-closeout.js';
+  return file === 'scripts/dev/run-validation.js' || file === 'scripts/dev/validation-plan.mjs' || file === 'scripts/dev/assess-validation.mjs' || file === 'scripts/lib/local-validation.mjs' || file === 'scripts/test-local-validation.mjs' || file === 'scripts/test-validation-runner.js' || file === 'scripts/candidate-build.js' || file.startsWith('scripts/lib/candidate-build-') || file.startsWith('scripts/test-candidate-build-') || file === 'scripts/dev/worktree-closeout.js' || file.startsWith('scripts/lib/worktree-closeout') || file === 'scripts/test-worktree-closeout.js';
 }
 function isWorkstationOrRelease(file) {
   return file.startsWith('cli/assets/workstation/') || file.startsWith('scripts/release/') || file.startsWith('scripts/vm/') || file.startsWith('scripts/test-workstation-') || file.startsWith('scripts/smoke-install-workstation-') || file === 'cli/src/install.rs' || file === 'cli/src/workstation_install.rs' || file.startsWith('cli/src/workstation_install/') || file === 'scripts/test-fresh-workstation-vm-harness.js' || file === 'scripts/test-guacamole-postgres-durability.js' || file === 'scripts/test-rdp-guac-postgres-hardening.js' || file === 'scripts/test-rdp-guac-route-specific-user-sync.js' || file === 'CHANGELOG.md' || file === '.github/workflows/release.yml';
@@ -101,7 +101,7 @@ function isRustSource(file) { return file.startsWith('cli/src/') || file.startsW
 function isServiceSmokeSurface(file) {
   return file.startsWith('cli/src/native/service_') || file.startsWith('cli/src/native/mcp') || file === 'cli/src/native/stream/http.rs' || file === 'cli/src/mcp.rs';
 }
-function isClassifierOrWorkflow(file) { return file === 'package.json' || file === 'scripts/lib/validation-selection.js' || file === 'scripts/test-validation-selection.js' || file === 'scripts/dev/select-validation.js' || file.startsWith('.github/workflows/'); }
+function isClassifierOrWorkflow(file) { return file === 'package.json' || file === 'scripts/lib/validation-selection.js' || file === 'scripts/test-validation-selection.js' || file === 'scripts/test-validation-selector-cli.js' || file === 'scripts/dev/select-validation.js' || file.startsWith('.github/workflows/'); }
 function isMaterialDependencyOrToolchain(file) {
   return new Set(['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'Cargo.lock', 'Cargo.toml', 'cli/Cargo.toml', 'rust-toolchain', 'rust-toolchain.toml']).has(file) || /^crates\/[^/]+\/Cargo\.toml$/.test(file) || file.startsWith('.cargo/') || file.startsWith('.github/actions/');
 }
@@ -126,3 +126,8 @@ function rustCompartmentsFor(files) {
 }
 
 function allRustCompartments() { return ['candidate', 'challenge-control', 'cli-core', 'cli-integration', 'cli-native', 'cli-workstation', 'desktop-services', 'lease-authority', 'transport']; }
+
+/** Existing Auth owner composition, including test-only inputs. */
+export function isAuthCompositionSurface(file) {
+  return /^(?:packages\/client\/src\/(?:owner-|hosted-auth-helper|login-playbook|playbooks)|scripts\/(?:test-owner-|test-installed-owner-auth|test-standalone-auth-bootstrap|test-hosted-auth-helper|test-hosted-credential-follow|test-auth-composition-preflight)|scripts\/fixtures\/owner-|scripts\/lib\/auth-composition-preflight|scripts\/dev\/run-owner-auth-source)/.test(file);
+}
