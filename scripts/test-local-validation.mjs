@@ -1,0 +1,127 @@
+import assert from 'node:assert/strict';
+import {spawn,spawnSync,execFileSync} from 'node:child_process';
+import {chmodSync,existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join,resolve} from 'node:path';
+import test from 'node:test';
+
+const commands=Object.fromEntries(['validation-plan.mjs','run-validation.js','assess-validation.mjs'].map(name=>[name,resolve('scripts/dev',name)]));
+function fixture(t){
+ const root=mkdtempSync(join(tmpdir(),'local-validation-505-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const repo=join(root,'repo'),bin=join(root,'bin');mkdirSync(repo);mkdirSync(bin);
+ const pnpm=join(bin,'pnpm');writeFileSync(pnpm,`#!/usr/bin/env node
+if(process.env.FIXTURE_MODE==='fail-docs' && process.argv.includes('docs'))process.exit(7);
+if(process.env.FIXTURE_MODE==='mutate')require('node:fs').writeFileSync('docs/change.md','# Modified during check');
+if(process.env.FIXTURE_MODE==='timeout')setInterval(()=>{},1000);
+else console.log('synthetic check passed');
+`);chmodSync(pnpm,0o700);
+ const env={...process.env,PATH:`${bin}:${process.env.PATH}`};
+ const git=args=>execFileSync('git',args,{cwd:repo,env,stdio:'pipe'}).toString().trim();
+ git(['init']);git(['config','user.name','Fixture']);git(['config','user.email','fixture@example.invalid']);
+ mkdirSync(join(repo,'docs'));writeFileSync(join(repo,'.gitignore'),'node_modules/\n');writeFileSync(join(repo,'docs','base.md'),'# Base\n');git(['add','.']);git(['commit','-m','base']);const base=git(['rev-parse','HEAD']);
+ writeFileSync(join(repo,'docs','change.md'),'# Change\n');git(['add','.']);git(['commit','-m','change']);
+ const run=(name,args)=>spawnSync(process.execPath,[commands[name],...args],{cwd:repo,env,encoding:'utf8',timeout:15000});
+ const planPath=join(root,'plan.json'),output=join(root,'results');
+ return {root,repo,bin,env,git,run,base,planPath,output,plan:()=>JSON.parse(readFileSync(planPath,'utf8')),receipt:()=>JSON.parse(readFileSync(join(output,'receipt.json'),'utf8'))};
+}
+test('selected local checks run and assess as complete source-bound evidence',t=>{
+ const f=fixture(t),planned=f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]);
+ assert.equal(planned.status,0,planned.stderr);
+ const plan=f.plan();assert.ok(plan.checks.length>=3);assert.ok(plan.checks.some(c=>c.args.includes('test:policy-wiring')));
+ const ran=f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]);assert.equal(ran.status,0,ran.stderr);
+ const assessed=f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']);
+ assert.equal(assessed.status,0,assessed.stderr);const result=JSON.parse(assessed.stdout);assert.equal(result.ready,true);
+ assert.equal(f.receipt().schemaVersion,'agent-browser.local-validation.v2');
+ assert.ok(!JSON.stringify(result).includes(f.root));
+});
+
+test('a subset plan cannot execute or qualify the complete selection',t=>{
+ const f=fixture(t);assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);
+ const plan=f.plan();plan.checks=plan.checks.slice(0,1);writeFileSync(f.planPath,JSON.stringify(plan));
+ const result=f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]);assert.equal(result.status,1);assert.match(result.stderr,/validation_plan_stale_or_incomplete/);
+});
+test('relevant dirty bytes invalidate evidence even while the dirty flag stays true',t=>{
+ const f=fixture(t),file=join(f.repo,'docs','change.md');writeFileSync(file,'# Dirty first bytes\n');
+ assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);assert.equal(f.plan().source.dirty,true);
+ assert.equal(f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]).status,0);
+ writeFileSync(file,'# Different dirty bytes\n');
+ const assessed=f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']);assert.equal(assessed.status,1);assert.ok(JSON.parse(assessed.stdout).problems.includes('validation_plan_stale_or_incomplete'));
+});
+test('failed documentation and incomplete required checks never qualify',t=>{
+ const f=fixture(t);mkdirSync(join(f.repo,'docs','src','app','sample'),{recursive:true});writeFileSync(join(f.repo,'docs','src','app','sample','page.mdx'),'# Docs\n');
+ assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);f.env.FIXTURE_MODE='fail-docs';
+ const run=f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]);assert.equal(run.status,1);
+ const original=readFileSync(join(f.output,'receipt.json'),'utf8'),receipt=f.receipt();assert.equal(receipt.state,'failure');assert.ok(receipt.checks.some(c=>c.exitCode===7));
+ const failed=f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']);assert.equal(failed.status,1);assert.equal(readFileSync(join(f.output,'receipt.json'),'utf8'),original,'assessment preserves historical receipt');
+ receipt.state='success';receipt.checks[0].state='pending';delete receipt.checks[0].finishedAt;writeFileSync(join(f.root,'incomplete.json'),JSON.stringify(receipt));
+ assert.equal(f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.root,'incomplete.json'),'--json']).status,1);
+});
+test('unknown changed paths remain explicit unresolved coverage',t=>{
+ const f=fixture(t);writeFileSync(join(f.repo,'unknown.surface'),'unknown');
+ const result=f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]);assert.equal(result.status,1);assert.equal(f.plan().coverage.complete,false);
+ assert.equal(f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]).status,1);
+});
+test('selected check timeout retains failure and prevents readiness',t=>{
+ const f=fixture(t);const planned=f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath,'--timeout-ms','100']);assert.equal(planned.status,0,planned.stderr);
+ f.env.FIXTURE_MODE='timeout';assert.equal(f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]).status,1);
+ assert.ok(f.receipt().checks.some(c=>c.errorCode==='ETIMEDOUT'));
+ assert.equal(f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']).status,1);
+});
+
+function authSources(f){
+ const layouts=[
+ ['AUTH_RECEIPTS_SOURCE',['src/standalone.mjs','src/credential-service.mjs','src/receipts-approval.mjs','src/keepass-backend.mjs','src/credential-sources.mjs','src/native-browser-receiver.mjs']],
+ ['AUTH_RECEIPTS_SDK_SOURCE',['src/client-sdk.mjs','src/client-sdk-verification.mjs','src/auth-client.mjs','src/auth-transport.mjs']],
+ ['RECEIPTS_SOURCE',['apps/receipts-interoperation/src/request-hub.mjs','apps/receipts-interoperation/src/notifications.mjs']]];
+ for(const [key,files]of layouts){
+  const root=join(f.root,key);mkdirSync(root);writeFileSync(join(root,'package.json'),JSON.stringify({dependencies:{}}));
+  for(const file of files){mkdirSync(join(root,file,'..'),{recursive:true});writeFileSync(join(root,file),"throw Error('Source must not execute in preflight');\n");}
+  for(const args of [['init','-q'],['add','.'],['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-qm','reviewed synthetic source']])execFileSync('git',args,{cwd:root,stdio:'pipe'});
+  f.env[key]=root;
+ }
+ mkdirSync(join(f.repo,'scripts'),{recursive:true});writeFileSync(join(f.repo,'scripts','test-owner-staged-factor.js'),'// selected Auth fixture\n');
+}
+test('Auth selected prerequisites and changed external source bytes gate readiness',t=>{
+ const f=fixture(t);authSources(f);
+ const sdk=f.env.AUTH_RECEIPTS_SDK_SOURCE;delete f.env.AUTH_RECEIPTS_SDK_SOURCE;
+ const missing=f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]);assert.equal(missing.status,1);assert.match(missing.stderr,/AUTH_RECEIPTS_SDK_SOURCE/);assert.ok(!missing.stderr.includes(f.root));
+ f.env.AUTH_RECEIPTS_SDK_SOURCE=sdk;assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);
+ assert.ok(f.plan().checks.every(c=>c.inputs.auth.sources.service.contentDigest));
+ assert.ok(!JSON.stringify(f.plan()).includes(f.root));
+ assert.equal(f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]).status,0);
+ writeFileSync(join(sdk,'src','auth-client.mjs'),'// different actual SDK bytes\n');
+ const result=f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']);assert.equal(result.status,1);assert.ok(JSON.parse(result.stdout).problems.includes('validation_plan_stale_or_incomplete'));
+});
+test('successful checks that mutate relevant inputs do not qualify their former source',t=>{
+ const f=fixture(t);assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);f.env.FIXTURE_MODE='mutate';
+ assert.equal(f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]).status,1);assert.equal(f.receipt().sourceUnchanged,false);
+});
+test('changed Node injection settings invalidate a selected execution environment',t=>{
+ const f=fixture(t);assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);f.env.NODE_OPTIONS='--no-warnings';
+ const result=f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]);assert.equal(result.status,1);assert.match(result.stderr,/validation_plan_stale_or_incomplete/);
+});
+
+test('an interrupted running batch remains incomplete and read-only assessment rejects it',async t=>{
+ const f=fixture(t);assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);f.env.FIXTURE_MODE='timeout';
+ const child=spawn(process.execPath,[commands['run-validation.js'],'--plan',f.planPath,'--output-dir',f.output],{cwd:f.repo,env:f.env,detached:true,stdio:'ignore'});
+ const kill=()=>{try{process.kill(-child.pid,'SIGKILL');}catch{}};t.after(kill);
+ const terminal=new Promise(resolve=>child.once('exit',(code,signal)=>resolve({code,signal})));
+ const deadline=Date.now()+5000;let running=false;
+ while(Date.now()<deadline){try{running=existsSync(join(f.output,'receipt.json'))&&f.receipt().checks.some(check=>check.command==='pnpm'&&check.state==='running');}catch{}if(running)break;await new Promise(resolve=>setTimeout(resolve,20));}
+ assert.equal(running,true,'persisted check-running state is the readiness signal');kill();await terminal;
+ assert.equal(f.receipt().state,'running');const original=readFileSync(join(f.output,'receipt.json'),'utf8');
+ assert.equal(f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']).status,1);assert.equal(readFileSync(join(f.output,'receipt.json'),'utf8'),original);
+});
+
+test('ignored installed dependency bytes remain relevant even without a tracked diff',t=>{
+ const f=fixture(t);
+ const dependency=join(f.repo,'node_modules','synthetic','index.js');mkdirSync(join(dependency,'..'),{recursive:true});writeFileSync(dependency,'// executable dependency v1\n');
+ assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);
+ assert.equal(f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]).status,0);assert.equal(f.git(['status','--porcelain']),'');
+ writeFileSync(dependency,'// executable dependency v2\n');assert.equal(f.git(['status','--porcelain']),'');
+ const assessed=f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']);assert.equal(assessed.status,1);assert.ok(JSON.parse(assessed.stdout).problems.includes('validation_plan_stale_or_incomplete'));
+});
+test('a historical head cannot omit later changes while qualifying the current checkout',t=>{
+ const f=fixture(t);const result=f.run('validation-plan.mjs',['--base',f.base,'--head',f.base,'--output',f.planPath]);
+ assert.equal(result.status,1);assert.match(result.stderr,/validation_head_not_current/);
+});

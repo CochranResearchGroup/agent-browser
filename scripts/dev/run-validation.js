@@ -3,9 +3,11 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { closeSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { PLAN_SCHEMA, runBoundValidation } from '../lib/local-validation.mjs';
 
 const usage = 'Usage: pnpm validation:run --plan <checks.json> --output-dir <new-directory>';
 
+let boundPlan = false;
 try {
   const args = process.argv.slice(2);
   if (args.length === 1 && args[0] === '--help') {
@@ -20,6 +22,11 @@ try {
     }
     if (options.size !== 2) throw new Error(usage);
     const plan = JSON.parse(readFileSync(resolve(options.get('--plan')), 'utf8'));
+    if (plan.schemaVersion === PLAN_SCHEMA) {
+      boundPlan = true;
+      const receipt = await runBoundValidation(plan, resolve(options.get('--output-dir')));
+      process.exitCode = receipt.state === 'success' ? 0 : 1;
+    } else {
     validatePlan(plan);
     const source = {
       head: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
@@ -66,9 +73,10 @@ try {
     save();
     console.log(`Batch: ${receipt.state}; receipt: ${join(output, 'receipt.json')}`);
     process.exitCode = receipt.state === 'success' ? 0 : 1;
+    }
   }
 } catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
+  console.error(boundPlan ? JSON.stringify({ code: error.code ?? 'validation_execution_unavailable' }) : error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 }
 
