@@ -8,11 +8,13 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#512]
-    plan_state: ACTIVE
-    custody_state: IMPLEMENTING
+    plan_state: CLOSED
+    custody_state: INTEGRATED
     overlaps: [CochranResearchGroup/agent-browser#506]
     reconciled_overlaps: ["512 owns ingress and native presentation receipt adapter;506 retains inventory UI hook/component/tests; serialize shared guidance/catalog at integration; reuse clean canonical checkout without another worktree"]
-    limitations: ["Provider-free source repair; no production replacement, principal reconciliation or hosted CI"]
+    validation_status: "PR513/main8277ddba1;92 selected Rust tests, affected4-test rerun, strict quality, docs, source fixtures and exact installer fixture pass; sealed5a9f1250acef preserve install accepted; Native readiness assertion green after exact cleanup"
+    evidence: docs/dev/notes/2026-10-31-native-journey-receipt.md
+    limitations: ["Build-source46fda93e3 retained with explicit symbolic-HEAD metadata equivalence proof", "Separate owner-scoped profile-lease advisory remains; no reset, principal reconciliation or hosted CI"]
     updated_at: 2026-10-31
   - id: P299
     product_lane: PL-PLATFORM
