@@ -7516,7 +7516,9 @@ control takeover or credential authority. See [retention](docs/src/app/browser-r
 ## Local repository validation
 
 Use `pnpm validation:select -- --base <ref>` for the complete changed slice.
-Unknown paths are explicit coverage gaps, not a passing broad result. Local
+Unknown paths are explicit coverage gaps, not a passing broad result. Set check
+configuration before planning; source-bound evidence hashes the effective check
+environment without exposing raw values. Local
 checks satisfy the operator CI cost policy; hosted CI stays disabled. The
 [local validation guide](docs/agents/local-validation.md) describes selection,
 private per-check receipts and explicit-source synthetic Auth preflight. This

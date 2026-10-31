@@ -14,7 +14,7 @@ lanes:
     dependencies: []
     overlaps: []
     reconciled_overlaps: ["Root owns selector/runner/package/docs; worker504 owns only Auth preflight/aggregate/new tests in one isolated auxiliary; preserve clean retention peer"]
-    limitations: ["Source-only local validation; no hosted CI or runtime/provider effects", "One final broad review and bounded findings remediation"]
+    limitations: ["Source-only local validation; no hosted CI or runtime/provider effects", "All source tickets and parent closed through PR509/main9d1a18522; actual13/13 readiness/reuse pass; final single review awaits fixed-point confirmation"]
     updated_at: 2026-10-31
   - id: P298
     product_lane: PL-BUGFIX

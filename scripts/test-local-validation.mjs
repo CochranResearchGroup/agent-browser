@@ -11,8 +11,10 @@ function fixture(t){
  const repo=join(root,'repo'),bin=join(root,'bin');mkdirSync(repo);mkdirSync(bin);
  const pnpm=join(bin,'pnpm');writeFileSync(pnpm,`#!/usr/bin/env node
 if(process.env.FIXTURE_CALLS)require('node:fs').appendFileSync(process.env.FIXTURE_CALLS,process.argv.slice(2).join(' ')+'\\n');
+if(process.env.FIXTURE_MODE==='canonical-env' && (process.env.npm_lifecycle_event || process.env.npm_package_name || process.env.PWD!==process.cwd() || process.env.INIT_CWD!==process.cwd()))process.exit(19);
 if(process.env.FIXTURE_MODE==='touch-pnpm'){const fs=require('node:fs'),path='node_modules/.pnpm-workspace-state-v1.json',data=JSON.parse(fs.readFileSync(path,'utf8'));data.lastValidatedTimestamp++;fs.writeFileSync(path,JSON.stringify(data));}
 if(process.env.FIXTURE_MODE==='workspace-build'){const fs=require('node:fs');fs.mkdirSync('docs/.next',{recursive:true});fs.writeFileSync('docs/.next/generated',String(Date.now()));}
+if(process.env.NEXT_PRIVATE_APP_PATHS==='SYNTHETIC-PRIVATE-CHANGED-ENV' && process.argv.includes('docs'))process.exit(17);
 if(process.env.FIXTURE_MODE==='fail-docs' && process.argv.includes('docs'))process.exit(7);
 if(process.env.FIXTURE_MODE==='mutate')require('node:fs').writeFileSync('docs/change.md','# Modified during check');
 if(process.env.FIXTURE_MODE==='timeout')setInterval(()=>{},1000);
@@ -52,7 +54,7 @@ test('relevant dirty bytes invalidate evidence even while the dirty flag stays t
 });
 test('failed documentation and incomplete required checks never qualify',t=>{
  const f=fixture(t);mkdirSync(join(f.repo,'docs','src','app','sample'),{recursive:true});writeFileSync(join(f.repo,'docs','src','app','sample','page.mdx'),'# Docs\n');
- assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);f.env.FIXTURE_MODE='fail-docs';
+ f.env.FIXTURE_MODE='fail-docs';assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);
  const run=f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]);assert.equal(run.status,1);
  const original=readFileSync(join(f.output,'receipt.json'),'utf8'),receipt=f.receipt();assert.equal(receipt.state,'failure');assert.ok(receipt.checks.some(c=>c.exitCode===7));
  const failed=f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']);assert.equal(failed.status,1);assert.equal(readFileSync(join(f.output,'receipt.json'),'utf8'),original,'assessment preserves historical receipt');
@@ -65,7 +67,7 @@ test('unknown changed paths remain explicit unresolved coverage',t=>{
  assert.equal(f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]).status,1);
 });
 test('selected check timeout retains failure and prevents readiness',t=>{
- const f=fixture(t);const planned=f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath,'--timeout-ms','100']);assert.equal(planned.status,0,planned.stderr);
+ const f=fixture(t);f.env.FIXTURE_MODE='timeout';const planned=f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath,'--timeout-ms','100']);assert.equal(planned.status,0,planned.stderr);
  f.env.FIXTURE_MODE='timeout';assert.equal(f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]).status,1);
  assert.ok(f.receipt().checks.some(c=>c.errorCode==='ETIMEDOUT'));
  assert.equal(f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']).status,1);
@@ -96,7 +98,7 @@ test('Auth selected prerequisites and changed external source bytes gate readine
  const result=f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']);assert.equal(result.status,1);assert.ok(JSON.parse(result.stdout).problems.includes('validation_plan_stale_or_incomplete'));
 });
 test('successful checks that mutate relevant inputs do not qualify their former source',t=>{
- const f=fixture(t);assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);f.env.FIXTURE_MODE='mutate';
+ const f=fixture(t);f.env.FIXTURE_MODE='mutate';assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);
  assert.equal(f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]).status,1);assert.equal(f.receipt().sourceUnchanged,false);
 });
 test('changed Node injection settings invalidate a selected execution environment',t=>{
@@ -105,7 +107,7 @@ test('changed Node injection settings invalidate a selected execution environmen
 });
 
 test('an interrupted running batch remains incomplete and read-only assessment rejects it',async t=>{
- const f=fixture(t);assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);f.env.FIXTURE_MODE='timeout';
+ const f=fixture(t);f.env.FIXTURE_MODE='timeout';assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);
  const child=spawn(process.execPath,[commands['run-validation.js'],'--plan',f.planPath,'--output-dir',f.output],{cwd:f.repo,env:f.env,detached:true,stdio:'ignore'});
  const kill=()=>{try{process.kill(-child.pid,'SIGKILL');}catch{}};t.after(kill);
  const terminal=new Promise(resolve=>child.once('exit',(code,signal)=>resolve({code,signal})));
@@ -240,4 +242,41 @@ test('linked Next workspace build output is excluded while source and runtime de
  assert.equal(f.receipt().sourceUnchanged,true);assert.equal(f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']).status,0);
  writeFileSync(source,'// changed executable source\n');assert.equal(f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']).status,1);
  writeFileSync(source,'// original executable source\n');writeFileSync(dependency,'// changed installed dependency\n');assert.equal(f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']).status,1);
+});
+
+test('recognized Rust library changes cannot qualify on whitespace alone',t=>{
+ const f=fixture(t),file=join(f.repo,'crates','agent-browser-service-model','src','browser_session_manager.rs');
+ mkdirSync(join(file,'..'),{recursive:true});writeFileSync(file,'this is deliberately invalid Rust\n');f.git(['add','.']);f.git(['commit','-m','invalid Rust change']);
+ assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);
+ const commands=f.plan().checks.map(check=>[check.command,...check.args].join(' '));
+ assert.ok(commands.includes('scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check'));
+ assert.ok(commands.includes('scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings'));
+ assert.ok(commands.includes('scripts/ci/cargo-safe.sh test --manifest-path Cargo.toml -p agent-browser-service-model -- --test-threads=1'));
+ // The disposable repository has no compiler adapter. Missing required gates must
+ // fail rather than treating its passing whitespace check as complete evidence.
+ const ran=f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]);assert.equal(ran.status,1);
+ assert.equal(f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']).status,1);
+});
+
+
+test('changed effective build environment invalidates readiness and reuse without exposing values',t=>{
+ const f=fixture(t);f.env.NEXT_PRIVATE_APP_PATHS='[]';
+ mkdirSync(join(f.repo,'docs','src','app','env'),{recursive:true});writeFileSync(join(f.repo,'docs','src','app','env','page.mdx'),'# Build environment\n');
+ assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);assert.equal(f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]).status,0);
+ const prior=join(f.output,'receipt.json'),bytes=readFileSync(prior,'utf8');f.env.NEXT_PRIVATE_APP_PATHS='SYNTHETIC-PRIVATE-CHANGED-ENV';
+ const assessed=f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',prior,'--json']);assert.equal(assessed.status,1);
+ const changed=join(f.root,'environment-plan.json'),output=join(f.root,'environment-results');assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',changed]).status,0);
+ assert.ok(!readFileSync(changed,'utf8').includes(f.env.NEXT_PRIVATE_APP_PATHS));
+ const ran=f.run('run-validation.js',['--plan',changed,'--output-dir',output,'--reuse-receipt',prior]);assert.equal(ran.status,1);
+ const receipt=JSON.parse(readFileSync(join(output,'receipt.json'),'utf8'));assert.ok(receipt.checks.some(check=>check.exitCode===17));assert.ok(receipt.checks.every(check=>check.outcome==='executed'));
+ assert.equal(readFileSync(prior,'utf8'),bytes);
+});
+
+
+test('invocation metadata is normalized before both identity and check dispatch',t=>{
+ const f=fixture(t);f.env.FIXTURE_MODE='canonical-env';f.env.npm_lifecycle_event='validation:plan';f.env.npm_package_name='synthetic-plan';f.env.INIT_CWD='/synthetic/launch';
+ assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);
+ f.env.npm_lifecycle_event='validation:run';f.env.npm_package_name='synthetic-run';f.env.INIT_CWD='/synthetic/another-launch';f.env.SHLVL='17';
+ const ran=f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]);assert.equal(ran.status,0,ran.stderr);
+ f.env.npm_lifecycle_event='validation:assess';assert.equal(f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']).status,0);
 });

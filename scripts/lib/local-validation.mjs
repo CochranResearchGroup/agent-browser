@@ -97,7 +97,19 @@ function toolingIdentity(){
  const files=['../dev/select-validation.js','validation-selection.js','local-validation.mjs','../dev/run-validation.js','../dev/validation-plan.mjs','../dev/assess-validation.mjs','auth-composition-preflight.mjs'];
  return hash(stable(files.map(path=>[path,hash(readFileSync(new URL(path,import.meta.url)))])));
 }
-function environmentIdentity(){return {node:process.versions.node,nodeExecutable:executableIdentity('node'),platform:process.platform,arch:process.arch,injectionDigest:hash(stable(['NODE_OPTIONS','NODE_PATH'].map(key=>[key,process.env[key]??null])))};}
+/** Use the same effective environment for identity and dispatch. Invocation-only
+ * shell/package lifecycle metadata is removed or canonicalized before both, so
+ * excluded values cannot secretly influence a selected check. Values stay opaque. */
+function checkEnvironment(){
+ const environment=gitEnvironment();
+ for(const key of Object.keys(environment)){
+  if(['OLDPWD','SHLVL','_','npm_command','npm_execpath','npm_node_execpath','npm_config_argv','PNPM_SCRIPT_SRC_DIR'].includes(key)||key.startsWith('npm_lifecycle_')||key.startsWith('npm_package_'))delete environment[key];
+ }
+ environment.PWD=process.cwd();environment.INIT_CWD=process.cwd();environment.SHLVL='0';
+ return environment;
+}
+function environmentIdentity(){return {node:process.versions.node,nodeExecutable:executableIdentity('node'),platform:process.platform,arch:process.arch,injectionDigest:hash(stable(['NODE_OPTIONS','NODE_PATH'].map(key=>[key,process.env[key]??null]))),effectiveDigest:hash(stable(Object.entries(checkEnvironment()).sort(([a],[b])=>a.localeCompare(b))))};}
+
 function selectedCheck(recommendation){
  const parts=recommendation.command.split(' ');const command=parts.shift();
  const unresolved= /[<>]|[\n\r\0]/.test(recommendation.command)||parts.some(arg=>arg.startsWith('/'))||/^pnpm (?:publish:|development-runtime:|install |version:sync)/.test(recommendation.command);
@@ -149,7 +161,7 @@ export async function runBoundValidation(plan,output,{reuseReceiptText}={}){
    writeFileSync(join(output,check.log),`${JSON.stringify({outcome:'reused',provenance:check.reusedFrom})}\n`,{flag:'wx',mode:0o600});save();console.log(`${check.id}: reused`);continue;
   }
   check.outcome='executed';check.state='running';check.startedAt=new Date().toISOString();save();const log=openSync(join(output,check.log),'wx',0o600),started=performance.now();let result;
-  try{result=spawnSync(check.command,check.args,{shell:false,stdio:['ignore',log,log],timeout:check.timeoutMs,env:gitEnvironment()});}finally{closeSync(log);}
+  try{result=spawnSync(check.command,check.args,{shell:false,stdio:['ignore',log,log],timeout:check.timeoutMs,env:checkEnvironment()});}finally{closeSync(log);}
   check.durationMs=Math.round(performance.now()-started);check.finishedAt=new Date().toISOString();check.exitCode=result.status;check.signal=result.signal;check.errorCode=result.error?.code??null;check.state=result.status===0&&!result.signal&&!result.error?'success':'failure';save();console.log(`${check.id}: ${check.state}`);
  }
  // A check may modify its inputs: a successful exit does not preserve qualification.

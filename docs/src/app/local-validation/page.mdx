@@ -48,3 +48,15 @@ settings remain bound. A known PNPM operational timestamp does not invalidate
 otherwise unchanged input content. Original receipt bytes remain unchanged, and
 the new receipt records executed or reused outcomes with original provenance.
 Readiness assessment remains read-only and grants no merge or runtime authority.
+
+## Effective inputs
+
+Configure the check environment before planning. Evidence binds its effective
+values by an opaque digest, including build configuration. Invocation-only shell
+and package lifecycle metadata is normalized before both hashing and dispatch.
+A changed effective build input invalidates old assessment and reuse. The legacy
+v1 runner retains its original environment behavior.
+
+Rust source and integration-test changes select cargo-safe quality and applicable
+behavior gates. Tooling selection retains the readiness suite through its
+repository-tooling aggregate rather than scheduling the same suite twice.
