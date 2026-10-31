@@ -77,3 +77,31 @@ JSON containing revisions, dirty state, declared source/dependency digests and
 Node/platform/architecture. Source paths and environment values are not returned.
 `--help` describes the command. The fixed-clock staged-factor fixture explicitly
 sets its synthetic preparation budget; this does not change production guards.
+
+## Source-bound readiness
+
+Generate a selected plan outside the repository with
+`pnpm validation:plan --base <reviewed-base> --head HEAD --output /tmp/new-plan.json`.
+The selected head must resolve to the current checkout; dirty bytes are included.
+Optional `--timeout-ms <positive-integer>` binds a per-check timeout to the plan.
+Resolve any unknown coverage or unsupported/unparameterized command before
+claiming completeness. Recommendations with runtime-publication effects remain
+held rather than being executed by generated readiness plans.
+
+Run the generated plan using the existing
+`pnpm validation:run --plan /tmp/new-plan.json --output-dir /tmp/new-results`.
+Generated plans and receipts must remain outside the source tree. Their new
+source-bound schema identifies selected requirements, repository and installed
+dependency bytes, command/executable identity, declared Node environment and
+selected Auth preflight source metadata. The legacy `{checks}` batch remains
+supported with its original v1 receipt, but is not selected-completeness proof.
+
+Inspect current completeness without executing checks:
+`pnpm validation:assess --plan /tmp/new-plan.json --receipt /tmp/new-results/receipt.json --json`.
+Assessment recomputes selection and relevant identity. Missing, edited-subset,
+failed, timed-out, signalled, pending, interrupted, mismatched or stale evidence
+prevents readiness. A source digest proves only its declared local input closure;
+it is not a sandbox, unrestricted toolchain attestation or provider acceptance.
+
+Use `--help` on the plan and assessment scripts for exact supported arguments.
+Private logs and source locators belong outside Git; inspect before sharing.

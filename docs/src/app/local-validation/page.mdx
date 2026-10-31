@@ -19,3 +19,18 @@ Distinct reviewed service and SDK sources remain supported.
 These are synthetic source checks, separate from installed receiving and provider
 acceptance. Local checks satisfy the operator CI cost policy. No hosted CI,
 automatic merge, deployment or live browser authority is enabled.
+
+## Selected readiness
+
+Generate an explicit source-bound plan with `pnpm validation:plan --base <ref> --head HEAD --output /tmp/new-plan.json`.
+The selected head must match the checkout. Dirty source bytes are captured; a
+historical head cannot narrow the required current slice. An optional
+`--timeout-ms` sets each check's timeout. Resolve incomplete coverage and held
+commands before running.
+
+Use the existing validation runner for that plan, then inspect its terminal
+receipt with `pnpm validation:assess --plan /tmp/new-plan.json --receipt /tmp/new-results/receipt.json --json`.
+The assessment is read-only. It rejects missing requirements, passing subsets,
+failed or interrupted checks and stale source or dependency identities. Generated
+plans and results stay outside the repository. Existing caller-selected v1
+batches remain compatible, but do not prove selected completeness.

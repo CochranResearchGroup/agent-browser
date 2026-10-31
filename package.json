@@ -33,7 +33,7 @@
     "test:candidate-build-filesystem-adapter": "node scripts/test-candidate-build-filesystem-adapter.js",
     "test:candidate-build-command": "node scripts/test-candidate-build-command.js",
     "test:worktree-closeout": "node scripts/test-worktree-closeout.js",
-    "test:repository-tooling": "pnpm test:validation-runner && pnpm test:candidate-executable-input && pnpm test:candidate-build-executor && pnpm test:candidate-build-filesystem-adapter && pnpm test:candidate-build-command && pnpm test:worktree-closeout",
+    "test:repository-tooling": "pnpm test:validation-runner && pnpm test:candidate-executable-input && pnpm test:candidate-build-executor && pnpm test:candidate-build-filesystem-adapter && pnpm test:candidate-build-command && pnpm test:worktree-closeout && pnpm test:local-validation",
     "worktree:closeout": "node scripts/dev/worktree-closeout.js",
     "candidate:build": "node scripts/candidate-build.js",
     "test:lease-authority-crate-architecture": "node scripts/test-lease-authority-crate-architecture.js",
@@ -344,7 +344,10 @@
     "test:teaching-grilling": "node scripts/test-teaching-grilling.js",
     "test:teaching-report-repeat-client": "node scripts/test-teaching-review.js && pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --types node ../packages/client/src/teaching-review.js ../packages/client/src/teaching-review.d.ts",
     "smoke:teaching-report-repeat": "node scripts/smoke-teaching-report-repeat.mjs",
-    "test:auth-composition-preflight": "node --test scripts/test-auth-composition-preflight.mjs"
+    "test:auth-composition-preflight": "node --test scripts/test-auth-composition-preflight.mjs",
+    "validation:plan": "node scripts/dev/validation-plan.mjs",
+    "validation:assess": "node scripts/dev/assess-validation.mjs",
+    "test:local-validation": "node --test scripts/test-local-validation.mjs"
   },
   "keywords": [
     "browser",
