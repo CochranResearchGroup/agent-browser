@@ -62,6 +62,8 @@ Never send providerExternalUrl or raw Guacamole URLs.
 
 ## Operator workspace
 
+Native inventory 401 requires Remote View sign-in; 403 requires an account access check. Dashboard sign-in is separate. Sign in through existing Remote View access, then refresh browsers with the same selection. A transport failure alone does not prove expired authentication.
+
 Read [Workspace](references/cli-and-service.md#operator-workspace) for tabs, sharing and handoffs. Focus needs an owned tab; reviews are opt-in. Rail catches up once. Remote View owns view/auth. Terminal pool replay retains history.
 
 [Manual login](references/cli-and-service.md#manual-login) is CDP-free. Native control and human takeover are separate.

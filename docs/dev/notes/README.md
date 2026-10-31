@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[Native inventory access guidance](2026-10-31-native-inventory-access.md), #506: explicit sign-in and denial messages, collapsed-rail visibility and recovery; source-only repair with the unrelated baseline mode-fixture failure retained.
+
 [P295 final ticket reconciliation review](0295-2026-10-30-ticket-reconciliation-review.md): one Standards/Spec review and a bounded fixed-clock fixture repair; existing installed acceptance remains distinct.
 
 [P298 retirement progress](0298-2026-10-30-ttl-reconciliation.md): historical-peer retirement, orphan record reconciliation and durable reaper readback; source-only local validation.

@@ -1,6 +1,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: ACCESS506
+    product_lane: PL-BUGFIX
+    objective: Explain native browser inventory authentication and access failures
+    branch: fix/native-inventory-access
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#506]
+    plan_state: OPEN
+    custody_state: BRANCH_OWNED
+    overlaps: []
+    validation_status: "Targeted browser checks, dashboard/docs builds, policy/docs contracts, Rust format and strict Clippy pass; unrelated compact mode assertion fails on unchanged baseline"
+    evidence: docs/dev/notes/2026-10-31-native-inventory-access.md
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/508
+    limitations: ["Source qualification only; no production deployment", "Dedicated native-inventory-access checkout; preserve concurrent validation and Auth work"]
+    updated_at: 2026-10-31
   - id: P298
     product_lane: PL-BUGFIX
     objective: Restore retirement progress and truthful tab accounting
