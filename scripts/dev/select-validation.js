@@ -228,6 +228,10 @@ function selectRecommendations(files, base) {
     );
   }
 
+  if (files.some(file => /auth-composition-preflight|run-owner-auth-source/.test(file))) {
+    add('pnpm test:auth-composition-preflight', 'Auth aggregate preflight or its public regressions changed');
+  }
+
   if (files.some(isAuthCompositionSurface)) {
     add('pnpm test:owner-auth-source', 'Auth owner implementation, fixture or composition changed');
     add('pnpm test:standalone-auth-bootstrap', 'Auth default verified bootstrap changed or is composed');
