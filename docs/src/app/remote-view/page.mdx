@@ -209,6 +209,8 @@ Guacamole and preserve one durable link across route changes. The operator
 opens an authenticated `/remote-view/<handoff-id>` URL. Provider URLs remain
 diagnostic evidence and must not become handoff links.
 
+For Native Remote View, acceptance is recorded after the provider qualifies an authenticated viewer connection and delivered frame acknowledgement, and the browser owner confirms the current exact target. Workstation status exposes this as `operatorJourneyReady` and a `presentationReceipt` with schema `agent-browser.native-operator-journey.v1`. The receipt binds the full selected backend identity and Native lifecycle/viewing generations. Anonymous links, pending use and stale identities do not qualify. Recording acceptance does not select a staged backend or change fallback and rollback custody.
+
 Authenticated ready handoff resolution also records operator-journey acceptance for the already-selected dashboard generation after validating its live runtime manifest and current owner, route, display, target and provider evidence. This does not select a staged candidate or change fallback and rollback custody. Stale dashboard generations cannot refresh acceptance. An ordinary dashboard without an explicit deployment-generation setting identifies itself by matching its own executable-bound runtime manifest to the selected backend; it cannot borrow a newer backend identity.
 
 Guacamole viewer failures and unusable durable handoff links are appended to

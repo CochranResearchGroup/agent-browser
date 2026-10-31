@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[Native operator-journey recording](2026-10-31-native-journey-receipt.md): #512 repairs acceptance recording after provider-qualified Native viewer use, fenced to the selected backend.
+
 [P299 final review](0299-2026-10-31-final-review.md): one Standards/Spec review, two Spec blockers and one duplicate-selection finding resolved in a bounded TDD pass.
 
 [P299 local validation delivery](0299-2026-10-31-local-validation-delivery.md): PR509 merged, source tickets closed, initial actual13/13 readiness/reuse pass; subsequent final review and remediation complete through PR510.

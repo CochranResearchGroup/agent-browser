@@ -1,6 +1,19 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: JOURNEY512
+    product_lane: PL-BUGFIX
+    objective: Record selected dashboard acceptance from qualified Native handoff use
+    branch: fix/native-journey-receipt
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#512]
+    plan_state: ACTIVE
+    custody_state: IMPLEMENTING
+    overlaps: [CochranResearchGroup/agent-browser#506]
+    reconciled_overlaps: ["512 owns ingress and native presentation receipt adapter;506 retains inventory UI hook/component/tests; serialize shared guidance/catalog at integration; reuse clean canonical checkout without another worktree"]
+    limitations: ["Provider-free source repair; no production replacement, principal reconciliation or hosted CI"]
+    updated_at: 2026-10-31
   - id: P299
     product_lane: PL-PLATFORM
     objective: Connect local validation selection, Auth preflight and source-bound readiness

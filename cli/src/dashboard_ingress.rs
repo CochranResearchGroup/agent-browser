@@ -4,6 +4,8 @@
 //! retains the previously accepted backend for bounded fallback, and changes
 //! selection only after a manifest-bound authenticated presentation proof.
 
+pub(crate) mod native_journey;
+
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
@@ -663,11 +665,14 @@ pub(crate) fn dashboard_ingress_status_for_path(path: &Path) -> serde_json::Valu
     let repository = DashboardIngressRepository::new(path);
     match repository.load() {
         Ok(registry) => {
-            let receipt_ready = registry.last_presentation_receipt().is_some_and(|receipt| {
-                receipt.state == crate::runtime_adoption::PresentationState::Ready
-                    && receipt.dashboard_deployment_generation
-                        == registry.selected_backend().generation_id
-            });
+            let native_receipt =
+                native_journey::selected_receipt(path, registry.selected_backend());
+            let receipt_ready = native_receipt.is_some()
+                || registry.last_presentation_receipt().is_some_and(|receipt| {
+                    receipt.state == crate::runtime_adoption::PresentationState::Ready
+                        && receipt.dashboard_deployment_generation
+                            == registry.selected_backend().generation_id
+                });
             serde_json::json!({
                 "schemaVersion": registry.schema_version,
                 "revision": registry.revision,
@@ -681,7 +686,7 @@ pub(crate) fn dashboard_ingress_status_for_path(path: &Path) -> serde_json::Valu
                 "selectedBackend": registry.selected_backend(),
                 "candidateBackend": registry.candidate_backend(),
                 "fallbackBackend": registry.fallback_backend(),
-                "presentationReceipt": registry.last_presentation_receipt(),
+                "presentationReceipt": native_receipt.or_else(|| serde_json::to_value(registry.last_presentation_receipt()).ok()),
             })
         }
         Err(error) => serde_json::json!({
@@ -1939,6 +1944,51 @@ mod tests {
             .commit_candidate(CandidateOperatorJourney::blocked("generation-new"))
             .is_err());
         assert_eq!(registry.selected_backend(), &old);
+    }
+
+    #[test]
+    fn native_journey_receipt_qualifies_only_its_exact_selected_backend() {
+        let root = std::env::temp_dir().join(format!("native-journey-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("dashboard-ingress.json");
+        let backend = DashboardBackend::new("selected-native", 4849, "selected-manifest");
+        let repository = DashboardIngressRepository::new(&path);
+        repository.initialize(backend.clone()).unwrap();
+        let before = fs::read(&path).unwrap();
+        let receipt = serde_json::json!({
+            "schemaVersion":"agent-browser.native-operator-journey.v1",
+            "receiptId":"native-handoff-proof", "dashboardDeploymentGeneration":"selected-native",
+            "backend":backend, "state":"ready", "handoffId":"handoff-native",
+            "targetDigest":"a".repeat(64), "processInstanceDigest":"b".repeat(64),
+            "providerTarget":{"assignmentId":"assignment","registrationId":"registration",
+                "desktopId":"desktop","lifecycleGeneration":2,"viewingDesktopId":"view","viewingGeneration":3},
+            "correlationId":"c".repeat(64), "viewerConnectionDigest":"d".repeat(64),
+            "frameSync":7, "observedAtMs":150
+        });
+        let receipt_path = path.with_extension("native-journey.json");
+        fs::write(&receipt_path, receipt.to_string()).unwrap();
+        let status = dashboard_ingress_status_for_path(&path);
+        assert_eq!(
+            status["operatorJourneyReady"], true,
+            "qualified Native use must satisfy selected-generation acceptance: {status}"
+        );
+        assert_eq!(
+            status["presentationReceipt"]["receiptId"],
+            "native-handoff-proof"
+        );
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            before,
+            "Native acceptance must not rewrite legacy selection custody"
+        );
+        let mut stale = receipt;
+        stale["backend"]["runtimeManifestSha256"] = serde_json::json!("changed");
+        fs::write(&receipt_path, stale.to_string()).unwrap();
+        assert_eq!(
+            dashboard_ingress_status_for_path(&path)["operatorJourneyReady"],
+            false
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

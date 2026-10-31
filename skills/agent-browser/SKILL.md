@@ -22,6 +22,8 @@ Use `browser_open` with `{"serviceName":"my-app","agentName":"editor","taskName"
 
 Use `profileMode: "existing"` for an existing profile, or `"disposable"` without `profile` for temporary work. The workflow owns selection, replay and scoped closure.
 
+Native operator-journey acceptance follows private provider-qualified viewer use and exact owner confirmation. Route readiness alone does not establish it. Workstation status binds `operatorJourneyReady` and the Native presentation receipt to the selected installation; stale dashboard or target identities cannot refresh acceptance.
+
 For human assistance, call `browser_handoff({ "taskId": "<returned-task-id>" })`. Require `operatorVisible.state=ready` before giving the person its complete `data.handoffUrl`; continue with the same task ID. For `remote_view_public_origin_missing`, check reviewed `AGENT_BROWSER_PUBLIC_ORIGIN` configuration and stale MCP startup. Set it in `~/.agent-browser/.env` or `AGENT_BROWSER_ENV_FILE`; explicit process settings win. MCP connections pin startup configuration: reconnect after changes, preserving the task. Never assemble provider URLs.
 
 A standalone handoff resolves its current owned desktop and redirects to Native authentication without a Dashboard login. The public locator remains read-only. Native authentication precedes configured browser-owner recovery. Missing recovery configuration reports unavailability. Reuse the opaque URL; require native display confirmation.
