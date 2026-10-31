@@ -34,3 +34,17 @@ The assessment is read-only. It rejects missing requirements, passing subsets,
 failed or interrupted checks and stale source or dependency identities. Generated
 plans and results stay outside the repository. Existing caller-selected v1
 batches remain compatible, but do not prove selected completeness.
+
+## Reuse with current evidence
+
+Generate a new current-head plan, then pass `--reuse-receipt <prior-v2-receipt.json>`
+to the validation runner with a new output directory. It reuses only equivalent
+qualified checks from a fully successful terminal batch and executes affected
+checks normally. Legacy, incomplete and failed batches cannot establish reuse.
+
+Docs-build and Auth composition have conservative owner-defined input recipes;
+unfamiliar checks retain whole-repository scope. Dependency code and semantic
+settings remain bound. A known PNPM operational timestamp does not invalidate
+otherwise unchanged input content. Original receipt bytes remain unchanged, and
+the new receipt records executed or reused outcomes with original provenance.
+Readiness assessment remains read-only and grants no merge or runtime authority.

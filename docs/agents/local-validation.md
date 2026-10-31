@@ -105,3 +105,26 @@ it is not a sandbox, unrestricted toolchain attestation or provider acceptance.
 
 Use `--help` on the plan and assessment scripts for exact supported arguments.
 Private logs and source locators belong outside Git; inspect before sharing.
+
+## Verified reuse
+
+After a source change, generate a new current-head plan and use
+`pnpm validation:run --plan /tmp/current-plan.json --output-dir /tmp/new-results --reuse-receipt /tmp/prior-results/receipt.json`.
+Reuse applies only to generated source-bound plans and a prior fully successful
+terminal v2 batch. Caller-selected legacy batches, failed or interrupted history
+cannot supply passing reuse evidence. The current selection remains complete;
+new or invalidated checks execute normally.
+
+Owner-defined conservative input recipes may reuse the docs build or Auth
+composition after changes outside their relevant closure. Unfamiliar checks keep
+whole-repository binding. Installed dependency bytes, executable identity,
+requirements, environment and tooling remain bound. Auth revision/dirty metadata
+is provenance; actual source/dependency content determines equivalence. No caller
+can supply a smaller arbitrary scope. Only the known PNPM operational validation
+timestamp is normalized; semantic settings and executable dependency changes
+remain invalidating inputs.
+
+The original receipt is never rewritten. A new receipt distinguishes executed
+and reused checks and records original receipt digest, plan, source and check
+provenance. The read-only assessment reports outcomes and limitations. This is
+explicit local evidence reuse, not a general cache or unrestricted attestation.
