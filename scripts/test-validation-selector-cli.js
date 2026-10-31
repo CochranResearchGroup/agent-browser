@@ -110,6 +110,17 @@ try {
   assert.ok(unknownText.includes('Unresolved coverage: unmapped/new-surface.txt'));
   const preflight = reportForChangedPaths(['scripts/lib/auth-composition-preflight.mjs']);
   assert.ok(preflight.recommendations.some(check => check.command === 'pnpm test:auth-composition-preflight'));
+  const readinessTools = reportForChangedPaths(['scripts/lib/local-validation.mjs']);
+  const readinessCommands = readinessTools.recommendations.map(check => check.command);
+  assert.equal(readinessCommands.filter(command => command === 'pnpm test:repository-tooling').length, 1);
+  assert.ok(!readinessCommands.includes('node --test scripts/test-local-validation.mjs'),
+    'the repository-tooling aggregate already exercises the same readiness suite');
+  const rustIntegration = reportForChangedPaths(['cli/tests/source-validation.rs']);
+  for (const command of [
+    'scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check',
+    'scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings',
+    'scripts/ci/rust-tests.sh --compartment cli-integration',
+  ]) assert.ok(rustIntegration.recommendations.some(check => check.command === command));
   const selectorSelf = reportForChangedPaths(['scripts/test-validation-selector-cli.js']);
   assert.equal(selectorSelf.coverage.complete, true, 'the selector public regression is a known tooling input');
   const startup = reportForChangedPaths(['packages/dashboard/src/lib/dashboard-read-coordinator.ts']);

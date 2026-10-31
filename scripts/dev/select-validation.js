@@ -246,10 +246,6 @@ function selectRecommendations(files, base) {
     add('pnpm test:service-client', 'service client package, examples, or generated helpers changed');
   }
 
-  if (files.some(file => /^(?:scripts\/(?:dev\/(?:run-validation|validation-plan|assess-validation)|lib\/local-validation|test-local-validation))\.(?:js|mjs)$/.test(file))) {
-    add('node --test scripts/test-local-validation.mjs', 'local selection-to-receipt readiness changed');
-  }
-
   if (files.some(isRepositoryToolingSurface)) {
     add('pnpm test:repository-tooling', 'candidate, worktree closeout or local validation tooling changed');
   }
@@ -407,11 +403,8 @@ function isRustWorkspaceSurface(file) {
     file === 'cli/Cargo.toml' ||
     file === 'cli/build.rs' ||
     file.startsWith('cli/src/') ||
-    file.startsWith('crates/agent-browser-candidate/') ||
-    file.startsWith('crates/agent-browser-cdp/') ||
-    file.startsWith('crates/agent-browser-challenge-control/') ||
-    file.startsWith('crates/agent-browser-desktop-services/') ||
-    file.startsWith('crates/agent-browser-lease-authority/')
+    file.startsWith('cli/tests/') ||
+    file.startsWith('crates/')
   );
 }
 
@@ -634,6 +627,16 @@ function focusedRustTestCommands(files) {
       checks.push({ command, reason });
     }
   };
+
+  if (files.some(file => file.startsWith('cli/tests/'))) {
+    add('scripts/ci/rust-tests.sh --compartment cli-integration', 'CLI Rust integration-test behavior changed');
+  }
+
+  for (const name of ['agent-browser-service-model', 'agent-browser-authentication-control', 'agent-browser-challenge-visual-adapter']) {
+    if (files.some(file => file.startsWith(`crates/${name}/`))) {
+      add(`scripts/ci/cargo-safe.sh test --manifest-path Cargo.toml -p ${name} -- --test-threads=1`, `${name} library behavior changed`);
+    }
+  }
 
   if (files.some((file) => file.startsWith('crates/agent-browser-candidate/'))) {
     add(

@@ -92,7 +92,7 @@ Run the generated plan using the existing
 `pnpm validation:run --plan /tmp/new-plan.json --output-dir /tmp/new-results`.
 Generated plans and receipts must remain outside the source tree. Their new
 source-bound schema identifies selected requirements, repository and installed
-dependency bytes, command/executable identity, declared Node environment and
+dependency bytes, command/executable identity, opaque effective check environment and
 selected Auth preflight source metadata. The legacy `{checks}` batch remains
 supported with its original v1 receipt, but is not selected-completeness proof.
 
@@ -130,3 +130,24 @@ The original receipt is never rewritten. A new receipt distinguishes executed
 and reused checks and records original receipt digest, plan, source and check
 provenance. The read-only assessment reports outcomes and limitations. This is
 explicit local evidence reuse, not a general cache or unrestricted attestation.
+
+## Environment and Rust coverage
+
+Set check configuration before generating the plan. Generated evidence hashes the
+complete effective environment passed to checks without recording raw values;
+changed build inputs such as Next app-path configuration invalidate assessment
+and reuse. Shell and package-lifecycle invocation metadata is removed or
+canonicalized before both fingerprinting and dispatch. `PWD` and `INIT_CWD` use
+the checked repository root. Legacy caller-selected v1 execution stays unchanged.
+Use the same launcher context for plan, run and assessment; the public pnpm
+wrappers are supported without lifecycle-event differences changing identity.
+
+Recognized Rust workspace source and CLI integration-test changes require
+cargo-safe format/strict Clippy and the applicable existing package or compartment
+tests. A passing whitespace check cannot qualify a known Rust slice. Tooling
+changes run the local-readiness suite through the repository-tooling aggregate
+once, preserving its coverage without a duplicate direct invocation.
+
+Plans predating effective-environment binding must be regenerated. Older v2
+results lacking the new input identity cannot qualify these checks by reuse; the
+runner executes the affected checks under a fresh plan instead.
