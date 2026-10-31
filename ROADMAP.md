@@ -1,6 +1,6 @@
 # Roadmap
 
-[P299 local validation](docs/dev/plans/0299-2026-10-31-local-validation-502.md), spec502 and all four children CLOSED through PR509/main9d1a18522; actual source readiness and13/13 verified reuse pass. Final single review awaits the operator-supplied boundary. No hosted CI or runtime effects.
+[P299 local validation](docs/dev/plans/0299-2026-10-31-local-validation-502.md), spec502 and all four children CLOSED through PR509/main9d1a18522; initial source readiness/reuse pass. The single final review and bounded TDD pass are complete through PR510/mainc738fb694; two Spec blockers and one redundant-suite finding are resolved. No hosted CI or runtime effects.
 
 [P296 dependable browser journeys and narrated teaching](docs/dev/plans/0296-2026-10-26-browser-journeys-teaching.md), #466, PL-RECIPES, has merged its approved source graph through PR480 and qualified the isolated development candidate. Narrated acceptance #478 remains deferred. Preserve standalone Auth P295 and historical Stage1 #453/draft454. See [current execution](RUNBOOK.md).
 
