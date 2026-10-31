@@ -63,3 +63,53 @@ not repaired by this work. Preserve peer PR508's inventory/access UI changes.
 No production replacement or receipt backfill has occurred in this source
 checkpoint; the installed reproduction remains red until deployed repair and
 fresh authenticated Native acceptance. Hosted CI remains excluded by policy.
+
+
+## Integrated and installed acceptance
+
+PR513 merged at8277ddba1. The production-shaped release build sealed source
+46fda93e3 as binary5a9f1250acef and completed in22m26s. The source checkpoint's
+installer fixture subsequently passed and retired its two exact owned runtime
+hosts with zero residue. No hosted CI ran.
+
+Before installation, the fresh canonical tree exactly matched the sealed
+source tree and the source commit was an ancestor of origin/main. The raw
+input fingerprints differed only on the `.git/HEAD` symbolic reference changing
+from the repair branch to main; all608 other recorded inputs were identical.
+This reviewed provenance-only difference is recorded explicitly in the private
+equivalence receipt under policy0051. Original source labels and seal bytes were
+retained. The installer's sealed-document dry run independently accepted reuse
+and reported no conflicting operation or integrity precondition.
+
+Preserve transaction upgrade-057ed10f-b150-4b2b-89c7-2a494e63d4b7 accepted at
+revision13 in36.629seconds. Selected generation
+0.28.0-5a9f1250acef-c3a6ab67b776 matches the sealed binary digest. Fresh doctor
+passes. This is an ordinary workstation update, not a formal release.
+
+Before fresh viewer use, operatorJourneyReady was false. A disposable task then
+passed clean-context Cooper authentication, Native frame delivery and a single
+Native click verified through the addressed browser snapshot. Reopening the
+same opaque handoff preserved the exact task/browser/tab, and subsequent
+automation changed delivered synthetic pixels. Native acceptance was recorded
+automatically for the exact new handoff and selected generation. Fresh status
+and the original generation-bound readiness assertion now pass with
+operatorJourneyReady true and a ready native presentation receipt.
+
+The first live harness confirmed Native input and advanced the same task to
+its automation continuation page, then failed writing into an absent receipt
+directory. The directory was created, original task and typed readiness
+were inspected, and the remaining reconnect/continuation evidence was captured
+without replaying the delivered Native click. Preserve that first log alongside
+the completed continuation receipt; do not treat its artifact error as a product
+failure or reconstruct missing pixel counts.
+
+The disposable browser closed through its exact task. A fresh OS read proves
+the original process identity absent and no matching disposable Chrome residue.
+Readiness remains true after closure, as historical selected-install acceptance.
+Canonical production skill guidance is synchronized. Remaining doctor advisories
+are the separate idle profile-lease principal binding and the older workspace
+candidate; neither blocks the qualified disposable workflow.
+
+Detailed receipts, logs and curated qualification are user-scoped under the
+private acceptance directory for this work item. No auth cookies, passwords,
+provider routes or tenant state were copied into this repository.
