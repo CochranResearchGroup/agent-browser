@@ -10,6 +10,8 @@ function fixture(t){
  const root=mkdtempSync(join(tmpdir(),'local-validation-505-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
  const repo=join(root,'repo'),bin=join(root,'bin');mkdirSync(repo);mkdirSync(bin);
  const pnpm=join(bin,'pnpm');writeFileSync(pnpm,`#!/usr/bin/env node
+if(process.env.FIXTURE_CALLS)require('node:fs').appendFileSync(process.env.FIXTURE_CALLS,process.argv.slice(2).join(' ')+'\\n');
+if(process.env.FIXTURE_MODE==='touch-pnpm'){const fs=require('node:fs'),path='node_modules/.pnpm-workspace-state-v1.json',data=JSON.parse(fs.readFileSync(path,'utf8'));data.lastValidatedTimestamp++;fs.writeFileSync(path,JSON.stringify(data));}
 if(process.env.FIXTURE_MODE==='fail-docs' && process.argv.includes('docs'))process.exit(7);
 if(process.env.FIXTURE_MODE==='mutate')require('node:fs').writeFileSync('docs/change.md','# Modified during check');
 if(process.env.FIXTURE_MODE==='timeout')setInterval(()=>{},1000);
@@ -86,7 +88,7 @@ test('Auth selected prerequisites and changed external source bytes gate readine
  const sdk=f.env.AUTH_RECEIPTS_SDK_SOURCE;delete f.env.AUTH_RECEIPTS_SDK_SOURCE;
  const missing=f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]);assert.equal(missing.status,1);assert.match(missing.stderr,/AUTH_RECEIPTS_SDK_SOURCE/);assert.ok(!missing.stderr.includes(f.root));
  f.env.AUTH_RECEIPTS_SDK_SOURCE=sdk;assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);
- assert.ok(f.plan().checks.every(c=>c.inputs.auth.sources.service.contentDigest));
+ assert.ok(f.plan().checks.filter(c=>c.args.includes('test:owner-auth-source')).every(c=>c.inputs.auth.sources.service.contentDigest));
  assert.ok(!JSON.stringify(f.plan()).includes(f.root));
  assert.equal(f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]).status,0);
  writeFileSync(join(sdk,'src','auth-client.mjs'),'// different actual SDK bytes\n');
@@ -124,4 +126,102 @@ test('ignored installed dependency bytes remain relevant even without a tracked 
 test('a historical head cannot omit later changes while qualifying the current checkout',t=>{
  const f=fixture(t);const result=f.run('validation-plan.mjs',['--base',f.base,'--head',f.base,'--output',f.planPath]);
  assert.equal(result.status,1);assert.match(result.stderr,/validation_head_not_current/);
+});
+
+
+test('an unrelated source change reuses an equivalent docs check with immutable history',t=>{
+ const f=fixture(t);f.env.FIXTURE_CALLS=join(f.root,'calls.log');
+ mkdirSync(join(f.repo,'docs','src','app','sample'),{recursive:true});writeFileSync(join(f.repo,'docs','src','app','sample','page.mdx'),'# Docs\n');
+ assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);
+ assert.equal(f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]).status,0);
+ const previousPath=join(f.output,'receipt.json'),previousBytes=readFileSync(previousPath,'utf8');
+ writeFileSync(join(f.repo,'README.md'),'# Unrelated repository introduction\n');f.git(['add','.']);f.git(['commit','-m','unrelated introduction']);
+ const nextPlan=join(f.root,'next-plan.json'),nextOutput=join(f.root,'next-results');
+ assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',nextPlan]).status,0);
+ const run=f.run('run-validation.js',['--plan',nextPlan,'--output-dir',nextOutput,'--reuse-receipt',previousPath]);assert.equal(run.status,0,run.stderr);
+ const receipt=JSON.parse(readFileSync(join(nextOutput,'receipt.json'),'utf8'));
+ const docs=receipt.checks.find(check=>check.command==='pnpm'&&check.args.join(' ')==='--dir docs build');
+ assert.equal(docs.outcome,'reused');assert.ok(docs.reusedFrom.receiptDigest);assert.equal(docs.reusedFrom.source.head,JSON.parse(previousBytes).source.head);
+ assert.equal(readFileSync(join(f.root,'calls.log'),'utf8').split('\n').filter(line=>line==='--dir docs build').length,1);
+ assert.equal(readFileSync(previousPath,'utf8'),previousBytes);
+ const assessed=f.run('assess-validation.mjs',['--plan',nextPlan,'--receipt',join(nextOutput,'receipt.json'),'--json']);assert.equal(assessed.status,0,assessed.stderr);
+ const summary=JSON.parse(assessed.stdout);assert.equal(summary.ready,true);assert.ok(summary.checks.some(check=>check.id===docs.id&&check.outcome==='reused'));
+});
+
+
+test('changed relevant docs bytes execute again while old receipts remain unchanged',t=>{
+ const f=fixture(t);f.env.FIXTURE_CALLS=join(f.root,'calls.log');
+ const file=join(f.repo,'docs','src','app','sample','page.mdx');mkdirSync(join(file,'..'),{recursive:true});writeFileSync(file,'# First docs\n');
+ assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);assert.equal(f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]).status,0);
+ const prior=join(f.output,'receipt.json'),bytes=readFileSync(prior,'utf8');writeFileSync(file,'# Changed docs\n');
+ const plan=join(f.root,'changed-plan.json'),output=join(f.root,'changed-results');assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',plan]).status,0);
+ assert.equal(f.run('run-validation.js',['--plan',plan,'--output-dir',output,'--reuse-receipt',prior]).status,0);
+ const receipt=JSON.parse(readFileSync(join(output,'receipt.json'),'utf8'));assert.equal(receipt.checks.find(check=>check.args.join(' ')==='--dir docs build').outcome,'executed');
+ assert.equal(readFileSync(join(f.root,'calls.log'),'utf8').split('\n').filter(line=>line==='--dir docs build').length,2);assert.equal(readFileSync(prior,'utf8'),bytes);
+});
+
+test('Auth byte identity permits documentation-only source revisions but rejects changed factor source',t=>{
+ const f=fixture(t);authSources(f);
+ assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);assert.equal(f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]).status,0);
+ const prior=join(f.output,'receipt.json'),bytes=readFileSync(prior,'utf8'),service=f.env.AUTH_RECEIPTS_SOURCE;
+ writeFileSync(join(service,'README.md'),'# Source-only documentation revision\n');execFileSync('git',['add','.'],{cwd:service,stdio:'pipe'});execFileSync('git',['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-qm','documentation only'],{cwd:service,stdio:'pipe'});
+ const next=join(f.root,'auth-next.json'),output=join(f.root,'auth-next-results');assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',next]).status,0);
+ const nextPlan=JSON.parse(readFileSync(next,'utf8'));assert.notEqual(nextPlan.authProvenance.sources.service.revision,f.plan().authProvenance.sources.service.revision);
+ assert.equal(f.run('run-validation.js',['--plan',next,'--output-dir',output,'--reuse-receipt',prior]).status,0);
+ const reused=JSON.parse(readFileSync(join(output,'receipt.json'),'utf8'));assert.equal(reused.checks.find(check=>check.args.includes('test:owner-auth-source')).outcome,'reused');
+ writeFileSync(join(service,'src','native-browser-receiver.mjs'),'// changed source input\n');
+ const changed=join(f.root,'auth-changed.json'),changedOutput=join(f.root,'auth-changed-results');assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',changed]).status,0);
+ assert.equal(f.run('run-validation.js',['--plan',changed,'--output-dir',changedOutput,'--reuse-receipt',join(output,'receipt.json')]).status,0);
+ const ran=JSON.parse(readFileSync(join(changedOutput,'receipt.json'),'utf8'));assert.equal(ran.checks.find(check=>check.args.includes('test:owner-auth-source')).outcome,'executed');assert.equal(readFileSync(prior,'utf8'),bytes);
+ assert.equal(f.run('assess-validation.mjs',['--plan',changed,'--receipt',join(changedOutput,'receipt.json'),'--json']).status,0);
+});
+
+test('failed or interrupted batches and legacy evidence cannot supply reuse',t=>{
+ const f=fixture(t);assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);assert.equal(f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]).status,0);
+ const original=readFileSync(join(f.output,'receipt.json'),'utf8');
+ for(const state of ['failure','running','pending','legacy']){
+  const candidate=JSON.parse(original);if(state==='legacy')candidate.schemaVersion='agent-browser.local-validation.v1';else candidate.state=state;
+  const path=join(f.root,`${state}.json`),output=join(f.root,`${state}-results`);writeFileSync(path,JSON.stringify(candidate));
+  const run=f.run('run-validation.js',['--plan',f.planPath,'--output-dir',output,'--reuse-receipt',path]);assert.equal(run.status,1);assert.match(run.stderr,/validation_reuse_receipt_unqualified/);assert.equal(existsSync(output),false);
+ }
+ assert.equal(readFileSync(join(f.output,'receipt.json'),'utf8'),original);
+});
+
+test('changed timeout requirements and installed dependency bytes invalidate reuse',t=>{
+ const f=fixture(t);const dependency=join(f.repo,'node_modules','synthetic','index.js');mkdirSync(join(dependency,'..'),{recursive:true});writeFileSync(dependency,'// dependency first\n');
+ assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);assert.equal(f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]).status,0);
+ const next=join(f.root,'new-budget.json'),output=join(f.root,'new-budget-results');assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--timeout-ms','1000','--output',next]).status,0);
+ assert.equal(f.run('run-validation.js',['--plan',next,'--output-dir',output,'--reuse-receipt',join(f.output,'receipt.json')]).status,0);
+ assert.ok(JSON.parse(readFileSync(join(output,'receipt.json'),'utf8')).checks.every(check=>check.outcome==='executed'));
+ writeFileSync(dependency,'// dependency changed\n');const after=join(f.root,'new-dependency.json'),afterOutput=join(f.root,'new-dependency-results');
+ assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--timeout-ms','1000','--output',after]).status,0);assert.equal(f.run('run-validation.js',['--plan',after,'--output-dir',afterOutput,'--reuse-receipt',join(output,'receipt.json')]).status,0);
+ assert.ok(JSON.parse(readFileSync(join(afterOutput,'receipt.json'),'utf8')).checks.every(check=>check.outcome==='executed'));
+});
+
+
+test('PNPM operational timestamp updates preserve qualification but settings remain bound',t=>{
+ const f=fixture(t),metadata=join(f.repo,'node_modules','.pnpm-workspace-state-v1.json');mkdirSync(join(metadata,'..'),{recursive:true});
+ writeFileSync(metadata,JSON.stringify({lastValidatedTimestamp:1,settings:{nodeLinker:'isolated',storeDir:'synthetic-store'}}));f.env.FIXTURE_MODE='touch-pnpm';
+ assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);
+ const ran=f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]);assert.equal(ran.status,0,ran.stderr);assert.equal(f.receipt().sourceUnchanged,true);
+ assert.ok(JSON.parse(readFileSync(metadata,'utf8')).lastValidatedTimestamp>1);
+ const prior=join(f.output,'receipt.json'),priorBytes=readFileSync(prior,'utf8'),next=join(f.root,'pnpm-next.json'),output=join(f.root,'pnpm-next-results');
+ assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',next]).status,0);assert.equal(f.run('run-validation.js',['--plan',next,'--output-dir',output,'--reuse-receipt',prior]).status,0);
+ assert.ok(JSON.parse(readFileSync(join(output,'receipt.json'),'utf8')).checks.every(check=>check.outcome==='reused'));
+ const semantic=JSON.parse(readFileSync(metadata,'utf8'));semantic.settings.nodeLinker='hoisted';writeFileSync(metadata,JSON.stringify(semantic));
+ const changed=join(f.root,'pnpm-changed.json'),changedOutput=join(f.root,'pnpm-changed-results');assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',changed]).status,0);
+ assert.equal(f.run('run-validation.js',['--plan',changed,'--output-dir',changedOutput,'--reuse-receipt',join(output,'receipt.json')]).status,0);
+ assert.ok(JSON.parse(readFileSync(join(changedOutput,'receipt.json'),'utf8')).checks.every(check=>check.outcome==='executed'));
+ assert.equal(readFileSync(prior,'utf8'),priorBytes);
+});
+
+
+test('reuse requires complete source provenance and unambiguous prior check custody',t=>{
+ const f=fixture(t);assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);assert.equal(f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]).status,0);
+ const bytes=readFileSync(join(f.output,'receipt.json'),'utf8');
+ for(const kind of ['source','plan','duplicate']){
+  const prior=JSON.parse(bytes);if(kind==='source')delete prior.source;else if(kind==='plan')delete prior.planDigest;else prior.checks.push(prior.checks[0]);
+  const file=join(f.root,`${kind}-prior.json`),output=join(f.root,`${kind}-output`);writeFileSync(file,JSON.stringify(prior));
+  const ran=f.run('run-validation.js',['--plan',f.planPath,'--output-dir',output,'--reuse-receipt',file]);assert.equal(ran.status,1,kind);assert.match(ran.stderr,/validation_reuse_receipt_unqualified/);assert.equal(existsSync(output),false);
+ }
 });

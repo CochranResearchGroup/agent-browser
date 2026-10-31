@@ -25,10 +25,24 @@ function executableIdentity(command){
  for(const path of candidates){try{const actual=realpathSync(path),stat=lstatSync(actual);if(stat.isFile()&&(stat.mode&0o111))return {digest:hash(readFileSync(actual)),mode:stat.mode&0o111};}catch{}}
  return {missing:true};
 }
-function repositorySnapshot(){
+const rootProse=new Set(['README.md','ROADMAP.md','RUNBOOK.md','CONTEXT.md']);
+/** Owner recipes only remove inputs known not to execute in these checked flows.
+ * Unknown commands retain the full repository closure. No caller scope override. */
+function recipeFor(check){
+ const command=[check.command,...check.args].join(' ');
+ if(command==='pnpm --dir docs build')return 'docs-build-without-root-prose';
+ if(/^pnpm test:(?:owner-auth-source|standalone-auth-bootstrap|auth-composition-preflight)$/.test(command))return 'auth-composition-without-documentation';
+ return 'tracked-and-unignored-repository';
+}
+function isRecipeInput(path,recipe){
+ if(recipe==='docs-build-without-root-prose')return !rootProse.has(path);
+ if(recipe==='auth-composition-without-documentation')return !rootProse.has(path)&&!path.startsWith('docs/');
+ return true;
+}
+function repositorySnapshot(recipe='tracked-and-unignored-repository'){
  const files=execFileSync('git',['-c','core.fsmonitor=false','ls-files','--cached','--others','--exclude-standard','-z'],{encoding:'utf8',env:gitEnvironment()}).split('\0').filter(Boolean).sort();
  const digest=createHash('sha256');
- for(const path of [...new Set(files)]){
+ for(const path of [...new Set(files)].filter(path=>isRecipeInput(path,recipe))){
   let stat;try{stat=lstatSync(path);}catch(error){if(error.code==='ENOENT'){digest.update(stable([path,'missing']));continue;}throw error;}
   if(stat.isDirectory())fail('validation_submodule_input_unsupported');
   if(stat.isSymbolicLink()){
@@ -38,13 +52,14 @@ function repositorySnapshot(){
   if(!stat.isFile()&&!stat.isSymbolicLink())fail('validation_input_type_unsupported');
   digest.update(stable([path,stat.mode&0o111,stat.isSymbolicLink()?lstatSync(realpathSync(path)).mode&0o111:null,hash(readFileSync(path))]));
  }
- return {scope:'tracked-and-unignored-repository',digest:digest.digest('hex')};
+ return {scope:recipe,digest:digest.digest('hex')};
 }
 /** Hash present installed dependency trees, following content links with cycle and
  * resource bounds. Ignored build/output trees are deliberately not inputs. */
 function installedDependencies(){
  const files=execFileSync('git',['ls-files','--cached','--others','--exclude-standard','-z'],{encoding:'utf8',env:gitEnvironment()}).split('\0').filter(Boolean);
  const roots=[...new Set(['node_modules',...files.filter(path=>path.endsWith('/package.json')).map(path=>join(path,'..','node_modules'))])].sort().filter(path=>existsSync(path));
+ const operationalMetadata=new Set(roots.map(root=>join(root,'.pnpm-workspace-state-v1.json')).filter(path=>existsSync(path)).map(path=>realpathSync(path)));
  const cache=new Map(),active=new Set();let entries=0,bytes=0;
  const visit=(path,depth=0)=>{
   if(depth>64)fail('validation_dependency_depth_exceeded');
@@ -54,7 +69,16 @@ function installedDependencies(){
   if(stat.isDirectory())digest=hash(stable(readdirSync(actual).sort().map(name=>[name,visit(join(actual,name),depth+1)])));
   else if(stat.isFile()){
    bytes+=stat.size;if(bytes>2147483648||stat.size>268435456)fail('validation_dependency_byte_limit_exceeded');
-   digest=hash(stable([stat.mode&0o111,hash(readFileSync(actual))]));
+   let contents=readFileSync(actual);
+   if(operationalMetadata.has(actual)){
+    let metadata;try{metadata=JSON.parse(contents);}catch{fail('validation_dependency_metadata_invalid');}
+    // PNPM refreshes this operational clock during checks. All semantic fields
+    // remain bound; malformed or nonnumeric clock values are not silently erased.
+    if(metadata&&typeof metadata==='object'&&!Array.isArray(metadata)&&Number.isFinite(metadata.lastValidatedTimestamp)){
+     delete metadata.lastValidatedTimestamp;contents=Buffer.from(stable(metadata));
+    }
+   }
+   digest=hash(stable([stat.mode&0o111,hash(contents)]));
   }else fail('validation_dependency_type_unsupported');
   active.delete(actual);cache.set(actual,digest);return digest;
  };
@@ -80,9 +104,11 @@ export async function createValidationPlan({base,head='HEAD',timeoutMs}){
  const coverage={complete:selection.coverage.complete,gaps:[...selection.coverage.gaps,...checks.filter(check=>check.hold).map(check=>({checkId:check.id,reason:check.hold}))]};coverage.complete=coverage.complete&&coverage.gaps.length===0;
  let auth;
  if(checks.some(check=>check.args.some(arg=>/^(?:test:owner-auth-source|test:standalone-auth-bootstrap)$/.test(arg))))auth=await preflightAuthComposition({source:process.env.AUTH_RECEIPTS_SOURCE,sdkSource:process.env.AUTH_RECEIPTS_SDK_SOURCE,parentSource:process.env.RECEIPTS_SOURCE});
- const repository=repositorySnapshot(),dependencies=installedDependencies(),environment=environmentIdentity(),toolingDigest=toolingIdentity();
- return {schemaVersion:PLAN_SCHEMA,base,head,...(timeoutMs===undefined?{}:{timeoutMs}),source:{head:git(['rev-parse','HEAD']),dirty:git(['status','--porcelain'])!==''},coverage,environment,toolingDigest,checks:checks.map(check=>{
-  const inputs={repository,dependencies,environment,toolingDigest,requirement:{command:check.command,args:check.args,timeoutMs:timeoutMs??null},executable:executableIdentity(check.command),...(auth?{auth}: {})};
+ const repositories=new Map(),dependencies=installedDependencies(),environment=environmentIdentity(),toolingDigest=toolingIdentity();
+ return {schemaVersion:PLAN_SCHEMA,base,head,...(timeoutMs===undefined?{}:{timeoutMs}),source:{head:git(['rev-parse','HEAD']),dirty:git(['status','--porcelain'])!==''},coverage,environment,toolingDigest,...(auth?{authProvenance:auth}:{}),checks:checks.map(check=>{
+  const recipe=recipeFor(check);if(!repositories.has(recipe))repositories.set(recipe,repositorySnapshot(recipe));
+  const authInput=recipe==='auth-composition-without-documentation'&&auth?{environment:auth.environment,sources:Object.fromEntries(Object.entries(auth.sources).map(([role,value])=>[role,{contentDigest:value.contentDigest,dependencyDigest:value.dependencyDigest}]))}:null;
+  const inputs={repository:repositories.get(recipe),dependencies,environment,toolingDigest,requirement:{command:check.command,args:check.args,timeoutMs:timeoutMs??null},executable:executableIdentity(check.command),...(authInput?{auth:authInput}: {})};
   return {...check,...(timeoutMs===undefined?{}:{timeoutMs}),inputs,inputDigest:hash(stable(inputs))};
  })};
 }
@@ -95,12 +121,25 @@ export async function verifyValidationPlan(plan){
  return current;
 }
 /** Execute trusted selected direct commands; assessment never dispatches them. */
-export async function runBoundValidation(plan,output){
- await verifyValidationPlan(plan);assertOutsideSource(output);mkdirSync(output,{mode:0o700});
+export async function runBoundValidation(plan,output,{reuseReceiptText}={}){
+ await verifyValidationPlan(plan);
+ let previous,previousDigest;
+ if(reuseReceiptText!==undefined){
+  try{previous=JSON.parse(reuseReceiptText);}catch{fail('validation_reuse_receipt_invalid');}
+  if(!qualifiedReuseReceipt(previous))fail('validation_reuse_receipt_unqualified');
+  previousDigest=hash(reuseReceiptText);
+ }
+ assertOutsideSource(output);mkdirSync(output,{mode:0o700});
  const receipt={schemaVersion:RECEIPT_SCHEMA,planDigest:hash(stable(plan)),source:plan.source,environment:plan.environment,startedAt:new Date().toISOString(),state:'running',checks:plan.checks.map((check,index)=>({...check,state:'pending',log:`${index+1}-${check.id}.log`}))};
  const save=()=>{writeFileSync(join(output,'receipt.tmp'),`${JSON.stringify(receipt,null,2)}\n`,{mode:0o600});renameSync(join(output,'receipt.tmp'),join(output,'receipt.json'));};save();
  for(const check of receipt.checks){
-  check.state='running';check.startedAt=new Date().toISOString();save();const log=openSync(join(output,check.log),'wx',0o600),started=performance.now();let result;
+  const candidates=previous?.checks.filter(candidate=>candidate.id===check.id)??[];
+  if(candidates.length===1&&equivalentSuccessfulCheck(candidates[0],check)){
+   const candidate=candidates[0],now=new Date().toISOString();
+   Object.assign(check,{state:'success',outcome:'reused',startedAt:now,finishedAt:now,durationMs:0,exitCode:0,signal:null,errorCode:null,reusedFrom:{receiptDigest:previousDigest,source:previous.source,planDigest:previous.planDigest,checkId:candidate.id,inputDigest:candidate.inputDigest,finishedAt:candidate.finishedAt}});
+   writeFileSync(join(output,check.log),`${JSON.stringify({outcome:'reused',provenance:check.reusedFrom})}\n`,{flag:'wx',mode:0o600});save();console.log(`${check.id}: reused`);continue;
+  }
+  check.outcome='executed';check.state='running';check.startedAt=new Date().toISOString();save();const log=openSync(join(output,check.log),'wx',0o600),started=performance.now();let result;
   try{result=spawnSync(check.command,check.args,{shell:false,stdio:['ignore',log,log],timeout:check.timeoutMs,env:gitEnvironment()});}finally{closeSync(log);}
   check.durationMs=Math.round(performance.now()-started);check.finishedAt=new Date().toISOString();check.exitCode=result.status;check.signal=result.signal;check.errorCode=result.error?.code??null;check.state=result.status===0&&!result.signal&&!result.error?'success':'failure';save();console.log(`${check.id}: ${check.state}`);
  }
@@ -120,9 +159,30 @@ export async function assessValidation(plan,receipt){
  for(const expected of current?.checks??plan?.checks??[]){
   const matches=Array.isArray(receipt?.checks)?receipt.checks.filter(check=>check.id===expected.id):[];
   const actual=matches[0];let status='success';
-  if(matches.length!==1||!actual||actual.state!=='success'||actual.exitCode!==0||actual.signal||actual.errorCode||!actual.finishedAt||actual.inputDigest!==expected.inputDigest||stable(actual.inputs)!==stable(expected.inputs)||actual.timeoutMs!==expected.timeoutMs||actual.command!==expected.command||stable(actual.args)!==stable(expected.args)){problems.push(`validation_check_unqualified:${expected.id}`);status='unqualified';}
-  checks.push({id:expected.id,state:status});
+  if(matches.length!==1||!equivalentSuccessfulCheck(actual,expected)){problems.push(`validation_check_unqualified:${expected.id}`);status='unqualified';}
+  checks.push({id:expected.id,state:status,outcome:actual?.outcome??'executed',...(actual?.reusedFrom?{reusedFrom:actual.reusedFrom}:{})});
  }
  if(receipt?.checks?.length!==plan?.checks?.length)problems.push('validation_receipt_check_set_mismatch');
- return {schemaVersion:'agent-browser.local-validation-readiness.v1',ready:problems.length===0,source:current?.source??plan?.source,checks,problems:[...new Set(problems)]};
+ return {schemaVersion:'agent-browser.local-validation-readiness.v1',ready:problems.length===0,source:current?.source??plan?.source,checks,coverage:current?.coverage??plan?.coverage,environment:current?.environment??plan?.environment,limitations:['cooperative-local-input-closure','not-installed-or-provider-acceptance'],problems:[...new Set(problems)]};
+}
+
+function equivalentSuccessfulCheck(actual,expected){
+ if(!actual||actual.state!=='success'||actual.exitCode!==0||actual.signal||actual.errorCode||!actual.finishedAt||actual.inputDigest!==expected.inputDigest||stable(actual.inputs)!==stable(expected.inputs)||actual.timeoutMs!==expected.timeoutMs||actual.command!==expected.command||stable(actual.args)!==stable(expected.args))return false;
+ if(actual.outcome!==undefined&&!['executed','reused'].includes(actual.outcome))return false;
+ if(actual.outcome==='reused'){
+  const from=actual.reusedFrom;
+  if(!from||!/^[a-f0-9]{64}$/.test(from.receiptDigest)||!/^[a-f0-9]{64}$/.test(from.planDigest)||from.checkId!==expected.id||from.inputDigest!==expected.inputDigest||!from.finishedAt||!from.source?.head)return false;
+ }
+ return true;
+}
+
+function qualifiedReuseReceipt(receipt){
+ if(receipt?.schemaVersion!==RECEIPT_SCHEMA||receipt.state!=='success'||receipt.sourceUnchanged!==true||!receipt.finishedAt||!Array.isArray(receipt.checks)||!receipt.checks.length)return false;
+ if(!/^[a-f0-9]{40,64}$/.test(receipt.source?.head)||typeof receipt.source?.dirty!=='boolean'||!/^[a-f0-9]{64}$/.test(receipt.planDigest))return false;
+ const ids=new Set();
+ for(const check of receipt.checks){
+  if(!/^check-[a-f0-9]{16}$/.test(check.id)||ids.has(check.id)||!check.inputs||hash(stable(check.inputs))!==check.inputDigest||!equivalentSuccessfulCheck(check,check))return false;
+  ids.add(check.id);
+ }
+ return true;
 }
