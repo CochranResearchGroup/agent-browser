@@ -162,8 +162,7 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
               </section>;
             })}
             {search && (browserCount > 0 || nativeWindows.length > 0) && !groups.length && !nativeGroups.length && <p role="status" className="native-workspace-empty">No matching browsers or tabs</p>}
-            {!groups.length && !nativeGroups.length && !search && <p className="native-workspace-empty">{loading ? "Loading browsers…" : unverifiedTabs || nativeIssue || error ? "Browser presence could not be verified. Refresh browsers to check again." : "No active browsers"}</p>}
-            {nativeIssue && <p role="status" className="native-workspace-empty">{nativeIssue}</p>}
+            {!groups.length && !nativeGroups.length && !search && !nativeIssue && <p className="native-workspace-empty">{loading ? "Loading browsers…" : unverifiedTabs || error ? "Browser presence could not be verified. Refresh browsers to check again." : "No active browsers"}</p>}
           </nav>
         </>}
         {!collapsed && <div role="separator" tabIndex={0} aria-label="Browser rail width" aria-orientation="vertical" aria-valuemin={180} aria-valuemax={400} aria-valuenow={width} className="native-workspace-resize" onKeyDown={event => {
@@ -173,6 +172,7 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
       </aside>
       <section className="native-workspace-main" aria-label="Browser workspace">
         <header className="native-workspace-toolbar"><img src="/branding/agent-browser-logo.png" alt="" width={28} height={28} className="shrink-0" /><span>Agent Browser</span>{runtimeEnvironment === "development" && <span data-runtime-environment={runtimeEnvironment}>Development</span>}<span className="native-workspace-user">{userLabel}</span><SubsystemHealthIndicator inventoryIssue={error} nativeIssue={nativeIssue} loading={loading} /><a className="native-workspace-diagnostics" href={diagnosticsHref} aria-label="Diagnostics" title="Diagnostics"><Wrench size={14} /></a><button type="button" aria-label="Refresh browsers" title="Refresh browsers" onClick={() => void onRefresh()}><RefreshCw size={14} /></button><button type="button" aria-label="Sign out" title="Sign out" onClick={onLogout}><LogOut size={14} /></button></header>
+        {nativeIssue && <div role="status" className="native-workspace-error">{nativeIssue}</div>}
         {closeRefreshError && <div role="alert" className="native-workspace-error">{closeRefreshError}</div>}
         {error && <div role="alert" className="native-workspace-error">{error} <button type="button" onClick={() => void onRefresh()}>Retry</button></div>}
         <div className="native-workspace-desktop">{selection.tabId && closedTabs.has(selection.tabId) ? <p role="status" className="native-task-message">The selected tab was closed. Select another tab to continue.</p> : children}</div>

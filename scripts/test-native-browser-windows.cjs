@@ -11,6 +11,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
   await buildWorkspaceViewportFixture(root, path.join(root, 'scripts/fixtures/native-browser-windows.tsx'), artifacts);
   let generation = 7;
   let unavailable = false;
+  let failure = null;
   const effects = [];
   const serviceRequests = [];
   let releaseFirst;
@@ -20,6 +21,8 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     if (url.pathname.startsWith('/api/service')) serviceRequests.push(url.pathname);
     if (url.pathname === '/api/v1/desktops/browser-windows') {
       res.setHeader('Content-Type', 'application/json');
+      if (failure === 'html') { res.setHeader('Content-Type', 'text/html'); return res.end('<html>Sign in</html>'); }
+      if (failure) { res.statusCode = failure; return res.end('{}'); }
       if (unavailable) { res.statusCode = 503; return res.end('{}'); }
       return res.end(JSON.stringify({ schemaVersion: 1, source: 'remote-view-native-windows', observedAtMs: Date.now(), observationAgeMs: 0, unverifiedDesktopCount: 0,
         desktops: [{ desktopId: '11111111-1111-4111-8111-111111111111', slot: 2, generation, displayName: 'Research', application: 'research',
@@ -69,6 +72,32 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.getByRole('button', { name: 'Alpha browser', exact: true }).click();
     await page.locator('[data-native-window-state="opened"]').waitFor();
     assert.deepEqual(effects[2], { generation: 8, windowId: 31 });
+    const selectedUrl = page.url();
+    for (const [status, message] of [
+      [401, 'Sign in to Remote View to load browser windows. Your dashboard sign-in does not sign you in to Remote View. After signing in, refresh browsers.'],
+      [403, 'Remote View denied access to browser windows. Check your account permissions before refreshing browsers.'],
+      ['html', 'Remote View returned a web page instead of browser windows. Check Remote View sign-in and access, then refresh browsers.'],
+    ]) {
+      failure = status;
+      await page.getByRole('button', { name: 'Refresh browsers', exact: true }).click();
+      await page.getByText(message, { exact: true }).waitFor({ timeout: 3000 });
+      assert.equal(await page.getByText('Browser presence could not be verified. Refresh browsers to check again.', { exact: true }).count(), 0);
+      assert.equal(await page.locator('iframe').count(), 0);
+      if (status === 401) {
+        await page.getByRole('button', { name: 'Collapse browser rail', exact: true }).click();
+        assert.equal(await page.getByRole('status').filter({ hasText: message }).isVisible(), true, 'sign-in guidance remains visible with a collapsed rail');
+        await page.getByRole('button', { name: 'Show browser rail', exact: true }).click();
+      }
+      assert.equal(page.url(), selectedUrl, 'access failures must preserve requested selection');
+    }
+    await page.route('**/api/v1/desktops/browser-windows?*', route => route.abort('failed'));
+    await page.getByRole('button', { name: 'Refresh browsers', exact: true }).click();
+    await page.getByText('Could not load Remote View browser windows. Check Remote View sign-in and access, or the service connection, then refresh browsers.', { exact: true }).waitFor({ timeout: 3000 });
+    await page.unroute('**/api/v1/desktops/browser-windows?*');
+    failure = null;
+    await page.getByRole('button', { name: 'Refresh browsers', exact: true }).click();
+    await page.getByRole('button', { name: 'Alpha browser', exact: true }).waitFor();
+    await page.getByRole('status').filter({ hasText: 'Remote View denied access' }).waitFor({ state: 'detached' });
     unavailable = true;
     await page.getByRole('button', { name: 'Refresh browsers', exact: true }).click();
     await page.getByText('Remote View browser inventory is unavailable. Managed tasks remain listed separately.', { exact: true }).waitFor();

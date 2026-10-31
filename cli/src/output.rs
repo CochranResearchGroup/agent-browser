@@ -6591,6 +6591,10 @@ failed evidence. Service reconciliation and
 workstation diagnostics run only on diagnostic surfaces. Observation freshness expires
 independently after 30 seconds using elapsed time, even if the next read stalls.
 Search matches displayed tab labels and URLs, excluding embedded document payloads.
+The rail reports Remote View sign-in separately from dashboard sign-in.
+Authentication failures ask you to sign in to Remote View; access denials ask
+for an account permission check. Sign in through existing Remote View access,
+then refresh browsers. The requested selection is preserved.
 Native window reads refresh in one background worker. Initial reads can remain
 unverified until it completes; cached samples retain their elapsed age and failed
 refreshes do not establish presence. These observations never renew tab lifetime.

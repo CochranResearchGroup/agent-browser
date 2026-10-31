@@ -1116,6 +1116,8 @@ directly, without the diagnostic transport, CLI fallback or one-second status ca
 Service reconciliation and workstation diagnostics run only on diagnostic surfaces. Observation freshness expires
 independently after 30 seconds using elapsed time, even if the next read stalls.
 Search matches displayed tab labels and URLs, excluding embedded document payloads.
+The browser rail reports Remote View sign-in separately from dashboard sign-in. An authentication failure asks you to sign in to Remote View, an access denial asks you to check account permissions, and a service failure reports unavailable inventory. Sign in through your deployment's existing Remote View access, then refresh browsers; the requested selection is preserved.
+
 Native window reads refresh in one background worker. Initial reads can remain
 unverified until it completes; cached samples retain their elapsed age and failed
 refreshes do not establish presence. These observations never renew tab lifetime.

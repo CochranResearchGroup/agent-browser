@@ -808,6 +808,8 @@ cooldown and `minimum_reserved = 1`; resumed use resets eligibility.
 
 On Linux, opening an explicit profile first reconciles its current browser from physical profile, process and CDP evidence. Missing or stale inventory is repaired during acquisition. Each task gets its own tab, and closing a task preserves peer tabs and browsers whose lifecycle it does not own. Retained local-browser sessions with a free profile can resume on a native Remote View desktop while keeping their logical session identity. Desktop identity comes from current native window evidence.
 
+The browser rail reports Remote View sign-in separately from dashboard sign-in. An authentication failure asks you to sign in to Remote View, an access denial asks you to check account permissions, and a service failure reports unavailable inventory. Sign in through your deployment's existing Remote View access, then refresh browsers; the requested selection is preserved.
+
 Native window observation refreshes in one background worker, so dashboard
 requests do not wait for provider I/O. An initial read can remain unverified until
 the worker completes. Cached results carry their original sample identity and
