@@ -44,7 +44,6 @@ impl NativeJourneyReceipt {
             && digest(&self.process_instance_digest)
             && digest(&self.correlation_id)
             && digest(&self.viewer_connection_digest)
-            && self.frame_sync > 0
             && self.observed_at_ms > 0
             && self.provider_target.lifecycle_generation > 0
             && self.provider_target.viewing_generation > 0
@@ -279,6 +278,18 @@ mod tests {
     #[test]
     fn native_journey_rejects_pending_stale_or_incomplete_private_evidence() {
         assert!(receipt(proof()).is_ok());
+        let mut first_frame = proof();
+        first_frame
+            .observation
+            .used
+            .as_mut()
+            .unwrap()
+            .evidence
+            .frame_sync = 0;
+        assert!(
+            receipt(first_frame).is_ok(),
+            "the provider's first acknowledged frame may have sequence zero"
+        );
         for condition in 0..9 {
             let mut p = proof();
             match condition {
@@ -296,7 +307,7 @@ mod tests {
                     .context
                     .operator
                     .clear(),
-                6 => p.observation.used.as_mut().unwrap().evidence.frame_sync = 0,
+                6 => p.observation.used.as_mut().unwrap().recorded_at_ms = 0,
                 7 => p
                     .observation
                     .used

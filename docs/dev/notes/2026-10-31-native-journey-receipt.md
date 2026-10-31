@@ -46,10 +46,17 @@ retention remain unchanged.
 The focused status regression first failed because a qualified Native receipt
 was ignored. The four new regression tests pass, covering selected-backend
 projection, pending/stale/incomplete proof rejection, idempotent recording,
-changed-backend fencing and unchanged selector/staged custody. Expanded Rust,
-quality and exact-binary fixture results are pending at this checkpoint.
-Documentation build, policy wiring, changed links, handoff guidance, and the
-selected VM/Guacamole/PostgreSQL/route-user source fixtures pass.
+changed-backend fencing and unchanged selector/staged custody. The provider's
+acknowledged first-frame sequence zero is explicitly accepted; a missing use
+timestamp remains rejected. The 42 ingress, four native-use, six presentation
+and 40 output tests pass. The affected four-test native journey selection and
+strict Clippy were rerun after that contract correction and pass. Format and
+strict workspace Clippy pass. Exact-source debug binary18512941d255 passes the
+no-launch service-contract smoke; its isolated installer fixture remains in
+progress. That fixture protects unchanged legacy installation paths, while the
+final zero-frame change is covered by the affected Native tests and Clippy.
+Documentation build, policy wiring, changed links, handoff guidance, host
+provision and selected VM/Guacamole/PostgreSQL/route-user source fixtures pass.
 
 The separate idle books-receipts profile-lease advisory is owner-scoped and is
 not repaired by this work. Preserve peer PR508's inventory/access UI changes.
