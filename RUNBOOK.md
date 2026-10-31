@@ -1,6 +1,6 @@
 # Runbook
 
-[P299 local validation](docs/dev/plans/0299-2026-10-31-local-validation-502.md), spec502: execute503/504 then505 then507 through explicit source selection and local receipts. No hosted CI or runtime effects.
+[P299 local validation](docs/dev/plans/0299-2026-10-31-local-validation-502.md), spec502 and all four children CLOSED through PR509/main9d1a18522; actual source readiness and13/13 verified reuse pass. Final single review awaits the operator-supplied boundary. No hosted CI or runtime effects.
 
 [P295 standalone Auth](docs/dev/plans/0295-2026-10-26-standalone-auth-449.md): #449 and Auth #81/#91 are closed after criterion reconciliation with accepted #464/#193 evidence. Auth source `b5bd66ac910c3e6a07f79cc8962cb14b67a77290` is merged/adopted; owner web approval and Slack receipt delivery are separately verified. No new provider or runtime effects. The requested final review against original base99faef3d accepted one shared P2 fixed-clock fixture issue. Its single TDD repair passes the focused staged-factor seam and all five owner-auth source-composition scripts; policy/link/syntax/patch checks and the integrated docs build pass. PR501 preserves canonical retention PR500 and fixes its MDX table parsing without changing behavior. [Review receipt](docs/dev/notes/0295-2026-10-30-ticket-reconciliation-review.md).
 
