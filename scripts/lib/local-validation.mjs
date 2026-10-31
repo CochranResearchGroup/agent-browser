@@ -58,6 +58,7 @@ function repositorySnapshot(recipe='tracked-and-unignored-repository'){
  * resource bounds. Ignored build/output trees are deliberately not inputs. */
 function installedDependencies(){
  const files=execFileSync('git',['ls-files','--cached','--others','--exclude-standard','-z'],{encoding:'utf8',env:gitEnvironment()}).split('\0').filter(Boolean);
+ const workspaceRoots=new Set(files.filter(path=>path==='package.json'||path.endsWith('/package.json')).filter(path=>existsSync(path)).map(path=>realpathSync(dirname(resolve(path)))));
  const roots=[...new Set(['node_modules',...files.filter(path=>path.endsWith('/package.json')).map(path=>join(path,'..','node_modules'))])].sort().filter(path=>existsSync(path));
  const operationalMetadata=new Set(roots.map(root=>join(root,'.pnpm-workspace-state-v1.json')).filter(path=>existsSync(path)).map(path=>realpathSync(path)));
  const cache=new Map(),active=new Set();let entries=0,bytes=0;
@@ -66,7 +67,15 @@ function installedDependencies(){
   const actual=realpathSync(path);if(cache.has(actual))return cache.get(actual);if(active.has(actual))return hash('dependency-cycle');
   if(++entries>200000)fail('validation_dependency_entry_limit_exceeded');
   const stat=lstatSync(actual);active.add(actual);let digest;
-  if(stat.isDirectory())digest=hash(stable(readdirSync(actual).sort().map(name=>[name,visit(join(actual,name),depth+1)])));
+  if(stat.isDirectory())digest=hash(stable(readdirSync(actual).sort().filter(name=>{
+   // Workspace aliases can lead back into ignored build output. Only the known
+   // ignored Next output is excluded; source, dist and installed code stay bound.
+   if(name!=='.next'||!workspaceRoots.has(actual))return true;
+   let manifest;try{manifest=JSON.parse(readFileSync(join(actual,'package.json'),'utf8'));}catch{return true;}
+   if(!Object.values(manifest.scripts??{}).some(value=>typeof value==='string'&&/(?:^|\s)next(?:\s|$)/.test(value)))return true;
+   const ignored=spawnSync('git',['check-ignore','-q','--',`${relative(process.cwd(),join(actual,name))}/`],{env:gitEnvironment(),stdio:'ignore'});
+   return ignored.status!==0;
+  }).map(name=>[name,visit(join(actual,name),depth+1)])));
   else if(stat.isFile()){
    bytes+=stat.size;if(bytes>2147483648||stat.size>268435456)fail('validation_dependency_byte_limit_exceeded');
    let contents=readFileSync(actual);

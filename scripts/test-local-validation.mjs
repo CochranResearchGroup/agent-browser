@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {spawn,spawnSync,execFileSync} from 'node:child_process';
-import {chmodSync,existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {chmodSync,existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import test from 'node:test';
@@ -12,6 +12,7 @@ function fixture(t){
  const pnpm=join(bin,'pnpm');writeFileSync(pnpm,`#!/usr/bin/env node
 if(process.env.FIXTURE_CALLS)require('node:fs').appendFileSync(process.env.FIXTURE_CALLS,process.argv.slice(2).join(' ')+'\\n');
 if(process.env.FIXTURE_MODE==='touch-pnpm'){const fs=require('node:fs'),path='node_modules/.pnpm-workspace-state-v1.json',data=JSON.parse(fs.readFileSync(path,'utf8'));data.lastValidatedTimestamp++;fs.writeFileSync(path,JSON.stringify(data));}
+if(process.env.FIXTURE_MODE==='workspace-build'){const fs=require('node:fs');fs.mkdirSync('docs/.next',{recursive:true});fs.writeFileSync('docs/.next/generated',String(Date.now()));}
 if(process.env.FIXTURE_MODE==='fail-docs' && process.argv.includes('docs'))process.exit(7);
 if(process.env.FIXTURE_MODE==='mutate')require('node:fs').writeFileSync('docs/change.md','# Modified during check');
 if(process.env.FIXTURE_MODE==='timeout')setInterval(()=>{},1000);
@@ -20,7 +21,7 @@ else console.log('synthetic check passed');
  const env={...process.env,PATH:`${bin}:${process.env.PATH}`};
  const git=args=>execFileSync('git',args,{cwd:repo,env,stdio:'pipe'}).toString().trim();
  git(['init']);git(['config','user.name','Fixture']);git(['config','user.email','fixture@example.invalid']);
- mkdirSync(join(repo,'docs'));writeFileSync(join(repo,'.gitignore'),'node_modules/\n');writeFileSync(join(repo,'docs','base.md'),'# Base\n');git(['add','.']);git(['commit','-m','base']);const base=git(['rev-parse','HEAD']);
+ mkdirSync(join(repo,'docs'));writeFileSync(join(repo,'.gitignore'),'node_modules/\n.next/\n');writeFileSync(join(repo,'docs','base.md'),'# Base\n');git(['add','.']);git(['commit','-m','base']);const base=git(['rev-parse','HEAD']);
  writeFileSync(join(repo,'docs','change.md'),'# Change\n');git(['add','.']);git(['commit','-m','change']);
  const run=(name,args)=>spawnSync(process.execPath,[commands[name],...args],{cwd:repo,env,encoding:'utf8',timeout:15000});
  const planPath=join(root,'plan.json'),output=join(root,'results');
@@ -224,4 +225,19 @@ test('reuse requires complete source provenance and unambiguous prior check cust
   const file=join(f.root,`${kind}-prior.json`),output=join(f.root,`${kind}-output`);writeFileSync(file,JSON.stringify(prior));
   const ran=f.run('run-validation.js',['--plan',f.planPath,'--output-dir',output,'--reuse-receipt',file]);assert.equal(ran.status,1,kind);assert.match(ran.stderr,/validation_reuse_receipt_unqualified/);assert.equal(existsSync(output),false);
  }
+});
+
+
+test('linked Next workspace build output is excluded while source and runtime dependencies stay bound',t=>{
+ const f=fixture(t);
+ writeFileSync(join(f.repo,'docs','package.json'),JSON.stringify({name:'synthetic-docs',scripts:{build:'next build'}}));
+ const source=join(f.repo,'docs','source.js');writeFileSync(source,'// original executable source\n');
+ const links=join(f.repo,'node_modules','.pnpm','node_modules');mkdirSync(links,{recursive:true});symlinkSync(join(f.repo,'docs'),join(links,'docs'),'dir');
+ const dependency=join(f.repo,'docs','node_modules','synthetic','index.js');mkdirSync(join(dependency,'..'),{recursive:true});writeFileSync(dependency,'// original installed dependency\n');
+ f.env.FIXTURE_MODE='workspace-build';
+ assert.equal(f.run('validation-plan.mjs',['--base',f.base,'--output',f.planPath]).status,0);
+ const ran=f.run('run-validation.js',['--plan',f.planPath,'--output-dir',f.output]);assert.equal(ran.status,0,ran.stderr);
+ assert.equal(f.receipt().sourceUnchanged,true);assert.equal(f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']).status,0);
+ writeFileSync(source,'// changed executable source\n');assert.equal(f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']).status,1);
+ writeFileSync(source,'// original executable source\n');writeFileSync(dependency,'// changed installed dependency\n');assert.equal(f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']).status,1);
 });

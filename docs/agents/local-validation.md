@@ -122,7 +122,9 @@ requirements, environment and tooling remain bound. Auth revision/dirty metadata
 is provenance; actual source/dependency content determines equivalence. No caller
 can supply a smaller arbitrary scope. Only the known PNPM operational validation
 timestamp is normalized; semantic settings and executable dependency changes
-remain invalidating inputs.
+remain invalidating inputs. Dependency workspace aliases exclude only Git-ignored
+`.next` output when the workspace declares Next scripts; workspace source and
+other ignored executable directories such as `dist` remain bound.
 
 The original receipt is never rewritten. A new receipt distinguishes executed
 and reused checks and records original receipt digest, plan, source and check
