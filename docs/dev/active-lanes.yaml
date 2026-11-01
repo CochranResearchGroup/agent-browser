@@ -8,8 +8,10 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#515]
-    plan_state: ACTIVE
-    custody_state: ACTIVE_WORKTREE
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    evidence: docs/dev/notes/2026-10-31-registered-idle-lease.md
+    validation_status: Source gates pass; sealed production artifact installed accepted; original idle repro, unchanged capability metadata, disposable Native journey and exact cleanup pass; only older workspace-candidate advisory remains
     overlaps: [CochranResearchGroup/agent-browser#506]
     reconciled_overlaps: ["515 primary writer for lease projection, typed recourse/schema/client and its documentation paragraphs;506 retains inventory UI; serialize shared guidance/catalog through main; reuse canonical checkout without another worktree"]
     limitations: ["No capability rotation, identity rebinding, account access or profile reset; tenant evidence stays outside Git"]
