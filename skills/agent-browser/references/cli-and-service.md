@@ -4418,3 +4418,37 @@ for the complete slice and resolve reported coverage gaps. The repository's
 `docs/agents/local-validation.md` owns local receipt and explicit Auth-source
 preflight guidance. These commands are repository tooling, not installed browser
 commands or permission for hosted CI, deployment or provider effects.
+
+
+## Runtime health and cleanup diagnostics
+
+Read `agent-browser.runtime-health.v1` for drift and bounded recourse. Consult
+advanced runtime custody diagnostics before maintenance, retirement or unknown
+effect interpretation. For TTL diagnosis, inspect the private latest-pass
+`~/.agent-browser/service/browser-session-reaper.json`: a running/stale receipt
+is not completed cleanup. Session expiry, tab inactivity and human holds are
+separate. Retired history and closed legacy orphan records are not live targets;
+unknown original-process evidence still protects peers. Compact logs; scrub exported URLs.
+
+## Owner service waits
+
+For an authentication wait, use the owning service's lifecycle retention, not
+agent page polling or a permanent leave-open toggle. `browser_retention` takes
+`taskId`, `browserId`, `browserPid`, stable `claimId`, `ownerId`, and
+`operation:acquire|renew|release`; acquire/renew use `ttlMs` up to 300000. Retain the
+returned `generation` for renew/release. Release only this claim when the wait
+ends; never close peers or clear a person's explicit leave-open preference. A
+replacement browser cannot inherit the claim. Retention is not credential or
+control authority, and failed renewal does not permit relaunch or replay.
+
+
+## Native journey qualification
+
+Native operator-journey acceptance follows private provider-qualified viewer use and exact owner confirmation. Route readiness alone does not establish it. Workstation status binds `operatorJourneyReady` and the Native presentation receipt to the selected installation; stale dashboard or target identities cannot refresh acceptance.
+
+A standalone handoff resolves its current owned desktop and redirects to Native authentication without a Dashboard login. The public locator remains read-only. Native authentication precedes configured browser-owner recovery. Missing recovery configuration reports unavailability. Reuse the opaque URL; require native display confirmation.
+
+
+## Idle registration
+
+A current registered capability with a resolved profile identity and no retained owner, browser, session or tab work is `registered_idle`, with `acquire_profile` recourse and no missing-owner-binding finding. This is an observation-only registration, not an active claim. Acquisition still authenticates the capability and checks current ownership. No owner binding, capability rotation or browser launch is performed by diagnostics.

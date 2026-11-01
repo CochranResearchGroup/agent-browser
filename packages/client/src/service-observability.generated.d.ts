@@ -525,7 +525,7 @@ export interface ServiceProfileLeaseRecord {
   cleanupObligation: string | null;
   blockingIdentityAxes: string[];
   authorizedActions: string[];
-  recourse: 'continue_with_active_claim' | 'rejoin_owned_browser' | 'replace_stale_same_principal_session' | 'wait_for_foreign_principal' | 'reconcile_principal_identity';
+  recourse: 'acquire_profile' | 'continue_with_active_claim' | 'rejoin_owned_browser' | 'replace_stale_same_principal_session' | 'wait_for_foreign_principal' | 'reconcile_principal_identity';
   observationOnly: boolean;
   [key: string]: unknown;
 }

@@ -22,11 +22,11 @@ Use `browser_open` with `{"serviceName":"my-app","agentName":"editor","taskName"
 
 Use `profileMode: "existing"` for an existing profile, or `"disposable"` without `profile` for temporary work. The workflow owns selection, replay and scoped closure.
 
-Native operator-journey acceptance follows private provider-qualified viewer use and exact owner confirmation. Route readiness alone does not establish it. Workstation status binds `operatorJourneyReady` and the Native presentation receipt to the selected installation; stale dashboard or target identities cannot refresh acceptance.
+Read [Native journey qualification](references/cli-and-service.md#native-journey-qualification) when validating an installed viewer generation.
 
 For human assistance, call `browser_handoff({ "taskId": "<returned-task-id>" })`. Require `operatorVisible.state=ready` before giving the person its complete `data.handoffUrl`; continue with the same task ID. For `remote_view_public_origin_missing`, check reviewed `AGENT_BROWSER_PUBLIC_ORIGIN` configuration and stale MCP startup. Set it in `~/.agent-browser/.env` or `AGENT_BROWSER_ENV_FILE`; explicit process settings win. MCP connections pin startup configuration: reconnect after changes, preserving the task. Never assemble provider URLs.
 
-A standalone handoff resolves its current owned desktop and redirects to Native authentication without a Dashboard login. The public locator remains read-only. Native authentication precedes configured browser-owner recovery. Missing recovery configuration reports unavailability. Reuse the opaque URL; require native display confirmation.
+Standalone handoffs use Native authentication and the current owned desktop. Reuse the opaque URL; require native display confirmation.
 
 After human input, `browser_continue` with the same `taskId` reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff.
 
@@ -74,6 +74,8 @@ Automatic tab expiry in a shared browser without an Agent Browser Native desktop
 
 Use a separate task/session and tab for each workflow. Shared profiles share login and persistent site state. Read [Sharing a profile between tasks](references/cli-and-service.md#sharing-a-profile-between-tasks) before coordinating shared-profile work, foreground input or closing a peer task.
 
+Idle capability registration reports `registered_idle` and `acquire_profile`, without claiming ownership. Read [Idle registration](references/cli-and-service.md#idle-registration) before diagnosing a missing binding.
+
 ## CLI fallback
 
 If browser_open is absent, report missing Agent Browser MCP integration.
@@ -82,13 +84,7 @@ Use the CLI while correcting integration; server tools/list does not prove clien
 
 Help never launches browsers. MCP uses `success`, `data`, `error`; CLI failures add `type`. Private launch journals retain secret-free `details.phase`; unknown outcomes need readback.
 
-Read `agent-browser.runtime-health.v1` for drift and bounded recourse. Consult
-advanced runtime custody diagnostics before maintenance, retirement or unknown
-effect interpretation. For TTL diagnosis, inspect the private latest-pass
-`~/.agent-browser/service/browser-session-reaper.json`: a running/stale receipt
-is not completed cleanup. Session expiry, tab inactivity and human holds are
-separate. Retired history and closed legacy orphan records are not live targets;
-unknown original-process evidence still protects peers. Compact logs; scrub exported URLs.
+Read [Runtime health and cleanup diagnostics](references/cli-and-service.md#runtime-health-and-cleanup-diagnostics) before maintenance, expiry diagnosis or unknown-effect interpretation. Preserve peers and scrub exported URLs.
 
 
 Use the installed `agent-browser` executable when MCP is unavailable. Read
@@ -147,11 +143,4 @@ Dates: YYYY-MM-DD; downloads need live process proof.
 
 ### Owner service waits
 
-For an authentication wait, use the owning service's lifecycle retention, not
-agent page polling or a permanent leave-open toggle. `browser_retention` takes
-`taskId`, `browserId`, `browserPid`, stable `claimId`, `ownerId`, and
-`operation:acquire|renew|release`; acquire/renew use `ttlMs` up to 300000. Retain the
-returned `generation` for renew/release. Release only this claim when the wait
-ends; never close peers or clear a person's explicit leave-open preference. A
-replacement browser cannot inherit the claim. Retention is not credential or
-control authority, and failed renewal does not permit relaunch or replay.
+Use the owning service’s bounded lifecycle retention for authentication waits. Read [Owner service waits](references/cli-and-service.md#owner-service-waits); never transfer a claim to a replacement browser or treat retention as credential/control authority.

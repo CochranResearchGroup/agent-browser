@@ -1785,6 +1785,30 @@ fn unbound_capability_profile_lease(
         },
         observation_only: true,
     };
+    // Registration is authority to request acquisition, not proof of an owner.
+    // A valid grant with no retained profile work needs no runtime binding.
+    let registered_idle = state.authenticated_authority_is_current(&authority)
+        && record.profile_identity_digest.is_some()
+        && record.browser_id.is_none()
+        && record.session_ids.is_empty()
+        && record.tab_ids.is_empty()
+        && record.cleanup_obligation.is_none()
+        && !state
+            .browsers
+            .values()
+            .any(|browser| browser.profile_id.as_deref() == Some(capability.profile_id.as_str()));
+    if registered_idle {
+        record.state = "registered_idle".to_string();
+        record.blocking_identity_axes.clear();
+        record.authorized_actions = READ_ACTIONS
+            .iter()
+            .chain([&"profile_acquire"])
+            .map(ToString::to_string)
+            .collect();
+        record.authorized_actions.sort();
+        record.authorized_actions.dedup();
+        record.recourse = PrincipalContinuityRecourse::AcquireProfile;
+    }
     project_exact_terminal_history(state, &mut record, now);
     record.lease_revision = lease_revision(&record);
     record
@@ -2366,6 +2390,92 @@ mod tests {
     const CAPABILITY: &str = "profile-lease-test-capability-with-more-than-thirty-two-characters";
     const SEAL_KEY: &[u8] = b"profile-lease-test-seal-key-more-than-thirty-two-bytes";
     const NOW: &str = "2026-08-27T12:00:00Z";
+
+    #[test]
+    fn registered_idle_capability_has_no_runtime_binding_diagnostic() {
+        let (mut state, authority, _) = state_with_lease();
+        state.runtime_owner_registry = RuntimeOwnerRegistry::default();
+        state.sessions.clear();
+        state.tabs.clear();
+        state.browsers.clear();
+        let before = state.clone();
+        let leases = profile_leases_for_state(&state, NOW);
+        assert_eq!(leases.len(), 1);
+        let lease = &leases[0];
+        assert_eq!(
+            lease.state, "registered_idle",
+            "registration before launch needs no runtime owner"
+        );
+        assert_eq!(lease.mode, "idle");
+        assert!(lease.observation_only);
+        assert!(lease.blocking_identity_axes.is_empty());
+        assert_eq!(lease.recourse.as_str(), "acquire_profile");
+        assert!(lease
+            .authorized_actions
+            .contains(&"profile_acquire".to_string()));
+        for denied in [
+            "rejoin",
+            "renew",
+            "release",
+            "reconcile_plan",
+            "reconcile_apply",
+            "recover_plan",
+        ] {
+            assert!(!lease
+                .authorized_actions
+                .iter()
+                .any(|action| action == denied));
+        }
+        assert!(doctor_profile_leases(&state, NOW).healthy);
+        assert!(state.authenticated_authority_is_current(&authority));
+        assert_eq!(
+            state, before,
+            "projection must not bind identity or change capability state"
+        );
+    }
+
+    #[test]
+    fn registered_idle_does_not_hide_retained_owner_work_or_invalid_identity() {
+        let (original, authority, _) = state_with_lease();
+        for condition in 0..5 {
+            let mut state = original.clone();
+            state.runtime_owner_registry = RuntimeOwnerRegistry::default();
+            state.sessions.clear();
+            state.tabs.clear();
+            state.browsers.clear();
+            match condition {
+                0 => {
+                    state.runtime_owner_registry = original.runtime_owner_registry.clone();
+                    crate::runtime_owner_transfer::edit_registry_fixture(
+                        &mut state.runtime_owner_registry,
+                    )
+                    .principal_records
+                    .clear();
+                }
+                1 => state.sessions = original.sessions.clone(),
+                2 => {
+                    state
+                        .profiles
+                        .get_mut(&authority.profile_id)
+                        .unwrap()
+                        .user_data_dir = None
+                }
+                3 => state.service_principals.principals.clear(),
+                _ => {
+                    let browser = state.browsers.entry("retained-browser".into()).or_default();
+                    browser.id = "retained-browser".into();
+                    browser.profile_id = Some(authority.profile_id.clone());
+                }
+            }
+            let leases = profile_leases_for_state(&state, NOW);
+            assert_eq!(leases.len(), 1);
+            assert_ne!(leases[0].state, "registered_idle", "condition {condition}");
+            assert!(
+                !doctor_profile_leases(&state, NOW).healthy,
+                "condition {condition}"
+            );
+        }
+    }
 
     #[test]
     fn named_profile_registration_and_lease_projection_use_launch_identity() {

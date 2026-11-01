@@ -207,6 +207,8 @@ _Avoid_: Immediate revocation, force unlock
 The explicit permission to end another Client Subject's current Profile Occupancy during a Drain-and-restrict Transition.
 _Avoid_: Policy edit, lease release, process kill
 
+**Registered idle capability**: A current capability with resolved profile identity and no retained owner, browser or subordinate work. Its observation-only lease row reports `registered_idle` with `acquire_profile` recourse, without requiring a runtime binding that cannot exist yet. Acquisition still proves capability authority and current ownership; the projection creates no claim, binding or browser.
+
 **Runtime ownership proof**:
 Internal evidence that binds an exact managed browser or runtime process to its profile, executable, process instance, endpoint, and owner generation before lifecycle effects occur.
 _Avoid_: Client identity, access permission, profile lease
