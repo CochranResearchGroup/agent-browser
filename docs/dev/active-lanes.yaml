@@ -1,6 +1,19 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: IDLE515
+    product_lane: PL-BUGFIX
+    objective: Diagnose valid idle registration without demanding runtime owner evidence
+    branch: fix/registered-idle-lease
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#515]
+    plan_state: ACTIVE
+    custody_state: ACTIVE_WORKTREE
+    overlaps: [CochranResearchGroup/agent-browser#506]
+    reconciled_overlaps: ["515 primary writer for lease projection, typed recourse/schema/client and its documentation paragraphs;506 retains inventory UI; serialize shared guidance/catalog through main; reuse canonical checkout without another worktree"]
+    limitations: ["No capability rotation, identity rebinding, account access or profile reset; tenant evidence stays outside Git"]
+    updated_at: 2026-10-31
   - id: JOURNEY512
     product_lane: PL-BUGFIX
     objective: Record selected dashboard acceptance from qualified Native handoff use

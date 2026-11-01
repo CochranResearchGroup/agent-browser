@@ -59,6 +59,10 @@ new work.
 
 Every continuity decision returns exactly one of these states:
 
+- `acquire_profile`: a current registered grant has a resolved profile identity
+  but no retained owner or subordinate work. Request acquisition through the
+  existing capability-checked coordinator; this projection establishes no
+  runtime ownership and performs no launch or identity mutation;
 - `continue_with_active_claim`: the canonical lease authority has a current
   claim for the exact profile. The claim authorizes only operations that
   validate its revision and fencing token, and does not prove that a browser

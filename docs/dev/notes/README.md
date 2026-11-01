@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[Registered idle lease repair](2026-10-31-registered-idle-lease.md): #515 separates pre-launch capability registration from runtime ownership without identity mutation.
+
 [Native operator-journey recording](2026-10-31-native-journey-receipt.md): #512 repairs acceptance recording after provider-qualified Native viewer use, fenced to the selected backend.
 
 [P299 final review](0299-2026-10-31-final-review.md): one Standards/Spec review, two Spec blockers and one duplicate-selection finding resolved in a bounded TDD pass.

@@ -14,6 +14,7 @@ use agent_browser_lease_authority::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PrincipalContinuityRecourse {
+    AcquireProfile,
     ContinueWithActiveClaim,
     ContinueWithSelfDeclaredAccess,
     RejoinOwnedBrowser,
@@ -25,6 +26,7 @@ pub enum PrincipalContinuityRecourse {
 impl PrincipalContinuityRecourse {
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::AcquireProfile => "acquire_profile",
             Self::ContinueWithActiveClaim => "continue_with_active_claim",
             Self::ContinueWithSelfDeclaredAccess => "continue_with_self_declared_access",
             Self::RejoinOwnedBrowser => "rejoin_owned_browser",
@@ -1051,6 +1053,10 @@ mod tests {
     }
 
     const CASES: &[(PrincipalContinuityRecourse, &str)] = &[
+        (
+            PrincipalContinuityRecourse::AcquireProfile,
+            "acquire_profile",
+        ),
         (
             PrincipalContinuityRecourse::ContinueWithActiveClaim,
             "continue_with_active_claim",
