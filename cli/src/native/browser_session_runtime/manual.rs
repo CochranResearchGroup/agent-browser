@@ -3,8 +3,20 @@ use super::*;
 use agent_browser_service_model::{BrowserLaunchCustodyStore, RecordedProcessIdentity};
 use serde_json::json;
 
+// Connection inputs stay process-local and are never included in public or
+// durable browser records. The Native owner refreshes them before every effect.
+#[derive(Clone)]
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+struct NativeX11Context {
+    pid: u32,
+    desktop: RemoteViewFixedDesktop,
+    display: String,
+    authority: std::path::PathBuf,
+}
+
 #[derive(Default)]
 pub(super) struct ManualBrowsers {
+    native_contexts: HashMap<String, NativeX11Context>,
     owned: HashMap<
         String,
         (
@@ -15,21 +27,70 @@ pub(super) struct ManualBrowsers {
 }
 
 impl ManualBrowsers {
-    #[cfg(target_os = "linux")]
-    fn display(&mut self, browser: &ManagedBrowserInstance) -> Result<String, String> {
-        // The exact owned child retains the provider's trusted launch display.
-        // Sandboxed Chrome may make environ unreadable after launch. Adopted
-        // paths without that owned child must still establish current context.
-        let owned = self
+    pub(super) fn refresh_native_context(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        desktop: &RemoteViewFixedDesktop,
+        environment: std::collections::BTreeMap<String, String>,
+    ) -> Result<(), String> {
+        // A failed refresh revokes stale inputs before any further local effect.
+        self.native_contexts.remove(&browser.id);
+        if !is_manual(browser)
+            || browser.desktop.as_ref().is_none_or(|actual| {
+                actual.desktop_id != desktop.desktop_id || actual.generation != desktop.generation
+            })
+        {
+            return Err("manual_login_native_assignment_changed".into());
+        }
+        if !self.verify(browser)? {
+            return Err("manual_login_process_exited".into());
+        }
+        let display = environment
+            .get("DISPLAY")
+            .filter(|value| {
+                !value.is_empty() && !value.chars().any(|c| c.is_control() || c.is_whitespace())
+            })
+            .cloned()
+            .ok_or("manual_login_native_context_unavailable")?;
+        let authority = environment
+            .get("XAUTHORITY")
+            .map(std::path::PathBuf::from)
+            .filter(|path| path.is_absolute())
+            .ok_or("manual_login_native_context_unavailable")?;
+        if self
             .owned
             .get(&browser.id)
-            .map(|(child, _)| child.display_name().map(str::to_owned));
-        resolve_display(
-            owned.as_ref().map(|value| value.as_deref()),
-            || self.verify(browser),
-            || process_display(browser),
-        )
+            .is_some_and(|(child, _)| child.display_name() != Some(display.as_str()))
+        {
+            return Err("manual_login_native_display_changed".into());
+        }
+        self.native_contexts.insert(
+            browser.id.clone(),
+            NativeX11Context {
+                pid: browser.pid,
+                desktop: desktop.clone(),
+                display,
+                authority,
+            },
+        );
+        Ok(())
     }
+
+    #[cfg(target_os = "linux")]
+    fn native_context(&self, browser: &ManagedBrowserInstance) -> Result<NativeX11Context, String> {
+        self.native_contexts
+            .get(&browser.id)
+            .filter(|context| {
+                context.pid == browser.pid
+                    && browser.desktop.as_ref().is_some_and(|desktop| {
+                        desktop.desktop_id == context.desktop.desktop_id
+                            && desktop.generation == context.desktop.generation
+                    })
+            })
+            .cloned()
+            .ok_or_else(|| "manual_login_native_context_unavailable".into())
+    }
+
     /// Reap only retained owned children during idle runtime polling. A zombie
     /// must not survive because no later task command happens to verify it.
     pub(super) fn poll_owned_exits(&mut self) {
@@ -85,6 +146,9 @@ impl ManualBrowsers {
             .remove(physical_id)
             .ok_or("mode_operation_launched_child_missing")?;
         self.owned.insert(logical_id.into(), child);
+        if let Some(context) = self.native_contexts.remove(physical_id) {
+            self.native_contexts.insert(logical_id.into(), context);
+        }
         Ok(())
     }
 
@@ -160,9 +224,9 @@ impl ManualBrowsers {
         }
         #[cfg(target_os = "linux")]
         {
-            // Read only this verified process's launch display. Remote View then
+            // Use only freshly owner-bound connection inputs. Remote View then
             // independently verifies the assignment and foreground window.
-            let display = self.display(browser)?;
+            let context = self.native_context(browser)?;
             if !self.verify(browser)? {
                 return Err("manual_login_process_exited".into());
             }
@@ -170,7 +234,8 @@ impl ManualBrowsers {
             loop {
                 match super::super::browser::focus_viewable_x11_browser_window(
                     browser.pid,
-                    &display,
+                    &context.display,
+                    &context.authority,
                 ) {
                     Ok(_) => return Ok(()),
                     Err(reason)
@@ -192,25 +257,31 @@ impl ManualBrowsers {
     pub(super) fn close(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         if !self.verify(browser)? {
             self.owned.remove(&browser.id);
+            self.native_contexts.remove(&browser.id);
             return Ok(());
         }
         #[cfg(target_os = "linux")]
         {
-            let display = self.display(browser)?;
+            let context = self.native_context(browser)?;
             if !self.verify(browser)? {
                 self.owned.remove(&browser.id);
                 return Ok(());
             }
             // SIGTERM can discard buffered cookies. WM_DELETE_WINDOW follows
             // normal Chrome shutdown, without CDP or a forced-close fallback.
-            super::super::browser::close_x11_browser_windows(browser.pid, &display)
-                .map_err(|_| "manual_login_native_close_unavailable")?;
+            super::super::browser::close_x11_browser_windows(
+                browser.pid,
+                &context.display,
+                &context.authority,
+            )
+            .map_err(|_| "manual_login_native_close_unavailable")?;
             let until = Instant::now() + Duration::from_secs(5);
             if let Some((mut process, identity)) = self.owned.remove(&browser.id) {
                 loop {
                     if let Some(exit) = process.poll_exit() {
                         if exit.poll_error.is_none() {
                             process.relinquish_for_handoff();
+                            self.native_contexts.remove(&browser.id);
                             return Ok(());
                         }
                         self.owned.insert(browser.id.clone(), (process, identity));
@@ -225,6 +296,7 @@ impl ManualBrowsers {
             }
             loop {
                 if !self.verify(browser)? {
+                    self.native_contexts.remove(&browser.id);
                     return Ok(());
                 }
                 if Instant::now() >= until {
@@ -267,39 +339,6 @@ impl ManualBrowsers {
     }
 }
 
-#[cfg(target_os = "linux")]
-fn resolve_display(
-    owned: Option<Option<&str>>,
-    verify: impl FnOnce() -> Result<bool, String>,
-    read: impl FnOnce() -> Result<String, String>,
-) -> Result<String, String> {
-    if !verify()? {
-        return Err("manual_login_process_exited".into());
-    }
-    match owned {
-        Some(Some(display))
-            if !display.is_empty()
-                && !display.chars().any(char::is_whitespace)
-                && !display.chars().any(char::is_control) =>
-        {
-            Ok(display.into())
-        }
-        Some(_) => Err("manual_login_owned_display_unavailable".into()),
-        None => read(),
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn process_display(browser: &ManagedBrowserInstance) -> Result<String, String> {
-    let env = fs::read(format!("/proc/{}/environ", browser.pid))
-        .map_err(|_| "manual_login_display_unavailable")?;
-    env.split(|byte| *byte == 0)
-        .find_map(|entry| entry.strip_prefix(b"DISPLAY="))
-        .and_then(|value| std::str::from_utf8(value).ok())
-        .map(str::to_owned)
-        .ok_or_else(|| "manual_login_display_unavailable".into())
-}
-
 pub(super) fn is_manual(browser: &ManagedBrowserInstance) -> bool {
     browser.cdp_endpoint.is_empty()
 }
@@ -315,29 +354,6 @@ pub(super) fn window_tab(browser: &ManagedBrowserInstance) -> BrowserTabAcquisit
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn owned_manual_display_survives_unreadable_process_environment() {
-        let result = resolve_display(
-            Some(Some(":6850")),
-            || Ok(true),
-            || Err("environ_unreadable".into()),
-        );
-        assert_eq!(result.unwrap(), ":6850");
-        for owned in [Some(Some(":6850")), None] {
-            assert_eq!(
-                resolve_display(
-                    owned,
-                    || Err("original_context_changed".into()),
-                    || panic!("must not borrow display")
-                )
-                .unwrap_err(),
-                "original_context_changed"
-            );
-        }
-        assert!(resolve_display(Some(None), || Ok(true), || Ok(":9999".into())).is_err());
-    }
 
     #[test]
     fn manual_login_guard_rejects_debugging_arguments_before_spawn() {

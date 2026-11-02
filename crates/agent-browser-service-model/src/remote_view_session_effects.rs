@@ -645,6 +645,45 @@ impl<
         Ok(())
     }
 
+    fn refresh_manual_native_context(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<(), String>
+    where
+        E: BrowserSessionEffects + RemoteViewBrowserProcessEffects,
+    {
+        if !browser.cdp_endpoint.is_empty() || !self.effects.browser_is_live(browser)? {
+            return Ok(());
+        }
+        let desktop = browser
+            .desktop
+            .as_ref()
+            .ok_or("manual_login_native_desktop_missing")?;
+        let assignment = self
+            .store
+            .published_presentation_assignment(browser)
+            .map_err(|_| "manual_login_native_assignment_unavailable")?;
+        if assignment.desktop_id != desktop.desktop_id
+            || assignment.generation != desktop.generation
+        {
+            return Err("manual_login_native_assignment_changed".into());
+        }
+        let environment = self
+            .adapter
+            .launch_environment(&assignment)
+            .map_err(|_| "manual_login_native_context_unavailable")?;
+        let observation = self
+            .adapter
+            .observe_assignment(&assignment)
+            .map_err(|_| "manual_login_native_context_unavailable")?;
+        environment
+            .validate_observation(&observation, &assignment)
+            .map_err(|_| "manual_login_native_context_changed")?;
+        self.effects
+            .refresh_native_environment(browser, &assignment, environment, &observation)
+            .map_err(|_| "manual_login_native_context_rejected".into())
+    }
+
     fn require_operation(&self) -> Result<(), String> {
         if self.expected.is_none() {
             return Err("remote_view_session_operation_baseline_missing".into());
@@ -1252,6 +1291,7 @@ impl<
     }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         self.require_operation()?;
+        self.refresh_manual_native_context(browser)?;
         let effect = BrowserIdleRetirementEffect::CloseBrowser {
             browser_id: browser.id.clone(),
         };
@@ -1312,6 +1352,7 @@ impl<
         tab: &ManagedBrowserTab,
     ) -> Result<(), String> {
         self.require_operation()?;
+        self.refresh_manual_native_context(browser)?;
         let effect = BrowserIdleRetirementEffect::CloseTab {
             browser_id: browser.id.clone(),
             tab_id: tab.id.clone(),
@@ -1370,6 +1411,7 @@ impl<
         // CDP selects the addressed target. Provider observations then fence the
         // current desktop generations and prove the owned process is foreground.
         // This is window proof only; it does not establish viewer connectivity.
+        self.refresh_manual_native_context(browser)?;
         self.with_browser_activity(browser, |effects| effects.focus_browser(browser, tab))?;
         let windows = self
             .adapter
