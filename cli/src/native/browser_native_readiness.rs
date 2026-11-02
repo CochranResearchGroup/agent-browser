@@ -153,7 +153,7 @@ mod tests {
         http: RemoteViewApplicationHttp,
         server: std::thread::JoinHandle<()>,
         token_path: std::path::PathBuf,
-        _guard: EnvGuard,
+        _guard: EnvGuard<'static>,
     }
 
     impl OwnerFixture {
