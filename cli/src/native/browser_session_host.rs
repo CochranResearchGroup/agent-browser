@@ -31,6 +31,9 @@ mod browser_native_host;
 #[path = "browser_operation_lookup.rs"]
 mod browser_operation_lookup;
 
+#[path = "workspace_browser_launch.rs"]
+pub(crate) mod workspace_browser_launch;
+
 #[path = "profile_duplicate_host.rs"]
 mod profile_duplicate_host;
 
@@ -1615,6 +1618,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .get("action")
             .and_then(serde_json::Value::as_str)
             .ok_or_else(|| "browser_session_action_missing".to_string())?;
+        if action == "browser_session_workspace_open" {
+            return self.workspace_browser_launch(command);
+        }
         if let Some(readback) = self.operation_request_readback(command)? {
             return Ok(readback);
         }
@@ -2338,11 +2344,14 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         let id = optional_string(command, "profileId")
             .or_else(|| optional_string(command, "runtimeProfile"));
         let Some(id) = id else {
-            return if explicit_manual == Some(true) {
-                Err("manual_login_requires_persistent_profile".into())
-            } else {
-                Ok(())
-            };
+            if explicit_manual == Some(true) {
+                if !self.effects.admits_ordinary_sessions() {
+                    return Err("manual_login_requires_native_remote_desktop".into());
+                }
+                reqwest::Url::parse(required_string(command, "url")?)
+                    .map_err(|_| "manual_login_url_invalid")?;
+            }
+            return Ok(());
         };
         let profile = self
             .catalog
@@ -2572,12 +2581,28 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         let request = if let Some(profile_id) = optional_string(command, "profileId") {
             OpenBrowserSession::exact_profile(session_name, profile_id, activity_at_ms)
         } else {
-            OpenBrowserSession::disposable(
+            let request = OpenBrowserSession::disposable(
                 session_name,
                 optional_string(command, "disposablePolicyId")
                     .unwrap_or(DEFAULT_DISPOSABLE_POLICY_ID),
                 activity_at_ms,
-            )
+            );
+            if command
+                .get("manualLogin")
+                .and_then(serde_json::Value::as_bool)
+                == Some(true)
+            {
+                request.with_manual_login_url(required_string(command, "url")?)
+            } else {
+                request
+            }
+        };
+        let request = if let Some(selection) = command.get("workspaceDisposableBuild") {
+            let build = browser_build_selection::requested_build(selection, &[])?
+                .ok_or("workspace_build_required")?;
+            request.with_disposable_executable(build.path)
+        } else {
+            request
         };
         let request = if let Some(binding) = &hosted {
             request.with_placement(binding.placement.clone())

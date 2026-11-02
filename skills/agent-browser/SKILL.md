@@ -107,9 +107,9 @@ Discover `category:"playbooks"` and use `browser_command` in the existing task. 
 
 ## Read more only when needed
 
-Retained-task recovery requires proven process/profile absence and preserves peer claims. Continue through the original taskId.
+Retained recovery requires proven process/profile absence; preserve peers and the original taskId.
 
-Read the advanced reference for bounded host resource waits and retained session/tab history; continue existing tasks through taskId.
+The advanced reference covers host resource waits and retained history; continue through taskId.
 
 - [Commands](references/commands.md): detailed CLI syntax.
 - [Snapshot references](references/snapshot-refs.md): find and use element refs.
@@ -121,11 +121,11 @@ Read the advanced reference for bounded host resource waits and retained session
 Use `browser_discover` for advanced MCP metadata.
 
 
-For dashboard/viewer/startup failures, read [dashboard diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics).
+For workspace sign-in, read [workspace access](references/workspace-sign-in.md); for viewer/startup failures, read [diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics).
 
 ## Browser mode and builds
 
-Use `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build family/version and CDP mode are independent. Inspect before choosing; copy success never proves login portability. Read [controls and recovery](references/cli-and-service.md#browser-build-selection) before changing a build. Reconcile original operations after lost replies.
+Use `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build and CDP mode are independent. For copy checkpoints, source-mode uncertainty and original-operation readback, read [copy experiments](references/cli-and-service.md#profile-lab-independent-copies) and [build recovery](references/cli-and-service.md#browser-build-selection).
 
 Diagnostics retain selection query fields. Rail presence revalidates at 250/500/1000 ms, then polls every three seconds.
 

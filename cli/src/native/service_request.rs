@@ -796,6 +796,24 @@ pub(crate) fn normalize_service_request(
         }
     }
 
+    if action == "workspace_profile_library" {
+        // Params are untrusted public input. Only the authenticated transport
+        // may introduce actor proof after canonical normalization.
+        if let Some(fields) = command.as_object_mut() {
+            for field in [
+                "servicePrincipalId",
+                "servicePrincipalProvenance",
+                "serviceProfileCapabilityId",
+                "serviceProfileCapabilityRevision",
+                "actor",
+                "identityAssurance",
+                "operatorIdentity",
+            ] {
+                fields.remove(field);
+            }
+        }
+    }
+
     let mut trace = json!({
         "serviceName": Value::Null,
         "agentName": Value::Null,

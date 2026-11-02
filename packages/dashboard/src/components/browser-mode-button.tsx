@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { CircleHelp, Code2, MousePointer2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ProfileLab } from "@/components/profile-lab";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BrowserBuildDialog } from "@/components/browser-build-dialog";
 import { BrowserModeDialog } from "@/components/browser-mode-dialog";
 import { ProfileDuplicateDialog } from "@/components/profile-duplicate-dialog";
@@ -16,6 +18,7 @@ export function BrowserModeButton({ label, inspection, profileId, taskId, sessio
   const [conversion, setConversion] = useState<"cdp" | "cdp_free" | null>(null);
   const [buildProfile, setBuildProfile] = useState<string | null>(null);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [labOpen, setLabOpen] = useState(false);
   const sourceProfileId = profileId ?? inspection?.profileId;
   const [, expireEvidence] = useState(0);
   useEffect(() => {
@@ -38,7 +41,8 @@ export function BrowserModeButton({ label, inspection, profileId, taskId, sessio
   return <><DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
     <DropdownMenuTrigger asChild>
       <button type="button" className="native-browser-mode" aria-label={`Browser mode for ${label}: ${name}`}
-        title={`Browser mode: ${name}`} onPointerEnter={event => { if (event.pointerType !== "touch") setOpen(true); }}>
+        title={`Browser mode: ${name}`} onPointerEnter={event => { if (event.pointerType !== "touch") setOpen(true); }}
+        onPointerDown={event => { if (open && event.pointerType !== "touch" && event.button === 0) event.preventDefault(); }}>
         <Icon size={14} aria-hidden="true" />
       </button>
     </DropdownMenuTrigger>
@@ -53,9 +57,9 @@ export function BrowserModeButton({ label, inspection, profileId, taskId, sessio
       <DropdownMenuSeparator />
       {taskId && sessionName && <><DropdownMenuItem onSelect={() => { setOpen(false); setConversion("cdp"); }}>Relaunch with CDP</DropdownMenuItem><DropdownMenuItem onSelect={() => { setOpen(false); setConversion("cdp_free"); }}>Relaunch without CDP</DropdownMenuItem></>}
       {sourceProfileId && <DropdownMenuItem onSelect={() => { setOpen(false); setBuildProfile(sourceProfileId); }}>Choose browser build</DropdownMenuItem>}
-      {sourceProfileId && <DropdownMenuItem onSelect={() => { setOpen(false); setDuplicateOpen(true); }}>Duplicate profile</DropdownMenuItem>}
+      {sourceProfileId && <><DropdownMenuItem onSelect={() => { setOpen(false); setDuplicateOpen(true); }}>Duplicate profile</DropdownMenuItem><DropdownMenuItem onSelect={() => { setOpen(false); setLabOpen(true); }}>Profile Lab</DropdownMenuItem></>}
       <DropdownMenuItem disabled={refreshing} onSelect={event => { event.preventDefault(); void refresh(); }}>{refreshing ? "Refreshing inventory…" : "Refresh inventory"}</DropdownMenuItem>
       {error && <DropdownMenuLabel role="alert">Inventory refresh failed. Try again.</DropdownMenuLabel>}
     </DropdownMenuContent>
-  </DropdownMenu>{taskId && sessionName && (["cdp", "cdp_free"] as const).map(mode => <BrowserModeDialog key={`${taskId}:${mode}`} open={conversion === mode} onOpenChange={value => { if (!value) setConversion(null); }} taskId={taskId} sessionName={sessionName} profileId={sourceProfileId ?? undefined} browserId={inspection?.browserId} mode={mode} onRefresh={onRefresh} />)}{sourceProfileId && <ProfileDuplicateDialog open={duplicateOpen} onOpenChange={setDuplicateOpen} profileId={sourceProfileId} taskId={taskId} sessionName={sessionName} browserId={inspection?.browserId} onRefresh={onRefresh} onChooseCopy={setBuildProfile} />}{buildProfile && <BrowserBuildDialog key={buildProfile} open onOpenChange={value => { if (!value) setBuildProfile(null); }} profileId={buildProfile} taskId={taskId} onRefresh={onRefresh} onChooseCopy={setBuildProfile} />}</>;
+  </DropdownMenu>{taskId && sessionName && (["cdp", "cdp_free"] as const).map(mode => <BrowserModeDialog key={`${taskId}:${mode}`} open={conversion === mode} onOpenChange={value => { if (!value) setConversion(null); }} taskId={taskId} sessionName={sessionName} profileId={sourceProfileId ?? undefined} browserId={inspection?.browserId} mode={mode} onRefresh={onRefresh} />)}{sourceProfileId && <ProfileDuplicateDialog open={duplicateOpen} onOpenChange={setDuplicateOpen} profileId={sourceProfileId} taskId={taskId} sessionName={sessionName} browserId={inspection?.browserId} onRefresh={onRefresh} onChooseCopy={setBuildProfile} />}{buildProfile && <BrowserBuildDialog key={buildProfile} open onOpenChange={value => { if (!value) setBuildProfile(null); }} profileId={buildProfile} taskId={taskId} onRefresh={onRefresh} onChooseCopy={setBuildProfile} />}{sourceProfileId && <Dialog open={labOpen} onOpenChange={setLabOpen}><DialogContent className="native-task-dialog"><DialogHeader><DialogTitle>Profile Lab</DialogTitle><DialogDescription>Prepare independent profile copies and keep identity, authentication and storage checks separate.</DialogDescription></DialogHeader><ProfileLab profiles={[{ id: sourceProfileId, name: label, taskId: taskId ?? undefined, sessionName: sessionName ?? undefined, browserId: inspection?.browserId }]} onRefresh={onRefresh} /></DialogContent></Dialog>}</>;
 }

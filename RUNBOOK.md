@@ -1,5 +1,7 @@
 # Runbook
 
+[P300 workspace execution](docs/dev/plans/0300-2026-11-01-workspace-siteguides-523.md): spec523 and tickets524–530 published with native blocking edges. Root525 plus isolated workers524/526/527; actual narrated/copy acceptance remains separately qualified. One final review and one TDD pass are reserved.
+
 [Native operator-journey acceptance](docs/dev/notes/2026-10-31-native-journey-receipt.md), #512 / PR513, is installed accepted on sealed binary5a9f1250acef. Authenticated Native input, same-link reconnect, continued same-task automation and exact cleanup pass; operatorJourneyReady is now true. The idle profile-lease advisory remains separate.
 
 [P299 local validation](docs/dev/plans/0299-2026-10-31-local-validation-502.md), spec502 and all four children CLOSED through PR509/main9d1a18522; initial source readiness/reuse pass. The single final review and bounded TDD pass are complete through PR510/mainc738fb694; two Spec blockers and one redundant-suite finding are resolved. No hosted CI or runtime effects.

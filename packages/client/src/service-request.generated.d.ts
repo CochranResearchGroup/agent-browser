@@ -115,6 +115,7 @@ export type ServiceRequestAction =
   | "scrollintoview"
   | "focus"
   | "clear"
+  | "workspace_profile_library"
   | "service_browser_close"
   | "service_browser_repair"
   | "service_browser_contamination_report"

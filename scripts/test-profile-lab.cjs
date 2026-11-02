@@ -1,0 +1,62 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const http = require('node:http');
+const { chromium } = require('playwright');
+const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-browser-fixture.cjs');
+(async () => {
+  const root = path.resolve(__dirname, '..');
+  const artifacts = fs.mkdtempSync(path.join(os.tmpdir(), 'profile-lab-'));
+  let browser; let server;
+  try {
+    await buildWorkspaceViewportFixture(root, path.join(root, 'scripts/fixtures/profile-lab.tsx'), artifacts);
+    server = http.createServer((req, res) => { res.setHeader('Content-Type', req.url === '/bundle.js' ? 'application/javascript' : 'text/html'); res.end(req.url === '/bundle.js' ? fs.readFileSync(path.join(artifacts, 'bundle.js')) : '<div id="root"></div><script src="/bundle.js"></script>'); });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    browser = await chromium.launch({ executablePath: process.env.AGENT_BROWSER_TEST_CHROME || '/usr/bin/google-chrome', headless: true });
+    const page = await browser.newPage(); const commands = []; let retained; let loseReply = true;
+    const build = { id: 'chromium-130', name: 'Chromium', family: 'chromium', version: '130.1', available: true, selection: { buildId: 'chromium-130', expectedSha256: 'fixture-digest' } };
+    await page.route('**/api/command', async route => {
+      const command = route.request().postDataJSON(); commands.push(command);
+      if (command.action === 'browser_session_build_select') return route.fulfill({ json: { success: true, data: { schemaVersion: 'agent-browser.build-selection.v1', profileId: 'donor', availableBuilds: [build], activeTasks: [{ id: 'source-task', name: 'Unsaved research' }], nextLaunchMode: 'cdp', nextLaunchBuild: { ...build, name: 'Chrome', version: '129.7' } } } });
+      if (command.choice === 'inspect') return route.fulfill({ json: { success: true, data: { schemaVersion: 'agent-browser.browser-operations.v1', kind: 'profile_duplicate', profileId: 'donor', operations: retained ? [retained] : [] } } });
+      if (command.choice === 'prepare') retained = { schemaVersion: 'agent-browser.profile-duplication.v1', operationId: command.operationId, source: { id: 'donor', browserBuild: '129.7' }, sourceObservation: { mode: 'cdp_free', observedAtMs: 17, build: { name: 'Chrome', version: '129.7', sha256: 'source-digest' }, buildEvidence: 'original_loaded_digest' }, selectedBuild: build, requestedMode: command.mode, destination: { id: 'copy', name: command.destinationName }, phase: 'awaiting_owner_choice', affectedTaskIds: ['source-task'], actions: [{ action: 'close_and_duplicate', requiresConfirmation: true }] };
+      if (command.choice === 'close_and_duplicate') { retained = { ...retained, phase: 'launch_dispatched', actions: [{ action: 'reconcile', requiresConfirmation: false }] }; if (loseReply) { loseReply = false; return route.abort(); } }
+      if (command.choice === 'reconcile') retained = { ...retained, phase: 'completed', copyComplete: true, profilePublished: true, actions: [] };
+      await route.fulfill({ json: { success: true, data: retained } });
+    });
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    await page.goto(origin);
+    await page.getByText('Chrome 129.7', { exact: false }).waitFor({ timeout: 3000 });
+    await page.getByLabel('Chromium 130.1', { exact: true }).check();
+    await page.getByLabel('Target mode').selectOption('cdp_free');
+    await page.getByRole('button', { name: 'Review independent copy', exact: true }).click();
+    await page.getByLabel('Copy name').fill('Independent trial');
+    await page.getByRole('button', { name: 'Review duplication', exact: true }).click();
+    const prepared = commands.find(c => c.choice === 'prepare');
+    assert.equal(prepared.sourceProfileId, 'donor'); assert.equal(prepared.destinationName, 'Independent trial'); assert.equal(prepared.buildId, 'chromium-130'); assert.equal(prepared.mode, 'cdp_free');
+    await page.getByText('Original source mode: No CDP', { exact: false }).waitFor({ timeout: 2500 });
+    const close = page.getByRole('button', { name: 'Close source and duplicate', exact: true }); assert(await close.isDisabled());
+    await page.getByText('source-task', { exact: true }).waitFor();
+    await page.getByLabel('Confirm the selected browser action').check(); await close.click();
+    await page.getByRole('button', { name: 'Reconcile operation', exact: true }).waitFor();
+    await page.reload();
+    await page.getByLabel('Chromium 130.1', { exact: true }).check(); await page.getByRole('button', { name: 'Review independent copy', exact: true }).click();
+    await page.getByText(`Operation: ${prepared.operationId}`, { exact: true }).waitFor();
+    assert.equal(commands.filter(c => c.choice === 'close_and_duplicate').length, 1);
+    await page.getByRole('button', { name: 'Reconcile operation', exact: true }).click();
+    await page.getByText('Copy completion: Complete', { exact: true }).waitFor();
+    await page.getByText('Account identity: Unverified', { exact: true }).waitFor();
+    await page.getByText('Authentication usability: Unverified', { exact: true }).waitFor();
+    await page.getByText('Independent storage writes: Unverified', { exact: true }).waitFor();
+    assert.equal(commands.at(-1).operationId, prepared.operationId);
+    assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
+    retained = { ...retained, phase: 'cancelled', copyComplete: false, profilePublished: false, failure: 'source_fixture_failed', actions: [] };
+    const beforeFailure = commands.filter(c => !['inspect'].includes(c.choice) && c.action !== 'browser_session_build_select').length;
+    await page.reload(); await page.getByLabel('Chromium 130.1', { exact: true }).check(); await page.getByRole('button', { name: 'Review independent copy', exact: true }).click();
+    await page.getByRole('alert').filter({ hasText: 'source_fixture_failed' }).waitFor({ timeout: 2500 });
+    await page.getByText('Copy completion: Unverified', { exact: true }).waitFor();
+    assert.equal(commands.filter(c => !['inspect'].includes(c.choice) && c.action !== 'browser_session_build_select').length, beforeFailure, 'Failure readback never retries a copy');
+    console.log('Profile Lab mounted public operation workflow passed: exact selections, explicit closure, lost reply/readback, independent checkpoints; synthetic only.');
+  } finally { await browser?.close(); if (server) await new Promise(resolve => server.close(resolve)); fs.rmSync(artifacts, { recursive: true, force: true }); }
+})().catch(error => { console.error(error); process.exitCode = 1; });

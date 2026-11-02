@@ -8527,3 +8527,94 @@ fn current_retirement_excludes_historical_peers_through_sqlite_custody() {
         );
     }
 }
+
+#[test]
+fn workspace_manual_disposable_uses_native_owner_and_retains_original_allocation() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut host = host(&fixture, provider, calls.clone());
+    let command = serde_json::json!({"action":"browser_session_open","sessionName":"manual-disposable",
+        "url":"about:blank","manualLogin":true,"leaveOpen":true,"activityAtMs":100,
+        "serviceName":"fixture","agentName":"operator","originKind":"human","taskName":"Manual browsing"});
+    let first = host.handle_command(&command);
+    assert_eq!(first["success"], true, "{first}");
+    let id = first["data"]["sessionId"].as_str().unwrap().to_owned();
+    let profile_id = first["data"]["profileId"].as_str().unwrap().to_owned();
+    let browser = host.state().browsers.values().next().unwrap();
+    assert!(
+        browser.cdp_endpoint.is_empty(),
+        "CDP-free cannot acquire a debugging endpoint"
+    );
+    assert_eq!(
+        host.state().disposable_profiles[&profile_id]
+            .profile
+            .manual_login_url
+            .as_deref(),
+        Some("about:blank")
+    );
+    assert!(host.state().leave_open_session_ids.contains(&id));
+    assert_eq!(host.handle_command(&command)["data"]["sessionId"], id);
+    assert_eq!(
+        calls.get(),
+        1,
+        "reopening the same original task cannot launch again"
+    );
+    assert_eq!(host.state().disposable_profiles.len(), 1);
+}
+
+#[test]
+fn workspace_manual_launch_retains_original_request_and_inspection_never_replays() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let inspect = consumer.handle_command(&serde_json::json!({"action":"browser_session_workspace_open", "operation":"inspect", "operationId":"8e54f8ab-91ed-4bcb-91a2-88ab0df1a001", "operator":"operator"}));
+    assert!(
+        inspect["error"]
+            .as_str()
+            .unwrap_or("")
+            .contains("launch_unknown"),
+        "{inspect}"
+    );
+    assert_eq!(calls.get(), 0);
+    let executable = fixture.root.join("chrome");
+    std::fs::copy("/bin/true", &executable).unwrap();
+    use sha2::Digest;
+    let digest = format!(
+        "{:x}",
+        sha2::Sha256::digest(std::fs::read(&executable).unwrap())
+    );
+    let operation = "8e54f8ab-91ed-4bcb-91a2-88ab0df1a001";
+    let mut command = serde_json::json!({"action":"browser_session_workspace_open","operationId":operation,"operator":"operator","intent":{"operationId":operation,"profileMode":"disposable","mode":"cdp_free","url":"about:blank","leaveOpen":true,"buildSelection":{"executablePath":executable,"expectedSha256":digest}}});
+    let opened = consumer.handle_command(&command);
+    assert_eq!(opened["success"], true, "{opened}");
+    let inspected=consumer.handle_command(&serde_json::json!({"action":"browser_session_workspace_open","operation":"inspect","operationId":operation,"operator":"operator"}));
+    assert_eq!(inspected["data"], opened["data"]);
+    assert_eq!(calls.get(), 1);
+    let mut pending = consumer.state().clone();
+    pending
+        .managed_tab_requests
+        .values_mut()
+        .find(|row| row.session_name == opened["data"]["sessionName"].as_str().unwrap())
+        .unwrap()
+        .response = None;
+    drop(consumer);
+    fixture.store(false).save_session_state(&pending).unwrap();
+    let mut consumer = host(&fixture, provider, calls.clone());
+    let recovered=consumer.handle_command(&serde_json::json!({"action":"browser_session_workspace_open","operation":"inspect","operationId":operation,"operator":"operator"}));
+    assert_eq!(recovered["success"], true, "{recovered}");
+    assert_eq!(recovered["data"]["taskId"], opened["data"]["taskId"]);
+    assert_eq!(recovered["data"]["initialNavigation"], "unconfirmed");
+    assert_eq!(calls.get(), 1);
+    command["intent"]["url"] = serde_json::json!("https://example.test/");
+    let changed = consumer.handle_command(&command);
+    assert!(
+        changed["error"]
+            .as_str()
+            .unwrap_or("")
+            .contains("intent_changed"),
+        "{changed}"
+    );
+    assert_eq!(calls.get(), 1);
+}

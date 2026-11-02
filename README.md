@@ -3124,6 +3124,30 @@ Ordinary task updates do not consult malformed launch history or unchanged peer 
 
 ## Observability Dashboard
 
+The compact top toolbar contains **Open browser** and **Profiles and SiteGuides**.
+Open browser starts with a disposable profile, CDP-free mode and a blank page.
+Choose Chrome or Chromium, expand exact build/version details when needed, and
+select an existing profile or name a new durable profile. The existing inventory
+rail keeps its search, grouping, collapse and resize controls. Remote View supplies
+the actual desktop, native input and recording controls.
+
+Manual tasks remain open until explicitly closed, including when the dashboard
+is closed. An existing compatible connected profile gets a separate task/tab.
+A CDP-free profile has one owned window: return to that task, choose another
+profile, or duplicate and test in Profile Lab. Changing a closed original
+profile's build requires explicit migration/sign-in risk confirmation.
+
+The launcher retains its original operation across lost replies. Inspect that
+operation before creating another browser. A confirmed refusal with no effects
+allows revised choices; an uncertain result remains pending.
+
+Profiles support multiple intended site/account/organization associations.
+These labels remain separate from observed account identity and authentication
+freshness. Explicit profile choice is preserved; unique compatible exact
+identity matches can be selected automatically, while ambiguous or conflicting
+matches require a choice. The public policy owner filters profile visibility
+and use, and association changes do not update authentication evidence.
+
 Dashboard summary status omits detailed runtime resource inventories and reconciliation receipts while retaining health flags and resource totals. Its projection metadata reports omitted counts and points to complete `/api/service/status` diagnostics. Summary delivery failure is not evidence that browsers or tabs have ended.
 
 
@@ -3209,19 +3233,39 @@ Closing a diagnostic connection with no active profile tabs leaves authority
 state unchanged. A real disconnect marks only that connection's active tabs as
 disconnected; repeating the disconnect does not advance the state revision.
 
-The dashboard includes an app-owned login screen. On first start it creates
-`~/.agent-browser/dashboard-auth.json` with hashed superuser credentials and a
-mode-0600 bootstrap credential file at
-`~/.agent-browser/dashboard-auth.env`. The default `admin` account and the
-`codex` observer account are superusers. `~/.agent-browser/.env` records
-`AGENT_BROWSER_DASHBOARD_AUTH_FILE` so the user-scoped service and foreground
-runs use the same credential store. Set `AGENT_BROWSER_DASHBOARD_AUTH_DIR` to
-an isolated directory when a fixture must not read or rewrite the user-scoped
-auth store, bootstrap credentials, or managed environment file.
-Successful login creates a secure, host-wide browser cookie that lasts thirty
-days. Each authenticated dashboard load renews that period, so opening another
-durable remote-view link on the same public dashboard host does not require a
-new login. A different hostname or browser profile has its own cookie.
+The ordinary workspace uses the existing ingress sign-in and has no second
+password form. Configure the complete reviewed bridge below in the dashboard
+backend environment before relying on ingress identity:
+
+| Environment variable | Contract |
+| --- | --- |
+| `AGENT_BROWSER_DASHBOARD_INGRESS_VERIFY_URL` | Trusted Authelia owner URL ending exactly in `/api/authz/forward-auth`; HTTPS or numeric-loopback HTTP only. |
+| `AGENT_BROWSER_DASHBOARD_INGRESS_WORKSPACE_URL` | Fixed public HTTPS workspace URL whose GET access is checked by the owner. Review the owner ACL and verifier peer-IP semantics; caller Host and forwarded headers never select this URL. |
+| `AGENT_BROWSER_DASHBOARD_INGRESS_USERS` | JSON map from exact owner principal to an existing local dashboard username, for example `{"operator":"admin","reader":"codex"}`. Roles come from the current private auth store. Prefer one-to-one mappings to preserve distinct actor attribution. |
+
+The backend forwards the session cookie and constructs ForwardAuth metadata
+from the reviewed workspace URL. It accepts identity only from an owner HTTP200
+with one `Remote-User` value and an explicit mapping. Caller `Remote-*` headers
+never authenticate or grant a role. Redirects are not followed; owner302/303/401
+requests sign-in, denied or unmapped identities return403, and malformed or
+unavailable verification returns503. Partial or invalid configuration fails
+closed. Missing sign-in, denial, redirects and service failures offer recovery
+without rewriting the selected browser URL. See the
+[Authelia ForwardAuth metadata contract](https://www.authelia.com/reference/guides/proxy-authorization/#forwardauth-metadata).
+
+With all three variables absent, supported local and machine authentication
+remains available through the dashboard login API and signed sessions. First
+start creates private `~/.agent-browser/dashboard-auth.json` and mode-0600
+`~/.agent-browser/dashboard-auth.env`; `admin` is a superuser and `codex` is an
+observer. Existing `AGENT_BROWSER_DASHBOARD_AUTH_FILE` and
+`AGENT_BROWSER_DASHBOARD_AUTH_DIR` overrides remain supported. A valid local
+session takes precedence and renews its thirty-day cookie on status read.
+Ingress identity never becomes a local cookie. Auth responses identify the
+user's `authenticationSource` as `ingress` or `local`. **End local session**
+ends only the local cookie; ingress sign-out belongs to its provider. Workspace
+access is separate from website account authentication and Native viewer access.
+Source fixture passes do not establish installed ingress, cookie delivery or
+Native workflow acceptance.
 
 Authenticated dashboard identity and Guacamole route identity are separate.
 For a hosted Guacamole request, forward authentication keeps the signed-in
@@ -7290,6 +7334,36 @@ HTTP: send these fields and `action: "browser_session_profile_duplicate"` to
 set `ownerConfirmed: true` only for the explicitly selected consequential
 choice. After a lost reply, reconcile that operation before attempting another
 effect. Cancelling a request does not reopen a source already stopped.
+
+### Profile Lab independent copies
+
+Open **Profile Lab** from **Profiles and SiteGuides**. Select a source profile,
+review its configured browser/version, mode and current work, then choose an
+available target build and CDP-free or automation-connected mode. Give the copy
+its own name in **Review independent copy**. The existing duplication owner
+reviews affected tasks and offers the consistent-source action. Finish unsaved
+work and explicitly confirm source closure when offered; the UI never silently
+closes a running source. The destination gets an independent profile identity
+and data directory. Copying does not overwrite or restore the source.
+
+Source configured build/mode describe next-launch configuration, not the
+physical source process. Original source mode is unverified when the owner
+receipt does not retain it; observe it separately. Target build/version and
+requested mode come from the retained operation. Choosing an earlier executable
+does not undo data migration or restore profile bytes.
+
+The checkpoint disclosure separates copy completion, published profile identity,
+account identity, authentication usability and independent storage writes.
+Publication proves neither a usable login nor independent storage divergence.
+Account, authentication and storage checks remain unverified until independently
+observed for the exact source/copy/build/mode pair. Source and synthetic fixture
+checks are not real-account portability evidence.
+
+After a failed launch or interrupted reply, reopen the dialog and inspect the
+retained original operation. Reload and operation selection only read history.
+Continue the returned action with its original operation ID; reconcile uncertain
+results before any further effect. A failed operation stays visible. Do not
+prepare another copy or replay closure merely because a reply was lost.
 
 ### Convert an existing task
 
