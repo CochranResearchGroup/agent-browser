@@ -185,7 +185,8 @@ fn copy_operations(
             let cancelled = intent["cancelled"] == true;
             json!({"schemaVersion":"agent-browser.profile-duplication.v1","operationId":id,"phase":if cancelled {"cancelled"} else {"source_preparation_required"},"source":{"id":profile},"destination":{"id":intent["destination_profile_id"],"name":intent["destination_name"]},"launchRequested":intent["launch"],"actions":if cancelled {json!([])} else {json!([{"action":"open_source","requiresConfirmation":true},{"action":"cancel","requiresConfirmation":false}])}})
         };
-        view = super::profile_duplicate_host::decorate_retained_build(view, &raw)?;
+        view =
+            super::profile_duplicate_host::decorate_retained_build(view, &raw, binding.as_ref())?;
         view["kind"] = json!("profile_duplicate");
         view["profileId"] = json!(profile);
         view["browserId"] = binding

@@ -20,7 +20,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
       const command = route.request().postDataJSON(); commands.push(command);
       if (command.action === 'browser_session_build_select') return route.fulfill({ json: { success: true, data: { schemaVersion: 'agent-browser.build-selection.v1', profileId: 'donor', availableBuilds: [build], activeTasks: [{ id: 'source-task', name: 'Unsaved research' }], nextLaunchMode: 'cdp', nextLaunchBuild: { ...build, name: 'Chrome', version: '129.7' } } } });
       if (command.choice === 'inspect') return route.fulfill({ json: { success: true, data: { schemaVersion: 'agent-browser.browser-operations.v1', kind: 'profile_duplicate', profileId: 'donor', operations: retained ? [retained] : [] } } });
-      if (command.choice === 'prepare') retained = { schemaVersion: 'agent-browser.profile-duplication.v1', operationId: command.operationId, source: { id: 'donor', browserBuild: '129.7' }, selectedBuild: build, requestedMode: command.mode, destination: { id: 'copy', name: command.destinationName }, phase: 'awaiting_owner_choice', affectedTaskIds: ['source-task'], actions: [{ action: 'close_and_duplicate', requiresConfirmation: true }] };
+      if (command.choice === 'prepare') retained = { schemaVersion: 'agent-browser.profile-duplication.v1', operationId: command.operationId, source: { id: 'donor', browserBuild: '129.7' }, sourceObservation: { mode: 'cdp_free', observedAtMs: 17, build: { name: 'Chrome', version: '129.7', sha256: 'source-digest' }, buildEvidence: 'original_loaded_digest' }, selectedBuild: build, requestedMode: command.mode, destination: { id: 'copy', name: command.destinationName }, phase: 'awaiting_owner_choice', affectedTaskIds: ['source-task'], actions: [{ action: 'close_and_duplicate', requiresConfirmation: true }] };
       if (command.choice === 'close_and_duplicate') { retained = { ...retained, phase: 'launch_dispatched', actions: [{ action: 'reconcile', requiresConfirmation: false }] }; if (loseReply) { loseReply = false; return route.abort(); } }
       if (command.choice === 'reconcile') retained = { ...retained, phase: 'completed', copyComplete: true, profilePublished: true, actions: [] };
       await route.fulfill({ json: { success: true, data: retained } });
@@ -35,6 +35,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.getByRole('button', { name: 'Review duplication', exact: true }).click();
     const prepared = commands.find(c => c.choice === 'prepare');
     assert.equal(prepared.sourceProfileId, 'donor'); assert.equal(prepared.destinationName, 'Independent trial'); assert.equal(prepared.buildId, 'chromium-130'); assert.equal(prepared.mode, 'cdp_free');
+    await page.getByText('Original source mode: No CDP', { exact: false }).waitFor({ timeout: 2500 });
     const close = page.getByRole('button', { name: 'Close source and duplicate', exact: true }); assert(await close.isDisabled());
     await page.getByText('source-task', { exact: true }).waitFor();
     await page.getByLabel('Confirm the selected browser action').check(); await close.click();
