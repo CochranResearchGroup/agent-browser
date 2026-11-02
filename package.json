@@ -350,7 +350,11 @@
     "test:local-validation": "node --test scripts/test-local-validation.mjs",
     "test:profile-lab": "node scripts/test-profile-lab.cjs",
     "test:manual-browser-launch": "node scripts/test-manual-browser-launch.cjs",
-    "test:workspace-auth-gate": "node scripts/test-workspace-auth-gate.cjs"
+    "test:workspace-auth-gate": "node scripts/test-workspace-auth-gate.cjs",
+    "test:workspace-toolbar": "node scripts/test-workspace-toolbar.cjs",
+    "test:dashboard-profile-library": "node scripts/test-dashboard-profile-library.cjs",
+    "test:workspace-profile-library-client": "node --no-warnings --experimental-strip-types scripts/test-workspace-profile-library-client.ts",
+    "test:profile-library-service-client": "node scripts/test-profile-library-service-client.mjs"
   },
   "keywords": [
     "browser",

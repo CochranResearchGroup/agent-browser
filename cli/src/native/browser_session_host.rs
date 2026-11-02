@@ -31,6 +31,9 @@ mod browser_native_host;
 #[path = "browser_operation_lookup.rs"]
 mod browser_operation_lookup;
 
+#[path = "workspace_browser_launch.rs"]
+pub(crate) mod workspace_browser_launch;
+
 #[path = "profile_duplicate_host.rs"]
 mod profile_duplicate_host;
 
@@ -1615,6 +1618,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .get("action")
             .and_then(serde_json::Value::as_str)
             .ok_or_else(|| "browser_session_action_missing".to_string())?;
+        if action == "browser_session_workspace_open" {
+            return self.workspace_browser_launch(command);
+        }
         if let Some(readback) = self.operation_request_readback(command)? {
             return Ok(readback);
         }
@@ -2581,11 +2587,22 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     .unwrap_or(DEFAULT_DISPOSABLE_POLICY_ID),
                 activity_at_ms,
             );
-            if command.get("manualLogin").and_then(serde_json::Value::as_bool) == Some(true) {
+            if command
+                .get("manualLogin")
+                .and_then(serde_json::Value::as_bool)
+                == Some(true)
+            {
                 request.with_manual_login_url(required_string(command, "url")?)
             } else {
                 request
             }
+        };
+        let request = if let Some(selection) = command.get("workspaceDisposableBuild") {
+            let build = browser_build_selection::requested_build(selection, &[])?
+                .ok_or("workspace_build_required")?;
+            request.with_disposable_executable(build.path)
+        } else {
+            request
         };
         let request = if let Some(binding) = &hosted {
             request.with_placement(binding.placement.clone())

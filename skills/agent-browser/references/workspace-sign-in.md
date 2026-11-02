@@ -35,3 +35,11 @@ cookie; ingress provider sign-out remains separate.
 Never read credentials into logs, tracked docs or command arguments. Configure
 or mutate installed ingress only within its explicit authority. Source fixtures
 prove neither installed cookie delivery nor actual Native workflow acceptance.
+
+## Manual workspace tools
+
+Use the compact top-toolbar Open browser tool for Chrome/Chromium, exact installed build, existing/new durable/disposable profile, CDP-free or connected mode, and optional HTTP/HTTPS/blank URL. Disposable plus CDP-free is the default. Manual tasks stay open until explicitly closed. Compatible connected sharing creates an independent task/tab; CDP-free has one owned window. Return to that task or choose another profile. Use Profile Lab for independent copies. Changing an original closed profile build requires explicit migration/sign-in risk confirmation.
+
+A lost launch reply retains the original operation. Inspect it without creation replay. Only a confirmed refusal with no effects permits revised choices. A ready allocation selects exact browser/task/tab IDs; Native visibility remains independently qualified by the existing Remote View consumer. Remote View retains input, recording and narration controls.
+
+Profiles and SiteGuides stores multiple intended site/account/organization associations. Intended labels, observed identity and authentication freshness remain distinct. Explicit profile choice is honored. Automatic routing needs a unique compatible exact intended identity; ambiguity/conflict requires a choice. Public policy filters profile read/use/write, and association edits preserve authentication evidence.

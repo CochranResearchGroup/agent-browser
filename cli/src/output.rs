@@ -7383,6 +7383,13 @@ Commands:
   browser-mode TASK Inspect mode
   browser-native TASK ACTION JSON Input/capture <=1Mpx
   browser-build JSON Inspect/select/open profile build
+  Workspace Open browser: compact toolbar; disposable CDP-free is the default.
+  Choose Chrome/Chromium, an exact installed build, profile and optional URL.
+  New durable profiles retain data; manual tasks remain until explicitly closed.
+  Compatible connected profiles get an independent task/tab; conflicts need a choice.
+  Lost launch replies retain the original operation; inspect before another creation.
+  Profiles and SiteGuides manages intended site/account/workspace associations.
+  Intended labels, observed identity and authentication freshness remain distinct.
   profile-duplicate JSON Copy/inspect; retry_launch or finish_without_opening
   Profile Lab: Profiles and SiteGuides; choose source, target build/mode and copy name.
   Review affected source work; clean-source closure requires explicit confirmation.

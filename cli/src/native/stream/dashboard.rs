@@ -1,3 +1,5 @@
+#[path = "workspace_launch_http.rs"]
+mod workspace_launch_http;
 use futures_util::{FutureExt, SinkExt, StreamExt};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -486,6 +488,42 @@ pub(super) async fn handle_dashboard_connection(mut stream: tokio::net::TcpStrea
     } else {
         None
     };
+
+    if path == "/api/dashboard/profile-library" {
+        let body = if method == "POST" {
+            read_post_body(&mut stream, &buf, n).await
+        } else {
+            String::new()
+        };
+        super::http::handle_profile_library_http(
+            &mut stream,
+            method,
+            &body,
+            &headers,
+            secure_cookie,
+        )
+        .await;
+        return;
+    }
+
+    if path == "/api/dashboard/browser-launch" {
+        let body = if method == "POST" {
+            read_post_body(&mut stream, &buf, n).await
+        } else {
+            String::new()
+        };
+        workspace_launch_http::handle(
+            &mut stream,
+            method,
+            query,
+            &body,
+            authenticated_dashboard_user.as_deref().unwrap_or(""),
+            &headers,
+            secure_cookie,
+        )
+        .await;
+        return;
+    }
 
     // This route follows the ordinary dashboard authentication gate above.
     // Opening the durable handoff restores its browser before the native viewer redirect.

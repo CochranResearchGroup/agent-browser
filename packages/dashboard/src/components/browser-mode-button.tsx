@@ -41,7 +41,8 @@ export function BrowserModeButton({ label, inspection, profileId, taskId, sessio
   return <><DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
     <DropdownMenuTrigger asChild>
       <button type="button" className="native-browser-mode" aria-label={`Browser mode for ${label}: ${name}`}
-        title={`Browser mode: ${name}`} onPointerEnter={event => { if (event.pointerType !== "touch") setOpen(true); }}>
+        title={`Browser mode: ${name}`} onPointerEnter={event => { if (event.pointerType !== "touch") setOpen(true); }}
+        onPointerDown={event => { if (open && event.pointerType !== "touch" && event.button === 0) event.preventDefault(); }}>
         <Icon size={14} aria-hidden="true" />
       </button>
     </DropdownMenuTrigger>

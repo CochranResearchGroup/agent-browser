@@ -26,8 +26,8 @@ Root owns compact workspace/launcher integration, public HTTP/service wiring, ce
 | --- | --- | --- | --- |
 | #524 | Use existing ingress sign-in for the compact workspace | none | integrated/b35e2d795; cumulative gates pending |
 | #525 | Open manual browsers from the existing compact toolbar | none | running/root |
-| #526 | Manage site identities and choose matching profiles | none | integrated/129418c21,73b7ed08d; transport followup running/p300_profiles526 |
-| #527 | Plan and execute independent profile copies through Profile Lab | none | integrated/19602e955,54825b4c5; composition and cumulative gates pending |
+| #526 | Manage site identities and choose matching profiles | none | integrated/129418c21,73b7ed08d,cd9fa2502,94099363b; root gateway final gate pending |
+| #527 | Plan and execute independent profile copies through Profile Lab | none | validated/root932d40070 plus root composition; tracker closure pending |
 | #528 | Manage SiteGuides and teach through Remote View recordings | #525, #526 | pending |
 | #529 | Qualify the integrated Native workspace and narrated teaching journey | #524, #525, #526, #528 | pending |
 | #530 | Qualify real-account Chrome and Chromium profile portability | #527 | pending |
@@ -51,3 +51,13 @@ Root525 red/green evidence: public service-model disposable Native posture regre
 Root Cargo uses isolated target `/tmp/agent-browser-p300-root-target`; workers use their own targets. A separate active lane owns the canonical CLI target. No target cache or foreign process was removed. Root model/native focused tests used a reviewed8GiB claim and8GiB cap with8 jobs; full cumulative gates retain ordinary admission. No hosted CI is dispatched.
 
 Shared documentation custody transferred serially527 then524; root retains launcher and cumulative guidance. Profiles transport module/action/router custody remains526 until its followup checkpoint. The selected real donor/account and actual human-narrated recording are requested;529/530 remain unqualified. No ticket is tracker-closed at this checkpoint.
+
+## Integrated source gate checkpoint
+
+Current worker integrations are auth524 b35e2d795/55ad334b1, profile526 cd9fa2502/94099363b, and copies527932d40070 plus prior source/docs commits.527 now retains optional frozen original source mode/build observation in the same owner binding. Qualified Linux loaded-digest evidence is distinguished from on-disk evidence; old/missing observations stay unknown. Public continuation and pure operation lookup preserve that original observation. Focused duplication3/3, mounted Profile Lab and18 original-operation/history paths pass; root reran the mounted Lab after integration. No actual account portability is claimed.
+
+Root cumulative cargo-safe workspace Clippy with warnings denied passed on the integrated working source. Cargo-safe formatting check passed. The complete service-model suite passed, including all integration binaries and compile-fail doctests. Source checkpoint contains unfinished525 acceptance, so this does not close525. Root's mounted launcher, known-no-effect versus uncertain recovery, explicit existing-task return, complete compact workspace, toolbar/manager/Profile Lab composition, profile manager/client and public service/MCP client checks pass. Docs build and links pass.524 integrated auth-status/mounted gate and dashboard production build pass; its repeated frozen build used unchanged hashes across the five relevant UI files, with only existing static-export rewrite warnings.
+
+The actual public dashboard launcher HTTP test passed anonymous/spoof refusal, authenticated catalog, preflight refusal, private/unknown profile protection, original readback and no browser/daemon launch. A final composition rerun adds the authenticated dashboard profile-library forwarder after526's fresh native inventory overlay. Root's disposable Native launch and original-request tests passed, including serialization/reopen and recovery of an existing allocation whose final reply was missing. That recovery acknowledges exact allocation only; navigation remains unconfirmed and is never replayed.
+
+Review count remains0 and bounded final TDD count0. Tests used synthetic fixtures and isolated homes; no production/provider/account/media effects occurred. Draft integration PR: https://github.com/CochranResearchGroup/agent-browser/pull/532.

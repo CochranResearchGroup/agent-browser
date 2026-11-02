@@ -167,7 +167,9 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.getByRole('menu', { name: 'Browser mode details' }).waitFor();
     assert.match(await page.getByRole('menu').innerText(), /Executable: chrome/);
     assert.match(await page.getByRole('menu').innerText(), /Ownership: Managed/);
-    assert.equal(await page.getByRole('menuitem', { name: /Relaunch|Duplicate/ }).count(), 0, 'No dead mutation controls before their implementation');
+    assert.equal(await page.getByRole('menuitem', { name: /Relaunch/ }).count(), 0, 'Relaunch needs an exact managed task');
+    assert.equal(await page.getByRole('menuitem', { name: 'Duplicate profile', exact: true }).count(), 1, 'Known profiles expose the existing copy owner');
+    assert.equal(await page.getByRole('menuitem', { name: 'Profile Lab', exact: true }).count(), 1);
     await page.keyboard.press('Escape');
     await cdpMode.click();
     await page.getByRole('menu', { name: 'Browser mode details' }).waitFor();
@@ -199,7 +201,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
       'desktop drawer must anchor alongside the browser rail');
     await page.emulateMedia({ reducedMotion: 'reduce' });
 
-    for (const name of ['Refresh browsers', 'Sign out']) assert.equal(await page.getByRole('button', { name, exact: true, includeHidden: true }).getAttribute('title'), name);
+    for (const name of ['Refresh browsers', 'End local session']) assert.equal(await page.getByRole('button', { name, exact: true, includeHidden: true }).getAttribute('title'), name);
     const beforeListControls = requests.length;
     await page.evaluate(() => window.dispatchEvent(new CustomEvent('fixture-handoffs-records', { detail: [
       { handoffId: 'zeta', handoffUrl: '/remote-view/zeta', taskMetadata: { taskName: 'Zeta' }, createdAtMs: 3000, expiresAtMs: null, linkState: 'active', targetState: 'expired' },

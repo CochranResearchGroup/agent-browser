@@ -3124,6 +3124,30 @@ Ordinary task updates do not consult malformed launch history or unchanged peer 
 
 ## Observability Dashboard
 
+The compact top toolbar contains **Open browser** and **Profiles and SiteGuides**.
+Open browser starts with a disposable profile, CDP-free mode and a blank page.
+Choose Chrome or Chromium, expand exact build/version details when needed, and
+select an existing profile or name a new durable profile. The existing inventory
+rail keeps its search, grouping, collapse and resize controls. Remote View supplies
+the actual desktop, native input and recording controls.
+
+Manual tasks remain open until explicitly closed, including when the dashboard
+is closed. An existing compatible connected profile gets a separate task/tab.
+A CDP-free profile has one owned window: return to that task, choose another
+profile, or duplicate and test in Profile Lab. Changing a closed original
+profile's build requires explicit migration/sign-in risk confirmation.
+
+The launcher retains its original operation across lost replies. Inspect that
+operation before creating another browser. A confirmed refusal with no effects
+allows revised choices; an uncertain result remains pending.
+
+Profiles support multiple intended site/account/organization associations.
+These labels remain separate from observed account identity and authentication
+freshness. Explicit profile choice is preserved; unique compatible exact
+identity matches can be selected automatically, while ambiguous or conflicting
+matches require a choice. The public policy owner filters profile visibility
+and use, and association changes do not update authentication evidence.
+
 Dashboard summary status omits detailed runtime resource inventories and reconciliation receipts while retaining health flags and resource totals. Its projection metadata reports omitted counts and points to complete `/api/service/status` diagnostics. Summary delivery failure is not evidence that browsers or tabs have ended.
 
 

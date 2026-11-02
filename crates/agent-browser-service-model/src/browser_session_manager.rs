@@ -1423,13 +1423,22 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
         let profile = self.resolve_profile_for_open(&request)?;
         if let Some(path) = &request.disposable_executable {
-            if profile.kind != BrowserProfileKind::Disposable || !std::path::Path::new(path).is_absolute() {
+            if profile.kind != BrowserProfileKind::Disposable
+                || !std::path::Path::new(path).is_absolute()
+            {
                 return Err("browser_disposable_build_selection_invalid".into());
             }
-            if self.state.profile_executables.get(&profile.id).is_some_and(|current| current != path) {
+            if self
+                .state
+                .profile_executables
+                .get(&profile.id)
+                .is_some_and(|current| current != path)
+            {
                 return Err("browser_disposable_build_conflict".into());
             }
-            self.state.profile_executables.insert(profile.id.clone(), path.clone());
+            self.state
+                .profile_executables
+                .insert(profile.id.clone(), path.clone());
         }
         if let Some(operation) = self.state.profile_operation_ids.get(&profile.id) {
             return Err(format!("browser_profile_operation_pending:{operation}:inspect or resume the owner operation"));

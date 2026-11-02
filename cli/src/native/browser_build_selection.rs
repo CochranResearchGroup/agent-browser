@@ -518,7 +518,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
 }
 
 /// Review exact executable bytes without asserting profile or credential portability.
-fn requested_build(
+pub(super) fn requested_build(
     command: &Value,
     additional: &[String],
 ) -> Result<Option<ExecutableEvidence>, String> {
@@ -577,4 +577,22 @@ pub(super) fn verify_build(path: &str, expected: Option<&str>) -> Result<(), Str
         return Err("browser_build_changed:choose another build and review again".into());
     }
     Ok(())
+}
+
+/// Installed build choices without allocating a profile or opening a browser.
+pub(super) fn workspace_builds() -> Result<Vec<Value>, String> {
+    Ok(candidate_paths(&json!({}), &[])?
+        .into_iter()
+        .map(|path| inspect_executable(&path))
+        .filter(|row| {
+            row.available
+                && row.native_binary != Some(false)
+                && matches!(row.family.as_deref(), Some("chrome" | "chromium"))
+        })
+        .map(|row| {
+            let mut public = row.public();
+            public["selection"] = json!({"buildId":row.id,"expectedSha256":row.sha256});
+            public
+        })
+        .collect())
 }
