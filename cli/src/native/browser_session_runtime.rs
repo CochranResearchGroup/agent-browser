@@ -243,6 +243,17 @@ impl<D: RemoteViewBrowserProcessEffects> RemoteViewBrowserProcessEffects
             .recover_launch(browser, profile, intent, environment, observation)
     }
 
+    fn refresh_native_environment(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        assignment: &agent_browser_service_model::RemoteViewAssignmentRecord,
+        environment: RemoteViewPrivateLaunchEnvironment,
+        observation: &RemoteViewAssignmentObservation,
+    ) -> Result<(), RemoteViewBrowserProcessError> {
+        self.runtime
+            .refresh_native_environment(browser, assignment, environment, observation)
+    }
+
     fn launch(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
@@ -611,6 +622,12 @@ enum BrowserRuntimeCommand {
         recovery_browser: Option<ManagedBrowserInstance>,
         reply: mpsc::Sender<Result<BrowserLaunch, String>>,
     },
+    RefreshNativeContext {
+        browser: ManagedBrowserInstance,
+        desktop: RemoteViewFixedDesktop,
+        environment: std::collections::BTreeMap<String, String>,
+        reply: mpsc::Sender<Result<(), String>>,
+    },
     Close {
         browser: ManagedBrowserInstance,
         reply: mpsc::Sender<Result<(), String>>,
@@ -773,6 +790,39 @@ impl RemoteViewBrowserProcessEffects for BrowserManagerRuntime {
             },
         )
         .map_err(|_| RemoteViewBrowserProcessError::OutcomeUnknown)
+    }
+
+    fn refresh_native_environment(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        assignment: &agent_browser_service_model::RemoteViewAssignmentRecord,
+        environment: RemoteViewPrivateLaunchEnvironment,
+        observation: &RemoteViewAssignmentObservation,
+    ) -> Result<(), RemoteViewBrowserProcessError> {
+        let desktop = browser
+            .desktop
+            .as_ref()
+            .ok_or(RemoteViewBrowserProcessError::Rejected)?;
+        if !manual::is_manual(browser)
+            || desktop.desktop_id != assignment.desktop_id
+            || desktop.generation != assignment.generation
+        {
+            return Err(RemoteViewBrowserProcessError::Rejected);
+        }
+        let environment = environment
+            .into_environment(observation, assignment)
+            .map_err(|_| RemoteViewBrowserProcessError::Rejected)?;
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::RefreshNativeContext {
+                browser: browser.clone(),
+                desktop: desktop.clone(),
+                environment,
+                reply,
+            },
+        )
+        .map_err(|_| RemoteViewBrowserProcessError::Rejected)
     }
 
     fn launch(
@@ -1321,6 +1371,14 @@ fn run_browser_worker(
                     Ok(launch)
                 })();
                 let _ = reply.send(result);
+            }
+            BrowserRuntimeCommand::RefreshNativeContext {
+                browser,
+                desktop,
+                environment,
+                reply,
+            } => {
+                let _ = reply.send(manual.refresh_native_context(&browser, &desktop, environment));
             }
             BrowserRuntimeCommand::IsLive { browser, reply } if manual::is_manual(&browser) => {
                 let _ = reply.send(manual.verify(&browser));

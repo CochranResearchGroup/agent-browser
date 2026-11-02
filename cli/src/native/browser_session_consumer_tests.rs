@@ -179,6 +179,38 @@ fn competing_write(root: &std::path::Path) {
         .unwrap();
 }
 impl RemoteViewBrowserProcessEffects for Process {
+    fn refresh_native_environment(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        assignment: &RemoteViewAssignmentRecord,
+        environment: RemoteViewPrivateLaunchEnvironment,
+        observation: &RemoteViewAssignmentObservation,
+    ) -> Result<(), RemoteViewBrowserProcessError> {
+        let desktop = browser
+            .desktop
+            .as_ref()
+            .ok_or(RemoteViewBrowserProcessError::Rejected)?;
+        if desktop.desktop_id != assignment.desktop_id
+            || desktop.generation != assignment.generation
+        {
+            return Err(RemoteViewBrowserProcessError::Rejected);
+        }
+        if self.root.join("real-native-context-adoption").exists() {
+            use super::browser_session_runtime::BrowserManagerRuntime;
+            let mut runtime = BrowserManagerRuntime::start(Default::default())
+                .map_err(|_| RemoteViewBrowserProcessError::Rejected)?;
+            runtime.refresh_native_environment(browser, assignment, environment, observation)?;
+        } else {
+            environment
+                .into_environment(observation, assignment)
+                .map_err(|_| RemoteViewBrowserProcessError::Rejected)?;
+        }
+        let path = self.root.join("native-context-refresh-count");
+        let count = std::fs::read_to_string(&path).map_or(0, |value| value.parse::<u32>().unwrap());
+        std::fs::write(path, (count + 1).to_string()).unwrap();
+        Ok(())
+    }
+
     fn preflight_launch(&mut self, _profile: &BrowserProfileCatalogEntry) -> Result<(), String> {
         if self.root.join("preflight-pressure").exists() {
             Err("browser_launch_resource_pressure:browser_process_capacity_exhausted".into())
@@ -290,11 +322,18 @@ impl RemoteViewBrowserProcessEffects for Process {
             process_identity: (!std::fs::read_to_string(self.root.join("legacy-launch-no-kernel"))
                 .ok()
                 .is_some_and(|legacy| legacy.trim() == profile.id))
-            .then(|| RecordedProcessIdentity {
-                pid,
-                start_token: format!("synthetic-original:{pid}"),
-                executable_path: Some("/synthetic/chrome".into()),
-                browser_family: None,
+            .then(|| {
+                live.as_ref()
+                    .and_then(|value| value.get("processIdentity"))
+                    .map_or_else(
+                        || RecordedProcessIdentity {
+                            pid,
+                            start_token: format!("synthetic-original:{pid}"),
+                            executable_path: Some("/synthetic/chrome".into()),
+                            browser_family: None,
+                        },
+                        |value| serde_json::from_value(value.clone()).unwrap(),
+                    )
             }),
             browser_id: format!("browser:{}", profile.id),
             pid,
@@ -593,6 +632,18 @@ impl BrowserSessionEffects for Process {
         _browser: &ManagedBrowserInstance,
         _tab: Option<&ManagedBrowserTab>,
     ) -> Result<(), String> {
+        if _browser.cdp_endpoint.is_empty() {
+            assert!(
+                self.root.join("native-context-refresh-count").exists(),
+                "manual local effect requires fresh Native context"
+            );
+        }
+        if _browser.cdp_endpoint.is_empty() {
+            let path = self.root.join("manual-native-focus-count");
+            let count =
+                std::fs::read_to_string(&path).map_or(0, |value| value.parse::<u32>().unwrap());
+            std::fs::write(path, (count + 1).to_string()).unwrap();
+        }
         Ok(())
     }
     fn allocate_disposable_profile(

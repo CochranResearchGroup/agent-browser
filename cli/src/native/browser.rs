@@ -2848,20 +2848,25 @@ pub(crate) async fn resolve_cdp_url(input: &str) -> Result<String, String> {
 
 #[cfg(target_os = "linux")]
 fn focus_x11_browser_window(pid: u32, display_name: &str) -> Result<Value, String> {
-    x11_focus::focus_window_for_pid(pid, display_name, false)
+    x11_focus::focus_window_for_pid(pid, display_name, false, None)
 }
 
 #[cfg(target_os = "linux")]
 pub(crate) fn focus_viewable_x11_browser_window(
     pid: u32,
     display_name: &str,
+    authority: &std::path::Path,
 ) -> Result<Value, String> {
-    x11_focus::focus_window_for_pid(pid, display_name, true)
+    x11_focus::focus_window_for_pid(pid, display_name, true, Some(authority))
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) fn close_x11_browser_windows(pid: u32, display_name: &str) -> Result<(), String> {
-    x11_focus::close_windows_for_pid(pid, display_name)
+pub(crate) fn close_x11_browser_windows(
+    pid: u32,
+    display_name: &str,
+    authority: &std::path::Path,
+) -> Result<(), String> {
+    x11_focus::close_windows_for_pid(pid, display_name, Some(authority))
 }
 
 #[cfg(target_os = "linux")]
@@ -2878,11 +2883,102 @@ mod x11_focus {
 
     // Every request is bound to this connection. A vanished XID returns checked
     // protocol readback instead of invoking Xlib's process-wide fatal handler.
-    fn connect(display: &str) -> Result<(RustConnection, Window), String> {
-        let (connection, screen) = x11rb::connect(Some(display))
-            .map_err(|_| "X11 browser display unavailable".to_string())?;
-        let root = connection.setup().roots[screen].root;
-        Ok((connection, root))
+    fn connect(
+        display: &str,
+        authority: Option<&std::path::Path>,
+    ) -> Result<(RustConnection, Window), String> {
+        let unavailable = || "X11 browser display unavailable".to_string();
+        let Some(authority) = authority else {
+            let (connection, screen) = x11rb::connect(Some(display)).map_err(|_| unavailable())?;
+            let root = connection.setup().roots[screen].root;
+            return Ok((connection, root));
+        };
+        // Explicit provider context never falls back to this process's HOME or
+        // XAUTHORITY. The same private file is read afresh for each connection.
+        let parsed = x11rb::reexports::x11rb_protocol::parse_display::parse_display(Some(display))
+            .map_err(|_| unavailable())?;
+        let screen = usize::from(parsed.screen);
+        for address in parsed.connect_instruction() {
+            if let Ok((stream, (family, peer))) =
+                x11rb::rust_connection::DefaultStream::connect(&address)
+            {
+                let (name, data) = authority_for_peer(authority, family, &peer, parsed.display)
+                    .map_err(|_| unavailable())?;
+                let connection =
+                    RustConnection::connect_to_stream_with_auth_info(stream, screen, name, data)
+                        .map_err(|_| unavailable())?;
+                let root = connection.setup().roots[screen].root;
+                return Ok((connection, root));
+            }
+        }
+        Err(unavailable())
+    }
+
+    /// Bounded, read-only Xauthority selection. These bytes are connection-local
+    /// credentials: never format, serialize or include them in an error.
+    fn authority_for_peer(
+        path: &std::path::Path,
+        peer_family: x11rb::reexports::x11rb_protocol::xauth::Family,
+        peer: &[u8],
+        display: u16,
+    ) -> Result<(Vec<u8>, Vec<u8>), ()> {
+        use std::io::Read;
+        use std::os::unix::fs::OpenOptionsExt;
+        use x11rb::reexports::x11rb_protocol::xauth::Family;
+        if !path.is_absolute() {
+            return Err(());
+        }
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NONBLOCK | libc::O_CLOEXEC)
+            .open(path)
+            .map_err(|_| ())?;
+        if !file.metadata().map_err(|_| ())?.is_file() {
+            return Err(());
+        }
+        let mut bytes = Vec::new();
+        file.take(65537).read_to_end(&mut bytes).map_err(|_| ())?;
+        if bytes.len() > 65536 {
+            return Err(());
+        }
+        fn number(bytes: &mut &[u8]) -> Result<u16, ()> {
+            let value = bytes.get(..2).ok_or(())?;
+            let result = u16::from_be_bytes([value[0], value[1]]);
+            *bytes = &bytes[2..];
+            Ok(result)
+        }
+        fn field<'a>(bytes: &mut &'a [u8]) -> Result<&'a [u8], ()> {
+            let length = usize::from(number(bytes)?);
+            let value = bytes.get(..length).ok_or(())?;
+            *bytes = &bytes[length..];
+            Ok(value)
+        }
+        let display = display.to_string();
+        let mut remaining = bytes.as_slice();
+        let mut selected: Option<(Vec<u8>, Vec<u8>)> = None;
+        while !remaining.is_empty() {
+            let family = Family::from(number(&mut remaining)?);
+            let address = field(&mut remaining)?;
+            let number = field(&mut remaining)?;
+            let name = field(&mut remaining)?;
+            let data = field(&mut remaining)?;
+            if (family == Family::WILD || (family == peer_family && address == peer))
+                && (number.is_empty() || number == display.as_bytes())
+                && name == b"MIT-MAGIC-COOKIE-1"
+            {
+                if data.len() != 16 {
+                    return Err(());
+                }
+                if selected
+                    .as_ref()
+                    .is_some_and(|(_, previous)| previous != data)
+                {
+                    return Err(());
+                }
+                selected = Some((name.to_vec(), data.to_vec()));
+            }
+        }
+        selected.ok_or(())
     }
 
     fn atom(connection: &RustConnection, name: &[u8]) -> Result<Atom, String> {
@@ -2935,8 +3031,12 @@ mod x11_focus {
 
     /// Request normal application closure, allowing Chrome's cookie store to
     /// flush. Only this process's WM-managed top-level windows receive it.
-    pub(super) fn close_windows_for_pid(pid: u32, display: &str) -> Result<(), String> {
-        let (connection, root) = connect(display)?;
+    pub(super) fn close_windows_for_pid(
+        pid: u32,
+        display: &str,
+        authority: Option<&std::path::Path>,
+    ) -> Result<(), String> {
+        let (connection, root) = connect(display, authority)?;
         let pid_atom = atom(&connection, b"_NET_WM_PID")?;
         let protocols = atom(&connection, b"WM_PROTOCOLS")?;
         let delete = atom(&connection, b"WM_DELETE_WINDOW")?;
@@ -2967,8 +3067,9 @@ mod x11_focus {
         pid: u32,
         display: &str,
         viewable_only: bool,
+        authority: Option<&std::path::Path>,
     ) -> Result<Value, String> {
-        let (connection, root) = connect(display)?;
+        let (connection, root) = connect(display, authority)?;
         let unavailable =
             || format!("No X11 window found for browser PID {pid}: read current window state");
         let pid_atom = atom(&connection, b"_NET_WM_PID")?;
@@ -3072,7 +3173,165 @@ mod x11_focus {
         fn vanished_window_does_not_terminate_browser_owner() {
             const CHILD: &str = "AGENT_BROWSER_X11_RACE_FIXTURE_DISPLAY";
             if let Ok(display) = std::env::var(CHILD) {
-                let (connection, screen) = x11rb::connect(Some(&display)).unwrap();
+                let authority = std::path::PathBuf::from(
+                    std::env::var_os("AGENT_BROWSER_X11_FIXTURE_AUTHORITY").unwrap(),
+                );
+                let data = std::fs::read(&authority).unwrap();
+                let parsed =
+                    x11rb::reexports::x11rb_protocol::parse_display::parse_display(Some(&display))
+                        .unwrap();
+                let (stream, _) = x11rb::rust_connection::DefaultStream::connect(
+                    &parsed.connect_instruction().next().unwrap(),
+                )
+                .unwrap();
+                let screen = usize::from(parsed.screen);
+                let connection = RustConnection::connect_to_stream_with_auth_info(
+                    stream,
+                    screen,
+                    b"MIT-MAGIC-COOKIE-1".to_vec(),
+                    data[data.len() - 16..].to_vec(),
+                )
+                .unwrap();
+                let parent_env = [std::env::var_os("DISPLAY"), std::env::var_os("XAUTHORITY")];
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&authority, std::fs::Permissions::from_mode(0o400))
+                    .unwrap();
+                // A second server in the same private namespaces has an
+                // independent cookie. Neither context can authenticate to its peer.
+                let second_authority = authority.with_file_name("second-authority");
+                let mut second_data = data.clone();
+                let tail = second_data.len() - 16;
+                getrandom::getrandom(&mut second_data[tail..]).unwrap();
+                std::fs::write(&second_authority, &second_data).unwrap();
+                std::fs::set_permissions(&second_authority, std::fs::Permissions::from_mode(0o400))
+                    .unwrap();
+                struct Server(std::process::Child);
+                impl Drop for Server {
+                    fn drop(&mut self) {
+                        let _ = self.0.kill();
+                        let _ = self.0.wait();
+                    }
+                }
+                let mut second_server = Server(
+                    Command::new("Xvfb")
+                        .args([
+                            "-displayfd",
+                            "1",
+                            "-screen",
+                            "0",
+                            "320x240x24",
+                            "-nolisten",
+                            "tcp",
+                            "-auth",
+                        ])
+                        .arg(&second_authority)
+                        .stdout(Stdio::piped())
+                        .stderr(Stdio::null())
+                        .spawn()
+                        .unwrap(),
+                );
+                let stdout = second_server.0.stdout.take().unwrap();
+                let (sender, receiver) = std::sync::mpsc::channel();
+                let reader = std::thread::spawn(move || {
+                    let mut line = String::new();
+                    BufReader::new(stdout).read_line(&mut line).unwrap();
+                    let _ = sender.send(line);
+                });
+                let second_display = format!(
+                    ":{}",
+                    receiver
+                        .recv_timeout(std::time::Duration::from_secs(10))
+                        .unwrap()
+                        .trim()
+                );
+                reader.join().unwrap();
+                let parsed = x11rb::reexports::x11rb_protocol::parse_display::parse_display(Some(
+                    &second_display,
+                ))
+                .unwrap();
+                let (stream, _) = x11rb::rust_connection::DefaultStream::connect(
+                    &parsed.connect_instruction().next().unwrap(),
+                )
+                .unwrap();
+                let second = RustConnection::connect_to_stream_with_auth_info(
+                    stream,
+                    usize::from(parsed.screen),
+                    b"MIT-MAGIC-COOKIE-1".to_vec(),
+                    second_data[tail..].to_vec(),
+                )
+                .unwrap();
+                let second_root = second.setup().roots[usize::from(parsed.screen)].root;
+                let peer_window = second.generate_id().unwrap();
+                second
+                    .create_window(
+                        0,
+                        peer_window,
+                        second_root,
+                        0,
+                        0,
+                        100,
+                        100,
+                        0,
+                        WindowClass::INPUT_OUTPUT,
+                        0,
+                        &CreateWindowAux::new(),
+                    )
+                    .unwrap()
+                    .check()
+                    .unwrap();
+                let second_atom = |name: &[u8]| {
+                    second
+                        .intern_atom(false, name)
+                        .unwrap()
+                        .reply()
+                        .unwrap()
+                        .atom
+                };
+                second
+                    .change_property32(
+                        PropMode::REPLACE,
+                        peer_window,
+                        second_atom(b"_NET_WM_PID"),
+                        AtomEnum::CARDINAL,
+                        &[std::process::id()],
+                    )
+                    .unwrap()
+                    .check()
+                    .unwrap();
+                second
+                    .change_property32(
+                        PropMode::REPLACE,
+                        second_root,
+                        second_atom(b"_NET_CLIENT_LIST_STACKING"),
+                        AtomEnum::WINDOW,
+                        &[peer_window],
+                    )
+                    .unwrap()
+                    .check()
+                    .unwrap();
+                second.map_window(peer_window).unwrap().check().unwrap();
+                assert!(focus_window_for_pid(
+                    std::process::id(),
+                    &display,
+                    true,
+                    Some(&authority.with_file_name("missing-authority"))
+                )
+                .is_err());
+                assert!(focus_window_for_pid(
+                    std::process::id(),
+                    &display,
+                    true,
+                    Some(&second_authority)
+                )
+                .is_err());
+                assert!(focus_window_for_pid(
+                    std::process::id(),
+                    &second_display,
+                    true,
+                    Some(&authority)
+                )
+                .is_err());
+
                 let root = connection.setup().roots[screen].root;
                 let atom = |name: &[u8]| {
                     connection
@@ -3116,7 +3375,10 @@ mod x11_focus {
                 // The WM list is a snapshot: the selected window may disappear
                 // before its PID/geometry read. X protocol errors are readback,
                 // never permission to terminate the owner or claim focus.
-                assert!(focus_window_for_pid(std::process::id(), &display, true).is_err());
+                assert!(
+                    focus_window_for_pid(std::process::id(), &display, true, Some(&authority))
+                        .is_err()
+                );
                 // The same owner must remain usable for a subsequent live target.
                 let live = connection.generate_id().unwrap();
                 connection
@@ -3154,10 +3416,15 @@ mod x11_focus {
                     .check()
                     .unwrap();
                 assert_eq!(
-                    focus_window_for_pid(std::process::id(), &display, true).unwrap()["focused"],
+                    focus_window_for_pid(std::process::id(), &display, true, Some(&authority))
+                        .unwrap()["focused"],
                     true
                 );
-                close_windows_for_pid(std::process::id(), &display).unwrap();
+                close_windows_for_pid(std::process::id(), &display, Some(&authority)).unwrap();
+                assert_eq!(
+                    parent_env,
+                    [std::env::var_os("DISPLAY"), std::env::var_os("XAUTHORITY")]
+                );
                 let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
                 loop {
                     if let Some(x11rb::protocol::Event::ClientMessage(event)) =
@@ -3174,6 +3441,52 @@ mod x11_focus {
                     );
                     std::thread::sleep(std::time::Duration::from_millis(5));
                 }
+                assert_eq!(
+                    focus_window_for_pid(
+                        std::process::id(),
+                        &second_display,
+                        true,
+                        Some(&second_authority)
+                    )
+                    .unwrap()["focused"],
+                    true
+                );
+                close_windows_for_pid(std::process::id(), &second_display, Some(&second_authority))
+                    .unwrap();
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+                loop {
+                    if let Some(x11rb::protocol::Event::ClientMessage(event)) =
+                        second.poll_for_event().unwrap()
+                    {
+                        assert_eq!(event.window, peer_window);
+                        assert_eq!(event.type_, second_atom(b"WM_PROTOCOLS"));
+                        assert_eq!(event.data.as_data32()[0], second_atom(b"WM_DELETE_WINDOW"));
+                        break;
+                    }
+                    assert!(
+                        std::time::Instant::now() < deadline,
+                        "peer polite close not delivered"
+                    );
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                assert_eq!(std::fs::read(&authority).unwrap(), data);
+                assert_eq!(std::fs::read(&second_authority).unwrap(), second_data);
+                assert_eq!(
+                    std::fs::metadata(&authority).unwrap().permissions().mode() & 0o777,
+                    0o400
+                );
+                assert_eq!(
+                    std::fs::metadata(&second_authority)
+                        .unwrap()
+                        .permissions()
+                        .mode()
+                        & 0o777,
+                    0o400
+                );
+                assert_eq!(
+                    parent_env,
+                    [std::env::var_os("DISPLAY"), std::env::var_os("XAUTHORITY")]
+                );
                 return;
             }
             const PRIVATE: &str = "AGENT_BROWSER_X11_RACE_FIXTURE_NAMESPACES";
@@ -3217,6 +3530,17 @@ mod x11_focus {
                 .status()
                 .unwrap()
                 .success());
+            let authority = fixture.join("authority");
+            let mut cookie = [0u8; 16];
+            getrandom::getrandom(&mut cookie).unwrap();
+            let mut bytes = 65535u16.to_be_bytes().to_vec();
+            for value in [&b""[..], &b""[..], &b"MIT-MAGIC-COOKIE-1"[..], &cookie[..]] {
+                bytes.extend_from_slice(&(value.len() as u16).to_be_bytes());
+                bytes.extend_from_slice(value);
+            }
+            std::fs::write(&authority, bytes).unwrap();
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&authority, std::fs::Permissions::from_mode(0o600)).unwrap();
             let diagnostics = std::fs::File::create(fixture.join("xvfb.log")).unwrap();
             let mut server = Command::new("Xvfb")
                 .args([
@@ -3227,8 +3551,9 @@ mod x11_focus {
                     "320x240x24",
                     "-nolisten",
                     "tcp",
-                    "-ac",
+                    "-auth",
                 ])
+                .arg(&authority)
                 .stdout(Stdio::piped())
                 .stderr(diagnostics)
                 .env_remove("XAUTHORITY")
@@ -3248,7 +3573,7 @@ mod x11_focus {
                 Command::new(std::env::current_exe().unwrap()).args([
                     "--exact", "native::browser::x11_focus::protocol_tests::vanished_window_does_not_terminate_browser_owner",
                     "--ignored", "--nocapture", "--test-threads=1"])
-                    .env(CHILD, format!(":{}", number.trim())).env("HOME", &fixture).env_remove("XAUTHORITY").status()
+                    .env(CHILD, format!(":{}", number.trim())).env("AGENT_BROWSER_X11_FIXTURE_AUTHORITY", &authority).env("HOME", &fixture).env_remove("DISPLAY").env_remove("XAUTHORITY").status()
             } else {
                 Err(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
