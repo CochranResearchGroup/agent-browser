@@ -74,3 +74,23 @@ references and must be inspected before another submission.
 Installed/source-free checks and synthetic fixtures establish implementation
 behavior. Real narrated teaching and authenticated profile-copy experiments
 remain separate acceptance work.
+
+### Private SiteGuides support configuration
+
+Set `AGENT_BROWSER_SITEGUIDES_CONFIG` on the backend to an absolute, owner-owned,
+non-symlink JSON file with mode0600. Its `schemaVersion` is
+`agent-browser.workspace-siteguides-host.v1`; `candidateDirectory` identifies
+the existing private candidate store. Optional `sources` maps descriptive keys
+to existing scoped Remote View recording-reader selections, URLs and private
+`tokenFile` references. Each selection binds the original task, finalized
+recording and selected narration. Optional `speech` configures the existing
+Speech adapter and its private token file. `freshRepeatReceipts` resolves exact
+receiving-verifier references to its immutable private receipts. These are
+server-owned settings; callers cannot supply paths, actor authority or tokens.
+
+Use the existing recording-access and Speech owner contracts when provisioning
+those bindings. An empty configuration does not make recordings or verification
+available. The `AI_GATEWAY_URL`, `AI_GATEWAY_API_KEY` and `AI_GATEWAY_MODEL`
+settings are shared with existing chat configuration; teaching uses a separate
+inert request with no browser tools. Keep configuration, tokens, transcripts,
+recordings and actual account evidence outside the source repository.
