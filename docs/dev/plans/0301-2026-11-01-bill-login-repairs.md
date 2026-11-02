@@ -43,7 +43,7 @@ original private owner evidence. #519 and #521 source work are independent;
 
 | Ticket | Blockers | Owner | State | Owned scope | Branch and result |
 | --- | --- | --- | --- | --- | --- |
-| #518 | none | root prior slice | validated | evidence parser/CLI tests | a7f55e83a; custody78132d85d; tracker open |
+| #518 | none | root prior slice | validated | evidence parser/CLI tests | a7f55e83a; custody78132d85d; tracker closed |
 | #519 | none for source | /root/native519 | validated | new Native readiness module/tests; root integrates shared host hook | fix/bill-native-readiness-519; base78132d85d; result5a801208d; integratedb0aeb82c3 |
 | #520 | none | root | validated | owner HTTP error projection, Native wrapper, service-model recovery errors/tests | integration branch |
 | #521 | none for source | /root/guidance521 | validated | auth guidance and public SDK/helper fixture | fix/bill-auth-guidance-521; base78132d85d; result47dee514b; integrated7be3c8f22 |
@@ -206,3 +206,7 @@ qualification, not a comprehensive/multiplatform or installed-provider claim.
 Source closure restored for519/520;518/521 remain closed.522 stays open on the
 exact original-evidence gate. Integration branch and PR531 retain all source;
 root checkout will close after the final clean-state/durable-custody readback.
+
+Source repair/remediation checkpoint:0a8220064. Final followup changes only ledger
+custody, not tested implementation. All owned worker checkouts are removed;
+root removal uses the governed terminal receipt published in PR531.
