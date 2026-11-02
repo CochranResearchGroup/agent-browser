@@ -76,6 +76,18 @@ fn profile_library_real_http_auth_write_read_and_no_launch() {
             assert_eq!(denied["error"], "Profile unavailable or permission denied");
         }
         assert!(exchange("POST", "", json!({"operation":"replace_associations","profileId":"work","associations":[],"expectedAssociations":[]})).await.0.contains("401"));
+        let native_store=crate::native::browser_session_store::BrowserSessionSqliteStore::default_sqlite().unwrap();
+        let mut native=agent_browser_service_model::BrowserSessionState::default();
+        native.browsers.insert("native-manual".into(),agent_browser_service_model::ManagedBrowserInstance{id:"native-manual".into(),profile_id:"work".into(),pid:4242,cdp_endpoint:String::new(),desktop:None,active_session_ids:vec!["manual-session".into()]});native_store.save_session_state(&native).unwrap();
+        let (_,occupied)=exchange("GET",cookie,Value::Null).await;
+        assert_eq!(occupied["data"]["profiles"][0]["currentUse"][0]["browserId"],"native-manual");
+        assert_eq!(occupied["data"]["profiles"][0]["currentUse"][0]["mode"],"cdp_free");
+        let (_,incompatible)=exchange("POST",cookie,json!({"operation":"select","sitePolicyId":"site","account":"a","organization":"org","cdpConnected":true})).await;assert_eq!(incompatible["data"]["state"],"conflict");
+        assert!(repository.load_snapshot().unwrap().browsers.is_empty(),"read-only native projection must not persist occupancy");
+        repository.mutate(|state|{state.browsers.insert("native-manual".into(),agent_browser_service_model::BrowserProcess{id:"native-manual".into(),profile_id:Some("work".into()),pid:Some(99),cdp_endpoint:Some(String::new()),health:agent_browser_service_model::BrowserHealth::Ready,..Default::default()});Ok(())}).unwrap();
+        let (conflict_status,conflict)=exchange("GET",cookie,Value::Null).await;assert!(conflict_status.contains("409"));assert_eq!(conflict["error"],"browser_inventory_identity_conflict");
+        assert!(exchange("POST",cookie,json!({"operation":"replace_associations","profileId":"work","associations":[{"sitePolicyId":"site","account":"a","organization":"org"}],"expectedAssociations":[{"sitePolicyId":"site","account":"a","organization":"org"}]})).await.0.contains("200"),"metadata mutation must not require or persist occupancy overlay");
+        repository.mutate(|state|{state.browsers.clear();Ok(())}).unwrap();native.browsers.clear();native_store.save_session_state(&native).unwrap();
         let mut store:Value=serde_json::from_slice(&std::fs::read(&auth_path).unwrap()).unwrap();
         store["users"].as_array_mut().unwrap().iter_mut().find(|user|user["username"]=="operator").unwrap()["role"]=json!("observer");std::fs::write(&auth_path,serde_json::to_vec(&store).unwrap()).unwrap();
         assert!(exchange("POST",cookie,write.clone()).await.0.contains("401"),"role change invalidates the old session");
