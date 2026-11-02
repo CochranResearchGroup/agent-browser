@@ -3209,19 +3209,39 @@ Closing a diagnostic connection with no active profile tabs leaves authority
 state unchanged. A real disconnect marks only that connection's active tabs as
 disconnected; repeating the disconnect does not advance the state revision.
 
-The dashboard includes an app-owned login screen. On first start it creates
-`~/.agent-browser/dashboard-auth.json` with hashed superuser credentials and a
-mode-0600 bootstrap credential file at
-`~/.agent-browser/dashboard-auth.env`. The default `admin` account and the
-`codex` observer account are superusers. `~/.agent-browser/.env` records
-`AGENT_BROWSER_DASHBOARD_AUTH_FILE` so the user-scoped service and foreground
-runs use the same credential store. Set `AGENT_BROWSER_DASHBOARD_AUTH_DIR` to
-an isolated directory when a fixture must not read or rewrite the user-scoped
-auth store, bootstrap credentials, or managed environment file.
-Successful login creates a secure, host-wide browser cookie that lasts thirty
-days. Each authenticated dashboard load renews that period, so opening another
-durable remote-view link on the same public dashboard host does not require a
-new login. A different hostname or browser profile has its own cookie.
+The ordinary workspace uses the existing ingress sign-in and has no second
+password form. Configure the complete reviewed bridge below in the dashboard
+backend environment before relying on ingress identity:
+
+| Environment variable | Contract |
+| --- | --- |
+| `AGENT_BROWSER_DASHBOARD_INGRESS_VERIFY_URL` | Trusted Authelia owner URL ending exactly in `/api/authz/forward-auth`; HTTPS or numeric-loopback HTTP only. |
+| `AGENT_BROWSER_DASHBOARD_INGRESS_WORKSPACE_URL` | Fixed public HTTPS workspace URL whose GET access is checked by the owner. Review the owner ACL and verifier peer-IP semantics; caller Host and forwarded headers never select this URL. |
+| `AGENT_BROWSER_DASHBOARD_INGRESS_USERS` | JSON map from exact owner principal to an existing local dashboard username, for example `{"operator":"admin","reader":"codex"}`. Roles come from the current private auth store. Prefer one-to-one mappings to preserve distinct actor attribution. |
+
+The backend forwards the session cookie and constructs ForwardAuth metadata
+from the reviewed workspace URL. It accepts identity only from an owner HTTP200
+with one `Remote-User` value and an explicit mapping. Caller `Remote-*` headers
+never authenticate or grant a role. Redirects are not followed; owner302/303/401
+requests sign-in, denied or unmapped identities return403, and malformed or
+unavailable verification returns503. Partial or invalid configuration fails
+closed. Missing sign-in, denial, redirects and service failures offer recovery
+without rewriting the selected browser URL. See the
+[Authelia ForwardAuth metadata contract](https://www.authelia.com/reference/guides/proxy-authorization/#forwardauth-metadata).
+
+With all three variables absent, supported local and machine authentication
+remains available through the dashboard login API and signed sessions. First
+start creates private `~/.agent-browser/dashboard-auth.json` and mode-0600
+`~/.agent-browser/dashboard-auth.env`; `admin` is a superuser and `codex` is an
+observer. Existing `AGENT_BROWSER_DASHBOARD_AUTH_FILE` and
+`AGENT_BROWSER_DASHBOARD_AUTH_DIR` overrides remain supported. A valid local
+session takes precedence and renews its thirty-day cookie on status read.
+Ingress identity never becomes a local cookie. Auth responses identify the
+user's `authenticationSource` as `ingress` or `local`. **End local session**
+ends only the local cookie; ingress sign-out belongs to its provider. Workspace
+access is separate from website account authentication and Native viewer access.
+Source fixture passes do not establish installed ingress, cookie delivery or
+Native workflow acceptance.
 
 Authenticated dashboard identity and Guacamole route identity are separate.
 For a hosted Guacamole request, forward authentication keeps the signed-in

@@ -107,9 +107,9 @@ Discover `category:"playbooks"` and use `browser_command` in the existing task. 
 
 ## Read more only when needed
 
-Retained-task recovery requires proven process/profile absence and preserves peer claims. Continue through the original taskId.
+Retained recovery requires proven process/profile absence; preserve peers and the original taskId.
 
-Read the advanced reference for bounded host resource waits and retained session/tab history; continue existing tasks through taskId.
+The advanced reference covers host resource waits and retained history; continue through taskId.
 
 - [Commands](references/commands.md): detailed CLI syntax.
 - [Snapshot references](references/snapshot-refs.md): find and use element refs.
@@ -121,7 +121,7 @@ Read the advanced reference for bounded host resource waits and retained session
 Use `browser_discover` for advanced MCP metadata.
 
 
-For dashboard/viewer/startup failures, read [dashboard diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics).
+For workspace sign-in, read [workspace access](references/workspace-sign-in.md); for viewer/startup failures, read [diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics).
 
 ## Browser mode and builds
 
