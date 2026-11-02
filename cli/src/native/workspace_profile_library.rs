@@ -70,6 +70,14 @@ fn workspace_profile_library_with_config(
             let mut state = repository.load_snapshot()?;
             state.overlay_configured_entities(configured);
             state.apply_builtin_site_policies();
+            // Current manual occupancy belongs to the native owner. Join its
+            // read-only snapshot only into this response/selection projection,
+            // never into the serialized metadata mutation above.
+            if let Some(managed) = super::browser_session_store::BrowserSessionSqliteStore::default_session_state_read_only()? {
+                for record in super::service_inventory::managed_browser_inventory_records(&state, &managed)? {
+                    state.browsers.insert(record.id.clone(), record);
+                }
+            }
             profile_library_request(&mut state, cmd, actor, &now)
         }
     }

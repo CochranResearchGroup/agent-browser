@@ -197,7 +197,13 @@ pub(super) async fn handle_profile_library_http(
     let result =
         crate::native::workspace_profile_library::handle_workspace_profile_library(&command).await;
     let status = match result.as_ref().err().map(String::as_str) {
-        Some(error) if error.contains("changed; reload") => "409 Conflict",
+        Some(error)
+            if error.contains("changed; reload")
+                || error == "browser_inventory_identity_conflict" =>
+        {
+            "409 Conflict"
+        }
+        Some(error) if error.starts_with("browser_runtime_") => "503 Service Unavailable",
         Some("Profile unavailable or permission denied") => "403 Forbidden",
         Some(_) => "400 Bad Request",
         None => "200 OK",
