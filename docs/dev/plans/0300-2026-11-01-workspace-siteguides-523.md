@@ -25,10 +25,10 @@ Root owns compact workspace/launcher integration, public HTTP/service wiring, ce
 | Ticket | Outcome | Blocked by | State / owner |
 | --- | --- | --- | --- |
 | #524 | Use existing ingress sign-in for the compact workspace | none | validated/5f3f34009; tracker CLOSED |
-| #525 | Open manual browsers from the existing compact toolbar | none | validated/root; tracker closure pending |
+| #525 | Open manual browsers from the existing compact toolbar | none | validated/9a67d186f; tracker CLOSED |
 | #526 | Manage site identities and choose matching profiles | none | validated/5f3f34009; tracker CLOSED |
 | #527 | Plan and execute independent profile copies through Profile Lab | none | validated/5f3f34009; tracker CLOSED |
-| #528 | Manage SiteGuides and teach through Remote View recordings | #525, #526 | pending |
+| #528 | Manage SiteGuides and teach through Remote View recordings | #525, #526 | running/p300_profiles526 |
 | #529 | Qualify the integrated Native workspace and narrated teaching journey | #524, #525, #526, #528 | pending |
 | #530 | Qualify real-account Chrome and Chromium profile portability | #527 | blocked/p300_copy527; private packet prepared, donor/context missing |
 
@@ -75,3 +75,11 @@ The official isolated cli-native-browser compartment passed382 tests with11 igno
 The actual Page ingress/local-control regression exposed a missed source prop.524 was reopened, fixed in9892ec9ce, then reclosed after the real Page mounted red/green and TypeScript passed. Its previous backend/role/build evidence remains valid within unchanged scope.
 
 A120-profile390px mounted regression exposed an unbounded launcher dialog. Scoped bounded-dialog/list styling and accessible controls now pass; original-operation, conflict, explicit-return and large-list checks remain green. Synthetic mobile screenshot was visually inspected outside Git. Profile Lab and actual compact toolbar composition pass with the dialog styling. No native viewer/control implementation was replaced.
+
+##528 dispatch and current custody
+
+525 is CLOSED at9a67d186f after its source and cumulative gates.528 is now legitimately source-ready: both525 and526 validated on integration. The profile worker's clean admitted auxiliary `/tmp/agent-browser-p300-526` is reused on platform/p300-528-siteguides from9a67d186f; its old526 branch/result remains pushed. Worker owns focused SiteGuides/teaching components, deep-owner Node composition, authenticated HTTP adapter, narrow dedicated teaching-purpose confirmation reader, and the existing installed controller-assets support seam. Root retains Compact/page/global styling/package/shared guidance and dashboard forwarding. The asset path must work source-free and be covered by existing generation hashes/doctor; no cwd/repository fallback, new daemon, second recording/viewing stack or parallel guide/approval ledger is admitted. Agent interpretation and distinct fresh-repeat verification remain actual receiving interfaces, not fabricated templates or proof.
+
+Root's final formatting/strict workspace Clippy and styled manager/full compact checks pass after9a67d186f.524's actual entry followup is9892ec9ce and its corrected closure is recorded on the issue. Current source implementation closures are524,525,526,527.528 runs;529 remains dependency/media-gated;530 remains input/runtime-gated with its four actual rows NOT_RUN.
+
+Read-only development-runtime preparation found an older installed generation and a non-ready status receipt; it is not equivalent to P300. Graphiti status is healthy but the one narrowly scoped development-history search timed out, so current repo/runtime artifacts remain authoritative. No runtime repair/publication, provider mutation, account/media access or source closure was performed by this preparation. Private runtime metadata remains outside Git.

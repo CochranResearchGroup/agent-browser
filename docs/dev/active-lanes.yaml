@@ -13,7 +13,7 @@ lanes:
     work_items: [CochranResearchGroup/agent-browser#523, CochranResearchGroup/agent-browser#524, CochranResearchGroup/agent-browser#525, CochranResearchGroup/agent-browser#526, CochranResearchGroup/agent-browser#527, CochranResearchGroup/agent-browser#528, CochranResearchGroup/agent-browser#529, CochranResearchGroup/agent-browser#530]
     dependencies: [CochranResearchGroup/agent-browser#478]
     overlaps: [CochranResearchGroup/agent-browser#506, CochranResearchGroup/agent-browser#519, CochranResearchGroup/agent-browser#520]
-    reconciled_overlaps: ["Root owns integration and shared wiring/docs;524 auth gate;526 profile model/library;527 copy experiment UX; preserve506 foreign checkout and existing Auth custody; Native/physical narration/account qualification stays distinct"]
+    reconciled_overlaps: ["Root owns integration/shared wiring/docs;524-527 source validated; profile worker528 owns SiteGuides consumer and existing support assets; copy worker530 prepared private experiment packet; preserve506/Auth foreign custody; actual narration/account qualification remains open"]
     limitations: ["No source-readiness inference of production/provider/private-account effects", "Actual narrated and real-account copy rows require exact selected context", "One final broad review and one bounded TDD pass"]
     updated_at: 2026-11-01
   - id: IDLE515
