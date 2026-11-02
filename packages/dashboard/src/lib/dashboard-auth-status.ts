@@ -38,8 +38,13 @@ export async function fetchDashboardAuthStatus(
         cache: "no-store",
         credentials: "same-origin",
         signal: controller.signal,
+        redirect: "manual",
       });
-      if (response.ok) return response;
+      if (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400)
+        || response.headers.get("content-type")?.includes("text/html")) {
+        throw new Error("Workspace sign-in redirect: reopen this workspace through its authenticated public URL.");
+      }
+      if (response.ok || response.status === 401 || response.status === 403) return response;
       lastError = new Error(`Dashboard authentication status returned HTTP ${response.status}`);
     } catch (error) {
       lastError = error;
