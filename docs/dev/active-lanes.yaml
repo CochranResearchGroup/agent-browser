@@ -3,6 +3,21 @@ work_item_tracking: required
 lanes:
   - id: P301
     product_lane: PL-BUGFIX
+    objective: Restore authenticated Native manual browser publication and clean close
+    plan: docs/dev/plans/0301-2026-11-02-native-x11-authority-529.md
+    branch: fix/native-x11-authority-529
+    target: main
+    accountable_owner: ecochran76
+    plan_state: ACTIVE
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#529]
+    dependencies: []
+    overlaps: [CochranResearchGroup/agent-browser#529]
+    reconciled_overlaps: ["P300 worker is sole source writer; P301 consumes frozen repair serially from fresh main; root owns docs/runtime; preserve foreign worktrees and pinned P300 candidate"]
+    limitations: ["No runtime authority inferred from source qualification", "P300 actual narrated/copy acceptance and final review remain separate"]
+    updated_at: 2026-11-02
+  - id: P301
+    product_lane: PL-BUGFIX
     objective: Close bounded BILL login incident repair tickets
     branch: fix/desktop-evidence-518
     target: main
