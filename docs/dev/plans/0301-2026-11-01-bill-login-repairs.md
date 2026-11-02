@@ -44,8 +44,8 @@ original private owner evidence. #519 and #521 source work are independent;
 | Ticket | Blockers | Owner | State | Owned scope | Branch and result |
 | --- | --- | --- | --- | --- | --- |
 | #518 | none | root prior slice | validated | evidence parser/CLI tests | a7f55e83a; custody78132d85d; tracker open |
-| #519 | none for source | /root/native519 | integrated | new Native readiness module/tests; root integrates shared host hook | fix/bill-native-readiness-519; base78132d85d; result5a801208d; integratedb0aeb82c3 |
-| #520 | none | root | implemented | owner HTTP error projection, Native wrapper, service-model recovery errors/tests | integration branch |
+| #519 | none for source | /root/native519 | validated | new Native readiness module/tests; root integrates shared host hook | fix/bill-native-readiness-519; base78132d85d; result5a801208d; integratedb0aeb82c3 |
+| #520 | none | root | validated | owner HTTP error projection, Native wrapper, service-model recovery errors/tests | integration branch |
 | #521 | none for source | /root/guidance521 | validated | auth guidance and public SDK/helper fixture | fix/bill-auth-guidance-521; base78132d85d; result47dee514b; integrated7be3c8f22 |
 | #522 | #520 and original evidence | pending | blocked | original owner evidence/read-only diagnosis | no effect authorized |
 
@@ -66,8 +66,8 @@ Default builds disable cache after the observed sccache stall; Cargo admission
 remains mandatory. Coordinate at most two repository Cargo invocations, use
 isolated homes and fixture ports, preserve first failures and unknown outcomes.
 
-Final broad review: pending, exactly one invocation. Review fixed point awaiting
-operator confirmation. Accepted findings: none yet. One TDD remediation: pending.
+Final broad review: pending, exactly one invocation. Review fixed point is starting origin/main bddb5b3fa9437639215a8431664dd6ef2da88575;
+optional clarification requested and no alternate supplied. Accepted findings: none yet. One TDD remediation: pending.
 
 ## Closeout obligations
 
@@ -101,7 +101,36 @@ legacy/hosted playbook tests and JavaScript type coverage pass. No real vault,
 source unlock, account enrollment, private input or installed skill publication.
 
 Docs build, policy wiring and changed links pass. Required strict workspace
-Clippy and cargo-safe format final results pending. Intermediate custody only.
+Clippy and cargo-safe format final checks pass. Root module registration order
+was corrected after the first format diagnostic; only ordering changed.
 Private #522 original readback was located: no lower cause or phase retained.
 /root/recovery522 investigates only existing evidence and supported read-only
 exact-assignment recourse; no reproduction of launch/recovery is authorized.
+
+## Final source gate and custody readback
+
+`--focused remote_view_application_http`:12 passed. `--focused task_operations_tests`:14 passed, including original request readback and uncertain-input no-replay.
+`--focused desktop_evidence`:57 passed on integrated source. Readiness5 and
+recovery10 passed. Current SDK/helper/doc17 pass. Strict workspace Clippy,
+cargo-safe fmt, documentation build, policy wiring and changed links pass.
+
+The initial playbook command exited1 without a terminal diagnostic; its log is
+retained. Explicit docs-scoped TypeScript reproduced unrelated implicit MDX JSX
+namespace failures. The harness now uses its declared docs-workspace TypeScript
+and `--types node`, matching these non-UI modules. Complete playbook/client type
+lane passes without ambient UI types or a global TypeScript fallback. This is a
+harness repair, not a claim that an unexplained failed run passed.
+
+Worker519 clean exact tip5a801208d removed via governed operation
+worktree-closeout-70c837aa-33e8-41fa-8cf2-b6c47573828b; worker521 clean exact
+tip47dee514b removed via worktree-closeout-eeccf688-2c64-4e7c-9f8b-496517321f0e.
+No candidate pins/builds existed. Integrated remote source retains both outcomes.
+Root integration checkout remains until final review/remediation and publication.
+
+#522 evidence-only investigation found no original cause or exact provider
+generation custody in the retained evidence. No safe original-assignment probe
+can be targeted. Original-cause and cause-specific fixture criteria remain
+unproven; keep the ticket open. No live probe/input/configuration/recovery occurred.
+
+Source tickets518-521 are eligible for closure under the approved source briefs;
+no merge, installation, provider commissioning or actual login is claimed.

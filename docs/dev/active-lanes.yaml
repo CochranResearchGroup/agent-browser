@@ -12,7 +12,7 @@ lanes:
     plan_state: ACTIVE
     custody_state: ACTIVE_WORKTREE
     pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/531
-    validation_status: "57 focused evidence tests, strict workspace Clippy, format, policy wiring and changed links pass; broad route-confusion recommendation excluded because production route code is unchanged; initial cache stall retained"
+    validation_status: "Source518-521 qualified: evidence57, ownerHTTP12, originalreadback14, readiness5, recovery10, AuthSDK17; strict Clippy/fmt/docs/link gates pass; single review pending;522 missing original cause/custody remains open"
     overlaps: [P300]
     reconciled_overlaps: ["518 owns evidence parser and bounded regression only; preserve P300 source and serialize catalog at integration"]
     limitations: ["Explicit operator admission of dedicated checkout; close through governed helper after durable PR custody", "No runtime or provider effects"]
