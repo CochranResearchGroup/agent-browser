@@ -127,6 +127,84 @@ fn runtime_manifest_json_uncached() -> Value {
 
 /// Shared dashboard and per-session HTTP entry. Actor fields are rebuilt from
 /// the existing authenticated identity; mutation requires its current role.
+pub(super) async fn handle_siteguides_http(
+    stream: &mut tokio::net::TcpStream,
+    method: &str,
+    body: &str,
+    headers: &[(String, String)],
+    secure_cookie: bool,
+) {
+    let identity = match dashboard_auth::require_authenticated(headers, secure_cookie) {
+        Ok(identity) => identity,
+        Err(response) => {
+            let _ = stream.write_all(&response.into_http_bytes()).await;
+            return;
+        }
+    };
+    if !matches!(method, "GET" | "POST") {
+        write_json_result(
+            stream,
+            Err("SiteGuides supports GET and POST".into()),
+            "405 Method Not Allowed",
+        )
+        .await;
+        return;
+    }
+    let input = if method == "GET" {
+        json!({"operation":"list"})
+    } else {
+        match serde_json::from_str::<Value>(body) {
+            Ok(value) if value.is_object() => value,
+            _ => {
+                write_json_result(
+                    stream,
+                    Err("Invalid SiteGuides request".into()),
+                    "400 Bad Request",
+                )
+                .await;
+                return;
+            }
+        }
+    };
+    let operation = input
+        .get("operation")
+        .and_then(Value::as_str)
+        .unwrap_or("list");
+    match crate::native::workspace_siteguides::operation_is_write(operation) {
+        Ok(true) => {
+            if let Err(response) = dashboard_auth::require_superuser(headers, secure_cookie) {
+                let _ = stream.write_all(&response.into_http_bytes()).await;
+                return;
+            }
+            if let Err(error) = dashboard_auth::require_current_operator_role(&identity.username) {
+                write_json_result(stream, Err(error), "403 Forbidden").await;
+                return;
+            }
+        }
+        Ok(false) => {}
+        Err(error) => {
+            write_json_result(stream, Err(error), "400 Bad Request").await;
+            return;
+        }
+    }
+    let result = crate::native::workspace_siteguides::handle_workspace_siteguides(
+        &input,
+        &identity.username,
+    )
+    .await;
+    let status = if result.is_ok() {
+        "200 OK"
+    } else {
+        "503 Service Unavailable"
+    };
+    write_json_result(
+        stream,
+        result.map(|data| json!({"success":true,"data":data}).to_string()),
+        status,
+    )
+    .await;
+}
+
 pub(super) async fn handle_profile_library_http(
     stream: &mut tokio::net::TcpStream,
     method: &str,
@@ -322,6 +400,11 @@ pub(super) async fn handle_http_request(
         }
     }
 
+    if path == "/api/dashboard/siteguides" && method != "POST" {
+        handle_siteguides_http(&mut stream, method, "", &headers, secure_cookie).await;
+        return;
+    }
+
     if path == "/api/dashboard/profile-library" && method != "POST" {
         handle_profile_library_http(&mut stream, method, "", &headers, secure_cookie).await;
         return;
@@ -343,6 +426,7 @@ pub(super) async fn handle_http_request(
         let full_body = read_full_body(&mut stream, peeked).await;
         if full_body.is_none()
             && (path == "/api/dashboard/profile-library"
+                || path == "/api/dashboard/siteguides"
                 || path == "/api/chat"
                 || path == APP_INTELLIGENCE_INSPECT_HTTP_ROUTE
                 || path == APP_INTELLIGENCE_OPERATOR_TURN_HTTP_ROUTE
@@ -361,6 +445,10 @@ pub(super) async fn handle_http_request(
             return;
         }
         let body_str = full_body.as_deref().unwrap_or("");
+        if path == "/api/dashboard/siteguides" {
+            handle_siteguides_http(&mut stream, method, body_str, &headers, secure_cookie).await;
+            return;
+        }
         if path == "/api/dashboard/profile-library" {
             handle_profile_library_http(&mut stream, method, body_str, &headers, secure_cookie)
                 .await;
