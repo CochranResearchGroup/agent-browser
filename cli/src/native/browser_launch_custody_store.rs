@@ -57,12 +57,14 @@ fn owner_release_observed(
     connection: &Connection,
     prior: &BrowserLaunchCustodyRecord,
 ) -> Result<bool, LaunchCustodyStoreError> {
-    let proof: Option<OwnerRecoveryRelease> = load_optional_document(
-        connection, &owner_release_kind(prior), OWNER_RELEASE_SCHEMA,
-    ).map_err(|_| LaunchCustodyStoreError::InvalidRecord)?;
+    let proof: Option<OwnerRecoveryRelease> =
+        load_optional_document(connection, &owner_release_kind(prior), OWNER_RELEASE_SCHEMA)
+            .map_err(|_| LaunchCustodyStoreError::InvalidRecord)?;
     match proof {
         None => Ok(false),
-        Some(proof) if proof.prior == *prior && exact_owner_release(prior, &proof.released) => Ok(true),
+        Some(proof) if proof.prior == *prior && exact_owner_release(prior, &proof.released) => {
+            Ok(true)
+        }
         Some(_) => Err(LaunchCustodyStoreError::InvalidRecord),
     }
 }
@@ -425,8 +427,10 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
         released: &agent_browser_service_model::RemoteViewAssignmentRecord,
     ) -> Result<(), LaunchCustodyStoreError> {
         use LaunchCustodyStoreError as Error;
-        let transaction = self.remote_view_mutation_connection()
-            .transaction_with_behavior(TransactionBehavior::Immediate).map_err(|_| Error::Unavailable)?;
+        let transaction = self
+            .remote_view_mutation_connection()
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| Error::Unavailable)?;
         if current(&transaction)? != *expected {
             return Err(Error::Conflict);
         }
@@ -437,9 +441,16 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
         let kind = owner_release_kind(&prior);
         // Never overwrite conflicting historical custody under a reused identity.
         owner_release_observed(&transaction, &prior)?;
-        save_document(&transaction, &kind, OWNER_RELEASE_SCHEMA, &OwnerRecoveryRelease {
-            prior, released: released.clone(),
-        }).map_err(|_| Error::Unavailable)?;
+        save_document(
+            &transaction,
+            &kind,
+            OWNER_RELEASE_SCHEMA,
+            &OwnerRecoveryRelease {
+                prior,
+                released: released.clone(),
+            },
+        )
+        .map_err(|_| Error::Unavailable)?;
         transaction.commit().map_err(|_| Error::Unavailable)
     }
     fn assignment_release_confirmed(

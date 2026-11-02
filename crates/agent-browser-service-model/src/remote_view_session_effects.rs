@@ -1654,29 +1654,54 @@ impl<
         let environment = match self.adapter.launch_environment(&intent.assignment) {
             Ok(environment) => environment,
             Err(error) => {
-                let unavailable = || format!("browser_session_recovery_environment_unavailable:{error:?}");
+                let unavailable =
+                    || format!("browser_session_recovery_environment_unavailable:{error:?}");
                 // Denial alone is not release evidence. Require current validated
                 // owner inventory and every original assignment identity field.
                 // An explicit recovery target never silently moves elsewhere.
-                if target.is_some() { return Err(unavailable()); }
+                if target.is_some() {
+                    return Err(unavailable());
+                }
                 let inventory = self.adapter.inventory().map_err(|_| unavailable())?;
                 let mut released = intent.assignment.clone();
                 released.state = RemoteViewAssignmentState::Released;
-                if !inventory.assignments.contains(&released) { return Err(unavailable()); }
-                self.store.retain_owner_released_assignment(
-                    browser, self.expected.as_ref().expect("qualified baseline"), &released,
-                ).map_err(|_| "browser_session_recovery_prior_custody_unavailable")?;
-                let pool = self.pool.as_ref().ok_or("browser_session_recovery_pool_missing")?;
-                let prepared = prepare_remote_view_session_pool(&mut self.adapter, &mut self.store, pool)?;
-                desktop = prepared.desktops.first()
-                    .ok_or("browser_session_recovery_desktop_unavailable")?.desktop.clone();
-                intent.assignment = prepared.assignments.into_iter().find(|assignment|
-                    assignment.desktop_id == desktop.desktop_id && assignment.generation == desktop.generation
-                ).ok_or("browser_session_recovery_assignment_unavailable")?;
+                if !inventory.assignments.contains(&released) {
+                    return Err(unavailable());
+                }
+                self.store
+                    .retain_owner_released_assignment(
+                        browser,
+                        self.expected.as_ref().expect("qualified baseline"),
+                        &released,
+                    )
+                    .map_err(|_| "browser_session_recovery_prior_custody_unavailable")?;
+                let pool = self
+                    .pool
+                    .as_ref()
+                    .ok_or("browser_session_recovery_pool_missing")?;
+                let prepared =
+                    prepare_remote_view_session_pool(&mut self.adapter, &mut self.store, pool)?;
+                desktop = prepared
+                    .desktops
+                    .first()
+                    .ok_or("browser_session_recovery_desktop_unavailable")?
+                    .desktop
+                    .clone();
+                intent.assignment = prepared
+                    .assignments
+                    .into_iter()
+                    .find(|assignment| {
+                        assignment.desktop_id == desktop.desktop_id
+                            && assignment.generation == desktop.generation
+                    })
+                    .ok_or("browser_session_recovery_assignment_unavailable")?;
                 // A single read-only preflight on the qualified replacement.
                 // Process custody and launch admission still follow below.
-                self.adapter.launch_environment(&intent.assignment)
-                    .map_err(|error| format!("browser_session_recovery_environment_unavailable:{error:?}"))?
+                self.adapter
+                    .launch_environment(&intent.assignment)
+                    .map_err(|error| {
+                        format!("browser_session_recovery_environment_unavailable:{error:?}")
+                    })?
             }
         };
         let observation = self
