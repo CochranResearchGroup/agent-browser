@@ -37,6 +37,7 @@ pub mod browser_locator;
 pub(crate) mod browser_mode_operation;
 pub(crate) mod browser_native_control;
 pub(crate) mod browser_native_image;
+pub(crate) mod browser_native_readiness;
 #[allow(dead_code)]
 pub mod browser_navigation;
 #[allow(dead_code)]

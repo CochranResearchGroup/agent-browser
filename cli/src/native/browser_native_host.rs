@@ -78,8 +78,8 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             std::time::Duration::from_secs(10),
         )
         .map_err(|_| "browser_native_owner_configuration_invalid")?;
-        let control=http.native_request("control",&json!({"desktopId":assignment.viewing_desktop_id,"expectedGeneration":assignment.viewing_generation,"operation":"status"}))
-            .map_err(|_| "browser_native_original_observation_control_unverified")?;
+        let control=http.native_control_status(&json!({"desktopId":assignment.viewing_desktop_id,"expectedGeneration":assignment.viewing_generation,"operation":"status"}))
+            ?;
         if control["desktopId"] != observation.desktop_id
             || control["generation"] != observation.generation
             || control["owner"] != "agent"
@@ -114,25 +114,6 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             &assignment,
             command,
             Some(&mut check),
-            None,
-        )
-    }
-
-    /// A private launched-process proof can be qualified before publication.
-    /// Callers retain the exact launch claim; this grants no additional access.
-    pub(crate) fn native_process_command(
-        &self,
-        original: &agent_browser_service_model::RecordedProcessIdentity,
-        assignment: &agent_browser_service_model::RemoteViewApplicationTarget,
-        command: &Value,
-    ) -> Result<Value, String> {
-        run_native_owner(
-            &self.persistence,
-            &self.persisted_state,
-            original,
-            assignment,
-            command,
-            None,
             None,
         )
     }
@@ -172,6 +153,29 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         Ok(Some(
             json!({"success":true,"data":data,"browserSession":{"sessionId":target.session.id,"browserId":target.browser.id,"profileId":target.session.profile_id,"tabId":target.tab.id}}),
         ))
+    }
+}
+
+// This adapter uses persistence and the existing Native owner only; browser
+// lifecycle effects are deliberately absent from this process-control boundary.
+impl<P: BrowserSessionPersistence, E> BrowserSessionHost<P, E> {
+    /// A private launched-process proof can be qualified before publication.
+    /// Callers retain the exact launch claim; this grants no additional access.
+    pub(crate) fn native_process_command(
+        &self,
+        original: &agent_browser_service_model::RecordedProcessIdentity,
+        assignment: &agent_browser_service_model::RemoteViewApplicationTarget,
+        command: &Value,
+    ) -> Result<Value, String> {
+        run_native_owner(
+            &self.persistence,
+            &self.persisted_state,
+            original,
+            assignment,
+            command,
+            None,
+            None,
+        )
     }
 }
 
@@ -275,11 +279,18 @@ fn run_native_owner<'a, P: BrowserSessionPersistence>(
 ) -> Result<Value, String> {
     let origin = std::env::var("AGENT_BROWSER_REMOTE_VIEW_ORIGIN")
         .map_err(|_| "browser_native_owner_unconfigured")?;
-    let http = super::super::remote_view_application_http::RemoteViewApplicationHttp::new(
+    let mut http = super::super::remote_view_application_http::RemoteViewApplicationHttp::new(
         &origin,
         std::time::Duration::from_secs(10),
     )
     .map_err(|_| "browser_native_owner_configuration_invalid")?;
+    let input_readiness = if command["action"] == "native_ready" {
+        Some(super::super::browser_native_readiness::qualify_readiness(
+            &mut http, assignment,
+        )?)
+    } else {
+        None
+    };
     struct Owner<'a, P> {
         command: &'a Value,
         admission: Option<&'a mut NativeAttemptAdmission<'a>>,
@@ -287,6 +298,7 @@ fn run_native_owner<'a, P: BrowserSessionPersistence>(
         http: super::super::remote_view_application_http::RemoteViewApplicationHttp,
         persistence: &'a P,
         expected: &'a BrowserSessionState,
+        target: agent_browser_service_model::RemoteViewApplicationTarget,
     }
     impl<P: BrowserSessionPersistence> super::super::browser_native_control::NativeOwner
         for Owner<'_, P>
@@ -357,8 +369,16 @@ fn run_native_owner<'a, P: BrowserSessionPersistence>(
                     return Err("browser_native_target_changed:refresh task".into());
                 }
             }
-            self.http.native_request(operation, body)
-                    .map_err(|error| format!("browser_native_owner_request:{error:?}:observe before retry; input may have been delivered"))
+            if operation == "input" {
+                super::super::browser_native_readiness::require_input_ready(
+                    &mut self.http,
+                    &self.target,
+                )?;
+                if self.persistence.load_session_state()? != *self.expected {
+                    return Err("browser_native_target_changed:refresh task".into());
+                }
+            }
+            self.http.native_operation(operation, body)
         }
     }
     let mut owner = Owner {
@@ -368,9 +388,20 @@ fn run_native_owner<'a, P: BrowserSessionPersistence>(
         command,
         admission,
         image_admission,
+        target: assignment.clone(),
     };
-    super::super::browser_native_control::execute(original, assignment, command, &mut owner)
+    let mut result =
+        super::super::browser_native_control::execute(original, assignment, command, &mut owner)?;
+    if let Some(readiness) = input_readiness {
+        result["ready"] = json!(result["ready"] == true && readiness["inputReady"] == true);
+        result["inputReadiness"] = readiness;
+    }
+    Ok(result)
 }
 
 #[path = "browser_native_host_image.rs"]
 mod image;
+
+#[cfg(test)]
+#[path = "browser_native_host_tests.rs"]
+mod tests;

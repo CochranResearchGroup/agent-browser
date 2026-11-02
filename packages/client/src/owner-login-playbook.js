@@ -14,6 +14,8 @@ const errorCode=error=>error&&typeof error==='object'&&'code' in error&&typeof e
 /** Compose owner credential requests with guarded SiteGuide routines. Auth owns
  * all policy, private use and receiver privacy; this client persists metadata
  * before dispatch and independently verifies the intended receiving account.
+ * Discovery keeps source outages, incomplete searches, no match and account
+ * choice distinct; none can create a request or infer an empty vault.
  * Legacy callback checkpoints are never translated into owner requests.
  * @param {OwnerLoginDependencies} dependencies
  */
@@ -65,7 +67,13 @@ export function createOwnerLoginPlaybook({browser,auth,checkpoints}){
      let preparation;try{preparation=await browser.prepareLogin(options);}catch{return result('waiting','receiving_unavailable','no_effect');}
      if(!preparation.plan)return {...preparation,...result(preparation.status,preparation.reasonCode,'no_effect')};
      let discovery;try{discovery=await auth.helper('discover_credentials',{query:options.query,accountHint:options.accountHint});}catch(error){return result('waiting',errorCode(error)??'auth_unavailable','no_effect');}
-     if(discovery.state!=='unique'||!discovery.selected)return result('waiting',discovery.state==='ambiguous'?'account_ambiguous':'credential_unavailable','no_effect');
+     if(discovery?.state!=='unique'||!discovery.selected){
+      let reason='credential_unavailable';
+      if(discovery?.state==='choice_required'||discovery?.state==='ambiguous')reason='account_ambiguous';
+      else if(discovery?.state==='not_found')reason='credential_not_found';
+      else if(discovery?.state==='partial')reason=Array.isArray(discovery.unavailable)&&discovery.unavailable.length?'credential_source_unavailable':'credential_discovery_incomplete';
+      return result('waiting',reason,'no_effect');
+     }
      const selected=discovery.selected;
      if(selected.origin!==options.origin||!nonempty(selected.sourceId)||!nonempty(selected.recordId))return result('waiting','credential_recipient_mismatch','no_effect');
      checkpoint={contract,issuer:'auth-receipts',callerTaskId:auth.callerTaskId,intent,receiving:Object.fromEntries(receivingFields.map(field=>[field,observed[field]])),selected:{sourceId:selected.sourceId,recordId:selected.recordId},preparedPlan:preparation.plan};

@@ -162,6 +162,13 @@ fn parse_request(command: &Value) -> Result<ConfiguredObservationRequest, String
         "serviceJobId",
         "callerId",
         "requestPrincipalSource",
+        "connectionInstanceId",
+        "clientSubjectId",
+        "identityAssurance",
+        "servicePrincipalId",
+        "servicePrincipalProvenance",
+        "serviceProfileCapabilityId",
+        "serviceProfileCapabilityRevision",
     ];
     if let Some(field) = command.as_object().and_then(|record| {
         record
@@ -504,6 +511,87 @@ mod tests {
             }))
             .unwrap_err();
             assert!(error.contains(STACKING_OR_OCCLUSION));
+        }
+    }
+
+    #[test]
+    fn desktop_evidence_trusted_queue_envelope_reaches_parser() {
+        use crate::native::service_principal::{
+            AuthenticatedServicePrincipal, ServicePrincipalProvenance,
+        };
+        use crate::native::service_request::{
+            apply_service_request_attribution, normalize_service_request,
+            ServiceRequestNormalization,
+        };
+
+        let request = json!({
+            "action": ACTION,
+            "browserId": "browser-1",
+            "episodeId": "episode-1",
+            "evidenceSurface": STACKING_OR_OCCLUSION,
+            "serviceName": "DesktopEvidence",
+            "agentName": "fixture-agent",
+            "taskName": "inspect-stacking"
+        });
+        let authority = AuthenticatedServicePrincipal {
+            principal_id: "principal:fixture".into(),
+            profile_id: "profile-1".into(),
+            capability_id: "profile-capability-v1:fixture".into(),
+            capability_revision: 3,
+            provenance: ServicePrincipalProvenance::RegisteredCapability,
+        };
+        let mut normalized = normalize_service_request(ServiceRequestNormalization {
+            request: &request,
+            service_state: None,
+            authenticated_principal: Some(&authority),
+            fallback_principal: None,
+            request_id: "request-1",
+            effective_session: Some("session-1"),
+        })
+        .unwrap();
+        apply_service_request_attribution(&mut normalized.command, &normalized.attribution);
+        normalized.command["serviceJobId"] = json!("job-1");
+        normalized.command["connectionInstanceId"] = json!("connection-1");
+        assert_eq!(
+            normalized.command["servicePrincipalId"],
+            "principal:fixture"
+        );
+        assert_eq!(normalized.command["serviceProfileCapabilityRevision"], 3);
+        for field in ["serviceName", "agentName", "taskName"] {
+            assert_eq!(normalized.command[field], request[field]);
+        }
+        let parsed = parse_request(&normalized.command).unwrap();
+        assert_eq!(parsed.browser_id, "browser-1");
+        assert_eq!(parsed.episode_id, "episode-1");
+
+        for field in [
+            "clientSubjectId",
+            "identityAssurance",
+            "servicePrincipalId",
+            "servicePrincipalProvenance",
+            "serviceProfileCapabilityId",
+            "serviceProfileCapabilityRevision",
+            "connectionInstanceId",
+            "displayName",
+            "routeId",
+            "providerUrl",
+            "windowId",
+            "coordinates",
+        ] {
+            let mut forged = request.clone();
+            forged[field] = json!("caller-controlled");
+            assert!(
+                normalize_service_request(ServiceRequestNormalization {
+                    request: &forged,
+                    service_state: None,
+                    authenticated_principal: Some(&authority),
+                    fallback_principal: None,
+                    request_id: "request-1",
+                    effective_session: Some("session-1"),
+                })
+                .is_err(),
+                "public request accepted {field}"
+            );
         }
     }
 

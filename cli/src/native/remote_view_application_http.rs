@@ -48,6 +48,28 @@ impl RemoteViewApplicationHttp {
     }
 }
 impl RemoteViewApplicationHttp {
+    /// Whether the private token file supplied an owner bearer. Presence alone
+    /// is configuration evidence; only a successful owner request authenticates it.
+    pub(crate) fn has_control_authorization(&self) -> bool {
+        self.authorization.is_some()
+    }
+
+    /// Inspect consumer input policy on the lifecycle desktop. Viewing identity
+    /// remains independently fenced by the existing Native operation.
+    pub(crate) fn desktop_input_capability(
+        &mut self,
+        target: &agent_browser_service_model::RemoteViewApplicationTarget,
+    ) -> Result<Value, Error> {
+        let mut endpoint = self.endpoint.clone();
+        endpoint.set_path("/v1/desktops/");
+        endpoint
+            .path_segments_mut()
+            .map_err(|_| Error::Rejected)?
+            .pop_if_empty()
+            .push(&target.desktop_id);
+        self.owner_http_request(reqwest::Method::GET, endpoint, None)
+    }
+
     /// Existing Remote View agent-desktop API. No browser/CDP attachment or
     /// controller takeover is performed by this transport.
     pub(crate) fn native_request(&mut self, operation: &str, body: &Value) -> Result<Value, Error> {
@@ -61,20 +83,71 @@ impl RemoteViewApplicationHttp {
                 | "input"
                 | "window"
                 | "input_cancel"
-        ) {
-            return Err(Error::Rejected);
-        }
-        if operation == "control" && body["operation"] != "status" {
+        ) || (operation == "control" && body["operation"] != "status")
+        {
             return Err(Error::Rejected);
         }
         let mut endpoint = self.endpoint.clone();
         endpoint.set_path(&format!("/v1/agent-desktop/{operation}"));
-        let authorization = self.authorization.clone();
-        let timeout = self.timeout;
         let body = serde_json::to_vec(body).map_err(|_| Error::Rejected)?;
         if body.len() > 1_048_576 {
             return Err(Error::Rejected);
         }
+        self.owner_http_request(reqwest::Method::POST, endpoint, Some(body))
+    }
+
+    /// Exact control-status preflight shared by checkbox and image attempts.
+    pub(crate) fn native_control_status(&mut self, body: &Value) -> Result<Value, String> {
+        self.native_operation("control", body).map_err(|error| {
+            format!("browser_native_original_observation_control_unverified:{error}")
+        })
+    }
+
+    /// Retain a safe owner cause and operation-specific uncertainty through the
+    /// actual Native host request boundary. This method never retries input.
+    pub(crate) fn native_operation(
+        &mut self,
+        operation: &str,
+        body: &Value,
+    ) -> Result<Value, String> {
+        self.native_request(operation, body).map_err(|error| {
+            let mutating = matches!(operation, "input" | "window" | "input_cancel");
+            let rejected = matches!(
+                error,
+                Error::Rejected
+                    | Error::Unavailable
+                    | Error::OwnerAuthenticationRequired
+                    | Error::OwnerAccessDenied
+                    | Error::OwnerInputDisabled
+            );
+            let effect = if !mutating {
+                "observation_failed; no input dispatched"
+            } else if rejected {
+                "rejected; no input dispatched"
+            } else {
+                "observe before retry; input may have been delivered"
+            };
+            let status = match error {
+                Error::OwnerAuthenticationRequired => Some(401),
+                Error::OwnerAccessDenied | Error::OwnerInputDisabled => Some(403),
+                Error::OwnerFailure { status, .. } => Some(status),
+                _ => None,
+            };
+            let status = status
+                .map(|value| format!(":httpStatus={value}"))
+                .unwrap_or_default();
+            format!("browser_native_owner_request:{operation}:{error:?}{status}:{effect}")
+        })
+    }
+
+    fn owner_http_request(
+        &mut self,
+        method: reqwest::Method,
+        endpoint: reqwest::Url,
+        body: Option<Vec<u8>>,
+    ) -> Result<Value, Error> {
+        let authorization = self.authorization.clone();
+        let timeout = self.timeout;
         std::thread::Builder::new()
             .name("remote-view-native-http".into())
             .spawn(move || {
@@ -93,24 +166,21 @@ impl RemoteViewApplicationHttp {
                         .build()
                         .map_err(|_| Error::Unavailable)?;
                     let mut request = client
-                        .post(endpoint)
-                        .header(reqwest::header::CONTENT_TYPE, "application/json")
-                        .header(reqwest::header::CONNECTION, "close")
-                        .body(body);
+                        .request(method, endpoint)
+                        .header(reqwest::header::CONNECTION, "close");
+                    if let Some(body) = body {
+                        request = request
+                            .header(reqwest::header::CONTENT_TYPE, "application/json")
+                            .body(body);
+                    }
                     if let Some(authorization) = authorization {
                         request = request.header(reqwest::header::AUTHORIZATION, authorization);
                     }
                     let mut response = request.send().await.map_err(|_| Error::OutcomeUnknown)?;
-                    if matches!(
-                        response.status(),
-                        reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN
-                    ) {
-                        return Err(Error::Rejected);
-                    }
                     if response.status() != reqwest::StatusCode::OK {
-                        return Err(Error::OutcomeUnknown);
+                        return Err(owner_failure(response).await);
                     }
-                    // Remote View bounds raw captures at 4 MiB; allow base64 and metadata.
+                    // Raw captures are bounded at 4 MiB; allow base64 and metadata.
                     const LIMIT: usize = 6 * 1024 * 1024;
                     if response
                         .content_length()
@@ -122,7 +192,7 @@ impl RemoteViewApplicationHttp {
                     while let Some(chunk) =
                         response.chunk().await.map_err(|_| Error::OutcomeUnknown)?
                     {
-                        if bytes.len().saturating_add(chunk.len()) > LIMIT {
+                        if chunk.len() > LIMIT.saturating_sub(bytes.len()) {
                             return Err(Error::OutcomeUnknown);
                         }
                         bytes.extend_from_slice(&chunk);
@@ -134,6 +204,62 @@ impl RemoteViewApplicationHttp {
             .join()
             .map_err(|_| Error::OutcomeUnknown)?
     }
+}
+
+/// Only reviewed static reason codes leave the HTTP boundary. Never retain
+/// arbitrary messages, headers or provider response bodies in an error.
+async fn owner_failure(mut response: reqwest::Response) -> Error {
+    let status = response.status().as_u16();
+    if status == 401 {
+        return Error::OwnerAuthenticationRequired;
+    }
+    let fallback = if status == 403 {
+        Error::OwnerAccessDenied
+    } else {
+        Error::OwnerFailure {
+            status,
+            cause: "unrecognized_owner_failure",
+        }
+    };
+    const LIMIT: usize = 8192;
+    if response
+        .content_length()
+        .is_some_and(|size| size > LIMIT as u64)
+    {
+        return fallback;
+    }
+    let mut bytes = Vec::new();
+    loop {
+        match response.chunk().await {
+            Ok(Some(chunk)) if chunk.len() <= LIMIT.saturating_sub(bytes.len()) => {
+                bytes.extend_from_slice(&chunk)
+            }
+            Ok(None) => break,
+            _ => return fallback,
+        }
+    }
+    let Ok(value) = serde_json::from_slice::<Value>(&bytes) else {
+        return fallback;
+    };
+    let code = value
+        .get("code")
+        .and_then(Value::as_str)
+        .or_else(|| value.get("error").and_then(Value::as_str))
+        .or_else(|| value.pointer("/error/code").and_then(Value::as_str));
+    let cause = match code {
+        Some("input_disabled" | "native_input_disabled") if status == 403 => {
+            return Error::OwnerInputDisabled
+        }
+        Some("input_disabled") => "input_disabled",
+        Some("native_input_disabled") => "native_input_disabled",
+        Some("desktop_not_found") => "desktop_not_found",
+        Some("desktop_generation_conflict") => "desktop_generation_conflict",
+        Some("consumer_not_found") => "consumer_not_found",
+        Some("launch_environment_unavailable") => "launch_environment_unavailable",
+        Some("provider_unavailable") => "provider_unavailable",
+        _ => return fallback,
+    };
+    Error::OwnerFailure { status, cause }
 }
 impl RemoteViewApplicationTransport for RemoteViewApplicationHttp {
     fn request(&mut self, envelope: &RemoteViewApplicationEnvelope) -> Result<Value, Error> {
@@ -173,6 +299,21 @@ impl RemoteViewApplicationTransport for RemoteViewApplicationHttp {
                     }
                     let mut response = request.send().await.map_err(|_| Error::OutcomeUnknown)?;
                     let status = response.status();
+                    if matches!(status.as_u16(), 401 | 403) {
+                        return Err(owner_failure(response).await);
+                    }
+                    let invalid_response = || {
+                        if envelope_operation == "launch_environment"
+                            && status != reqwest::StatusCode::OK
+                        {
+                            Error::OwnerFailure {
+                                status: status.as_u16(),
+                                cause: "unrecognized_owner_failure",
+                            }
+                        } else {
+                            Error::OutcomeUnknown
+                        }
+                    };
                     if response
                         .content_length()
                         .is_some_and(|length| length > RESPONSE_LIMIT as u64)
@@ -182,19 +323,19 @@ impl RemoteViewApplicationTransport for RemoteViewApplicationHttp {
                             .and_then(|value| value.to_str().ok())
                             .is_none_or(|value| value.split(';').next() != Some("application/json"))
                     {
-                        return Err(Error::OutcomeUnknown);
+                        return Err(invalid_response());
                     }
                     let mut bytes = Vec::new();
                     while let Some(chunk) =
-                        response.chunk().await.map_err(|_| Error::OutcomeUnknown)?
+                        response.chunk().await.map_err(|_| invalid_response())?
                     {
                         if chunk.len() > RESPONSE_LIMIT.saturating_sub(bytes.len()) {
-                            return Err(Error::OutcomeUnknown);
+                            return Err(invalid_response());
                         }
                         bytes.extend_from_slice(&chunk);
                     }
                     let value: Value =
-                        serde_json::from_slice(&bytes).map_err(|_| Error::OutcomeUnknown)?;
+                        serde_json::from_slice(&bytes).map_err(|_| invalid_response())?;
                     if status == reqwest::StatusCode::BAD_REQUEST
                         && envelope_operation == "prepare_idle_retirement"
                         && value.get("schema_version").and_then(Value::as_u64) == Some(1)
@@ -236,7 +377,25 @@ impl RemoteViewApplicationTransport for RemoteViewApplicationHttp {
                         return Err(Error::ViewGrantTerminal);
                     }
                     if status != reqwest::StatusCode::OK {
-                        return Err(Error::OutcomeUnknown);
+                        // Preserve the existing uncertain-mutation classification.
+                        // This diagnostic projection belongs to the private read.
+                        if envelope_operation != "launch_environment" {
+                            return Err(Error::OutcomeUnknown);
+                        }
+                        // Consumer errors also retain only static allowlisted codes.
+                        let cause = match value.get("code").and_then(Value::as_str) {
+                            Some("launch_environment_unavailable") => {
+                                "launch_environment_unavailable"
+                            }
+                            Some("desktop_not_found") => "desktop_not_found",
+                            Some("desktop_generation_conflict") => "desktop_generation_conflict",
+                            Some("provider_unavailable") => "provider_unavailable",
+                            _ => "unrecognized_owner_failure",
+                        };
+                        return Err(Error::OwnerFailure {
+                            status: status.as_u16(),
+                            cause,
+                        });
                     }
                     Ok(value)
                 })
@@ -299,6 +458,194 @@ mod tests {
         io::{Read, Write},
         net::{TcpListener, TcpStream},
     };
+
+    #[test]
+    fn native_owner_rejection_preserves_safe_http_cause() {
+        let guard =
+            crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE"]);
+        guard.remove("AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE");
+        for (status, expected) in [
+            ("401 Unauthorized", "OwnerAuthenticationRequired"),
+            ("403 Forbidden", "OwnerAccessDenied"),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let origin = format!("http://{}", listener.local_addr().unwrap());
+            let server = std::thread::spawn(move || {
+                let (mut socket, _) = listener.accept().unwrap();
+                let request = read_request(&mut socket);
+                assert!(request.starts_with("POST /v1/agent-desktop/capture "));
+                let body = r#"{"code":"unreviewed_secret_text","token":"DO_NOT_REFLECT"}"#;
+                write!(socket, "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+            });
+            let mut http = RemoteViewApplicationHttp::new(&origin, Duration::from_secs(2)).unwrap();
+            let result = http.native_request(
+                "capture",
+                &serde_json::json!({"desktopId":"viewing-520","expectedGeneration":7}),
+            );
+            server.join().unwrap();
+            let diagnostic = format!("{:?}", result.unwrap_err());
+            assert_eq!(diagnostic, expected);
+            assert!(!diagnostic.contains("DO_NOT_REFLECT"));
+        }
+    }
+
+    #[test]
+    fn native_owner_rejection_classifies_observation_and_uncertain_input_without_secrets() {
+        let guard =
+            crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE"]);
+        guard.remove("AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE");
+        for (operation, status, body, expected, uncertain) in [
+            (
+                "capture",
+                "401 Unauthorized",
+                "not-json-secret",
+                "OwnerAuthenticationRequired",
+                false,
+            ),
+            (
+                "input",
+                "403 Forbidden",
+                r#"{"code":"input_disabled","message":"DO_NOT_REFLECT"}"#,
+                "OwnerInputDisabled",
+                false,
+            ),
+            (
+                "input",
+                "500 Internal Server Error",
+                r#"{"code":"DO_NOT_REFLECT","token":"DO_NOT_REFLECT"}"#,
+                "unrecognized_owner_failure",
+                true,
+            ),
+            (
+                "observe",
+                "503 Service Unavailable",
+                r#"{"code":"provider_unavailable","headers":"DO_NOT_REFLECT"}"#,
+                "provider_unavailable",
+                false,
+            ),
+            (
+                "capture",
+                "500 Internal Server Error",
+                "DO_NOT_REFLECT",
+                "unrecognized_owner_failure",
+                false,
+            ),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let origin = format!("http://{}", listener.local_addr().unwrap());
+            let server = std::thread::spawn(move || {
+                let (mut socket, _) = listener.accept().unwrap();
+                let request = read_request(&mut socket);
+                assert!(request.starts_with(&format!("POST /v1/agent-desktop/{operation} ")));
+                write!(socket, "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+            });
+            let mut http = RemoteViewApplicationHttp::new(&origin, Duration::from_secs(2)).unwrap();
+            let error = http
+                .native_operation(
+                    operation,
+                    &serde_json::json!({"desktopId":"viewing-520","expectedGeneration":7}),
+                )
+                .unwrap_err();
+            server.join().unwrap();
+            assert!(error.contains(expected), "{error}");
+            assert_eq!(
+                error.contains("input may have been delivered"),
+                uncertain,
+                "{error}"
+            );
+            if !uncertain {
+                assert!(error.contains("no input dispatched"), "{error}");
+            }
+            assert!(!error.contains("DO_NOT_REFLECT"));
+        }
+    }
+
+    #[test]
+    fn native_control_preflight_retains_rejected_owner_authentication() {
+        let guard =
+            crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE"]);
+        guard.remove("AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE");
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let origin = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let request = read_request(&mut socket);
+            assert!(request.starts_with("POST /v1/agent-desktop/control "));
+            assert!(request.contains(r#""operation":"status""#));
+            let body = r#"{"code":"authentication_required","token":"DO_NOT_REFLECT"}"#;
+            write!(socket, "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+        });
+        let mut http = RemoteViewApplicationHttp::new(&origin, Duration::from_secs(2)).unwrap();
+        let error = http.native_control_status(&serde_json::json!({"desktopId":"viewing-520","expectedGeneration":7,"operation":"status"})).unwrap_err();
+        server.join().unwrap();
+        assert!(error.contains("OwnerAuthenticationRequired"), "{error}");
+        assert!(error.contains("httpStatus=401"), "{error}");
+        assert!(error.contains("no input dispatched"), "{error}");
+        assert!(!error.contains("DO_NOT_REFLECT"));
+    }
+
+    #[test]
+    fn launch_environment_failure_retains_status_independent_of_response_body() {
+        let guard =
+            crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE"]);
+        guard.remove("AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE");
+        for kind in ["html", "malformed", "oversized"] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let origin = format!("http://{}", listener.local_addr().unwrap());
+            let server = std::thread::spawn(move || {
+                let (mut socket, _) = listener.accept().unwrap();
+                let request = read_request(&mut socket);
+                assert!(request.starts_with("POST /v1/consumer "));
+                assert!(request.contains("launch_environment"));
+                let body = "DO_NOT_REFLECT";
+                let content_type = if kind == "html" {
+                    "text/html"
+                } else {
+                    "application/json"
+                };
+                let length = if kind == "oversized" {
+                    RESPONSE_LIMIT + 1
+                } else {
+                    body.len()
+                };
+                write!(socket, "HTTP/1.1 503 Service Unavailable\r\nContent-Type: {content_type}\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n{body}").unwrap();
+            });
+            let mut http = RemoteViewApplicationHttp::new(&origin, Duration::from_secs(2)).unwrap();
+            let request = RemoteViewApplicationEnvelope {
+                application: "agent-browser".into(),
+                request: RemoteViewApplicationRequest::LaunchEnvironment {
+                    assignment_id: "assignment-520".into(),
+                    expected_generation: 3,
+                    expected_viewing_generation: 7,
+                },
+            };
+            let error = format!("{:?}", http.request(&request).unwrap_err());
+            server.join().unwrap();
+            assert!(
+                error.contains("status: 503"),
+                "known owner status lost for {kind}: {error}"
+            );
+            assert!(!error.contains("DO_NOT_REFLECT"));
+        }
+    }
+
+    #[test]
+    fn native_owner_rejection_bounds_oversized_provider_errors() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let origin = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            read_request(&mut socket);
+            write!(socket, "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: 99999999\r\nConnection: close\r\n\r\n").unwrap();
+        });
+        let mut http = RemoteViewApplicationHttp::new(&origin, Duration::from_secs(2)).unwrap();
+        let error = http
+            .native_operation("capture", &serde_json::json!({}))
+            .unwrap_err();
+        server.join().unwrap();
+        assert!(error.contains("unrecognized_owner_failure"));
+        assert!(error.contains("no input dispatched"));
+    }
 
     #[test]
     fn configured_native_control_token_authenticates_direct_inventory() {

@@ -31,6 +31,25 @@ capabilities require Auth installation/enrollment diagnostics, not direct vault
 access or a legacy auth fallback. Private discovery and bearer material stay in
 the SDK. Owner decisions, required delivery and exact browser binding still gate
 input. Never repeat an unknown credential attempt.
+Use current `auth_capabilities` before the owner login example in
+[playbooks.md](playbooks.md#private-login-composition). Current credential discovery
+is `discover_credentials({query, accountHint})`; legacy `list_accounts` only lists
+configured caller scopes. An empty legacy list is not an empty vault. Missing
+discovery authority (`auth_not_authorized`), `partial` source searches, completed
+`not_found` searches and `choice_required` account selection are separate outcomes.
+Partial searches with unavailable sources do not identify whether a source is
+locked, expired or absent. Auth's owner inspects source health and recovers its
+configured service-owned source session; caller enrollment is a different concern.
+The public owner playbook preserves these distinctions without creating a request
+or selecting the first available candidate. Personal/company intent must be exact.
+
+For a supported saved-password fallback, retain the exact owned browser and
+account/origin. Qualify Native owner authentication, consumer input capability and
+private capture/input guards before selection or submission. A visible viewer
+alone is insufficient; source recovery is not authority to borrow another desktop,
+change enrollment or replay uncertain input. SDK/example qualification does not
+establish installed provider login acceptance.
+
 Before private use is attempted, owner login may renew a typed `plan_stale` hold caused by owner-review delay. Renewal requires complete, unchanged guide, control, expected-state and task/profile/browser/tab bindings with the same receiving generation. The fresh plan is validated and durably saved against the original request before dispatch intent. Missing or changed proof stays held; attempted or unknown input never renews a plan or creates replacement approval.
 
 Use `createOwnerLoginPlaybook` with trusted browser routines, connected `auth` and

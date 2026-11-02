@@ -33,6 +33,42 @@ struct Ledger {
     idle_release_fences: BTreeSet<String>,
 }
 
+// Separate evidence document: retain immutable launch history and do not invent
+// a locally performed joined release. Older readers can still read the ledger.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OwnerRecoveryRelease {
+    prior: BrowserLaunchCustodyRecord,
+    released: agent_browser_service_model::RemoteViewAssignmentRecord,
+}
+const OWNER_RELEASE_SCHEMA: &str = "agent-browser.owner-recovery-release.v1";
+fn owner_release_kind(prior: &BrowserLaunchCustodyRecord) -> String {
+    format!("owner_recovery_release:{}", prior.intent.intent_id)
+}
+fn exact_owner_release(
+    prior: &BrowserLaunchCustodyRecord,
+    released: &agent_browser_service_model::RemoteViewAssignmentRecord,
+) -> bool {
+    let mut expected = prior.intent.assignment.clone();
+    expected.state = agent_browser_service_model::RemoteViewAssignmentState::Released;
+    *released == expected
+}
+fn owner_release_observed(
+    connection: &Connection,
+    prior: &BrowserLaunchCustodyRecord,
+) -> Result<bool, LaunchCustodyStoreError> {
+    let proof: Option<OwnerRecoveryRelease> =
+        load_optional_document(connection, &owner_release_kind(prior), OWNER_RELEASE_SCHEMA)
+            .map_err(|_| LaunchCustodyStoreError::InvalidRecord)?;
+    match proof {
+        None => Ok(false),
+        Some(proof) if proof.prior == *prior && exact_owner_release(prior, &proof.released) => {
+            Ok(true)
+        }
+        Some(_) => Err(LaunchCustodyStoreError::InvalidRecord),
+    }
+}
+
 fn ledger(connection: &Connection) -> Result<Ledger, LaunchCustodyStoreError> {
     let ledger: Ledger = load_optional_document::<Ledger>(connection, DOCUMENT, SCHEMA)
         .map_err(|_| LaunchCustodyStoreError::InvalidRecord)?;
@@ -384,6 +420,39 @@ fn published_launch_record(
 }
 
 impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
+    fn retain_owner_released_assignment(
+        &mut self,
+        browser: &agent_browser_service_model::ManagedBrowserInstance,
+        expected: &BrowserSessionState,
+        released: &agent_browser_service_model::RemoteViewAssignmentRecord,
+    ) -> Result<(), LaunchCustodyStoreError> {
+        use LaunchCustodyStoreError as Error;
+        let transaction = self
+            .remote_view_mutation_connection()
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| Error::Unavailable)?;
+        if current(&transaction)? != *expected {
+            return Err(Error::Conflict);
+        }
+        let prior = published_launch_record(&transaction, browser)?;
+        if !exact_owner_release(&prior, released) {
+            return Err(Error::Conflict);
+        }
+        let kind = owner_release_kind(&prior);
+        // Never overwrite conflicting historical custody under a reused identity.
+        owner_release_observed(&transaction, &prior)?;
+        save_document(
+            &transaction,
+            &kind,
+            OWNER_RELEASE_SCHEMA,
+            &OwnerRecoveryRelease {
+                prior,
+                released: released.clone(),
+            },
+        )
+        .map_err(|_| Error::Unavailable)?;
+        transaction.commit().map_err(|_| Error::Unavailable)
+    }
     fn assignment_release_confirmed(
         &mut self,
         assignment: &agent_browser_service_model::RemoteViewAssignmentRecord,
@@ -1959,6 +2028,7 @@ impl BrowserSessionSqliteStore {
             return Err(Error::ReleaseFenced);
         }
 
+        let mut owner_terminal_replacement = false;
         if let Some(browser) = recovery {
             let prior = records
                 .records
@@ -1972,7 +2042,9 @@ impl BrowserSessionSqliteStore {
             let explicit_target =
                 explicit_hosted_recovery_target(&state, browser, &intent.assignment);
             let prior_conflict = if let [prior] = prior.as_slice() {
+                owner_terminal_replacement = owner_release_observed(&transaction, prior)?;
                 (prior.intent.assignment != intent.assignment
+                    && !owner_terminal_replacement
                     && !explicit_target
                     && (!state.idle_closed_browsers.contains_key(&browser.id)
                         || !assignment_release_completed(&transaction, &prior.intent.assignment)?))
@@ -2004,7 +2076,8 @@ impl BrowserSessionSqliteStore {
         }) || state.browsers.values().any(|browser| {
             if state.idle_closed_browsers.contains_key(&browser.id)
                 || (recovery == Some(browser)
-                    && explicit_hosted_recovery_target(&state, browser, &intent.assignment))
+                    && (owner_terminal_replacement
+                        || explicit_hosted_recovery_target(&state, browser, &intent.assignment)))
             {
                 return false;
             }

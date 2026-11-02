@@ -13,6 +13,17 @@ use crate::{
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RemoteViewApplicationTransportError {
     Rejected,
+    /// The owner refused the request before any protected input.
+    OwnerAuthenticationRequired,
+    /// The owner rejected this caller or consumer before protected input.
+    OwnerAccessDenied,
+    /// The owner explicitly reports disabled Native input for this consumer.
+    OwnerInputDisabled,
+    /// Bounded status and a compile-time allowlisted code, never raw provider text.
+    OwnerFailure {
+        status: u16,
+        cause: &'static str,
+    },
     Unavailable,
     OutcomeUnknown,
     /// Exact provider response proves the retained view grant is terminal.

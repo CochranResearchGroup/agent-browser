@@ -73,75 +73,98 @@ real login acceptance or passkey support.
 
 ## Private login composition
 
-The supported software adapter composes existing verification and shared helper
-operations without moving credentials into the client:
+New login work uses the standalone owner-authority adapter. This example is
+executed through the real SDK/helper by `scripts/test-auth-discovery-guidance.mjs`.
+Its variables come from reviewed nonsecret task/account intent and the exact
+receiving target, not from a guessed profile name.
+
+<!-- owner-login-example -->
 
 ```js
 import {connectHostedAuthHelper} from '@agent-browser/client/hosted-auth-helper';
-import {createLoginPlaybook} from '@agent-browser/client/login-playbook';
-const caller = await connectHostedAuthHelper();
-const {accounts} = await caller.helper('list_accounts', {});
-// Select scope from an exact configured account/source/origin mapping.
-// accounts describes configured scopes; it does not prove vault readiness.
-const login = createLoginPlaybook({
+import {createOwnerLoginPlaybook} from '@agent-browser/client/login-playbook';
+const auth = await connectHostedAuthHelper();
+const capabilities = await auth.helper('auth_capabilities', {});
+if (capabilities.contractVersion !== 1 ||
+    capabilities.credentialOperations !== true ||
+    capabilities.sharedOwnerAuthority !== true ||
+    capabilities.legacyCredentialEffects !== false) {
+  throw Object.assign(new Error('Install a compatible owner-authority Auth SDK'),
+    {code: 'auth_authority_migration_required'});
+}
+const login = createOwnerLoginPlaybook({
   browser: playbooks,
-  helper: caller.helper,
+  auth,
   checkpoints: durableMetadataStore,
 });
 const options = {
   taskId, guideId, accountRef, organizationRef,
-  callerTaskId: caller.callerTaskId,
-  scope, // {person, tenant, account, origin, source, capabilities: ['login']}
-  expiresAt,
+  query, accountHint, // service hint plus the intended personal/company account
+  origin, targetId, // exact reviewed recipient, not a discovery hint
+  purpose, expiresAt, idempotencyKey,
 };
 const result = await login.advance(options);
 ```
 
-Discovery verifies the installed producer candidate, loads its supported SDK and
-keeps bearer material inside that private transport. The ordinary caller is the
-currently attested Codex work/thread, with no Bots roster entry or TUI required.
-Its `callerTaskId` is separate from the receiving browser `taskId`. Version2 freezes
-the exact receiving provider/task/profile/browser/tab, while the summary's legacy
-`taskId` identifies the caller. Preserve both identities rather than aliasing them.
-Account/source references come from configured logical metadata and the existing
-source owner; do not guess them from a browser profile or request a password in
-model-visible conversation. No standalone auth service is created.
+The public adapter calls `discover_credentials` with `{query, accountHint}`;
+`requestLogin` uses `request_credential` in private login mode. `advanceLogin`
+inspects that same request, receives its owner decision and uses `use_credential`
+only before an attempt exists. Credentials remain inside Auth and its trusted
+receiver. The currently attested caller `auth.callerTaskId` is separate from the
+receiving browser `taskId`; neither identity is substituted for the other.
+The existing Auth service owns enrollment, policy and private source custody.
 
-`helper` uses request_login, inspect_request and begin_authentication for ordinary
-hosted callers; legacy callbacks retain authenticate. Both return sanitized
-structured summaries. The trusted receiving configuration positively verifies the
-original caller/receiving association and rechecks exact native ownership around
-private effects. Shared hosted-login-receiver and native-receiving-browser ports
-are trusted-host modules, not credential APIs for agents. They sequence actual
-identifier/password states and configured private MFA callbacks; check visible,
-masked, account-bound controls; use native Remote View process/window/visual
-fences; and prove empty-field and exact-value readback privately. A recognized
-popup may receive one guarded Escape before a fresh hit-tested submit. Unknown
-Escape or submission acknowledgement permits no replay. A current exact
-identifier match needs no clear/retype under unchanged native/control guards;
-unknown prior delivery cannot become equality success. Qualify every real MFA,
-passkey and password-manager path separately; no resend, enrollment or password
-saving is implied.
+Do not use legacy `list_accounts` to choose a current credential. Empty legacy
+caller scopes say nothing about saved LastPass/KeePass records. A service-only
+query can lack discovery authority while an admitted exact account hint permits
+a bounded search. Keep these distinct:
 
-The store implements asynchronous load(key) and save(key, checkpoint); save
-must durably complete before returning. Checkpoints contain scope, task/page
-binding and request metadata, never credential or challenge values. Preserve
-the same inputs, including expiresAt and callerTaskId, when resuming.
+- `auth_not_authorized`: discovery authority is missing; diagnose the enrolled
+  caller's admitted scope with Auth's owner. This is not source or vault absence.
+- `credential_source_unavailable`: discovery was `partial` with `unavailable`
+  sources. No complete search occurred, even if another source returned a match.
+  This result does not distinguish locked, expired or missing source sessions.
+- `credential_discovery_incomplete`: discovery was `partial`, for example due to
+  truncation. Narrow the service/account hints; never select the first candidate.
+- `credential_not_found`: a completed authorized search returned `not_found`.
+  This describes the searched sources and account hints, not the entire vault.
+- `account_ambiguous`: discovery returned `choice_required`. Inspect bounded
+  nonsecret candidate labels with `auth.helper('discover_credentials',
+  {query, accountHint})`, resolve personal/company intent and use an exact account
+  hint. Do not guess a record from an opaque ID or change the receiving origin.
+- `credential_unavailable`: unsupported or unverified discovery metadata. Inspect
+  the current producer contract rather than treating it as a complete no-match.
 
-`approval_required` waits for the shared helper's approved request. After a
-submission attempt, each advance inspects that request. A missing response,
-30-second helper timeout or restart yields helper_running_or_uncertain and
-effectState unknown; never create another request or resubmit to recover it.
-Completed helper authentication also requires captureState ready and fresh
-receiving verification. A held capture, changed task target or wrong company
-cannot produce playbook completion. Unsupported extension/passkey methods and
-helper absence produce waiting states with no submission.
-An uncertain terminal helper request with capture ready and no inputAttemptedAt
-proves that private input did not begin. It yields password_source_unavailable;
-check the configured source and password-manager unlock state in the helper.
-The current producer intentionally does not disclose whether the source was
-locked, absent or otherwise unavailable. Exact lock-state detection remains a
-producer capability gap; the client does not infer it from a failed login.
+Auth's owner diagnoses source health and recovers its service-owned source
+session in the configured private source home. Client enrollment and source
+unlock/refresh are separate tasks. Do not create a parallel vault session,
+change caller enrollment or ask for manual website login because legacy scopes
+are empty. Source-session recovery is an AuthReceipts responsibility.
+
+A saved-password fallback in the existing owned browser requires the intended
+account/origin, current private-input/capture guards, authenticated Native owner
+access and consumer input capability on that exact desktop. Viewer readiness
+alone does not prove those prerequisites. Use the supported guarded receiving
+path without exposing passwords, borrowing another desktop or replaying an
+uncertain submission. If prerequisites are missing, report that exact gate.
+
+The metadata store implements asynchronous `load(key)` and `save(key, checkpoint)`;
+save must durably complete before returning. Preserve the same task, intent,
+expiry, idempotency key, request and receiving binding on continuation. After a
+lost response, call `login.advance({...options, reconcile: true})` on that original
+checkpoint; it cannot create or repeat private input. Completion still requires
+fresh independent intended account/company evidence. Source/SDK fixtures do not
+prove an installed real login, provider MFA or password-manager acceptance.
+
+## Retained legacy callback checkpoints
+
+`createLoginPlaybook` remains for checkpoints issued by the original callback
+helper. Resume it only with the original trusted helper, caller identity and
+retained options. Do not send legacy `request_login`/`begin_authentication`
+operations to a current owner-authority helper or translate old checkpoints into
+new requests. The standalone example above is the path for new work.
+Legacy summaries retain their existing capture/readback and no-replay contract;
+the following continuation notes describe that retained interface.
 
 ### Read back after human completion
 

@@ -188,6 +188,18 @@ pub trait BrowserLaunchCustodyStore {
     ) -> Result<bool, LaunchCustodyStoreError> {
         Ok(false)
     }
+    /// Retain exact owner-terminal evidence for a published browser after the
+    /// caller proves its profile absent. This is replacement evidence only,
+    /// never a joined release, cleanup acknowledgement or permission to retry input.
+    fn retain_owner_released_assignment(
+        &mut self,
+        _browser: &crate::ManagedBrowserInstance,
+        _expected: &BrowserSessionState,
+        _released: &crate::RemoteViewAssignmentRecord,
+    ) -> Result<(), LaunchCustodyStoreError> {
+        Err(LaunchCustodyStoreError::Unavailable)
+    }
+
     /// Settle only the occupancy of an exact interrupted launch after the caller
     /// proves its process and entire retained profile absent. Preserve the claim
     /// as history; compare the unchanged session baseline and original record.

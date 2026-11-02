@@ -5335,6 +5335,9 @@ agent-browser auth - Manage authentication profiles
 
 Standalone website login helpers consume the verified Auth Receipts client SDK.
 Bots is not required; private discovery stays inside Auth Receipts.
+Current owner login uses discover_credentials with service/account intent.
+Empty legacy scopes do not mean missing saved credentials. Missing authority,
+unavailable/partial sources, no match and account choice remain distinct holds.
 Owner login can renew an unchanged age-stale plan before any private-use intent.
 Fresh validation and durable metadata preserve the original owner request;
 changed proof or attempted/unknown input remains held without replacement approval.
@@ -7359,6 +7362,10 @@ Commands:
   Teaching grilling: client teaching-grilling; source-linked questions, authenticated answers
   Native challenge: bounded passive wait or one registered checkbox attempt per task
   Native OCR: high-confidence hCaptcha variants require same-frame brand and registered pixels
+  Native readiness: native_ready separates owner authentication, consumer input policy and viewer delivery
+  Native setup: AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE and consumer selective_input; no borrowed desktop
+  Native owner failures: observations report no input dispatched; only safe status/cause is retained
+  Retained recovery: proven process absence plus exact owner released assignment permits fresh placement; no inferred cleanup
   Native input: stable original requestId; uncertain delivery forbids replay
   Native completion errors: inspect the original requestId and safe cause; never replay
   Native image: explicit provider membership; static 3x3 bus grid; returned IDs only

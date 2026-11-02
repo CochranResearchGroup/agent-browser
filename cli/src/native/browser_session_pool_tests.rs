@@ -222,6 +222,7 @@ struct Provider {
     terminal_view_key: Option<String>,
     all_views_terminal: bool,
     unavailable_assignment: Option<String>,
+    denied_assignment: Option<String>,
     empty_desktop: Option<String>,
     occupied_desktops: std::collections::BTreeSet<String>,
     fail_new_windows: bool,
@@ -642,6 +643,9 @@ impl RemoteViewApplicationTransport for PoolTransport {
                 expected_generation,
             } => {
                 provider.operations.push("observe_assignment");
+                if provider.denied_assignment.as_ref() == Some(assignment_id) {
+                    return Err(RemoteViewApplicationTransportError::OwnerAccessDenied);
+                }
                 if provider.unavailable_assignment.as_ref() == Some(assignment_id) {
                     return Err(RemoteViewApplicationTransportError::Unavailable);
                 }
@@ -651,6 +655,9 @@ impl RemoteViewApplicationTransport for PoolTransport {
                     .find(|assignment| assignment.assignment_id == *assignment_id)
                     .unwrap();
                 assert_eq!(assignment.generation, *expected_generation);
+                if assignment.state != RemoteViewAssignmentState::Active {
+                    return Err(RemoteViewApplicationTransportError::OwnerAccessDenied);
+                }
                 let mut observation = fixture["assignmentObservation"].clone();
                 observation["target"]["assignmentId"] = assignment.assignment_id.clone().into();
                 observation["target"]["desktopId"] = assignment.desktop_id.clone().into();
@@ -8526,4 +8533,205 @@ fn current_retirement_excludes_historical_peers_through_sqlite_custody() {
             "admission does not erase history or close targets"
         );
     }
+}
+
+#[test]
+fn recovery522_exact_owner_release_restores_retained_tasks_without_fabricating_cleanup() {
+    for case in [
+        "exact",
+        "missing",
+        "generation",
+        "desktop",
+        "registration",
+        "pool",
+        "pending",
+        "denied",
+        "absence",
+    ] {
+        let fixture = Fixture::new();
+        let provider = Rc::new(RefCell::new(Provider::default()));
+        let calls = Rc::new(Cell::new(0));
+        let mut consumer = host_mode(
+            &fixture,
+            provider.clone(),
+            calls.clone(),
+            Mode::IdleRecovery,
+        );
+        let alice = consumer
+            .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+            .unwrap();
+        let bob = consumer
+            .open(OpenBrowserSession::exact_profile("Bob", "profile-a", 101))
+            .unwrap();
+        let mut before = consumer.state().clone();
+        let original = before.browsers[&alice.browser_id].clone();
+        let prior = fixture
+            .store(false)
+            .published_launch_assignment(&original)
+            .unwrap();
+        assert!(!fixture
+            .store(false)
+            .assignment_release_confirmed(&prior)
+            .unwrap());
+        drop(consumer);
+        before
+            .idle_closed_browsers
+            .insert(alice.browser_id.clone(), 101);
+        before
+            .leave_open_session_ids
+            .insert(alice.session_id.clone());
+        fixture.store(false).save_session_state(&before).unwrap();
+        {
+            let mut owner = provider.borrow_mut();
+            owner.assignments[0].state = RemoteViewAssignmentState::Released;
+            match case {
+                "missing" => {
+                    owner.assignments.clear();
+                    owner.unavailable_assignment = Some(prior.assignment_id.clone());
+                }
+                "generation" => {
+                    owner.assignments[0].generation += 1;
+                    owner.unavailable_assignment = Some(prior.assignment_id.clone());
+                }
+                "desktop" => owner.assignments[0].desktop_id = uuid::Uuid::new_v4().to_string(),
+                "registration" => owner.assignments[0].registration_id.push_str("-other"),
+                "pool" => owner.assignments[0].pool_id.push_str("-other"),
+                "pending" => owner.assignments[0].state = RemoteViewAssignmentState::ReleasePending,
+                "denied" => {
+                    owner.assignments[0].state = RemoteViewAssignmentState::Active;
+                    owner.denied_assignment = Some(prior.assignment_id.clone());
+                }
+                _ => (),
+            }
+        }
+        std::fs::write(
+            fixture.root.join("idle-process-absent"),
+            "exact synthetic absence",
+        )
+        .unwrap();
+        if case == "absence" {
+            std::fs::write(fixture.root.join("recovery-absence-unknown"), "unknown").unwrap();
+        }
+        let mut restarted = host_mode(
+            &fixture,
+            provider.clone(),
+            calls.clone(),
+            Mode::IdleRecovery,
+        );
+        let result = restarted.execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"get_url", "sessionId":alice.session_id, "activityAtMs":102
+            }),
+        );
+        if case != "exact" {
+            assert!(
+                result.is_err(),
+                "unqualified terminal evidence {case} must not replace a browser"
+            );
+            assert_eq!(calls.get(), 1, "{case}");
+            assert_eq!(*restarted.state(), before, "{case}");
+            assert_eq!(provider.borrow().acquisitions.len(), 1, "{case}");
+            continue;
+        }
+        let result = result
+            .expect("owner-terminal assignment must not strand retained recovery")
+            .unwrap();
+        assert_eq!(result["success"], true, "{result}");
+        assert_eq!(result["browserSession"]["sessionId"], alice.session_id);
+        let after = restarted.state();
+        assert!(after.sessions.contains_key(&bob.session_id));
+        assert_eq!(after.sessions.len(), before.sessions.len());
+        assert_ne!(after.browsers[&alice.browser_id].desktop, original.desktop);
+        assert_eq!(calls.get(), 2);
+        assert_eq!(provider.borrow().acquisitions.len(), 2);
+        assert!(provider.borrow().view_requests.is_empty());
+        assert!(
+            !fixture
+                .store(false)
+                .assignment_release_confirmed(&prior)
+                .unwrap(),
+            "owner terminal evidence is not a fabricated joined cleanup receipt"
+        );
+        assert!(fixture
+            .store(false)
+            .unpublished_launch_records()
+            .unwrap()
+            .is_empty());
+    }
+}
+
+#[test]
+fn recovery522_owner_terminal_evidence_survives_restart_and_fences_stale_admission() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider, calls);
+    let opened = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let before = consumer.state().clone();
+    let browser = before.browsers[&opened.browser_id].clone();
+    let prior = fixture
+        .store(false)
+        .published_launch_assignment(&browser)
+        .unwrap();
+    drop(consumer);
+    let mut released = prior.clone();
+    released.state = RemoteViewAssignmentState::Released;
+    let mut wrong = released.clone();
+    wrong.generation += 1;
+    assert_eq!(
+        fixture
+            .store(false)
+            .retain_owner_released_assignment(&browser, &before, &wrong),
+        Err(LaunchCustodyStoreError::Conflict)
+    );
+    let mut stale = before.clone();
+    stale.next_session_sequence += 1;
+    assert_eq!(
+        fixture
+            .store(false)
+            .retain_owner_released_assignment(&browser, &stale, &released),
+        Err(LaunchCustodyStoreError::Conflict)
+    );
+    fixture
+        .store(false)
+        .retain_owner_released_assignment(&browser, &before, &released)
+        .unwrap();
+    let mut restarted = fixture.store(false);
+    assert_eq!(
+        restarted.published_launch_assignment(&browser).unwrap(),
+        prior
+    );
+    assert!(!restarted.assignment_release_confirmed(&prior).unwrap());
+    let mut fresh = prior.clone();
+    fresh.assignment_id.push_str("-fresh");
+    fresh.generation += 1;
+    let intent = BrowserLaunchIntent {
+        intent_id: uuid::Uuid::new_v4().to_string(),
+        profile_id: browser.profile_id.clone(),
+        assignment: fresh,
+    };
+    assert_eq!(
+        restarted
+            .admit_recovery_launch_intent(&intent, &before, &browser)
+            .unwrap(),
+        LaunchCustodyAdmission::New
+    );
+    drop(restarted);
+    assert!(matches!(
+        fixture
+            .store(false)
+            .admit_recovery_launch_intent(&intent, &before, &browser)
+            .unwrap(),
+        LaunchCustodyAdmission::Existing(_)
+    ));
+    fixture.store(false).save_session_state(&stale).unwrap();
+    assert_eq!(
+        fixture
+            .store(false)
+            .admit_recovery_launch_intent(&intent, &before, &browser),
+        Err(LaunchCustodyStoreError::Conflict)
+    );
 }
