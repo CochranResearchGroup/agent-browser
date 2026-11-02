@@ -248,3 +248,5 @@ mod e2e_tests;
 mod parity_tests;
 
 mod workspace_profile_library;
+
+mod workspace_siteguides;
