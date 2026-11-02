@@ -5776,3 +5776,5 @@ button {
 .workspace-library input, .workspace-library select { max-width: 100%; min-width: 0; padding: .4rem; border: 1px solid var(--border); border-radius: .3rem; background: var(--background); color: inherit; }
 .workspace-library pre, .workspace-library code { overflow-wrap: anywhere; white-space: pre-wrap; }
 .workspace-library article, .workspace-library section { min-width: 0; }
+.workspace-library label:has(> input[type="checkbox"]) { display: flex; align-items: center; gap: .5rem; }
+.workspace-library input[type="checkbox"] { width: auto; }

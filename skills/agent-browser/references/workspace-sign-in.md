@@ -48,7 +48,8 @@ Profiles and SiteGuides stores multiple intended site/account/organization assoc
 
 Choose **Teach this site** in the compact toolbar after selecting a managed
 browser task, or open the **SiteGuides** library tab. Select a configured site
-and explicitly choose the intended account and organization/workspace. These
+and explicitly choose the intended account and organization/workspace, or mark
+account unknown and personal/no organization. These
 labels do not prove the signed-in identity. Use the existing Native Remote View
 recording and human-narration controls, then select finalized evidence. The
 workspace consumes those recordings; it does not add a viewer or recorder.
