@@ -17,3 +17,16 @@ await assert.rejects(()=>loadTeachingMediaPacket({evidence,bundle:{...bundle,vid
 const wrappers=transcripts.map(row=>({status:'available',operationId:row.operationId,transcript:{operationId:row.operationId,source:{artifactId:row.artifactId,revision:row.revision,startMs:row.startMs,endMs:row.endMs},text:row.text}}));
 const realShape=await loadTeachingMediaPacket({evidence,bundle,transcripts:wrappers,context,operationId:'wrapped',decodeFrame:async()=>({bytes:image,mimeType:'image/png'})});assert.deepEqual(realShape.transcripts,transcripts);
 console.log('Teaching media public consumer passed: scoped bytes, full digest, all transcript ranges, actual frame bytes and unavailable binding.');
+
+// Actual decoder boundary over synthetic WebM, with no user recording or profile.
+const {execFileSync}=await import('node:child_process');
+const fs=await import('node:fs/promises');const os=await import('node:os');const path=await import('node:path');
+const scratch=await fs.mkdtemp(path.join(os.tmpdir(),'teaching-media-decoder-'));
+try {
+ const file=path.join(scratch,'synthetic.webm');
+ execFileSync('ffmpeg',['-nostdin','-hide_banner','-loglevel','error','-f','lavfi','-i','color=c=blue:s=320x200:d=1','-c:v','libvpx-vp9','-an',file],{timeout:15000,stdio:['ignore','ignore','pipe']});
+ const real=await fs.readFile(file);const realBundle={...bundle,video:{artifact:'video.webm',sha256:hash(real)},inputEvidence:[]};
+ const reader={inspect:async()=>structuredClone(realBundle),readVideoSlice:async(_,{offset,length})=>{const bytes=real.subarray(offset,offset+length);return{recordingId:bundle.recordingId,artifact:'video.webm',offset,size:real.length,base64:bytes.toString('base64'),sha256:hash(bytes),nextOffset:offset+bytes.length,eof:offset+bytes.length===real.length}}};
+ const decoded=await loadTeachingMediaPacket({evidence:reader,bundle:realBundle,transcripts,context,operationId:'decoded',intervals:[{startMs:0,endMs:500}]});
+ assert.equal(decoded.frames.length,1);assert.equal(decoded.frames[0].mimeType,'image/jpeg');assert.ok(Buffer.from(decoded.frames[0].dataBase64,'base64').subarray(0,2).equals(Buffer.from([255,216])));console.log('Actual bounded ffmpeg consumer decoded a synthetic owner-authorized WebM frame.');
+} finally {await fs.rm(scratch,{recursive:true,force:true})}

@@ -17,7 +17,7 @@ async function decodeFrame({videoBytes,timeMs}) {
  try {
   const input=join(directory,'source.webm');await writeFile(input,videoBytes,{mode:0o600});
   const bytes=await new Promise((resolve,reject)=>{
-   const child=spawn('ffmpeg',['-nostdin','-hide_banner','-loglevel','error','-max_alloc','67108864','-protocol_whitelist','file,pipe','-f','matroska','-ss',String(timeMs/1000),'-i',input,'-frames:v','1','-vf',"scale=w='min(960,iw)':h='min(960,ih)':force_original_aspect_ratio=decrease",'-q:v','8','-f','image2pipe','-vcodec','mjpeg','pipe:1'],{stdio:['ignore','pipe','ignore'],windowsHide:true});
+   const child=spawn('ffmpeg',['-nostdin','-hide_banner','-loglevel','error','-max_alloc','67108864','-protocol_whitelist','file,pipe','-f','matroska','-ss',String(timeMs/1000),'-i',input,'-frames:v','1','-vf',"scale=w='min(960,iw)':h='min(960,ih)':force_original_aspect_ratio=decrease",'-q:v','8','-f','image2pipe','-vcodec','mjpeg','pipe:1'],{stdio:['ignore','pipe','ignore'],windowsHide:true,env:{PATH:process.env.PATH??'',HOME:directory,XDG_CONFIG_HOME:directory,XDG_CACHE_HOME:directory,XDG_DATA_HOME:directory,...(process.env.SystemRoot?{SystemRoot:process.env.SystemRoot}:{}),...(process.env.SYSTEMROOT?{SYSTEMROOT:process.env.SYSTEMROOT}:{})}});
    const chunks=[];let size=0,error=null;
    const timer=setTimeout(()=>{error='teaching_frame_timeout';child.kill('SIGKILL')},15000);
    child.stdout.on('data',chunk=>{size+=chunk.length;if(size>MAX_FRAME){error='teaching_frame_limit';child.kill('SIGKILL')}else chunks.push(chunk)});
