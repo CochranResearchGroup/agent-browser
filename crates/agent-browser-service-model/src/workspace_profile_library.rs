@@ -161,7 +161,9 @@ pub fn select_profile_for_site_identity(
             identity_verification_required: true,
         }
     };
-    if !state.site_policies.contains_key(&request.site_policy_id) {
+    if !state.site_policies.contains_key(&request.site_policy_id)
+        && !(request.site_policy_id.is_empty() && request.profile_id.is_some())
+    {
         return result("conflict", None, vec![], "Requested SitePolicy is unknown");
     }
     if let Some(id) = request.profile_id.as_ref() {
