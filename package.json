@@ -362,7 +362,8 @@
     "test:teaching-agent-submission": "node scripts/test-teaching-agent-submission.mjs",
     "test:workspace-siteguides-agent": "node scripts/test-workspace-siteguides-agent.mjs",
     "test:workspace-siteguides-receipts": "node scripts/test-workspace-siteguides-receipts.mjs",
-    "test:teaching-media": "node scripts/test-teaching-media.mjs"
+    "test:teaching-media": "node scripts/test-teaching-media.mjs",
+    "test:teaching-accepted-baseline": "node scripts/test-teaching-accepted-baseline.mjs"
   },
   "keywords": [
     "browser",
