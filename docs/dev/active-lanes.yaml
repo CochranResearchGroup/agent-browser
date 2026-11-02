@@ -1,6 +1,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: BUG518
+    product_lane: PL-BUGFIX
+    objective: Accept trusted queue provenance in desktop evidence parsing
+    branch: fix/desktop-evidence-518
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#518]
+    plan_state: OPEN
+    custody_state: PAUSED_REF
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/531
+    validation_status: "57 focused evidence tests, strict workspace Clippy, format, policy wiring and changed links pass; broad route-confusion recommendation excluded because production route code is unchanged; initial cache stall retained"
+    overlaps: [P300]
+    reconciled_overlaps: ["518 owns evidence parser and bounded regression only; preserve P300 source and serialize catalog at integration"]
+    limitations: ["Explicit operator admission of dedicated checkout; close through governed helper after durable PR custody", "No runtime or provider effects"]
+    updated_at: 2026-11-01
   - id: IDLE515
     product_lane: PL-BUGFIX
     objective: Diagnose valid idle registration without demanding runtime owner evidence
