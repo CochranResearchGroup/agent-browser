@@ -1,6 +1,6 @@
 # Active plan index
 
-[P300 compact workspace, Profiles and SiteGuides](0300-2026-11-01-workspace-siteguides-523.md), spec523: source integration starts with524–527;528 consumes launch/profile contracts;529/530 retain actual Native/narration/account acceptance boundaries.
+[P300 compact workspace, Profiles and SiteGuides](0300-2026-11-01-workspace-siteguides-523.md), spec523:524–528 source validated/CLOSED; sealed fast_iteration candidate built, not installed;529/530 remain OPEN/needs-info for actual Native/narration/account acceptance. Final review/remediation remain0.
 
 [P299 local validation](0299-2026-10-31-local-validation-502.md), spec502 and all four children CLOSED through PR509/main9d1a18522; initial source readiness/reuse pass. The single final review and bounded TDD pass are complete through PR510/mainc738fb694; two Spec blockers and one redundant-suite finding are resolved. No hosted CI or runtime effects.
 

@@ -13,7 +13,8 @@ lanes:
     work_items: [CochranResearchGroup/agent-browser#523, CochranResearchGroup/agent-browser#524, CochranResearchGroup/agent-browser#525, CochranResearchGroup/agent-browser#526, CochranResearchGroup/agent-browser#527, CochranResearchGroup/agent-browser#528, CochranResearchGroup/agent-browser#529, CochranResearchGroup/agent-browser#530]
     dependencies: [CochranResearchGroup/agent-browser#478]
     overlaps: [CochranResearchGroup/agent-browser#506, CochranResearchGroup/agent-browser#519, CochranResearchGroup/agent-browser#520]
-    reconciled_overlaps: ["Root owns integration/shared wiring/docs;524-527 source validated; profile worker528 owns SiteGuides consumer and existing support assets; copy worker530 prepared private experiment packet; preserve506/Auth foreign custody; actual narration/account qualification remains open"]
+    reconciled_overlaps: ["Root retains integration and sealed fast_iteration candidate;524-528 source validated/closed;3 owned auxiliaries governed-closed with branches retained;529/530 actual narration/account/runtime qualification remains open; preserve506/Auth foreign custody"]
+    validation_status: Source gates pass through368ac49e9; candidate sealed but not installed; actual529/530 rows all NOT_RUN; final review/remediation remain0
     limitations: ["No source-readiness inference of production/provider/private-account effects", "Actual narrated and real-account copy rows require exact selected context", "One final broad review and one bounded TDD pass"]
     updated_at: 2026-11-01
   - id: IDLE515
