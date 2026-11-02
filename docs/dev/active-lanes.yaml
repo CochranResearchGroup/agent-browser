@@ -10,7 +10,7 @@ lanes:
     work_items: [CochranResearchGroup/agent-browser#518, CochranResearchGroup/agent-browser#519, CochranResearchGroup/agent-browser#520, CochranResearchGroup/agent-browser#521, CochranResearchGroup/agent-browser#522]
     plan: docs/dev/plans/0301-2026-11-01-bill-login-repairs.md
     plan_state: OPEN
-    custody_state: PAUSED_REF
+    custody_state: ACTIVE_WORKTREE
     pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/531
     validation_status: "518-521 source closed; one Standards/Spec review and one bounded TDD pass completed, all3 P2 blockers resolved; strict and focused gates pass;522 remains needs-info on original cause/custody"
     overlaps: [P300]

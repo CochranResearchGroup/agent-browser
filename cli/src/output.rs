@@ -7365,6 +7365,7 @@ Commands:
   Native readiness: native_ready separates owner authentication, consumer input policy and viewer delivery
   Native setup: AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE and consumer selective_input; no borrowed desktop
   Native owner failures: observations report no input dispatched; only safe status/cause is retained
+  Retained recovery: proven process absence plus exact owner released assignment permits fresh placement; no inferred cleanup
   Native input: stable original requestId; uncertain delivery forbids replay
   Native completion errors: inspect the original requestId and safe cause; never replay
   Native image: explicit provider membership; static 3x3 bus grid; returned IDs only

@@ -521,3 +521,10 @@ grants no merge, installation, browser or credential authority.
 **Validation evidence reuse**: A new attributable decision that accepts an
 existing passing result only after its requirement and relevant declared input
 closure are verifiably unchanged. The original receipt remains immutable.
+
+**Owner release evidence for recovery**: A current owner inventory record that
+matches every field of a retained launch assignment except its terminal released
+state. After proven profile-process absence, the exact record is retained beside
+immutable launch custody and permits replacement admission against an unchanged
+browser baseline. It does not establish locally performed cleanup, retire peer
+work, acknowledge input or authorize a second launch after an uncertain result.

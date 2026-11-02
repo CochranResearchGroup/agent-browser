@@ -210,3 +210,11 @@ root checkout will close after the final clean-state/durable-custody readback.
 Source repair/remediation checkpoint:0a8220064. Final followup changes only ledger
 custody, not tested implementation. All owned worker checkouts are removed;
 root removal uses the governed terminal receipt published in PR531.
+
+## Issue 522 continuation, 2026-11-02
+
+Product lane: PL-BUGFIX. Reuse branch and PR531 in one temporary primary checkout; preserve P300 and inventory-access peers. Root owns service-model recovery and launch-custody tests. No additional broad review; the prior one-review and one-remediation counts remain complete.
+
+Exact owner evidence yields403 consumer_access_denied for the retained assignment while same-application inventory succeeds. The owner reports released, local immutable launch custody retains active, and no joined local release completion exists. Every assignment field except state matches. The regression reproduces this real failure through the Host, adapter and SQLite before repair. Preserve historical custody and peer work; never turn missing inventory or an arbitrary403 into release authority. No production install, recovery, reset or manual ledger edit is authorized by source validation.
+
+The initial two fixture runs lacked logical task retention and failed earlier with recovery_not_retained; the corrected retained-task fixture failed at the actual environment OwnerAccessDenied boundary, then passed with the repair. Source tests and strict Clippy passed before an execution-environment loss removed the temporary checkout/test session. Restored the same registration from retained branch, reconstructed the patch, and rerun final checks. The interrupted106-case suite has no claimed terminal result.

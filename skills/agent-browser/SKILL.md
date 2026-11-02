@@ -148,3 +148,9 @@ Dates: YYYY-MM-DD; downloads need live process proof.
 ### Owner service waits
 
 Use the owning service’s bounded lifecycle retention for authentication waits. Read [Owner service waits](references/cli-and-service.md#owner-service-waits); never transfer a claim to a replacement browser or treat retention as credential/control authority.
+
+Retained browser recovery can select a fresh Native assignment after proven
+profile-process absence and an exact owner `released` record. It preserves the
+original launch history and retains owner terminal evidence separately from local
+cleanup completion. Missing inventory, a denial alone, mismatched identity or an
+explicit fixed recovery target does not authorize relocation.

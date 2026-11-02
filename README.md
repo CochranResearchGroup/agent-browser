@@ -7281,6 +7281,12 @@ Observation failures report no input dispatched; uncertain input retains its
 original request and must not be replayed. Recovery diagnostics retain only safe
 owner status/cause and do not establish that profile recovery succeeded.
 
+Retained browser recovery can select a fresh Native assignment after proven
+profile-process absence and an exact owner `released` record. It preserves the
+original launch history and retains owner terminal evidence separately from local
+cleanup completion. Missing inventory, a denial alone, mismatched identity or an
+explicit fixed recovery target does not authorize relocation.
+
 For an existing scoped `browser_policy` override, send `policyOverrideId` and
 `requestId` at the top level of `browser_command` for either Native action.
 The grant must match the exact task, action, request and current policy; a
