@@ -44,6 +44,19 @@ pub trait RemoteViewBrowserProcessEffects {
         Err(RemoteViewBrowserProcessError::Rejected)
     }
 
+    /// Refresh connection-local Native inputs for an exactly verified existing
+    /// process. This never launches or navigates. Implementors must consume the
+    /// non-serializable environment against this exact assignment/observation.
+    fn refresh_native_environment(
+        &mut self,
+        _browser: &crate::ManagedBrowserInstance,
+        _assignment: &crate::RemoteViewAssignmentRecord,
+        _environment: RemoteViewPrivateLaunchEnvironment,
+        _observation: &RemoteViewAssignmentObservation,
+    ) -> Result<(), RemoteViewBrowserProcessError> {
+        Err(RemoteViewBrowserProcessError::Rejected)
+    }
+
     fn launch(
         &mut self,
         profile: &BrowserProfileCatalogEntry,

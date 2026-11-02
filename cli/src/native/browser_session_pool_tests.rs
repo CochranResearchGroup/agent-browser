@@ -7749,6 +7749,156 @@ fn ordinary_live_profile_ignores_mismatched_historical_launch_observation() {
 }
 
 #[test]
+fn manual_native_context_adopts_current_kernel_identity_and_rejects_replaced_pid() {
+    let root =
+        std::env::temp_dir().join(format!("manual-native-adoption-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(root.join(".agent-browser/service")).unwrap();
+    let environment_guard = crate::test_utils::EnvGuard::new(&[
+        "HOME",
+        "AGENT_BROWSER_HOME",
+        "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+        "AGENT_BROWSER_CONFIG",
+    ]);
+    environment_guard.set("HOME", root.to_str().unwrap());
+    environment_guard.set("AGENT_BROWSER_HOME", root.to_str().unwrap());
+    environment_guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+    environment_guard.remove("AGENT_BROWSER_CONFIG");
+    let parent_env = [std::env::var_os("DISPLAY"), std::env::var_os("XAUTHORITY")];
+    let fixture = Fixture::with_root(root.join(".agent-browser/service"), true);
+    std::fs::write(fixture.root.join("real-native-context-adoption"), "enabled").unwrap();
+    let crate::process_identity::ProcessObservation::Observed(current) =
+        crate::process_identity::observe_process(std::process::id())
+    else {
+        panic!("fixture process must be observable");
+    };
+    let identity = RecordedProcessIdentity {
+        pid: current.pid,
+        start_token: current.start_token.unwrap(),
+        executable_path: current.executable_path,
+        browser_family: None,
+    };
+    std::fs::write(
+        fixture.root.join("live-cdp-endpoint.json"),
+        serde_json::json!({"pid":identity.pid, "processIdentity":identity}).to_string(),
+    )
+    .unwrap();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    provider.borrow_mut().window_pid = Some(std::process::id());
+    let launches = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), launches.clone());
+    let opened = consumer.handle_command(&serde_json::json!({"action":"browser_session_open", "sessionName":"Native adoption", "profileId":"profile-a", "url":"about:blank", "manualLogin":true, "activityAtMs":100, "serviceName":"fixture", "agentName":"fixture", "taskName":"Native adoption"}));
+    assert_eq!(opened["success"], true, "{opened}");
+    let browser = consumer.state().browsers.values().next().unwrap().clone();
+    drop(consumer);
+    let mut adopted = host(&fixture, provider.clone(), launches.clone());
+    adopted.focus_browser(&browser.id, None, 101).unwrap();
+    assert_eq!(
+        launches.get(),
+        1,
+        "adoption binds current provider inputs without launching or navigating"
+    );
+    assert_eq!(
+        parent_env,
+        [std::env::var_os("DISPLAY"), std::env::var_os("XAUTHORITY")]
+    );
+    let assignment = fixture
+        .store(false)
+        .published_launch_assignment(&browser)
+        .unwrap();
+    let mut owner = adapter(&fixture, provider);
+    let private = owner.launch_environment(&assignment).unwrap();
+    let observation = owner.observe_assignment(&assignment).unwrap();
+    let mut wrong = browser.clone();
+    wrong.pid = u32::MAX;
+    let mut runtime =
+        super::super::browser_session_runtime::BrowserManagerRuntime::start(Default::default())
+            .unwrap();
+    assert_eq!(
+        runtime.refresh_native_environment(&wrong, &assignment, private, &observation),
+        Err(RemoteViewBrowserProcessError::Rejected),
+        "binding cannot adopt another process identity"
+    );
+    assert_eq!(
+        parent_env,
+        [std::env::var_os("DISPLAY"), std::env::var_os("XAUTHORITY")]
+    );
+    drop(adopted);
+    drop(runtime);
+    drop(fixture);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn manual_native_context_refreshes_after_host_restart_and_fences_generation() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let launches = Rc::new(Cell::new(0));
+    let command = serde_json::json!({"action":"browser_session_open", "sessionName":"Native auth", "profileId":"profile-a", "url":"about:blank", "manualLogin":true, "activityAtMs":100, "serviceName":"fixture", "agentName":"fixture", "taskName":"Native auth"});
+    let mut original = host(&fixture, provider.clone(), launches.clone());
+    let opened = original.handle_command(&command);
+    assert_eq!(opened["success"], true, "{opened}");
+    let browser = original.state().browsers.values().next().unwrap().clone();
+    provider.borrow_mut().window_pid = Some(browser.pid);
+    let session = opened["data"]["sessionId"].as_str().unwrap().to_owned();
+    let reads = || {
+        provider
+            .borrow()
+            .operations
+            .iter()
+            .filter(|operation| **operation == "launch_environment")
+            .count()
+    };
+    original.focus_browser(&browser.id, None, 101).unwrap();
+    assert_eq!(
+        reads(),
+        2,
+        "manual focus needs fresh owner context before local focus"
+    );
+    drop(original);
+    let mut adopted = host(&fixture, provider.clone(), launches.clone());
+    let before = reads();
+    adopted.focus_browser(&browser.id, None, 102).unwrap();
+    assert_eq!(
+        reads(),
+        before + 1,
+        "adoption refreshes from the exact current owner"
+    );
+    assert_eq!(launches.get(), 1, "focus must not relaunch or navigate");
+    let effects =
+        || std::fs::read_to_string(fixture.root.join("manual-native-focus-count")).unwrap();
+    let before_refusal = effects();
+    provider.borrow_mut().native_viewing_generation = Some(2);
+    assert!(
+        adopted.focus_browser(&browser.id, None, 103).is_err(),
+        "stale owner context must be refused"
+    );
+    assert_eq!(
+        effects(),
+        before_refusal,
+        "generation refusal precedes the local effect"
+    );
+    provider.borrow_mut().native_viewing_generation = None;
+    let assignment_id = provider.borrow().assignments[0].assignment_id.clone();
+    provider.borrow_mut().unavailable_assignment = Some(assignment_id);
+    assert!(adopted.focus_browser(&browser.id, None, 104).is_err());
+    assert_eq!(
+        effects(),
+        before_refusal,
+        "unavailable owner refuses before the local effect"
+    );
+    provider.borrow_mut().unavailable_assignment = None;
+    let before = reads();
+    adopted
+        .close_session(&session, SessionEndReason::ExplicitClose, 105)
+        .unwrap();
+    assert!(
+        reads() > before,
+        "clean close also needs fresh exact owner context"
+    );
+    assert_eq!(launches.get(), 1);
+}
+
+#[test]
 fn manual_login_preserves_posture_through_managed_owner_replay_and_conflict() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));
