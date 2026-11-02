@@ -2,7 +2,9 @@ import type {TeachingReviewOptions} from './teaching-review.js';
 import type {TeachingEvidenceClient,TeachingSelection} from './teaching-evidence.js';
 /** Configuration is receiver-owned. Never construct these ports from request JSON. */
 export interface WorkspaceSiteGuidesOptions extends TeachingReviewOptions {
+ context?:Record<string,unknown>;
  evidence?:TeachingEvidenceClient;
+ listSources?:(taskId:string)=>Promise<Array<{sourceKey:string;recordingId:string;narrationSourceId:string;state:'not_checked'}>>;
  authorizeTask?:(taskId:string,mode:'read'|'use')=>Promise<boolean>;
  resolveSelection?:(request:{taskId:string;sourceKey:string})=>Promise<TeachingSelection>;
 }

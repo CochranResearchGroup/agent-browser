@@ -8,16 +8,16 @@ import {createTeachingEvidenceClient} from './teaching-evidence.js';
 import {createTeachingRecordingReader,createTeachingSpeechAdapter} from './teaching-evidence-http.js';
 const fail=reason=>{throw Error(reason);};
 /** Only private receiver configuration/ledger paths; no dashboard-supplied paths. */
-export async function readPrivateJson(path) {
+export async function readPrivateJson(path,strictMode=true) {
  if(!isAbsolute(path??''))fail('siteguides_configuration_path_required');
  const stat=await lstat(path);
- if(!stat.isFile()||stat.isSymbolicLink()||stat.size>1048576||(process.getuid&&stat.uid!==process.getuid())||(process.platform!=='win32'&&(stat.mode&0o077)))fail('siteguides_private_file_required');
+ if(!stat.isFile()||stat.isSymbolicLink()||stat.size>1048576||(process.getuid&&stat.uid!==process.getuid())||(strictMode&&process.platform!=='win32'&&(stat.mode&0o077)))fail('siteguides_private_file_required');
  return JSON.parse(await readFile(path,'utf8'));
 }
 export async function readTeachingReceipt({ledgerDirectory,actor},request,purpose) {
  const ref=purpose==='teaching_review'?request.decisionRef:request.answerRef;
  if(!/^[A-Za-z0-9_-]{1,128}$/.test(ref??''))fail('teaching_receipt_reference_invalid');
- const value=await readPrivateJson(join(ledgerDirectory,ref+'.json'));
+ const value=await readPrivateJson(join(ledgerDirectory,ref+'.json'),false);
  const saved=value.action?.request;
  if(value.version!=='codex-operator-confirmation.v1'||value.status!=='confirmed'||value.confirmationId!==ref||value.authenticatedUser?.username!==actor||saved?.purpose!==purpose)fail('teaching_receipt_authority_mismatch');
  const keys=purpose==='teaching_review'?['taskId','rootGuideId','reviewedGuideId','reviewedSha256','contentSha256']:['taskId','rootGuideId','answeredGuideId','answeredSha256','contentSha256','questionId','questionSha256'];
@@ -25,7 +25,7 @@ export async function readTeachingReceipt({ledgerDirectory,actor},request,purpos
  return {...saved,...(purpose==='teaching_review'?{decisionId:ref}:{answerRef:ref}),actorRef:'dashboard:'+actor,sourceRef:ref,provenance:'authenticated_operator'};
 }
 /** Server passes trusted task allowlist independently from the dashboard request. */
-export async function runInstalledSiteGuides({configPath,actor,allowedTasks,request}) {
+export async function runInstalledSiteGuides({configPath,actor,ledgerDirectory,allowedTasks,request}) {
  if(Number(process.versions.node.split('.')[0])<18)fail('siteguides_node_18_required');
  const config=await readPrivateJson(configPath);
  if(config.schemaVersion!=='agent-browser.workspace-siteguides-host.v1'||!config.candidateDirectory)fail('siteguides_configuration_required');
@@ -56,8 +56,9 @@ export async function runInstalledSiteGuides({configPath,actor,allowedTasks,requ
    const adapter=createTeachingSpeechAdapter({...config.speech,token:await secret(config.speech.tokenFile)});return adapter[method](...args);
   }})
  });
- const receipt={ledgerDirectory:config.operatorConfirmationDirectory,actor};
+ const receipt={ledgerDirectory,actor};
  const owner=createWorkspaceSiteGuides({candidateDirectory:config.candidateDirectory,browser:createPlaybookClient(callTool),evidence,
+  listSources:async taskId=>Object.entries(sources).filter(([,value])=>value.selection?.expected?.taskId===taskId).map(([sourceKey,value])=>({sourceKey,recordingId:value.selection.recordingId,narrationSourceId:value.selection.narrationSourceId,state:'not_checked'})),
   authorizeTask:async(taskId,mode)=>allowedTasks[taskId]?.[mode]===true,
   resolveSelection:async input=>{activeSource=await source(input);return activeSource.selection;},
   readOperatorDecision:input=>readTeachingReceipt(receipt,input,'teaching_review'),

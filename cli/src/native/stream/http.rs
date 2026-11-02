@@ -190,6 +190,7 @@ pub(super) async fn handle_siteguides_http(
     let result = crate::native::workspace_siteguides::handle_workspace_siteguides(
         &input,
         &identity.username,
+        super::app_intelligence::operator_confirmation_directory(),
     )
     .await;
     let status = if result.is_ok() {
@@ -6250,6 +6251,7 @@ mod tests {
     }
 
     include!("p300_profile_library.rs");
+    include!("p300_siteguides.rs");
     include!("p237_physical_selection.rs");
     include!("p237_http_selection.rs");
     include!("p278_tab_close.rs");

@@ -61,7 +61,7 @@ export function ProfileLibrary({ onOpenGuides, onProfilesChange }: {
    </fieldset>)}
    <button type="button" disabled={busy} onClick={() => setDraft(current => [...current, { sitePolicyId: '', account: '', organization: '' }])}>Add association</button>
    <button type="button" disabled={busy || draft.some(a => !a.sitePolicyId || !a.account.trim() || !a.organization.trim())} onClick={() => void save()}>Save intended associations</button>
-   <h4>Relevant SiteGuides</h4>{row.relevantSitePolicyIds.map(site => <button key={site} type="button" disabled={!onOpenGuides} title={onOpenGuides ? undefined : 'SiteGuides is unavailable in this view'} onClick={() => onOpenGuides?.(site, profile.id)}>SiteGuides for {site}</button>)}
+   <h4>Relevant SiteGuides</h4>{row.relevantSitePolicyIds.map(site => <button key={site} type="button" disabled={!onOpenGuides} title={onOpenGuides ? undefined : 'SiteGuides is unavailable in this view'} onClick={() => onOpenGuides?.(site, row.profile.id)}>SiteGuides for {site}</button>)}
   </div>}
  </section>;
 }
