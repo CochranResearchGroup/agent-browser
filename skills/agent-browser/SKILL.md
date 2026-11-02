@@ -125,7 +125,7 @@ For dashboard/viewer/startup failures, read [dashboard diagnostics](references/c
 
 ## Browser mode and builds
 
-Use `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build family/version and CDP mode are independent. Inspect before choosing; copy success never proves login portability. Read [controls and recovery](references/cli-and-service.md#browser-build-selection) before changing a build. Reconcile original operations after lost replies.
+Use `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build and CDP mode are independent. For copy checkpoints, source-mode uncertainty and original-operation readback, read [copy experiments](references/cli-and-service.md#profile-lab-independent-copies) and [build recovery](references/cli-and-service.md#browser-build-selection).
 
 Diagnostics retain selection query fields. Rail presence revalidates at 250/500/1000 ms, then polls every three seconds.
 
