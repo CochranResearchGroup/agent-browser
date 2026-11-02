@@ -7373,6 +7373,11 @@ Commands:
   browser-native TASK ACTION JSON Input/capture <=1Mpx
   browser-build JSON Inspect/select/open profile build
   profile-duplicate JSON Copy/inspect; retry_launch or finish_without_opening
+  Profile Lab: Profiles and SiteGuides; choose source, target build/mode and copy name.
+  Review affected source work; clean-source closure requires explicit confirmation.
+  Source configured mode is not physical-mode proof; unretained original mode is unknown.
+  Copy/publication do not prove account identity, usable login or storage divergence.
+  Reload/inspect reads the original operation; reconcile lost replies without replay.
   mode-convert JSON Inspect/relaunch/pause/cancel/restore_previous/select_build
   watch-host-task TASK Changed NDJSON; fresh reconnect
   host-control      Status/view/takeover/return/override/reconcile; inspect failed return.

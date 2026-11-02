@@ -7291,6 +7291,36 @@ set `ownerConfirmed: true` only for the explicitly selected consequential
 choice. After a lost reply, reconcile that operation before attempting another
 effect. Cancelling a request does not reopen a source already stopped.
 
+### Profile Lab independent copies
+
+Open **Profile Lab** from **Profiles and SiteGuides**. Select a source profile,
+review its configured browser/version, mode and current work, then choose an
+available target build and CDP-free or automation-connected mode. Give the copy
+its own name in **Review independent copy**. The existing duplication owner
+reviews affected tasks and offers the consistent-source action. Finish unsaved
+work and explicitly confirm source closure when offered; the UI never silently
+closes a running source. The destination gets an independent profile identity
+and data directory. Copying does not overwrite or restore the source.
+
+Source configured build/mode describe next-launch configuration, not the
+physical source process. Original source mode is unverified when the owner
+receipt does not retain it; observe it separately. Target build/version and
+requested mode come from the retained operation. Choosing an earlier executable
+does not undo data migration or restore profile bytes.
+
+The checkpoint disclosure separates copy completion, published profile identity,
+account identity, authentication usability and independent storage writes.
+Publication proves neither a usable login nor independent storage divergence.
+Account, authentication and storage checks remain unverified until independently
+observed for the exact source/copy/build/mode pair. Source and synthetic fixture
+checks are not real-account portability evidence.
+
+After a failed launch or interrupted reply, reopen the dialog and inspect the
+retained original operation. Reload and operation selection only read history.
+Continue the returned action with its original operation ID; reconcile uncertain
+results before any further effect. A failed operation stays visible. Do not
+prepare another copy or replay closure merely because a reply was lost.
+
 ### Convert an existing task
 
 The browser mode menu offers **Relaunch with CDP** and **Relaunch without CDP** for managed tasks. A successful explicit replacement preserves the logical task, durable profile and original handoff; it changes the physical browser process. Review the affected tasks before selecting relaunch. Unsaved page state and downloads may be lost; unknown URLs and uncertain website submissions are never replayed.
