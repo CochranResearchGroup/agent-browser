@@ -56,6 +56,7 @@ export interface TeachingEvidenceClient {
     gaps: Array<TeachingSequenceGap & {provenance: 'caller_supplied'; durationMs: null}>;
     captureSuppressionVerified: false;
   }>;
+  reconcileNarration(selection:TeachingSelection,input:{requestId:string}):Promise<{status:'not_found';retryAuthority:'not_inferred'}|{status:'applied';bundle:TeachingBundle}>;
   importNarration(selection: TeachingSelection, input: {requestId: string; owned: true}): Promise<TeachingBundle>;
   segmentRanges(bundle: TeachingBundle): TeachingRange[];
   transcribeSegment(bundle: TeachingBundle, input: TeachingRange & {requestId: string}): Promise<TeachingSegment>;

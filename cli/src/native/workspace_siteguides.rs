@@ -8,8 +8,15 @@ use tokio::io::AsyncWriteExt;
 
 pub(crate) fn operation_is_write(operation: &str) -> Result<bool, String> {
     match operation {
-        "list" | "open" | "lookup_operation" | "inspect_source" | "read_transcript"
-        | "agent_packet" => Ok(false),
+        "list"
+        | "open"
+        | "lookup_operation"
+        | "list_sources"
+        | "read_video"
+        | "inspect_source"
+        | "read_transcript"
+        | "agent_packet"
+        | "reconcile_narration" => Ok(false),
         "import_narration" | "transcribe" | "stage_draft" | "save" | "prepare_questions"
         | "answer" | "record_decision" | "record_repeat" | "promote" => Ok(true),
         _ => Err("siteguides_operation_unsupported".into()),
@@ -46,6 +53,7 @@ fn installed_host(executable: &Path) -> Result<PathBuf, String> {
 pub(crate) async fn handle_workspace_siteguides(
     input: &Value,
     username: &str,
+    confirmation_directory: Option<PathBuf>,
 ) -> Result<Value, String> {
     let operation = input
         .get("operation")
@@ -135,7 +143,7 @@ pub(crate) async fn handle_workspace_siteguides(
         .kill_on_drop(true)
         .spawn()
         .map_err(|_| "siteguides_node_18_required")?;
-    let payload = serde_json::to_vec(&json!({"configPath":config,"actor":username,"allowedTasks":allowed_tasks,"request":request})).map_err(|error|error.to_string())?;
+    let payload = serde_json::to_vec(&json!({"configPath":config,"actor":username,"ledgerDirectory":confirmation_directory,"allowedTasks":allowed_tasks,"request":request})).map_err(|error|error.to_string())?;
     child
         .stdin
         .take()

@@ -122,6 +122,19 @@ export function createTeachingEvidenceClient({recordings, speech}) {
       });
       return {schemaVersion:1,taskId:first.taskId,recordings:results,gaps:references,captureSuppressionVerified:false};
     },
+    /** Read only the original Saved import request after an uncertain reply.
+     * Absence never authorizes another upload or conversion. */
+    async reconcileNarration(selection,{requestId}) {
+      if(!id(requestId)||requestId.length>96)fail('teaching_import_request_required');
+      const bundle=await inspect(selection),name=`Teaching ${digest(JSON.stringify(selection))}`;
+      const prior=await speech.reconcileSaved(`${requestId}-save`);
+      if(prior.status==='not_found')return {status:'not_found',retryAuthority:'not_inferred'};
+      if(prior.status!=='applied')fail('teaching_import_unresolved');
+      const metadata=await speech.savedRecording(prior.artifactId);
+      if(metadata.name!==name||metadata.id!==prior.artifactId||metadata.kind!=='recording'||metadata.mediaType!=='audio/wav'||metadata.provenance?.sourceRevision!==bundle.narration.sha256||!hash(metadata.sha256)||!integer(metadata.provenance?.durationMs))fail('teaching_import_conflict');
+      await current(bundle);
+      return {status:'applied',bundle:{...bundle,speechSource:{artifactId:metadata.id,revision:metadata.sha256,durationMs:metadata.provenance.durationMs,originalSha256:bundle.narration.sha256}}};
+    },
     /** Explicit ownership permits a Speech-owned normalized copy; originals are untouched. */
     async importNarration(selection,{requestId,owned}) {
       if(!id(requestId) || requestId.length>96 || owned!==true) fail('teaching_owned_source_required');

@@ -43,6 +43,8 @@ assert.equal(inspected.inputEvidence[0].delivery,'sent_to_transport');
 assert.equal(JSON.stringify(inspected).includes('keysym'),false);
 assert.equal(inspected.gaps[0].reason,'lease_expired');
 assert.equal(inspected.sourceBindings.length,1);
+assert.deepEqual(await client.reconcileNarration(selection,{requestId:'lesson-1'}),{status:'not_found',retryAuthority:'not_inferred'});
+assert.equal(submits,0);
 const bundle=await client.importNarration(selection,{requestId:'lesson-1',owned:true});
 assert.deepEqual(client.segmentRanges(bundle),[{startMs:0,endMs:300000},{startMs:300000,endMs:400001}]);
 const segment=await client.transcribeSegment(bundle,{requestId:'lesson-part-2',startMs:300000,endMs:400001});

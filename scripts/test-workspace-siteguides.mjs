@@ -22,5 +22,19 @@ try {
  assert.equal(opened.view.steps.length,guide.teaching.routines.reduce((total,routine)=>total+routine.steps.length,0));
  assert.equal(opened.view.source.replayable,false);
  assert.equal(opened.history.length,1);assert.equal(opened.history[0].sha256,hash(await readFile(join(directory,guide.guideId+'.json'))));
+ const denied=createWorkspaceSiteGuides({candidateDirectory:directory,browser,authorizeTask:async()=>false});
+ assert.deepEqual(await denied.dispatch({operation:'list'}),{guides:[]});
+ await assert.rejects(denied.dispatch({operation:'open',taskId:'task',guideId:guide.guideId}),/siteguides_task_denied/);
+ const changed=structuredClone(opened.view.guide);changed.name='Reviewed Daily sales';
+ const saved=await owner.dispatch({operation:'save',taskId:'task',guideId:guide.guideId,expectedSha256:opened.view.sha256,operationId:'edit-1',guide:changed});
+ assert.equal(saved.status,'saved');
+ const recovered=await owner.dispatch({operation:'lookup_operation',taskId:'task',rootGuideId:guide.guideId,operationId:'edit-1'});
+ assert.equal(recovered.guideId,saved.guideId);assert.equal(recovered.recoveredOriginal,true);
+ const missed=await owner.dispatch({operation:'lookup_operation',taskId:'task',rootGuideId:guide.guideId,operationId:'lost-before-publication'});
+ assert.equal(missed.status,'not_observed');assert.equal(missed.retryAuthority,'not_inferred');
+ const current=(await owner.dispatch({operation:'list'})).guides[0];assert.equal(current.name,'Reviewed Daily sales');assert.equal(current.history.length,2);
+ const original=await owner.dispatch({operation:'open',taskId:'task',guideId:guide.guideId});assert.equal(original.view.guide.name,'Daily sales teaching candidate');
+ await assert.rejects(owner.dispatch({operation:'record_decision',taskId:'task',guideId:saved.guideId,expectedSha256:saved.sha256,operationId:'review-1',decisionRef:'client-approval',approved:true}),/teaching_operator_authority_unconfigured/);
+ await assert.rejects(owner.dispatch({operation:'record_repeat',taskId:'task',guideId:saved.guideId,expectedSha256:saved.sha256,operationId:'repeat-1',validationRef:'client-pass',passed:true}),/teaching_repeat_authority_unconfigured/);
  console.log('Workspace SiteGuides public catalog/open keeps purpose, progress, source uncertainty and immutable history.');
 } finally {await rm(directory,{recursive:true,force:true});}
