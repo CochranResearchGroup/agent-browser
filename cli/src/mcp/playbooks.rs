@@ -339,7 +339,7 @@ pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, 
     ) {
         // Inert procedure metadata survives loss of the physical browser target.
         // Executable routines retain their full current-target checks below.
-        super::workflow::task_session(task_id)?;
+        super::workflow::procedure_metadata_session(task_id)?;
     } else {
         task_context(task_id)?;
     }

@@ -19,6 +19,7 @@ export interface TeachingGrillingView extends TeachingReviewView {
 export function createTeachingGrillingClient(options:TeachingGrillingOptions):{
  prepare(input:TeachingReviewInput & {questions:Array<Pick<TeachingClarificationQuestion,'id'|'category'|'stepRefs'|'dependsOn'>>}):Promise<TeachingSaveResult>;
  open(input:{taskId:string;guideId:string}):Promise<TeachingGrillingView>;
+ readAnswerContext(input:Omit<TeachingReviewInput,'operationId'>&{questionId:string;answerRef:string}):Promise<{guide:TeachingSiteGuide;question:TeachingClarificationQuestion&{questionSha256:string};authenticatedAnswer:TeachingClarificationAnswer;binding:Record<string,string>}>;
  answer(input:TeachingReviewInput & {questionId:string;answerRef:string;revisedGuide:TeachingSiteGuide}):Promise<TeachingSaveResult>;
  lookupOperation:ReturnType<typeof createTeachingReviewClient>['lookupOperation'];
 };

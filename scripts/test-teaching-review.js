@@ -119,6 +119,9 @@ try {
  const repeatedView=await createTeachingReviewClient(repeatOptions).open({taskId:'fresh-report-task',guideId:repeated.guideId});
  assert.equal(repeatedView.validation.state,'verified');assert.equal(repeatedView.ordinaryReuseAllowed,false);
  assert.equal(await readFile(join(directory,accepted.guideId+'.json'),'utf8'),acceptedBytes,'repeat evidence alone never replaces accepted bytes');
+ await writeFile(join(directory,accepted.guideId+'.json'),acceptedBytes+' ');
+ await assert.rejects(repeatClient.promote({taskId:'fresh-report-task',guideId:repeated.guideId,expectedSha256:repeatedView.sha256,operationId:'stale-baseline-promotion'}),/teaching_accepted_version_changed/);
+ await writeFile(join(directory,accepted.guideId+'.json'),acceptedBytes);
  const promoted=await repeatClient.promote({taskId:'fresh-report-task',guideId:repeated.guideId,expectedSha256:repeatedView.sha256,operationId:'promote-repeat-1'});
  assert.equal(promoted.status,'promoted');assert.equal(promoted.ordinaryReuseAllowed,true);
  const promotedView=await createTeachingReviewClient(repeatOptions).open({taskId:'fresh-report-task',guideId:promoted.guideId});
@@ -162,6 +165,7 @@ try {
  const questionView=await grilling.open({taskId:'task',guideId:preparedQuestion.guideId}),question=questionView.round[0];
  const answer=await (await fetch(origin+'/answers',{method:'POST',headers:{authorization:'Bearer synthetic-human',origin:'https://operator.test'},body:JSON.stringify({questionId:question.id,questionSha256:question.questionSha256,answer:'Keep refunds as the explicit caller choice for each report.',taskId:'task',rootGuideId:questionView.rootGuideId,answeredGuideId:questionView.guideId,answeredSha256:questionView.sha256,contentSha256:questionView.contentSha256})})).json();
  const revised=structuredClone(questionView.guide);revised.teaching.parameters.find(parameter=>parameter.id==='includeRefunds').meaning='Use the explicit caller refunds choice confirmed by the operator, rather than adopting the example as a business default.';
+ const verifiedContext=await grilling.readAnswerContext({taskId:'task',guideId:questionView.guideId,expectedSha256:questionView.sha256,questionId:question.id,answerRef:answer.answerRef});assert.equal(verifiedContext.authenticatedAnswer.answer,answer.answer);assert.equal(verifiedContext.question.questionSha256,question.questionSha256);
  const answered=await grilling.answer({taskId:'task',guideId:questionView.guideId,expectedSha256:questionView.sha256,operationId:'apply-authenticated-answer',questionId:question.id,answerRef:answer.answerRef,revisedGuide:revised});
  const answeredView=await clarifiedReview.open({taskId:'review-task',guideId:answered.guideId});
  const clarificationDecision=await (await fetch(origin+'/decisions',{method:'POST',headers:{authorization:'Bearer synthetic-human',origin:'https://operator.test'},body:JSON.stringify({intent:'review_exact_candidate',decision:'approved',taskId:'review-task',rootGuideId:answeredView.rootGuideId,reviewedGuideId:answeredView.guideId,reviewedSha256:answeredView.sha256,contentSha256:answeredView.contentSha256})})).json();
