@@ -47,7 +47,7 @@ original private owner evidence. #519 and #521 source work are independent;
 | #519 | none for source | /root/native519 | validated | new Native readiness module/tests; root integrates shared host hook | fix/bill-native-readiness-519; base78132d85d; result5a801208d; integratedb0aeb82c3 |
 | #520 | none | root | validated | owner HTTP error projection, Native wrapper, service-model recovery errors/tests | integration branch |
 | #521 | none for source | /root/guidance521 | validated | auth guidance and public SDK/helper fixture | fix/bill-auth-guidance-521; base78132d85d; result47dee514b; integrated7be3c8f22 |
-| #522 | #520 and original evidence | pending | blocked | original owner evidence/read-only diagnosis | no effect authorized |
+| #522 | installed canonical recovery acceptance | root | source qualified; live gate open | exact owner terminal evidence, fenced replacement, immutable launch history and regression tests | source0c0c48f73; PR531; no install or new launch |
 
 Root is sole writer for shared native module registration, browser_native_host,
 README/help/docs parity and catalog. Worker519 supplies an isolated readiness
@@ -218,3 +218,51 @@ Product lane: PL-BUGFIX. Reuse branch and PR531 in one temporary primary checkou
 Exact owner evidence yields403 consumer_access_denied for the retained assignment while same-application inventory succeeds. The owner reports released, local immutable launch custody retains active, and no joined local release completion exists. Every assignment field except state matches. The regression reproduces this real failure through the Host, adapter and SQLite before repair. Preserve historical custody and peer work; never turn missing inventory or an arbitrary403 into release authority. No production install, recovery, reset or manual ledger edit is authorized by source validation.
 
 The initial two fixture runs lacked logical task retention and failed earlier with recovery_not_retained; the corrected retained-task fixture failed at the actual environment OwnerAccessDenied boundary, then passed with the repair. Source tests and strict Clippy passed before an execution-environment loss removed the temporary checkout/test session. Restored the same registration from retained branch, reconstructed the patch, and rerun final checks. The interrupted106-case suite has no claimed terminal result.
+
+## Issue 522 source qualification
+
+Implementation checkpoint:0c0c48f736842ee4b9d192456f95bd196ea903fd.
+The owner denies observation of its exact released assignment; recovery formerly
+required local joined release completion before it could choose a new assignment.
+After proven profile-process absence, recovery now retains the exact current owner
+terminal record separately from immutable launch custody. SQLite replacement
+admission compares the full browser baseline and historical record. Missing,
+pending, mismatched and denial-only evidence cannot authorize replacement; fixed
+recovery targets cannot silently move. No local cleanup completion is fabricated.
+
+Final local checks against the restored checkpoint all pass:
+
+- cargo-safe fmt check and strict workspace Clippy with warnings denied.
+- Full service-model unit, integration and doc suite:408 passed across24 binaries.
+- Full pool-consumer suite:105 passed,0 failed,1 ignored actual Native-owner fixture.
+- Policy wiring11 tests, changed links and Remote View handoff guidance.
+- Standard docs Turbopack production build after offline dependency installation.
+- Patch hygiene.
+
+Commands: cargo-safe clippy --workspace --manifest-path Cargo.toml with warnings
+denied; cargo-safe test --manifest-path Cargo.toml -p agent-browser-service-model
+with serial tests; rust-tests.sh --focused browser_session_consumer_tests::pool_tests.
+All Cargo ran through cargo-safe, cache off and shared repository target. Final
+builds used one job under enforced task cgroups; ceilings increased from1 to5GiB
+only after fresh host-reserve checks, preserving16GiB and the unchanged aggregate
+limits. This differs from hosted runners; no hosted CI ran. Source-input hashes
+and terminal receipts remain in operator-scoped validation evidence.
+
+The first docs attempt used outside-root dependency symlinks that Turbopack
+rejected; webpack passed, then the restored checkout's normal Turbopack build
+also passed with real local dependencies. One conservatively recommended installer
+fixture stopped at missing AGENT_BROWSER_FIXTURE_BIN before product assertions.
+No installer source, packaging or runtime contract changed: only a Native help
+line. The installer lane and installed shared-skill publication are excluded, not
+claimed passing. Source doc guidance is qualified; shared installation is not.
+
+The prior final broad review and bounded finding-remediation counts remain1 each.
+This user-requested diagnosing-bugs continuation adds the actual incident-pattern
+repair and regression evidence without another broad review.
+
+#522 remains open only for installed canonical acquisition/continuation acceptance
+on qualified source under exact current owner authority. The historical release
+origin remains unknown. No production install, browser launch, owner mutation,
+credential input or manual ledger edit occurred in this continuation. The source
+branch is retained in PR531; the temporary checkout closes through the governed
+helper after durable remote readback.
