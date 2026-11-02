@@ -8583,6 +8583,13 @@ mod tests {
             "--window-id",
             "--coordinates",
             "--cdp-url",
+            "--client-subject-id",
+            "--identity-assurance",
+            "--service-principal-id",
+            "--service-principal-provenance",
+            "--service-profile-capability-id",
+            "--service-profile-capability-revision",
+            "--connection-instance-id",
         ] {
             let error = parse_command(
                 &args(&format!(
