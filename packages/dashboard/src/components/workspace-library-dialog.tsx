@@ -21,8 +21,12 @@ export function WorkspaceLibraryDialog({open,onOpenChange,initialSection,source,
   const request=packet.agentRequest;
   if(!request||typeof request!=='object'||Array.isArray(request))throw Error('Teaching agent request is unavailable. Refresh the original source packet.');
   const result=await requestSiteGuides({...request as Record<string,unknown>,operation:'request_agent'});
-  if(result.status!=='saved'||typeof result.guideId!=='string')throw Error('The original interpretation is not confirmed. Inspect its original operation before continuing.');
-  return {guideId:result.guideId};
+  if(result.status==='saved'&&typeof result.guideId==='string')return {guideId:result.guideId};
+  if(['unavailable','unknown','pending','not_observed'].includes(result.status))return {
+   status:result.status, reason:typeof result.reason==='string'?result.reason:undefined,
+   modelCallState:result.modelCallState, newSubmissionAllowed:result.newSubmissionAllowed===true,
+  };
+  throw Error('The original interpretation is not confirmed. Inspect its original operation before continuing.');
  },[]);
  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="native-task-dialog workspace-library"><DialogHeader><DialogTitle>Profiles and SiteGuides</DialogTitle><DialogDescription>Intended site identities and retained authentication evidence remain separate.</DialogDescription></DialogHeader>
  <nav aria-label="Library sections"><button type="button" aria-pressed={section==='profiles'} onClick={()=>setSection('profiles')}>Profiles</button><button type="button" aria-pressed={section==='guides'} onClick={()=>setSection('guides')}>SiteGuides</button><button type="button" aria-pressed={section==='lab'} disabled={!profiles.length&&!source} onClick={()=>setSection('lab')}>Profile Lab</button></nav>
