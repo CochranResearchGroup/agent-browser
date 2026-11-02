@@ -6,6 +6,7 @@ export interface TeachingContext {
   organization: string;
 }
 export interface SiteGuideSummary {
+  kind?:'ordinary';inspectionTaskId?:string;
   guideId: string; rootGuideId: string; name: string; purpose: string;
   sourceTaskId: string; allowedOrigins: string[]; review: string; repeat: string;
   source: {state: string; replayable: boolean; reason?: string};
@@ -13,6 +14,8 @@ export interface SiteGuideSummary {
   history: Array<{guideId:string;sha256:string;revision:number;operationId?:string}>;
 }
 export interface TeachingView {
+  teachingContext?:TeachingContext;
+  mediaReferences?:{sourceKey:string;speechSource?:unknown;segments:unknown[]};
   guideId: string; rootGuideId: string; sha256: string; contentSha256: string;
   guide: {name: string; teaching: {sourceTaskId:string;playbook:{goal:string};[key:string]:unknown};[key:string]:unknown};
   source: {state:string;replayable:boolean;reason?:string};

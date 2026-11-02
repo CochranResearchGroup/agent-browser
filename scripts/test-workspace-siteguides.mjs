@@ -35,6 +35,6 @@ try {
  const current=(await owner.dispatch({operation:'list'})).guides[0];assert.equal(current.name,'Reviewed Daily sales');assert.equal(current.history.length,2);
  const original=await owner.dispatch({operation:'open',taskId:'task',guideId:guide.guideId});assert.equal(original.view.guide.name,'Daily sales teaching candidate');
  await assert.rejects(owner.dispatch({operation:'record_decision',taskId:'task',guideId:saved.guideId,expectedSha256:saved.sha256,operationId:'review-1',decisionRef:'client-approval',approved:true}),/teaching_operator_authority_unconfigured/);
- await assert.rejects(owner.dispatch({operation:'record_repeat',taskId:'task',guideId:saved.guideId,expectedSha256:saved.sha256,operationId:'repeat-1',validationRef:'client-pass',passed:true}),/teaching_repeat_authority_unconfigured/);
+ await assert.rejects(owner.dispatch({operation:'record_repeat',taskId:'fresh-task',guideId:saved.guideId,expectedSha256:saved.sha256,operationId:'repeat-1',validationRef:'client-pass',passed:true}),/teaching_repeat_authority_unconfigured/);
  console.log('Workspace SiteGuides public catalog/open keeps purpose, progress, source uncertainty and immutable history.');
 } finally {await rm(directory,{recursive:true,force:true});}

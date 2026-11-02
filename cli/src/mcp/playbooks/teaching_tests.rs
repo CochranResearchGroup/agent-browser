@@ -141,28 +141,96 @@ fn teaching_draft_public_inspection_preserves_useful_evidence_without_execution(
     );
     assert!(!sockets.exists());
     drop(store);
-    fn remove_fixture(path: &std::path::Path) {
-        let metadata = std::fs::symlink_metadata(path).unwrap();
-        if metadata.is_dir() {
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
-            }
-            for entry in std::fs::read_dir(path).unwrap() {
-                remove_fixture(&entry.unwrap().path());
-            }
-            std::fs::remove_dir(path).unwrap();
-        } else {
-            #[cfg(windows)]
-            {
-                let mut permissions = metadata.permissions();
-                permissions.set_readonly(false);
-                std::fs::set_permissions(path, permissions).unwrap();
-            }
-            std::fs::remove_file(path).unwrap();
-        }
-    }
     remove_fixture(&root);
     drop(guard);
+}
+
+#[test]
+fn teaching_retained_public_metadata_after_task_close_keeps_actions_live_only() {
+    use crate::native::browser_session_store::BrowserSessionSqliteStore;
+    use agent_browser_service_model::{
+        BrowserSessionState, SessionEndReason, TerminalBrowserSession,
+    };
+    let root = std::env::temp_dir().join(format!("teaching-retained-{}", uuid::Uuid::new_v4()));
+    let candidates = root.join("guides");
+    std::fs::create_dir_all(&candidates).unwrap();
+    let guard = crate::test_utils::EnvGuard::new(&[
+        "HOME",
+        "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+        "AGENT_BROWSER_HOME",
+        "AGENT_BROWSER_SOCKET_DIR",
+        "AGENT_BROWSER_SITEGUIDE_DIRECTORY",
+    ]);
+    guard.set("HOME", root.to_str().unwrap());
+    guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+    guard.set("AGENT_BROWSER_HOME", root.to_str().unwrap());
+    guard.set(
+        "AGENT_BROWSER_SOCKET_DIR",
+        root.join("sockets").to_str().unwrap(),
+    );
+    guard.set(
+        "AGENT_BROWSER_SITEGUIDE_DIRECTORY",
+        candidates.to_str().unwrap(),
+    );
+    let document = include_str!("../../../../scripts/fixtures/teaching-report/draft.json");
+    std::fs::write(candidates.join("daily-sales-draft-v1.json"), document).unwrap();
+    let store = BrowserSessionSqliteStore::default_sqlite().unwrap();
+    let mut state = BrowserSessionState::default();
+    state.session_history.push(TerminalBrowserSession {
+        id: "task".into(),
+        name: "closed-teaching".into(),
+        profile_id: "profile".into(),
+        browser_id: "browser".into(),
+        created_at_ms: 1,
+        last_activity_at_ms: 1,
+        ended_at_ms: 2,
+        reason: SessionEndReason::ExplicitClose,
+    });
+    store.save_session_state(&state).unwrap();
+    for params in [
+        json!({"operation":"siteguides"}),
+        json!({"operation":"inspect_guide","guideId":"daily-sales-draft-v1"}),
+        json!({"operation":"validate_teaching_candidate","guide":serde_json::from_str::<Value>(document).unwrap()}),
+    ] {
+        let response=super::super::handle_jsonrpc_line(&json!({"jsonrpc":"2.0","id":528,"method":"tools/call","params":{"name":"browser_command","arguments":{"taskId":"task","action":"playbook","params":params}}}).to_string(),"no-browser").unwrap();
+        assert!(response["error"].is_null(), "retained metadata: {response}");
+    }
+    let refused=super::super::handle_jsonrpc_line(&json!({"jsonrpc":"2.0","id":529,"method":"tools/call","params":{"name":"browser_navigate","arguments":{"taskId":"task","url":"https://synthetic.invalid"}}}).to_string(),"no-browser").unwrap();
+    assert!(
+        refused["error"]
+            .to_string()
+            .contains("browser_task_not_found"),
+        "closed task must not route browser input: {refused}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(candidates.join("daily-sales-draft-v1.json")).unwrap(),
+        document
+    );
+    assert!(!root.join("sockets").exists());
+    drop(store);
+    drop(guard);
+    remove_fixture(&root);
+}
+
+fn remove_fixture(path: &std::path::Path) {
+    let metadata = std::fs::symlink_metadata(path).unwrap();
+    if metadata.is_dir() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        for entry in std::fs::read_dir(path).unwrap() {
+            remove_fixture(&entry.unwrap().path());
+        }
+        std::fs::remove_dir(path).unwrap();
+    } else {
+        #[cfg(windows)]
+        {
+            let mut permissions = metadata.permissions();
+            permissions.set_readonly(false);
+            std::fs::set_permissions(path, permissions).unwrap();
+        }
+        std::fs::remove_file(path).unwrap();
+    }
 }

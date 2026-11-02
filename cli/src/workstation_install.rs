@@ -123,7 +123,7 @@ const SYNC_ROUTE_POOL_SCRIPT: &str =
 const GRANT_ROUTE_DISPLAY_ACCESS_SCRIPT: &str =
     include_str!("../../scripts/grant-rdp-route-display-access.sh");
 const CONTROLLER_PACKAGE_JSON: &str = "{\n  \"private\": true,\n  \"type\": \"module\"\n}\n";
-pub(crate) const CONTROLLER_ASSETS: [(&str, &str, bool); 21] = [
+pub(crate) const CONTROLLER_ASSETS: [(&str, &str, bool); 22] = [
     (
         "scripts/smoke-rdp-guac-route-pool-readiness.js",
         ROUTE_POOL_READINESS_SCRIPT,
@@ -222,6 +222,11 @@ pub(crate) const CONTROLLER_ASSETS: [(&str, &str, bool); 21] = [
     (
         "teaching/teaching-grilling.js",
         include_str!("../../packages/client/src/teaching-grilling.js"),
+        false,
+    ),
+    (
+        "teaching/teaching-media.js",
+        include_str!("../../packages/client/src/teaching-media.js"),
         false,
     ),
     ("package.json", CONTROLLER_PACKAGE_JSON, false),

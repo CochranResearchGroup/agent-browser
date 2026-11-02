@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';import{mkdtemp,rm}from'node:fs/promises'
 import{createTeachingAgentSubmissionOwner}from'../packages/client/src/teaching-draft.js';
 const directory=await mkdtemp(join(tmpdir(),'teaching-agent-'));
 try{
- const owner=createTeachingAgentSubmissionOwner({candidateDirectory:directory});const scope={taskId:'task',rootGuideId:'teaching-original',operationId:'teaching-original',inputSha256:'a'.repeat(64)};
+ const owner=createTeachingAgentSubmissionOwner({candidateDirectory:directory});const scope={taskId:'task',rootGuideId:'teaching-original',operationId:'teaching-original',inputSha256:'a'.repeat(64),context:{taskId:'task',profileId:'disposable-fixture',profileKind:'disposable',sitePolicyId:'site',account:'',organization:'',allowedOrigins:['https://synthetic.invalid']}};
  const results=await Promise.all([owner.begin(scope),owner.begin(scope)]);assert.equal(results.filter(item=>item.status==='created').length,1);assert.equal(results.filter(item=>item.status==='pending').length,1);
+ assert.equal((await owner.retainedContexts())[0].context.profileId,'disposable-fixture');
  assert.equal((await owner.begin(scope)).retryAuthority,'not_inferred');
  await assert.rejects(owner.begin({...scope,inputSha256:'b'.repeat(64)}),/intent_changed/);
  await owner.bindMedia({...scope,mediaSha256:'c'.repeat(64)});

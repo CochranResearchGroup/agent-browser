@@ -1,4 +1,4 @@
-import {lstat,open,link,unlink,readFile} from 'node:fs/promises';
+import {lstat,open,link,unlink,readFile,readdir} from 'node:fs/promises';
 import {isAbsolute,join} from 'node:path';
 import {randomUUID,createHash} from 'node:crypto';
 
@@ -42,7 +42,7 @@ export function createTeachingAgentSubmissionOwner({candidateDirectory}) {
   const stat=await lstat(candidateDirectory);
   if(!stat.isDirectory()||stat.isSymbolicLink()||process.getuid&&stat.uid!==process.getuid()||process.platform!=='win32'&&(stat.mode&0o077))throw Error('teaching_candidate_directory_invalid');
   const stem=join(candidateDirectory,'.teaching-agent-'+digest([scope.rootGuideId,scope.operationId]));
-  return {intent:stem+'.intent.json',result:stem+'.result.json',media:stem+'.media.json'};
+  return {intent:stem+'.intent',result:stem+'.result',media:stem+'.media'};
  }
  async function read(path) {
   try{const stat=await lstat(path);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>131072)throw Error('teaching_agent_record_invalid');const bytes=await readFile(path);if(bytes.length>131072)throw Error('teaching_agent_record_invalid');return JSON.parse(bytes.toString('utf8'));}
@@ -74,9 +74,19 @@ export function createTeachingAgentSubmissionOwner({candidateDirectory}) {
  return {
   async begin(scope) {
    if(!/^[a-f0-9]{64}$/.test(scope.inputSha256??''))throw Error('teaching_agent_input_digest_required');
-   const path=await paths(scope),value={schemaVersion:'agent-browser.teaching-agent-operation.v1',taskId:scope.taskId,rootGuideId:scope.rootGuideId,operationId:scope.operationId,inputSha256:scope.inputSha256};
+   if(scope.context&&(scope.context.taskId!==scope.taskId||!['named','disposable'].includes(scope.context.profileKind)||['profileId','sitePolicyId'].some(key=>typeof scope.context[key]!=='string'||!scope.context[key]||scope.context[key].length>4000)||['account','organization'].some(key=>typeof scope.context[key]!=='string'||scope.context[key].length>4000)||!Array.isArray(scope.context.allowedOrigins)||!scope.context.allowedOrigins.length))throw Error('teaching_agent_context_invalid');
+   if(scope.acceptedVersion&&(!/^[a-z0-9][a-z0-9-]{0,119}$/.test(scope.acceptedVersion.guideId??'')||!/^[a-f0-9]{64}$/.test(scope.acceptedVersion.sha256??'')))throw Error('teaching_accepted_version_invalid');
+   const path=await paths(scope),value={schemaVersion:'agent-browser.teaching-agent-operation.v1',taskId:scope.taskId,rootGuideId:scope.rootGuideId,operationId:scope.operationId,inputSha256:scope.inputSha256,...(scope.acceptedVersion?{acceptedVersion:structuredClone(scope.acceptedVersion)}:{}),...(scope.context?{context:structuredClone(scope.context)}:{}),...(scope.references?{references:structuredClone(scope.references)}:{})};
    if(await publish(path.intent,value))return {...value,status:'created',retryAuthority:'not_inferred'};
    return readOriginal(scope);
+  },
+  async retainedContexts() {
+   // Reuse the same private directory validation before enumerating provenance.
+   await paths({taskId:'metadata',rootGuideId:'metadata',operationId:'metadata'});
+   const names=(await readdir(candidateDirectory)).filter(name=>/^\.teaching-agent-[a-f0-9]{64}\.intent$/.test(name));if(names.length>4096)throw Error('teaching_agent_history_limit');
+   const contexts=[];
+   for(const name of names){const record=await read(join(candidateDirectory,name));if(record?.schemaVersion!=='agent-browser.teaching-agent-operation.v1'||record.rootGuideId!==record.operationId||!record.context)continue;checked(record,record);if(record.context.taskId!==record.taskId)throw Error('teaching_agent_context_invalid');contexts.push({taskId:record.taskId,rootGuideId:record.rootGuideId,context:record.context});}
+   return contexts;
   },
   read:readOriginal,
   async bindMedia(scope) {

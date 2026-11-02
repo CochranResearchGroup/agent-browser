@@ -218,6 +218,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
     if(base.sha256!==expectedSha256||head.guide.guideId!==name||head.sha256!==expectedSha256)return {status:'conflict',reason:'stale_revision',current:receipt(head,'saved'),ordinaryReuseAllowed:false};
     if(meta.revision>=256)error('teaching_review_lineage_capacity');
     const retained=acceptedReference(base);
+    if(kind==='promote'&&retained){let observed;try{observed=await read(retained.guideId);}catch{error('teaching_accepted_version_changed');}if(observed.sha256!==retained.sha256)error('teaching_accepted_version_changed');}
     const guide=await transform(clone(base.guide),base);
     const revision=meta.revision+1;
     guide.guideId=versionId(meta.rootGuideId,revision);
@@ -301,4 +302,28 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
       return found?{...receipt(found,'saved'),recoveredOriginal:true}:{status:'not_observed',operationId,retryAuthority:'not_inferred'};
     },
   };
+}
+
+/** Resolve an operator-selected existing procedure through its current owner.
+ * Paths and baseline hashes are receiver-owned, never supplied by a model.
+ * @param {{candidateDirectory:string,browser:{inspectGuide:(taskId:string,guideId:string)=>Promise<any>},taskId:string,guideId:string,allowedOrigins:string[],review?:import('./teaching-review.js').TeachingReviewClient}} options
+ */
+export async function resolveTeachingAcceptedBaseline({candidateDirectory,browser,taskId,guideId:name,allowedOrigins,review}) {
+ if(!isAbsolute(candidateDirectory??'')||!guideId(name)||!task(taskId)||!Array.isArray(allowedOrigins)||!allowedOrigins.length)error('teaching_accepted_scope_required');
+ const directory=await lstat(candidateDirectory);
+ if(!directory.isDirectory()||directory.isSymbolicLink()||process.getuid&&directory.uid!==process.getuid()||process.platform!=='win32'&&(directory.mode&0o077))error('teaching_review_directory_invalid');
+ const filename=join(candidateDirectory,name+'.json'),stat=await lstat(filename);
+ if(!stat.isFile()||stat.isSymbolicLink()||stat.size>65536)error('teaching_review_file_invalid');
+ const bytes=await readFile(filename);if(bytes.length>65536)error('teaching_review_file_invalid');
+ const observed=await browser.inspectGuide(taskId,name);
+ if(observed?.guideId!==name||!observed.allowedOrigins?.some(origin=>allowedOrigins.includes(origin)))error('teaching_accepted_scope_mismatch');
+ if(sha(await readFile(filename))!==sha(bytes))error('teaching_accepted_version_changed');
+ if(observed.teaching){
+  if(!review)error('teaching_prior_acceptance_unavailable');
+  const view=await review.open({taskId,guideId:name});
+  if(!view.ordinaryReuseAllowed||!view.acceptedVersion.guideId||!view.acceptedVersion.sha256)error('teaching_prior_not_accepted');
+  const acceptedBytes=await readFile(join(candidateDirectory,view.acceptedVersion.guideId+'.json'));if(sha(acceptedBytes)!==view.acceptedVersion.sha256)error('teaching_accepted_version_changed');
+  return {guideId:view.acceptedVersion.guideId,sha256:view.acceptedVersion.sha256};
+ }
+ return {guideId:name,sha256:sha(bytes)};
 }

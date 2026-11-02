@@ -2,7 +2,7 @@
 import {readdir,readFile,lstat} from 'node:fs/promises';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
-import {createTeachingReviewClient} from './teaching-review.js';
+import {createTeachingReviewClient,resolveTeachingAcceptedBaseline} from './teaching-review.js';
 import {createTeachingGrillingClient} from './teaching-grilling.js';
 import {writeTeachingDraftCandidate,createTeachingAgentSubmissionOwner} from './teaching-draft.js';
 const sha=value=>createHash('sha256').update(value).digest('hex');
@@ -44,12 +44,29 @@ export function createWorkspaceSiteGuides(options) {
   if(!selected||selected.expected?.taskId!==request.taskId)fail('teaching_source_context_mismatch');
   return selected;
  }
+ async function ownersFor(taskId,guideId) {
+  const record=(await records()).find(item=>item.guide.guideId===guideId);
+  if(!record?.guide.teaching)fail('teaching_draft_required');
+  const root=record.guide.teaching.lineage?.rootGuideId??guideId;
+  const original=await submissions.read({taskId:record.guide.teaching.sourceTaskId,rootGuideId:root,operationId:root});
+  const currentReview=createTeachingReviewClient({...options,sourceStatus:options.sourceStatus?input=>options.sourceStatus(Object.assign({},input,{rootGuideId:root})):undefined,acceptedVersion:original.acceptedVersion??options.acceptedVersion});
+  return {original,review:currentReview,grilling:createTeachingGrillingClient({review:currentReview,readOperatorAnswer:options.readOperatorAnswer})};
+ }
+ async function agentIntent(request) {
+  let revision;
+  if(request.kind==='answer'){const owners=await ownersFor(request.taskId,request.guideId);revision=await owners.grilling.readAnswerContext(request);if(request.rootGuideId!==revision.binding.rootGuideId)fail('teaching_agent_intent_changed');}
+  else if(request.rootGuideId!==request.operationId)fail('teaching_stage_original_operation_required');
+  const acceptedVersion=request.priorGuideId?await resolveTeachingAcceptedBaseline({candidateDirectory,browser:{inspectGuide:async(taskId,guideId)=>{if(!browser.inspectGuide)fail('siteguides_inspection_unavailable');return browser.inspectGuide(taskId,guideId);}},taskId:request.taskId,guideId:request.priorGuideId,allowedOrigins:options.context?.allowedOrigins??[],review}):undefined;
+  const inputSha256=sha(JSON.stringify({acceptedVersion,kind:request.kind,guideId:request.guideId,expectedSha256:request.expectedSha256,questionId:request.questionId,answerRef:request.answerRef,revisionBinding:revision?.binding,taskId:request.taskId,rootGuideId:request.rootGuideId,operationId:request.operationId,sourceKey:request.sourceKey,bundle:request.bundle,speechSource:request.speechSource,segments:request.segments,context:options.context}));
+  return {inputSha256,acceptedVersion};
+ }
  async function open(request) {
   await allowed(request.taskId);
-  const view=await grilling.open({taskId:request.taskId,guideId:request.guideId});
+  const owners=await ownersFor(request.taskId,request.guideId);
+  const view=await owners.grilling.open({taskId:request.taskId,guideId:request.guideId});
   await allowed(view.guide.teaching.sourceTaskId);
   const history=(await records()).filter(item=>(item.guide.teaching?.lineage?.rootGuideId??item.guide.guideId)===view.rootGuideId).map(item=>({guideId:item.guide.guideId,sha256:item.sha256,revision:item.guide.teaching?.lineage?.revision??1,operationId:item.guide.teaching?.lineage?.operationId})).sort((a,b)=>a.revision-b.revision);
-  return {view,history};
+  return {view:{...view,teachingContext:owners.original.context??options.context,mediaReferences:owners.original.references},history};
  }
  return {async dispatch(request) {
   if(!request||typeof request!=='object')fail('siteguides_request_required');
@@ -66,7 +83,22 @@ export function createWorkspaceSiteGuides(options) {
      const {view,history}=await open({taskId,guideId:latest.guide.guideId});
      guides.push({guideId:view.guideId,rootGuideId:view.rootGuideId,name:view.guide.name,purpose:view.guide.teaching.playbook.goal,allowedOrigins:view.guide.allowedOrigins,sourceTaskId:taskId,review:view.review.state,repeat:view.validation.state,source:view.source,acceptedVersion:view.acceptedVersion,ordinaryReuseAllowed:view.ordinaryReuseAllowed,history});
     }
-    return {guides};
+    const inspectionTaskId=request.taskId??options.catalogTaskId;
+    if(inspectionTaskId&&browser.inspectGuide){
+     await allowed(inspectionTaskId);
+     for(const item of all.filter(item=>!item.guide.teaching)){
+      const inspected=await browser.inspectGuide(inspectionTaskId,item.guide.guideId);
+      guides.push({kind:'ordinary',guideId:inspected.guideId,rootGuideId:inspected.guideId,name:inspected.name,purpose:inspected.description??inspected.name,allowedOrigins:inspected.allowedOrigins,inspectionTaskId,review:'existing_procedure',repeat:'not_requalified',source:{state:'not_recorded',replayable:false},ordinaryReuseAllowed:false,history:[{guideId:inspected.guideId,sha256:item.sha256,revision:1}]});
+     }
+    }
+    return {...(all.some(item=>!item.guide.teaching)?{ordinaryCatalogState:inspectionTaskId?'available':'retained_task_required'}:{}),guides};
+   }
+   case 'inspect_guide': {
+    await allowed(request.taskId);if(!browser.inspectGuide)fail('siteguides_inspection_unavailable');
+    const guide=await browser.inspectGuide(request.taskId,request.guideId);
+    if(guide.teaching)return open(request);
+    const observed=(await records()).find(item=>item.guide.guideId===guide.guideId);if(!observed)fail('siteguides_guide_unavailable');
+    return {kind:'ordinary',guide,sha256:observed.sha256,ordinaryReuseAllowed:false};
    }
    case 'open':return open(request);
    case 'lookup_operation': {
@@ -78,29 +110,42 @@ export function createWorkspaceSiteGuides(options) {
     return review.lookupOperation(request);
    }
    case 'begin_agent': {
-    await allowed(request.taskId,'use');await selection(request);
-    if(request.rootGuideId!==request.operationId)fail('teaching_stage_original_operation_required');
-    const inputSha256=sha(JSON.stringify({taskId:request.taskId,rootGuideId:request.rootGuideId,operationId:request.operationId,sourceKey:request.sourceKey,bundle:request.bundle,segments:request.segments,context:options.context}));
-    return submissions.begin({...request,inputSha256});
+    await allowed(request.taskId,'use');
+    const prior=await submissions.read(request);
+    if(prior.status==='not_observed'&&request.kind!=='answer'&&options.isCurrentTask&&!await options.isCurrentTask(request.taskId))fail('teaching_current_browser_required');
+    if(prior.status==='not_observed')await selection(request);
+    const intent=await agentIntent(request);
+    return submissions.begin({...request,...intent,context:options.context,references:{sourceKey:request.sourceKey,speechSource:request.bundle?.speechSource??request.speechSource,segments:request.segments}});
    }
+   case 'agent_revision_context': {await allowed(request.taskId,'use');const owners=await ownersFor(request.taskId,request.guideId);return owners.grilling.readAnswerContext(request);}
+   case 'retained_contexts':return {contexts:await submissions.retainedContexts()};
+   case 'read_receipt':await allowed(request.taskId);if(request.purpose==='teaching_review'&&options.readOperatorDecision)return options.readOperatorDecision(request);if(request.purpose==='teaching_answer'&&options.readOperatorAnswer)return options.readOperatorAnswer(request);fail('teaching_receipt_authority_unconfigured');
    case 'read_agent':await allowed(request.taskId);return submissions.read(request);
    case 'bind_agent_media':await allowed(request.taskId,'use');return submissions.bindMedia({...request,mediaSha256:sha(JSON.stringify(request.packet))});
    case 'record_agent_result':await allowed(request.taskId,'use');return submissions.recordResult({...request,response:request.response});
    case 'stage_agent_result': {
     await allowed(request.taskId,'use');
-    const original=await submissions.read(request);
+    const intent=await agentIntent(request);
+    const original=await submissions.read({...request,...intent});
     if(original.status!=='resolved')return original;
     const response=/** @type {{status?:string;guide?:import('./teaching-draft.js').TeachingSiteGuide;questions?:Array<Pick<import('./teaching-draft.js').TeachingClarificationQuestion,'id'|'category'|'stepRefs'|'dependsOn'>>}} */(original.response);
     if(response?.status==='unavailable'||response?.status==='unknown')return response;
     if(!response?.guide)fail('teaching_agent_result_invalid');
-    const guide=response.guide;
+    const guide=structuredClone(response.guide);
+    if(request.kind==='answer'){
+     const owners=await ownersFor(request.taskId,request.guideId),current=await owners.grilling.open({taskId:request.taskId,guideId:request.guideId});
+     if(guide.guideId!==request.guideId)fail('teaching_agent_revision_identity_changed');
+     for(const key of ['lineage','review','validation','clarification','unresolved']){if(key in current.guide.teaching)guide.teaching[key]=structuredClone(current.guide.teaching[key]);else delete guide.teaching[key];}
+     return owners.grilling.answer({...request,revisedGuide:guide});
+    }
     const selected=await selection(request),source=await evidence.inspect(selected);
     if(guide.guideId!==request.rootGuideId||guide.teaching?.sourceTaskId!==request.taskId||guide.teaching.recordingId!==source.recordingId||guide.teaching.videoSha256!==source.video.sha256)fail('teaching_source_context_mismatch');
+    if(options.context?.allowedOrigins&&JSON.stringify([...guide.allowedOrigins].sort())!==JSON.stringify([...options.context.allowedOrigins].sort()))fail('teaching_site_origins_changed');
     const validation=await browser.validateTeachingCandidate({taskId:request.taskId,guide});if(validation?.valid!==true)fail('teaching_candidate_validation_failed');
     let staged=(await records()).find(item=>item.guide.guideId===request.rootGuideId);
     if(staged){if(JSON.stringify(staged.guide)!==JSON.stringify(guide))fail('teaching_agent_published_content_changed');}
     else {const written=await writeTeachingDraftCandidate({candidateDirectory,candidateOnly:true,guide});staged={guide,sha256:written.sha256};}
-    if(response.questions?.length){const prepared=await grilling.prepare({taskId:request.taskId,guideId:guide.guideId,expectedSha256:staged.sha256,operationId:request.operationId+'-questions',questions:response.questions});return {...prepared,rootGuideId:request.rootGuideId,agentOperationId:request.operationId};}
+    if(response.questions?.length){const scopedReview=createTeachingReviewClient({...options,acceptedVersion:original.acceptedVersion});const scopedGrilling=createTeachingGrillingClient({review:scopedReview,readOperatorAnswer:options.readOperatorAnswer});const prepared=await scopedGrilling.prepare({taskId:request.taskId,guideId:guide.guideId,expectedSha256:staged.sha256,operationId:request.operationId+'-questions',questions:response.questions});return {...prepared,rootGuideId:request.rootGuideId,agentOperationId:request.operationId};}
     return {status:'saved',guideId:guide.guideId,rootGuideId:request.rootGuideId,sha256:staged.sha256,agentOperationId:request.operationId,ordinaryReuseAllowed:false};
    }
    case 'list_sources':await allowed(request.taskId,'use');if(!options.listSources)fail('teaching_source_configuration_unavailable');return {sources:await options.listSources(request.taskId)};
@@ -118,11 +163,17 @@ export function createWorkspaceSiteGuides(options) {
     const selected=await selection(request),source=await evidence.inspect(selected),guide=request.guide;
     if(request.rootGuideId!==request.operationId||guide?.guideId!==request.rootGuideId)fail('teaching_stage_original_operation_required');
     if(guide?.teaching?.sourceTaskId!==request.taskId||guide.teaching.recordingId!==source.recordingId||guide.teaching.videoSha256!==source.video.sha256)fail('teaching_source_context_mismatch');
+    if(options.context?.allowedOrigins&&JSON.stringify([...guide.allowedOrigins].sort())!==JSON.stringify([...options.context.allowedOrigins].sort()))fail('teaching_site_origins_changed');
     const validation=await browser.validateTeachingCandidate({taskId:request.taskId,guide});if(validation?.valid!==true)fail('teaching_candidate_validation_failed');
-    return writeTeachingDraftCandidate({candidateDirectory,candidateOnly:true,guide});
+    await submissions.begin({...request,inputSha256:sha(JSON.stringify({kind:'external_stage',guide,context:options.context})),context:options.context,references:{sourceKey:request.sourceKey,speechSource:request.bundle?.speechSource??request.speechSource,segments:request.segments}});
+    const written=await writeTeachingDraftCandidate({candidateDirectory,candidateOnly:true,guide});return {guideId:written.guideId,sha256:written.sha256,state:written.state,executionAllowed:false};
    }
    case 'save':case 'prepare_questions':case 'answer':case 'record_decision':case 'record_repeat':case 'promote': {
-    await allowed(request.taskId,'use');await open(request);
+    await allowed(request.taskId,'use');
+    const existing=(await records()).find(item=>item.guide.guideId===request.guideId);if(!existing?.guide.teaching)fail('teaching_draft_required');
+    await allowed(existing.guide.teaching.sourceTaskId);
+    const {review,grilling}=await ownersFor(request.taskId,request.guideId);
+    await review.open({taskId:request.taskId,guideId:request.guideId});
     const methods={save:()=>review.save(request),prepare_questions:()=>grilling.prepare(request),answer:()=>grilling.answer(request),record_decision:()=>review.recordDecision(request),record_repeat:()=>review.recordFreshRepeat(request),promote:()=>review.promote(request)};
     return methods[request.operation]();
    }
