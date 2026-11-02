@@ -304,7 +304,7 @@ where
     Err(last_error.unwrap_or_else(|| "dashboard service backend bootstrap failed".to_string()))
 }
 
-async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
+pub(super) async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
     let mut buf = vec![0u8; 8192];
     let n = match stream.read(&mut buf).await {
         Ok(n) if n > 0 => n,
@@ -478,7 +478,8 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
                 return;
             }
             Err(err) => {
-                write_json_error(&mut stream, "500 Internal Server Error", &err).await;
+                let response = dashboard_auth::authentication_error_response(&err);
+                let _ = stream.write_all(&response.into_http_bytes()).await;
                 return;
             }
         }
