@@ -7,6 +7,14 @@ import {requestSiteGuides,confirmTeachingReceipt,teachingOperationId,type SiteGu
 // establish receipt authority and never authorize replay after an unknown result.
 const readPending=(key:string)=>{try{return JSON.parse(sessionStorage.getItem(key)??'null');}catch{return null;}};
 const retainPending=(key:string,value:unknown)=>{try{if(value===null)sessionStorage.removeItem(key);else sessionStorage.setItem(key,JSON.stringify(value));}catch{/* UI still keeps the in-memory reference. */}};
+export interface TeachingInterpretationResult {
+ readonly guideId?:string;
+ readonly status?:'unavailable'|'unknown'|'pending'|'not_observed';
+ readonly reason?:string;
+ readonly modelCallState?:'not_called'|'completed_refusal'|'unknown';
+ readonly newSubmissionAllowed?:boolean;
+}
+const ownerAllowsDistinctSubmission=(result:TeachingInterpretationResult|void)=>result?.status==='unavailable'&&result.newSubmissionAllowed===true&&(result.modelCallState==='not_called'||result.modelCallState==='completed_refusal');
 export interface SiteGuidesLibraryProps {
  context:TeachingContext|null;
  profiles?:LibraryProfile[];
@@ -16,7 +24,7 @@ export interface SiteGuidesLibraryProps {
  onNativeView?:()=>void;
  /** Existing chat/agent integration consumes exact evidence and stages a useful
   * inert candidate through the public owner. No response means awaiting agent. */
- onInterpret?:(packet:Record<string,unknown>&{agentRequest:Record<string,unknown>})=>Promise<{guideId:string}|void>;
+ onInterpret?:(packet:Record<string,unknown>&{agentRequest:Record<string,unknown>})=>Promise<TeachingInterpretationResult|void>;
 }
 export function SiteGuidesLibrary({context,profiles=[],sitePolicyId,onProfile,transport=requestSiteGuides,onNativeView,onInterpret}:SiteGuidesLibraryProps) {
  const [guides,setGuides]=useState<SiteGuideSummary[]>([]),[view,setView]=useState<TeachingView|null>(null),[history,setHistory]=useState<SiteGuideSummary['history']>([]);
@@ -62,7 +70,7 @@ export function SiteGuidesLibrary({context,profiles=[],sitePolicyId,onProfile,tr
   const request={...scope,kind:'answer',guideId:view.guideId,expectedSha256:view.sha256,operationId,answerRef,sourceKey:input.sourceKey,bundle:input.bundle,speechSource:input.speechSource,segments:input.segments,sitePolicyId:effective.sitePolicyId,account:effective.account,organization:effective.organization};
   setPending({...request,phase:'confirmation'});await confirmTeachingReceipt(answerRef,scope);setPending(request);
   const result=await onInterpret({context:effective,agentRequest:request});
-  if(result?.guideId){setPending(null);await open(view.guide.teaching.sourceTaskId,result.guideId);await load();}else setMessage('Original answer is recorded. Agent revision is awaiting or unconfirmed; read the original operation.');
+  if(result?.guideId){setPending(null);await open(view.guide.teaching.sourceTaskId,result.guideId);await load();}else if(ownerAllowsDistinctSubmission(result)){setPending({...request,diagnosis:result});setMessage(`Answer revision unavailable: ${result?.reason??'Completed refusal'}. The original is retained.`);}else setMessage('Original answer is recorded. Agent revision is awaiting or unconfirmed; read the original operation.');
  }
  async function recoverPending() {
   if(!pending)return;
@@ -71,6 +79,7 @@ export function SiteGuidesLibrary({context,profiles=[],sitePolicyId,onProfile,tr
    await transport({...pending,operation:'read_receipt'});
    result=pending.kind==='answer'?await transport({...pending,operation:'request_agent'}):await transport({...pending,operation:'record_decision'});
   }else result=await transport({...pending,operation:pending.kind==='answer'?'resume_agent':'lookup_operation'});
+  if(ownerAllowsDistinctSubmission(result))setPending({...pending,phase:undefined,diagnosis:result});
   setMessage(result.status==='saved'?'Original operation recovered.':'Original operation not observed or remains pending. Retry authority is not inferred.');
   if(result.status==='saved'){setPending(null);const sourceTask=String(pending.sourceTaskId??pending.taskId);await open(sourceTask,result.guideId);await load();}
  }
@@ -109,6 +118,7 @@ export function SiteGuidesLibrary({context,profiles=[],sitePolicyId,onProfile,tr
 
   </article>}
    {pending&&<Button disabled={busy} onClick={()=>void run(recoverPending)}>Read original operation</Button>}
+   {pending?.kind==='answer'&&ownerAllowsDistinctSubmission(pending.diagnosis as TeachingInterpretationResult)&&<Button disabled={busy} onClick={()=>{retainPending('siteguides-retained-original:'+String(pending.operationId),pending);setPending(null);setMessage('The refused original revision remains retained. Record a deliberate new answer revision if needed.');}}>Start a distinct answer revision</Button>}
  </section>;
 }
 export function TeachSite({context,transport=requestSiteGuides,onNativeView,onInterpret,onCandidate,priorGuideId}:SiteGuidesLibraryProps&{onCandidate?:(guideId:string)=>Promise<void>;priorGuideId?:string}) {
@@ -126,6 +136,8 @@ export function TeachSite({context,transport=requestSiteGuides,onNativeView,onIn
  const setRangeRequests=(update:(current:Record<number,string>)=>Record<number,string>)=>setRangeRequestsState(current=>{const next=update(current);retainSpeech({rangeRequests:next});return next;});
  useEffect(()=>{const original=readPending(speechKey);setSourceKey(original?.sourceKey??'');setBundleState(original?.bundle??null);setImportRefState(original?.importRef??'');setSegmentsState(original?.segments??[]);setRangeRequestsState(original?.rangeRequests??{});setTranscripts([]);setSource(null);},[speechKey]);
  const [sources,setSources]=useState<Array<{sourceKey:string;recordingId:string;narrationSourceId:string}>>([]);
+ const [canStartNew,setCanStartNew]=useState(false);
+ useEffect(()=>{setCanStartNew(ownerAllowsDistinctSubmission(readPending(pendingKey)?.diagnosis));},[pendingKey]);
  async function run(work:()=>Promise<void>){setBusy(true);setMessage('');try{await work();}catch(error){setMessage(String(error));}finally{setBusy(false);}}
  return <section aria-label="Teach this site"><h3>Teach this site</h3>
   {context?<p>Task {context.taskId}; profile {context.profileId}; site {context.sitePolicyId}; intended account {context.account||'unspecified'}; organization {context.organization||'unspecified'}. Intended identity does not establish authentication freshness.</p>:<p>Select a browser task to teach this site.</p>}
@@ -150,10 +162,11 @@ export function TeachSite({context,transport=requestSiteGuides,onNativeView,onIn
   <Button disabled={!context||!source||!bundle||segments.length!==Math.ceil(bundle.speechSource.durationMs/300000)||transcripts.length!==segments.length||transcripts.some(item=>item.status!=='available')||busy||!!pending||!onInterpret} onClick={()=>void run(async()=>{
    const operationId=teachingOperationId(),request={operation:'agent_packet',taskId:context!.taskId,sourceKey,rootGuideId:operationId,operationId,priorGuideId,bundle,segments,sitePolicyId:context!.sitePolicyId,account:context!.account,organization:context!.organization};setPending(request);
    const packet=await transport(request);const result=await onInterpret!({...packet,context,agentRequest:{...request,operation:undefined}});
-   if(result?.guideId){await onCandidate?.(result.guideId);setPending(null);}else setMessage('Awaiting ordinary agent interpretation. No draft, review or repeat has been claimed.');
+   if(result?.guideId){await onCandidate?.(result.guideId);setPending(null);}else if(ownerAllowsDistinctSubmission(result)){setCanStartNew(true);setPending({...request,diagnosis:result});setMessage(`Interpretation unavailable: ${result?.reason??'Completed refusal'}. A distinct deliberate submission is available; the original is retained.`);}else setMessage(result?.status==='unknown'?'Original model outcome is unknown. Read it without resubmission.':'Awaiting ordinary agent interpretation. No draft, review or repeat has been claimed.');
   })}>Ask agent to interpret exact evidence</Button>
   {!onInterpret&&<p>Agent interpretation is unavailable until the existing agent connection is configured.</p>}
-  {pending&&<Button disabled={busy} onClick={()=>void run(async()=>{let result=await transport({...pending,operation:'resume_agent'});if(result.status==='not_observed')result=await transport({...pending,operation:'lookup_operation'});if(result.status==='saved'){await onCandidate?.(result.guideId);setPending(null);setMessage('Original agent publication recovered.');}else setMessage('Original agent publication not observed. No automatic resubmission.');})}>Read original agent publication</Button>}
+  {pending&&<Button disabled={busy} onClick={()=>void run(async()=>{let result=await transport({...pending,operation:'resume_agent'});if(result.status==='not_observed')result=await transport({...pending,operation:'lookup_operation'});if(result.status==='saved'){await onCandidate?.(result.guideId);setPending(null);setMessage('Original agent publication recovered.');}else if(ownerAllowsDistinctSubmission(result)){setCanStartNew(true);setPending({...pending,diagnosis:result});setMessage(`Original interpretation unavailable: ${result?.reason??'Completed refusal'}. The original remains retained.`);}else setMessage(result.status==='unknown'?'Original model outcome is unknown. No automatic resubmission.':'Original agent publication not observed or pending. No automatic resubmission.');})}>Read original agent publication</Button>}
+  {canStartNew&&pending&&<Button disabled={busy} onClick={()=>{retainPending('siteguides-retained-original:'+String(pending.operationId),pending);setPending(null);setCanStartNew(false);setMessage('The diagnosed original remains retained. Use Ask agent to create a distinct new operation.');}}>Start a distinct new submission</Button>}
   {message&&<p role="status">{message}</p>}
  </section>;
 }

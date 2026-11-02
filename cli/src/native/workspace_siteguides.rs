@@ -198,7 +198,7 @@ pub(crate) async fn handle_workspace_siteguides(
                     ))
                     || disposable_default_access(
                         &managed,
-                        &session,
+                        session,
                         profile_state.profiles.contains_key(&session.profile_id),
                         &principal,
                         agent_browser_service_model::ProfilePermission::PolicyRead,
@@ -211,7 +211,7 @@ pub(crate) async fn handle_workspace_siteguides(
                     ))
                     || disposable_default_access(
                         &managed,
-                        &session,
+                        session,
                         profile_state.profiles.contains_key(&session.profile_id),
                         &principal,
                         agent_browser_service_model::ProfilePermission::ProfileUse,
@@ -236,7 +236,7 @@ pub(crate) async fn handle_workspace_siteguides(
     if operation == "request_agent" {
         if let Err(reason) = super::stream::chat::teaching_agent_preflight() {
             return Ok(
-                json!({"status":"unavailable","reason":reason,"retryAuthority":"not_inferred"}),
+                json!({"status":"unavailable","reason":reason,"modelCallState":"not_called","newSubmissionAllowed":true,"retryAuthority":"not_inferred"}),
             );
         }
     }
@@ -298,7 +298,11 @@ where
     };
     if admitted["status"] != "created" {
         return if admitted["status"] == "resolved" {
-            host(command("stage_agent_result")).await
+            if admitted["response"].get("status").is_some() {
+                Ok(admitted["response"].clone())
+            } else {
+                host(command("stage_agent_result")).await
+            }
         } else {
             Ok(admitted)
         };
@@ -306,8 +310,7 @@ where
     let packet = match host(command("prepare_agent_media")).await {
         Ok(packet) => packet,
         Err(reason) => {
-            let response =
-                json!({"status":"unavailable","reason":reason,"retryAuthority":"not_inferred"});
+            let response = json!({"status":"unavailable","reason":reason,"modelCallState":"not_called","newSubmissionAllowed":true,"retryAuthority":"not_inferred"});
             let mut record = command("record_agent_result");
             record["response"] = response.clone();
             host(record).await?;
@@ -320,7 +323,7 @@ where
     let response = match interpret(packet).await {
         Ok(response) => response,
         Err(reason) => {
-            json!({"status":if reason=="teaching_agent_outcome_unknown"{"unknown"}else{"unavailable"},"reason":reason,"retryAuthority":"not_inferred"})
+            json!({"status":if reason=="teaching_agent_outcome_unknown"{"unknown"}else{"unavailable"},"modelCallState":if reason=="teaching_agent_outcome_unknown"{"unknown"}else if reason.starts_with("teaching_agent_unavailable")||reason=="teaching_agent_packet_invalid"{"not_called"}else{"completed_refusal"},"newSubmissionAllowed":reason!="teaching_agent_outcome_unknown","reason":reason,"retryAuthority":"not_inferred"})
         }
     };
     let mut record = command("record_agent_result");
@@ -611,6 +614,25 @@ mod tests {
             "pending"
         );
         assert_eq!(calls.load(Ordering::SeqCst), 0);
+        *state.lock().unwrap() = (false, None);
+        let refused = compose_agent_operation(&request, &host, |_: Value| async {
+            Err("teaching_agent_rejected:400".into())
+        })
+        .await
+        .unwrap();
+        assert_eq!(refused["status"], "unavailable");
+        assert_eq!(refused["newSubmissionAllowed"], true);
+        assert_eq!(
+            compose_agent_operation(&request, &host, &model)
+                .await
+                .unwrap()["status"],
+            "unavailable"
+        );
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "a positively refused original also requires a distinct deliberate new operation"
+        );
     }
     #[test]
     fn siteguides_disposable_uses_owned_allocation_and_never_shadows_private_profile() {
