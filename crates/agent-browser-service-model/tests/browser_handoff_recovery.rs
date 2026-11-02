@@ -231,6 +231,9 @@ impl RemoteViewApplicationTransport for Transport {
                 self.fixture["assignmentObservation"].clone()
             }
             RemoteViewApplicationRequest::LaunchEnvironment { .. } => {
+                if self.fixture["rejectLaunchEnvironment"] == true {
+                    return Err(RemoteViewApplicationTransportError::Rejected);
+                }
                 self.fixture["launchEnvironment"].clone()
             }
             RemoteViewApplicationRequest::ReadIdleRetirement { .. } => serde_json::json!({
@@ -452,11 +455,17 @@ impl BrowserSessionEffects for Runtime {
 
 #[test]
 fn recovery_restores_peer_tabs_and_failed_restoration_keeps_unpublished_custody() {
-    for (absent, fail_restoration) in [(false, false), (true, true), (true, false)] {
-        let f: Value = serde_json::from_str(include_str!(
+    for (absent, fail_restoration, reject_environment) in [
+        (false, false, false),
+        (true, true, false),
+        (true, false, false),
+        (true, false, true),
+    ] {
+        let mut f: Value = serde_json::from_str(include_str!(
             "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
         ))
         .unwrap();
+        f["rejectLaunchEnvironment"] = reject_environment.into();
         let assignment: RemoteViewAssignmentRecord =
             serde_json::from_value(f["assignment"].clone()).unwrap();
         let evidence = Rc::new(RefCell::new(Evidence {
@@ -526,7 +535,16 @@ fn recovery_restores_peer_tabs_and_failed_restoration_keeps_unpublished_custody(
         .unwrap();
         effects.begin_operation(&state).unwrap();
         let outcome = effects.recover_browser(&browser, &profile, &tabs, &navigation);
-        if !absent {
+        if reject_environment {
+            let error = outcome.unwrap_err();
+            assert!(error.contains("browser_session_recovery_environment_unavailable"));
+            assert!(
+                error.contains("Transport(Rejected)"),
+                "safe cause was lost: {error}"
+            );
+            assert!(evidence.borrow().pending.is_none());
+            assert_eq!(evidence.borrow().effects, ["absence"]);
+        } else if !absent {
             assert_eq!(
                 outcome.unwrap_err(),
                 "browser_session_recovery_absence_unproven"

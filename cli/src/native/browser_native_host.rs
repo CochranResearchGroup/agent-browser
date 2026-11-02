@@ -275,11 +275,18 @@ fn run_native_owner<'a, P: BrowserSessionPersistence>(
 ) -> Result<Value, String> {
     let origin = std::env::var("AGENT_BROWSER_REMOTE_VIEW_ORIGIN")
         .map_err(|_| "browser_native_owner_unconfigured")?;
-    let http = super::super::remote_view_application_http::RemoteViewApplicationHttp::new(
+    let mut http = super::super::remote_view_application_http::RemoteViewApplicationHttp::new(
         &origin,
         std::time::Duration::from_secs(10),
     )
     .map_err(|_| "browser_native_owner_configuration_invalid")?;
+    let input_readiness = if command["action"] == "native_ready" {
+        Some(super::super::browser_native_readiness::qualify_readiness(
+            &mut http, assignment,
+        )?)
+    } else {
+        None
+    };
     struct Owner<'a, P> {
         command: &'a Value,
         admission: Option<&'a mut NativeAttemptAdmission<'a>>,
@@ -287,6 +294,7 @@ fn run_native_owner<'a, P: BrowserSessionPersistence>(
         http: super::super::remote_view_application_http::RemoteViewApplicationHttp,
         persistence: &'a P,
         expected: &'a BrowserSessionState,
+        target: agent_browser_service_model::RemoteViewApplicationTarget,
     }
     impl<P: BrowserSessionPersistence> super::super::browser_native_control::NativeOwner
         for Owner<'_, P>
@@ -357,8 +365,16 @@ fn run_native_owner<'a, P: BrowserSessionPersistence>(
                     return Err("browser_native_target_changed:refresh task".into());
                 }
             }
-            self.http.native_request(operation, body)
-                    .map_err(|error| format!("browser_native_owner_request:{error:?}:observe before retry; input may have been delivered"))
+            if operation == "input" {
+                super::super::browser_native_readiness::require_input_ready(
+                    &mut self.http,
+                    &self.target,
+                )?;
+                if self.persistence.load_session_state()? != *self.expected {
+                    return Err("browser_native_target_changed:refresh task".into());
+                }
+            }
+            self.http.native_operation(operation, body)
         }
     }
     let mut owner = Owner {
@@ -368,8 +384,15 @@ fn run_native_owner<'a, P: BrowserSessionPersistence>(
         command,
         admission,
         image_admission,
+        target: assignment.clone(),
     };
-    super::super::browser_native_control::execute(original, assignment, command, &mut owner)
+    let mut result =
+        super::super::browser_native_control::execute(original, assignment, command, &mut owner)?;
+    if let Some(readiness) = input_readiness {
+        result["ready"] = json!(result["ready"] == true && readiness["inputReady"] == true);
+        result["inputReadiness"] = readiness;
+    }
+    Ok(result)
 }
 
 #[path = "browser_native_host_image.rs"]

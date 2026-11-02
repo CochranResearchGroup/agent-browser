@@ -1654,7 +1654,9 @@ impl<
         let environment = self
             .adapter
             .launch_environment(&intent.assignment)
-            .map_err(|_| "browser_session_recovery_environment_unavailable")?;
+            .map_err(|error| {
+                format!("browser_session_recovery_environment_unavailable:{error:?}")
+            })?;
         let observation = self
             .adapter
             .observe_assignment(&intent.assignment)

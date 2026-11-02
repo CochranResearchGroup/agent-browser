@@ -2035,6 +2035,21 @@ inspection does not relaunch the browser or attach a debugger. Mode conversion
 and agentic CDP-free desktop input are separate delivery work.
 
 
+`native_ready` returns separate `inputReadiness` evidence. A private
+`AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE` supplies owner authentication;
+token presence alone does not prove acceptance. The exact lifecycle desktop's
+consumer input policy must be enabled, and the independently joined viewing
+identity remains fenced for actual input. Viewer readiness grants neither input
+nor control ownership. Configure `selective_input = true` through the Remote View
+owner's supported consumer-scoped setup for current/future owned allocations,
+without borrowing another desktop or mutating fixture slots. Missing auth and
+disabled input have distinct actionable holds.
+
+Observation rejection reports no input dispatched. Uncertain input preserves
+its original request and cannot be replayed. Recovery diagnostics expose only
+reviewed owner causes/status, never raw provider bodies or environments; improved
+diagnostics do not prove functional profile recovery.
+
 Native task observation and input use the existing Remote View owner. MCP
 `browser_command` supports `native_capture` and `native_input`; discover their
 arguments with `browser_discover`. CLI equivalent:

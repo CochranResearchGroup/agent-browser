@@ -34,7 +34,11 @@ After human input, `browser_continue` with the same `taskId` reads identity/URL 
 
 Website credentials use standalone Auth Receipts through its verified SDK.
 Before login, MFA or recovery, read [Standalone Auth](references/authentication.md#standalone-auth-receipts).
-Owner decisions, delivery and exact browser binding gate input. Keep unknown
+Use current `discover_credentials`, not empty legacy scopes, to distinguish
+missing authority, unavailable/partial sources, no match and account choice.
+Before saved-password Native input, use `native_ready`: owner authentication and
+consumer input policy must be ready for the exact target; viewer readiness alone
+is insufficient. Owner decisions, delivery and exact browser binding gate input. Keep unknown
 attempts on their original requests; never replay private use.
 
 ## Hosted workflow guidance v1

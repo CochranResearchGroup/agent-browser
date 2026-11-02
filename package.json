@@ -330,6 +330,7 @@
     "test:hosted-auth-fixtures": "node scripts/test-native-fixture-custody.js && node scripts/test-hosted-auth-fixture-environment.js && node --check scripts/hosted-auth-native-fixture-host.mjs && node --check scripts/smoke-hosted-login-playbook.js",
     "test:dashboard-workspace-startup": "node scripts/test-dashboard-workspace-startup.cjs",
     "test:standalone-auth-bootstrap": "node scripts/test-standalone-auth-bootstrap.js",
+    "test:auth-discovery-guidance": "node scripts/test-auth-discovery-guidance.mjs",
     "test:owner-auth-source": "node scripts/dev/run-owner-auth-source.mjs",
     "test:owner-auth-chrome": "node scripts/test-owner-login-chrome.js",
     "test:task-briefing-client": "node scripts/test-task-briefing-client.js && pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext ../packages/client/src/task-briefing.js",

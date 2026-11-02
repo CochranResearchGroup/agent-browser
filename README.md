@@ -1195,6 +1195,13 @@ the complete agent, operator, reconnect, and troubleshooting workflows.
 
 ## SiteGuides and website routines
 
+Use capability-aware `discover_credentials({ query, accountHint })` for current
+owner login. Empty legacy caller scopes do not imply an empty credential source.
+Missing authority, unavailable or partial sources, complete no-match results and
+personal/company account choice remain distinct holds. Source recovery belongs
+to Auth Receipts; saved-password fallback requires the exact owned Native target
+and input readiness before selection.
+
 `connectHostedAuthHelper()` uses standalone Auth Receipts by default. Owner setup
 selects Auth's verified SDK candidate at
 `${XDG_DATA_HOME:-~/.local/share}/auth-receipts/client/current`; Bots is not required.
@@ -7262,6 +7269,18 @@ input reports delivery separately from completed page effects. Observe after
 an uncertain reply before deciding another input is appropriate. These actions
 never attach CDP, acquire another task, or return explicit human takeover.
 An unavailable Native owner or changed process/window returns remediation.
+`native_ready` includes `inputReadiness` separately from its exact-window check.
+It requires owner control authentication and inspects the exact lifecycle desktop's
+consumer input policy; viewer delivery and control ownership remain separate.
+Before guarded input, the owner policy is rechecked without creating another task.
+Configure the private `AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE` and use the
+Remote View owner's supported consumer-scoped `selective_input = true` setup for
+current and future owned allocations. Never borrow a different desktop or repair
+hardcoded slots. Missing authentication and disabled input have distinct recourse.
+Observation failures report no input dispatched; uncertain input retains its
+original request and must not be replayed. Recovery diagnostics retain only safe
+owner status/cause and do not establish that profile recovery succeeded.
+
 For an existing scoped `browser_policy` override, send `policyOverrideId` and
 `requestId` at the top level of `browser_command` for either Native action.
 The grant must match the exact task, action, request and current policy; a

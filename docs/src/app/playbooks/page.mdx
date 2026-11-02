@@ -65,6 +65,15 @@ private `AUTH_RECEIPTS_DISCOVERY_FILE` discovery and connection rotation. Missin
 unsafe or incompatible SDKs fail explicitly rather than using legacy credentials.
 Installed/source/provider qualification remains separate.
 
+Current owner login uses capability-aware `discover_credentials({ query,
+accountHint })`. Empty legacy scopes do not describe vault contents. Missing
+discovery authority, unavailable or partial source, completed no-match and
+personal/company choice remain distinct holds. Recover source availability
+through Auth Receipts' supported owner workflow; no source unlock or enrollment
+is implied. Saved-password fallback first requires the exact owned Native task,
+owner authentication and consumer input readiness. The public SDK/helper fixture
+qualifies these examples without proving installed real-login acceptance.
+
 ## Owner-authority login and factors
 
 Import `createOwnerLoginPlaybook`, `createOwnerTotpContinuation` and
