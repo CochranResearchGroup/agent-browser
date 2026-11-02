@@ -1,5 +1,7 @@
 # Active plan index
 
+[P301 BILL login repairs](0301-2026-11-01-bill-login-repairs.md), #518–522: bounded parallel source repair; original recovery evidence remains gated.
+
 [P299 local validation](0299-2026-10-31-local-validation-502.md), spec502 and all four children CLOSED through PR509/main9d1a18522; initial source readiness/reuse pass. The single final review and bounded TDD pass are complete through PR510/mainc738fb694; two Spec blockers and one redundant-suite finding are resolved. No hosted CI or runtime effects.
 
 [P297 independent task TTL](0297-2026-10-28-independent-tab-ttl.md), #490 closed: installed source `9d782cb3c` qualifies fresh logical/physical expiry, peer preservation, responsive owner status and the bounded helper smoke. Shared acceptance and the single zero-finding review are complete; canonical main composition passes source gates for PR491 integration while installed runtime remains the accepted hotfix.

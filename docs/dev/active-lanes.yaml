@@ -1,15 +1,16 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
-  - id: BUG518
+  - id: P301
     product_lane: PL-BUGFIX
-    objective: Accept trusted queue provenance in desktop evidence parsing
+    objective: Close bounded BILL login incident repair tickets
     branch: fix/desktop-evidence-518
     target: main
     accountable_owner: ecochran76
-    work_items: [CochranResearchGroup/agent-browser#518]
-    plan_state: OPEN
-    custody_state: PAUSED_REF
+    work_items: [CochranResearchGroup/agent-browser#518, CochranResearchGroup/agent-browser#519, CochranResearchGroup/agent-browser#520, CochranResearchGroup/agent-browser#521, CochranResearchGroup/agent-browser#522]
+    plan: docs/dev/plans/0301-2026-11-01-bill-login-repairs.md
+    plan_state: ACTIVE
+    custody_state: ACTIVE_WORKTREE
     pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/531
     validation_status: "57 focused evidence tests, strict workspace Clippy, format, policy wiring and changed links pass; broad route-confusion recommendation excluded because production route code is unchanged; initial cache stall retained"
     overlaps: [P300]
