@@ -376,3 +376,6 @@ pub use remote_view_session_pool::{
     prepare_remote_view_session_pool, replenish_remote_view_session_pool,
     RemoteViewPoolRequestStore, RemoteViewPreparedSessionPool, RemoteViewSessionPool,
 };
+
+mod workspace_profile_library;
+pub use workspace_profile_library::*;

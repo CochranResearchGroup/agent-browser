@@ -12,6 +12,8 @@
     "origins",
     "loginIds",
     "accountLabels",
+    "siteAssociations",
+    "siteAssociationsUpdatedAt",
     "profileOrigin",
     "profileClass",
     "userDataDir",
@@ -33,6 +35,22 @@
     "tags"
   ],
   "properties": {
+    "siteAssociations": {
+      "description": "Intended context only; never authenticated identity or action authority.",
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "required": ["sitePolicyId", "account", "organization"],
+        "properties": {
+          "sitePolicyId": { "type": "string" },
+          "account": { "type": "string" },
+          "organization": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "siteAssociationsUpdatedAt": { "type": ["string", "null"] },
     "id": {
       "type": "string"
     },

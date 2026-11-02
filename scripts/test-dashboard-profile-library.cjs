@@ -1,0 +1,50 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const http = require('node:http');
+const { chromium } = require('playwright');
+const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-browser-fixture.cjs');
+(async () => {
+ const root = path.resolve(__dirname, '..'), artifacts = fs.mkdtempSync(path.join(os.tmpdir(), 'profile-library-'));
+ let browser, server;
+ const profile = {id:'work',name:'Research',browserBuild:'stock_chrome',siteAssociations:[{sitePolicyId:'accounts',account:'person@example.test',organization:'Research'}],siteAssociationsUpdatedAt:null,targetReadiness:[{targetServiceId:'accounts',state:'fresh',evidence:'Old probe',lastVerifiedAt:'2026-10-01T12:00:00Z',freshnessExpiresAt:'2026-10-02T12:00:00Z'}],browserCompatibilityEvidence:[{browserFamily:'Chrome',browserVersion:'140',evidence:'retained build'}]};
+ const row = {profile,currentUse:[],observedIdentity:{state:'unknown',account:null},relevantSitePolicyIds:['accounts']};
+ let saved = false, conflict = false;
+ try {
+  await buildWorkspaceViewportFixture(root,path.join(root,'scripts/fixtures/profile-library.tsx'),artifacts);
+  server = http.createServer((req,res) => {res.setHeader('Content-Type',req.url==='/bundle.js'?'application/javascript':'text/html');res.end(req.url==='/bundle.js'?fs.readFileSync(path.join(artifacts,'bundle.js')):'<div id="root"></div><div id="guide-result"></div><script src="/bundle.js"></script>');});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  browser = await chromium.launch({executablePath:'/opt/google/chrome/chrome',headless:true});
+  const page = await browser.newPage();
+  await page.route('**/api/dashboard/profile-library', async route=>{
+   const req = route.request();
+   if(req.method()==='GET') return route.fulfill({json:{success:true,data:{profiles:[row],sitePolicies:[{id:'accounts',name:'Accounts'}]}}});
+   const body=req.postDataJSON();assert.equal(body.operation,'replace_associations');assert.equal(body.profileId,'work');
+   assert.deepEqual(body.expectedAssociations,[{sitePolicyId:'accounts',account:'person@example.test',organization:conflict?'New workspace':'Research'}]);
+   if(conflict) return route.fulfill({status:409,json:{success:false,error:'Profile associations changed; reload before saving'}});
+   assert.equal(body.associations[0].organization,'New workspace');profile.siteAssociations=body.associations;saved=true;
+   return route.fulfill({json:{success:true,data:{profile}}});
+  });
+  await page.goto(`http://127.0.0.1:${server.address().port}`);
+  await page.getByLabel('Search profiles').fill('person@example.test');
+  await page.getByRole('button',{name:'Research',exact:true}).click();
+  await page.getByText('Observed identity: unknown',{exact:true}).waitFor();
+  await page.getByText('Authentication: stale',{exact:true}).waitFor();
+  await page.getByText('Chrome 140',{exact:false}).waitFor();
+  await page.getByRole('button',{name:'SiteGuides for accounts'}).click();
+  assert.equal(await page.locator('#guide-result').textContent(),'accounts');
+  await page.getByLabel('Organization / workspace 1').fill('New workspace');
+  await page.getByRole('button',{name:'Save intended associations'}).click();
+  await page.getByText('Intended associations saved. Authentication evidence is unchanged.',{exact:true}).waitFor();assert(saved);
+  await page.getByText('Authentication: stale',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Add association'}).click();
+  assert.equal(await page.getByLabel('Account 2',{exact:true}).count(),1);
+  await page.getByRole('button',{name:'Remove association 2'}).click();
+  conflict=true;await page.getByLabel('Organization / workspace 1').fill('Another');
+  await page.getByRole('button',{name:'Save intended associations'}).click();
+  await page.getByRole('alert').getByText('Profile associations changed; reload before saving').waitFor();
+  await page.setViewportSize({width:390,height:760});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  console.log('Profile library mounted consumer passed: search, intended labels, unknown observation, stale auth, guide link, multi-association, conflict.');
+ } finally {await browser?.close();if(server)await new Promise(resolve=>server.close(resolve));fs.rmSync(artifacts,{recursive:true,force:true});}
+})().catch(error=>{console.error(error);process.exitCode=1;});
