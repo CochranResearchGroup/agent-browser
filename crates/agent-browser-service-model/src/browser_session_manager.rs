@@ -476,12 +476,29 @@ impl BrowserPlacement {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenBrowserSession {
     pub placement: Option<BrowserPlacement>,
+    /// Initial Native URL for a CDP-free disposable allocation; retained with its data.
+    pub manual_login_url: Option<String>,
+    /// Verified executable for a newly allocated disposable profile.
+    pub disposable_executable: Option<String>,
     pub session_name: String,
     pub profile_intent: BrowserProfileIntent,
     pub activity_at_ms: u64,
 }
 
 impl OpenBrowserSession {
+    /// Pin a verified executable before the first disposable browser effect.
+    pub fn with_disposable_executable(mut self, path: impl Into<String>) -> Self {
+        self.disposable_executable = Some(path.into());
+        self
+    }
+
+    /// Request a CDP-free disposable browser through the existing Native launch path.
+    /// The caller validates provider readiness and URL before admission.
+    pub fn with_manual_login_url(mut self, url: impl Into<String>) -> Self {
+        self.manual_login_url = Some(url.into());
+        self
+    }
+
     /// Constrain this open without changing ordinary default placement.
     pub fn with_placement(mut self, placement: BrowserPlacement) -> Self {
         self.placement = Some(placement);
@@ -497,6 +514,8 @@ impl OpenBrowserSession {
     ) -> Self {
         Self {
             placement: None,
+            manual_login_url: None,
+            disposable_executable: None,
             session_name: session_name.into(),
             profile_intent: BrowserProfileIntent::ExistingDisposable {
                 profile_id: profile_id.into(),
@@ -511,6 +530,8 @@ impl OpenBrowserSession {
     ) -> Self {
         Self {
             placement: None,
+            manual_login_url: None,
+            disposable_executable: None,
             session_name: session_name.into(),
             profile_intent: BrowserProfileIntent::Exact {
                 profile_id: profile_id.into(),
@@ -526,6 +547,8 @@ impl OpenBrowserSession {
     ) -> Self {
         Self {
             placement: None,
+            manual_login_url: None,
+            disposable_executable: None,
             session_name: session_name.into(),
             profile_intent: BrowserProfileIntent::Disposable {
                 policy_id: policy_id.into(),
@@ -1399,6 +1422,15 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .checked_add(self.config.session_idle_timeout_ms)
             .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
         let profile = self.resolve_profile_for_open(&request)?;
+        if let Some(path) = &request.disposable_executable {
+            if profile.kind != BrowserProfileKind::Disposable || !std::path::Path::new(path).is_absolute() {
+                return Err("browser_disposable_build_selection_invalid".into());
+            }
+            if self.state.profile_executables.get(&profile.id).is_some_and(|current| current != path) {
+                return Err("browser_disposable_build_conflict".into());
+            }
+            self.state.profile_executables.insert(profile.id.clone(), path.clone());
+        }
         if let Some(operation) = self.state.profile_operation_ids.get(&profile.id) {
             return Err(format!("browser_profile_operation_pending:{operation}:inspect or resume the owner operation"));
         }
@@ -2173,11 +2205,14 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     .activity_at_ms
                     .checked_add(policy.cleanup_delay_ms)
                     .ok_or_else(|| "browser_disposable_cleanup_expiry_exhausted".to_string())?;
-                let profile = self.effects.allocate_disposable_profile(
+                let mut profile = self.effects.allocate_disposable_profile(
                     &policy,
                     &allocation_id,
                     &request.session_name,
                 )?;
+                if let Some(url) = &request.manual_login_url {
+                    profile.manual_login_url = Some(url.clone());
+                }
                 if profile.id != allocation_id || profile.kind != BrowserProfileKind::Disposable {
                     return Err("browser_disposable_allocation_identity_invalid".to_string());
                 }

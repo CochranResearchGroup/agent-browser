@@ -8527,3 +8527,36 @@ fn current_retirement_excludes_historical_peers_through_sqlite_custody() {
         );
     }
 }
+
+#[test]
+fn workspace_manual_disposable_uses_native_owner_and_retains_original_allocation() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut host = host(&fixture, provider, calls.clone());
+    let command = serde_json::json!({"action":"browser_session_open","sessionName":"manual-disposable",
+        "url":"about:blank","manualLogin":true,"leaveOpen":true,"activityAtMs":100,
+        "serviceName":"fixture","agentName":"operator","originKind":"human","taskName":"Manual browsing"});
+    let first = host.handle_command(&command);
+    assert_eq!(first["success"], true, "{first}");
+    let id = first["data"]["sessionId"].as_str().unwrap().to_owned();
+    let profile_id = first["data"]["profileId"].as_str().unwrap().to_owned();
+    let browser = host.state().browsers.values().next().unwrap();
+    assert!(browser.cdp_endpoint.is_empty(), "CDP-free cannot acquire a debugging endpoint");
+    assert_eq!(host.state().disposable_profiles[&profile_id].profile.manual_login_url.as_deref(), Some("about:blank"));
+    assert!(host.state().leave_open_session_ids.contains(&id));
+    assert_eq!(host.handle_command(&command)["data"]["sessionId"], id);
+    assert_eq!(calls.get(), 1, "reopening the same original task cannot launch again");
+    assert_eq!(host.state().disposable_profiles.len(), 1);
+}
+
+#[test]
+fn workspace_manual_launch_retains_original_request_and_inspection_never_replays() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider, calls.clone());
+    let inspect = consumer.handle_command(&serde_json::json!({"action":"browser_session_workspace_open", "operation":"inspect", "operationId":"8e54f8ab-91ed-4bcb-91a2-88ab0df1a001", "operator":"operator"}));
+    assert!(inspect["error"].as_str().unwrap_or("").contains("launch_unknown"), "{inspect}");
+    assert_eq!(calls.get(), 0);
+}

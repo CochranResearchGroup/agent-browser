@@ -83,6 +83,7 @@ struct FixtureEffects {
     disposable_delete_error: Option<String>,
     retirement_guard_active: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     launches: Vec<String>,
+    manual_launch_urls: Vec<Option<String>>,
     executable: String,
     profile_executables: BTreeMap<String, String>,
     launch_executables: Vec<(String, String)>,
@@ -391,6 +392,7 @@ impl BrowserSessionEffects for FixtureEffects {
                 .unwrap_or(&self.executable)
                 .clone(),
         ));
+        self.manual_launch_urls.push(profile.manual_login_url.clone());
         let sequence = self.launches.len();
         Ok(BrowserLaunch {
             process_identity: None,
@@ -3266,4 +3268,43 @@ fn authentication_retention_blocks_new_profile_quota_eviction() {
     assert!(state.sessions.contains_key(&first.session_id));
     assert!(effects.disposable_deletions.is_empty());
     assert_eq!(effects.disposable_allocations.len(), 1);
+}
+
+#[test]
+fn disposable_manual_browser_keeps_its_mode_and_data_lifetime_across_reopen() {
+    let catalog = catalog_with_disposable_policy();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects { browser_live: true, ..FixtureEffects::default() };
+    let config = BrowserSessionManagerConfig { session_idle_timeout_ms: 300_000, remote_view_desktops: vec![] };
+    let opened = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::disposable("operator", "default", 1_000).with_manual_login_url("about:blank"))
+        .unwrap();
+    assert_eq!(effects.manual_launch_urls, [Some("about:blank".to_string())]);
+    assert_eq!(state.disposable_profiles[&opened.profile_id].profile.kind, BrowserProfileKind::Disposable);
+    let mut restored: BrowserSessionState = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+    let reopened = BrowserSessionManager::new(&mut restored, &catalog, &mut effects, config)
+        .open(OpenBrowserSession::disposable("operator", "default", 2_000).with_manual_login_url("about:blank"))
+        .unwrap();
+    assert_eq!(reopened.browser_id, opened.browser_id);
+    assert_eq!(effects.disposable_allocations.len(), 1);
+    assert_eq!(effects.manual_launch_urls.len(), 1);
+}
+
+#[test]
+fn disposable_launch_pins_the_selected_executable_before_launch_and_after_reload() {
+    let catalog = catalog_with_disposable_policy();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects { browser_live: true, ..FixtureEffects::default() };
+    let config = BrowserSessionManagerConfig { session_idle_timeout_ms: 300_000, remote_view_desktops: vec![] };
+    let opened = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::disposable("build-choice", "default", 1_000).with_disposable_executable("/opt/chromium/chromium"))
+        .unwrap();
+    assert_eq!(effects.launch_executables, [(opened.profile_id.clone(), "/opt/chromium/chromium".into())]);
+    let mut restored: BrowserSessionState = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+    assert_eq!(restored.profile_executables[&opened.profile_id], "/opt/chromium/chromium");
+    let error = BrowserSessionManager::new(&mut restored, &catalog, &mut effects, config)
+        .open(OpenBrowserSession::disposable("build-choice", "default", 2_000).with_disposable_executable("/opt/chrome/chrome"))
+        .unwrap_err();
+    assert!(error.contains("build_conflict"), "{error}");
+    assert_eq!(effects.launch_executables.len(), 1);
 }
