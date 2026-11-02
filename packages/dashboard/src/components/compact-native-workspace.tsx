@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, LogOut, Monitor, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Link2, Wrench, Plus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ChevronDown, LogOut, Monitor, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Link2, Wrench, Plus, GraduationCap } from "lucide-react";
 import { buildNativeRailGroups } from "@/lib/native-rail";
 import { tabDescription } from "@/lib/tab-description";
 import { queueWorkspaceFocusRequest } from "@/lib/workspace-focus-request";
@@ -16,10 +16,8 @@ import { NativeTabActions } from "@/components/native-tab-actions";
 import type { NativeBrowserWindow } from "@/lib/native-window-inventory";
 
 import { ManualBrowserLaunchDialog } from "@/components/manual-browser-launch-dialog";
-import { ProfileLab, type ProfileLabSource } from "@/components/profile-lab";
-import type { LibraryProfile } from "@/lib/workspace-profile-library";
-import { ProfileLibrary } from "@/components/profile-library";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import type { ProfileLabSource } from "@/components/profile-lab";
+import { WorkspaceLibraryDialog } from "@/components/workspace-library-dialog";
 
 type Props = {
   runtimeEnvironment?: "production" | "development";
@@ -47,9 +45,8 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
   const [launchNotice, setLaunchNotice] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [labSource, setLabSource] = useState<ProfileLabSource | null>(null);
-  const [labOpen, setLabOpen] = useState(false);
-  const [libraryProfiles, setLibraryProfiles] = useState<ProfileLabSource[]>([]);
-  const profilesChanged = useCallback((profiles: LibraryProfile[]) => setLibraryProfiles(profiles.map(profile => ({id:profile.id,name:profile.name || profile.id}))), []);
+  const [librarySection, setLibrarySection] = useState<'profiles'|'guides'|'lab'>('profiles');
+  const [launchProfile, setLaunchProfile] = useState<string | undefined>();
   const [handoffsOpen, setHandoffsOpen] = useState(false);
   const [sharedLink, setSharedLink] = useState<{ url: string; label: string } | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
@@ -87,6 +84,7 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
   const drag = useRef<{ x: number; width: number } | null>(null);
   const root = useRef<HTMLElement>(null);
   const [closedTabs, setClosedTabs] = useState<Set<string>>(new Set());
+  const selectedTask = tabs.find(tab => tab.id === selection.tabId && tab.browserId === selection.browserId && tab.managedTask && tab.sessionId && !closedTabs.has(tab.id));
   const [closeRefreshError, setCloseRefreshError] = useState<string | null>(null);
   const tabClosed = async (tab: WorkspaceServiceTab) => {
     // Only an exact owner receipt reaches this callback. Hide its stale frame
@@ -198,17 +196,17 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
         }} onPointerDown={event => { drag.current = { x: event.clientX, width }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (drag.current) saveWidth(drag.current.width + event.clientX - drag.current.x); }} onPointerUp={() => { drag.current = null; }} onLostPointerCapture={() => { drag.current = null; }} />}
       </aside>
       <section className="native-workspace-main" aria-label="Browser workspace">
-        <header className="native-workspace-toolbar"><img src="/branding/agent-browser-logo.png" alt="" width={28} height={28} className="shrink-0" /><span>Agent Browser</span>{runtimeEnvironment === "development" && <span data-runtime-environment={runtimeEnvironment}>Development</span>}<span className="native-workspace-user">{userLabel}</span><SubsystemHealthIndicator inventoryIssue={error} nativeIssue={nativeIssue} loading={loading} /><button type="button" aria-label="Open browser" title="Open browser" onClick={() => setLaunchOpen(true)}><Plus size={14} /></button><button type="button" aria-label="Profiles and SiteGuides" title="Profiles and SiteGuides" onClick={() => {setLabSource(null);setLabOpen(false);setLibraryOpen(true)}}><Wrench size={14} /></button><button type="button" aria-label="Refresh browsers" title="Refresh browsers" onClick={() => void onRefresh()}><RefreshCw size={14} /></button>{canEndLocalSession && <button type="button" aria-label="End local session" title="End local session" onClick={onLogout}><LogOut size={14} /></button>}</header>
+        <header className="native-workspace-toolbar"><img src="/branding/agent-browser-logo.png" alt="" width={28} height={28} className="shrink-0" /><span>Agent Browser</span>{runtimeEnvironment === "development" && <span data-runtime-environment={runtimeEnvironment}>Development</span>}<span className="native-workspace-user">{userLabel}</span><SubsystemHealthIndicator inventoryIssue={error} nativeIssue={nativeIssue} loading={loading} /><button type="button" aria-label="Open browser" title="Open browser" onClick={() => {setLaunchProfile(undefined);setLaunchOpen(true)}}><Plus size={14} /></button><button type="button" aria-label="Profiles and SiteGuides" title="Profiles and SiteGuides" onClick={() => {setLabSource(null);setLibrarySection("profiles");setLibraryOpen(true)}}><Wrench size={14} /></button><button type="button" aria-label="Teach this site" title={selectedTask ? "Teach this site with Native recording and narration" : "Select a managed browser task to teach this site"} disabled={!selectedTask} onClick={() => {setLibrarySection("guides");setLibraryOpen(true)}}><GraduationCap size={14} /></button><button type="button" aria-label="Refresh browsers" title="Refresh browsers" onClick={() => void onRefresh()}><RefreshCw size={14} /></button>{canEndLocalSession && <button type="button" aria-label="End local session" title="End local session" onClick={onLogout}><LogOut size={14} /></button>}</header>
         {launchNotice && <div role="status" className="native-workspace-error">{launchNotice}</div>}
         {closeRefreshError && <div role="alert" className="native-workspace-error">{closeRefreshError}</div>}
         {error && <div role="alert" className="native-workspace-error">{error} <button type="button" onClick={() => void onRefresh()}>Retry</button></div>}
         <div className="native-workspace-desktop">{selection.tabId && closedTabs.has(selection.tabId) ? <p role="status" className="native-task-message">The selected tab was closed. Select another tab to continue.</p> : children}</div>
       </section>
-      <ManualBrowserLaunchDialog open={launchOpen} onOpenChange={setLaunchOpen} userLabel={userLabel} onOpened={selectManualTask} onReturnTask={async profile => {
+      <ManualBrowserLaunchDialog initialProfileId={launchProfile} open={launchOpen} onOpenChange={setLaunchOpen} userLabel={userLabel} onOpened={selectManualTask} onReturnTask={async profile => {
         if (!profile.browserId || !profile.taskId || !profile.tabId) throw new Error("workspace_task_unknown");
         await selectManualTask({browserId: profile.browserId, taskId: profile.taskId, tabId: profile.tabId, profileId: profile.id});
-      }} onCopyProfile={profile => {setLabSource({id:profile.id,name:profile.name,taskId:profile.taskId,sessionName:profile.sessionName,browserId:profile.browserId});setLabOpen(true);setLibraryOpen(true)}} />
-      <Dialog open={libraryOpen} onOpenChange={setLibraryOpen}><DialogContent className="native-task-dialog"><DialogHeader><DialogTitle>Profiles and SiteGuides</DialogTitle><DialogDescription>Manage intended site identities separately from observed authentication.</DialogDescription></DialogHeader><nav aria-label="Library sections"><button type="button" aria-pressed={!labOpen} onClick={() => setLabOpen(false)}>Profiles</button><button type="button" aria-pressed={labOpen} disabled={!libraryProfiles.length&&!labSource} onClick={() => setLabOpen(true)}>Profile Lab</button></nav>{labOpen ? <ProfileLab profiles={labSource ? [labSource] : libraryProfiles} onRefresh={onRefresh} /> : <ProfileLibrary onProfilesChange={profilesChanged} />}<a href={diagnosticsHref}>Service diagnostics</a></DialogContent></Dialog>
+      }} onCopyProfile={profile => {setLabSource({id:profile.id,name:profile.name,taskId:profile.taskId,sessionName:profile.sessionName,browserId:profile.browserId});setLibrarySection("lab");setLibraryOpen(true)}} />
+      <WorkspaceLibraryDialog open={libraryOpen} onOpenChange={setLibraryOpen} initialSection={librarySection} source={labSource} task={selectedTask?.sessionId && (selectedTask.profileId || nodes.find(node=>node.browserId===selectedTask.browserId)?.profileId) ? {taskId:selectedTask.sessionId,profileId:(selectedTask.profileId || nodes.find(node=>node.browserId===selectedTask.browserId)?.profileId)!} : null} onRefresh={onRefresh} diagnosticsHref={diagnosticsHref} onOpenProfile={profileId=>{setLaunchProfile(profileId);setLaunchOpen(true)}} />
       <NativeHandoffDrawer open={handoffsOpen} onOpenChange={setHandoffsOpen} busy={shareBusy} error={shareError} sharedLink={sharedLink}
         railWidth={collapsed ? 40 : width} records={handoffs} inventoryLoading={loading} inventoryError={error ? "Could not refresh handoffs. Showing the last reported records." : null} onRefresh={onRefresh}
         onReturnFocus={() => shareFocus.current?.focus()} />

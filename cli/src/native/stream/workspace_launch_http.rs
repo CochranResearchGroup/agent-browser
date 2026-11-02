@@ -98,6 +98,7 @@ mod tests {
                 .env_remove("AGENT_BROWSER_DASHBOARD_INGRESS_VERIFY_URL")
                 .env_remove("AGENT_BROWSER_DASHBOARD_INGRESS_WORKSPACE_URL")
                 .env_remove("AGENT_BROWSER_DASHBOARD_INGRESS_USERS")
+                .env_remove("AGENT_BROWSER_SITEGUIDES_CONFIG")
                 .env("AGENT_BROWSER_EXECUTABLE_PATH",root.join("must-not-launch"))
                 .status().unwrap();
             let _ = std::fs::remove_dir_all(&root);
@@ -124,6 +125,11 @@ mod tests {
             let login=String::from_utf8(dashboard_auth::login_response(&[],&json!({"username":"admin","password":password}).to_string(),false).into_http_bytes()).unwrap();
             let cookie=login.lines().find_map(|line|line.strip_prefix("Set-Cookie: ").and_then(|s|s.split(';').next())).unwrap();
             let endpoint="/api/dashboard/browser-launch";
+            assert!(exchange("GET","/api/dashboard/siteguides","",Value::Null).await.0.contains("401"));
+            let (guide_status,guides)=exchange("GET","/api/dashboard/siteguides",cookie,Value::Null).await;
+            assert!(guide_status.contains("503"),"unconfigured source-free owner must fail explicitly: {guide_status} {guides}");
+            assert_eq!(guides["success"],false);
+
             assert!(exchange("GET","/api/dashboard/profile-library","",Value::Null).await.0.contains("401"));
             let (profile_status,profiles)=exchange("GET","/api/dashboard/profile-library",cookie,Value::Null).await;
             assert!(profile_status.contains("200"),"{profile_status} {profiles}");

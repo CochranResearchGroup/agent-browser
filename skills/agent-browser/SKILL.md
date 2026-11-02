@@ -121,7 +121,7 @@ The advanced reference covers host resource waits and retained history; continue
 Use `browser_discover` for advanced MCP metadata.
 
 
-For workspace sign-in, read [workspace access](references/workspace-sign-in.md); for viewer/startup failures, read [diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics).
+For sign-in and workspace teaching, read [workspace tools](references/workspace-sign-in.md); for viewer failures, read [diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics).
 
 ## Browser mode and builds
 

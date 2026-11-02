@@ -7389,6 +7389,13 @@ Commands:
   Compatible connected profiles get an independent task/tab; conflicts need a choice.
   Lost launch replies retain the original operation; inspect before another creation.
   Profiles and SiteGuides manages intended site/account/workspace associations.
+  Teach this site consumes finalized Native video and selected human narration.
+  Choose exact task/profile/site and intended identity; labels are not login proof.
+  Scoped recording references require private server configuration; no automatic
+  Remote View source discovery or new viewer/recording controls are introduced.
+  Node >=18 and ffmpeg support installed bounded visual interpretation through
+  the configured chat gateway, without browser tools. Review exact draft content
+  and require a distinct receiving-verifier fresh repeat before acceptance.
   Intended labels, observed identity and authentication freshness remain distinct.
   profile-duplicate JSON Copy/inspect; retry_launch or finish_without_opening
   Profile Lab: Profiles and SiteGuides; choose source, target build/mode and copy name.

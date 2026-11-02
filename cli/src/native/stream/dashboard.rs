@@ -489,6 +489,17 @@ pub(super) async fn handle_dashboard_connection(mut stream: tokio::net::TcpStrea
         None
     };
 
+    if path == "/api/dashboard/siteguides" {
+        let body = if method == "POST" {
+            read_post_body(&mut stream, &buf, n).await
+        } else {
+            String::new()
+        };
+        super::http::handle_siteguides_http(&mut stream, method, &body, &headers, secure_cookie)
+            .await;
+        return;
+    }
+
     if path == "/api/dashboard/profile-library" {
         let body = if method == "POST" {
             read_post_body(&mut stream, &buf, n).await
