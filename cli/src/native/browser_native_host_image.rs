@@ -44,7 +44,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             std::time::Duration::from_secs(10),
         )
         .map_err(|_| "browser_native_owner_configuration_invalid")?;
-        let control=http.native_request("control",&json!({"desktopId":assignment.viewing_desktop_id,"expectedGeneration":assignment.viewing_generation,"operation":"status"})).map_err(|_|"browser_native_original_observation_control_unverified")?;
+        let control=http.native_control_status(&json!({"desktopId":assignment.viewing_desktop_id,"expectedGeneration":assignment.viewing_generation,"operation":"status"}))?;
         if control["desktopId"] != observation.desktop_id
             || control["generation"] != observation.generation
             || control["owner"] != "agent"

@@ -66,8 +66,8 @@ Default builds disable cache after the observed sccache stall; Cargo admission
 remains mandatory. Coordinate at most two repository Cargo invocations, use
 isolated homes and fixture ports, preserve first failures and unknown outcomes.
 
-Final broad review: pending, exactly one invocation. Review fixed point is starting origin/main bddb5b3fa9437639215a8431664dd6ef2da88575;
-optional clarification requested and no alternate supplied. Accepted findings: none yet. One TDD remediation: pending.
+Final broad review: complete, exactly one invocation. Review fixed point is starting origin/main bddb5b3fa9437639215a8431664dd6ef2da88575;
+optional clarification requested and no alternate supplied. Accepted findings: Standards S1 and Spec F1/F2, all P2 and resolved. One TDD remediation: complete.
 
 ## Closeout obligations
 
@@ -134,3 +134,75 @@ unproven; keep the ticket open. No live probe/input/configuration/recovery occur
 
 Source tickets518-521 are eligible for closure under the approved source briefs;
 no merge, installation, provider commissioning or actual login is claimed.
+
+## Single broad review and adjudication
+
+Frozen review tip77921bc1646c3f78140d01a363e3bd9fcd636d54 against fixed
+basebddb5b3fa9437639215a8431664dd6ef2da88575; nonempty three-dot diff and
+commit list captured. Independent /root/review_standards and /root/review_spec
+reviewed the same packet once. No second broad review is authorized in this slice.
+
+### Standards
+
+S1 blocking P2: accepted. Direct readiness-helper tests do not detect removal of
+actual Host input and ready projection hooks. Add an actual Host/SQLite/HTTP seam
+regression and qualify its oracle against removal of the production hooks.
+S2 nonblocking_backlog: duplicated static owner-code allowlists are a possible
+maintenance smell; operation-specific uncertainty remains intentional. No broad
+refactor is necessary for the source repair. Selector registration is an optional
+automation gap, not an unmet gate: manual fixture coverage is explicit and the
+selector's broad fallback remains intact.
+
+### Spec
+
+F1 blocking P2: accepted. Non-JSON, malformed or oversized launch-environment
+HTTP failure can lose known status before the safe cause projection.
+F2 blocking P2: accepted. Checkbox/image control-status preflights discard typed
+auth causes before the newly repaired Native request wrapper.
+#519/#520 reopened for bounded remediation; #518/#521 source closure remains.
+#522 remains an evidence gate, not a source-fix acceptance claim.
+
+## One bounded TDD remediation pass
+
+Invocation count1. Seams: real owner control-status HTTP projection (catches auth
+cause erasure; no actual provider proof), real consumer launch-environment HTTP
+read (catches status loss independently of invalid bodies), and actual Host
+Native process command with real SQLite/fake external owner (catches missing
+readiness/input wiring; no live guarded-input commissioning).
+Work vertical slices per accepted finding; retain red/green commands and known
+bad-source diff for the Host oracle. No new broad review or unrelated feature work.
+
+## Remediation result
+
+Standards S1 and Spec F1/F2 are resolved in the single bounded pass. No second
+broad review ran. The nonblocking duplication/selector advice remains deferred;
+no unrelated architecture or validation-selector work was added.
+
+Exact test environment for all CLI Rust commands:
+`AGENT_BROWSER_CARGO_CACHE=off CARGO_TARGET_DIR=/home/ecochran76/workspace.local/agent-browser/cli/target`.
+All commands use `scripts/ci/rust-tests.sh --focused FILTER`:
+
+| Finding/seam | Filter | Red evidence | Green evidence |
+| --- | --- | --- | --- |
+| F2 control preflight | native_control_preflight | generic control-unverified lost401 | 1 passed; both source callers use composed safe projection |
+| F1 consumer failure | launch_environment_failure_retains | HTML503 became OutcomeUnknown | 1 passed across HTML/malformed/oversized cases |
+| S1 actual Host | native_host_readiness | known-bad removal returned ready=true and accepted input | 2 passed after exact source restoration; disabled owner receives zero input |
+
+The first Host fixture attempt failed setup with unsupported empty SQLite schema0;
+it is retained as a harness failure, not product red evidence. The fixture now
+uses supported SQLite migration. The qualified red run exercised both actual
+Host failures after deleting the production hooks. A retained outside-Git diff
+and good/bad SHA256 receipt prove mutation of the real source; restoration's
+checksum matches the pristine copy. No known-bad hook deletion remains.
+
+Final focused transport suite14 and original-request/readback suite14 passed.
+Final strict workspace Clippy and cargo-safe fmt passed. Policy wiring (11 harness
+tests), links and patch hygiene pass. Prior evidence57, readiness5, recovery10,
+Auth SDK/helper17, JavaScript/types and docs-build results are reused because
+those source seams/pages did not change during remediation; the affected HTTP,
+Host and readback risks were explicitly rerun. This is focused local Linux source
+qualification, not a comprehensive/multiplatform or installed-provider claim.
+
+Source closure restored for519/520;518/521 remain closed.522 stays open on the
+exact original-evidence gate. Integration branch and PR531 retain all source;
+root checkout will close after the final clean-state/durable-custody readback.

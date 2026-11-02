@@ -9,10 +9,10 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#518, CochranResearchGroup/agent-browser#519, CochranResearchGroup/agent-browser#520, CochranResearchGroup/agent-browser#521, CochranResearchGroup/agent-browser#522]
     plan: docs/dev/plans/0301-2026-11-01-bill-login-repairs.md
-    plan_state: ACTIVE
-    custody_state: ACTIVE_WORKTREE
+    plan_state: OPEN
+    custody_state: PAUSED_REF
     pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/531
-    validation_status: "Source518-521 qualified: evidence57, ownerHTTP12, originalreadback14, readiness5, recovery10, AuthSDK17; strict Clippy/fmt/docs/link gates pass; single review pending;522 missing original cause/custody remains open"
+    validation_status: "518-521 source closed; one Standards/Spec review and one bounded TDD pass completed, all3 P2 blockers resolved; strict and focused gates pass;522 remains needs-info on original cause/custody"
     overlaps: [P300]
     reconciled_overlaps: ["518 owns evidence parser and bounded regression only; preserve P300 source and serialize catalog at integration"]
     limitations: ["Explicit operator admission of dedicated checkout; close through governed helper after durable PR custody", "No runtime or provider effects"]
