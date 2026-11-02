@@ -354,7 +354,8 @@
     "test:workspace-toolbar": "node scripts/test-workspace-toolbar.cjs",
     "test:dashboard-profile-library": "node scripts/test-dashboard-profile-library.cjs",
     "test:workspace-profile-library-client": "node --no-warnings --experimental-strip-types scripts/test-workspace-profile-library-client.ts",
-    "test:profile-library-service-client": "node scripts/test-profile-library-service-client.mjs"
+    "test:profile-library-service-client": "node scripts/test-profile-library-service-client.mjs",
+    "test:workspace-auth-entry": "node scripts/test-workspace-auth-entry.cjs"
   },
   "keywords": [
     "browser",
