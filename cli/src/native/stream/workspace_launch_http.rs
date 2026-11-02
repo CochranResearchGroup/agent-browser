@@ -105,6 +105,9 @@ mod tests {
             return;
         }
         tokio::runtime::Runtime::new().unwrap().block_on(async {
+            // Debug SHA-256 discovery over large native builds is slower than
+            // the installed optimized candidate. This is a functional transport
+            // check; the frontend deadline and runtime acceptance stay separate.
             async fn exchange(method:&str,path:&str,cookie:&str,body:Value)->(String,Value) {
                 use tokio::io::{AsyncReadExt,AsyncWriteExt};
                 let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -112,7 +115,7 @@ mod tests {
                 let server=tokio::spawn(async move {let(stream,_)=listener.accept().await.unwrap();handle_dashboard_connection(stream).await;});
                 let mut client=tokio::net::TcpStream::connect(address).await.unwrap();let body=body.to_string();
                 client.write_all(format!("{method} {path} HTTP/1.1\r\nHost: localhost\r\nCookie: {cookie}\r\nRemote-User: admin\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).as_bytes()).await.unwrap();
-                let mut bytes=vec![];tokio::time::timeout(std::time::Duration::from_secs(20),client.read_to_end(&mut bytes)).await.unwrap().unwrap();server.await.unwrap();
+                let mut bytes=vec![];tokio::time::timeout(std::time::Duration::from_secs(60),client.read_to_end(&mut bytes)).await.unwrap().unwrap();server.await.unwrap();
                 let raw=String::from_utf8(bytes).unwrap();let(head,body)=raw.split_once("\r\n\r\n").unwrap();(head.lines().next().unwrap().into(),serde_json::from_str(body).unwrap())
             }
             let auth=dashboard_auth::ensure_dashboard_auth_config().unwrap();

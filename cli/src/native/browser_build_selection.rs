@@ -76,6 +76,9 @@ fn candidate_paths(command: &Value, additional: &[String]) -> Result<Vec<PathBuf
             "/opt/google/chrome/chrome",
             "/usr/lib/chromium/chromium",
             "/usr/lib/chromium-browser/chromium-browser",
+            // Inspect the native executable directly. The snap launcher can
+            // change desktop settings and is never a discovery probe.
+            "/snap/chromium/current/usr/lib/chromium-browser/chrome",
         ] {
             if Path::new(path).is_file() {
                 paths.insert(PathBuf::from(path));

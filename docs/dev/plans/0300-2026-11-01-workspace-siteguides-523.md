@@ -24,13 +24,13 @@ Root owns compact workspace/launcher integration, public HTTP/service wiring, ce
 
 | Ticket | Outcome | Blocked by | State / owner |
 | --- | --- | --- | --- |
-| #524 | Use existing ingress sign-in for the compact workspace | none | integrated/b35e2d795; cumulative gates pending |
-| #525 | Open manual browsers from the existing compact toolbar | none | running/root |
-| #526 | Manage site identities and choose matching profiles | none | integrated/129418c21,73b7ed08d,cd9fa2502,94099363b; root gateway final gate pending |
-| #527 | Plan and execute independent profile copies through Profile Lab | none | validated/root932d40070 plus root composition; tracker closure pending |
+| #524 | Use existing ingress sign-in for the compact workspace | none | validated/5f3f34009; tracker CLOSED |
+| #525 | Open manual browsers from the existing compact toolbar | none | validated/root; tracker closure pending |
+| #526 | Manage site identities and choose matching profiles | none | validated/5f3f34009; tracker CLOSED |
+| #527 | Plan and execute independent profile copies through Profile Lab | none | validated/5f3f34009; tracker CLOSED |
 | #528 | Manage SiteGuides and teach through Remote View recordings | #525, #526 | pending |
 | #529 | Qualify the integrated Native workspace and narrated teaching journey | #524, #525, #526, #528 | pending |
-| #530 | Qualify real-account Chrome and Chromium profile portability | #527 | pending |
+| #530 | Qualify real-account Chrome and Chromium profile portability | #527 | blocked/p300_copy527; private packet prepared, donor/context missing |
 
 ## Validation and acceptance
 
@@ -61,3 +61,17 @@ Root cumulative cargo-safe workspace Clippy with warnings denied passed on the i
 The actual public dashboard launcher HTTP test passed anonymous/spoof refusal, authenticated catalog, preflight refusal, private/unknown profile protection, original readback and no browser/daemon launch. A final composition rerun adds the authenticated dashboard profile-library forwarder after526's fresh native inventory overlay. Root's disposable Native launch and original-request tests passed, including serialization/reopen and recovery of an existing allocation whose final reply was missing. That recovery acknowledges exact allocation only; navigation remains unconfirmed and is never replayed.
 
 Review count remains0 and bounded final TDD count0. Tests used synthetic fixtures and isolated homes; no production/provider/account/media effects occurred. Draft integration PR: https://github.com/CochranResearchGroup/agent-browser/pull/532.
+
+## Tracker and acceptance preparation
+
+524,526 and527 are tracker CLOSED following source validation at5f3f34009.525 remains open while its cumulative native-browser compartment runs. The final public dashboard launcher/profile-library forwarding test passed on integrated source, including protected reads, spoof refusal, no-effect preflight and no-launch readback.416 service-model tests/doctests passed. The review/remediation counts remain0.
+
+530 was assigned to the same copy worker only after527 validated/closed. Its clean admitted auxiliary was reused at5f3f34009 on platform/p300-530-portability; old527 branch/commit remain durable. A private four-row target-family by CDP-mode packet and original-preserving sequence exist outside Git under the user acceptance directory. Every row is NOT_RUN and the donor is unset. Controlled empty-environment native version probes confirmed Chrome and Chromium metadata without opening profiles. The installed candidate differs from P300 source. Donor/identity/workload, exact source impact, qualified installed context, storage probe and cleanup disposition remain execution gates. Discovery now includes the direct native snap Chromium executable while excluding its desktop-setting launcher. This is executable metadata, not browser/profile portability proof.
+
+##525 completed source qualification
+
+The official isolated cli-native-browser compartment passed382 tests with11 ignored at5f3f34009; ignored physical E2E rows are not claimed. Official isolated ingress and profile-library native HTTP focused checks each passed. Adding direct native snap discovery exposed debug-only catalog hashing cost in the functional HTTP fixture: its20-second test read timer expired while the debug build hashed large installed executables. The fixture now allows60 seconds and passes32.7 seconds; the product frontend deadline is unchanged and cold optimized-candidate performance remains an installed acceptance row, not an inferred result.
+
+The actual Page ingress/local-control regression exposed a missed source prop.524 was reopened, fixed in9892ec9ce, then reclosed after the real Page mounted red/green and TypeScript passed. Its previous backend/role/build evidence remains valid within unchanged scope.
+
+A120-profile390px mounted regression exposed an unbounded launcher dialog. Scoped bounded-dialog/list styling and accessible controls now pass; original-operation, conflict, explicit-return and large-list checks remain green. Synthetic mobile screenshot was visually inspected outside Git. Profile Lab and actual compact toolbar composition pass with the dialog styling. No native viewer/control implementation was replaced.

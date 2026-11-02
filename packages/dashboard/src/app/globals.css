@@ -5726,3 +5726,43 @@ button {
 .native-workspace-browser-row .native-workspace-browser { flex: 1; min-width: 0; }
 .native-browser-mode { display: flex; align-items: center; justify-content: center; padding: 6px; flex-shrink: 0; border-radius: 4px; }
 .native-browser-mode:hover, .native-browser-mode:focus-visible { background: var(--muted); outline: 1px solid currentColor; }
+
+/* Workspace tools stay inside a bounded dialog, including large profile lists. */
+.native-task-dialog {
+  position: fixed; top: 50%; left: 50%; translate: -50% -50%;
+  transform: none; z-index: 60; box-sizing: border-box;
+  width: min(42rem, calc(100vw - 2rem)); max-width: calc(100vw - 2rem);
+  max-height: calc(100dvh - 2rem); overflow: auto; overscroll-behavior: contain;
+  padding: 20px; border: 1px solid #45454d; border-radius: 12px;
+  background: #202023; color: #e6e6e8; font: 13px/1.5 system-ui, sans-serif;
+  overflow-wrap: anywhere;
+}
+.native-task-dialog :is(h2, h3, h4) { margin: 0 0 8px; font-weight: 600; }
+.native-task-dialog p { margin: 8px 0; }
+.native-task-dialog :is(label, fieldset) { min-width: 0; }
+.native-task-dialog label { display: grid; gap: 4px; margin: 8px 0; }
+.native-task-dialog label:has(input[type="checkbox"]), .native-task-dialog label:has(input[type="radio"]) { display: flex; align-items: flex-start; gap: 8px; }
+.native-task-dialog :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%;
+  border: 1px solid #555560; border-radius: 5px; padding: 7px 9px;
+  background: #18181b; color: inherit; font: inherit;
+}
+.native-task-dialog button:not([data-slot="dialog-close"]) {
+  border: 1px solid #555560; border-radius: 5px; padding: 6px 10px;
+  background: #29292e; color: inherit; font: inherit; cursor: pointer;
+  max-width: 100%; white-space: normal; overflow-wrap: anywhere;
+}
+.native-task-dialog button:disabled { opacity: .5; cursor: default; }
+.native-task-dialog button[aria-pressed="true"] { border-color: #93c5fd; background: #26364b; }
+.native-task-dialog :is(button, input, select, textarea, summary):focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
+.native-task-dialog fieldset { margin: 12px 0; padding: 10px; border: 1px solid #45454d; border-radius: 6px; }
+.native-task-dialog nav[aria-label="Library sections"] { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.manual-browser-launch { display: grid; gap: 6px; min-width: 0; }
+.manual-browser-launch [aria-label="Existing profiles"] { max-height: min(16rem, 35dvh); overflow: auto; overscroll-behavior: contain; display: grid; gap: 6px; }
+.manual-browser-launch [aria-label="Existing profiles"] button { text-align: left; }
+.manual-browser-launch [aria-label="Existing profiles"] small { display: block; color: #b6b6bf; }
+.manual-browser-launch details { border: 1px solid #45454d; border-radius: 6px; padding: 8px; }
+.manual-browser-launch summary { cursor: pointer; }
+.manual-browser-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.native-task-dialog section[aria-label="Profiles"] ul { display: grid; gap: 6px; max-height: 16rem; overflow: auto; padding: 0; list-style: none; }
+.native-task-dialog section[aria-label="Profiles"] li { display: grid; gap: 3px; padding: 8px; border: 1px solid #45454d; border-radius: 6px; }
