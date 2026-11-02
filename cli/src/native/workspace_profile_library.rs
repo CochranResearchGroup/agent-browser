@@ -29,7 +29,14 @@ pub(crate) fn workspace_profile_library_in_repository(
     let actor = ProfileLibraryActor {
         subject_id: subject.map(str::to_string),
         assurance: if authenticated.is_some() {
-            ProfileIdentityAssurance::RegisteredCapability
+            match cmd
+                .get("servicePrincipalProvenance")
+                .and_then(Value::as_str)
+            {
+                Some("registered_capability") => ProfileIdentityAssurance::RegisteredCapability,
+                Some("authenticated_transport") => ProfileIdentityAssurance::AuthenticatedIngress,
+                _ => ProfileIdentityAssurance::Unknown,
+            }
         } else if subject.is_some() {
             ProfileIdentityAssurance::SelfDeclared
         } else {

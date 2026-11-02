@@ -49,14 +49,17 @@ export type ProfileLibraryData = {
         name: string;
     }[];
 };
-export type ProfileSelectionRequest = {
+export type ProfileSelectionRequest = ({
+    profileId: string;
+    sitePolicyId?: string;
+    account?: string;
+    organization?: string;
+} | {
     sitePolicyId: string;
     account: string;
     organization: string;
     profileId?: string;
-    browserBuild?: string;
-    cdpConnected?: boolean;
-};
+}) & {browserBuild?: string; cdpConnected?: boolean};
 export type ProfileSelection = {
     state: 'selected' | 'choice_required' | 'conflict';
     profileId: string | null;

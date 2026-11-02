@@ -274,3 +274,43 @@ fn configured_profile_keeps_owner_edited_intent_and_current_config_policy() {
         "org"
     );
 }
+
+#[test]
+fn explicit_profile_can_be_authorized_without_inventing_a_site_context() {
+    let mut state = ServiceState::default();
+    state.profiles.insert(
+        "work".into(),
+        BrowserProfile {
+            id: "work".into(),
+            ..Default::default()
+        },
+    );
+    let actor = ProfileLibraryActor {
+        subject_id: Some("dashboard:operator".into()),
+        assurance: ProfileIdentityAssurance::AuthenticatedIngress,
+    };
+    let choice = profile_library_request(
+        &mut state,
+        &json!({"operation":"select","profileId":"work"}),
+        &actor,
+        "2026-11-01T12:00:00Z",
+    )
+    .unwrap();
+    assert_eq!(choice["profileId"], "work");
+    let invalid = profile_library_request(
+        &mut state,
+        &json!({"operation":"select","profileId":"work","sitePolicyId":"unknown"}),
+        &actor,
+        "2026-11-01T12:00:00Z",
+    )
+    .unwrap();
+    assert_eq!(invalid["state"], "conflict");
+    let auto = profile_library_request(
+        &mut state,
+        &json!({"operation":"select"}),
+        &actor,
+        "2026-11-01T12:00:00Z",
+    )
+    .unwrap();
+    assert_ne!(auto["state"], "selected");
+}
