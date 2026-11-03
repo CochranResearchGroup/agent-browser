@@ -319,6 +319,15 @@ pub trait BrowserSessionEffects {
     }
 
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String>;
+    /// Dispatch a normal close for an exactly verified owned manual browser.
+    /// Ok means positive dispatch acknowledgement, not process exit. Errors may
+    /// have uncertain effects and must never be automatically replayed.
+    fn dispatch_graceful_browser_close(
+        &mut self,
+        _browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        Err("browser_graceful_close_dispatch_unsupported".into())
+    }
 
     fn acquire_initial_tab(
         &mut self,

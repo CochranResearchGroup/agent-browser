@@ -650,6 +650,15 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
             }
         }
     }
+    fn dispatch_graceful_browser_close(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        match self {
+            Self::Local(effects) => effects.dispatch_graceful_browser_close(browser),
+            Self::Remote(effects) => effects.dispatch_graceful_browser_close(browser),
+        }
+    }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         match self {
             Self::Local(effects) => effects.close_browser(browser),

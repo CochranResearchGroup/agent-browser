@@ -253,9 +253,15 @@ struct OwnerBinding {
     target_build: Option<ExecutableEvidence>,
     #[serde(default)]
     target_mode: Option<String>,
+    // Old journals cannot prove whether an unacknowledged dispatch was tried.
+    #[serde(default = "legacy_close_attempt_unknown")]
+    close_attempted: bool,
     close_dispatched: bool,
     clean_close: bool,
     reviewed_tasks: Vec<String>,
+}
+fn legacy_close_attempt_unknown() -> bool {
+    true
 }
 impl OwnerBinding {
     fn target(&self) -> RemoteViewTabHandoffTarget {
@@ -420,6 +426,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 digest,
                 target_build: intent.target_build.clone(),
                 target_mode: intent.target_mode.clone(),
+                close_attempted: false,
                 close_dispatched: false,
                 clean_close: false,
                 reviewed_tasks,
@@ -621,10 +628,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         };
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         loop {
-            match self
-                .host
-                .native_browser_command(&target, &json!({"action":"native_ready"}))
-            {
+            match self.host.native_browser_window_ready(&target) {
                 Ok(observation) if observation["ready"] == true => {
                     return Ok(LaunchReceipt {
                         task_id,
@@ -748,18 +752,79 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         {
             return Err("profile_duplicate_source_operation_busy".into());
         }
+        let owned_manual = self.binding.borrowed_anchor.is_none()
+            && self.binding.browser.cdp_endpoint.is_empty()
+            && !self
+                .host
+                .state
+                .app_browser_attachments
+                .contains_key(&self.binding.browser.id)
+            && self
+                .host
+                .catalog
+                .profiles
+                .get(&source.id)
+                .is_some_and(|profile| profile.manual_login_url.is_some());
+        if owned_manual {
+            // The immutable process token already carries the Linux boot epoch.
+            // Neither reboot disappearance nor a legacy unknown token proves clean exit.
+            let epoch = self
+                .binding
+                .original
+                .start_token
+                .rsplit_once(':')
+                .filter(|(epoch, ticks)| {
+                    epoch.starts_with("linux:") && ticks.parse::<u64>().is_ok()
+                })
+                .map(|(epoch, _)| epoch);
+            let current = crate::process_identity::current_boot_epoch();
+            if crate::process_identity::boot_epoch_status(epoch, current.as_deref())
+                != crate::process_identity::BootEpochStatus::Current
+            {
+                return Err("profile_duplicate_source_boot_changed".into());
+            }
+        }
         if !self.binding.close_dispatched {
             self.host
                 .state
                 .profile_operation_ids
                 .insert(source.id.clone(), self.operation_id.clone());
             self.host.commit_state()?;
-            let dispatch = self.host.native_browser_command(
-                &self.binding.target(),
-                &json!({"action":"native_close"}),
-            )?;
-            if !matches!(dispatch["delivery"].as_str(), Some("dispatched")) {
-                return Err("profile_duplicate_close_dispatch_unconfirmed".into());
+            if owned_manual {
+                if self.binding.close_attempted {
+                    return Err("profile_duplicate_close_dispatch_unconfirmed".into());
+                }
+                if self.host.state.browsers.get(&self.binding.browser.id)
+                    != Some(&self.binding.browser)
+                    || self.host.state.sessions.get(&self.binding.session.id)
+                        != Some(&self.binding.session)
+                    || self.host.state.tabs.get(&self.binding.tab.id) != Some(&self.binding.tab)
+                    || !matches!(crate::process_identity::observe_process(self.binding.original.pid),
+                        crate::process_identity::ProcessObservation::Observed(ref current)
+                        if current.pid == self.binding.browser.pid
+                            && current.start_token.as_deref() == Some(self.binding.original.start_token.as_str())
+                            && current.executable_path == self.binding.original.executable_path)
+                {
+                    return Err("profile_duplicate_source_identity_changed".into());
+                }
+                {
+                    let _manager = self.host.manager()?;
+                }
+                // Retain uncertainty before crossing the process boundary. A lost
+                // acknowledgement cannot authorize another close or a clean copy.
+                self.binding.close_attempted = true;
+                save_binding(&self.connection, &self.operation_id, &self.binding)?;
+                self.host
+                    .effects
+                    .dispatch_graceful_browser_close(&self.binding.browser)?;
+            } else {
+                let dispatch = self.host.native_browser_command(
+                    &self.binding.target(),
+                    &json!({"action":"native_close"}),
+                )?;
+                if !matches!(dispatch["delivery"].as_str(), Some("dispatched")) {
+                    return Err("profile_duplicate_close_dispatch_unconfirmed".into());
+                }
             }
             self.binding.close_dispatched = true;
             save_binding(&self.connection, &self.operation_id, &self.binding)?;
@@ -1051,6 +1116,8 @@ mod tests {
     use agent_browser_service_model::*;
     struct NoRuntime {
         launches: Option<Rc<std::cell::Cell<u32>>>,
+        closes: Option<Rc<std::cell::Cell<u32>>>,
+        fail_dispatch: bool,
     }
     impl BrowserRuntimeDriver for NoRuntime {
         fn select_profile_browser_executable(
@@ -1065,7 +1132,7 @@ mod tests {
             }
         }
         fn browser_is_live(&mut self, _: &ManagedBrowserInstance) -> Result<bool, String> {
-            if self.launches.is_some() {
+            if self.launches.is_some() || self.closes.is_some() {
                 Ok(true)
             } else {
                 Err("unexpected runtime effect".into())
@@ -1087,7 +1154,23 @@ mod tests {
             })
         }
         fn close_browser(&mut self, _: &ManagedBrowserInstance) -> Result<(), String> {
-            Err("unexpected close".into())
+            if let Some(closes) = &self.closes {
+                closes.set(closes.get() + 1);
+                Ok(())
+            } else {
+                Err("unexpected close".into())
+            }
+        }
+        fn dispatch_graceful_browser_close(
+            &mut self,
+            browser: &ManagedBrowserInstance,
+        ) -> Result<(), String> {
+            self.close_browser(browser)?;
+            if self.fail_dispatch {
+                Err("synthetic_close_acknowledgement_lost".into())
+            } else {
+                Ok(())
+            }
         }
         fn acquire_initial_tab(
             &mut self,
@@ -1150,7 +1233,11 @@ mod tests {
         store.save_profile_catalog(&catalog).unwrap();
         let mut host = BrowserSessionHost::load(
             store,
-            BrowserSessionEffectAdapter::new(NoRuntime { launches: None }),
+            BrowserSessionEffectAdapter::new(NoRuntime {
+                launches: None,
+                closes: None,
+                fail_dispatch: false,
+            }),
             Path::new(""),
             BrowserSessionHostConfig {
                 session_idle_timeout_ms: 60000,
@@ -1175,6 +1262,283 @@ mod tests {
         drop(host);
         std::fs::remove_dir_all(root).unwrap();
     }
+    #[cfg(target_os = "linux")]
+    struct ManualCloseFixture {
+        root: std::path::PathBuf,
+        host: BrowserSessionHost<BrowserSessionSqliteStore, BrowserSessionEffectAdapter<NoRuntime>>,
+        connection: rusqlite::Connection,
+        closes: Rc<std::cell::Cell<u32>>,
+    }
+    #[cfg(target_os = "linux")]
+    impl Drop for ManualCloseFixture {
+        fn drop(&mut self) {
+            std::fs::remove_dir_all(&self.root).unwrap();
+        }
+    }
+    #[cfg(target_os = "linux")]
+    fn load_binding(connection: &rusqlite::Connection, id: &str) -> Result<OwnerBinding, String> {
+        let encoded: String = connection
+            .query_row(
+                "SELECT binding FROM profile_duplicate_owner_bindings WHERE id=?1",
+                [id],
+                |row| row.get(0),
+            )
+            .map_err(|_| "fixture binding missing")?;
+        serde_json::from_str(&encoded).map_err(|_| "fixture binding invalid".into())
+    }
+    #[cfg(target_os = "linux")]
+    fn manual_close_fixture(case: &str) -> ManualCloseFixture {
+        let closes = Rc::new(std::cell::Cell::new(0));
+        let root =
+            std::env::temp_dir().join(format!("duplicate-host-review-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("source")).unwrap();
+        let store = BrowserSessionSqliteStore::launch_custody_fixture(
+            rusqlite::Connection::open(root.join("runtime.sqlite3")).unwrap(),
+            true,
+        )
+        .unwrap();
+        store
+            .save_session_state(&BrowserSessionState::default())
+            .unwrap();
+        let catalog:BrowserProfileCatalog=serde_json::from_value(json!({"schemaVersion":"agent-browser.browser-profile-catalog.v1","profiles":{"source":{"id":"source","name":"Source","userDataDir":root.join("source"),"kind":"named","manualLoginUrl":"https://example.test/login"}},"disposablePolicies":{}})).unwrap();
+        store.save_profile_catalog(&catalog).unwrap();
+        let mut host = BrowserSessionHost::load(
+            store,
+            BrowserSessionEffectAdapter::new(NoRuntime {
+                launches: None,
+                closes: Some(closes.clone()),
+                fail_dispatch: case == "uncertain",
+            }),
+            Path::new(""),
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 60000,
+                remote_view_desktops: vec![],
+                default_disposable_policy: None,
+                exact_url_history_maximum_bytes: 1024,
+            },
+        )
+        .unwrap();
+        host.profile_duplicate(
+            &json!({"operationId":"review","sourceProfileId":"source","launch":false}),
+        )
+        .unwrap();
+        let browser = ManagedBrowserInstance {
+            id: "browser".into(),
+            profile_id: "source".into(),
+            pid: std::process::id(),
+            cdp_endpoint: String::new(),
+            desktop: None,
+            active_session_ids: vec!["task".into()],
+        };
+        let session = ManagedBrowserSession {
+            id: "task".into(),
+            name: "Source work".into(),
+            profile_id: "source".into(),
+            browser_id: browser.id.clone(),
+            created_at_ms: 1,
+            last_activity_at_ms: 1,
+            expires_at_ms: u64::MAX,
+            current_tab_id: Some("tab".into()),
+        };
+        let tab = ManagedBrowserTab {
+            id: "tab".into(),
+            target_id: "target".into(),
+            browser_id: browser.id.clone(),
+            session_id: session.id.clone(),
+            created_at_ms: 1,
+            last_activity_at_ms: 1,
+        };
+        host.state
+            .browsers
+            .insert(browser.id.clone(), browser.clone());
+        host.state
+            .sessions
+            .insert(session.id.clone(), session.clone());
+        host.state.tabs.insert(tab.id.clone(), tab.clone());
+        host.persistence.save_session_state(&host.state).unwrap();
+        host.persisted_state = host.state.clone();
+        let connection =
+            rusqlite::Connection::open(root.join("profile-duplication/operations.sqlite3"))
+                .unwrap();
+        let mut binding = OwnerBinding {
+            borrowed_anchor: None,
+            original: match crate::process_identity::observe_process(browser.pid) {
+                crate::process_identity::ProcessObservation::Observed(current) => {
+                    RecordedProcessIdentity {
+                        pid: current.pid,
+                        start_token: current.start_token.unwrap(),
+                        executable_path: current.executable_path,
+                        browser_family: current.browser_family,
+                    }
+                }
+                _ => panic!("fixture process unavailable"),
+            },
+            browser,
+            session,
+            tab,
+            executable: "/synthetic/build".into(),
+            digest: "review-only".into(),
+            target_build: None,
+            target_mode: None,
+            close_attempted: false,
+            close_dispatched: false,
+            clean_close: false,
+            reviewed_tasks: vec!["task".into()],
+        };
+        match case {
+            "prior_boot" => binding.original.start_token = "linux:prior-boot:1".into(),
+            "unknown_boot" => binding.original.start_token = "legacy-unknown".into(),
+            "replaced" => {
+                let epoch = binding.original.start_token.rsplit_once(':').unwrap().0;
+                binding.original.start_token = format!("{epoch}:0");
+            }
+            "missing" => {
+                binding.original.pid = u32::MAX;
+                binding.browser.pid = u32::MAX;
+                host.state
+                    .browsers
+                    .insert(binding.browser.id.clone(), binding.browser.clone());
+            }
+            "foreign_fence" => {
+                host.state
+                    .profile_operation_ids
+                    .insert("source".into(), "foreign-owner".into());
+            }
+            _ => {}
+        }
+        host.persistence.save_session_state(&host.state).unwrap();
+        host.persisted_state = host.state.clone();
+        save_binding(&connection, "review", &binding).unwrap();
+        if case == "legacy" {
+            let mut legacy = serde_json::to_value(&binding).unwrap();
+            legacy.as_object_mut().unwrap().remove("close_attempted");
+            connection
+                .execute(
+                    "UPDATE profile_duplicate_owner_bindings SET binding=?1 WHERE id='review'",
+                    [legacy.to_string()],
+                )
+                .unwrap();
+        }
+        ManualCloseFixture {
+            root,
+            host,
+            connection,
+            closes,
+        }
+    }
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn profile_duplicate_manual_close_uses_lifecycle_owner_without_selective_input() {
+        let mut fixture = manual_close_fixture("normal");
+        let result = fixture.host.profile_duplicate(&json!({"operationId":"review","choice":"close_and_duplicate","ownerConfirmed":true})).unwrap();
+        assert_eq!(
+            fixture.closes.get(),
+            1,
+            "copy close must use lifecycle owner despite unavailable selective input"
+        );
+        assert_eq!(result["phase"], "awaiting_graceful_close");
+        let destination = result["destination"].clone();
+        for command in [
+            json!({"operationId":"review"}),
+            json!({"operationId":"review","choice":"close_and_duplicate","ownerConfirmed":true}),
+        ] {
+            let pending = fixture.host.profile_duplicate(&command).unwrap();
+            assert_eq!(pending["phase"], "awaiting_graceful_close");
+            assert_eq!(pending["destination"], destination);
+        }
+        assert_eq!(
+            fixture.closes.get(),
+            1,
+            "acknowledged pending close must never redispatch"
+        );
+        assert_eq!(
+            fixture.host.state.sessions.len(),
+            1,
+            "pending process cannot retire task or copy"
+        );
+        assert_eq!(fixture.host.catalog.profiles.len(), 1);
+    }
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn profile_duplicate_manual_close_refuses_unknown_or_changed_original_before_effect() {
+        for case in [
+            "prior_boot",
+            "unknown_boot",
+            "replaced",
+            "missing",
+            "legacy",
+            "foreign_fence",
+        ] {
+            let mut fixture = manual_close_fixture(case);
+            let result = fixture.host.profile_duplicate(&json!({"operationId":"review","choice":"close_and_duplicate","ownerConfirmed":true})).unwrap();
+            assert_eq!(
+                result["failure"], "profile_duplicate_close_readback_required",
+                "{case}"
+            );
+            assert_eq!(
+                fixture.closes.get(),
+                0,
+                "{case} must refuse before physical effect"
+            );
+            assert_eq!(
+                fixture
+                    .host
+                    .profile_duplicate(&json!({"operationId":"review","choice":"cancel"}))
+                    .unwrap()["phase"],
+                "cancelled"
+            );
+            if case == "foreign_fence" {
+                assert_eq!(
+                    fixture
+                        .host
+                        .state
+                        .profile_operation_ids
+                        .get("source")
+                        .map(String::as_str),
+                    Some("foreign-owner")
+                );
+            } else {
+                assert!(!fixture
+                    .host
+                    .state
+                    .profile_operation_ids
+                    .contains_key("source"));
+            }
+            let binding = load_binding(&fixture.connection, "review").unwrap();
+            assert!(
+                !binding.clean_close,
+                "cancellation cannot fabricate clean evidence"
+            );
+        }
+    }
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn profile_duplicate_manual_close_uncertain_acknowledgement_never_replays() {
+        let mut fixture = manual_close_fixture("uncertain");
+        for _ in 0..2 {
+            let result = fixture.host.profile_duplicate(&json!({"operationId":"review","choice":"close_and_duplicate","ownerConfirmed":true})).unwrap();
+            assert_eq!(
+                result["failure"],
+                "profile_duplicate_close_readback_required"
+            );
+        }
+        assert_eq!(fixture.closes.get(), 1);
+        assert_eq!(fixture.host.catalog.profiles.len(), 1);
+        let binding = load_binding(&fixture.connection, "review").unwrap();
+        assert!(!binding.close_dispatched && !binding.clean_close);
+        fixture
+            .host
+            .profile_duplicate(&json!({"operationId":"review","choice":"cancel"}))
+            .unwrap();
+        assert_eq!(
+            fixture
+                .host
+                .profile_duplicate(&json!({"operationId":"review"}))
+                .unwrap()["phase"],
+            "cancelled"
+        );
+        assert_eq!(fixture.closes.get(), 1);
+    }
     #[test]
     fn profile_duplicate_host_reviews_current_peer_tasks_and_cancels_durably() {
         let root =
@@ -1192,7 +1556,11 @@ mod tests {
         store.save_profile_catalog(&catalog).unwrap();
         let mut host = BrowserSessionHost::load(
             store,
-            BrowserSessionEffectAdapter::new(NoRuntime { launches: None }),
+            BrowserSessionEffectAdapter::new(NoRuntime {
+                launches: None,
+                closes: None,
+                fail_dispatch: false,
+            }),
             Path::new(""),
             BrowserSessionHostConfig {
                 session_idle_timeout_ms: 60000,
@@ -1259,6 +1627,7 @@ mod tests {
             digest: "review-only".into(),
             target_build: None,
             target_mode: None,
+            close_attempted: false,
             close_dispatched: false,
             clean_close: false,
             reviewed_tasks: vec!["task".into()],
@@ -1328,6 +1697,8 @@ mod tests {
         let mut host = BrowserSessionHost::load(
             store,
             BrowserSessionEffectAdapter::new(NoRuntime {
+                closes: None,
+                fail_dispatch: false,
                 launches: Some(launches.clone()),
             }),
             Path::new(""),

@@ -143,6 +143,16 @@ pub(crate) trait BrowserRuntimeDriver {
         desktop: Option<&RemoteViewFixedDesktop>,
     ) -> Result<BrowserLaunch, String>;
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String>;
+    /// Dispatch a normal close for an exactly verified owned manual browser.
+    /// Ok means positive dispatch acknowledgement, not process exit. Errors may
+    /// have uncertain effects and must never be automatically replayed.
+    fn dispatch_graceful_browser_close(
+        &mut self,
+        _browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        Err("browser_graceful_close_dispatch_unsupported".into())
+    }
+
     fn acquire_initial_tab(
         &mut self,
         browser: &ManagedBrowserInstance,
@@ -385,6 +395,12 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
     }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         self.runtime.close_browser(browser)
+    }
+    fn dispatch_graceful_browser_close(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        self.runtime.dispatch_graceful_browser_close(browser)
     }
 
     fn acquire_initial_tab(
@@ -629,6 +645,10 @@ enum BrowserRuntimeCommand {
         reply: mpsc::Sender<Result<(), String>>,
     },
     Close {
+        browser: ManagedBrowserInstance,
+        reply: mpsc::Sender<Result<(), String>>,
+    },
+    DispatchGracefulClose {
         browser: ManagedBrowserInstance,
         reply: mpsc::Sender<Result<(), String>>,
     },
@@ -1116,6 +1136,19 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
             },
         )
     }
+    fn dispatch_graceful_browser_close(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::DispatchGracefulClose {
+                browser: browser.clone(),
+                reply,
+            },
+        )
+    }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         let (reply, receiver) = mpsc::channel();
         self.request(
@@ -1382,6 +1415,14 @@ fn run_browser_worker(
             }
             BrowserRuntimeCommand::IsLive { browser, reply } if manual::is_manual(&browser) => {
                 let _ = reply.send(manual.verify(&browser));
+            }
+            BrowserRuntimeCommand::DispatchGracefulClose { browser, reply } => {
+                let result = if manual::is_manual(&browser) {
+                    manual.dispatch_graceful_close(&browser)
+                } else {
+                    Err("browser_graceful_close_dispatch_unsupported".into())
+                };
+                let _ = reply.send(result);
             }
             BrowserRuntimeCommand::Close { browser, reply } if manual::is_manual(&browser) => {
                 let _ = reply.send(manual.close(&browser));
