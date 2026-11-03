@@ -161,5 +161,39 @@ metadata and selection-budget mismatch, plus obsolete embedded workspace-shell
 assertions and a missing accessible busy state. Bounded repairs preserve request
 validation and restore the loading-state contract; first failures are retained.
 Affected gates are rerun on the combined source before merge or installation.
-Actual529 narration and530 portability acceptance remain open. Final broad review
+Actual #529 narration and #530 portability acceptance remain open. Final broad review
 and post-review TDD counters remain0.
+
+
+### Qualified source checkpoint
+
+Executable source `780b4275d666654b3135d10ec8c6dd78fc851380` is locally qualified.
+The comprehensive `scripts/ci/rust-tests.sh` run took 2,771 seconds and retained
+three deterministic failures. Subsequent repairs passed the affected gates:
+
+- `scripts/ci/rust-tests.sh --compartment cli-native-stream`: 263 passed,
+  2 existing fixture-dependent tests ignored.
+- `scripts/ci/rust-tests.sh --focused tools_list_returns_only_bounded_workflow_catalog`:
+  1 passed, preserving exact names, contract parity and the schema-size limit.
+- `scripts/ci/rust-tests.sh --focused service_contracts`: 1 passed.
+- `scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml --test browser_mode_operation -- --test-threads=1`:
+  16 passed.
+- Workspace `cargo-safe.sh fmt` check and strict workspace Clippy passed.
+
+The initial run's unchanged installer (221), browser (402), action (274), service
+(617), other native (750), integration, extracted-crate and performance gates
+remain valid. Existing ignored tests are retained as exclusions, not passes.
+The separate complete service-model suite passed 416 tests with none ignored.
+Mounted workspace/profile/launcher/SiteGuide checks, source-free teaching support,
+service-client contracts and types, dashboard/docs builds, policy wiring,
+changed links and API/MCP parity passed. The accessible workspace busy-state
+regression was observed before its repair and passed afterward.
+
+Validation used Linux/WSL, bounded local Cargo scopes and synthetic providers.
+Hosted CI is disabled. Target-platform parity, actual narrated teaching and
+private-account portability are not established by these source checks.
+A redundant private-target catalog compilation was cancelled after the current
+stream test binary became reusable; that cancellation is not a pass. First
+failure and cancellation receipts remain outside Git. This documentation-only
+checkpoint reuses the code gates above under policy 0042. Final broad review and
+post-review TDD remain unrun, pending ticket acceptance and closure.

@@ -1,4 +1,4 @@
-P300/530 continuation: P302 lifecycle repair is merged through PR536 and its preserving installation and installed doctor passed. No real copy exists. Operation-specific copy disposal is committed through8798e74f9 with restart/refusal tests, authenticated HTTP admission, formatting and strict workspace Clippy passing. Root owns serial canonical integration and installed qualification. Actual copy qualification and final review/remediation remain open.
+P300/530 continuation: PR542 source is locally qualified on 780b4275d, including exact completed-copy disposal and cumulative validation repairs. Canonical source integration, a sealed production candidate and preserving installation are next. Actual #529 narration and #530 portability remain open; final review/remediation remain0.
 
 [P301 Native handoff repair](docs/dev/plans/0301-2026-11-02-native-x11-authority-529.md): PR533 merged and preserve-mode installed; doctor passes and retained browser handoff is ready. Full P300 rail deployment and actual narrated/copy acceptance remain pending.
 
