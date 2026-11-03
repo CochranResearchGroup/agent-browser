@@ -1289,6 +1289,17 @@ impl<
         }
         result
     }
+    fn dispatch_graceful_browser_close(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        self.require_operation()?;
+        if !browser.cdp_endpoint.is_empty() {
+            return Err("browser_graceful_close_dispatch_unsupported".into());
+        }
+        self.refresh_manual_native_context(browser)?;
+        self.effects.dispatch_graceful_browser_close(browser)
+    }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         self.require_operation()?;
         self.refresh_manual_native_context(browser)?;

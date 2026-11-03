@@ -1,5 +1,7 @@
 # Active plan index
 
+[P302 owned manual copy closure](0302-2026-11-02-profile-copy-lifecycle-530.md): bounded lifecycle repair for530; source and installed qualification pending.
+
 [P301 BILL login repairs](0301-2026-11-01-bill-login-repairs.md), #518–521 source closed; one review/TDD pass complete; #522 original recovery evidence remains gated.
 
 [P299 local validation](0299-2026-10-31-local-validation-502.md), spec502 and all four children CLOSED through PR509/main9d1a18522; initial source readiness/reuse pass. The single final review and bounded TDD pass are complete through PR510/mainc738fb694; two Spec blockers and one redundant-suite finding are resolved. No hosted CI or runtime effects.

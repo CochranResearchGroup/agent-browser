@@ -7380,6 +7380,9 @@ Commands:
   browser-native TASK ACTION JSON Input/capture <=1Mpx
   browser-build JSON Inspect/select/open profile build
   profile-duplicate JSON Copy/inspect; retry_launch or finish_without_opening
+  Owned manual copies close without desktop agent input. Inspect uncertain closes;
+  cancel the original before a new attempt. Reboot absence is not clean-close proof.
+  Copy window readiness is separate from agent input readiness.
   mode-convert JSON Inspect/relaunch/pause/cancel/restore_previous/select_build
     Conversion verifies mode/window without input; retained handoffs reconcile the original launch
   watch-host-task TASK Changed NDJSON; fresh reconnect

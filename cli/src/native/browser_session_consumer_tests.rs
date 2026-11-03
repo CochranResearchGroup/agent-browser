@@ -492,6 +492,20 @@ impl BrowserSessionEffects for Process {
         }
         Ok(self.root.join("idle-process-absent").exists())
     }
+    fn dispatch_graceful_browser_close(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        assert!(browser.cdp_endpoint.is_empty());
+        assert!(
+            self.root.join("native-context-refresh-count").exists(),
+            "strict close requires current owner inputs"
+        );
+        let path = self.root.join("manual-strict-close-count");
+        let count = std::fs::read_to_string(&path).map_or(0, |value| value.parse::<u32>().unwrap());
+        std::fs::write(path, (count + 1).to_string()).unwrap();
+        Ok(())
+    }
     fn close_browser(&mut self, _browser: &ManagedBrowserInstance) -> Result<(), String> {
         if self.root.join("count-retirement-closes").exists() {
             let path = self.root.join("retirement-effect-count");

@@ -254,6 +254,32 @@ impl ManualBrowsers {
         Err("manual_login_native_focus_unsupported".into())
     }
 
+    /// Positive normal-close acknowledgement only. Unlike ordinary idempotent
+    /// close, an already absent original cannot produce a dispatch receipt.
+    pub(super) fn dispatch_graceful_close(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        if !self.verify(browser)? {
+            return Err("manual_login_process_exited".into());
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let context = self.native_context(browser)?;
+            if !self.verify(browser)? {
+                return Err("manual_login_process_exited".into());
+            }
+            super::super::browser::close_x11_browser_windows(
+                browser.pid,
+                &context.display,
+                &context.authority,
+            )
+            .map_err(|_| "manual_login_native_close_unavailable".into())
+        }
+        #[cfg(not(target_os = "linux"))]
+        Err("manual_login_close_unsupported".into())
+    }
+
     pub(super) fn close(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         if !self.verify(browser)? {
             self.owned.remove(&browser.id);

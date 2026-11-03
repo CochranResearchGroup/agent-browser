@@ -116,6 +116,8 @@ For dashboard/viewer/startup failures, read [dashboard diagnostics](references/c
 
 Inspect `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build and mode are independent; copies do not prove login. Read [controls/recovery](references/cli-and-service.md#browser-build-selection). Reconcile the original operation after lost replies.
 
+Owned manual copies use normal close without desktop agent input. Inspect uncertain closes; cancel the original operation before reviewing a new attempt. A reboot is not clean-close proof. Window readiness is separate from agent input authority.
+
 Diagnostics retain selection query fields. Rail presence revalidates at 250/500/1000 ms, then polls every three seconds.
 
 ### Tasks and teaching

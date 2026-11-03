@@ -4249,6 +4249,12 @@ history offers **Open source for review**. The copy has a new identity and
 writable directory; source and copy evolve independently. Copy success does
 not prove that stored authentication works in the copy.
 
+Owned manual browsers close normally for copying even when desktop agent input
+is disabled. If the close result is uncertain, inspect and cancel the original
+operation before reviewing another attempt. A reboot does not substitute for
+a clean source close.
+Window readiness does not grant desktop input control.
+
 MCP: discover `profile_duplicate`, then use `browser_command` with
 `action: "profile_duplicate"` and `params` containing `operationId`,
 `sourceProfileId`, `destinationName`, `choice` and `launch`. An optional `taskId`
