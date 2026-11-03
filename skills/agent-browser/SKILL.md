@@ -41,7 +41,7 @@ attempts on their original requests; never replay private use.
 
 Reuse the browser/task already owned by Bots. Read [host integration v1](references/host-integration.md) before attachment, sharing or takeover. Discover connected schemas; visibility does not prove account identity or control ownership. Shared skill publication needs explicit approval.
 
-Tools: `browser_open`, `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`, `browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_reconnect`, `browser_policy`, `browser_artifact`, `browser_command`, `browser_discover`.
+Tools: `browser_open`, `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`, `browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_reconnect`, `browser_retention`, `browser_policy`, `browser_artifact`, `browser_command`, `browser_discover`.
 Page actions require `taskId`. `browser_tab` manages this task's tabs; retry creation
 with the same `tabKey`. After restart, creation rejoins the verified browser
 and preserves tabs; peer tabs remain outside scope. Discover actions with `browser_discover`; use `browser_command` with `taskId`, `action`, `params`.
