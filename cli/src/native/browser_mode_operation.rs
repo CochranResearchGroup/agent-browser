@@ -339,6 +339,9 @@ impl OperationStore {
     fn transition(&mut self, operation: &mut Operation, phase: Phase) -> Result<(), String> {
         let mut next = operation.clone();
         next.phase = phase;
+        if next.phase == Phase::Completed {
+            next.failure = None;
+        }
         self.save_transition(operation, &next)?;
         *operation = next;
         Ok(())
@@ -698,7 +701,6 @@ impl OperationStore {
                 || replacement.mode != effect_request.requested_mode
                 || replacement.debugging != (replacement.mode == Mode::Cdp)
                 || !replacement.native_observation
-                || !replacement.native_input
             {
                 return Err("mode_operation_replacement_proof_required".into());
             }

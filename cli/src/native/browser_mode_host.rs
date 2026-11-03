@@ -592,33 +592,10 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         }
         let ready =
             ready.ok_or("mode_operation_native_window_pending:reconcile without relaunch")?;
-        if ready["window"]["active"] != true {
-            self.host.native_process_command(
-                original,
-                &target,
-                &json!({"action":"native_focus"}),
-            )?;
-        }
-        let x = ready["window"]["x"]
-            .as_i64()
-            .ok_or("mode_operation_native_geometry_unverified")?
-            + 10;
-        let y = ready["window"]["y"]
-            .as_i64()
-            .ok_or("mode_operation_native_geometry_unverified")?
-            + 10;
-        // Validate native delivery on the new browser's empty chrome, not a
-        // website action. Selective-control unavailability is never called ready.
-        let delivery = self.host.native_process_command(
-            original,
-            &target,
-            &json!({"action":"native_input","actions":[{"kind":"move","x":x,"y":y}]}),
-        )?;
-        if delivery["delivery"] != "dispatched" {
-            return Err(
-                "mode_operation_native_input_unavailable:reconcile or restore configuration".into(),
-            );
-        }
+        // Visibility and mode are lifecycle facts. Selective input is a separate
+        // owner capability and may intentionally be disabled for this desktop.
+        // Qualification must not inject a mouse move or take foreground control.
+        let _ = ready;
 
         Ok(Replacement {
             process_identity: serde_json::to_string(original)
@@ -626,7 +603,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             mode: request.requested_mode.clone(),
             debugging: request.requested_mode == Mode::Cdp,
             native_observation: true,
-            native_input: true,
+            native_input: false,
         })
     }
 }
@@ -1016,4 +993,67 @@ pub(crate) fn recovery_authorized(
                 .unwrap_or(&operation.request.requested_mode)
                 == &Mode::CdpFree
     })
+}
+
+impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserCommandEffects>
+    BrowserSessionHost<P, E>
+{
+    /// Resume only an already-dispatched mode replacement before ordinary
+    /// recovery. The retained operation owns its launch; never start another.
+    pub(super) fn reconcile_pending_mode(&mut self, browser_id: &str) -> Result<(), String> {
+        let browser = self
+            .state
+            .browsers
+            .get(browser_id)
+            .ok_or("browser_session_browser_missing")?;
+        let Some(id) = self
+            .state
+            .profile_operation_ids
+            .get(&browser.profile_id)
+            .cloned()
+        else {
+            return Ok(());
+        };
+        let database = self
+            .persistence
+            .runtime_database_path()?
+            .with_extension("mode.sqlite3");
+        let store = OperationStore::open(&database)?;
+        let Some(operation) = store.read(&id)? else {
+            return Err("browser_profile_operation_in_progress:inspect original operation".into());
+        };
+        if operation.request.browser_id != browser_id
+            || operation.request.profile_id != browser.profile_id
+            || !matches!(
+                operation.phase,
+                Phase::LaunchDispatched | Phase::ReplacementPending
+            )
+        {
+            return Err("browser_profile_operation_in_progress:inspect original operation".into());
+        }
+        let task = operation
+            .request
+            .task_ids
+            .iter()
+            .find(|id| {
+                self.state
+                    .sessions
+                    .get(*id)
+                    .is_some_and(|task| task.browser_id == browser_id)
+            })
+            .ok_or("mode_operation_task_missing")?
+            .clone();
+        let mode = if operation.request.requested_mode == Mode::Cdp {
+            "cdp"
+        } else {
+            "cdp_free"
+        };
+        let view = self.mode_convert(
+            &json!({"sessionId":task,"operationId":id,"mode":mode,"choice":"reconcile"}),
+        )?;
+        if view["phase"] != "completed" {
+            return Err("mode_operation_replacement_pending:reconcile original operation".into());
+        }
+        Ok(())
+    }
 }

@@ -7318,7 +7318,12 @@ effect. Cancelling a request does not reopen a source already stopped.
 
 ### Convert an existing task
 
-The browser mode menu offers **Relaunch with CDP** and **Relaunch without CDP** for managed tasks. A successful explicit replacement preserves the logical task, durable profile and original handoff; it changes the physical browser process. Review the affected tasks before selecting relaunch. Unsaved page state and downloads may be lost; unknown URLs and uncertain website submissions are never replayed.
+Right-click a managed browser heading or tab in the left rail to choose **Relaunch with CDP** or **Relaunch without CDP**. The tab actions button and browser mode menu offer the same controls. Review applies to the entire shared browser, including its other tasks. A successful explicit replacement preserves the logical task, durable profile and original handoff; it changes the physical browser process. Review the affected tasks before selecting relaunch. Unsaved page state and downloads may be lost; unknown URLs and uncertain website submissions are never replayed.
+
+Conversion qualifies the replacement's exact process, requested mode and Native
+window without injecting input. Selective agent input remains independently
+governed and may be unavailable. Reopening the durable handoff reconciles an
+already-dispatched conversion through its original operation without relaunch.
 
 MCP uses `browser_command` with `taskId`, action `mode_convert`, and params containing `operationId`, `mode` (`cdp` or `cdp_free`) and `choice`. Start with `prepare`, then select an offered action. CLI accepts `agent-browser --json mcp mode-convert '{"taskId":"TASK","operationId":"mode-one","mode":"cdp_free","choice":"prepare"}'`. HTTP uses `POST /api/command` with action `browser_session_mode_convert`, the exact `sessionId` and owner `sessionName`, and the same operation fields.
 

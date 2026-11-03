@@ -2213,7 +2213,11 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         &mut self,
         browser_id: &str,
         command: &serde_json::Value,
-    ) -> Result<(), String> {
+    ) -> Result<(), String>
+    where
+        E: ManagedBrowserCommandEffects,
+    {
+        self.reconcile_pending_mode(browser_id)?;
         // Use the same publication and operation fence as manager recovery.
         let _ = self.manager()?;
         let browser = self

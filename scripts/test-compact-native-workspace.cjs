@@ -167,7 +167,8 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.getByRole('menu', { name: 'Browser mode details' }).waitFor();
     assert.match(await page.getByRole('menu').innerText(), /Executable: chrome/);
     assert.match(await page.getByRole('menu').innerText(), /Ownership: Managed/);
-    assert.equal(await page.getByRole('menuitem', { name: /Relaunch|Duplicate/ }).count(), 0, 'No dead mutation controls before their implementation');
+    assert.equal(await page.getByRole('menuitem', { name: /Relaunch/ }).count(), 0, 'Relaunch requires an exact managed task');
+    assert.equal(await page.getByRole('menuitem', { name: 'Duplicate profile', exact: true }).count(), 1, 'Known profiles expose the implemented copy operation');
     await page.keyboard.press('Escape');
     await cdpMode.click();
     await page.getByRole('menu', { name: 'Browser mode details' }).waitFor();

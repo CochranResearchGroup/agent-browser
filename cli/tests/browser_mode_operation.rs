@@ -1044,3 +1044,72 @@ fn unavailable_build_keeps_original_and_allows_explicit_same_operation_selection
     drop(store);
     std::fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn conversion_with_visible_replacement_does_not_require_selective_input() {
+    struct ReadOnlyNative;
+    impl ModeRuntime for ReadOnlyNative {
+        fn original_status(&mut self, _: &Request) -> Result<OriginalStatus, String> {
+            Ok(OriginalStatus::Exited)
+        }
+        fn graceful_close(&mut self, _: &Request) -> Result<CloseOutcome, String> {
+            panic!("original exited")
+        }
+        fn force_close(&mut self, _: &Request) -> Result<CloseOutcome, String> {
+            panic!("no force")
+        }
+        fn focus(&mut self, _: &Request) -> Result<(), String> {
+            panic!("no input")
+        }
+        fn launch(&mut self, _: &Request) -> Result<Replacement, String> {
+            Err("mode_operation_native_input_unavailable".into())
+        }
+        fn reconcile_replacement(&mut self, _: &Request) -> Result<Option<Replacement>, String> {
+            Ok(Some(Replacement {
+                process_identity: "boot:live:replacement".into(),
+                mode: Mode::CdpFree,
+                debugging: false,
+                native_observation: true,
+                native_input: false,
+            }))
+        }
+        fn publish(&mut self, _: &Request, replacement: &Replacement) -> Result<(), String> {
+            assert!(
+                !replacement.native_input,
+                "conversion must not invent input permission"
+            );
+            Ok(())
+        }
+    }
+    let directory =
+        std::env::temp_dir().join(format!("mode-no-selective-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&directory).unwrap();
+    let mut store = OperationStore::open(&directory.join("operations.sqlite3")).unwrap();
+    store.request(request()).unwrap();
+    assert_eq!(
+        store
+            .advance(
+                "convert-1",
+                Choice::Relaunch { confirmed: true },
+                &mut ReadOnlyNative
+            )
+            .unwrap_err(),
+        "mode_operation_native_input_unavailable"
+    );
+    assert_eq!(
+        store.read("convert-1").unwrap().unwrap().phase,
+        Phase::ReplacementPending
+    );
+    let result = store
+        .advance("convert-1", Choice::Resume, &mut ReadOnlyNative)
+        .unwrap();
+    assert_eq!(result.phase, Phase::Completed);
+    assert_eq!(
+        result.failure, None,
+        "successful reconciliation clears the prior failure"
+    );
+    assert_eq!(result.request.task_ids, vec!["task-1", "peer-task"]);
+    assert!(!result.replacement.unwrap().native_input);
+    drop(store);
+    std::fs::remove_dir_all(directory).unwrap();
+}
