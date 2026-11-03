@@ -339,6 +339,9 @@ impl OperationStore {
     fn transition(&mut self, operation: &mut Operation, phase: Phase) -> Result<(), String> {
         let mut next = operation.clone();
         next.phase = phase;
+        if next.phase == Phase::Completed {
+            next.failure = None;
+        }
         self.save_transition(operation, &next)?;
         *operation = next;
         Ok(())

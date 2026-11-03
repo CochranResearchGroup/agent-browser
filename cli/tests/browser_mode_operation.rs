@@ -1104,6 +1104,10 @@ fn conversion_with_visible_replacement_does_not_require_selective_input() {
         .advance("convert-1", Choice::Resume, &mut ReadOnlyNative)
         .unwrap();
     assert_eq!(result.phase, Phase::Completed);
+    assert_eq!(
+        result.failure, None,
+        "successful reconciliation clears the prior failure"
+    );
     assert_eq!(result.request.task_ids, vec!["task-1", "peer-task"]);
     assert!(!result.replacement.unwrap().native_input);
     drop(store);
