@@ -7142,3 +7142,7 @@ mod tests {
         .is_err());
     }
 }
+
+#[cfg(test)]
+#[path = "native_mode_tests.rs"]
+mod native_mode_tests;
