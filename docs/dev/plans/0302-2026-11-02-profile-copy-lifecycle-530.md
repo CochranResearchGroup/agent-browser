@@ -2,7 +2,7 @@
 
 Product lane: PL-BUGFIX.
 Work item: P300 dependent #530.
-Branch: fix/profile-copy-native-close-530. Canonical base:33de9da49ff15cb4cf844ed203ac55e205f3e8db.
+Branch: fix/profile-copy-native-close-530. Canonical base: 33de9da49ff15cb4cf844ed203ac55e205f3e8db.
 
 ## Bounded outcome
 
@@ -22,16 +22,20 @@ Canonical main combines agent-input policy with Native control readiness. Copy l
 
 Require a public hosted RED/GREEN with generic input disabled; exact lifecycle dispatch and original identity; changed task/process/desktop generation rejection; acknowledged pending close without repeat; unknown acknowledgement without replay; reboot/missing source without clean-copy promotion; terminal cancellation without clean evidence. Also require an authenticated observe-only owner regression with changed identity/generation refusal, plus unchanged main Native-input readiness tests. Reuse the existing authenticated Xvfb close transport fixture. Run relevant native/model regressions, full format and strict workspace Clippy through cargo-safe. Hosted CI stays disabled.
 
-Build one source-bound production-shaped candidate, merge the bounded repair through this fork, verify canonical source equivalence, inspect preserve-mode installation and current transaction before applying, then run installed doctor. Actual account portability, synthetic storage divergence and exact owned cleanup remain separate qualification under530. No private profile/account/runtime artifacts belong in Git.
+Build one source-bound production-shaped candidate, merge the bounded repair through this fork, verify canonical source equivalence, inspect preserve-mode installation and current transaction before applying, then run installed doctor. Actual account portability, synthetic storage divergence and exact owned cleanup remain separate qualification under #530. No private profile/account/runtime artifacts belong in Git.
 
-P300529/530 remain open. Its final broad code-review and bounded post-review TDD counters remain0; ordinary implementation RED/GREEN and focused self-check do not consume them.
+P300 tickets #529 and #530 remain open. Its final broad code-review and bounded post-review TDD counters remain at zero; ordinary implementation RED/GREEN and focused self-check do not consume them.
 
 ## Local source qualification
 
-Source checkpoint cae98bc3f was integrated with canonical main356a8664b through31b721c71ea0fc96e411c543fe33c0d69f8741b8. Preserve MODE534 reconciliation and the P302 lifecycle hooks together. Only the active-lane catalog conflicted; both entries were retained with explicit overlap. The source worker checkpoint27138b762 preserves the original nine-file patch in P300 separately from unrelated edits.
+Source checkpoint cae98bc3f was integrated with canonical main at 356a8664b through 31b721c71ea0fc96e411c543fe33c0d69f8741b8. Preserve MODE534 reconciliation and the P302 lifecycle hooks together. Only the active-lane catalog conflicted; both entries were retained with explicit overlap. The source worker checkpoint 27138b762 preserves the original nine-file patch in P300 separately from unrelated edits.
 
-On combined source31b721c71, the four focused CLI filters `profile_duplicate`, `lifecycle_window_readiness`, `native_readiness_` and `manual_native_context_` passed14 tests. Full service-model tests passed408 checks across24 binaries, including doctests. The `browser_mode_operation` integration binary passed16 tests. All ran locally through the Cargo admission wrapper, with a disjoint persistent target, two jobs and a5GiB memory bound. Full format and strict workspace Clippy passed. The docs build, policy wiring, changed documentation links and Remote View handoff documentation checks passed. Hosted CI was not used.
+On combined source 31b721c71, the four focused CLI filters `profile_duplicate`, `lifecycle_window_readiness`, `native_readiness_` and `manual_native_context_` passed 14 tests. Full service-model tests passed 408 checks across 24 binaries, including doctests. The `browser_mode_operation` integration binary passed 16 tests. All ran locally through the Cargo admission wrapper, with a disjoint persistent target, two jobs and a 5 GiB memory bound. Full format and strict workspace Clippy passed. The docs build, policy wiring, changed documentation links and Remote View handoff documentation checks passed. Hosted CI was not used.
 
-The worker independently executed the authenticated Xvfb close fixture, the same focused repair/context tests, and the original copy-operation integration suite:13 passed and one existing private-mount quota test was ignored. Its format and strict workspace Clippy passed. An initial HTTP fixture omitted the manual task's first-tab acquisition; correcting that setup to match production copy launch produced a passing rerun without a production change. Earlier shared-target contamination was discarded as invalid validation and replaced by private cold targets.
+The worker independently executed the authenticated Xvfb close fixture, the same focused repair/context tests, and the original copy-operation integration suite: 13 passed and one existing private-mount quota test was ignored. Its format and strict workspace Clippy passed. An initial HTTP fixture omitted the manual task's first-tab acquisition; correcting that setup to match production copy launch produced a passing rerun without a production change. Earlier shared-target contamination was discarded as invalid validation and replaced by private cold targets.
 
-This qualification paragraph changes documentation only; the passed Rust and MDX sources remain unchanged. The production candidate, canonical merge and installed acceptance are pending. This source result does not qualify real-account portability or close P300529/530. Final P300 broad review and post-review remediation counters remain zero.
+This qualification paragraph changes documentation only; the passed Rust and MDX sources remain unchanged. At source qualification, the production candidate, canonical merge and installed acceptance were still pending; the bounded disposition below supersedes that checkpoint. This source result does not qualify real-account portability or close P300 tickets #529 and #530. Final P300 broad review and post-review remediation counters remain zero.
+
+## Bounded checkpoint disposition
+
+P302 is complete as a source and installed repair checkpoint through merged PR #536. The sealed production candidate passed its exact-binary install fixture, canonical source/input-equivalence checks, preserving installation and installed doctor. User-scoped artifact, transaction and process receipts stay outside the product repository. This does not qualify actual account portability or operation-owned copy disposal under #530. The registered auxiliary and immutable candidate remain retained for P300 serial integration, with explicit private custody rather than raw checkout removal.
