@@ -1168,6 +1168,36 @@ readback; inspection and selection still have no browser effects.
 Native capture returns PNG image content to MCP agents. Its default tile is bounded to one million pixels. Read `region`, `windowBounds` and `partialWindow`; request an explicit region for remaining pixels. A tile is not represented as a full-window screenshot.
 
 
+### Profile Lab independent copies
+
+Open **Profile Lab** from **Profiles and SiteGuides**. Select a source profile,
+review its configured browser/version, mode and current work, then choose an
+available target build and CDP-free or automation-connected mode. Give the copy
+its own name in **Review independent copy**. The existing duplication owner
+reviews affected tasks and offers the consistent-source action. Finish unsaved
+work and explicitly confirm source closure when offered; the UI never silently
+closes a running source. The destination gets an independent profile identity
+and data directory. Copying does not overwrite or restore the source.
+
+Source configured build/mode describe next-launch configuration, not the
+physical source process. Original source mode is unverified when the owner
+receipt does not retain it; observe it separately. Target build/version and
+requested mode come from the retained operation. Choosing an earlier executable
+does not undo data migration or restore profile bytes.
+
+The checkpoint disclosure separates copy completion, published profile identity,
+account identity, authentication usability and independent storage writes.
+Publication proves neither a usable login nor independent storage divergence.
+Account, authentication and storage checks remain unverified until independently
+observed for the exact source/copy/build/mode pair. Source and synthetic fixture
+checks are not real-account portability evidence.
+
+After a failed launch or interrupted reply, reopen the dialog and inspect the
+retained original operation. Reload and operation selection only read history.
+Continue the returned action with its original operation ID; reconcile uncertain
+results before any further effect. A failed operation stays visible. Do not
+prepare another copy or replay closure merely because a reply was lost.
+
 ### Browser build selection
 
 The rail menu's **Choose browser build** reads available executable versions,
@@ -1242,3 +1272,54 @@ profile-process absence and an exact owner `released` record. It preserves the
 original launch history and retains owner terminal evidence separately from local
 cleanup completion. Missing inventory, a denial alone, mismatched identity or an
 explicit fixed recovery target does not authorize relocation.
+
+## Teaching from the workspace
+
+Choose **Teach this site** in the compact toolbar after selecting a managed
+browser task, or open the **SiteGuides** library tab. Select a configured site
+and explicitly choose the intended account and organization/workspace, or mark
+account unknown and personal/no organization. These
+labels do not prove the signed-in identity. Use the existing Native Remote View
+recording and human-narration controls, then select finalized evidence. The
+workspace consumes those recordings; it does not add a viewer or recorder.
+
+Recording choices currently require server-configured, scoped references in the
+private SiteGuides configuration. Automatic discovery from the Remote View
+producer is not available. Never paste recording bearer credentials into the
+workspace. Missing source, Speech or receiving-verifier configuration is an
+explicit prerequisite, not permission to substitute synthetic evidence.
+
+The installed teaching support uses Node 18 or later and ffmpeg to consume
+bounded visual samples from authorized finalized video. The configured chat
+gateway receives those images and all selected human transcript segments. Its
+teaching request has no browser tools and can only produce an inert draft.
+Missing gateway configuration leaves interpretation unavailable. The first
+useful draft precedes focused questions. Review exact content, retain its
+confirmation receipt, and run a distinct fresh repeat through the existing
+receiving verifier before accepting an immutable revision. Failed candidates
+preserve the previous accepted guide. Unknown operations retain their original
+references and must be inspected before another submission.
+
+Installed/source-free checks and synthetic fixtures establish implementation
+behavior. Real narrated teaching and authenticated profile-copy experiments
+remain separate acceptance work.
+
+### Private SiteGuides support configuration
+
+Set `AGENT_BROWSER_SITEGUIDES_CONFIG` on the backend to an absolute, owner-owned,
+non-symlink JSON file with mode0600. Its `schemaVersion` is
+`agent-browser.workspace-siteguides-host.v1`; `candidateDirectory` identifies
+the existing private candidate store. Optional `sources` maps descriptive keys
+to existing scoped Remote View recording-reader selections, URLs and private
+`tokenFile` references. Each selection binds the original task, finalized
+recording and selected narration. Optional `speech` configures the existing
+Speech adapter and its private token file. `freshRepeatReceipts` resolves exact
+receiving-verifier references to its immutable private receipts. These are
+server-owned settings; callers cannot supply paths, actor authority or tokens.
+
+Use the existing recording-access and Speech owner contracts when provisioning
+those bindings. An empty configuration does not make recordings or verification
+available. The `AI_GATEWAY_URL`, `AI_GATEWAY_API_KEY` and `AI_GATEWAY_MODEL`
+settings are shared with existing chat configuration; teaching uses a separate
+inert request with no browser tools. Keep configuration, tokens, transcripts,
+recordings and actual account evidence outside the source repository.

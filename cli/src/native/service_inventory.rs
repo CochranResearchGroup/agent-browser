@@ -125,16 +125,8 @@ pub(crate) mod service_commands {
             )?;
         }
         if let Some(managed) = crate::native::browser_session_store::BrowserSessionSqliteStore::default_session_state_read_only()? {
-            for browser in managed.browsers.values() {
-                let record = managed_browser_inventory_record(browser);
-                if let Some(existing) = service_state.browsers.get(&record.id) {
-                    if existing.pid != record.pid || existing.cdp_endpoint != record.cdp_endpoint
-                        || existing.profile_id != record.profile_id {
-                        return Err("browser_inventory_identity_conflict".into());
-                    }
-                } else {
-                    service_state.browsers.insert(record.id.clone(), record);
-                }
+            for record in managed_browser_inventory_records(&service_state, &managed)? {
+                service_state.browsers.entry(record.id.clone()).or_insert(record);
             }
         }
         let protected_browser_owner_observations =
@@ -148,6 +140,29 @@ pub(crate) mod service_commands {
             "protectedBrowserOwnerObservations": protected_browser_owner_observations,
         }))
     }
+    /// Convert one fresh read-only manager snapshot using the inventory's exact
+    /// identity conflict guard. Returned records are descriptive projections;
+    /// they provide neither physical health proof nor persistence authority.
+    pub(crate) fn managed_browser_inventory_records(
+        service_state: &ServiceState,
+        managed: &agent_browser_service_model::BrowserSessionState,
+    ) -> Result<Vec<BrowserProcess>, String> {
+        let mut records = Vec::new();
+        for browser in managed.browsers.values() {
+            let record = managed_browser_inventory_record(browser);
+            if let Some(existing) = service_state.browsers.get(&record.id) {
+                if existing.pid != record.pid
+                    || existing.cdp_endpoint != record.cdp_endpoint
+                    || existing.profile_id != record.profile_id
+                {
+                    return Err("browser_inventory_identity_conflict".into());
+                }
+            }
+            records.push(record);
+        }
+        Ok(records)
+    }
+
     /// Project the existing manager identity and endpoint, without assigning new
     /// launch authority or claiming current CDP or operator-presentation health.
     fn managed_browser_inventory_record(

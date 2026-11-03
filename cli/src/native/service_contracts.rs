@@ -274,6 +274,7 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "scrollintoview",
     "focus",
     "clear",
+    "workspace_profile_library",
     "service_browser_close",
     "service_browser_repair",
     "service_browser_contamination_report",
@@ -332,6 +333,17 @@ pub fn service_contracts_metadata() -> Value {
                 "principalAwareProfileAdmission": true,
                 "actions": SERVICE_REQUEST_ACTIONS,
                 "actionCount": SERVICE_REQUEST_ACTIONS.len(),
+            },
+            "workspaceProfileLibrary": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId":"https://agent-browser.local/contracts/service-workspace-profile-library-response.v1.schema.json",
+                "schemaPath":"docs/dev/contracts/service-workspace-profile-library-response.v1.schema.json",
+                "http": {"route":"/api/dashboard/profile-library", "methods":["GET","POST"]},
+                "action":"workspace_profile_library",
+                "operations":["list","select","replace_associations"],
+                "mutationOperation":"replace_associations",
+                "noLaunch":true,
+                "perProfilePolicy":true
             },
             "serviceRequestMcpToolCall": {
                 "version": SERVICE_REQUEST_CONTRACT_VERSION,

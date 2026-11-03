@@ -1,0 +1,11 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://agent-browser.local/contracts/service-workspace-profile-library-response.v1.schema.json",
+  "title":"Profile library owner response data",
+  "description":"No-launch profile metadata and identity routing. Intended labels never verify website identity or authentication.",
+  "oneOf":[
+    {"type":"object","required":["profiles","sitePolicies"],"properties":{"profiles":{"type":"array","items":{"type":"object","required":["profile","currentUse","observedIdentity","relevantSitePolicyIds"],"properties":{"profile":{"$ref":"service-profile-record.v1.schema.json"},"currentUse":{"type":"array"},"observedIdentity":{"type":"object"},"relevantSitePolicyIds":{"type":"array","items":{"type":"string"}}}}},"sitePolicies":{"type":"array"}}},
+    {"type":"object","required":["profile"],"properties":{"profile":{"$ref":"service-profile-record.v1.schema.json"}}},
+    {"type":"object","required":["state","profileId","candidates","reason","identityVerificationRequired"],"properties":{"state":{"enum":["selected","choice_required","conflict"]},"profileId":{"type":["string","null"]},"candidates":{"type":"array","items":{"type":"string"}},"reason":{"type":"string"},"identityVerificationRequired":{"const":true}}}
+  ]
+}

@@ -326,6 +326,29 @@ pub(super) fn task_session(task_id: &str) -> Result<String, JsonRpcError> {
         .ok_or_else(|| issue(format!("browser_task_not_found:{task_id}")))
 }
 
+/// Only inert SiteGuide metadata may resolve an exact terminal task. Its source
+/// identity is retained knowledge, never authority to reopen or route input.
+pub(super) fn procedure_metadata_session(task_id: &str) -> Result<String, JsonRpcError> {
+    let path = BrowserSessionSqliteStore::default_sqlite_path().map_err(issue)?;
+    let state = BrowserSessionSqliteStore::open_read_only(&path)
+        .map_err(issue)?
+        .load_session_state()
+        .map_err(issue)?;
+    state
+        .sessions
+        .get(task_id)
+        .map(|task| task.name.clone())
+        .or_else(|| {
+            state
+                .session_history
+                .iter()
+                .rev()
+                .find(|task| task.id == task_id)
+                .map(|task| task.name.clone())
+        })
+        .ok_or_else(|| issue(format!("browser_task_not_found:{task_id}")))
+}
+
 /// Join opaque task identity to its transport lane without name-based selection.
 pub(super) fn address_task_command(command: &mut Value, task_id: &str) -> Result<String, String> {
     let path = BrowserSessionSqliteStore::default_sqlite_path()?;

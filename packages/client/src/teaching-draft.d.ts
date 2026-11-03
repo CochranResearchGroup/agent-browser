@@ -68,3 +68,14 @@ export interface TeachingSiteGuide {
 export function writeTeachingDraftCandidate(options: {
   candidateDirectory: string; candidateOnly: true; guide: TeachingSiteGuide;
 }): Promise<{guideId: string; path: string; sha256: string; state: 'draft'; executionAllowed: false}>;
+
+export interface TeachingAgentOperationScope {taskId:string;rootGuideId:string;operationId:string;inputSha256?:string;acceptedVersion?:TeachingRetainedVersion;context?:Record<string,any>;references?:Record<string,any>}
+export interface TeachingAgentOperationRecord {status:'created'|'pending'|'resolved'|'not_observed';retryAuthority:'not_inferred';response?:unknown;responseSha256?:string;inputSha256?:string;acceptedVersion?:TeachingRetainedVersion;context?:Record<string,any>;references?:Record<string,any>;}
+/** Operation provenance only; never guide, approval or acceptance authority. */
+export function createTeachingAgentSubmissionOwner(options:{candidateDirectory:string}):{
+ begin(scope:TeachingAgentOperationScope&{inputSha256:string}):Promise<TeachingAgentOperationRecord>;
+ bindMedia(scope:TeachingAgentOperationScope&{mediaSha256:string}):Promise<unknown>;
+ retainedContexts():Promise<Array<{taskId:string;rootGuideId:string;context:Record<string,any>}>>;
+ read(scope:TeachingAgentOperationScope):Promise<TeachingAgentOperationRecord>;
+ recordResult(scope:TeachingAgentOperationScope&{response:unknown}):Promise<TeachingAgentOperationRecord>;
+};

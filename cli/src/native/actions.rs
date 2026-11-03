@@ -292,6 +292,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_gc"
             | "service_prune_retained"
             | "service_repair_retained"
+            | "workspace_profile_library"
             | "service_access_plan"
             | "service_browser_capability_preflight"
             | "service_browser_capability_preference_guide"
@@ -1209,6 +1210,8 @@ async fn execute_command_after_navigation_admission(
             "service_gc" => handle_service_gc(cmd).await,
             "service_prune_retained" => handle_service_prune_retained(cmd).await,
             "service_repair_retained" => handle_service_repair_retained(cmd).await,
+            "workspace_profile_library" =>
+                super::workspace_profile_library::handle_workspace_profile_library(cmd).await,
             "service_access_plan" => handle_service_access_plan(cmd).await,
             "service_browser_capability_preflight" => {
                 handle_service_browser_capability_preflight(cmd).await

@@ -45,6 +45,10 @@ pub struct BrowserProfile {
     /// Safe account labels intended for operator search. Raw secrets and
     /// authentication material are not allowed.
     pub account_labels: Vec<String>,
+    /// Intended site/account/workspace tuples. These never establish a login.
+    pub site_associations: Vec<crate::ProfileSiteAssociation>,
+    /// Owner-recorded timestamp for intended metadata, independent of auth probes.
+    pub site_associations_updated_at: Option<String>,
     /// Ownership boundary for this profile's user-data directory and cleanup.
     pub profile_origin: ProfileOrigin,
     /// Product-level profile class used for reuse and cleanup decisions.

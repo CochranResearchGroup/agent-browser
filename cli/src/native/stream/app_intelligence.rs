@@ -1524,6 +1524,12 @@ fn write_operator_ledger(run_id: &str, value: &Value) -> Result<(), String> {
     fs::write(&path, bytes).map_err(|err| format!("Failed to write {}: {err}", path.display()))
 }
 
+/// Existing authenticated confirmation owner; teaching binds purpose and exact
+/// content when reading, rather than introducing a second approval ledger.
+pub(super) fn operator_confirmation_directory() -> Option<PathBuf> {
+    app_intelligence_run_root().map(|root| root.join("operator-confirmations"))
+}
+
 fn write_operator_confirmation_ledger(confirmation_id: &str, value: &Value) -> Result<(), String> {
     let root = app_intelligence_run_root()
         .ok_or_else(|| "Cannot resolve app intelligence run root.".to_string())?

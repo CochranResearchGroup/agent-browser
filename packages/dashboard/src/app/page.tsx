@@ -1,7 +1,7 @@
 "use client";
 
 import { managedWorkspaceViewport } from "@/lib/managed-workspace";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAtomValue } from "jotai/react";
 import { activePortAtom } from "@/store/sessions";
 import { useSessionsSync } from "@/store/sessions";
@@ -35,7 +35,7 @@ import {
   installDashboardFetchFailureInstrumentation,
   reportDashboardFailure,
 } from "@/lib/failure-observation";
-import { fetchDashboardAuthStatus } from "@/lib/dashboard-auth-status";
+import { WorkspaceAuthGate } from "@/components/workspace-auth-gate";
 import { fetchSharedRuntimeHealth } from "@/lib/dashboard-api";
 import { startCompletionDrivenDashboardPoll } from "@/lib/dashboard-read-coordinator";
 import { summarizeRuntimeAccess } from "@/lib/runtime-health-summary";
@@ -62,11 +62,7 @@ type DashboardAuthUser = {
   username: string;
   displayName?: string;
   role?: string;
-};
-
-type DashboardAuthStatus = {
-  authenticated: boolean;
-  user?: DashboardAuthUser | null;
+  authenticationSource?: "ingress" | "local";
 };
 
 type RuntimeManifest = {
@@ -363,70 +359,7 @@ export default function DashboardPage({
 }
 
 function DashboardAuthGate({ initialSection }: { initialSection: DashboardSection }) {
-  const [checking, setChecking] = useState(true);
-  const [user, setUser] = useState<DashboardAuthUser | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function checkAuth() {
-      try {
-        const response = await fetchDashboardAuthStatus();
-        const payload = (await response.json()) as DashboardAuthStatus;
-        if (cancelled) return;
-        setUser(payload.authenticated ? payload.user ?? null : null);
-      } catch {
-        if (!cancelled) setUser(null);
-      } finally {
-        if (!cancelled) setChecking(false);
-      }
-    }
-    void checkAuth();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handleLogin = useCallback((nextUser: DashboardAuthUser) => {
-    setUser(nextUser);
-    if (typeof window === "undefined") return;
-    const next = new URLSearchParams(window.location.search).get("next");
-    if (next?.startsWith("/") && !next.startsWith("//")) {
-      if (next.startsWith("/guacamole/")) {
-        window.location.assign(next);
-        return;
-      }
-      window.history.replaceState({ dashboardAuth: true }, "", next);
-    } else if (window.location.pathname === "/login") {
-      window.history.replaceState({ dashboardAuth: true }, "", "/");
-    }
-  }, []);
-
-  const handleLogout = useCallback(async () => {
-    await fetch("/api/dashboard-auth/logout", {
-      method: "POST",
-      credentials: "same-origin",
-    }).catch(() => undefined);
-    setUser(null);
-    if (typeof window !== "undefined") {
-      window.history.replaceState({ dashboardAuth: false }, "", "/login");
-    }
-  }, []);
-
-  if (checking) {
-    return <DashboardSessionRestoreScreen />;
-  }
-
-  if (!user) {
-    return <DashboardLoginScreen onAuthenticated={handleLogin} />;
-  }
-
-  return (
-    <RemoteViewHandoffGate
-      initialSection={initialSection}
-      user={user}
-      onLogout={handleLogout}
-    />
-  );
+  return <WorkspaceAuthGate>{(user, onLogout) => <RemoteViewHandoffGate initialSection={initialSection} user={user} onLogout={onLogout} />}</WorkspaceAuthGate>;
 }
 
 /** Navigate an authenticated durable handoff directly to the provider viewer. */
@@ -472,88 +405,6 @@ function DashboardSessionRestoreScreen({
             <p className="dashboard-login-subtitle">{message}</p>
           </div>
         </section>
-      </main>
-    </div>
-  );
-}
-
-function DashboardLoginScreen({
-  onAuthenticated,
-}: {
-  onAuthenticated?: (user: DashboardAuthUser) => void;
-}) {
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (submitting || !onAuthenticated) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const response = await fetch("/api/dashboard-auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ username, password }),
-      });
-      const payload = await response.json() as DashboardAuthStatus & { error?: string };
-      if (!response.ok || !payload.authenticated || !payload.user) {
-        setError(payload.error || "Invalid username or password.");
-        return;
-      }
-      onAuthenticated(payload.user);
-    } catch {
-      setError("Dashboard auth is not reachable.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="dashboard-root dashboard-login-root">
-      <div className="dashboard-aurora dashboard-aurora-one" />
-      <div className="dashboard-aurora dashboard-aurora-two" />
-      <main className="dashboard-login-main">
-        <form className="dashboard-login-panel" onSubmit={submit}>
-          <div className="dashboard-login-mark">
-            <ShieldCheck className="size-5" />
-          </div>
-          <div className="dashboard-login-heading">
-            <p className="dashboard-login-title">Agent Browser</p>
-            <p className="dashboard-login-subtitle">Superuser access required</p>
-          </div>
-          <label className="dashboard-login-field">
-            <span>Username</span>
-            <input
-              autoComplete="username"
-              disabled={submitting}
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-            />
-          </label>
-          <label className="dashboard-login-field">
-            <span>Password</span>
-            <input
-              autoComplete="current-password"
-              disabled={submitting}
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </label>
-          {error && <p className="dashboard-login-error">{error}</p>}
-          <Button
-            type="submit"
-            className="dashboard-primary-action dashboard-login-submit"
-            disabled={submitting || !username || !password}
-          >
-            <ShieldCheck className="size-4" />
-            {submitting ? "Signing in" : "Sign in"}
-          </Button>
-        </form>
       </main>
     </div>
   );
@@ -717,7 +568,7 @@ function NativeBrowserWorkspace({ user, onLogout }: {
     handoffs={inventory?.handoffs ? Object.values(inventory.handoffs) : undefined}
     selection={native.selectedKey ? { browserId: null, tabId: null } : selectedWorkspace.context.selection} userLabel={user.displayName || user.username}
     nativeWindows={nativeWindows} nativeSelection={native.selectedKey} nativeIssue={native.issue} onSelectNativeWindow={native.select}
-    onLogout={onLogout} onRefresh={async () => { await Promise.all([selectedWorkspace.refresh(), native.refresh(true)]); }} loading={selectedWorkspace.loading || native.loading} error={selectedWorkspace.error}
+    onLogout={onLogout} canEndLocalSession={user.authenticationSource !== "ingress"} onRefresh={async () => { await Promise.all([selectedWorkspace.refresh(), native.refresh(true)]); }} loading={selectedWorkspace.loading || native.loading} error={selectedWorkspace.error}
     diagnosticsHref={dashboardSectionUrl("service")}>
     {native.selectedKey ? <NativeWindowViewport target={native.windows.find(window => window.key === native.selectedKey) ?? null} loading={native.loading} /> : viewport.useNativeViewport ? <NativeTaskViewport target={viewport.target} unverifiedTarget={viewport.unverifiedTarget} desktopUnavailable={viewport.desktopUnavailable} presenceUnavailable={viewport.presenceUnavailable} hasSelection={Boolean(tabId)} loading={selectedWorkspace.loading} onRefresh={selectedWorkspace.refresh} /> : <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context}
       projection={selectedWorkspace.projection} onRefresh={selectedWorkspace.refresh} onSelectStream={workspaceViewPreferences.write} />}
@@ -817,7 +668,7 @@ function DashboardDiagnostics({ section, user, onLogout }: {
       <h1>Diagnostics</h1>
       <a href={dashboardSectionUrl("overview")}>Browsers</a>
       <span className="native-workspace-user">{user.displayName || user.username}</span>
-      <Button variant="ghost" size="sm" onClick={onLogout}>Sign out</Button>
+      {user.authenticationSource !== "ingress" && <Button variant="ghost" size="sm" onClick={onLogout}>End local session</Button>}
     </header>
     <RuntimeManifestNotice state={runtimeManifest} />
     <RuntimeHealthNotice state={runtimeHealth} />

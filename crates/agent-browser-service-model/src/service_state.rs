@@ -1422,6 +1422,13 @@ impl ServiceState {
         for (id, mut profile) in configured.profiles {
             if let Some(persisted) = self.profiles.get(&id) {
                 overlay_persisted_profile_freshness(&mut profile, persisted);
+                // Intended metadata has its own owner timestamp and must not be
+                // lost when current config refreshes launch/access policy.
+                if persisted.site_associations_updated_at.is_some() {
+                    profile.site_associations = persisted.site_associations.clone();
+                    profile.site_associations_updated_at =
+                        persisted.site_associations_updated_at.clone();
+                }
             }
             self.profiles.insert(id.clone(), profile);
             self.entity_sources

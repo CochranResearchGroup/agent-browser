@@ -63,7 +63,7 @@ export interface TeachingReviewOptions {
   candidateDirectory:string;
   browser:Pick<ReturnType<typeof createPlaybookClient>,'inspectTeachingDraft'|'validateTeachingCandidate'>;
   acceptedVersion?:TeachingRetainedVersion;
-  sourceStatus?:(request:Pick<TeachingSourceState,'recordingId'|'videoSha256'|'sourceTaskId'> & {evidence:TeachingEvidenceReference[]})=>Promise<TeachingSourceState>;
+  sourceStatus?:(request:Pick<TeachingSourceState,'recordingId'|'videoSha256'|'sourceTaskId'> & {evidence:TeachingEvidenceReference[];rootGuideId?:string})=>Promise<TeachingSourceState>;
   /** Read an existing explicit operator decision, not create an approval from a role label. */
   readOperatorDecision?:(request:TeachingDecisionRequest)=>Promise<TeachingOperatorReview>;
   /** Existing exact report/content evidence from the receiving application, never caller success labels. */
@@ -80,3 +80,5 @@ export interface TeachingReviewClient {
   lookupOperation(input:{rootGuideId:string;operationId:string}):Promise<(TeachingVersionReference & {status:'saved';recoveredOriginal:true;ordinaryReuseAllowed:false})|{status:'not_observed';operationId:string;retryAuthority:'not_inferred'}>;
 }
 export function createTeachingReviewClient(options:TeachingReviewOptions):TeachingReviewClient;
+/** Bind an existing scoped owner procedure to the actual immutable file digest. */
+export function resolveTeachingAcceptedBaseline(options:{candidateDirectory:string;browser:{inspectGuide:(taskId:string,guideId:string)=>Promise<any>};taskId:string;guideId:string;allowedOrigins:string[];review?:TeachingReviewClient}):Promise<{guideId:string;sha256:string}>;

@@ -1,4 +1,8 @@
+[P301 Native handoff repair](docs/dev/plans/0301-2026-11-02-native-x11-authority-529.md): PR533 merged and preserve-mode installed; doctor passes and retained browser handoff is ready. Full P300 rail deployment and actual narrated/copy acceptance remain pending.
+
 # Runbook
+
+[P300 workspace execution](docs/dev/plans/0300-2026-11-01-workspace-siteguides-523.md): 524–528 source validated/CLOSED through368ac49e9; sealed fast_iteration candidate built, not installed. Three owned worker checkouts governed-closed.529/530 remain OPEN/needs-info with all actual narrated/copy rows NOT_RUN; selected context and qualified runtime/verifier are missing. Final review and TDD counts remain0.
 
 [Native operator-journey acceptance](docs/dev/notes/2026-10-31-native-journey-receipt.md), #512 / PR513, is installed accepted on sealed binary5a9f1250acef. Authenticated Native input, same-link reconnect, continued same-task automation and exact cleanup pass; operatorJourneyReady is now true. The idle profile-lease advisory remains separate.
 

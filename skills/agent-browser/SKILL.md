@@ -98,7 +98,7 @@ Discover `category:"playbooks"` and use `browser_command` in the existing task. 
 
 ## Read more only when needed
 
-Retained-task recovery requires proven process/profile absence and preserves peer claims. Continue through the original taskId.
+Retained recovery requires proven process/profile absence; preserve peers and the original taskId.
 
 - [Commands](references/commands.md): detailed CLI syntax.
 - [Snapshot references](references/snapshot-refs.md): find and use element refs.
@@ -110,11 +110,11 @@ Retained-task recovery requires proven process/profile absence and preserves pee
 Use `browser_discover` for advanced MCP metadata.
 
 
-For dashboard/viewer/startup failures, read [dashboard diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics).
+For sign-in and workspace teaching, read [workspace tools](references/workspace-sign-in.md); for viewer failures, read [diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics).
 
 ## Browser mode and builds
 
-Inspect `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build and mode are independent; copies do not prove login. Read [controls/recovery](references/cli-and-service.md#browser-build-selection). Reconcile the original operation after lost replies.
+Inspect `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build and mode are independent; copies do not prove login. Read [copy experiments](references/cli-and-service.md#profile-lab-independent-copies) and [controls/recovery](references/cli-and-service.md#browser-build-selection). Reconcile the original operation after lost replies.
 
 Owned manual copies use normal close without desktop agent input. Inspect uncertain closes; cancel the original operation before reviewing a new attempt. A reboot is not clean-close proof. Window readiness is separate from agent input authority.
 
