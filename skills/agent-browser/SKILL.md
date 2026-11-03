@@ -118,6 +118,10 @@ Inspect `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `prof
 
 Owned manual copies use normal close without desktop agent input. Inspect uncertain closes; cancel the original operation before reviewing a new attempt. A reboot is not clean-close proof. Window readiness is separate from agent input authority.
 
+Owned manual copies use normal close without desktop agent input. Inspect uncertain closes; cancel the original operation before reviewing a new attempt. A reboot is not clean-close proof. Window readiness is separate from agent input authority.
+
+After verification and normal task close, `profile_duplicate` choice `dispose_copy` uses only the original completed `operationId` and `ownerConfirmed: true`, without `taskId`. The owner protects source/peers, refuses live or uncertain custody, and retains exact disposal history. Continue the original interrupted disposal; cancellation does not remove a completed copy.
+
 Diagnostics retain selection query fields. Rail presence revalidates at 250/500/1000 ms, then polls every three seconds.
 
 ### Tasks and teaching

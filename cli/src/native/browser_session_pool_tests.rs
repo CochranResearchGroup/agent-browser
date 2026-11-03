@@ -687,6 +687,37 @@ impl RemoteViewApplicationTransport for PoolTransport {
                     .unwrap();
                 let mut windows = fixture["windows"].clone();
                 windows["desktopId"] = assignment.desktop_id.clone().into();
+                #[cfg(target_os = "linux")]
+                if self.root.join("copy-process-fixture").exists() {
+                    let observed: Option<Value> = std::fs::read(self.root.join(format!(
+                        "copy-process-observation-{}.json",
+                        assignment.desktop_id
+                    )))
+                    .ok()
+                    .and_then(|bytes| serde_json::from_slice(&bytes).ok());
+                    let identity = observed
+                        .as_ref()
+                        .and_then(|value| value.get("processIdentity"));
+                    let pid = identity
+                        .and_then(|value| value["pid"].as_u64())
+                        .map(|pid| pid as u32);
+                    if observed
+                        .as_ref()
+                        .is_some_and(|value| value["desktopId"] == assignment.desktop_id)
+                        && pid.is_some_and(|pid| {
+                            matches!(
+                                crate::process_identity::observe_process(pid),
+                                crate::process_identity::ProcessObservation::Observed(_)
+                            )
+                        })
+                    {
+                        windows["windows"][0]["pid"] = serde_json::json!(pid.unwrap());
+                    } else {
+                        windows["windows"] = serde_json::json!([]);
+                    }
+                    return Ok(windows);
+                }
+
                 if let Some(generation) = provider.native_viewing_generation {
                     windows["viewingGeneration"] = generation.into();
                 }
@@ -9163,4 +9194,589 @@ fn lifecycle_window_readiness_uses_authenticated_observe_only_and_exact_identity
         .native_browser_window_ready(&target)
         .unwrap_err()
         .starts_with("browser_native_target_changed"));
+}
+
+#[cfg(target_os = "linux")]
+struct CopyDisposalHttp {
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    server: Option<std::thread::JoinHandle<()>>,
+}
+#[cfg(target_os = "linux")]
+impl CopyDisposalHttp {
+    fn new(root: &Path, environment: &crate::test_utils::EnvGuard<'_>) -> Self {
+        use std::io::{Read, Write};
+        let token = root.join("copy-disposal-owner.token");
+        use std::os::unix::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&token)
+            .unwrap()
+            .write_all(b"synthetic-copy-disposal-owner-token")
+            .unwrap();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        environment.set(
+            "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
+            &format!("http://{}", listener.local_addr().unwrap()),
+        );
+        environment.set(
+            "AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE",
+            token.to_str().unwrap(),
+        );
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stopping = stop.clone();
+        let root = root.to_path_buf();
+        let server = std::thread::spawn(move || {
+            while !stopping.load(std::sync::atomic::Ordering::SeqCst) {
+                let mut socket = match listener.accept() {
+                    Ok((socket, _)) => socket,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(std::time::Duration::from_millis(5));
+                        continue;
+                    }
+                    Err(error) => panic!("copy owner fixture accept failed: {error}"),
+                };
+                socket
+                    .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                    .unwrap();
+                let mut bytes = Vec::new();
+                let at = loop {
+                    let mut chunk = [0u8; 4096];
+                    let count = socket.read(&mut chunk).unwrap();
+                    assert!(count > 0);
+                    bytes.extend_from_slice(&chunk[..count]);
+                    assert!(bytes.len() <= 8192);
+                    if let Some(at) = bytes.windows(4).position(|part| part == b"\r\n\r\n") {
+                        let headers = String::from_utf8_lossy(&bytes[..at]);
+                        let length = headers
+                            .lines()
+                            .find_map(|line| {
+                                line.to_ascii_lowercase()
+                                    .strip_prefix("content-length:")
+                                    .and_then(|v| v.trim().parse::<usize>().ok())
+                            })
+                            .unwrap();
+                        if bytes.len() >= at + 4 + length {
+                            break at;
+                        }
+                    }
+                };
+                let headers = String::from_utf8_lossy(&bytes[..at]);
+                assert_eq!(
+                    headers.lines().next().unwrap(),
+                    "POST /v1/agent-desktop/observe HTTP/1.1"
+                );
+                assert!(headers.lines().any(|line| line.eq_ignore_ascii_case(
+                    "authorization: Bearer synthetic-copy-disposal-owner-token"
+                )));
+                let body: Value = serde_json::from_slice(&bytes[at + 4..]).unwrap();
+                let observed: Value = serde_json::from_slice(
+                    &std::fs::read(root.join("copy-process-observation.json")).unwrap(),
+                )
+                .unwrap();
+                let identity = &observed["processIdentity"];
+                let token = identity["startToken"].as_str().unwrap();
+                let (boot, start) = token
+                    .strip_prefix("linux:")
+                    .unwrap()
+                    .rsplit_once(':')
+                    .unwrap();
+                let reply = serde_json::json!({"desktopId":body["desktopId"],"generation":body["expectedGeneration"],"windows":{"windows":[{"id":1,"pid":identity["pid"],"active":true,"x":0,"y":0,"width":400,"height":300,"processIdentity":{"pid":identity["pid"],"executable":identity["executablePath"],"boot_id":boot,"start_token":start}}]}});
+                let encoded = serde_json::to_vec(&reply).unwrap();
+                write!(socket,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",encoded.len()).unwrap();
+                socket.write_all(&encoded).unwrap();
+            }
+        });
+        Self {
+            stop,
+            server: Some(server),
+        }
+    }
+}
+#[cfg(target_os = "linux")]
+impl Drop for CopyDisposalHttp {
+    fn drop(&mut self) {
+        self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.server.take().unwrap().join().unwrap();
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn copy_disposal_public_completed_close_reload_dispose_preserves_source_and_peer() {
+    copy_disposal_case("normal");
+}
+#[test]
+#[cfg(target_os = "linux")]
+fn copy_disposal_retained_owner_readback_refreshes_closed_copy_snapshot() {
+    copy_disposal_case("retained_snapshot");
+}
+#[cfg(target_os = "linux")]
+fn copy_disposal_case(case: &str) {
+    let root = std::env::temp_dir().join(format!("copy-disposal-public-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(root.join(".agent-browser/service")).unwrap();
+    let environment = crate::test_utils::EnvGuard::new(&[
+        "HOME",
+        "AGENT_BROWSER_HOME",
+        "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+        "AGENT_BROWSER_CONFIG",
+        "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
+        "AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE",
+    ]);
+    environment.set("HOME", root.to_str().unwrap());
+    environment.set("AGENT_BROWSER_HOME", root.to_str().unwrap());
+    environment.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+    environment.remove("AGENT_BROWSER_CONFIG");
+    let fixture = Fixture::with_root(root.join(".agent-browser/service"), true);
+    for (id, bytes) in [
+        ("profile-a", b"source bytes".as_slice()),
+        ("profile-b", b"peer bytes".as_slice()),
+    ] {
+        std::fs::create_dir_all(fixture.root.join(id)).unwrap();
+        std::fs::write(fixture.root.join(id).join("retained"), bytes).unwrap();
+    }
+    let processes = CopyProcessFixture::new(&fixture.root);
+    let owner = CopyDisposalHttp::new(&fixture.root, &environment);
+    let provider = Rc::new(RefCell::new(Provider {
+        pool_maximum: Some(4),
+        ..Provider::default()
+    }));
+    let launches = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), launches.clone());
+    let peer=consumer.handle_command(&serde_json::json!({"action":"browser_session_open","profileId":"profile-b","sessionName":"Peer retained work","manualLogin":true,"url":"https://peer.example.test/login","activityAtMs":100,"serviceName":"fixture","agentName":"fixture","taskName":"Peer retained work"}));
+    assert_eq!(peer["success"], true, "{peer}");
+    let peer_task = peer["data"]["sessionId"].as_str().unwrap().to_owned();
+    consumer.tab_for_navigation(&peer_task, 101).unwrap();
+    let peer_browser =
+        consumer.state().browsers[peer["data"]["browserId"].as_str().unwrap()].clone();
+    let peer_identity = crate::process_identity::observe_process(peer_browser.pid);
+    let opened=consumer.handle_command(&serde_json::json!({"action":"browser_session_open","profileId":"profile-a","sessionName":"Source copy","manualLogin":true,"url":"https://example.test/login","activityAtMs":100,"serviceName":"fixture","agentName":"fixture","taskName":"Source copy"}));
+    assert_eq!(opened["success"], true, "{opened}");
+    consumer
+        .tab_for_navigation(opened["data"]["sessionId"].as_str().unwrap(), 101)
+        .unwrap();
+    let original_catalog = fixture.store(false).load_profile_catalog().unwrap().catalog;
+    let prepare=consumer.handle_command(&serde_json::json!({"action":"browser_session_profile_duplicate","operationId":"copy-disposal-public","sourceProfileId":"profile-a","destinationName":"Synthetic independent copy","choice":"prepare","launch":true}));
+    assert_eq!(prepare["success"], true, "{prepare}");
+    let completed=consumer.handle_command(&serde_json::json!({"action":"browser_session_profile_duplicate","operationId":"copy-disposal-public","choice":"close_and_duplicate","ownerConfirmed":true}));
+    assert_eq!(
+        completed["data"]["phase"], "completed",
+        "public hosted copy must really complete: {completed}"
+    );
+    let destination = completed["data"]["destination"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let copied_path = fixture
+        .store(false)
+        .load_profile_catalog()
+        .unwrap()
+        .catalog
+        .profiles[&destination]
+        .user_data_dir
+        .clone();
+    if case == "live" {
+        let refused=consumer.handle_command(&serde_json::json!({"action":"browser_session_profile_duplicate","operationId":"copy-disposal-public","choice":"dispose_copy","ownerConfirmed":true}));
+        assert_eq!(refused["success"], false, "{refused}");
+        assert!(Path::new(&copied_path).is_dir());
+    }
+    let closed=consumer.handle_command(&serde_json::json!({"action":"browser_session_close","sessionId":completed["data"]["launch"]["taskId"],"scope":"browser","activityAtMs":200,"actor":"synthetic-owner","reason":"close the completed synthetic copy before disposal"}));
+    assert_eq!(closed["data"]["result"]["closed"], true, "{closed}");
+    assert_eq!(closed["data"]["residue"]["originalProcess"], "absent");
+    let launch_count = launches.get();
+    drop(consumer);
+    let mut retained_owner = host(&fixture, provider.clone(), launches.clone());
+    let mut reloaded = host(&fixture, provider.clone(), launches.clone());
+    // OS process enumeration is an external boundary. The exact published child
+    // identities above still require real kernel exit; unrelated census is synthetic.
+    let census = super::super::service_resources::CleanupCensusFixture::new(Vec::new());
+    let disposal_directory = fixture.root.join("profile-duplication");
+    let marker = disposal_directory.join("fixture-disposal-stop-after");
+    let request = serde_json::json!({"action":"browser_session_profile_duplicate","operationId":"copy-disposal-public","choice":"dispose_copy","ownerConfirmed":true});
+    let mut restore_catalog = None;
+    let mut restore_fence = None;
+    let mut moved_payload = None;
+    match case {
+        "confirmation" => {
+            let mut bad = request.clone();
+            bad["ownerConfirmed"] = false.into();
+            assert_eq!(reloaded.handle_command(&bad)["success"], false);
+        }
+        "forged_target" => {
+            for field in [
+                "destinationProfileId",
+                "path",
+                "actor",
+                "requestPrincipalSource",
+            ] {
+                let mut bad = request.clone();
+                bad[field] = "profile-a".into();
+                assert_eq!(reloaded.handle_command(&bad)["success"], false, "{field}");
+            }
+        }
+        "pending_intent" => {
+            let pending=reloaded.handle_command(&serde_json::json!({"action":"browser_session_profile_duplicate","operationId":"other-copy-intent","sourceProfileId":destination,"choice":"prepare","launch":false}));
+            assert_eq!(pending["success"], true, "{pending}");
+        }
+        "lock" => std::fs::write(
+            Path::new(&copied_path).join("SingletonLock"),
+            b"synthetic lock",
+        )
+        .unwrap(),
+        "unknown_census" => census.fail("synthetic_census_unavailable"),
+        "foreign_fence" => {
+            let mut store = fixture.store(false);
+            let before = store.load_session_state().unwrap();
+            let mut next = before.clone();
+            next.profile_operation_ids
+                .insert(destination.clone(), "foreign-operation".into());
+            store
+                .compare_and_save_session_state(&before, &next)
+                .unwrap();
+            restore_fence = Some(before);
+        }
+        "catalog_alias" => {
+            let store = fixture.store(false);
+            let before = store.load_profile_catalog().unwrap().catalog;
+            let mut next = before.clone();
+            let mut alias = next.profiles[&destination].clone();
+            alias.id = "foreign-alias".into();
+            next.profiles.insert(alias.id.clone(), alias);
+            store
+                .compare_and_save_profile_catalog(&before, &next)
+                .unwrap();
+            restore_catalog = Some(before);
+        }
+        "lineage" => {
+            rusqlite::Connection::open(fixture.root.join("runtime.sqlite3")).unwrap().execute("UPDATE browser_profile_duplication_lineage SET operation_id='foreign-operation' WHERE profile_id=?1",[&destination]).unwrap();
+        }
+        "symlink" => std::os::unix::fs::symlink(
+            fixture.root.join("profile-a/retained"),
+            Path::new(&copied_path).join("foreign-link"),
+        )
+        .unwrap(),
+        "root_symlink" => {
+            let moved = fixture.root.join("held-copy");
+            std::fs::rename(&copied_path, &moved).unwrap();
+            std::os::unix::fs::symlink(&moved, &copied_path).unwrap();
+            moved_payload = Some(moved);
+        }
+        _ => {}
+    }
+    if matches!(
+        case,
+        "pending_intent"
+            | "lock"
+            | "unknown_census"
+            | "foreign_fence"
+            | "catalog_alias"
+            | "lineage"
+            | "symlink"
+            | "root_symlink"
+    ) {
+        let blocked = reloaded.handle_command(&request);
+        assert_eq!(blocked["success"], false, "{case}: {blocked}");
+        assert!(Path::new(&copied_path).exists());
+        if case == "foreign_fence" {
+            let cancelled=reloaded.handle_command(&serde_json::json!({"action":"browser_session_profile_duplicate","operationId":"copy-disposal-public","choice":"cancel"}));
+            assert_eq!(cancelled["data"]["phase"], "completed");
+            assert_eq!(
+                fixture
+                    .store(false)
+                    .load_session_state()
+                    .unwrap()
+                    .profile_operation_ids[&destination],
+                "foreign-operation"
+            );
+        }
+        match case {
+            "pending_intent"=>assert_eq!(reloaded.handle_command(&serde_json::json!({"action":"browser_session_profile_duplicate","operationId":"other-copy-intent","choice":"cancel"}))["data"]["phase"],"cancelled"),
+            "lock"=>std::fs::remove_file(Path::new(&copied_path).join("SingletonLock")).unwrap(),
+            "unknown_census"=>census.restore(),
+            "foreign_fence"=>{let mut store=fixture.store(false);let now=store.load_session_state().unwrap();store.compare_and_save_session_state(&now,&restore_fence.take().unwrap()).unwrap();},
+            "catalog_alias"=>{let store=fixture.store(false);let now=store.load_profile_catalog().unwrap().catalog;store.compare_and_save_profile_catalog(&now,&restore_catalog.take().unwrap()).unwrap();},
+            "lineage"=>{rusqlite::Connection::open(fixture.root.join("runtime.sqlite3")).unwrap().execute("UPDATE browser_profile_duplication_lineage SET operation_id='copy-disposal-public' WHERE profile_id=?1",[&destination]).unwrap();},
+            "symlink"=>std::fs::remove_file(Path::new(&copied_path).join("foreign-link")).unwrap(),
+            "root_symlink"=>{std::fs::remove_file(&copied_path).unwrap();std::fs::rename(moved_payload.take().unwrap(),&copied_path).unwrap();},
+            _=>{}
+        }
+    }
+    let stop = case
+        .strip_prefix("restart_")
+        .or_else(|| case.strip_prefix("missing_"));
+    if let Some(stop) = stop {
+        std::fs::write(&marker, stop).unwrap();
+    }
+    if case == "foreign_after_intent" {
+        std::fs::write(&marker, "prepared").unwrap();
+    }
+    let mut disposed = reloaded.handle_command(&request);
+    if stop.is_some() || case == "foreign_after_intent" {
+        assert_eq!(
+            disposed["data"]["state"], completed["data"]["state"],
+            "cleanup must preserve public copy state"
+        );
+        assert_eq!(
+            disposed["data"]["sourceObservation"], completed["data"]["sourceObservation"],
+            "cleanup must preserve retained source observation"
+        );
+        assert_eq!(
+            disposed["data"]["cleanup"]["state"], "readback_required",
+            "{case}: {disposed}"
+        );
+        let checkpoint = disposed["data"]["cleanup"]["checkpoint"].clone();
+        let inspect=reloaded.handle_command(&serde_json::json!({"action":"browser_session_profile_duplicate","operationId":"copy-disposal-public","sourceProfileId":"profile-a","choice":"inspect"}));
+        let view = &inspect["data"]["operations"][0];
+        assert_eq!(view["cleanup"]["checkpoint"], checkpoint, "{inspect}");
+        assert_eq!(
+            view["actions"],
+            serde_json::json!([{"action":"reconcile","requiresConfirmation":false}])
+        );
+        std::fs::remove_file(&marker).unwrap();
+        drop(reloaded);
+        reloaded = host(&fixture, provider.clone(), launches.clone());
+        assert_eq!(
+            launches.get(),
+            launch_count,
+            "restart loads retained closed history without a dummy browser"
+        );
+        if case.starts_with("missing_") {
+            let payload = if case == "missing_prepared" {
+                PathBuf::from(&copied_path)
+            } else {
+                std::fs::read_dir(disposal_directory.join("disposal-quarantine"))
+                    .unwrap()
+                    .next()
+                    .unwrap()
+                    .unwrap()
+                    .path()
+            };
+            std::fs::remove_dir_all(payload).unwrap();
+            let unknown=reloaded.handle_command(&serde_json::json!({"action":"browser_session_profile_duplicate","operationId":"copy-disposal-public","choice":"reconcile"}));
+            assert_eq!(
+                unknown["data"]["cleanup"]["state"], "readback_required",
+                "{unknown}"
+            );
+            assert_eq!(
+                unknown["data"]["cleanup"]["deleteAcknowledged"],
+                Value::Null
+            );
+            assert_eq!(
+                std::fs::read(fixture.root.join("profile-a/retained")).unwrap(),
+                b"source bytes"
+            );
+            assert_eq!(
+                std::fs::read(fixture.root.join("profile-b/retained")).unwrap(),
+                b"peer bytes"
+            );
+            return;
+        }
+        if case == "foreign_after_intent" {
+            let mut store = fixture.store(false);
+            let before = store.load_session_state().unwrap();
+            let mut next = before.clone();
+            next.profile_operation_ids
+                .insert(destination.clone(), "foreign-operation".into());
+            store
+                .compare_and_save_session_state(&before, &next)
+                .unwrap();
+            reloaded.handle_command(&serde_json::json!({"action":"browser_session_profile_duplicate","operationId":"copy-disposal-public","choice":"cancel"}));
+            let refusal=reloaded.handle_command(&serde_json::json!({"action":"browser_session_profile_duplicate","operationId":"copy-disposal-public","choice":"reconcile"}));
+            assert_eq!(refusal["data"]["cleanup"]["state"], "readback_required");
+            assert_eq!(
+                store.load_session_state().unwrap().profile_operation_ids[&destination],
+                "foreign-operation"
+            );
+            let now = store.load_session_state().unwrap();
+            store.compare_and_save_session_state(&now, &before).unwrap();
+        }
+        disposed=reloaded.handle_command(&serde_json::json!({"action":"browser_session_profile_duplicate","operationId":"copy-disposal-public","choice":"reconcile"}));
+    }
+    assert_eq!(disposed["data"]["state"], completed["data"]["state"]);
+    assert_eq!(
+        disposed["data"]["sourceObservation"],
+        completed["data"]["sourceObservation"]
+    );
+    assert_eq!(
+        disposed["data"]["cleanup"]["state"], "completed",
+        "{case}: {disposed}"
+    );
+    assert_eq!(
+        disposed["data"]["cleanup"]["deleteAcknowledged"],
+        case != "restart_deleted"
+    );
+    if case == "restart_deleted" {
+        assert_eq!(
+            disposed["data"]["cleanup"]["completionEvidence"],
+            "absent_after_retained_delete_intent"
+        );
+    }
+    let inspect=reloaded.handle_command(&serde_json::json!({"action":"browser_session_profile_duplicate","operationId":"copy-disposal-public","sourceProfileId":"profile-a","choice":"inspect"}));
+    let view = &inspect["data"]["operations"][0];
+    assert_eq!(view["cleanup"]["state"], "completed", "{inspect}");
+    assert_eq!(view["actions"], serde_json::json!([]));
+    for field in [
+        "phase",
+        "source",
+        "destination",
+        "launch",
+        "completionOutcome",
+        "authenticationContinuity",
+    ] {
+        assert_eq!(
+            view[field], completed["data"][field],
+            "original history {field}"
+        );
+    }
+    for choice in [
+        "prepare",
+        "reconcile",
+        "close_and_duplicate",
+        "cancel",
+        "focus_source",
+        "retry_launch",
+        "finish_without_opening",
+        "open_source",
+    ] {
+        let replay=reloaded.handle_command(&serde_json::json!({"action":"browser_session_profile_duplicate","operationId":"copy-disposal-public","sourceProfileId":"profile-a","choice":choice,"ownerConfirmed":true}));
+        assert_eq!(
+            replay["data"]["cleanup"]["state"], "completed",
+            "{choice}: {replay}"
+        );
+        assert_eq!(replay["data"]["actions"], serde_json::json!([]));
+    }
+    let wrong=reloaded.handle_command(&serde_json::json!({"action":"browser_session_profile_duplicate","operationId":"copy-disposal-public","choice":"close_and_duplicate","sourceProfileId":"profile-b","ownerConfirmed":true}));
+    assert_eq!(wrong["success"], false);
+    reloaded.tab_for_navigation(&peer_task, 202).unwrap();
+    assert_eq!(
+        crate::process_identity::observe_process(peer_browser.pid),
+        peer_identity,
+        "active peer kernel identity preserved"
+    );
+    let after_catalog = fixture.store(false).load_profile_catalog().unwrap().catalog;
+    assert_eq!(
+        after_catalog.profiles["profile-a"],
+        original_catalog.profiles["profile-a"]
+    );
+    assert_eq!(
+        after_catalog.profiles["profile-b"],
+        original_catalog.profiles["profile-b"]
+    );
+    assert_eq!(
+        launches.get(),
+        launch_count,
+        "disposal after normal close never opens a dummy or source browser"
+    );
+    if case == "retained_snapshot" {
+        let readback=retained_owner.handle_command(&serde_json::json!({"action":"browser_session_profile_duplicate","operationId":"copy-disposal-public","sourceProfileId":"profile-a","choice":"prepare"}));
+        assert_eq!(readback["data"]["cleanup"]["state"], "completed");
+        let refusal = retained_owner
+            .open(OpenBrowserSession::exact_profile(
+                "disposed profile must not open",
+                &destination,
+                201,
+            ))
+            .unwrap_err();
+        assert!(
+            refusal.starts_with("browser_profile_not_found:"),
+            "retained catalog/state must refresh before the next owner call: {refusal}"
+        );
+        assert_eq!(launches.get(), launch_count);
+    }
+    assert!(!Path::new(&copied_path).exists());
+    assert!(!fixture
+        .store(false)
+        .load_profile_catalog()
+        .unwrap()
+        .catalog
+        .profiles
+        .contains_key(&destination));
+    assert_eq!(
+        std::fs::read(fixture.root.join("profile-a/retained")).unwrap(),
+        b"source bytes"
+    );
+    assert_eq!(
+        std::fs::read(fixture.root.join("profile-b/retained")).unwrap(),
+        b"peer bytes"
+    );
+    assert!(
+        fixture
+            .store(false)
+            .load_profile_catalog()
+            .unwrap()
+            .catalog
+            .profiles
+            .contains_key("profile-a")
+            && fixture
+                .store(false)
+                .load_profile_catalog()
+                .unwrap()
+                .catalog
+                .profiles
+                .contains_key("profile-b")
+    );
+    let repository =
+        super::super::service_store::LockedServiceStateRepository::default_json().unwrap();
+    assert!(
+        !super::super::service_store::ServiceStateRepository::load_snapshot(&repository)
+            .unwrap()
+            .profiles
+            .contains_key(&destination),
+        "Native copy/open did not persist a legacy profile projection"
+    );
+    drop(reloaded);
+    drop(retained_owner);
+    drop(owner);
+    drop(processes);
+    drop(fixture);
+    drop(environment);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn copy_disposal_rejects_live_references_untrusted_targets_and_foreign_metadata() {
+    for case in [
+        "live",
+        "confirmation",
+        "forged_target",
+        "pending_intent",
+        "lock",
+        "unknown_census",
+        "foreign_fence",
+        "catalog_alias",
+        "lineage",
+        "symlink",
+        "root_symlink",
+        "foreign_after_intent",
+    ] {
+        copy_disposal_case(case);
+    }
+}
+#[test]
+#[cfg(target_os = "linux")]
+fn copy_disposal_resumes_only_original_receipt_across_owner_restarts() {
+    for case in [
+        "restart_prepared",
+        "restart_renamed",
+        "restart_quarantined",
+        "restart_catalog_removed",
+        "restart_deleting",
+        "restart_deleted",
+    ] {
+        copy_disposal_case(case);
+    }
+}
+#[test]
+#[cfg(target_os = "linux")]
+fn copy_disposal_missing_unacknowledged_payload_never_becomes_terminal() {
+    for case in [
+        "missing_prepared",
+        "missing_quarantined",
+        "missing_catalog_removed",
+    ] {
+        copy_disposal_case(case);
+    }
 }

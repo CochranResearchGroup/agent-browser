@@ -37,11 +37,11 @@ pub enum OriginalProcessState {
     Unknown,
 }
 #[derive(Default, Deserialize)]
-struct LaunchLedger {
+pub(super) struct LaunchLedger {
     #[serde(default)]
-    records: BTreeMap<String, BrowserLaunchCustodyRecord>,
+    pub(super) records: BTreeMap<String, BrowserLaunchCustodyRecord>,
     #[serde(default)]
-    reconciled_absent: BTreeSet<String>,
+    pub(super) reconciled_absent: BTreeSet<String>,
 }
 /// Private pre-close attachment provenance captured from the browser owner.
 /// Public commands cannot supply process identities or deserialize this value;
@@ -409,7 +409,7 @@ impl Drop for SourceCustody {
         }
     }
 }
-fn load_document<T: serde::de::DeserializeOwned>(
+pub(super) fn load_document<T: serde::de::DeserializeOwned>(
     connection: &Connection,
     kind: &str,
     schema: &str,

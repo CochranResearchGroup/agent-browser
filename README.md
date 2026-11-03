@@ -7355,6 +7355,14 @@ operation before reviewing another attempt. A reboot does not substitute for
 a clean source close.
 Window readiness does not grant desktop input control.
 
+After verifying a copy, close its task normally. Use `profile_duplicate` choice
+`dispose_copy` with the original completed `operationId` and
+`ownerConfirmed: true`, omitting `taskId`. The owner derives the exact copy
+destination, refuses live or uncertain custody, and retains a durable disposal
+receipt. Inspect an interrupted disposal and continue its original operation;
+reusing its ID cannot create another copy. This choice preserves the source and
+other profiles. Cancellation does not remove a completed copy.
+
 MCP: discover `profile_duplicate`, then use `browser_command` with
 `action: "profile_duplicate"` and `params` containing `operationId`,
 `sourceProfileId`, `destinationName`, `choice` and `launch`. An optional `taskId`

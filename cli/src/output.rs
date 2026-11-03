@@ -7410,6 +7410,9 @@ Commands:
   Owned manual copies close without desktop agent input. Inspect uncertain closes;
   cancel the original before a new attempt. Reboot absence is not clean-close proof.
   Copy window readiness is separate from agent input readiness.
+  After normal copy close, dispose_copy uses its completed operationId and ownerConfirmed.
+  Omit taskId; inspect interrupted disposal and continue the same operation.
+  Disposal preserves source/peers; cancel does not remove a completed copy.
   Source configured mode is not physical-mode proof; unretained original mode is unknown.
   Copy/publication do not prove account identity, usable login or storage divergence.
   Reload/inspect reads the original operation; reconcile lost replies without replay.
