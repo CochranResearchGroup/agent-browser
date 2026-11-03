@@ -1,6 +1,6 @@
 # Active plan index
 
-[P300 compact workspace, Profiles and SiteGuides](0300-2026-11-01-workspace-siteguides-523.md), spec523: tickets524–528 source closed; full workspace installation and actual529/530 acceptance remain open. Donor selection is complete; exact copy disposal is under qualification. Actual narration awaits selected recording/context. Final broad review/remediation remain zero.
+[P300 compact workspace, Profiles and SiteGuides](0300-2026-11-01-workspace-siteguides-523.md), spec523:524–528 source CLOSED. Canonical lifecycle repair is installed; completed-copy cleanup source is qualified and combined integration is underway. Actual529 narration selection and530 portability qualification remain open. Final review/remediation remain0.
 
 [P302 owned manual copy closure](0302-2026-11-02-profile-copy-lifecycle-530.md): source and installed repair checkpoint complete; actual account qualification remains under #530.
 
