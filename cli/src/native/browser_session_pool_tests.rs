@@ -7877,6 +7877,26 @@ fn manual_native_context_refreshes_after_host_restart_and_fences_generation() {
         before_refusal,
         "generation refusal precedes the local effect"
     );
+    let mut strict_effects = RemoteViewSessionEffects::new(
+        Process {
+            mode: Mode::Success,
+            root: fixture.root.clone(),
+            calls: launches.clone(),
+        },
+        adapter(&fixture, provider.clone()),
+        fixture.store(false),
+        Vec::new(),
+        || uuid::Uuid::new_v4().to_string(),
+    )
+    .unwrap();
+    strict_effects.begin_operation(adopted.state()).unwrap();
+    assert!(strict_effects
+        .dispatch_graceful_browser_close(&browser)
+        .is_err());
+    assert!(
+        !fixture.root.join("manual-strict-close-count").exists(),
+        "strict close generation refusal precedes physical effect"
+    );
     provider.borrow_mut().native_viewing_generation = None;
     let assignment_id = provider.borrow().assignments[0].assignment_id.clone();
     provider.borrow_mut().unavailable_assignment = Some(assignment_id);
@@ -7886,7 +7906,27 @@ fn manual_native_context_refreshes_after_host_restart_and_fences_generation() {
         before_refusal,
         "unavailable owner refuses before the local effect"
     );
+    assert!(strict_effects
+        .dispatch_graceful_browser_close(&browser)
+        .is_err());
+    assert!(
+        !fixture.root.join("manual-strict-close-count").exists(),
+        "unavailable owner cannot close"
+    );
     provider.borrow_mut().unavailable_assignment = None;
+    let before_strict = reads();
+    strict_effects
+        .dispatch_graceful_browser_close(&browser)
+        .unwrap();
+    assert_eq!(
+        reads(),
+        before_strict + 1,
+        "strict close refreshes current adopted owner context"
+    );
+    assert_eq!(
+        std::fs::read_to_string(fixture.root.join("manual-strict-close-count")).unwrap(),
+        "1"
+    );
     let before = reads();
     adopted
         .close_session(&session, SessionEndReason::ExplicitClose, 105)
@@ -8767,4 +8807,152 @@ fn workspace_manual_launch_retains_original_request_and_inspection_never_replays
         "{changed}"
     );
     assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn lifecycle_window_readiness_uses_authenticated_observe_only_and_exact_identity() {
+    use std::io::{Read, Write};
+    let fixture = Fixture::new();
+    std::fs::write(fixture.root.join("live-cdp-endpoint.json"), serde_json::to_vec(&serde_json::json!({
+        "pid":42,"endpoint":"ws://127.0.0.1:9222","processIdentity":{"pid":42,"startToken":"linux:fixture-boot:99","executablePath":"/synthetic/chrome"}
+    })).unwrap()).unwrap();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let mut consumer = host(&fixture, provider.clone(), Rc::new(Cell::new(0)));
+    let opened = consumer.handle_command(&serde_json::json!({"action":"browser_session_open","sessionName":"Window readiness","profileId":"profile-a","manualLogin":true,"url":"https://example.test/login","activityAtMs":100,"serviceName":"fixture","agentName":"fixture","taskName":"Window readiness"}));
+    assert_eq!(opened["success"], true, "{opened}");
+    provider.borrow_mut().window_pid = Some(42);
+    // Mirror copy launch: acquire this task's first tab before window proof.
+    consumer
+        .tab_for_navigation(opened["data"]["sessionId"].as_str().unwrap(), 101)
+        .unwrap();
+    let task = consumer.state().sessions.values().next().unwrap().clone();
+    let target = RemoteViewTabHandoffTarget {
+        browser: consumer.state().browsers[&task.browser_id].clone(),
+        tab: consumer.state().tabs[task.current_tab_id.as_ref().unwrap()].clone(),
+        session: task,
+    };
+    let token = fixture.root.join("window-owner.token");
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options
+        .open(&token)
+        .unwrap()
+        .write_all(b"synthetic-window-owner-token-530")
+        .unwrap();
+    let environment = crate::test_utils::EnvGuard::new(&[
+        "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
+        "AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE",
+    ]);
+    environment.set(
+        "AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE",
+        token.to_str().unwrap(),
+    );
+    let binding = wire()["assignmentObservation"]["target"].clone();
+    for case in [
+        "ready_input_disabled",
+        "changed_generation",
+        "changed_identity",
+    ] {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        environment.set(
+            "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
+            &format!("http://{}", listener.local_addr().unwrap()),
+        );
+        let binding = binding.clone();
+        let server = std::thread::spawn(move || {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            let mut socket = loop {
+                match listener.accept() {
+                    Ok((socket, _)) => break socket,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(
+                            std::time::Instant::now() < deadline,
+                            "owner observation not requested"
+                        );
+                        std::thread::sleep(std::time::Duration::from_millis(5));
+                    }
+                    Err(error) => panic!("owner fixture accept failed: {error}"),
+                }
+            };
+            socket
+                .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                .unwrap();
+            let mut bytes = Vec::new();
+            let at = loop {
+                let mut chunk = [0u8; 4096];
+                let size = socket.read(&mut chunk).unwrap();
+                assert!(size > 0);
+                bytes.extend_from_slice(&chunk[..size]);
+                assert!(bytes.len() <= 8192);
+                if let Some(at) = bytes.windows(4).position(|part| part == b"\r\n\r\n") {
+                    let headers = String::from_utf8_lossy(&bytes[..at]);
+                    let length = headers
+                        .lines()
+                        .find_map(|line| {
+                            line.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .and_then(|value| value.trim().parse::<usize>().ok())
+                        })
+                        .unwrap();
+                    if bytes.len() >= at + 4 + length {
+                        break at;
+                    }
+                }
+            };
+            let headers = String::from_utf8_lossy(&bytes[..at]);
+            assert_eq!(
+                headers.lines().next().unwrap(),
+                "POST /v1/agent-desktop/observe HTTP/1.1"
+            );
+            assert!(
+                headers.lines().any(|line| line.eq_ignore_ascii_case(
+                    "authorization: Bearer synthetic-window-owner-token-530"
+                )),
+                "owner authentication missing"
+            );
+            let body: Value = serde_json::from_slice(&bytes[at + 4..]).unwrap();
+            assert_eq!(body["desktopId"], binding["viewingDesktopId"]);
+            assert_eq!(body["expectedGeneration"], binding["viewingGeneration"]);
+            let generation = binding["viewingGeneration"].as_u64().unwrap()
+                + u64::from(case == "changed_generation");
+            let start = if case == "changed_identity" {
+                "100"
+            } else {
+                "99"
+            };
+            let reply = serde_json::json!({"desktopId":binding["viewingDesktopId"],"generation":generation,"inputCapability":{"policyState":"disabled"},"windows":{"windows":[{"id":5,"pid":42,"active":true,"x":0,"y":0,"width":400,"height":300,"processIdentity":{"pid":42,"executable":"/synthetic/chrome","boot_id":"fixture-boot","start_token":start}}]}});
+            let encoded = serde_json::to_vec(&reply).unwrap();
+            write!(socket,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",encoded.len()).unwrap();
+            socket.write_all(&encoded).unwrap();
+        });
+        let result = consumer.native_browser_window_ready(&target);
+        server.join().unwrap();
+        if case == "ready_input_disabled" {
+            let ready = result.unwrap();
+            assert_eq!(ready["ready"], true);
+            assert!(ready.get("inputReady").is_none());
+            assert!(ready.get("inputReadiness").is_none());
+        } else {
+            assert!(result.is_err(), "{case} cannot qualify a window");
+        }
+    }
+    let mut changed = target.clone();
+    changed.browser.pid += 1;
+    assert!(consumer
+        .native_browser_window_ready(&changed)
+        .unwrap_err()
+        .starts_with("browser_native_target_changed"));
+    let mut changed = consumer.state().clone();
+    changed.next_session_sequence += 1;
+    fixture.store(false).save_session_state(&changed).unwrap();
+    assert!(consumer
+        .native_browser_window_ready(&target)
+        .unwrap_err()
+        .starts_with("browser_native_target_changed"));
 }
