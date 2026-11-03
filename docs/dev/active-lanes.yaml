@@ -1,6 +1,17 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: MODE534
+    product_lane: PL-BUGFIX
+    objective: Install browser context controls and reconcile CDP-free conversion without selective input
+    branch: fix/mode-recovery-selective-input
+    target: main
+    plan: docs/dev/maintenance/mode-recovery-selective-input.md
+    plan_state: ACTIVE
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#534]
+    overlaps: [P300, P302]
+    reconciled_overlaps: ["Own mode host/operation and manual reconciliation only; preserve P302 manual close hooks and P300 workspace edits"]
   - id: P301
     product_lane: PL-BUGFIX
     objective: Restore authenticated Native manual browser publication and clean close

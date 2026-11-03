@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { CircleHelp, Code2, MousePointer2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { BrowserBuildDialog } from "@/components/browser-build-dialog";
 import { BrowserModeDialog } from "@/components/browser-mode-dialog";
 import { ProfileDuplicateDialog } from "@/components/profile-duplicate-dialog";
 import type { ServiceBrowserModeInspection } from "@agent-browser/client/service-observability";
 
 /** Inspect owner evidence without focusing a browser, opening a viewer or changing mode. */
-export function BrowserModeButton({ label, inspection, profileId, taskId, sessionName, observed = false, onRefresh }: {
-  label: string; taskId?: string | null; sessionName?: string | null; profileId?: string | null; observed?: boolean; inspection?: ServiceBrowserModeInspection | null; onRefresh: () => Promise<void>;
+export function BrowserModeButton({ label, inspection, profileId, taskId, sessionName, observed = false, onRefresh, children }: {
+  children?: ReactNode; label: string; taskId?: string | null; sessionName?: string | null; profileId?: string | null; observed?: boolean; inspection?: ServiceBrowserModeInspection | null; onRefresh: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [conversion, setConversion] = useState<"cdp" | "cdp_free" | null>(null);
@@ -35,10 +36,10 @@ export function BrowserModeButton({ label, inspection, profileId, taskId, sessio
     setRefreshing(true); setError(false);
     try { await onRefresh(); } catch { setError(true); } finally { setRefreshing(false); }
   };
-  return <><DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+  const menu = <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
     <DropdownMenuTrigger asChild>
       <button type="button" className="native-browser-mode" aria-label={`Browser mode for ${label}: ${name}`}
-        title={`Browser mode: ${name}`} onPointerEnter={event => { if (event.pointerType !== "touch") setOpen(true); }}>
+        title={`Browser mode: ${name}`} onPointerEnter={event => { if (event.pointerType !== "touch") setOpen(true); }} onPointerDown={event => { if (open && event.pointerType !== "touch" && event.button === 0) event.preventDefault(); }}>
         <Icon size={14} aria-hidden="true" />
       </button>
     </DropdownMenuTrigger>
@@ -57,5 +58,6 @@ export function BrowserModeButton({ label, inspection, profileId, taskId, sessio
       <DropdownMenuItem disabled={refreshing} onSelect={event => { event.preventDefault(); void refresh(); }}>{refreshing ? "Refreshing inventory…" : "Refresh inventory"}</DropdownMenuItem>
       {error && <DropdownMenuLabel role="alert">Inventory refresh failed. Try again.</DropdownMenuLabel>}
     </DropdownMenuContent>
-  </DropdownMenu>{taskId && sessionName && (["cdp", "cdp_free"] as const).map(mode => <BrowserModeDialog key={`${taskId}:${mode}`} open={conversion === mode} onOpenChange={value => { if (!value) setConversion(null); }} taskId={taskId} sessionName={sessionName} profileId={sourceProfileId ?? undefined} browserId={inspection?.browserId} mode={mode} onRefresh={onRefresh} />)}{sourceProfileId && <ProfileDuplicateDialog open={duplicateOpen} onOpenChange={setDuplicateOpen} profileId={sourceProfileId} taskId={taskId} sessionName={sessionName} browserId={inspection?.browserId} onRefresh={onRefresh} onChooseCopy={setBuildProfile} />}{buildProfile && <BrowserBuildDialog key={buildProfile} open onOpenChange={value => { if (!value) setBuildProfile(null); }} profileId={buildProfile} taskId={taskId} onRefresh={onRefresh} onChooseCopy={setBuildProfile} />}</>;
+  </DropdownMenu>;
+  return <>{children ? <ContextMenu><ContextMenuTrigger asChild><div className="native-workspace-browser-row">{children}{menu}</div></ContextMenuTrigger><ContextMenuContent className="native-tab-menu">{taskId && sessionName ? <><ContextMenuItem onSelect={() => setConversion("cdp")}>Relaunch with CDP</ContextMenuItem><ContextMenuItem onSelect={() => setConversion("cdp_free")}>Relaunch without CDP</ContextMenuItem></> : <ContextMenuItem disabled>Relaunch unavailable: no managed task</ContextMenuItem>}</ContextMenuContent></ContextMenu> : menu}{taskId && sessionName && (["cdp", "cdp_free"] as const).map(mode => <BrowserModeDialog key={`${taskId}:${mode}`} open={conversion === mode} onOpenChange={value => { if (!value) setConversion(null); }} taskId={taskId} sessionName={sessionName} profileId={sourceProfileId ?? undefined} browserId={inspection?.browserId} mode={mode} onRefresh={onRefresh} />)}{sourceProfileId && <ProfileDuplicateDialog open={duplicateOpen} onOpenChange={setDuplicateOpen} profileId={sourceProfileId} taskId={taskId} sessionName={sessionName} browserId={inspection?.browserId} onRefresh={onRefresh} onChooseCopy={setBuildProfile} />}{buildProfile && <BrowserBuildDialog key={buildProfile} open onOpenChange={value => { if (!value) setBuildProfile(null); }} profileId={buildProfile} taskId={taskId} onRefresh={onRefresh} onChooseCopy={setBuildProfile} />}</>;
 }

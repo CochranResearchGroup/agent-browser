@@ -698,7 +698,6 @@ impl OperationStore {
                 || replacement.mode != effect_request.requested_mode
                 || replacement.debugging != (replacement.mode == Mode::Cdp)
                 || !replacement.native_observation
-                || !replacement.native_input
             {
                 return Err("mode_operation_replacement_proof_required".into());
             }

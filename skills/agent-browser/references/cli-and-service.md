@@ -4452,3 +4452,5 @@ A standalone handoff resolves its current owned desktop and redirects to Native 
 ## Idle registration
 
 A current registered capability with a resolved profile identity and no retained owner, browser, session or tab work is `registered_idle`, with `acquire_profile` recourse and no missing-owner-binding finding. This is an observation-only registration, not an active claim. Acquisition still authenticates the capability and checks current ownership. No owner binding, capability rotation or browser launch is performed by diagnostics.
+
+Mode conversion verifies the exact process, mode and Native window without synthetic input. Selective-input permission stays separate. Reopen the retained handoff to reconcile the original pending conversion without a second launch.

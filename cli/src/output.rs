@@ -7381,6 +7381,7 @@ Commands:
   browser-build JSON Inspect/select/open profile build
   profile-duplicate JSON Copy/inspect; retry_launch or finish_without_opening
   mode-convert JSON Inspect/relaunch/pause/cancel/restore_previous/select_build
+    Conversion verifies mode/window without input; retained handoffs reconcile the original launch
   watch-host-task TASK Changed NDJSON; fresh reconnect
   host-control      Status/view/takeover/return/override/reconcile; inspect failed return.
   host-reconnect TASK OP [options-json] Status/disconnect/reconnect/rebind/configure/reopen

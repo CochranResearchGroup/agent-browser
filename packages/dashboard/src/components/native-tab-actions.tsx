@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { BrowserModeDialog } from "@/components/browser-mode-dialog";
 import { MoreHorizontal } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -23,8 +24,11 @@ const createdTime = (value: unknown): string => {
  * Opening Properties and copying the supplied URL have no browser, selection
  * or handoff effect. Clipboard failure offers manual copying through Properties.
  * Close captures an exact identity and requires an owner-confirmed close receipt
- * before releasing the row or its selected native frame. */
+ * before releasing the row or its selected native frame. Mode menu actions
+ * open the existing whole-browser conversion review without relaunching. */
 export function NativeTabActions({ node, tab, children, onClosed, onProfileChanged, onShare, shareBusy }: { node: WorkspaceNode; tab: WorkspaceServiceTab; children: ReactNode; onClosed?: () => Promise<void>; onProfileChanged?: () => Promise<void>; onShare?: (opener: HTMLElement | null) => void; shareBusy?: boolean }) {
+  const [conversion, setConversion] = useState<"cdp" | "cdp_free" | null>(null);
+  const canConvert = tab.managedTask === true && Boolean(tab.sessionId && tab.ownerSessionId && tab.browserId);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [closeTarget, setCloseTarget] = useState<WorkspaceServiceTab | null>(null);
   const [closeBusy, setCloseBusy] = useState(false);
@@ -140,25 +144,30 @@ export function NativeTabActions({ node, tab, children, onClosed, onProfileChang
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="native-tab-menu" align="end" onCloseAutoFocus={event => {
-              if (propertiesOpen || closeTarget) event.preventDefault();
+              if (propertiesOpen || closeTarget || conversion) event.preventDefault();
             }}>
               <DropdownMenuItem disabled={!onShare || shareBusy || !tab.desktopId} onSelect={() => onShare?.(returnFocus.current ?? trigger.current)}>Share</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setPropertiesOpen(true)}>Properties</DropdownMenuItem>
               <DropdownMenuItem disabled={!tab.url} onSelect={() => void copyUrl()}>Copy URL</DropdownMenuItem>
+              <DropdownMenuItem disabled={!canConvert} onSelect={() => setConversion("cdp")}>Relaunch with CDP</DropdownMenuItem>
+              <DropdownMenuItem disabled={!canConvert} onSelect={() => setConversion("cdp_free")}>Relaunch without CDP</DropdownMenuItem>
               <DropdownMenuItem disabled={!canClose || closeBusy} onSelect={openClose}>Close Tab</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent className="native-tab-menu" onCloseAutoFocus={event => {
-        if (propertiesOpen || closeTarget) event.preventDefault();
+        if (propertiesOpen || closeTarget || conversion) event.preventDefault();
       }}>
         <ContextMenuItem disabled={!onShare || shareBusy || !tab.desktopId} onSelect={() => onShare?.(returnFocus.current ?? trigger.current)}>Share</ContextMenuItem>
         <ContextMenuItem onSelect={() => setPropertiesOpen(true)}>Properties</ContextMenuItem>
         <ContextMenuItem disabled={!tab.url} onSelect={() => void copyUrl()}>Copy URL</ContextMenuItem>
+        <ContextMenuItem disabled={!canConvert} onSelect={() => setConversion("cdp")}>Relaunch with CDP</ContextMenuItem>
+        <ContextMenuItem disabled={!canConvert} onSelect={() => setConversion("cdp_free")}>Relaunch without CDP</ContextMenuItem>
         <ContextMenuItem disabled={!canClose || closeBusy} onSelect={openClose}>Close Tab</ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
+    {canConvert && conversion && <BrowserModeDialog key={`${tab.sessionId}:${conversion}`} open onOpenChange={open => { if (!open) setConversion(null); }} taskId={tab.sessionId!} sessionName={tab.ownerSessionId!} profileId={tab.profileId ?? node.profileId ?? undefined} browserId={tab.browserId!} mode={conversion} onRefresh={onProfileChanged ?? (async () => {})} />}
     {copyFeedback && <p className="native-tab-feedback" role={copyFeedback === "failed" ? "alert" : "status"}>
       {copyFeedback === "copied" ? "URL copied" : "Could not copy this URL. Open Properties to copy it manually."}
     </p>}

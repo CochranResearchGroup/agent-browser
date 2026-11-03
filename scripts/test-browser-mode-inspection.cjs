@@ -22,6 +22,31 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.clock.pauseAt(new Date(Date.now() + 100));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     await page.getByRole('button', { name: 'Browser mode for Synthetic browser: No CDP', exact: true }).waitFor();
+    const modeRequests = [];
+    await page.route('**/api/command', async route => {
+      const command = route.request().postDataJSON(); modeRequests.push(command);
+      await route.fulfill({json:{success:true,data:{schemaVersion:'agent-browser.browser-operations.v1',kind:'mode_convert',taskId:'task-one',operations:[]}}});
+    });
+    for (const target of ['Synthetic browser heading', 'Synthetic managed tab']) {
+      for (const [label, requested] of [['Relaunch with CDP', 'CDP'], ['Relaunch without CDP', 'No CDP']]) {
+        const before = modeRequests.length;
+        await page.getByRole('button', {name:target,exact:true}).click({button:'right'});
+        assert.equal(modeRequests.length, before, 'Opening context menu has no owner effects');
+        await page.getByRole('menuitem', {name:label,exact:true}).click();
+        const dialog = page.getByRole('dialog', {name:'Change browser mode'});
+        await dialog.waitFor();
+        await dialog.getByText('Requested mode: '+requested,{exact:true}).waitFor();
+        await dialog.getByRole('button',{name:'Review relaunch',exact:true}).waitFor();
+        await page.waitForFunction(() => !document.body.textContent.includes('Reading existing operations…'));
+        assert.equal(modeRequests.length,before+1);
+        assert.equal(modeRequests.at(-1).choice,'inspect','Selection only reads existing operations');
+        assert.equal(modeRequests.at(-1).sessionId,'task-one');
+        assert.equal(modeRequests.at(-1).sessionName,'synthetic-owner');
+        await page.keyboard.press('Escape');
+      }
+    }
+    await page.unroute('**/api/command');
+
     await page.getByRole('button', { name: 'Browser mode for Synthetic browser: No CDP', exact: true }).hover();
     assert.match(await page.getByRole('menu').innerText(), /Ownership: Managed/);
     await page.getByRole('menuitem', {name:'Relaunch without CDP',exact:true}).waitFor({timeout:750});

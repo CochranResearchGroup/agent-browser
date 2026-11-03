@@ -2214,6 +2214,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         browser_id: &str,
         command: &serde_json::Value,
     ) -> Result<(), String> {
+        self.reconcile_pending_mode(browser_id)?;
         // Use the same publication and operation fence as manager recovery.
         let _ = self.manager()?;
         let browser = self
