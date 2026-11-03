@@ -7382,6 +7382,7 @@ Commands:
   profile-duplicate JSON Copy/inspect; retry_launch or finish_without_opening
   Owned manual copies close without desktop agent input. Inspect uncertain closes;
   cancel the original before a new attempt. Reboot absence is not clean-close proof.
+  Copy window readiness is separate from agent input readiness.
   mode-convert JSON Inspect/relaunch/pause/cancel/restore_previous/select_build
   watch-host-task TASK Changed NDJSON; fresh reconnect
   host-control      Status/view/takeover/return/override/reconcile; inspect failed return.

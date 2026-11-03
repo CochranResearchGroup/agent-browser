@@ -131,7 +131,7 @@ For dashboard/viewer/startup failures, read [dashboard diagnostics](references/c
 
 Use `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build family/version and CDP mode are independent. Inspect before choosing; copy success never proves login portability. Read [controls and recovery](references/cli-and-service.md#browser-build-selection) before changing a build. Reconcile original operations after lost replies.
 
-Owned manual copies use normal close without desktop agent input. Inspect uncertain closes; cancel the original operation before reviewing a new attempt. A reboot is not clean-close proof.
+Owned manual copies use normal close without desktop agent input. Inspect uncertain closes; cancel the original operation before reviewing a new attempt. A reboot is not clean-close proof. Window readiness is separate from agent input authority.
 
 Diagnostics retain selection query fields. Rail presence revalidates at 250/500/1000 ms, then polls every three seconds.
 
