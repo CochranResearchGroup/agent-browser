@@ -129,7 +129,10 @@ current page or verified authentication.
 **Mode conversion**: An explicit owner operation that replaces a physical
 browser with or without CDP while preserving its logical task, profile and
 original handoff. It reviews affected tasks and consequential close choices;
-ordinary open never silently changes a running process's posture. Transient
+ordinary open never silently changes a running process's posture. Native fullscreen
+mode controls resolve the retained handoff through its owner, review the same
+durable conversion and reconnect the original link; Native viewer authentication
+does not become a second dashboard login. Transient
 page state may be lost, and uncertain website submissions are never replayed.
 Source or synthetic qualification does not prove installed Native readiness or
 authenticated site state.

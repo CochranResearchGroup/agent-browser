@@ -7385,6 +7385,7 @@ Commands:
   Copy window readiness is separate from agent input readiness.
   mode-convert JSON Inspect/relaunch/pause/cancel/restore_previous/select_build
     Conversion verifies mode/window without input; retained handoffs reconcile the original launch
+    Fullscreen Native handoffs offer a top-row CDP on/off control with relaunch review
   watch-host-task TASK Changed NDJSON; fresh reconnect
   host-control      Status/view/takeover/return/override/reconcile; inspect failed return.
   host-reconnect TASK OP [options-json] Status/disconnect/reconnect/rebind/configure/reopen
