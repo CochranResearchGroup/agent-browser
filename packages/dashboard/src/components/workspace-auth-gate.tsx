@@ -49,7 +49,7 @@ export function WorkspaceAuthGate({ children }: {
     setFailure("Local session ended. Workspace sign-in is managed by the ingress provider.");
   };
   if (user) return children(user, logout);
-  return <main className="dashboard-login-main" aria-live="polite">
+  return <main className="dashboard-login-main" aria-live="polite" aria-busy={checking}>
     <section className="dashboard-login-panel">
       <h1>Agent Browser workspace</h1>
       <p>{checking ? "Restoring workspace access…" : failure}</p>

@@ -7812,9 +7812,9 @@ mod dashboard_asset_tests {
             return;
         }
 
-        // The exported page restores authentication before rendering login or
-        // the workspace. Route selection must survive that initial shell.
-        assert!(body.contains("Restoring session"));
+        // Ingress access is restored before the workspace renders. Route
+        // selection and the accessible loading state survive that initial shell.
+        assert!(body.contains("Restoring workspace access"));
         assert!(body.contains(r#"aria-busy="true""#));
         assert!(body.contains(&format!(r#"initialSection\":\"{expected_section}"#)));
     }
