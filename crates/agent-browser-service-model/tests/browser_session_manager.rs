@@ -2827,13 +2827,23 @@ fn owner_mode_replacement_preserves_logical_task_and_handoff() {
     let mut retained = serde_json::to_value(state).unwrap();
     retained["profileOperationIds"] = serde_json::json!({"profile-a":"mode-one"});
     let mut state: BrowserSessionState = serde_json::from_value(retained).unwrap();
+    state.browsers.get_mut(&opened.browser_id).unwrap().desktop =
+        Some(agent_browser_service_model::RemoteViewFixedDesktop {
+            desktop_id: "same-desktop".into(),
+            generation: 7,
+            friendly_route_label: "Original display label".into(),
+        });
     let previous = state.clone();
     let replacement = agent_browser_service_model::BrowserRecovery {
         launch: BrowserLaunch {
             browser_id: opened.browser_id.clone(),
             pid: 999,
             cdp_endpoint: String::new(),
-            desktop: None,
+            desktop: Some(agent_browser_service_model::RemoteViewFixedDesktop {
+                desktop_id: "same-desktop".into(),
+                generation: 7,
+                friendly_route_label: "Existing profile browser".into(),
+            }),
             process_identity: Some(agent_browser_service_model::RecordedProcessIdentity {
                 pid: 999,
                 start_token: "boot:new".into(),
@@ -2843,6 +2853,19 @@ fn owner_mode_replacement_preserves_logical_task_and_handoff() {
         },
         target_ids: BTreeMap::from([(tab.clone(), "native-window-new".into())]),
     };
+    for (desktop_id, generation) in [("other-desktop", 7), ("same-desktop", 8)] {
+        let mut changed = replacement.clone();
+        let desktop = changed.launch.desktop.as_mut().unwrap();
+        desktop.desktop_id = desktop_id.into();
+        desktop.generation = generation;
+        assert_eq!(
+            BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+                .publish_owner_replacement(&opened.browser_id, "mode-one", changed)
+                .unwrap_err(),
+            "browser_session_recovery_identity_conflict"
+        );
+        assert_eq!(state, previous, "changed desktop bindings cannot publish");
+    }
     BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
         .publish_owner_replacement(&opened.browser_id, "mode-one", replacement)
         .unwrap();

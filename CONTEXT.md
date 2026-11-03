@@ -36,6 +36,11 @@ current logical identity, historical verified progress, local artifact reference
 pending assistance/control and original uncertain operations. It never launches,
 observes a live page, acknowledges human use or turns missing evidence into success.
 
+**Mode conversion readiness**: Exact replacement process, requested debugging
+posture and Native window observation. Selective-input permission is independent;
+conversion does not inject input to qualify publication. An already-dispatched
+conversion rejoins its original owner journal before ordinary handoff recovery.
+
 **Browser mode inspection**: Read-only current original-process debugging posture.
 CDP and no-CDP require complete current process evidence joined to immutable
 owner identity. Missing, changed or stale evidence is unverified. Executable

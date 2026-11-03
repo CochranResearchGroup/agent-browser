@@ -411,14 +411,39 @@ pub(super) fn reconcile_mode(
     let records = store
         .unpublished_launch_records()
         .map_err(|_| "mode_operation_launch_readback_required")?;
-    let candidates = records
-        .into_iter()
-        .filter(|record| {
-            record.intent.profile_id == profile.id
-                && record.observed_browser_id.as_deref() == Some(&browser.id)
-                && record.observed_process_identity.is_some()
-        })
-        .collect::<Vec<_>>();
+    let mut candidates = Vec::new();
+    for record in records.into_iter().filter(|record| {
+        record.intent.profile_id == profile.id
+            && record.observed_browser_id.as_deref() == Some(&browser.id)
+            && record.observed_process_identity.is_some()
+    }) {
+        let original = record
+            .observed_process_identity
+            .as_ref()
+            .expect("filtered identity");
+        match crate::process_identity::observe_process(original.pid) {
+            crate::process_identity::ProcessObservation::Missing => continue,
+            crate::process_identity::ProcessObservation::Observed(current)
+                if current
+                    .start_token
+                    .as_deref()
+                    .is_some_and(|token| token != original.start_token)
+                    || current
+                        .executable_path
+                        .as_ref()
+                        .is_some_and(|path| Some(path) != original.executable_path.as_ref()) =>
+            {
+                continue
+            }
+            crate::process_identity::ProcessObservation::Observed(current)
+                if current.start_token.as_deref() == Some(original.start_token.as_str())
+                    && current.executable_path == original.executable_path =>
+            {
+                candidates.push(record)
+            }
+            _ => return Err("mode_operation_launch_readback_required".into()),
+        }
+    }
     let [record] = candidates.as_slice() else {
         return if candidates.is_empty() {
             Ok(None)

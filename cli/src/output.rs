@@ -7384,6 +7384,7 @@ Commands:
   cancel the original before a new attempt. Reboot absence is not clean-close proof.
   Copy window readiness is separate from agent input readiness.
   mode-convert JSON Inspect/relaunch/pause/cancel/restore_previous/select_build
+    Conversion verifies mode/window without input; retained handoffs reconcile the original launch
   watch-host-task TASK Changed NDJSON; fresh reconnect
   host-control      Status/view/takeover/return/override/reconcile; inspect failed return.
   host-reconnect TASK OP [options-json] Status/disconnect/reconnect/rebind/configure/reopen

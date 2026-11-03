@@ -1925,7 +1925,15 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             || (!current_desktop_rebind
                 && !self.state.shared_browser_ids.contains(&browser.id)
                 && browser.desktop.is_some()
-                && recovered.launch.desktop != browser.desktop
+                && recovered
+                    .launch
+                    .desktop
+                    .as_ref()
+                    .zip(browser.desktop.as_ref())
+                    .is_none_or(|(current, original)| {
+                        current.desktop_id != original.desktop_id
+                            || current.generation != original.generation
+                    })
                 && !self.state.idle_closed_browsers.contains_key(&browser.id))
             || recovered.target_ids.len() != tabs.len()
             || targets.len() != tabs.len()

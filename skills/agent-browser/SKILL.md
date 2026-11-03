@@ -10,9 +10,7 @@ Read [Remote View setup](references/cli-and-service.md) for native credentials.
 
 ## Handoff creator context
 
-Supply `serviceName`, `agentName` and concrete `taskName` on `browser_open`. CLI flags: `--service-name`, `--agent-name`, `--task-name`; `remote-view open` also requires `--origin-kind agent`. Blank labels fail before creation. MCP sets origin `agent`. Service requests set originKind in params. Principal identity does not replace creator labels. Do not infer `humanName` from the requester; labels are not authenticated identities.
-
-Creation context is immutable. Cards omit missing identity; polling, Share and job IDs never replace creator labels.
+Creation requires `serviceName`, `agentName`, concrete `taskName`. CLI: `--service-name`, `--agent-name`, `--task-name`; `remote-view open` requires `--origin-kind agent`. MCP sets agent origin; service requests set params.originKind. Labels are immutable attribution, not authenticated identity. Never infer `humanName` or replace labels with polling/job IDs.
 
 ## MCP task workflow
 
@@ -50,10 +48,7 @@ before app placement, attachment, sharing or human takeover. Discover the connec
 runtime's schemas first; documentation and a visible browser do not prove support,
 account identity or control ownership. Shared skill publication needs explicit approval.
 
-The default MCP catalog contains 16 workflow tools: `browser_open`, `browser_navigate`,
-`browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
-`browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_reconnect`, `browser_policy`,
-`browser_artifact`, `browser_command` and `browser_discover`.
+Tools: `browser_open`, `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`, `browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_reconnect`, `browser_policy`, `browser_artifact`, `browser_command`, `browser_discover`.
 Page actions require `taskId`. `browser_tab` manages this task's tabs; retry creation
 with the same `tabKey`. After restart, creation rejoins the verified browser
 and preserves tabs; peer tabs remain outside scope. Discover actions with `browser_discover`; use `browser_command` with `taskId`, `action`, `params`.
@@ -74,7 +69,7 @@ Read [Workspace](references/cli-and-service.md#operator-workspace) for tabs, sha
 
 ## Sharing a profile between tasks
 
-Automatic tab expiry in a shared browser without an Agent Browser Native desktop uses the existing service activity guards and closes only the task-owned target; it does not claim or close the borrowed browser. An unavailable ownership observation defers that browser while independent eligible tabs continue.
+Borrowed-browser expiry uses service activity guards and closes only owned tabs. Unknown ownership defers that browser; independent eligible tabs continue.
 
 Use a separate task/session and tab for each workflow. Shared profiles share login and persistent site state. Read [Sharing a profile between tasks](references/cli-and-service.md#sharing-a-profile-between-tasks) before coordinating shared-profile work, foreground input or closing a peer task.
 
@@ -86,24 +81,16 @@ If browser_open is absent, report missing Agent Browser MCP integration.
 Register installed agent-browser mcp serve in that client and reconnect.
 Use the CLI while correcting integration; server tools/list does not prove client exposure.
 
-Help never launches browsers. MCP uses `success`, `data`, `error`; CLI failures add `type`. Private launch journals retain secret-free `details.phase`; unknown outcomes need readback.
+Help is launch-free. MCP returns `success/data/error`; CLI errors add `type`. Read private journal `details.phase` for unknown outcomes.
 
 Read [Runtime health and cleanup diagnostics](references/cli-and-service.md#runtime-health-and-cleanup-diagnostics) before maintenance, expiry diagnosis or unknown-effect interpretation. Preserve peers and scrub exported URLs.
 
 
-Use the installed `agent-browser` executable when MCP is unavailable. Read
-`agent-browser <command> --help` for the requested operation. Choose the task's
-profile and named session explicitly; preserve peers and stored authentication.
-Do not run setup, process cleanup or profile resets just to open a browser task.
+CLI fallback: use installed `agent-browser <command> --help`, the exact profile
+and named session. Preserve peers/authentication; opening never requires cleanup
+or profile resets.
 
-A normal CLI sequence is:
-
-```bash
-agent-browser --runtime-profile editorial --session editing open https://example.com
-agent-browser --session editing snapshot -i
-agent-browser --session editing fill @e1 "Draft text"
-agent-browser --session editing click @e2
-```
+Read [CLI commands](references/commands.md) for examples.
 
 ## SiteGuide routines
 
@@ -112,8 +99,6 @@ Discover `category:"playbooks"` and use `browser_command` in the existing task. 
 ## Read more only when needed
 
 Retained-task recovery requires proven process/profile absence and preserves peer claims. Continue through the original taskId.
-
-Read the advanced reference for bounded host resource waits and retained session/tab history; continue existing tasks through taskId.
 
 - [Commands](references/commands.md): detailed CLI syntax.
 - [Snapshot references](references/snapshot-refs.md): find and use element refs.
@@ -129,7 +114,7 @@ For dashboard/viewer/startup failures, read [dashboard diagnostics](references/c
 
 ## Browser mode and builds
 
-Use `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build family/version and CDP mode are independent. Inspect before choosing; copy success never proves login portability. Read [controls and recovery](references/cli-and-service.md#browser-build-selection) before changing a build. Reconcile original operations after lost replies.
+Inspect `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build and mode are independent; copies do not prove login. Read [controls/recovery](references/cli-and-service.md#browser-build-selection). Reconcile the original operation after lost replies.
 
 Owned manual copies use normal close without desktop agent input. Inspect uncertain closes; cancel the original operation before reviewing a new attempt. A reboot is not clean-close proof. Window readiness is separate from agent input authority.
 
@@ -156,3 +141,6 @@ profile-process absence and an exact owner `released` record. It preserves the
 original launch history and retains owner terminal evidence separately from local
 cleanup completion. Missing inventory, a denial alone, mismatched identity or an
 explicit fixed recovery target does not authorize relocation.
+
+Right-click a managed dashboard browser/tab to review CDP or CDP-free relaunch.
+Mode conversion verifies visibility without synthetic input; selective input stays separately governed.
