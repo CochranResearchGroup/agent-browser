@@ -299,6 +299,7 @@ pub const WORKFLOW_MCP_TOOL_NAMES: &[&str] = &[
     "browser_close",
     "browser_control",
     "browser_reconnect",
+    "browser_retention",
     "browser_policy",
     "browser_artifact",
     "browser_command",

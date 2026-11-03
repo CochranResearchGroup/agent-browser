@@ -26,27 +26,27 @@ pub(super) fn tools() -> Vec<Value> {
     vec![
         json!({
             "name": "browser_open", "title": "Open a browser task",
-            "description": "Create or reuse a persistent, existing or disposable profile and open one task tab. Reuse taskKey to replay without another tab. Supply serviceName, agentName and a concrete taskName; origin is recorded as agent. Use the returned taskId for subsequent page actions and scoped close.",
+            "description": "Open one persistent/existing/disposable task tab. Reuse taskKey without new tab. Supply serviceName, agentName, concrete taskName (agent origin); use returned taskId.",
             "inputSchema": {"type":"object", "additionalProperties":false,
                 "properties": {
-                    "profile":{"type":"string","description":"Named profile for persistent or existing mode."},
+                    "profile":{"type":"string","description":"Persistent/existing profile name."},
                     "profileMode":{"type":"string","enum":["persistent","existing","disposable"],"default":"persistent"},
-                    "mode":{"type":"string","enum":["automation","manual_login"],"description":"Omit to retain profile mode; new profiles use automation. manual_login has no CDP: use native_capture/native_input; DOM needs automation."},
-                    "buildSelectionOperationId":{"type":"string","description":"Bind an earlier build selection."},
-                    "taskKey":{"type":"string","description":"Stable task key. Distinct keys receive independent tabs; reuse the key to continue this task."},
-                "url":{"type":"string","description":"Initial URL for a new task. Replaying a task returns its current page without navigating again."},
+                    "mode":{"type":"string","enum":["automation","manual_login"],"description":"Omit to retain mode (new: automation). manual_login: native_capture/native_input, no CDP. DOM requires automation."},
+                    "buildSelectionOperationId":{"type":"string","description":"Retained build selection."},
+                    "taskKey":{"type":"string","description":"Reuse to continue; distinct keys get separate tabs."},
+                "url":{"type":"string","description":"Initial URL; replay preserves the current page."},
                     "serviceName":{"type":"string"},"agentName":{"type":"string"},"taskName":{"type":"string"},
                     "taskPolicy":{"type":"object","additionalProperties":false,"properties":{"version":{"const":1},"deniedActions":{"type":"array","items":{"type":"string"}},"artifactDestinations":{"type":"object","additionalProperties":{"type":"string"}}},"required":["version"]},
-                    "attachment":{"type":"object","additionalProperties":false,"description":"Borrow an exact existing app browser, with no launch or initial navigation. Requires hostBinding and existing profile; omit url.","properties":{
+                    "attachment":{"type":"object","additionalProperties":false,"description":"Borrow exact app browser without launch/navigation. Requires hostBinding, existing profile; omit url.","properties":{
                         "version":{"const":1},"process":{"type":"object","properties":{"pid":{"type":"integer","minimum":1},"startToken":{"type":"string"},"executablePath":{"type":"string"},"browserFamily":{"type":"string"}},"required":["pid","startToken","executablePath"]},
                         "profilePath":{"type":"string"},"cdpEndpoint":{"type":"string"},"targetId":{"type":"string"},
                         "sharedWith":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"hostId":{"type":"string"},"participantId":{"type":"string"},"sessionId":{"type":"string"}},"required":["hostId","participantId","sessionId"]}}},"required":["version","process","profilePath","cdpEndpoint","targetId"]},
-                    "hostBinding":{"type":"object","additionalProperties":false,"description":"Configured app context and exact required/preferred placement; never a viewer URL.","properties":{"version":{"const":1},"hostId":{"type":"string"},"participantId":{"type":"string"},"sessionId":{"type":"string"},"placement":placement},"required":["version","hostId","participantId","sessionId","placement"]}
+                    "hostBinding":{"type":"object","additionalProperties":false,"description":"App context and exact required/preferred desktop; never viewer URL.","properties":{"version":{"const":1},"hostId":{"type":"string"},"participantId":{"type":"string"},"sessionId":{"type":"string"},"placement":placement},"required":["version","hostId","participantId","sessionId","placement"]}
                 }, "required":["taskKey","serviceName","agentName","taskName"],"oneOf":[{"required":["url"],"not":{"required":["attachment"]}},{"required":["attachment","hostBinding","profile"],"properties":{"mode":{"enum":["automation"]}},"not":{"required":["url"]}}]}
         }),
         json!({
             "name":"browser_retention", "title":"Retain a browser task for an owner service",
-            "description":"Acquire, renew or release a bounded owner-scoped context hold. Prevents idle cleanup only; does not navigate, take control, extend authentication permission or change explicit leave-open. Renew using the original generation receipt. Released claims cannot be reacquired.",
+            "description":"Owner idle hold only; no navigation/control/auth extension/leave-open change. Renew original generation. Released claims cannot be reacquired.",
             "inputSchema":{"type":"object","additionalProperties":false,"properties":{
                 "taskId":{"type":"string"},"browserId":{"type":"string"},"browserPid":{"type":"integer","minimum":1},
                 "claimId":{"type":"string"},"ownerId":{"type":"string"},"operation":{"enum":["acquire","renew","release"]},
@@ -55,19 +55,19 @@ pub(super) fn tools() -> Vec<Value> {
         }),
         json!({
             "name":"browser_close", "title":"Close a browser task",
-            "description":"End only the addressed task and its tabs. Preserve peers, borrowed browsers and persistent profile data.",
+            "description":"Close addressed task/tabs; preserve peers, borrowed browsers and persistent data.",
             "inputSchema":{"type":"object","additionalProperties":false,
                 "properties":{"taskId":{"type":"string"},"scope":{"enum":["task","browser"],"default":"task"},"actor":{"type":"string"},"reason":{"type":"string"}},"required":["taskId"]}
         }),
         json!({
             "name":"browser_handoff", "title":"Hand a browser task to a person",
-            "description":"Focus this task's current page and return its durable authenticated HTTPS Remote View link. Preserve the task, profile and page for later automation.",
+            "description":"Focus task; return durable authenticated HTTPS Remote View link; preserve task/profile/page.",
             "inputSchema":{"type":"object","additionalProperties":false,
                 "properties":{"taskId":{"type":"string"}},"required":["taskId"]}
         }),
         json!({
             "name":"browser_continue", "title":"Continue a browser task",
-            "description":"Read this task's current identity and URL without navigation or another task. After explicit human takeover, use browser_control return before mutating automation; continuation never implicitly returns control.",
+            "description":"Read task identity/URL without navigation. Human takeover requires browser_control return before mutation; continuation cannot return control.",
             "inputSchema":{"type":"object","additionalProperties":false,
                 "properties":{"taskId":{"type":"string"}},"required":["taskId"]}
         }),
