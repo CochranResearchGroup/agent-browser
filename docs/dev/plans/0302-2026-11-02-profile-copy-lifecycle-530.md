@@ -25,3 +25,13 @@ Require a public hosted RED/GREEN with generic input disabled; exact lifecycle d
 Build one source-bound production-shaped candidate, merge the bounded repair through this fork, verify canonical source equivalence, inspect preserve-mode installation and current transaction before applying, then run installed doctor. Actual account portability, synthetic storage divergence and exact owned cleanup remain separate qualification under530. No private profile/account/runtime artifacts belong in Git.
 
 P300529/530 remain open. Its final broad code-review and bounded post-review TDD counters remain0; ordinary implementation RED/GREEN and focused self-check do not consume them.
+
+## Local source qualification
+
+Source checkpoint cae98bc3f was integrated with canonical main356a8664b through31b721c71ea0fc96e411c543fe33c0d69f8741b8. Preserve MODE534 reconciliation and the P302 lifecycle hooks together. Only the active-lane catalog conflicted; both entries were retained with explicit overlap. The source worker checkpoint27138b762 preserves the original nine-file patch in P300 separately from unrelated edits.
+
+On combined source31b721c71, the four focused CLI filters `profile_duplicate`, `lifecycle_window_readiness`, `native_readiness_` and `manual_native_context_` passed14 tests. Full service-model tests passed408 checks across24 binaries, including doctests. The `browser_mode_operation` integration binary passed16 tests. All ran locally through the Cargo admission wrapper, with a disjoint persistent target, two jobs and a5GiB memory bound. Full format and strict workspace Clippy passed. The docs build, policy wiring, changed documentation links and Remote View handoff documentation checks passed. Hosted CI was not used.
+
+The worker independently executed the authenticated Xvfb close fixture, the same focused repair/context tests, and the original copy-operation integration suite:13 passed and one existing private-mount quota test was ignored. Its format and strict workspace Clippy passed. An initial HTTP fixture omitted the manual task's first-tab acquisition; correcting that setup to match production copy launch produced a passing rerun without a production change. Earlier shared-target contamination was discarded as invalid validation and replaced by private cold targets.
+
+This qualification paragraph changes documentation only; the passed Rust and MDX sources remain unchanged. The production candidate, canonical merge and installed acceptance are pending. This source result does not qualify real-account portability or close P300529/530. Final P300 broad review and post-review remediation counters remain zero.
