@@ -2,7 +2,7 @@
 
 ## Hosted reconnect, rules and artifacts
 
-The connected MCP catalog has 16 workflow tools. Discover actual schemas before
+The connected MCP catalog has 17 workflow tools. Discover actual schemas before
 use; the source guide does not prove installed support.
 
 `browser_reconnect` accepts taskId and operation status, disconnect, reconnect,
@@ -160,10 +160,11 @@ profile in `automation` mode. Ordinary open never silently closes, replaces or
 attaches to a browser in the other mode. Source/synthetic checks do not establish
 installed Native readiness or authenticated site state.
 
-The default MCP catalog contains 16 workflow tools: `browser_open`, `browser_navigate`,
+The default MCP catalog contains 17 workflow tools: `browser_open`, `browser_navigate`,
 `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
-`browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_reconnect`, `browser_policy`,
+`browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_reconnect`, `browser_retention`, `browser_policy`,
 `browser_artifact`, `browser_command` and `browser_discover`.
+`browser_retention` manages [bounded owner idle holds](/browser-retention); it grants no input or authentication authority.
 Page actions require `taskId`. Use `browser_tab` to list, create, select or close this
 task's tabs; repeat a stable `tabKey` when retrying creation. Peer tabs stay outside
 this scope. Use `browser_discover` for one advanced operation's argument schema,

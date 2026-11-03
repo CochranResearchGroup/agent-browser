@@ -72,7 +72,7 @@ lanes:
     product_lane: PL-PLATFORM
     objective: Deliver compact workspace launch, profile identity management and SiteGuide teaching through existing Native owners
     plan: docs/dev/plans/0300-2026-11-01-workspace-siteguides-523.md
-    branch: platform/spec523-workspace
+    branch: platform/spec523-acceptance
     target: main
     accountable_owner: ecochran76
     plan_state: ACTIVE
@@ -81,7 +81,7 @@ lanes:
     dependencies: [CochranResearchGroup/agent-browser#478]
     overlaps: [P302, CochranResearchGroup/agent-browser#506, CochranResearchGroup/agent-browser#519, CochranResearchGroup/agent-browser#520, CochranResearchGroup/agent-browser#538]
     reconciled_overlaps: ["P302 consumes frozen copy-lifecycle repair serially from canonical main; worker sole original source writer; root docs/runtime", "Ticket530 successor cleanup is limited to original-operation-owned copies; worker source in P300, root docs and serial integration; immutable P302 candidate untouched", "Issue538 owns fullscreen Native callbacks; P300 adds HTTP admission tests only and consumes canonical source serially in its retained auxiliary; no new checkout or foreign WIP consumption", "Root retains integration and sealed fast_iteration candidate;524-528 source validated/closed;3 owned auxiliaries governed-closed with branches retained;529/530 actual narration/account/runtime qualification remains open; preserve506/Auth foreign custody"]
-    validation_status: Source524-528 validated; P301 installed repair accepted; donor identity verified; P302 source merged and installed doctor passed; exact copy cleanup source qualified; combined integration underway; actual narration/copy qualification remains open; final review/remediation remain0
+    validation_status: Source524-528 validated; P301 installed repair accepted; donor identity verified; P302 source merged and installed doctor passed; exact copy cleanup integrated; cumulative qualification repairs in progress; actual narration/copy qualification remains open; final review/remediation remain0
     limitations: ["No source-readiness inference of production/provider/private-account effects", "Actual narrated and real-account copy rows require exact selected context", "One final broad review and one bounded TDD pass"]
     updated_at: 2026-11-02
   - id: IDLE515

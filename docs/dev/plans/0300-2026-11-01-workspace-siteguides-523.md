@@ -148,3 +148,18 @@ Product lane: PL-PLATFORM. Keep the source worker in the existing P300 checkout 
 Root may prepare main-based branch platform/spec523-acceptance in the already-registered retained P302 auxiliary using only published immutable checkpoint27138b762 while the worker finishes cleanup. Consume the later cleanup patch only after its explicit freeze. This creates no additional physical checkout or top-level lane. Start from freshly fetched canonical main, preserve the exact P300 source checkpoint and consume only committed or recoverable own patches. Retain the immutable P302 candidate and source-root candidate; do not remove either checkout through raw Git cleanup. Publish the replacement integration PR before superseding draft PR532. Run cumulative affected local gates on the combined source and use a source-bound production candidate for the authorized full workspace installation. This is an ordinary checkpoint, not a formal release.
 
 Parallel issue538 owns fullscreen Native mode callbacks and the Remote View toolbar seam; P300 owns launcher/ProfileLab/teaching behavior and only additional admission tests in their shared HTTP source. Preserve both when consuming canonical commits, without copying unpublished foreign work or taking custody of that lane. Actual account-copy rows remain separate from source qualification. Ticket529 still needs explicit actual recording/task/account selection; do not fabricate human narration. Final broad review and post-review remediation counters remain zero.
+
+
+## Serial integration qualification
+
+PR542 on `platform/spec523-acceptance` supersedes PR532. The original source
+branch remains retained; unrelated dirty work is preserved. Canonical fullscreen
+owner callbacks are integrated through main25825152d.
+
+The cumulative provider-free run exposed an existing retention-tool catalog,
+metadata and selection-budget mismatch, plus obsolete embedded workspace-shell
+assertions and a missing accessible busy state. Bounded repairs preserve request
+validation and restore the loading-state contract; first failures are retained.
+Affected gates are rerun on the combined source before merge or installation.
+Actual529 narration and530 portability acceptance remain open. Final broad review
+and post-review TDD counters remain0.
