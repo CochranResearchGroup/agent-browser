@@ -1,4 +1,10 @@
+P300/530 continuation: PR542 source is locally qualified on 780b4275d, including exact completed-copy disposal and cumulative validation repairs. Canonical source integration, a sealed production candidate and preserving installation are next. Actual #529 narration and #530 portability remain open; final review/remediation remain0.
+
+[P301 Native handoff repair](docs/dev/plans/0301-2026-11-02-native-x11-authority-529.md): PR533 merged and preserve-mode installed; doctor passes and retained browser handoff is ready. Full P300 rail deployment and actual narrated/copy acceptance remain pending.
+
 # Runbook
+
+[P300 workspace execution](docs/dev/plans/0300-2026-11-01-workspace-siteguides-523.md): 524–528 source validated/CLOSED through368ac49e9; sealed fast_iteration candidate built, not installed. Three owned worker checkouts governed-closed.529 remains OPEN/needs-info for actual recording/context selection;530 is OPEN/ready-for-agent with donor selection complete and copy cleanup source qualified; combined integration underway. Actual narrated/copy rows remain NOT_RUN. Final review and TDD counts remain0.
 
 [Native operator-journey acceptance](docs/dev/notes/2026-10-31-native-journey-receipt.md), #512 / PR513, is installed accepted on sealed binary5a9f1250acef. Authenticated Native input, same-link reconnect, continued same-task automation and exact cleanup pass; operatorJourneyReady is now true. The idle profile-lease advisory remains separate.
 

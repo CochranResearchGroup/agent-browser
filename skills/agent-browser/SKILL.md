@@ -24,8 +24,6 @@ For installed viewers, read [Native journey qualification](references/cli-and-se
 
 For human assistance, call `browser_handoff({ "taskId": "<returned-task-id>" })`. Require `operatorVisible.state=ready` before giving the person its complete `data.handoffUrl`; continue with the same task ID. For `remote_view_public_origin_missing`, check reviewed `AGENT_BROWSER_PUBLIC_ORIGIN` configuration and stale MCP startup. Set it in `~/.agent-browser/.env` or `AGENT_BROWSER_ENV_FILE`; explicit process settings win. MCP connections pin startup configuration: reconnect after changes, preserving the task. Never assemble provider URLs.
 
-Standalone handoffs use Native authentication. Reuse the opaque URL; verify native display.
-
 After human input, `browser_continue` with the same `taskId` reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff.
 
 ## Standalone authentication
@@ -41,14 +39,9 @@ attempts on their original requests; never replay private use.
 
 ## Hosted workflow guidance v1
 
-Use Bots-native browsing when it already owns the right browser and task. Choose
-Agent Browser for its reusable task, page and continuity controls; do not create a
-second browser just to switch tools. Read [host integration v1](references/host-integration.md)
-before app placement, attachment, sharing or human takeover. Discover the connected
-runtime's schemas first; documentation and a visible browser do not prove support,
-account identity or control ownership. Shared skill publication needs explicit approval.
+Reuse the browser/task already owned by Bots. Read [host integration v1](references/host-integration.md) before attachment, sharing or takeover. Discover connected schemas; visibility does not prove account identity or control ownership. Shared skill publication needs explicit approval.
 
-Tools: `browser_open`, `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`, `browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_reconnect`, `browser_policy`, `browser_artifact`, `browser_command`, `browser_discover`.
+Tools: `browser_open`, `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`, `browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_reconnect`, `browser_retention`, `browser_policy`, `browser_artifact`, `browser_command`, `browser_discover`.
 Page actions require `taskId`. `browser_tab` manages this task's tabs; retry creation
 with the same `tabKey`. After restart, creation rejoins the verified browser
 and preserves tabs; peer tabs remain outside scope. Discover actions with `browser_discover`; use `browser_command` with `taskId`, `action`, `params`.
@@ -96,29 +89,22 @@ Read [CLI commands](references/commands.md) for examples.
 
 Discover `category:"playbooks"` and use `browser_command` in the existing task. Before login, hosted-helper use, guide development or bounded collection, read [SiteGuide routines](references/cli-and-service.md#siteguide-routines) and [the routine guide](references/playbooks.md). Verify the intended account/company; browser login and OAuth/API readiness are separate.
 
-## Read more only when needed
+## References
 
-Retained-task recovery requires proven process/profile absence and preserves peer claims. Continue through the original taskId.
+Preserve peers and original task IDs during recovery.
+[Commands](references/commands.md), [snapshots](references/snapshot-refs.md),
+[authentication](references/authentication.md), [sessions](references/session-management.md).
+Discover advanced operations with `browser_discover`.
 
-- [Commands](references/commands.md): detailed CLI syntax.
-- [Snapshot references](references/snapshot-refs.md): find and use element refs.
-- [Authentication](references/authentication.md): requested login and state reuse.
-- [Session management](references/session-management.md): named CLI sessions.
-- [Advanced CLI and service reference](references/cli-and-service.md): flags,
-  installation, API contracts, diagnostics and explicit maintenance.
-
-Use `browser_discover` for advanced MCP metadata.
-
-
-For dashboard/viewer/startup failures, read [dashboard diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics).
+For sign-in and workspace teaching, read [workspace tools](references/workspace-sign-in.md); for viewer failures, read [diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics).
 
 ## Browser mode and builds
 
-Inspect `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build and mode are independent; copies do not prove login. Read [controls/recovery](references/cli-and-service.md#browser-build-selection). Reconcile the original operation after lost replies.
+Inspect `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build and mode are independent; copies do not prove login. Read [copy experiments](references/cli-and-service.md#profile-lab-independent-copies) and [controls/recovery](references/cli-and-service.md#browser-build-selection). Reconcile the original operation after lost replies.
 
 Owned manual copies use normal close without desktop agent input. Inspect uncertain closes; cancel the original operation before reviewing a new attempt. A reboot is not clean-close proof. Window readiness is separate from agent input authority.
 
-Diagnostics retain selection query fields. Rail presence revalidates at 250/500/1000 ms, then polls every three seconds.
+After verification and normal task close, `profile_duplicate` choice `dispose_copy` uses only the original completed `operationId` and `ownerConfirmed: true`, without `taskId`. The owner protects source/peers, refuses live or uncertain custody, and retains exact disposal history. Continue the original interrupted disposal; cancellation does not remove a completed copy.
 
 ### Tasks and teaching
 

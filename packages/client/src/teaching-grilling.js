@@ -65,6 +65,16 @@ export function createTeachingGrillingClient({review,readOperatorAnswer}){
    guide.teaching.clarification={questions,answers:[]};
    return review.save({...input,guide});
   },
+  async readAnswerContext(input){
+   const view=await base(input);
+   if(view.sha256!==input.expectedSha256)fail('teaching_question_stale_revision');
+   if(typeof readOperatorAnswer!=='function')fail('teaching_operator_answer_authority_unconfigured');
+   if((await verifyAnswers(view)).some(answer=>answer.verification!=='verified'))fail('teaching_prior_answers_unverified');
+   const question=ready(view).find(question=>question.id===input.questionId);if(!question)fail('teaching_question_not_ready');
+   const request={answerRef:input.answerRef,questionId:question.id,questionSha256:digest(question),taskId:input.taskId,rootGuideId:view.rootGuideId,answeredGuideId:view.guideId,answeredSha256:view.sha256,contentSha256:view.contentSha256};
+   const authenticatedAnswer=checkedAnswer(await readOperatorAnswer(clone(request)),request);
+   return {guide:clone(view.guide),question:{...clone(question),questionSha256:digest(question)},authenticatedAnswer,binding:request};
+  },
   async answer(input){
    const view=await base(input);
    if(view.sha256!==input.expectedSha256)return {status:'conflict',reason:'stale_revision',ordinaryReuseAllowed:false};

@@ -89,7 +89,7 @@ Retained-task recovery rechecks interrupted launch custody when the host is alre
 
 ## Hosted reconnect, rules and artifacts
 
-The connected MCP catalog has 16 workflow tools. Discover actual schemas before
+The connected MCP catalog has 17 workflow tools. Discover actual schemas before
 use; the source guide does not prove installed support.
 
 `browser_reconnect` accepts taskId and operation status, disconnect, reconnect,
@@ -223,9 +223,9 @@ profile in `automation` mode. Ordinary open never silently closes, replaces or
 attaches to a browser in the other mode. Source/synthetic checks do not establish
 installed Native readiness or authenticated site state.
 
-The default MCP catalog contains 16 workflow tools: `browser_open`, `browser_navigate`,
+The default MCP catalog contains 17 workflow tools: `browser_open`, `browser_navigate`,
 `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
-`browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_reconnect`, `browser_policy`,
+`browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_reconnect`, `browser_retention`, `browser_policy`,
 `browser_artifact`, `browser_command` and `browser_discover`.
 Page actions require `taskId`. Use `browser_tab` to list, create, select or close this
 task's tabs; repeat a stable `tabKey` when retrying creation. Peer tabs stay outside
@@ -3131,6 +3131,30 @@ Ordinary task updates do not consult malformed launch history or unchanged peer 
 
 ## Observability Dashboard
 
+The compact top toolbar contains **Open browser** and **Profiles and SiteGuides**.
+Open browser starts with a disposable profile, CDP-free mode and a blank page.
+Choose Chrome or Chromium, expand exact build/version details when needed, and
+select an existing profile or name a new durable profile. The existing inventory
+rail keeps its search, grouping, collapse and resize controls. Remote View supplies
+the actual desktop, native input and recording controls.
+
+Manual tasks remain open until explicitly closed, including when the dashboard
+is closed. An existing compatible connected profile gets a separate task/tab.
+A CDP-free profile has one owned window: return to that task, choose another
+profile, or duplicate and test in Profile Lab. Changing a closed original
+profile's build requires explicit migration/sign-in risk confirmation.
+
+The launcher retains its original operation across lost replies. Inspect that
+operation before creating another browser. A confirmed refusal with no effects
+allows revised choices; an uncertain result remains pending.
+
+Profiles support multiple intended site/account/organization associations.
+These labels remain separate from observed account identity and authentication
+freshness. Explicit profile choice is preserved; unique compatible exact
+identity matches can be selected automatically, while ambiguous or conflicting
+matches require a choice. The public policy owner filters profile visibility
+and use, and association changes do not update authentication evidence.
+
 Dashboard summary status omits detailed runtime resource inventories and reconciliation receipts while retaining health flags and resource totals. Its projection metadata reports omitted counts and points to complete `/api/service/status` diagnostics. Summary delivery failure is not evidence that browsers or tabs have ended.
 
 
@@ -3216,19 +3240,39 @@ Closing a diagnostic connection with no active profile tabs leaves authority
 state unchanged. A real disconnect marks only that connection's active tabs as
 disconnected; repeating the disconnect does not advance the state revision.
 
-The dashboard includes an app-owned login screen. On first start it creates
-`~/.agent-browser/dashboard-auth.json` with hashed superuser credentials and a
-mode-0600 bootstrap credential file at
-`~/.agent-browser/dashboard-auth.env`. The default `admin` account and the
-`codex` observer account are superusers. `~/.agent-browser/.env` records
-`AGENT_BROWSER_DASHBOARD_AUTH_FILE` so the user-scoped service and foreground
-runs use the same credential store. Set `AGENT_BROWSER_DASHBOARD_AUTH_DIR` to
-an isolated directory when a fixture must not read or rewrite the user-scoped
-auth store, bootstrap credentials, or managed environment file.
-Successful login creates a secure, host-wide browser cookie that lasts thirty
-days. Each authenticated dashboard load renews that period, so opening another
-durable remote-view link on the same public dashboard host does not require a
-new login. A different hostname or browser profile has its own cookie.
+The ordinary workspace uses the existing ingress sign-in and has no second
+password form. Configure the complete reviewed bridge below in the dashboard
+backend environment before relying on ingress identity:
+
+| Environment variable | Contract |
+| --- | --- |
+| `AGENT_BROWSER_DASHBOARD_INGRESS_VERIFY_URL` | Trusted Authelia owner URL ending exactly in `/api/authz/forward-auth`; HTTPS or numeric-loopback HTTP only. |
+| `AGENT_BROWSER_DASHBOARD_INGRESS_WORKSPACE_URL` | Fixed public HTTPS workspace URL whose GET access is checked by the owner. Review the owner ACL and verifier peer-IP semantics; caller Host and forwarded headers never select this URL. |
+| `AGENT_BROWSER_DASHBOARD_INGRESS_USERS` | JSON map from exact owner principal to an existing local dashboard username, for example `{"operator":"admin","reader":"codex"}`. Roles come from the current private auth store. Prefer one-to-one mappings to preserve distinct actor attribution. |
+
+The backend forwards the session cookie and constructs ForwardAuth metadata
+from the reviewed workspace URL. It accepts identity only from an owner HTTP200
+with one `Remote-User` value and an explicit mapping. Caller `Remote-*` headers
+never authenticate or grant a role. Redirects are not followed; owner302/303/401
+requests sign-in, denied or unmapped identities return403, and malformed or
+unavailable verification returns503. Partial or invalid configuration fails
+closed. Missing sign-in, denial, redirects and service failures offer recovery
+without rewriting the selected browser URL. See the
+[Authelia ForwardAuth metadata contract](https://www.authelia.com/reference/guides/proxy-authorization/#forwardauth-metadata).
+
+With all three variables absent, supported local and machine authentication
+remains available through the dashboard login API and signed sessions. First
+start creates private `~/.agent-browser/dashboard-auth.json` and mode-0600
+`~/.agent-browser/dashboard-auth.env`; `admin` is a superuser and `codex` is an
+observer. Existing `AGENT_BROWSER_DASHBOARD_AUTH_FILE` and
+`AGENT_BROWSER_DASHBOARD_AUTH_DIR` overrides remain supported. A valid local
+session takes precedence and renews its thirty-day cookie on status read.
+Ingress identity never becomes a local cookie. Auth responses identify the
+user's `authenticationSource` as `ingress` or `local`. **End local session**
+ends only the local cookie; ingress sign-out belongs to its provider. Workspace
+access is separate from website account authentication and Native viewer access.
+Source fixture passes do not establish installed ingress, cookie delivery or
+Native workflow acceptance.
 
 Authenticated dashboard identity and Guacamole route identity are separate.
 For a hosted Guacamole request, forward authentication keeps the signed-in
@@ -7311,6 +7355,14 @@ operation before reviewing another attempt. A reboot does not substitute for
 a clean source close.
 Window readiness does not grant desktop input control.
 
+After verifying a copy, close its task normally. Use `profile_duplicate` choice
+`dispose_copy` with the original completed `operationId` and
+`ownerConfirmed: true`, omitting `taskId`. The owner derives the exact copy
+destination, refuses live or uncertain custody, and retains a durable disposal
+receipt. Inspect an interrupted disposal and continue its original operation;
+reusing its ID cannot create another copy. This choice preserves the source and
+other profiles. Cancellation does not remove a completed copy.
+
 MCP: discover `profile_duplicate`, then use `browser_command` with
 `action: "profile_duplicate"` and `params` containing `operationId`,
 `sourceProfileId`, `destinationName`, `choice` and `launch`. An optional `taskId`
@@ -7321,6 +7373,36 @@ HTTP: send these fields and `action: "browser_session_profile_duplicate"` to
 set `ownerConfirmed: true` only for the explicitly selected consequential
 choice. After a lost reply, reconcile that operation before attempting another
 effect. Cancelling a request does not reopen a source already stopped.
+
+### Profile Lab independent copies
+
+Open **Profile Lab** from **Profiles and SiteGuides**. Select a source profile,
+review its configured browser/version, mode and current work, then choose an
+available target build and CDP-free or automation-connected mode. Give the copy
+its own name in **Review independent copy**. The existing duplication owner
+reviews affected tasks and offers the consistent-source action. Finish unsaved
+work and explicitly confirm source closure when offered; the UI never silently
+closes a running source. The destination gets an independent profile identity
+and data directory. Copying does not overwrite or restore the source.
+
+Source configured build/mode describe next-launch configuration, not the
+physical source process. Original source mode is unverified when the owner
+receipt does not retain it; observe it separately. Target build/version and
+requested mode come from the retained operation. Choosing an earlier executable
+does not undo data migration or restore profile bytes.
+
+The checkpoint disclosure separates copy completion, published profile identity,
+account identity, authentication usability and independent storage writes.
+Publication proves neither a usable login nor independent storage divergence.
+Account, authentication and storage checks remain unverified until independently
+observed for the exact source/copy/build/mode pair. Source and synthetic fixture
+checks are not real-account portability evidence.
+
+After a failed launch or interrupted reply, reopen the dialog and inspect the
+retained original operation. Reload and operation selection only read history.
+Continue the returned action with its original operation ID; reconcile uncertain
+results before any further effect. A failed operation stays visible. Do not
+prepare another copy or replay closure merely because a reply was lost.
 
 ### Convert an existing task
 
@@ -7565,3 +7647,54 @@ checks satisfy the operator CI cost policy; hosted CI stays disabled. The
 [local validation guide](docs/agents/local-validation.md) describes selection,
 private per-check receipts and explicit-source synthetic Auth preflight. This
 repository tooling does not merge, deploy or authorize live browser effects.
+
+## Teaching from the workspace
+
+Choose **Teach this site** in the compact toolbar after selecting a managed
+browser task, or open the **SiteGuides** library tab. Select a configured site
+and explicitly choose the intended account and organization/workspace, or mark
+account unknown and personal/no organization. These
+labels do not prove the signed-in identity. Use the existing Native Remote View
+recording and human-narration controls, then select finalized evidence. The
+workspace consumes those recordings; it does not add a viewer or recorder.
+
+Recording choices currently require server-configured, scoped references in the
+private SiteGuides configuration. Automatic discovery from the Remote View
+producer is not available. Never paste recording bearer credentials into the
+workspace. Missing source, Speech or receiving-verifier configuration is an
+explicit prerequisite, not permission to substitute synthetic evidence.
+
+The installed teaching support uses Node 18 or later and ffmpeg to consume
+bounded visual samples from authorized finalized video. The configured chat
+gateway receives those images and all selected human transcript segments. Its
+teaching request has no browser tools and can only produce an inert draft.
+Missing gateway configuration leaves interpretation unavailable. The first
+useful draft precedes focused questions. Review exact content, retain its
+confirmation receipt, and run a distinct fresh repeat through the existing
+receiving verifier before accepting an immutable revision. Failed candidates
+preserve the previous accepted guide. Unknown operations retain their original
+references and must be inspected before another submission.
+
+Installed/source-free checks and synthetic fixtures establish implementation
+behavior. Real narrated teaching and authenticated profile-copy experiments
+remain separate acceptance work.
+
+### Private SiteGuides support configuration
+
+Set `AGENT_BROWSER_SITEGUIDES_CONFIG` on the backend to an absolute, owner-owned,
+non-symlink JSON file with mode0600. Its `schemaVersion` is
+`agent-browser.workspace-siteguides-host.v1`; `candidateDirectory` identifies
+the existing private candidate store. Optional `sources` maps descriptive keys
+to existing scoped Remote View recording-reader selections, URLs and private
+`tokenFile` references. Each selection binds the original task, finalized
+recording and selected narration. Optional `speech` configures the existing
+Speech adapter and its private token file. `freshRepeatReceipts` resolves exact
+receiving-verifier references to its immutable private receipts. These are
+server-owned settings; callers cannot supply paths, actor authority or tokens.
+
+Use the existing recording-access and Speech owner contracts when provisioning
+those bindings. An empty configuration does not make recordings or verification
+available. The `AI_GATEWAY_URL`, `AI_GATEWAY_API_KEY` and `AI_GATEWAY_MODEL`
+settings are shared with existing chat configuration; teaching uses a separate
+inert request with no browser tools. Keep configuration, tokens, transcripts,
+recordings and actual account evidence outside the source repository.

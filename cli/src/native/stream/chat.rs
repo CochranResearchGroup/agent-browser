@@ -1,3 +1,7 @@
+#[path = "teaching_agent.rs"]
+mod teaching_agent;
+pub(crate) use teaching_agent::{interpret_teaching_packet, teaching_agent_preflight};
+
 use std::sync::OnceLock;
 
 use serde_json::{json, Value};

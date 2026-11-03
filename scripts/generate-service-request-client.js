@@ -1555,7 +1555,20 @@ export interface ServiceRuntimeBackupCreateData {
   status: ServiceRuntimeBackupStatus;
 }
 
+/** Intended metadata and selection do not establish authenticated site identity. */
+export type ServiceWorkspaceProfileLibraryData =
+  | { profiles: Array<{
+      profile: import('./service-observability.generated.js').ServiceProfileRecord;
+      currentUse: Array<{ browserId: string; mode: string; sessionIds: string[] }>;
+      observedIdentity: { state: string; account: string | null };
+      relevantSitePolicyIds: string[];
+    }>; sitePolicies: Array<{ id: string; name: string }> }
+  | { profile: import('./service-observability.generated.js').ServiceProfileRecord }
+  | { state: 'selected' | 'choice_required' | 'conflict'; profileId: string | null;
+      candidates: string[]; reason: string; identityVerificationRequired: true };
+
 export interface ServiceRequestActionDataMap {
+  workspace_profile_library: ServiceWorkspaceProfileLibraryData;
   navigate: ServiceNavigateData;
   cdp_free_launch: ServiceCdpFreeLaunchData;
   external_byop_adopt: ServiceExternalByopAdoptData;

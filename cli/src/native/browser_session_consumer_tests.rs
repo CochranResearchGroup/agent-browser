@@ -310,6 +310,10 @@ impl RemoteViewBrowserProcessEffects for Process {
             )
             .unwrap();
         }
+        #[cfg(target_os = "linux")]
+        if self.root.join("copy-process-fixture").exists() {
+            return Ok(copy_process_launch(&self.root, profile, intent));
+        }
         let live_endpoint = self.root.join("live-cdp-endpoint.json");
         let live: Option<Value> = live_endpoint
             .exists()
@@ -364,6 +368,104 @@ impl Process {
         }
         Ok(())
     }
+}
+// Synthetic process transport for public copy lifecycle tests. Every child is
+// owned here, exits normally on stdin EOF, and survives host-object reloads.
+#[cfg(target_os = "linux")]
+thread_local! {
+    static COPY_PROCESS_CHILDREN: std::cell::RefCell<std::collections::BTreeMap<(PathBuf, u32), std::process::Child>> = const { std::cell::RefCell::new(std::collections::BTreeMap::new()) };
+}
+#[cfg(target_os = "linux")]
+struct CopyProcessFixture {
+    root: PathBuf,
+}
+#[cfg(target_os = "linux")]
+impl CopyProcessFixture {
+    fn new(root: &std::path::Path) -> Self {
+        std::fs::write(root.join("copy-process-fixture"), b"synthetic").unwrap();
+        Self { root: root.into() }
+    }
+}
+#[cfg(target_os = "linux")]
+impl Drop for CopyProcessFixture {
+    fn drop(&mut self) {
+        COPY_PROCESS_CHILDREN.with(|children| {
+            children.borrow_mut().retain(|(root, _), child| {
+                if root != &self.root {
+                    return true;
+                }
+                child.stdin.take();
+                child.wait().unwrap();
+                false
+            });
+        });
+    }
+}
+#[cfg(target_os = "linux")]
+fn copy_process_launch(
+    root: &std::path::Path,
+    profile: &BrowserProfileCatalogEntry,
+    intent: &BrowserLaunchIntent,
+) -> BrowserLaunch {
+    let child = std::process::Command::new("/bin/sh")
+        .args(["-c", "read line; exit 0", "synthetic-copy-browser"])
+        .arg(format!("--user-data-dir={}", profile.user_data_dir))
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let pid = child.id();
+    let crate::process_identity::ProcessObservation::Observed(observed) =
+        crate::process_identity::observe_process(pid)
+    else {
+        panic!("owned synthetic process must be observable");
+    };
+    let original = RecordedProcessIdentity {
+        pid,
+        start_token: observed.start_token.unwrap(),
+        executable_path: observed.executable_path,
+        browser_family: observed.browser_family,
+    };
+    let observation = serde_json::to_vec(
+        &serde_json::json!({"processIdentity":original,"desktopId":intent.assignment.desktop_id}),
+    )
+    .unwrap();
+    std::fs::write(root.join("copy-process-observation.json"), &observation).unwrap();
+    std::fs::write(
+        root.join(format!(
+            "copy-process-observation-{}.json",
+            intent.assignment.desktop_id
+        )),
+        &observation,
+    )
+    .unwrap();
+    COPY_PROCESS_CHILDREN.with(|children| children.borrow_mut().insert((root.into(), pid), child));
+    BrowserLaunch {
+        browser_id: format!("browser:{}", profile.id),
+        pid,
+        process_identity: Some(original),
+        cdp_endpoint: String::new(),
+        desktop: Some(RemoteViewFixedDesktop {
+            desktop_id: intent.assignment.desktop_id.clone(),
+            generation: intent.assignment.generation,
+            friendly_route_label: String::new(),
+        }),
+    }
+}
+#[cfg(target_os = "linux")]
+fn copy_process_close(root: &std::path::Path, pid: u32) -> Result<(), String> {
+    COPY_PROCESS_CHILDREN.with(|children| {
+        let mut children = children.borrow_mut();
+        let child = children
+            .get_mut(&(root.into(), pid))
+            .ok_or("synthetic_copy_process_identity_missing")?;
+        child.stdin.take();
+        child
+            .wait()
+            .map_err(|_| "synthetic_copy_process_exit_unavailable")?;
+        Ok(())
+    })
 }
 struct TestRetirementGuard;
 impl BrowserIdleRetirementGuard for TestRetirementGuard {}
@@ -434,6 +536,19 @@ impl BrowserSessionEffects for Process {
         Ok(())
     }
     fn browser_is_live(&mut self, _browser: &ManagedBrowserInstance) -> Result<bool, String> {
+        #[cfg(target_os = "linux")]
+        if self.root.join("copy-process-fixture").exists() {
+            return COPY_PROCESS_CHILDREN.with(|children| {
+                let mut children = children.borrow_mut();
+                let child = children
+                    .get_mut(&(self.root.clone(), _browser.pid))
+                    .ok_or("synthetic_copy_process_identity_missing")?;
+                child
+                    .try_wait()
+                    .map(|exit| exit.is_none())
+                    .map_err(|_| "synthetic_copy_process_readback_unavailable".into())
+            });
+        }
         Ok(!self.root.join("idle-process-absent").exists())
     }
     fn launch_browser(
@@ -504,9 +619,18 @@ impl BrowserSessionEffects for Process {
         let path = self.root.join("manual-strict-close-count");
         let count = std::fs::read_to_string(&path).map_or(0, |value| value.parse::<u32>().unwrap());
         std::fs::write(path, (count + 1).to_string()).unwrap();
+        #[cfg(target_os = "linux")]
+        if self.root.join("copy-process-fixture").exists() {
+            return copy_process_close(&self.root, browser.pid);
+        }
         Ok(())
     }
     fn close_browser(&mut self, _browser: &ManagedBrowserInstance) -> Result<(), String> {
+        #[cfg(target_os = "linux")]
+        if self.root.join("copy-process-fixture").exists() {
+            return copy_process_close(&self.root, _browser.pid);
+        }
+
         if self.root.join("count-retirement-closes").exists() {
             let path = self.root.join("retirement-effect-count");
             let count =

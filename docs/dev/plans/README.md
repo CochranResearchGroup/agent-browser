@@ -1,6 +1,8 @@
 # Active plan index
 
-[P302 owned manual copy closure](0302-2026-11-02-profile-copy-lifecycle-530.md): bounded lifecycle repair for530; source and installed qualification pending.
+[P300 compact workspace, Profiles and SiteGuides](0300-2026-11-01-workspace-siteguides-523.md), spec523:524–528 source CLOSED. Canonical lifecycle repair is installed; completed-copy cleanup source is qualified and combined integration is underway. Actual529 narration selection and530 portability qualification remain open. Final review/remediation remain0.
+
+[P302 owned manual copy closure](0302-2026-11-02-profile-copy-lifecycle-530.md): source and installed repair checkpoint complete; actual account qualification remains under #530.
 
 [P301 BILL login repairs](0301-2026-11-01-bill-login-repairs.md), #518–521 source closed; one review/TDD pass complete; #522 original recovery evidence remains gated.
 

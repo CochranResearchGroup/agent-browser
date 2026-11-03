@@ -271,6 +271,9 @@ export interface ServiceProfileRecord {
   origins: string[];
   loginIds: string[];
   accountLabels: string[];
+  /** Intended metadata, never login verification. */
+  siteAssociations: { sitePolicyId: string; account: string; organization: string }[];
+  siteAssociationsUpdatedAt: string | null;
   profileOrigin: 'agent_browser_owned' | 'external_byop' | 'external_observed' | string;
   profileClass: 'default' | 'managed_one_time' | 'durable_named' | 'operator_supplied' | string;
   accessPolicy: ServiceProfileAccessPolicy | null;

@@ -12058,6 +12058,7 @@ mod tests {
                 "browser_open",
                 "browser_policy",
                 "browser_reconnect",
+                "browser_retention",
                 "browser_screenshot",
                 "browser_snapshot",
                 "browser_tab"

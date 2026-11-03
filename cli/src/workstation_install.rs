@@ -123,7 +123,7 @@ const SYNC_ROUTE_POOL_SCRIPT: &str =
 const GRANT_ROUTE_DISPLAY_ACCESS_SCRIPT: &str =
     include_str!("../../scripts/grant-rdp-route-display-access.sh");
 const CONTROLLER_PACKAGE_JSON: &str = "{\n  \"private\": true,\n  \"type\": \"module\"\n}\n";
-const CONTROLLER_ASSETS: [(&str, &str, bool); 13] = [
+pub(crate) const CONTROLLER_ASSETS: [(&str, &str, bool); 22] = [
     (
         "scripts/smoke-rdp-guac-route-pool-readiness.js",
         ROUTE_POOL_READINESS_SCRIPT,
@@ -182,6 +182,51 @@ const CONTROLLER_ASSETS: [(&str, &str, bool); 13] = [
     (
         "scripts/lib/rdp-route-user-pool.py",
         ROUTE_USER_POOL_SCRIPT,
+        false,
+    ),
+    (
+        "teaching/workspace-siteguides-host.js",
+        include_str!("../../packages/client/src/workspace-siteguides-host.js"),
+        false,
+    ),
+    (
+        "teaching/workspace-siteguides.js",
+        include_str!("../../packages/client/src/workspace-siteguides.js"),
+        false,
+    ),
+    (
+        "teaching/playbooks.js",
+        include_str!("../../packages/client/src/playbooks.js"),
+        false,
+    ),
+    (
+        "teaching/teaching-evidence.js",
+        include_str!("../../packages/client/src/teaching-evidence.js"),
+        false,
+    ),
+    (
+        "teaching/teaching-evidence-http.js",
+        include_str!("../../packages/client/src/teaching-evidence-http.js"),
+        false,
+    ),
+    (
+        "teaching/teaching-draft.js",
+        include_str!("../../packages/client/src/teaching-draft.js"),
+        false,
+    ),
+    (
+        "teaching/teaching-review.js",
+        include_str!("../../packages/client/src/teaching-review.js"),
+        false,
+    ),
+    (
+        "teaching/teaching-grilling.js",
+        include_str!("../../packages/client/src/teaching-grilling.js"),
+        false,
+    ),
+    (
+        "teaching/teaching-media.js",
+        include_str!("../../packages/client/src/teaching-media.js"),
         false,
     ),
     ("package.json", CONTROLLER_PACKAGE_JSON, false),

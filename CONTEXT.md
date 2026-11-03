@@ -4,6 +4,13 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Workspace ingress identity**: A session verified directly by the configured
+Authelia owner against a fixed reviewed workspace GET/ACL target, explicitly
+mapped to a current local dashboard role. Caller identity headers establish
+nothing. Ingress and local signed sessions retain distinct authentication
+sources; website account identity and Native viewer access remain separate.
+
+
 **Task operation receipt**: Existing-owner evidence for one original addressed
 CDP request, retained before transport. Attempt, owner acknowledgement and site
 completion are separate. Readback never dispatches; Native/Auth journals retain

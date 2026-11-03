@@ -1,3 +1,5 @@
+#[path = "workspace_launch_http.rs"]
+mod workspace_launch_http;
 use futures_util::{FutureExt, SinkExt, StreamExt};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -304,7 +306,7 @@ where
     Err(last_error.unwrap_or_else(|| "dashboard service backend bootstrap failed".to_string()))
 }
 
-async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
+pub(super) async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
     let mut buf = vec![0u8; 8192];
     let n = match stream.read(&mut buf).await {
         Ok(n) if n > 0 => n,
@@ -484,13 +486,61 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
                 return;
             }
             Err(err) => {
-                write_json_error(&mut stream, "500 Internal Server Error", &err).await;
+                let response = dashboard_auth::authentication_error_response(&err);
+                let _ = stream.write_all(&response.into_http_bytes()).await;
                 return;
             }
         }
     } else {
         None
     };
+
+    if path == "/api/dashboard/siteguides" {
+        let body = if method == "POST" {
+            read_post_body(&mut stream, &buf, n).await
+        } else {
+            String::new()
+        };
+        super::http::handle_siteguides_http(&mut stream, method, &body, &headers, secure_cookie)
+            .await;
+        return;
+    }
+
+    if path == "/api/dashboard/profile-library" {
+        let body = if method == "POST" {
+            read_post_body(&mut stream, &buf, n).await
+        } else {
+            String::new()
+        };
+        super::http::handle_profile_library_http(
+            &mut stream,
+            method,
+            &body,
+            &headers,
+            secure_cookie,
+        )
+        .await;
+        return;
+    }
+
+    if path == "/api/dashboard/browser-launch" {
+        let body = if method == "POST" {
+            read_post_body(&mut stream, &buf, n).await
+        } else {
+            String::new()
+        };
+        workspace_launch_http::handle(
+            &mut stream,
+            method,
+            query,
+            &body,
+            authenticated_dashboard_user.as_deref().unwrap_or(""),
+            &headers,
+            secure_cookie,
+        )
+        .await;
+        return;
+    }
 
     // This route follows the ordinary dashboard authentication gate above.
     // Opening the durable handoff restores its browser before the native viewer redirect.
@@ -4276,6 +4326,15 @@ mod tests {
                 "owner identity and confirmation must be forwarded unchanged"
             );
         }
+        let disposal = json!({"action":"browser_session_profile_duplicate","choice":"dispose_copy","operationId":"completed-copy","ownerConfirmed":true});
+        let before_disposal = observed.lock().unwrap().len();
+        let denied = exchange("POST", "/api/command", "", &disposal.to_string()).await;
+        assert_eq!(http_response_status(&denied), Some(401));
+        assert_eq!(observed.lock().unwrap().len(), before_disposal);
+        let result = exchange("POST", "/api/command", cookie, &disposal.to_string()).await;
+        assert_eq!(http_response_status(&result), Some(200));
+        let payload: Value = serde_json::from_slice(http_response_body(&result).unwrap()).unwrap();
+        assert_eq!(payload["data"]["request"], disposal);
         for (method, body, status) in [
             ("GET", "", 405),
             (
@@ -4334,7 +4393,7 @@ mod tests {
             Some(503),
             "missing owner must not fall back to another lane"
         );
-        assert_eq!(observed.lock().unwrap().len(), 3);
+        assert_eq!(observed.lock().unwrap().len(), 4);
         task.abort();
         let _ = task.await;
     }

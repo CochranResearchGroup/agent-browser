@@ -247,3 +247,7 @@ pub(crate) mod x11_scene;
 mod e2e_tests;
 #[cfg(test)]
 mod parity_tests;
+
+mod workspace_profile_library;
+
+mod workspace_siteguides;

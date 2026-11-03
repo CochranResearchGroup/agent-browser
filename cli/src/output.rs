@@ -6251,13 +6251,18 @@ browser sessions. All sessions automatically stream to the dashboard.
 The standalone dashboard proxies /api/service/* on the same origin, so service
 views work through stable local or authenticated ingress instead of requiring
 the operator's browser to reach per-session localhost ports.
-The dashboard self-guards its API routes with a superuser login. On first
-start it creates ~/.agent-browser/dashboard-auth.json plus the mode-0600
-bootstrap credential file ~/.agent-browser/dashboard-auth.env. The default
-admin user and the codex observer user are superusers. Rotate or remove the
-bootstrap credential file after recording the intended operator password.
-Successful login creates a secure cookie for thirty days. Each authenticated
-dashboard load renews that period for the same dashboard host and browser profile.
+The workspace reuses trusted ingress sign-in without a second password form.
+Configure all three ingress settings below with a reviewed owner endpoint,
+fixed workspace ACL target and explicit principal-to-local-user mapping.
+Caller Remote-* headers never authenticate. Ingress identities never mint
+local cookies. Owner redirects require sign-in without following Location;
+denied/unmapped identities return403 and verification failures return503.
+Partial/invalid configuration fails closed. With all three settings absent,
+local/machine login API sessions remain supported. The private auth store
+creates admin as superuser and codex as observer. Valid local sessions take
+precedence and renew their thirty-day cookie. authenticationSource identifies
+ingress/local; End local session ends only a local cookie, not ingress sign-in.
+Website accounts and Native viewer access retain their separate authentication.
 After login, the dashboard polls authenticated /api/runtime/health every ten
 seconds. Its agent-browser.runtime-health.v1 response warns when active daemon
 executables, package versions, or stream metadata drift. Detection is read-only
@@ -6271,6 +6276,12 @@ Environment:
                        Override the dashboard auth directory for an isolated runtime
   AGENT_BROWSER_DASHBOARD_AUTH_FILE
                        Override the dashboard auth store path
+  AGENT_BROWSER_DASHBOARD_INGRESS_VERIFY_URL
+                       Trusted Authelia /api/authz/forward-auth URL; HTTPS or numeric-loopback HTTP
+  AGENT_BROWSER_DASHBOARD_INGRESS_WORKSPACE_URL
+                       Fixed reviewed public HTTPS workspace GET/ACL target, never caller-derived
+  AGENT_BROWSER_DASHBOARD_INGRESS_USERS
+                       JSON owner-principal to existing local-user map; current roles, explicit grants only
   AGENT_BROWSER_GUACAMOLE_HEADER_USER
                        Stable route-authorized Guacamole principal used as Remote-User for /guacamole/ forward auth; the dashboard actor remains in X-Agent-Browser-User
   AGENT_BROWSER_DASHBOARD_INGRESS_STATE
@@ -7379,10 +7390,32 @@ Commands:
   browser-mode TASK Inspect mode
   browser-native TASK ACTION JSON Input/capture <=1Mpx
   browser-build JSON Inspect/select/open profile build
+  Workspace Open browser: compact toolbar; disposable CDP-free is the default.
+  Choose Chrome/Chromium, an exact installed build, profile and optional URL.
+  New durable profiles retain data; manual tasks remain until explicitly closed.
+  Compatible connected profiles get an independent task/tab; conflicts need a choice.
+  Lost launch replies retain the original operation; inspect before another creation.
+  Profiles and SiteGuides manages intended site/account/workspace associations.
+  Teach this site consumes finalized Native video and selected human narration.
+  Choose exact task/profile/site and intended identity; labels are not login proof.
+  Scoped recording references require private server configuration; no automatic
+  Remote View source discovery or new viewer/recording controls are introduced.
+  Node >=18 and ffmpeg support installed bounded visual interpretation through
+  the configured chat gateway, without browser tools. Review exact draft content
+  and require a distinct receiving-verifier fresh repeat before acceptance.
+  Intended labels, observed identity and authentication freshness remain distinct.
   profile-duplicate JSON Copy/inspect; retry_launch or finish_without_opening
+  Profile Lab: Profiles and SiteGuides; choose source, target build/mode and copy name.
+  Review affected source work; clean-source closure requires explicit confirmation.
   Owned manual copies close without desktop agent input. Inspect uncertain closes;
   cancel the original before a new attempt. Reboot absence is not clean-close proof.
   Copy window readiness is separate from agent input readiness.
+  After normal copy close, dispose_copy uses its completed operationId and ownerConfirmed.
+  Omit taskId; inspect interrupted disposal and continue the same operation.
+  Disposal preserves source/peers; cancel does not remove a completed copy.
+  Source configured mode is not physical-mode proof; unretained original mode is unknown.
+  Copy/publication do not prove account identity, usable login or storage divergence.
+  Reload/inspect reads the original operation; reconcile lost replies without replay.
   mode-convert JSON Inspect/relaunch/pause/cancel/restore_previous/select_build
     Conversion verifies mode/window without input; retained handoffs reconcile the original launch
     Fullscreen Native handoffs offer a top-row CDP on/off control with relaunch review
@@ -8209,6 +8242,12 @@ Configuration:
     {{"headed": true, "proxy": "http://localhost:8080", "profile": "./browser-data"}}
 
 Environment:
+  AGENT_BROWSER_DASHBOARD_INGRESS_VERIFY_URL
+                       Trusted Authelia /api/authz/forward-auth URL; HTTPS or numeric-loopback HTTP
+  AGENT_BROWSER_DASHBOARD_INGRESS_WORKSPACE_URL
+                       Fixed reviewed public HTTPS workspace GET/ACL target, never caller-derived
+  AGENT_BROWSER_DASHBOARD_INGRESS_USERS
+                       JSON owner-principal to existing local-user map; current roles, explicit grants only
   AGENT_BROWSER_CONFIG           Path to config file (or use --config)
   AGENT_BROWSER_SESSION          Session name (default: "default")
   AGENT_BROWSER_SESSION_NAME     Auto-save/restore state persistence name
@@ -8321,6 +8360,7 @@ Environment:
   AGENT_BROWSER_SCREENSHOT_DIR   Default screenshot output directory
   AGENT_BROWSER_SCREENSHOT_QUALITY JPEG quality 0-100
   AGENT_BROWSER_SCREENSHOT_FORMAT Screenshot format: png, jpeg
+  AGENT_BROWSER_SITEGUIDES_CONFIG Absolute private JSON path for installed SiteGuides source/Speech/verifier configuration
   AI_GATEWAY_URL                 Vercel AI Gateway base URL (default: https://ai-gateway.vercel.sh)
   AI_GATEWAY_API_KEY             API key for the AI Gateway (enables chat command and dashboard AI chat)
   AI_GATEWAY_MODEL               Default AI model (default: anthropic/claude-sonnet-4.6, or --model flag)

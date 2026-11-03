@@ -1,0 +1,199 @@
+# P300: Compact workspace, Profiles and SiteGuides
+
+Product lane: PL-PLATFORM
+Status: ACTIVE
+Spec: https://github.com/CochranResearchGroup/agent-browser/issues/523
+Accountable human: ecochran76
+Integration branch: platform/spec523-workspace
+Integration base: bddb5b3fa9437639215a8431664dd6ef2da88575
+Review fixed point: proposed integration base above; explicit user confirmation requested before the single final review.
+
+## Authority and scope
+
+The operator directed publishing tickets and implement-spec coordination, with one root ticket and each other unblocked ticket assigned to one worker. Source work is authorized; production installation, provider mutation, arbitrary private account/media access and profile closure are not inferred. Existing task authority is reused when a concrete effect is qualified. Exactly one final Standards/Spec review and one bounded TDD remediation pass follow ticket validation/closure; no repeated broad review loops.
+
+The accepted prototype revision uses one browser inventory rail and compact tools in the existing thin top toolbar. Native Remote View remains the viewer/control/recording/narration owner. Prototype media, identities and repeat results are synthetic and are not live acceptance evidence. The full self-contained public spec is the tracker authority.
+
+## Custody and shared writers
+
+Reuse the clean canonical checkout serially as integration/root525. Preserve separate Auth-retention and inventory-access506 checkouts and their exact branches/candidates. Three necessary worker auxiliaries are admitted serially from the planning checkpoint, one each for524,526,527; no worktree per additional idle agent. Total registered population becomes six. Worker auxiliaries must be integrated and closed with governed custody receipts, or retained explicitly with unresolved work.
+
+Root owns compact workspace/launcher integration, public HTTP/service wiring, central contracts, root package scripts and shared documentation. Worker524 owns dashboard auth implementation and entry gate. Worker526 owns profile/site identity model, dedicated public library handler/client and profile manager. Worker527 owns copy/experiment UX and dedicated tests. Shared module/action/router edits are supplied as narrow integration patches to root unless explicitly transferred. Root integrates serially and validates before unlocking dependents. PR508/issue506 retains inventory access-error behavior; this lane preserves it and serializes overlapping compact workspace integration. Do not alter the preserved foreign checkout.
+
+## Execution ledger
+
+| Ticket | Outcome | Blocked by | State / owner |
+| --- | --- | --- | --- |
+| #524 | Use existing ingress sign-in for the compact workspace | none | validated/5f3f34009; tracker CLOSED |
+| #525 | Open manual browsers from the existing compact toolbar | none | validated/9a67d186f; tracker CLOSED |
+| #526 | Manage site identities and choose matching profiles | none | validated/5f3f34009; tracker CLOSED |
+| #527 | Plan and execute independent profile copies through Profile Lab | none | validated/5f3f34009; tracker CLOSED |
+| #528 | Manage SiteGuides and teach through Remote View recordings | #525, #526 | validated/368ac49e9; tracker CLOSED |
+| #529 | Qualify the integrated Native workspace and narrated teaching journey | #524, #525, #526, #528 | blocked/root; private packet prepared, actual context/runtime missing |
+| #530 | Qualify real-account Chrome and Chromium profile portability | #527 | blocked/p300_copy527; private packet prepared, donor/context missing |
+
+## Validation and acceptance
+
+The stable public seams are authenticated browser task lifecycle/native selection, site/identity-aware public profile choice, and Remote View teaching evidence through reviewed and fresh-repeat-qualified guide acceptance. Real-account copying is a linked acceptance track. Tests prove observable behavior; run red before green one vertical slice at a time using existing harnesses. WSL Rust compilation uses cargo-safe, pnpm runs JS/frontend checks, and hosted CI stays disabled. Root records red/green/source/combined checks per ticket before closure.
+
+Source, installed, provider controls, human narration and real-account usability are separate rows.529 cannot be closed with fixtures or synthetic narration; reuse478 only when its actual context is supplied/resumed.530 cannot be closed by copy completion or synthetic pair evidence. Missing selected media/account/donor context blocks only the named acceptance row, with a concrete preparation packet; it does not stop unrelated source work. Preserve unknown original operations and do not replay them.
+
+## Review ledger
+
+Broad review count: 0. Bounded post-review TDD remediation count: 0. Review diff will be git diff <confirmed-fixed-point>...HEAD. Spec and Standards remain independent; root adjudicates findings before the one remediation pass.
+
+## Implementation checkpoint
+
+Worker auxiliaries524,526,527 retain exact branches under `/tmp/agent-browser-p300-<ticket>`.524 source04fe756e447f4aac37587a5b9b3d735bc4cad301 passed its focused real HTTP owner verification, mounted auth gate, auth status and dashboard TypeScript checks.526 source228079c25fd5918b082e91a89b12b1a5e3679bee plus receipt87e8ab0709f3cbd9d103e3ce32ded748d2790ead passed five public model tests, the service-model suite, mounted manager/client and generated schema parity; registered transport qualification remains running.527 sourcecd10692b33e153e5274b5e84c610749af3bfc91c and docsea6f1879dd233cf3ca0329446fd45031508e9918 passed mounted Profile Lab, all18 original-operation reload paths, documentation links and Remote View documentation checks. Root reran Profile Lab and original-operation checks after integration.
+
+Root525 red/green evidence: public service-model disposable Native posture regression and actual native host regression both passed after reproducing the persistent-only refusal. Disposable exact executable pinning passed its model red/green, including refusal of changed build on the same original task after serialization. Mounted launcher checks pass defaults, account search, explicit conflict, exact returned task, lost-reply preservation and readback without replay. Existing compact desktop/mobile bounded rail scrolling passes with the new compact controls. These are source/fixture checks, not installed Native or real-account acceptance.
+
+Root Cargo uses isolated target `/tmp/agent-browser-p300-root-target`; workers use their own targets. A separate active lane owns the canonical CLI target. No target cache or foreign process was removed. Root model/native focused tests used a reviewed8GiB claim and8GiB cap with8 jobs; full cumulative gates retain ordinary admission. No hosted CI is dispatched.
+
+Shared documentation custody transferred serially527 then524; root retains launcher and cumulative guidance. Profiles transport module/action/router custody remains526 until its followup checkpoint. The selected real donor/account and actual human-narrated recording are requested;529/530 remain unqualified. No ticket is tracker-closed at this checkpoint.
+
+## Integrated source gate checkpoint
+
+Current worker integrations are auth524 b35e2d795/55ad334b1, profile526 cd9fa2502/94099363b, and copies527932d40070 plus prior source/docs commits.527 now retains optional frozen original source mode/build observation in the same owner binding. Qualified Linux loaded-digest evidence is distinguished from on-disk evidence; old/missing observations stay unknown. Public continuation and pure operation lookup preserve that original observation. Focused duplication3/3, mounted Profile Lab and18 original-operation/history paths pass; root reran the mounted Lab after integration. No actual account portability is claimed.
+
+Root cumulative cargo-safe workspace Clippy with warnings denied passed on the integrated working source. Cargo-safe formatting check passed. The complete service-model suite passed, including all integration binaries and compile-fail doctests. Source checkpoint contains unfinished525 acceptance, so this does not close525. Root's mounted launcher, known-no-effect versus uncertain recovery, explicit existing-task return, complete compact workspace, toolbar/manager/Profile Lab composition, profile manager/client and public service/MCP client checks pass. Docs build and links pass.524 integrated auth-status/mounted gate and dashboard production build pass; its repeated frozen build used unchanged hashes across the five relevant UI files, with only existing static-export rewrite warnings.
+
+The actual public dashboard launcher HTTP test passed anonymous/spoof refusal, authenticated catalog, preflight refusal, private/unknown profile protection, original readback and no browser/daemon launch. A final composition rerun adds the authenticated dashboard profile-library forwarder after526's fresh native inventory overlay. Root's disposable Native launch and original-request tests passed, including serialization/reopen and recovery of an existing allocation whose final reply was missing. That recovery acknowledges exact allocation only; navigation remains unconfirmed and is never replayed.
+
+Review count remains0 and bounded final TDD count0. Tests used synthetic fixtures and isolated homes; no production/provider/account/media effects occurred. Draft integration PR: https://github.com/CochranResearchGroup/agent-browser/pull/532.
+
+## Tracker and acceptance preparation
+
+524,526 and527 are tracker CLOSED following source validation at5f3f34009.525 remains open while its cumulative native-browser compartment runs. The final public dashboard launcher/profile-library forwarding test passed on integrated source, including protected reads, spoof refusal, no-effect preflight and no-launch readback.416 service-model tests/doctests passed. The review/remediation counts remain0.
+
+530 was assigned to the same copy worker only after527 validated/closed. Its clean admitted auxiliary was reused at5f3f34009 on platform/p300-530-portability; old527 branch/commit remain durable. A private four-row target-family by CDP-mode packet and original-preserving sequence exist outside Git under the user acceptance directory. Every row is NOT_RUN and the donor is unset. Controlled empty-environment native version probes confirmed Chrome and Chromium metadata without opening profiles. The installed candidate differs from P300 source. Donor/identity/workload, exact source impact, qualified installed context, storage probe and cleanup disposition remain execution gates. Discovery now includes the direct native snap Chromium executable while excluding its desktop-setting launcher. This is executable metadata, not browser/profile portability proof.
+
+##525 completed source qualification
+
+The official isolated cli-native-browser compartment passed382 tests with11 ignored at5f3f34009; ignored physical E2E rows are not claimed. Official isolated ingress and profile-library native HTTP focused checks each passed. Adding direct native snap discovery exposed debug-only catalog hashing cost in the functional HTTP fixture: its20-second test read timer expired while the debug build hashed large installed executables. The fixture now allows60 seconds and passes32.7 seconds; the product frontend deadline is unchanged and cold optimized-candidate performance remains an installed acceptance row, not an inferred result.
+
+The actual Page ingress/local-control regression exposed a missed source prop.524 was reopened, fixed in9892ec9ce, then reclosed after the real Page mounted red/green and TypeScript passed. Its previous backend/role/build evidence remains valid within unchanged scope.
+
+A120-profile390px mounted regression exposed an unbounded launcher dialog. Scoped bounded-dialog/list styling and accessible controls now pass; original-operation, conflict, explicit-return and large-list checks remain green. Synthetic mobile screenshot was visually inspected outside Git. Profile Lab and actual compact toolbar composition pass with the dialog styling. No native viewer/control implementation was replaced.
+
+##528 dispatch and current custody
+
+525 is CLOSED at9a67d186f after its source and cumulative gates.528 is now legitimately source-ready: both525 and526 validated on integration. The profile worker's clean admitted auxiliary `/tmp/agent-browser-p300-526` is reused on platform/p300-528-siteguides from9a67d186f; its old526 branch/result remains pushed. Worker owns focused SiteGuides/teaching components, deep-owner Node composition, authenticated HTTP adapter, narrow dedicated teaching-purpose confirmation reader, and the existing installed controller-assets support seam. Root retains Compact/page/global styling/package/shared guidance and dashboard forwarding. The asset path must work source-free and be covered by existing generation hashes/doctor; no cwd/repository fallback, new daemon, second recording/viewing stack or parallel guide/approval ledger is admitted. Agent interpretation and distinct fresh-repeat verification remain actual receiving interfaces, not fabricated templates or proof.
+
+Root's final formatting/strict workspace Clippy and styled manager/full compact checks pass after9a67d186f.524's actual entry followup is9892ec9ce and its corrected closure is recorded on the issue. Current source implementation closures are524,525,526,527.528 runs;529 remains dependency/media-gated;530 remains input/runtime-gated with its four actual rows NOT_RUN.
+
+Read-only development-runtime preparation found an older installed generation and a non-ready status receipt; it is not equivalent to P300. Graphiti status is healthy but the one narrowly scoped development-history search timed out, so current repo/runtime artifacts remain authoritative. No runtime repair/publication, provider mutation, account/media access or source closure was performed by this preparation. Private runtime metadata remains outside Git.
+
+## Integrated teaching workspace checkpoint
+
+Root integrated worker source checkpoints430aa778d and250858be9 as1ac4e63c4 and42163b857. Bounded recording-frame consumption and actual synthetic WebM decoding are bfc3a2941, followed by77dca0157's private source-bound configured-gateway adapter. The gateway port sends actual sampled images and all selected transcript ranges with no browser tools; it produces only inert candidate data. Preflight fails before provider submission, and transport ambiguity retains an unknown outcome. Worker528 owns the original-submission journal and once-only dispatch composition.
+
+The compact toolbar now opens one Profiles/SiteGuides/Profile Lab dialog and contextual Teach this site. Explicit configured site and intended account/workspace choices are required for the selected managed task, including disposable profiles. They are not login evidence. Returning to Native preserves the existing mounted desktop, input, recording and narration controls. Guide-selected profiles open the existing manual chooser explicitly. The protected dashboard forwards SiteGuides requests to the existing authenticated HTTP adapter. All five guidance surfaces and client exports are updated.
+
+Local root checks pass for mounted toolbar teaching context/Native host preservation, manual launcher, actual auth entry, dashboard TypeScript/build, bounded recording media including actual synthetic WebM-to-JPEG decoding, and the private gateway's inert source-bound request. Source-free asset, closed-task metadata, deep-owner and full integrated gates continue under528. Final broad review remains0; bounded post-review TDD remediation remains0.
+
+A confirmed integration gap remains explicit: recording selection currently requires private server-configured scoped references. No public Native producer catalog was found that supplies finalized selected-task grants automatically. The source does not add a credential-paste flow or another viewer/recorder. This prerequisite and the actual narrated acceptance remain visible rather than claiming automatic producer discovery.
+
+Cumulative client validation exposed a missing workspace_profile_library response type in ServiceRequestActionDataMap. The existing action-coverage assertion failed RED; adding its typed list/edit/selection union and regenerating declarations makes the complete pnpm test:service-client suite GREEN (`/tmp/p300-service-client-{final,fixed}.log`). No service runtime shape changed. The real integrated dashboard forwarder now passes authenticated unavailable and unauthenticated refusal checks alongside launcher/profile routes, without launching a browser (`/tmp/p300-siteguides-dashboard-forward-final.log`). Documentation build and changed-link/handoff checks pass. The selector's production publication/shared-skill suggestions do not grant production effects; isolated development candidate qualification remains the appropriate pending runtime scope.
+
+Actual acceptance preparation now includes a private529 nine-row NOT_RUN packet alongside530's four-row NOT_RUN portability matrix. Both tickets carry needs-info and public generic gate comments. User selection of actual task/profile/site/account/workspace, human narration/recording and real donor remains pending; final review base confirmation is also pending. No real browser/account/media effect was substituted. The complete compact workspace, profile library and Profile Lab mounted suites pass after root integration (`/tmp/p300-{compact,profile-ui,lab}-final4.log`).
+
+
+## Source closure and sealed development candidate
+
+All source tickets524,525,526,527,528 are CLOSED and validated on platform/spec523-workspace through368ac49e9660cf745073885607ec9f0fbdc5eba7.528 integrates06db2b954 as8f4cb7ddb and3a19b2ce5 as9423078f5; root connects authenticated interpretation diagnoses at368ac49e9. Native SiteGuides4/4 and public closed-task metadata/live-action refusal1/1 pass at exact worker3a19b2ce5, with equality of the causal integrated Rust source verified. Root's final full format check, strict workspace Clippy, mounted recovery/toolbar/profile-choice, dashboard build and documentation build pass. The9-suite public owner/source-free/receipt/baseline/draft/review/grilling bundle is green; source-free child-process cleanup and actual synthetic WebM decoding are qualified separately from real human narration. Source checks do not qualify529 or530.
+
+The sealed fast_iteration development candidate is candidate-364ccab4339426f0-c19815384eaeb0e3, binary SHA256c19815384eaeb0e30335311de90c53f0ebe02d765d044315e2a57e006e86fd39, clean source368ac49e9660cf745073885607ec9f0fbdc5eba7, Rust1.94.1/x86_64-unknown-linux-gnu, Cargo ci profile. Governed candidate build operation candidate-build-75a8e790-dcf1-4adf-97e1-377dda795c86 sealed the binary, complete input closure, support manifest and artifact manifest under cli/target/candidate-builds/5c3bf3fb41019ababc727be51021d09e/sealed. Independent binary/manifest hash comparison and disposable-home version/help smoke pass. This candidate is built, not installed, and is not production-promotable. The integration checkout and pinned artifact are retained. Documentation-only closeout metadata does not change the candidate's recorded build source.
+
+The existing isolated development runtime still predates P300 and fails read-only doctor at runtime-host ingress, backend unit/executable/discovery, manifest/environment and skill checks. These exact diagnostics are in the private529 packet; no repair or legacy provider reconstruction occurred. Fresh production readback retains generation0.28.0-ded833ebae83-db1eebd0470c and SHA256ded833ebae8331f4f095f0256c063ace05839faf3327f7064e9f4b28727dd9c7.
+
+Actual529's9 rows and530's4 rows remain NOT_RUN. Both tickets are OPEN/needs-info with concrete private packets. The missing actual task/profile/site/account/workspace, selected human narration/recording, donor and independently qualified runtime/verifier remain gates. The single broad code-review count is0; the bounded post-review TDD remediation count is0. The proposed fixed review base bddb5b3fa9437639215a8431664dd6ef2da88575 still awaits confirmation. Parent523 and PR532 remain open; no merge, deployment or wider acceptance is claimed.
+
+All3 owned auxiliary checkouts are cleanly closed through governed operations3a7f8801-d259-481b-b6d6-a0d70242c7be (524), ae92e9a9-0c5c-4ace-800a-8e7be2d34341 (527/530 preparation), and0fa49dca-6062-43a8-bd93-6dc6cd221fe7 (526/528). No pinned/active builds existed in those checkouts; branches, exact source commits, targets and private preparation receipts remain retained. Fresh worktree inventory contains only the integration checkout and the2 preserved foreign checkouts. No foreign custody was changed.
+
+## Native manual-publication repair under529
+
+An actual requested manual sign-in exposes a bounded defect before task publication: the Native owner reports the exact launched browser window active, while Agent Browser focus returns manual_login_native_window_unavailable. A read-only X11 probe confirms that the local focus connection lacks the assigned display's authority. The existing private launch environment authenticates the Chrome child but not the parent focus/close connection. No usable handoff was returned; a live exact-owned browser remains retained for recovery. Private task/process/account evidence stays outside Git.
+
+Root assigns529's narrow source repair to the existing auth worker, with manual.rs and browser.rs X11 connection/focus/close tests as the primary write scope. Reuse only owner-validated private X11 context and fresh Native generations. No global environment mutation, guessed cookie path, permissive X access, cookie logging, new viewer, second access layer or unrelated runtime reset is admitted. Preserve existing process/window/PID and Native foreground checks. Worker may use one admitted clean auxiliary from e5e689898 and exclusive root debug target custody; root performs no concurrent Cargo work there. Installation remains a separate concrete runtime transition, and final broad-review/TDD-remediation counters remain0.
+
+
+## Native handoff recovery checkpoint
+
+P301's bounded authenticated X11 repair is merged via PR533 and installed with preservation. Installed doctor passes and the original retained manual browser now returns operatorVisible.state=ready through its durable handoff. Reconciliation corrects the initial publication inference: the failed public open retained its durable task and tab. Private account/runtime details stay outside Git. The P300 rail feature set remains unmerged and uninstalled; its absence in the production rail is not acceptance proof.529 narrated qualification and530 actual copy rows remain open, pending human sign-in and subsequent evidence. Final broad review/remediation remain0. See P301 for exact source/candidate and local validation.
+
+
+## Profile-copy lifecycle repair under530
+
+Product lane: PL-PLATFORM (P300 parent); the bounded reliability dependency restores the existing copy workflow rather than adding a new workflow. The actual installed attempt exposed two independent boundaries: a retained pre-upgrade browser's loaded-executable read can fail across sibling user namespaces, and generic Native keyboard input is unavailable on a desktop whose owner still supports normal task-scoped lifecycle closure. A graceful source reopen recovered executable qualification and preserved sign-in, but no actual copy was published. A subsequent host reboot ended that source without positive graceful-close evidence; the original operation was explicitly cancelled through its owner, without promoting absence into clean-close proof. Private account and runtime evidence stays outside Git.
+
+Root owns runtime reconciliation and shared documentation. The existing auth worker is the sole writer in the integration checkout for profile_duplicate_host.rs and the minimum lifecycle/effects/runtime hook and regression tests. No new checkout is admitted: both previously registered temporary repair checkouts were lost across reboot; their Git refs remain recoverable and their missing registrations must not be silently pruned. Preserve both foreign checkouts and the integration candidate. Historical temporary test logs are not fresh validation evidence.
+
+The repair routes only positively owned manual sources through a strict normal lifecycle close, reusing fresh owner-issued per-connection X11 authority and the exact original process/window/desktop fences. Retain affected-task review, durable attempt custody, positive dispatch acknowledgement, independent exact-process exit and profile-lock release, then existing source custody and logical retirement. Missing or rebooted originals cannot qualify clean close without acknowledgement. Unknown acknowledgement must not replay. Borrowed and nonmanual behavior remains unchanged; no force fallback, viewer duplication, generic input-policy change or credential changes.
+
+Required local evidence: disabled-generic-input reproducer, strict lifecycle-close GREEN, changed identity/generation/tasks refusal, pending/uncertain close reconciliation without replay, missing original after reboot without clean-copy promotion, and terminal cancellation without clean evidence. Reuse existing authenticated Xvfb close transport fixtures. Run touched regressions, full format and strict workspace Clippy. Source, installed and actual-account portability remain separate;529/530 are still open, and final broad review/remediation counts remain0.
+
+## Ticket530 exact copy cleanup dependency
+
+Product lane: PL-PLATFORM. The selected real-profile experiment requires exact owned browser and profile cleanup. No real copy has been created. Generic Service retention excludes persistent named copies and does not remove their Native catalog and duplication lineage, so it cannot qualify this criterion. Resolve this through the existing profile-duplication owner before real copy acceptance; do not substitute broad GC or manual state edits.
+
+Bound the effect to a destination positively identified by its original completed copy operation and lineage. It must never target the source or a generic existing profile. Require exact owner state, no live browser or active tasks/operations/locks, positive process evidence and path containment; refuse ambiguity or symlinks. Keep cancellation, failed/unknown outcomes and history attributable. Removal must have durable intent and recoverable, idempotent quarantine/catalog cleanup, retaining an explicit terminal receipt. No private profile bytes or account identity belong in Git.
+
+The existing source worker is primary writer in the canonical P300 checkout. Root owns shared documentation, serial integration and runtime. Before editing, enumerate exact source paths and the smallest owner-contract shape. P302 is an immutable candidate dependency in its separate registered checkout: do not edit it or expand its already-qualified install candidate. Reuse one exact operation on retry, preserve original/peer custody, and qualify only synthetic copies in source tests. Match tests and docs to the public choice. Actual account-copy execution remains gated on qualified installation and cleanup readiness. P300 final broad review/remediation counters remain zero.
+
+## Serial canonical integration after copy cleanup
+
+Product lane: PL-PLATFORM. Keep the source worker in the existing P300 checkout until its cleanup patch and tests are frozen. Its production paths are profile_duplicate_host, profile_duplicate_copy, profile_duplicate_disposal, profile_duplicate_custody and service_resources; consumer/pool changes are test support. Root owns MCP request/discovery wiring, the read-only operation projection, HTTP admission tests, help and shared documentation. Do not stage unrelated dirty UI or documentation hunks.
+
+Root may prepare main-based branch platform/spec523-acceptance in the already-registered retained P302 auxiliary using only published immutable checkpoint27138b762 while the worker finishes cleanup. Consume the later cleanup patch only after its explicit freeze. This creates no additional physical checkout or top-level lane. Start from freshly fetched canonical main, preserve the exact P300 source checkpoint and consume only committed or recoverable own patches. Retain the immutable P302 candidate and source-root candidate; do not remove either checkout through raw Git cleanup. Publish the replacement integration PR before superseding draft PR532. Run cumulative affected local gates on the combined source and use a source-bound production candidate for the authorized full workspace installation. This is an ordinary checkpoint, not a formal release.
+
+Parallel issue538 owns fullscreen Native mode callbacks and the Remote View toolbar seam; P300 owns launcher/ProfileLab/teaching behavior and only additional admission tests in their shared HTTP source. Preserve both when consuming canonical commits, without copying unpublished foreign work or taking custody of that lane. Actual account-copy rows remain separate from source qualification. Ticket529 still needs explicit actual recording/task/account selection; do not fabricate human narration. Final broad review and post-review remediation counters remain zero.
+
+
+## Serial integration qualification
+
+PR542 on `platform/spec523-acceptance` supersedes PR532. The original source
+branch remains retained; unrelated dirty work is preserved. Canonical fullscreen
+owner callbacks are integrated through main25825152d.
+
+The cumulative provider-free run exposed an existing retention-tool catalog,
+metadata and selection-budget mismatch, plus obsolete embedded workspace-shell
+assertions and a missing accessible busy state. Bounded repairs preserve request
+validation and restore the loading-state contract; first failures are retained.
+Affected gates are rerun on the combined source before merge or installation.
+Actual #529 narration and #530 portability acceptance remain open. Final broad review
+and post-review TDD counters remain0.
+
+
+### Qualified source checkpoint
+
+Executable source `780b4275d666654b3135d10ec8c6dd78fc851380` is locally qualified.
+The comprehensive `scripts/ci/rust-tests.sh` run took 2,771 seconds and retained
+three deterministic failures. Subsequent repairs passed the affected gates:
+
+- `scripts/ci/rust-tests.sh --compartment cli-native-stream`: 263 passed,
+  2 existing fixture-dependent tests ignored.
+- `scripts/ci/rust-tests.sh --focused tools_list_returns_only_bounded_workflow_catalog`:
+  1 passed, preserving exact names, contract parity and the schema-size limit.
+- `scripts/ci/rust-tests.sh --focused service_contracts`: 1 passed.
+- `scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml --test browser_mode_operation -- --test-threads=1`:
+  16 passed.
+- Workspace `cargo-safe.sh fmt` check and strict workspace Clippy passed.
+
+The initial run's unchanged installer (221), browser (402), action (274), service
+(617), other native (750), integration, extracted-crate and performance gates
+remain valid. Existing ignored tests are retained as exclusions, not passes.
+The separate complete service-model suite passed 416 tests with none ignored.
+Mounted workspace/profile/launcher/SiteGuide checks, source-free teaching support,
+service-client contracts and types, dashboard/docs builds, policy wiring,
+changed links and API/MCP parity passed. The accessible workspace busy-state
+regression was observed before its repair and passed afterward.
+
+Validation used Linux/WSL, bounded local Cargo scopes and synthetic providers.
+Hosted CI is disabled. Target-platform parity, actual narrated teaching and
+private-account portability are not established by these source checks.
+A redundant private-target catalog compilation was cancelled after the current
+stream test binary became reusable; that cancellation is not a pass. First
+failure and cancellation receipts remain outside Git. This documentation-only
+checkpoint reuses the code gates above under policy 0042. Final broad review and
+post-review TDD remain unrun, pending ticket acceptance and closure.

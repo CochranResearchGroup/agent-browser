@@ -51,4 +51,16 @@ await assert.rejects(
 );
 assert.equal(nonOkAttempts, 2);
 
-console.log("Dashboard authentication status retry checks passed");
+
+for (const status of [401, 403]) {
+  let calls = 0;
+  const response = await fetchDashboardAuthStatus(async () => {
+    calls++;
+    return new Response(JSON.stringify({ authenticated: false }), { status, headers: { "content-type": "application/json" } });
+  }, { attempts: 2, retryDelayMs: 0 });
+  assert.equal(response.status, status);
+  assert.equal(calls, 1);
+}
+await assert.rejects(fetchDashboardAuthStatus(async () => new Response('<html>Sign in</html>', { headers: { "content-type": "text/html" } }), { attempts: 1 }), /sign-in redirect/);
+
+console.log("Dashboard authentication status retry, denied and redirect checks passed");

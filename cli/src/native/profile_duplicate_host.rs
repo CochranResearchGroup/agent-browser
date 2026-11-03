@@ -6,6 +6,8 @@ use super::*;
 pub(super) mod profile_duplicate_copy;
 #[path = "profile_duplicate_custody.rs"]
 mod profile_duplicate_custody;
+#[path = "profile_duplicate_disposal.rs"]
+mod profile_duplicate_disposal;
 use agent_browser_service_model::ManagedBrowserCommandEffects;
 use agent_browser_service_model::{RecordedProcessIdentity, RemoteViewTabHandoffTarget};
 use profile_duplicate_copy::*;
@@ -65,6 +67,46 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             )
             .optional()
             .map_err(|_| "profile_duplicate_intent_read_failed")?;
+        let database = self.persistence.runtime_database_path()?;
+        if command["choice"] == "dispose_copy"
+            || profile_duplicate_disposal::read(&database, operation_id)?.is_some()
+        {
+            let intent: Option<PublicIntent> = retained
+                .as_deref()
+                .map(serde_json::from_str)
+                .transpose()
+                .map_err(|_| "profile_duplicate_intent_invalid")?;
+            let binding: Option<Value> = if intent.is_some() {
+                let raw: Option<String> = connection
+                    .query_row(
+                        "SELECT binding FROM profile_duplicate_owner_bindings WHERE id=?1",
+                        [operation_id],
+                        |row| row.get(0),
+                    )
+                    .optional()
+                    .map_err(|_| "profile_duplicate_binding_read_failed")?;
+                raw.map(|raw| serde_json::from_str(&raw))
+                    .transpose()
+                    .map_err(|_| "profile_duplicate_binding_invalid")?
+            } else {
+                None
+            };
+            let mut view = profile_duplicate_disposal::route(
+                self,
+                &directory,
+                operation_id,
+                command,
+                intent.as_ref(),
+            )?;
+            view["state"] = view["phase"].clone();
+            return decorate_retained_build(
+                view,
+                retained
+                    .as_deref()
+                    .ok_or("profile_duplicate_intent_missing")?,
+                binding.as_ref(),
+            );
+        }
         let mut intent: PublicIntent = if let Some(retained) = retained {
             serde_json::from_str(&retained).map_err(|_| "profile_duplicate_intent_invalid")?
         } else {
@@ -233,14 +275,89 @@ fn build_view(mut view: Value, intent: &PublicIntent) -> Value {
     }
     view
 }
-pub(super) fn decorate_retained_build(view: Value, raw: &str) -> Result<Value, String> {
+pub(super) fn decorate_retained_build(
+    mut view: Value,
+    raw: &str,
+    binding: Option<&Value>,
+) -> Result<Value, String> {
+    view["sourceObservation"] = binding
+        .and_then(|binding| binding.get("source_observation"))
+        .filter(|value| !value.is_null())
+        .cloned()
+        .unwrap_or_else(unknown_source_observation);
     let intent: PublicIntent =
         serde_json::from_str(raw).map_err(|_| "browser_build_copy_readback_invalid")?;
     Ok(build_view(view, &intent))
 }
 
+/// Read-only operation lookup shares the exact owner receipt projection.
+pub(super) fn decorate_retained_disposal(database: &Path, view: Value) -> Result<Value, String> {
+    let id = view["operationId"]
+        .as_str()
+        .ok_or("profile_duplicate_disposal_operation_missing")?;
+    match profile_duplicate_disposal::read(database, id)? {
+        Some(record) => profile_duplicate_disposal::overlay(view, &record),
+        None => Ok(view),
+    }
+}
+fn unknown_source_observation() -> Value {
+    json!({"mode":"unverified","reason":"not_retained","build":null,"buildEvidence":"unverified"})
+}
+
+/// Freeze process posture independently of next-launch configuration. Version
+/// discovery executes only the existing isolated executable inspection, never a profile.
+fn observe_source_binding(
+    browser: &agent_browser_service_model::ManagedBrowserInstance,
+    original: &RecordedProcessIdentity,
+    executable: &str,
+    digest: &str,
+    ownership: &str,
+) -> Value {
+    let inspect = || {
+        super::super::browser_session_store::mode_inspection::inspect(
+            browser,
+            Some(original),
+            ownership,
+            crate::process_identity::observe_process,
+        )
+    };
+    let mut observation = inspect();
+    observation["build"] = Value::Null;
+    observation["buildEvidence"] = json!("unverified");
+    if !matches!(observation["mode"].as_str(), Some("cdp" | "cdp_free")) {
+        return observation;
+    }
+    let executable = super::browser_build_selection::inspect_executable(Path::new(executable));
+    let after = inspect();
+    let stable = after["mode"] == observation["mode"]
+        && matches!(after["mode"].as_str(), Some("cdp" | "cdp_free"))
+        && executable.available
+        && executable.sha256.as_deref() == Some(digest);
+    #[cfg(target_os = "linux")]
+    let loaded_matches = executable_digest(Path::new(&format!("/proc/{}/exe", original.pid)))
+        .is_ok_and(|value| value == digest);
+    #[cfg(not(target_os = "linux"))]
+    let loaded_matches = true;
+    if stable && loaded_matches {
+        observation["build"] = executable.public();
+        observation["buildEvidence"] = json!(if cfg!(target_os = "linux") {
+            "original_loaded_digest"
+        } else {
+            "original_executable_on_disk"
+        });
+    }
+    // A process change during version discovery invalidates posture too.
+    if after["mode"] != observation["mode"] || after["reason"] != Value::Null {
+        observation["mode"] = json!("unverified");
+        observation["reason"] = json!("process_changed_during_build_observation");
+    }
+    observation
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 struct OwnerBinding {
+    #[serde(default)]
+    source_observation: Option<Value>,
     #[serde(default)]
     borrowed_anchor: Option<profile_duplicate_custody::BorrowedSourceAnchor>,
     original: RecordedProcessIdentity,
@@ -416,7 +533,19 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             } else {
                 None
             };
+            let source_observation = Some(observe_source_binding(
+                &browser,
+                &original,
+                &executable,
+                &digest,
+                if borrowed_anchor.is_some() {
+                    "app"
+                } else {
+                    "managed"
+                },
+            ));
             let binding = OwnerBinding {
+                source_observation,
                 borrowed_anchor,
                 original,
                 browser,
@@ -519,12 +648,22 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                     runtime.host.commit_state()?;
                 }
                 let mut view = operation.public_view();
+                view["sourceObservation"] = runtime
+                    .binding
+                    .source_observation
+                    .clone()
+                    .unwrap_or_else(unknown_source_observation);
                 view["state"] = view["phase"].clone();
                 Ok(view)
             }
             Err(error) => {
                 if let Some(operation) = journal.read(&intent.operation_id)? {
                     let mut view = operation.public_view();
+                    view["sourceObservation"] = runtime
+                        .binding
+                        .source_observation
+                        .clone()
+                        .unwrap_or_else(unknown_source_observation);
                     view["state"] = view["phase"].clone();
                     view["failure"] = json!(error
                         .split(':')
@@ -1361,6 +1500,7 @@ mod tests {
             rusqlite::Connection::open(root.join("profile-duplication/operations.sqlite3"))
                 .unwrap();
         let mut binding = OwnerBinding {
+            source_observation: None,
             borrowed_anchor: None,
             original: match crate::process_identity::observe_process(browser.pid) {
                 crate::process_identity::ProcessObservation::Observed(current) => {
@@ -1513,6 +1653,38 @@ mod tests {
     }
     #[test]
     #[cfg(target_os = "linux")]
+    fn profile_duplicate_disposal_refuses_unfinished_operation_without_effects() {
+        let mut fixture = manual_close_fixture("normal");
+        let result = fixture.host.handle_command(&json!({"action":"browser_session_profile_duplicate","operationId":"review","choice":"dispose_copy","ownerConfirmed":true,"principal":"administrator"}));
+        assert_eq!(result["success"], false);
+        assert!(
+            result["error"]
+                .as_str()
+                .unwrap()
+                .starts_with("profile_duplicate_disposal_completed_copy_required"),
+            "{result}"
+        );
+        assert_eq!(fixture.closes.get(), 0);
+        assert_eq!(fixture.host.catalog.profiles.len(), 1);
+        assert!(!fixture
+            .host
+            .state
+            .profile_operation_ids
+            .contains_key("source"));
+        let cancelled = fixture.host.handle_command(&json!({"action":"browser_session_profile_duplicate","operationId":"review","choice":"cancel"}));
+        assert_eq!(cancelled["data"]["phase"], "cancelled");
+        let refused = fixture.host.handle_command(&json!({"action":"browser_session_profile_duplicate","operationId":"review","choice":"dispose_copy","ownerConfirmed":true}));
+        assert_eq!(refused["success"], false);
+        assert!(refused["error"]
+            .as_str()
+            .unwrap()
+            .starts_with("profile_duplicate_disposal_completed_copy_required"));
+        assert_eq!(fixture.closes.get(), 0);
+        assert_eq!(fixture.host.catalog.profiles.len(), 1);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
     fn profile_duplicate_manual_close_uncertain_acknowledgement_never_replays() {
         let mut fixture = manual_close_fixture("uncertain");
         for _ in 0..2 {
@@ -1613,6 +1785,7 @@ mod tests {
             rusqlite::Connection::open(root.join("profile-duplication/operations.sqlite3"))
                 .unwrap();
         let binding = OwnerBinding {
+            source_observation: None,
             borrowed_anchor: None,
             original: RecordedProcessIdentity {
                 pid: browser.pid,
@@ -1633,9 +1806,25 @@ mod tests {
             reviewed_tasks: vec!["task".into()],
         };
         save_binding(&connection, "review", &binding).unwrap();
+        // Owner journal fixture: historical process observation, not next-launch intent.
+        let source_observation = json!({"mode":"cdp_free","observedAtMs":17,"build":{"name":"Chromium","version":"130.7","sha256":"review-only"}});
+        let mut frozen = serde_json::to_value(&binding).unwrap();
+        frozen["source_observation"] = source_observation.clone();
+        connection
+            .execute(
+                "UPDATE profile_duplicate_owner_bindings SET binding=?1 WHERE id='review'",
+                [frozen.to_string()],
+            )
+            .unwrap();
         let review = host
             .profile_duplicate(&json!({"operationId":"review"}))
             .unwrap();
+        assert_eq!(review["sourceObservation"], source_observation);
+        let lookup = host.operation_request_readback(&json!({"action":"browser_session_profile_duplicate","choice":"inspect","sourceProfileId":"source"})).unwrap().unwrap();
+        assert_eq!(
+            lookup["operations"][0]["sourceObservation"],
+            source_observation
+        );
         assert_eq!(review["phase"], "awaiting_owner_choice");
         assert_eq!(review["affectedTaskIds"], json!(["task"]));
         assert_eq!(review["actions"][1]["action"], "close_and_duplicate");

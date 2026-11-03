@@ -125,6 +125,176 @@ fn runtime_manifest_json_uncached() -> Value {
     })
 }
 
+/// Shared dashboard and per-session HTTP entry. Actor fields are rebuilt from
+/// the existing authenticated identity; mutation requires its current role.
+pub(super) async fn handle_siteguides_http(
+    stream: &mut tokio::net::TcpStream,
+    method: &str,
+    body: &str,
+    headers: &[(String, String)],
+    secure_cookie: bool,
+) {
+    let identity = match dashboard_auth::require_authenticated(headers, secure_cookie) {
+        Ok(identity) => identity,
+        Err(response) => {
+            let _ = stream.write_all(&response.into_http_bytes()).await;
+            return;
+        }
+    };
+    if !matches!(method, "GET" | "POST") {
+        write_json_result(
+            stream,
+            Err("SiteGuides supports GET and POST".into()),
+            "405 Method Not Allowed",
+        )
+        .await;
+        return;
+    }
+    let input = if method == "GET" {
+        json!({"operation":"list"})
+    } else {
+        match serde_json::from_str::<Value>(body) {
+            Ok(value) if value.is_object() => value,
+            _ => {
+                write_json_result(
+                    stream,
+                    Err("Invalid SiteGuides request".into()),
+                    "400 Bad Request",
+                )
+                .await;
+                return;
+            }
+        }
+    };
+    let operation = input
+        .get("operation")
+        .and_then(Value::as_str)
+        .unwrap_or("list");
+    match crate::native::workspace_siteguides::operation_is_write(operation) {
+        Ok(true) => {
+            if let Err(response) = dashboard_auth::require_superuser(headers, secure_cookie) {
+                let _ = stream.write_all(&response.into_http_bytes()).await;
+                return;
+            }
+            if let Err(error) = dashboard_auth::require_current_operator_role(&identity.username) {
+                write_json_result(stream, Err(error), "403 Forbidden").await;
+                return;
+            }
+        }
+        Ok(false) => {}
+        Err(error) => {
+            write_json_result(stream, Err(error), "400 Bad Request").await;
+            return;
+        }
+    }
+    let result = crate::native::workspace_siteguides::handle_workspace_siteguides(
+        &input,
+        &identity.username,
+        super::app_intelligence::operator_confirmation_directory(),
+    )
+    .await;
+    let status = if result.is_ok() {
+        "200 OK"
+    } else {
+        "503 Service Unavailable"
+    };
+    write_json_result(
+        stream,
+        result.map(|data| json!({"success":true,"data":data}).to_string()),
+        status,
+    )
+    .await;
+}
+
+pub(super) async fn handle_profile_library_http(
+    stream: &mut tokio::net::TcpStream,
+    method: &str,
+    body: &str,
+    headers: &[(String, String)],
+    secure_cookie: bool,
+) {
+    let identity = match dashboard_auth::require_authenticated(headers, secure_cookie) {
+        Ok(identity) => identity,
+        Err(response) => {
+            let _ = stream.write_all(&response.into_http_bytes()).await;
+            return;
+        }
+    };
+    if !matches!(method, "GET" | "POST") {
+        write_json_result(
+            stream,
+            Err("Profile library supports GET and POST".into()),
+            "405 Method Not Allowed",
+        )
+        .await;
+        return;
+    }
+    let input = if method == "GET" {
+        json!({"operation":"list"})
+    } else {
+        match serde_json::from_str::<Value>(body) {
+            Ok(value) if value.is_object() => value,
+            _ => {
+                write_json_result(
+                    stream,
+                    Err("Invalid profile library request".into()),
+                    "400 Bad Request",
+                )
+                .await;
+                return;
+            }
+        }
+    };
+    let mut command = json!({"action":"workspace_profile_library"});
+    for field in [
+        "operation",
+        "profileId",
+        "associations",
+        "expectedAssociations",
+        "sitePolicyId",
+        "account",
+        "organization",
+        "browserBuild",
+        "cdpConnected",
+    ] {
+        if let Some(value) = input.get(field) {
+            command[field] = value.clone();
+        }
+    }
+    if command.get("operation").and_then(Value::as_str) == Some("replace_associations") {
+        if let Err(response) = dashboard_auth::require_superuser(headers, secure_cookie) {
+            let _ = stream.write_all(&response.into_http_bytes()).await;
+            return;
+        }
+        if let Err(error) = dashboard_auth::require_current_operator_role(&identity.username) {
+            write_json_result(stream, Err(error), "403 Forbidden").await;
+            return;
+        }
+    }
+    command["servicePrincipalId"] = json!(format!("dashboard:{}", identity.username.trim()));
+    command["servicePrincipalProvenance"] = json!("authenticated_transport");
+    let result =
+        crate::native::workspace_profile_library::handle_workspace_profile_library(&command).await;
+    let status = match result.as_ref().err().map(String::as_str) {
+        Some(error)
+            if error.contains("changed; reload")
+                || error == "browser_inventory_identity_conflict" =>
+        {
+            "409 Conflict"
+        }
+        Some(error) if error.starts_with("browser_runtime_") => "503 Service Unavailable",
+        Some("Profile unavailable or permission denied") => "403 Forbidden",
+        Some(_) => "400 Bad Request",
+        None => "200 OK",
+    };
+    write_json_result(
+        stream,
+        result.map(|data| json!({"success":true,"data":data}).to_string()),
+        status,
+    )
+    .await;
+}
+
 fn runtime_environment_label(configured: Option<&str>) -> &'static str {
     match configured {
         Some("development") => "development",
@@ -231,6 +401,16 @@ pub(super) async fn handle_http_request(
         }
     }
 
+    if path == "/api/dashboard/siteguides" && method != "POST" {
+        handle_siteguides_http(&mut stream, method, "", &headers, secure_cookie).await;
+        return;
+    }
+
+    if path == "/api/dashboard/profile-library" && method != "POST" {
+        handle_profile_library_http(&mut stream, method, "", &headers, secure_cookie).await;
+        return;
+    }
+
     if method == "GET" && path == "/api/dashboard-auth/status" {
         let response = dashboard_auth::auth_status_response(&headers, secure_cookie);
         let _ = stream.write_all(&response.into_http_bytes()).await;
@@ -246,7 +426,9 @@ pub(super) async fn handle_http_request(
     if method == "POST" {
         let full_body = read_full_body(&mut stream, peeked).await;
         if full_body.is_none()
-            && (path == "/api/chat"
+            && (path == "/api/dashboard/profile-library"
+                || path == "/api/dashboard/siteguides"
+                || path == "/api/chat"
                 || path == APP_INTELLIGENCE_INSPECT_HTTP_ROUTE
                 || path == APP_INTELLIGENCE_OPERATOR_TURN_HTTP_ROUTE
                 || path == APP_INTELLIGENCE_OPERATOR_CONFIRM_HTTP_ROUTE
@@ -264,6 +446,16 @@ pub(super) async fn handle_http_request(
             return;
         }
         let body_str = full_body.as_deref().unwrap_or("");
+        if path == "/api/dashboard/siteguides" {
+            handle_siteguides_http(&mut stream, method, body_str, &headers, secure_cookie).await;
+            return;
+        }
+        if path == "/api/dashboard/profile-library" {
+            handle_profile_library_http(&mut stream, method, body_str, &headers, secure_cookie)
+                .await;
+            return;
+        }
+
         if let Some((encoded_profile_id, operation)) = service_profile_repair_route(path) {
             let profile_id = match decode_path_segment(encoded_profile_id, "profile repair id") {
                 Ok(profile_id) => profile_id,
@@ -433,6 +625,20 @@ pub(super) async fn handle_http_request(
             return;
         }
 
+        if path == "/api/command"
+            && serde_json::from_str::<Value>(body_str)
+                .ok()
+                .as_ref()
+                .and_then(|value| value.get("action"))
+                .and_then(Value::as_str)
+                == Some("workspace_profile_library")
+        {
+            // The legacy raw-command alias must retain this action's same
+            // authenticated role and actor boundary before native dispatch.
+            handle_profile_library_http(&mut stream, method, body_str, &headers, secure_cookie)
+                .await;
+            return;
+        }
         if path == "/api/command" {
             let result = relay_command_to_daemon(session_name, body_str).await;
             let (status, resp_body) = match result {
@@ -2298,6 +2504,34 @@ fn service_request_command_with_state_and_authority(
     let mut command = normalized.command;
     command["id"] = json!(request_id);
     apply_service_request_attribution(&mut command, &normalized.attribution);
+    if action_hint == "workspace_profile_library" {
+        if command.get("operation").and_then(Value::as_str) == Some("replace_associations") {
+            let role = authenticated_dashboard_user
+                .ok_or_else(|| {
+                    "Profile association writes require an authenticated dashboard operator"
+                        .to_string()
+                })
+                .and_then(dashboard_auth::require_current_operator_role);
+            role.map_err(|message| {
+                ServiceRequestRejection::record(
+                    "http_service_request",
+                    Some(action_hint),
+                    &request_id,
+                    effective_session,
+                    ServiceRequestIssue::new(
+                        ServiceRequestIssueKind::OperatorFocusAuthority,
+                        message,
+                    ),
+                )
+            })?;
+        }
+        if let Some(username) = authenticated_dashboard_user {
+            command["servicePrincipalId"] = json!(format!("dashboard:{}", username.trim()));
+            command["servicePrincipalProvenance"] = json!("authenticated_transport");
+            command["clientSubjectId"] = command["servicePrincipalId"].clone();
+        }
+    }
+
     if action_hint == "tab_close" && command["operatorClose"] == true {
         let proof = authenticated_dashboard_user
             .zip(service_state)
@@ -6016,6 +6250,8 @@ mod tests {
         assert!(error.contains("requires serviceName, agentName, and taskName"));
     }
 
+    include!("p300_profile_library.rs");
+    include!("p300_siteguides.rs");
     include!("p237_physical_selection.rs");
     include!("p237_http_selection.rs");
     include!("p278_tab_close.rs");
@@ -7576,9 +7812,9 @@ mod dashboard_asset_tests {
             return;
         }
 
-        // The exported page restores authentication before rendering login or
-        // the workspace. Route selection must survive that initial shell.
-        assert!(body.contains("Restoring session"));
+        // Ingress access is restored before the workspace renders. Route
+        // selection and the accessible loading state survive that initial shell.
+        assert!(body.contains("Restoring workspace access"));
         assert!(body.contains(r#"aria-busy="true""#));
         assert!(body.contains(&format!(r#"initialSection\":\"{expected_section}"#)));
     }

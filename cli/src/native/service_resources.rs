@@ -1011,6 +1011,87 @@ fn retained_profile_is_named_or_persistent_for_browser(
 /// Qualify an orphan disposable allocation against profile authority and a
 /// current process census. The caller retains Service State exclusion through
 /// deletion; this does not exclude independent provider or foreign OS launches.
+/// Explicit disposal of a completed Native copy has its own lineage authority;
+/// persistent/disposable retention eligibility is deliberately not reused.
+/// Caller holds the existing Service effect snapshot and exact Native fence.
+pub(super) fn prove_copy_profile_unoccupied(
+    state: &ServiceState,
+    profile_id: &str,
+    paths: &[PathBuf],
+    now: &str,
+) -> Result<(), String> {
+    let overlaps = |path: &Path| {
+        paths.iter().any(|expected| {
+            path == expected
+                || path.starts_with(expected)
+                || expected.starts_with(path)
+                || fs::canonicalize(path)
+                    .ok()
+                    .zip(fs::canonicalize(expected).ok())
+                    .is_some_and(|(left, right)| {
+                        left == right || left.starts_with(&right) || right.starts_with(&left)
+                    })
+        })
+    };
+    if state.profiles.contains_key(profile_id)
+        || state.profiles.values().any(|profile| {
+            profile
+                .user_data_dir
+                .as_deref()
+                .is_some_and(|path| overlaps(Path::new(path)))
+        })
+    {
+        return Err("profile_duplicate_disposal_service_projection_present".into());
+    }
+    if state
+        .current_lease_claim(
+            &agent_browser_lease_authority::LeaseResourceKey::profile(profile_id),
+            now,
+        )
+        .is_some()
+        || state.jobs.values().any(|job| {
+            matches!(&job.target, super::service_model::JobTarget::Profile(id) if id == profile_id)
+                && matches!(
+                    job.state,
+                    super::service_model::JobState::Queued
+                        | super::service_model::JobState::WaitingProfileLease
+                        | super::service_model::JobState::Running
+                )
+        })
+        || state
+            .browsers
+            .values()
+            .any(|browser| browser.profile_id.as_deref() == Some(profile_id))
+    {
+        return Err("profile_duplicate_disposal_service_reference_active".into());
+    }
+    let processes = profile_cleanup_process_census()?;
+    for process in processes {
+        if crate::process_identity::command_line_option_value(&process.command, "--user-data-dir")
+            .is_some_and(|path| overlaps(Path::new(path)))
+        {
+            return Err("profile_duplicate_disposal_process_present".into());
+        }
+        if process.command.is_empty()
+            && process.executable.as_deref().is_some_and(|executable| {
+                let name = executable.to_ascii_lowercase();
+                name.contains("chrome") || name.contains("chromium")
+            })
+        {
+            return Err("profile_duplicate_disposal_process_unverified".into());
+        }
+    }
+    for path in paths {
+        for marker in ["SingletonLock", "SingletonSocket", "SingletonCookie"] {
+            match fs::symlink_metadata(path.join(marker)) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                _ => return Err("profile_duplicate_disposal_profile_locked".into()),
+            }
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn permits_disposable_profile_cleanup(
     state: &ServiceState,
     allocation: &agent_browser_service_model::ManagedDisposableProfile,

@@ -2,6 +2,36 @@
 
 Select, inspect, share and continue browser tasks in one native workspace. Its compact browser/tab rail keeps the owned Remote View desktop central; Handoffs and diagnostics open when needed.
 
+## Open a manual browser
+
+Use **Open browser** in the thin top toolbar. The default is a disposable,
+CDP-free browser on a blank page. Choose Chrome or Chromium, inspect exact
+installed build/version details, and choose an existing profile or create a
+named durable profile. An optional starting URL is restricted to HTTP, HTTPS
+or <code>about:blank</code>. Manual tasks stay open until explicitly closed,
+including after closing the dashboard.
+
+Compatible connected profiles use an independent task/tab. A CDP-free browser
+has one owned window: return to the existing task or choose another profile.
+Use Profile Lab for an independent copy. A build change on an original closed
+profile requires explicit migration/sign-in risk confirmation.
+
+A lost reply retains the original operation. **Inspect original launch** reads
+its result without replaying creation. Only a confirmed refusal with no effects
+permits revised choices. A successful allocation selects the exact task; the
+existing native consumer independently qualifies desktop visibility and keeps
+Remote View's native input, recording and narration controls.
+
+## Profiles and intended identities
+
+The toolbar wrench opens **Profiles and SiteGuides**. Profiles can have several
+intended site/account/organization associations. Search names, account labels
+and site context. Intended use, observed identity and authentication freshness
+are separate evidence. Saving intended associations never verifies login.
+Explicit profiles remain selected. Automatic choice requires a unique,
+compatible exact intended identity; ambiguity and conflicts require a choice.
+Public profile policy controls read, use and association updates.
+
 Dashboard failures are postmortem evidence. The dashboard observes failed
 mutating HTTP actions without changing their behavior, reports unusable
 Guacamole frames and durable handoffs, and runs a watchdog for CDP feeds that
@@ -11,8 +41,8 @@ can be reviewed through <code>GET /api/service/failures?limit=100</code>. The
 reporter never sends the current page URL, iframe URL, raw handoff ID,
 credentials, headers, bearer material, or page content.
 
-The operator workspace retains its own login, authenticated session checks and
-logout. Native Remote View retains its existing viewer authentication.
+The operator workspace reuses trusted ingress sign-in and retains supported
+local API sessions. Native Remote View retains its existing viewer authentication.
 Native workspace embedding requires the dashboard and Remote View to share a
 public origin. An iframe handoff selects Remote View's existing workspace mode;
 Remote View enforces its same-origin framing policy. Opening the durable link
@@ -250,17 +280,43 @@ evidence.
 See [Open and reconnect an RDP browser](/remote-view) for the exact agent and
 operator workflow, takeover behavior, and troubleshooting steps.
 
-## Dashboard login
+## Workspace sign-in
 
-The dashboard protects its operator APIs with an app-owned login screen. On
-first start it creates `~/.agent-browser/dashboard-auth.json` with hashed
-superuser credentials and writes bootstrap credentials to the mode-0600 file
-`~/.agent-browser/dashboard-auth.env`.
+The ordinary workspace reuses ingress sign-in without another password form.
+Backend configuration requires all three reviewed values:
 
-The default `admin` account is a superuser. A `codex` superuser is also created
-for agent observation through trusted ingress. The dashboard records
-`AGENT_BROWSER_DASHBOARD_AUTH_FILE` in `~/.agent-browser/.env` so foreground
-runs and the user-scoped service use the same auth store.
+<table>
+<thead><tr><th>Environment variable</th><th>Contract</th></tr></thead>
+<tbody>
+<tr><td><code>AGENT_BROWSER_DASHBOARD_INGRESS_VERIFY_URL</code></td><td>Trusted Authelia owner endpoint with exact path <code>/api/authz/forward-auth</code>. HTTPS or numeric-loopback HTTP only.</td></tr>
+<tr><td><code>AGENT_BROWSER_DASHBOARD_INGRESS_WORKSPACE_URL</code></td><td>Fixed public HTTPS workspace URL checked with GET. Review the owner ACL and verifier peer-IP semantics; caller Host and forwarded headers cannot select the target.</td></tr>
+<tr><td><code>AGENT_BROWSER_DASHBOARD_INGRESS_USERS</code></td><td>JSON mapping from exact owner principal to an existing dashboard username. Current private-store roles apply. Prefer one-to-one mappings for distinct actor attribution.</td></tr>
+</tbody>
+</table>
+
+For example, the synthetic mapping <code>{'{"operator":"admin","reader":"codex"}'}</code>
+preserves the default admin superuser and codex observer roles. It grants no role
+without explicit configuration. The backend sends the cookie directly to the
+owner with metadata derived from the reviewed URL. Only owner HTTP200 with one
+<code>Remote-User</code> and a known mapping establishes identity; caller
+identity headers never authenticate. Redirects are not followed. Owner302/303/401
+requires sign-in; denied or unmapped users receive403; malformed or unavailable
+verification receives503. Partial or invalid configuration fails closed. Recovery
+preserves the selected browser URL and distinguishes sign-in, access denial,
+redirected content and service failure.
+
+With all three settings absent, supported local and machine authentication
+continues through <code>POST /api/dashboard-auth/login</code> and signed sessions.
+First start creates private <code>~/.agent-browser/dashboard-auth.json</code> and
+mode-0600 <code>~/.agent-browser/dashboard-auth.env</code>. The admin user is a
+superuser; codex is an observer. The existing auth-file and auth-directory
+overrides remain supported. Valid local sessions take precedence and renew their
+thirty-day cookie on status read. Ingress identities never mint local cookies.
+The returned user has <code>authenticationSource</code> set to ingress or local.
+**End local session** ends a local cookie; ingress sign-out remains provider-owned.
+Website account authentication and Native viewer access remain separate.
+Installing or configuring this bridge and qualifying an actual ingress/Native
+workflow require their own evidence; source fixtures do not establish those results.
 
 ### Custom stream port
 

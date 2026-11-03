@@ -62,6 +62,14 @@
     "./teaching-grilling": {
       "types": "./src/teaching-grilling.d.ts",
       "import": "./src/teaching-grilling.js"
+    },
+    "./workspace-siteguides": {
+      "types": "./src/workspace-siteguides.d.ts",
+      "import": "./src/workspace-siteguides.js"
+    },
+    "./teaching-media": {
+      "types": "./src/teaching-media.d.ts",
+      "import": "./src/teaching-media.js"
     }
   },
   "scripts": {
