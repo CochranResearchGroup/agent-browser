@@ -20,7 +20,7 @@ Use `browser_open` with `{"serviceName":"my-app","agentName":"editor","taskName"
 
 Use `profileMode: "existing"` for an existing profile, or `"disposable"` without `profile` for temporary work. The workflow owns selection, replay and scoped closure.
 
-Read [Native journey qualification](references/cli-and-service.md#native-journey-qualification) when validating an installed viewer generation.
+For installed viewers, read [Native journey qualification](references/cli-and-service.md#native-journey-qualification).
 
 For human assistance, call `browser_handoff({ "taskId": "<returned-task-id>" })`. Require `operatorVisible.state=ready` before giving the person its complete `data.handoffUrl`; continue with the same task ID. For `remote_view_public_origin_missing`, check reviewed `AGENT_BROWSER_PUBLIC_ORIGIN` configuration and stale MCP startup. Set it in `~/.agent-browser/.env` or `AGENT_BROWSER_ENV_FILE`; explicit process settings win. MCP connections pin startup configuration: reconnect after changes, preserving the task. Never assemble provider URLs.
 
@@ -122,11 +122,10 @@ Dates: YYYY-MM-DD; downloads need live process proof.
 
 Use the owning service’s bounded lifecycle retention for authentication waits. Read [Owner service waits](references/cli-and-service.md#owner-service-waits); never transfer a claim to a replacement browser or treat retention as credential/control authority.
 
-Retained browser recovery can select a fresh Native assignment after proven
-profile-process absence and an exact owner `released` record. It preserves the
-original launch history and retains owner terminal evidence separately from local
-cleanup completion. Missing inventory, a denial alone, mismatched identity or an
-explicit fixed recovery target does not authorize relocation.
+Fresh Native assignment requires proven profile-process absence and exact owner
+`released` evidence. Preserve launch history and separate owner termination from
+local cleanup. Missing inventory, denial, mismatched identity or a fixed recovery
+target cannot authorize relocation.
 
-Right-click a managed dashboard browser/tab to review CDP or CDP-free relaunch.
-Mode conversion verifies visibility without synthetic input; selective input stays separately governed.
+Review CDP/CDP-free relaunch from dashboard right-click menus or fullscreen Native handoff CDP toggle.
+Mode conversion verifies visibility without input; selective input is governed separately.

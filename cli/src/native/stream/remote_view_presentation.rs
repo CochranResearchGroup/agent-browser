@@ -83,6 +83,16 @@ pub(super) fn native_resume_operator(
     peer: std::net::IpAddr,
     headers: &[(String, String)],
 ) -> Result<String, String> {
+    native_callback_operator(peer, headers, 0)
+}
+
+/// Reuse the gateway capability for a bounded JSON callback. The caller checks
+/// the exact content length before allocating or reading its body.
+pub(super) fn native_callback_operator(
+    peer: std::net::IpAddr,
+    headers: &[(String, String)],
+    body_length: usize,
+) -> Result<String, String> {
     if !peer.is_loopback()
         || headers.iter().any(|(name, _)| {
             name.eq_ignore_ascii_case("cookie") || name.eq_ignore_ascii_case("transfer-encoding")
@@ -103,7 +113,7 @@ pub(super) fn native_resume_operator(
         }
         Ok(value)
     };
-    if one("content-length")? != "0" {
+    if body_length > 4096 || one("content-length")? != body_length.to_string() {
         return Err("remote_view_native_callback_denied".into());
     }
     let supplied = one("authorization")?

@@ -406,6 +406,12 @@ pub(super) async fn handle_dashboard_connection(mut stream: tokio::net::TcpStrea
         return;
     }
 
+    if path.starts_with("/api/native-remote-view/") && path.ends_with("/mode") {
+        super::native_browser_mode::handle(&mut stream, &buf, n, method, path, query, &headers)
+            .await;
+        return;
+    }
+
     // Capability-gated private native continuation. Browser cookies never
     // authenticate this route and the public opaque GET remains read-only.
     if path.starts_with("/api/native-remote-view/") {
@@ -3968,7 +3974,11 @@ async fn exec_agent_browser_args(args: Vec<String>) -> Result<String, String> {
     }
 }
 
-async fn write_json_error(stream: &mut tokio::net::TcpStream, status: &str, error: &str) {
+pub(super) async fn write_json_error(
+    stream: &mut tokio::net::TcpStream,
+    status: &str,
+    error: &str,
+) {
     write_json_error_with_code(stream, status, error, None, None).await;
 }
 
@@ -4009,7 +4019,11 @@ fn json_error_http_response(
     bytes
 }
 
-async fn write_json_value(stream: &mut tokio::net::TcpStream, status: &str, value: Value) {
+pub(super) async fn write_json_value(
+    stream: &mut tokio::net::TcpStream,
+    status: &str,
+    value: Value,
+) {
     let body = serde_json::to_string(&value).unwrap_or_else(|_| {
         r#"{"success":false,"error":"Failed to serialize JSON response"}"#.to_string()
     });
@@ -4021,7 +4035,11 @@ async fn write_json_value(stream: &mut tokio::net::TcpStream, status: &str, valu
     let _ = stream.write_all(body.as_bytes()).await;
 }
 
-async fn read_post_body(stream: &mut tokio::net::TcpStream, initial: &[u8], n: usize) -> String {
+pub(super) async fn read_post_body(
+    stream: &mut tokio::net::TcpStream,
+    initial: &[u8],
+    n: usize,
+) -> String {
     use tokio::io::AsyncReadExt;
 
     let header_end = initial[..n]
@@ -7201,3 +7219,7 @@ mod tests {
         .is_err());
     }
 }
+
+#[cfg(test)]
+#[path = "native_mode_tests.rs"]
+mod native_mode_tests;
