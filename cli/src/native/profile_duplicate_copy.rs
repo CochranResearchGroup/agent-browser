@@ -220,17 +220,77 @@ impl DuplicationStore {
             .map_err(|_| "profile_duplicate_write_failed")?;
         Ok(())
     }
+    pub(super) fn hold_profile_operations(
+        &self,
+        profile: &str,
+        original: &str,
+    ) -> Result<OperationSnapshot<'_>, String> {
+        self.connection
+            .execute_batch("BEGIN IMMEDIATE")
+            .map_err(|_| "profile_duplicate_disposal_operations_busy")?;
+        let guard = OperationSnapshot(&self.connection);
+        let mut statement = self
+            .connection
+            .prepare("SELECT state FROM profile_duplicate_operations WHERE id<>?1")
+            .map_err(|_| "profile_duplicate_disposal_operations_unavailable")?;
+        let rows = statement
+            .query_map([original], |row| row.get::<_, String>(0))
+            .map_err(|_| "profile_duplicate_disposal_operations_unavailable")?;
+        for row in rows {
+            let operation: Operation = serde_json::from_str(
+                &row.map_err(|_| "profile_duplicate_disposal_operations_unavailable")?,
+            )
+            .map_err(|_| "profile_duplicate_disposal_operations_invalid")?;
+            if (operation.request.source.id == profile
+                || operation.request.destination.id == profile)
+                && !matches!(operation.phase, Phase::Completed | Phase::Cancelled)
+            {
+                return Err("profile_duplicate_disposal_operation_active".into());
+            }
+        }
+        let has_intents: bool = self.connection.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='profile_duplicate_host_intents')",[],|row|row.get(0)).map_err(|_| "profile_duplicate_disposal_operations_unavailable")?;
+        if has_intents {
+            let mut statement = self.connection.prepare("SELECT intents.intent,operations.state FROM profile_duplicate_host_intents intents LEFT JOIN profile_duplicate_operations operations ON operations.id=intents.id WHERE intents.id<>?1").map_err(|_| "profile_duplicate_disposal_operations_unavailable")?;
+            let rows = statement
+                .query_map([original], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+                })
+                .map_err(|_| "profile_duplicate_disposal_operations_unavailable")?;
+            for row in rows {
+                let (raw, state) =
+                    row.map_err(|_| "profile_duplicate_disposal_operations_unavailable")?;
+                let intent: serde_json::Value = serde_json::from_str(&raw)
+                    .map_err(|_| "profile_duplicate_disposal_operations_invalid")?;
+                let source = intent["source_profile_id"]
+                    .as_str()
+                    .ok_or("profile_duplicate_disposal_operations_invalid")?;
+                let destination = intent["destination_profile_id"]
+                    .as_str()
+                    .ok_or("profile_duplicate_disposal_operations_invalid")?;
+                if (source == profile || destination == profile)
+                    && intent["cancelled"] != true
+                    && state.is_none()
+                {
+                    return Err("profile_duplicate_disposal_operation_active".into());
+                }
+            }
+        }
+        Ok(guard)
+    }
+    pub(super) fn lock_operation(&self, id: &str) -> Result<OperationLock, String> {
+        let path = self.lock_base.with_extension(format!(
+            "duplicate-{:x}.lock",
+            Sha256::digest(id.as_bytes())
+        ));
+        OperationLock::acquire(&path)
+    }
     pub fn advance(
         &mut self,
         id: &str,
         choice: Choice,
         runtime: &mut impl DuplicationRuntime,
     ) -> Result<Operation, String> {
-        let lock_path = self.lock_base.with_extension(format!(
-            "duplicate-{:x}.lock",
-            Sha256::digest(id.as_bytes())
-        ));
-        let _operation_lock = OperationLock::acquire(&lock_path)?;
+        let _operation_lock = self.lock_operation(id)?;
         let result = (|| {
             let mut op = self.read(id)?.ok_or("profile_duplicate_not_found")?;
             if matches!(op.phase, Phase::Completed | Phase::Cancelled) {
@@ -427,7 +487,13 @@ impl DuplicationStore {
     }
 }
 
-struct OperationLock {
+pub(super) struct OperationSnapshot<'a>(&'a Connection);
+impl Drop for OperationSnapshot<'_> {
+    fn drop(&mut self) {
+        let _ = self.0.execute_batch("ROLLBACK");
+    }
+}
+pub(super) struct OperationLock {
     _file: fs::File,
 }
 impl OperationLock {
@@ -634,7 +700,7 @@ fn remove_staging_data(path: &Path) -> Result<(), String> {
     }
 }
 #[cfg(target_os = "linux")]
-fn publish_directory(source: &Path, destination: &Path) -> Result<(), String> {
+pub(super) fn publish_directory(source: &Path, destination: &Path) -> Result<(), String> {
     use std::os::unix::ffi::OsStrExt;
     let source = std::ffi::CString::new(source.as_os_str().as_bytes())
         .map_err(|_| "profile_duplicate_path_invalid")?;
@@ -805,7 +871,8 @@ impl Operation {
             Phase::Copied | Phase::Published | Phase::LaunchDispatched | Phase::LaunchPending => {
                 vec![("reconcile", false)]
             }
-            Phase::Completed | Phase::Cancelled => vec![("reconcile", false)],
+            Phase::Completed => vec![("reconcile", false), ("dispose_copy", true)],
+            Phase::Cancelled => vec![("reconcile", false)],
         };
         json!({"schemaVersion":"agent-browser.profile-duplication.v1","operationId":self.request.operation_id,
             "source":{"id":self.request.source.id,"name":self.request.source.name,"browserBuild":self.request.source.browser_build,"generation":self.request.source.generation},

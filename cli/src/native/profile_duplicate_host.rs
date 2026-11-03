@@ -6,6 +6,8 @@ use super::*;
 pub(super) mod profile_duplicate_copy;
 #[path = "profile_duplicate_custody.rs"]
 mod profile_duplicate_custody;
+#[path = "profile_duplicate_disposal.rs"]
+mod profile_duplicate_disposal;
 use agent_browser_service_model::ManagedBrowserCommandEffects;
 use agent_browser_service_model::{RecordedProcessIdentity, RemoteViewTabHandoffTarget};
 use profile_duplicate_copy::*;
@@ -65,6 +67,46 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             )
             .optional()
             .map_err(|_| "profile_duplicate_intent_read_failed")?;
+        let database = self.persistence.runtime_database_path()?;
+        if command["choice"] == "dispose_copy"
+            || profile_duplicate_disposal::read(&database, operation_id)?.is_some()
+        {
+            let intent: Option<PublicIntent> = retained
+                .as_deref()
+                .map(serde_json::from_str)
+                .transpose()
+                .map_err(|_| "profile_duplicate_intent_invalid")?;
+            let binding: Option<Value> = if intent.is_some() {
+                let raw: Option<String> = connection
+                    .query_row(
+                        "SELECT binding FROM profile_duplicate_owner_bindings WHERE id=?1",
+                        [operation_id],
+                        |row| row.get(0),
+                    )
+                    .optional()
+                    .map_err(|_| "profile_duplicate_binding_read_failed")?;
+                raw.map(|raw| serde_json::from_str(&raw))
+                    .transpose()
+                    .map_err(|_| "profile_duplicate_binding_invalid")?
+            } else {
+                None
+            };
+            let mut view = profile_duplicate_disposal::route(
+                self,
+                &directory,
+                operation_id,
+                command,
+                intent.as_ref(),
+            )?;
+            view["state"] = view["phase"].clone();
+            return decorate_retained_build(
+                view,
+                retained
+                    .as_deref()
+                    .ok_or("profile_duplicate_intent_missing")?,
+                binding.as_ref(),
+            );
+        }
         let mut intent: PublicIntent = if let Some(retained) = retained {
             serde_json::from_str(&retained).map_err(|_| "profile_duplicate_intent_invalid")?
         } else {
@@ -248,6 +290,16 @@ pub(super) fn decorate_retained_build(
     Ok(build_view(view, &intent))
 }
 
+/// Read-only operation lookup shares the exact owner receipt projection.
+pub(super) fn decorate_retained_disposal(database: &Path, view: Value) -> Result<Value, String> {
+    let id = view["operationId"]
+        .as_str()
+        .ok_or("profile_duplicate_disposal_operation_missing")?;
+    match profile_duplicate_disposal::read(database, id)? {
+        Some(record) => profile_duplicate_disposal::overlay(view, &record),
+        None => Ok(view),
+    }
+}
 fn unknown_source_observation() -> Value {
     json!({"mode":"unverified","reason":"not_retained","build":null,"buildEvidence":"unverified"})
 }
@@ -1599,6 +1651,38 @@ mod tests {
             );
         }
     }
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn profile_duplicate_disposal_refuses_unfinished_operation_without_effects() {
+        let mut fixture = manual_close_fixture("normal");
+        let result = fixture.host.handle_command(&json!({"action":"browser_session_profile_duplicate","operationId":"review","choice":"dispose_copy","ownerConfirmed":true,"principal":"administrator"}));
+        assert_eq!(result["success"], false);
+        assert!(
+            result["error"]
+                .as_str()
+                .unwrap()
+                .starts_with("profile_duplicate_disposal_completed_copy_required"),
+            "{result}"
+        );
+        assert_eq!(fixture.closes.get(), 0);
+        assert_eq!(fixture.host.catalog.profiles.len(), 1);
+        assert!(!fixture
+            .host
+            .state
+            .profile_operation_ids
+            .contains_key("source"));
+        let cancelled = fixture.host.handle_command(&json!({"action":"browser_session_profile_duplicate","operationId":"review","choice":"cancel"}));
+        assert_eq!(cancelled["data"]["phase"], "cancelled");
+        let refused = fixture.host.handle_command(&json!({"action":"browser_session_profile_duplicate","operationId":"review","choice":"dispose_copy","ownerConfirmed":true}));
+        assert_eq!(refused["success"], false);
+        assert!(refused["error"]
+            .as_str()
+            .unwrap()
+            .starts_with("profile_duplicate_disposal_completed_copy_required"));
+        assert_eq!(fixture.closes.get(), 0);
+        assert_eq!(fixture.host.catalog.profiles.len(), 1);
+    }
+
     #[test]
     #[cfg(target_os = "linux")]
     fn profile_duplicate_manual_close_uncertain_acknowledgement_never_replays() {

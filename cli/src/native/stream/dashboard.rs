@@ -4308,6 +4308,15 @@ mod tests {
                 "owner identity and confirmation must be forwarded unchanged"
             );
         }
+        let disposal = json!({"action":"browser_session_profile_duplicate","choice":"dispose_copy","operationId":"completed-copy","ownerConfirmed":true});
+        let before_disposal = observed.lock().unwrap().len();
+        let denied = exchange("POST", "/api/command", "", &disposal.to_string()).await;
+        assert_eq!(http_response_status(&denied), Some(401));
+        assert_eq!(observed.lock().unwrap().len(), before_disposal);
+        let result = exchange("POST", "/api/command", cookie, &disposal.to_string()).await;
+        assert_eq!(http_response_status(&result), Some(200));
+        let payload: Value = serde_json::from_slice(http_response_body(&result).unwrap()).unwrap();
+        assert_eq!(payload["data"]["request"], disposal);
         for (method, body, status) in [
             ("GET", "", 405),
             (
@@ -4366,7 +4375,7 @@ mod tests {
             Some(503),
             "missing owner must not fall back to another lane"
         );
-        assert_eq!(observed.lock().unwrap().len(), 3);
+        assert_eq!(observed.lock().unwrap().len(), 4);
         task.abort();
         let _ = task.await;
     }

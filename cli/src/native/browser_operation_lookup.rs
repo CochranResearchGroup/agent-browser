@@ -187,6 +187,7 @@ fn copy_operations(
         };
         view =
             super::profile_duplicate_host::decorate_retained_build(view, &raw, binding.as_ref())?;
+        view = super::profile_duplicate_host::decorate_retained_disposal(database, view)?;
         view["kind"] = json!("profile_duplicate");
         view["profileId"] = json!(profile);
         view["browserId"] = binding
