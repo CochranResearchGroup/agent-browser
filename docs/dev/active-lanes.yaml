@@ -22,8 +22,8 @@ lanes:
     branch: fix/mode-recovery-selective-input
     target: main
     plan: docs/dev/maintenance/mode-recovery-selective-input.md
-    plan_state: ACTIVE
-    custody_state: ACTIVE_WORKTREE
+    plan_state: COMPLETE
+    custody_state: INTEGRATED
     work_items: [CochranResearchGroup/agent-browser#534]
     overlaps: [P300, P302]
     reconciled_overlaps: ["Own mode host/operation and manual reconciliation only; preserve P302 manual close hooks and P300 workspace edits"]
