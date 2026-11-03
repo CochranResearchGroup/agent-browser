@@ -7,8 +7,8 @@ lanes:
     branch: fix/fullscreen-mode-538
     target: main
     plan: docs/dev/maintenance/fullscreen-mode-538.md
-    plan_state: ACTIVE
-    custody_state: ACTIVE_WORKTREE
+    plan_state: COMPLETE
+    custody_state: INTEGRATED
     work_items: [CochranResearchGroup/agent-browser#538]
     overlaps: []
   - id: P302
