@@ -8,13 +8,13 @@ lanes:
     branch: fix/profile-copy-native-close-530
     target: main
     accountable_owner: ecochran76
-    plan_state: ACTIVE
-    custody_state: ACTIVE_WORKTREE
+    plan_state: CLOSED
+    custody_state: INTEGRATED
     work_items: [CochranResearchGroup/agent-browser#530]
     dependencies: [P300, P301]
     overlaps: [P300, MODE534]
     reconciled_overlaps: ["P300 worker owns original source; root serially consumes frozen patch from canonical main; root owns docs/runtime; preserve foreign checkouts and retained refs", "MODE534 is merged canonical input; preserve mode reconciliation and P302 lifecycle close hooks together"]
-    limitations: ["Actual profile portability remains unqualified", "No generic input-policy change or forced closure", "Final P300 broad review/remediation remain0"]
+    limitations: ["Source and installed checkpoint qualified; actual profile portability remains unqualified", "No generic input-policy change or forced closure", "Final P300 broad review/remediation remain0"]
     updated_at: 2026-11-02
   - id: MODE534
     product_lane: PL-BUGFIX
