@@ -5,6 +5,7 @@ mod cdp_loop;
 pub(crate) mod chat;
 mod dashboard;
 mod dashboard_auth;
+mod native_browser_mode;
 mod remote_view_presentation;
 pub(crate) use dashboard_auth::{
     verify_operator_focus, verify_operator_focus_scope, verify_operator_tab_close,
