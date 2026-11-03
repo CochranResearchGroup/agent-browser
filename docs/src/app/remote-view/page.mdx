@@ -1135,6 +1135,11 @@ operation and reports `mode_operation_already_completed`, preserving the current
 browser. Start a new explicit conversion to select another configuration.
 
 
+Owned manual browsers close normally for copying even when desktop agent input
+is disabled. If the close result is uncertain, inspect and cancel the original
+operation before reviewing another attempt. A reboot does not substitute for
+a clean source close.
+
 To find retained work after reload, send `choice: "inspect"` through the same
 `mode_convert` or `profile_duplicate` route. Omit `operationId` to list matching
 operations, or include it for one retained operation. Mode lookup requires the

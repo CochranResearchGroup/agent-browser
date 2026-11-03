@@ -12,7 +12,7 @@ A strict lifecycle-close hook must positively acknowledge the normal close reque
 
 ## Custody
 
-The P300 worker is sole source writer in the integration checkout for the copy host and minimal effects/runtime/model hook and tests. Root owns docs, focused integration inspection and runtime. Root consumes the frozen patch serially in the main-based bugfix checkout; no simultaneous source edits. The prior temporary repair checkout was lost across reboot and restored at its retained Git ref before switching to this canonical-main branch. No candidate bytes or missing test logs were reconstructed. Preserve foreign checkouts and the integration candidate. The other missing worker registration remains an explicit reconciliation obligation.
+The P300 worker is sole source writer in the integration checkout for the copy host and minimal effects/runtime/model hook and tests. Root owns docs, focused integration inspection and runtime. Root consumes the frozen patch serially in the main-based bugfix checkout; no simultaneous source edits. The prior temporary repair checkout was lost across reboot and restored at its retained Git ref before switching to this canonical-main branch. No candidate bytes or missing test logs were reconstructed. Preserve foreign checkouts and the integration candidate. The other missing worker registration was restored at its exact remote-backed c4e8079b6 source, inspected clean with no pinned or active candidate, then removed through governed operation worktree-closeout-735d2da1-f185-4c22-836a-7d9c0a468022. Its branch and source remain retained; no missing candidate or test bytes were reconstructed.
 
 ## Qualification
 
