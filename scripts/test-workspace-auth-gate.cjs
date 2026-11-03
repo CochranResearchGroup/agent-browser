@@ -26,6 +26,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     const url = `http://127.0.0.1:${server.address().port}/?browser=selected-task`;
     await page.goto(url);
     await page.getByText('Sign in through the authenticated workspace URL', { exact: false }).waitFor();
+    assert.equal(await page.getByRole('main').getAttribute('aria-busy'), 'false');
     assert.equal(await page.locator('input[type=password]').count(), 0);
     status = 403;
     await page.getByRole('button', { name: 'Retry workspace access' }).click();
