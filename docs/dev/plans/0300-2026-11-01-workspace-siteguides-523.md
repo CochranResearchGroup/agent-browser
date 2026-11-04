@@ -205,3 +205,33 @@ post-review TDD remain unrun, pending ticket acceptance and closure.
 ### Installed three-row checkpoint
 
 [The bounded acceptance note](../notes/2026-11-04-profile-copy-disposal-census.md) records merged/installed PR543, exact-binary fixture and doctor success, three independent account/storage/cleanup passes and the remaining human donor-readiness gate. No fourth copy was created. The donor task is intentionally retained for the human step; raw account/runtime artifacts and handoff links remain private.529 still needs actual narration/context and principal mapping. Final broad review/remediation remain0.
+
+
+### Native human-control handoff defect
+
+The actual handoff for the pending human step exposed a disabled control button.
+Authenticated live DOM and the real-viewer synthetic fixture reproduce managed
+input lockout. Remote View#798 / Plan0225 owns native toolbar, authenticated
+control binding and actual gateway input regressions. Root owns the existing
+private owner-mode inspection response extension in this acceptance lane. The
+provider and owner consume the frozen optional native-control target readback
+contract; no additional viewer or user grant ceremony is introduced. Preserve
+unbound managed-viewer lockout, exact assignment/generation/process identity,
+operator authentication, epoch arbitration and stale/revoked input refusal.
+Source and installed proof remain separate. The original donor browser is
+preserved without account interaction; final review/remediation counts remain0.
+
+
+Owner-side source qualification for Remote View#798: the new target-qualification
+regression was red before implementation, then passed. The actual authenticated
+HTTP mode callback passed two tests, including exact synthetic kernel process
+identity, correct provider binding and wrong-generation refusal. Required
+formatting, strict workspace Clippy, policy wiring (11 tests), changed links and
+patch hygiene pass locally. The source helper's later movement before its test
+module is formatting-only; focused results are reused within that unchanged
+semantic scope. This is a private readback prerequisite, not viewer/input or
+installed acceptance. Remote View owns the remaining actual gateway and UI
+checks. The Native arbiter fences Native input; independent CDP and OS
+controllers still require cooperation. Clipboard uploads on the new Native
+control path remain unavailable pending equally guarded support. No production
+or account effects were performed by this source repair.
