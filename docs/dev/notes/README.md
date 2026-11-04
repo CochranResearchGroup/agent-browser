@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[P300 copy disposal census repair](2026-11-04-profile-copy-disposal-census.md): #530 first actual row passes usability and storage checks; original-operation quarantine retained pending census repair and cleanup qualification.
+
 [Registered idle lease repair](2026-10-31-registered-idle-lease.md): #515 separates pre-launch capability registration from runtime ownership without identity mutation.
 
 [Native operator-journey recording](2026-10-31-native-journey-receipt.md): #512 repairs acceptance recording after provider-qualified Native viewer use, fenced to the selected backend.

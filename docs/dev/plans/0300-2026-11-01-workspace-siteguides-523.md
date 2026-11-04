@@ -197,3 +197,7 @@ stream test binary became reusable; that cancellation is not a pass. First
 failure and cancellation receipts remain outside Git. This documentation-only
 checkpoint reuses the code gates above under policy 0042. Final broad review and
 post-review TDD remain unrun, pending ticket acceptance and closure.
+
+### First actual portability row and cleanup diagnosis
+
+[Ticket530 census repair](../notes/2026-11-04-profile-copy-disposal-census.md) records the first real same-build CDP-free account and storage-isolation pass, normal probe closure, preserved Default usability and the retained original-operation quarantine. Three portability rows remain unrun. The sole source worker owns the bounded census regression; root serially owns documentation, canonical integration and runtime qualification in the existing acceptance auxiliary. No new checkout or foreign source is consumed. Final broad review and post-review TDD remain0.
