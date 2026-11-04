@@ -183,6 +183,84 @@ async fn native_mode_callback_relays_only_the_retained_task_and_never_acquires_a
         inspection["data"]["mode"], "unverified",
         "missing process evidence is never CDP-off evidence"
     );
+    assert!(
+        inspection["data"]["nativeControlTarget"].is_null(),
+        "missing original process evidence cannot authorize Native human input"
+    );
+    #[cfg(target_os = "linux")]
+    {
+        // Synthetic root executable with a real kernel process identity. This
+        // qualifies the HTTP owner seam without starting a browser or provider.
+        let executable = root.join("chrome");
+        std::fs::copy("/bin/sleep", &executable).unwrap();
+        struct OwnedChild(std::process::Child);
+        impl Drop for OwnedChild {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let child = OwnedChild(
+            std::process::Command::new(&executable)
+                .arg("60")
+                .spawn()
+                .unwrap(),
+        );
+        let crate::process_identity::ProcessObservation::Observed(process) =
+            crate::process_identity::observe_process(child.0.id())
+        else {
+            panic!("owned synthetic process unavailable")
+        };
+        assert_eq!(process.browser_family.as_deref(), Some("chrome"));
+        let original = agent_browser_service_model::RecordedProcessIdentity {
+            pid: child.0.id(),
+            start_token: process.start_token.unwrap(),
+            executable_path: process.executable_path,
+            browser_family: process.browser_family,
+        };
+        state.browsers.get_mut("retained-browser").unwrap().pid = original.pid;
+        state.shared_browser_ids.insert("retained-browser".into());
+        state.adopted_browser_process_identities.insert(
+            "retained-browser".into(),
+            agent_browser_service_model::BrowserAdoptedProcessIdentity {
+                profile_id: "retained-profile".into(),
+                cdp_endpoint: String::new(),
+                process: original,
+            },
+        );
+        let resolved =
+            agent_browser_service_model::resolve_remote_view_tab_handoff(&state, "retained-task")
+                .unwrap();
+        let digest = agent_browser_service_model::remote_view_native_target_digest(
+            "retained-task",
+            &resolved,
+        )
+        .unwrap();
+        let target = json!({"assignmentId":"assignment-external-1","registrationId":"registration-agent-browser",
+            "desktopId":"22222222-2222-4222-8222-222222222222","lifecycleGeneration":7,
+            "viewingDesktopId":"33333333-3333-4333-8333-333333333333","viewingGeneration":4});
+        state.remote_view_tab_handoffs.get_mut("retained-task").unwrap().native_observation = Some(
+            serde_json::from_value(json!({"targetDigest":digest,"providerTarget":target,"idempotencyKey":"synthetic",
+                "observation":{"correlationId":"a".repeat(64),"requestDigest":"b".repeat(64),"application":"agent-browser",
+                    "target":target,"targetDigest":digest,"clock":{"bootId":"fixture-boot","elapsedMs":1},"lifetimeMs":300000,"used":null}})).unwrap());
+        store.save_session_state(&state).unwrap();
+        let (status, inspection) =
+            exchange(json!({"slot":1,"generation":4,"choice":"inspect"})).await;
+        assert_eq!(status, 200);
+        assert_eq!(
+            inspection["data"]["nativeControlTarget"]["schemaVersion"],
+            "agent-browser.native-control-target.v1"
+        );
+        assert_eq!(
+            inspection["data"]["nativeControlTarget"]["targetDigest"],
+            digest
+        );
+        assert_eq!(inspection["data"]["nativeControlTarget"]["target"], target);
+        let (status, changed_generation) =
+            exchange(json!({"slot":1,"generation":5,"choice":"inspect"})).await;
+        assert_eq!(status, 200);
+        assert!(changed_generation["data"]["nativeControlTarget"].is_null());
+    }
     let (status, prepared) = exchange(json!({"slot":1,"generation":1,"choice":"prepare","mode":"cdp_free","operationId":"original:operation/v1","ownerConfirmed":false})).await;
     assert_eq!(status, 200);
     assert_eq!(prepared["data"]["operationId"], "original:operation/v1");

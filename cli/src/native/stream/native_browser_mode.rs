@@ -125,7 +125,8 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
     let handoff = id.to_owned();
     let slot = request.slot;
     let inspect = request.choice == "inspect";
-    let (target, mode) = tokio::task::spawn_blocking(move || {
+    let generation = request.generation;
+    let (target, mode, control_target) = tokio::task::spawn_blocking(move || {
         let store = BrowserSessionSqliteStore::open_read_only(
             &BrowserSessionSqliteStore::default_sqlite_path()?,
         )?;
@@ -166,12 +167,54 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
         {
             return Err("remote_view_native_mode_target_changed".into());
         }
+        let original = store.original_browser_identity(&current, &target.browser);
         let mode = if inspect {
             store.inspect_task_mode(&target.session.id)?["mode"].clone()
         } else {
             Value::Null
         };
-        Ok::<_, String>((target, mode))
+        // Input authority remains Remote View-owned. Export only fresh, opaque
+        // evidence from this existing authenticated read-only owner callback.
+        let after = store.load_session_state()?;
+        let after_target =
+            agent_browser_service_model::resolve_remote_view_tab_handoff(&after, &handoff)?;
+        let after_link = after
+            .remote_view_tab_handoffs
+            .get(&handoff)
+            .ok_or("remote_view_tab_handoff_missing")?;
+        after_link.check_link_at(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| "remote_view_clock_invalid")?
+                .as_millis() as u64,
+        )?;
+        if agent_browser_service_model::remote_view_native_target_digest(&handoff, &after_target)?
+            != digest
+            || after_link.native_observation != link.native_observation
+        {
+            return Err("remote_view_native_mode_target_changed".into());
+        }
+        let current_original = store.original_browser_identity(&after, &after_target.browser);
+        let binding = after_link.native_observation.as_ref().filter(|binding| {
+            binding.target_digest == digest
+                && binding.observation.as_ref().is_some_and(|observation| {
+                    observation.target_digest == digest
+                        && observation.target == binding.provider_target
+                })
+        });
+        let control_target = if inspect {
+            native_control_target(
+                mode.as_str().unwrap_or("unverified"),
+                generation,
+                &digest,
+                original.as_ref(),
+                current_original.as_ref(),
+                binding.map(|b| &b.provider_target),
+            )
+        } else {
+            None
+        };
+        Ok::<_, String>((target, mode, control_target))
     })
     .await
     .map_err(|_| "remote_view_native_mode_read_unavailable")??;
@@ -232,8 +275,71 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
             .iter()
             .filter(|row| !matches!(row["phase"].as_str(), Some("completed" | "cancelled")))
             .collect();
+        // The owner relay may have waited. Do not export input target evidence
+        // unless the same original process and binding remain current afterward.
+        let control_target = if let Some(expected) = control_target {
+            let handoff = id.to_owned();
+            tokio::task::spawn_blocking(move || {
+                let store = BrowserSessionSqliteStore::open_read_only(
+                    &BrowserSessionSqliteStore::default_sqlite_path()?,
+                )?;
+                let state = store.load_session_state()?;
+                let target =
+                    agent_browser_service_model::resolve_remote_view_tab_handoff(&state, &handoff)?;
+                let digest = agent_browser_service_model::remote_view_native_target_digest(
+                    &handoff, &target,
+                )?;
+                let link = state
+                    .remote_view_tab_handoffs
+                    .get(&handoff)
+                    .ok_or("remote_view_tab_handoff_missing")?;
+                link.check_link_at(
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_err(|_| "remote_view_clock_invalid")?
+                        .as_millis() as u64,
+                )?;
+                let original = store.original_browser_identity(&state, &target.browser);
+                let mode = store.inspect_task_mode(&target.session.id)?;
+                let current = store.load_session_state()?;
+                let current_target = agent_browser_service_model::resolve_remote_view_tab_handoff(
+                    &current, &handoff,
+                )?;
+                if agent_browser_service_model::remote_view_native_target_digest(
+                    &handoff,
+                    &current_target,
+                )? != digest
+                    || current
+                        .remote_view_tab_handoffs
+                        .get(&handoff)
+                        .and_then(|l| l.native_observation.as_ref())
+                        != link.native_observation.as_ref()
+                {
+                    return Ok::<_, String>(None);
+                }
+                let current_original =
+                    store.original_browser_identity(&current, &current_target.browser);
+                let binding = link
+                    .native_observation
+                    .as_ref()
+                    .filter(|b| b.target_digest == digest);
+                let observed = native_control_target(
+                    mode["mode"].as_str().unwrap_or("unverified"),
+                    generation,
+                    &digest,
+                    original.as_ref(),
+                    current_original.as_ref(),
+                    binding.map(|b| &b.provider_target),
+                );
+                Ok(observed.filter(|observed| observed == &expected))
+            })
+            .await
+            .map_err(|_| "remote_view_native_mode_read_unavailable")??
+        } else {
+            None
+        };
         return Ok(
-            json!({"success":true,"data":{"schemaVersion":"agent-browser.handoff-mode.v1","mode":mode,"operations":active}}),
+            json!({"success":true,"data":{"schemaVersion":"agent-browser.handoff-mode.v1","mode":mode,"operations":active,"nativeControlTarget":control_target}}),
         );
     }
     if reply["data"]["schemaVersion"] == "agent-browser.mode-operation.v1"
@@ -244,5 +350,123 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
         Ok(reply)
     } else {
         Err("remote_view_native_mode_reply_invalid".into())
+    }
+}
+
+/// No caller-provided locator becomes input authority. Remote View must join
+/// this private evidence to its current authenticated page and Native owner.
+fn native_control_target(
+    mode: &str,
+    generation: u64,
+    digest: &str,
+    original: Option<&agent_browser_service_model::RecordedProcessIdentity>,
+    current: Option<&agent_browser_service_model::RecordedProcessIdentity>,
+    target: Option<&agent_browser_service_model::RemoteViewApplicationTarget>,
+) -> Option<Value> {
+    use sha2::{Digest, Sha256};
+    let original = original?;
+    let target = target?;
+    if !matches!(mode, "cdp" | "cdp_free")
+        || generation != target.viewing_generation
+        || generation == 0
+        || current != Some(original)
+        || original.pid == 0
+        || original.start_token.is_empty()
+        || original.executable_path.is_none()
+        || digest.len() != 64
+        || !digest.bytes().all(|b| b.is_ascii_hexdigit())
+    {
+        return None;
+    }
+    let bytes = serde_json::to_vec(original).ok()?;
+    Some(
+        json!({"schemaVersion":"agent-browser.native-control-target.v1",
+        "targetDigest":digest,"processInstanceDigest":format!("{:x}",Sha256::digest(bytes)),
+        "target":target}),
+    )
+}
+
+#[cfg(test)]
+mod control_target_tests {
+    use super::*;
+
+    #[test]
+    fn native_control_target_requires_exact_process_and_current_binding() {
+        let process = agent_browser_service_model::RecordedProcessIdentity {
+            pid: 41,
+            start_token: "boot:100".into(),
+            executable_path: Some("/synthetic/chrome".into()),
+            browser_family: Some("chrome".into()),
+        };
+        let target = agent_browser_service_model::RemoteViewApplicationTarget {
+            assignment_id: "assignment".into(),
+            registration_id: "registration".into(),
+            desktop_id: "11111111-1111-4111-8111-111111111111".into(),
+            lifecycle_generation: 1,
+            viewing_desktop_id: "22222222-2222-4222-8222-222222222222".into(),
+            viewing_generation: 4,
+        };
+        let proof = native_control_target(
+            "cdp_free",
+            4,
+            &"a".repeat(64),
+            Some(&process),
+            Some(&process),
+            Some(&target),
+        )
+        .unwrap();
+        assert_eq!(
+            proof["schemaVersion"],
+            "agent-browser.native-control-target.v1"
+        );
+        assert_eq!(proof["target"]["viewingGeneration"], 4);
+        assert_eq!(proof["processInstanceDigest"].as_str().unwrap().len(), 64);
+        assert!(native_control_target(
+            "unverified",
+            4,
+            &"a".repeat(64),
+            Some(&process),
+            Some(&process),
+            Some(&target)
+        )
+        .is_none());
+        assert!(native_control_target(
+            "cdp",
+            5,
+            &"a".repeat(64),
+            Some(&process),
+            Some(&process),
+            Some(&target)
+        )
+        .is_none());
+        let mut changed = process.clone();
+        changed.start_token = "boot:101".into();
+        assert!(native_control_target(
+            "cdp",
+            4,
+            &"a".repeat(64),
+            Some(&process),
+            Some(&changed),
+            Some(&target)
+        )
+        .is_none());
+        assert!(native_control_target(
+            "cdp",
+            4,
+            &"a".repeat(64),
+            None,
+            Some(&process),
+            Some(&target)
+        )
+        .is_none());
+        assert!(native_control_target(
+            "cdp",
+            4,
+            &"a".repeat(64),
+            Some(&process),
+            Some(&process),
+            None
+        )
+        .is_none());
     }
 }

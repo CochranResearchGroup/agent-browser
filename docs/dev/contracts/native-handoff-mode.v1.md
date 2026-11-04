@@ -34,3 +34,29 @@ whole-browser impact; only explicit offered actions run. Lost replies retain the
 original operation for reconciliation. Completion navigates the original Native
 handoff. This contract does not introduce browser input authority, viewer grants,
 profile resets, credential transport or new public Service request actions.
+
+
+## Native human-control target readback
+
+Inspection may additionally return `data.nativeControlTarget` for Remote View's
+existing authenticated Native takeover and return flow. It is null when exact
+current process or provider binding evidence is unavailable. Its schema is
+`agent-browser.native-control-target.v1`, with `targetDigest`,
+`processInstanceDigest` and `target`. The target uses the existing
+`RemoteViewApplicationTarget` shape: assignment and registration IDs, lifecycle
+desktop/generation and viewing desktop/generation. Digests are opaque SHA256
+identities; no account data, process path, credentials or viewer URL is exported.
+
+The requested viewing generation must match the owner-qualified provider target.
+The original process identity must be available, freshly qualified as CDP or
+CDP-free, and unchanged across the owner read. The logical target and provider
+binding are rejoined after observation. Missing or changed evidence grants no
+control. This response is private evidence, not an input permission: Remote View
+must independently bind its authenticated operator, current exact page and
+assignment, then use its existing Native input epoch and held-input arbitration.
+Browser-selected handoff locators never become control authority. Unknown fields
+remain rejected and existing mode-operation request semantics are unchanged.
+
+The unbound managed viewer remains locked. The provider-side repair and gateway
+input qualification are tracked by `CochranResearchGroup/remote-view#798`; this
+owner response alone does not establish usable human takeover or installed proof.
