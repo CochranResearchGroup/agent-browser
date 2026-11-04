@@ -1,5 +1,7 @@
 # Roadmap
 
+P300/530 checkpoint: workspace delivery and PR543 cleanup repair are integrated and installed. [Three actual portability rows](docs/dev/notes/2026-11-04-profile-copy-disposal-census.md) pass usability, storage isolation and exact cleanup. The fourth awaits human donor readiness;529 narrated acceptance and principal mapping remain open. Final review/remediation remain0.
+
 [Native operator-journey acceptance](docs/dev/notes/2026-10-31-native-journey-receipt.md), #512 / PR513, is installed accepted on sealed binary5a9f1250acef. Authenticated Native input, same-link reconnect, continued same-task automation and exact cleanup pass; operatorJourneyReady is now true. The idle profile-lease advisory remains separate.
 
 [P299 local validation](docs/dev/plans/0299-2026-10-31-local-validation-502.md), spec502 and all four children CLOSED through PR509/main9d1a18522; initial source readiness/reuse pass. The single final review and bounded TDD pass are complete through PR510/mainc738fb694; two Spec blockers and one redundant-suite finding are resolved. No hosted CI or runtime effects.

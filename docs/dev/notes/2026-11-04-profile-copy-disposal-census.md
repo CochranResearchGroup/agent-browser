@@ -77,3 +77,55 @@ Hosted CI remains disabled by operator
 policy. These provider-free checks do not prove installed cleanup, account
 portability in other modes or browsers, or target-platform parity.
 Private account evidence and browser artifacts remain outside the repository.
+
+## Installed qualification and bounded portability checkpoint
+
+PR543 is merged at `ba029e5a6c3cde86adcdc3f46e35bf47e0feb21b`.
+The sealed production binary passed its source-free workstation installer
+fixture, including cleanup of both owned fixture hosts with zero residue.
+Preserving installation and installed doctor passed. The original quarantined
+copy then completed through its original operation: delete acknowledged,
+original and quarantine paths absent, destination catalog entry removed,
+completed operation history retained, and donor directory identity preserved.
+Private process, transaction and installation receipts remain outside Git.
+
+Three independently created copies now have positive, time-bounded evidence:
+
+| Target build | Mode | Fresh selected-account page | Storage divergence and key removal | Exact copy cleanup |
+| --- | --- | --- | --- | --- |
+| Chrome for Testing 156.0.8078.80 | CDP-free | PASS | PASS | PASS |
+| Chrome for Testing 156.0.8078.80 | CDP | PASS | PASS | PASS |
+| Chromium 156.0.8078.47 | CDP-free | PASS | PASS | PASS |
+| Chromium 156.0.8078.47 | CDP | NOT_RUN: donor readiness requires a human step | NOT_RUN | No copy created |
+
+The donor uses Chrome for Testing 156.0.8078.80 in CDP-free mode. Trials use
+one Linux/WSL host and one explicitly selected real account. Each claimed copy
+loaded its exact pinned executable and mode, then displayed the expected
+account on a fresh read-only Google Account page. Synthetic localStorage was
+written only to the independent copy, survived reopening, remained absent
+from the donor, and was removed before exact disposal. The donor was never
+opened under the alternate build. These observations do not prove arbitrary
+build compatibility, other accounts, other platforms, cross-machine copying
+or indefinite authentication continuity. A later donor-readiness check
+required human verification; its cause is unverified and the fourth copy was
+not prepared or created.
+
+The tested sequence warms the donor through ordinary `browser_open`, prepares
+with `launch:false`, closes through the original duplication owner, then opens
+the published destination separately. The earlier cold-source
+`profile_duplicate_source_tab_missing` outcome remains a cancelled attempt with
+zero copies. It is not represented as a qualified automatic cold-source path.
+Native input policy remains unchanged; initial-URL navigation and existing
+guarded Remote View or public CDP close operations supplied the bounded probes.
+Wrapper attribution and nested-result interpretation failures were retained;
+known completed closes were verified by readback rather than replayed.
+
+All three experimental profiles were disposed through their immutable original
+operations. The synthetic server was stopped after retaining its protocol state;
+the fourth row never issued a probe phase. The original donor task alone is
+intentionally preserved for the human readiness step. Final post-matrix donor
+usability and start-page restoration remain pending that step and the fourth row.
+
+Ticket530 remains OPEN with a concrete human readiness gate. Ticket529 still
+needs the actual narrated teaching context and principal mapping. Final broad
+review count: 0. Final post-review TDD count: 0.

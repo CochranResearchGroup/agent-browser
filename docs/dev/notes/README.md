@@ -1,6 +1,6 @@
 # Agent Browser Notes Index
 
-[P300 copy disposal census repair](2026-11-04-profile-copy-disposal-census.md): #530 first actual row passes usability and storage checks; original-operation quarantine retained pending census repair and cleanup qualification.
+[P300 copy disposal census repair](2026-11-04-profile-copy-disposal-census.md): #530 first actual row passes usability and storage checks; repair installed, original cleanup complete, three actual portability rows pass; fourth awaits human readiness.
 
 [Registered idle lease repair](2026-10-31-registered-idle-lease.md): #515 separates pre-launch capability registration from runtime ownership without identity mutation.
 
