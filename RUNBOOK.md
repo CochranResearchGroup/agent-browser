@@ -1,3 +1,5 @@
+P300/530 current checkpoint: canonical PR542 is installed. The first actual same-build CDP-free copy passed account usability and storage isolation, but original-operation disposal remains quarantined after a process-census guard failure. [Bounded diagnosis](docs/dev/notes/2026-11-04-profile-copy-disposal-census.md) owns the regression repair; three matrix rows and actual529 narration remain open. Earlier NOT_RUN and pre-install descriptions below are historical checkpoints. Final broad review/remediation remain0.
+
 P300/530 continuation: PR542 source is locally qualified on 780b4275d, including exact completed-copy disposal and cumulative validation repairs. Canonical source integration, a sealed production candidate and preserving installation are next. Actual #529 narration and #530 portability remain open; final review/remediation remain0.
 
 [P301 Native handoff repair](docs/dev/plans/0301-2026-11-02-native-x11-authority-529.md): PR533 merged and preserve-mode installed; doctor passes and retained browser handoff is ready. Full P300 rail deployment and actual narrated/copy acceptance remain pending.

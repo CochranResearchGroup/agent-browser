@@ -29,6 +29,11 @@ fn local_observation(pid: u32) -> ProcessObservation {
     if let ProcessObservation::Observed(value) = &mut observation {
         value.command_line = None;
     }
+    if observation == ProcessObservation::Missing && start(pid) != CurrentStart::Absent {
+        return ProcessObservation::Failed {
+            reason: "process_observer_absence_unproven".into(),
+        };
+    }
     observation
 }
 
@@ -68,19 +73,45 @@ pub(super) fn run_entry() -> Result<(), String> {
         .map_err(|_| "process_observer_census_output_failed".into())
 }
 
-fn start(pid: u32) -> Option<String> {
-    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum CurrentStart {
+    Present(String),
+    Absent,
+    Unproven,
+}
+
+fn start(pid: u32) -> CurrentStart {
+    start_at(std::path::Path::new(&format!("/proc/{pid}")))
+}
+
+fn start_at(process: &std::path::Path) -> CurrentStart {
+    let stat = match std::fs::read_to_string(process.join("stat")) {
+        Ok(stat) => stat,
+        Err(_) => {
+            return match std::fs::symlink_metadata(process) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => CurrentStart::Absent,
+                _ => CurrentStart::Unproven,
+            };
+        }
+    };
+    // A zombie, unreadable stat, or malformed identity is not positive proof
+    // that the original process directory has disappeared.
     if super::super::linux_process_state(&stat) == Some("Z") {
-        return None;
+        return CurrentStart::Unproven;
     }
-    let ticks = super::super::linux_start_ticks(&stat)?;
-    Some(format!("{}:{ticks}", super::super::current_boot_epoch()?))
+    match (
+        super::super::linux_start_ticks(&stat),
+        super::super::current_boot_epoch(),
+    ) {
+        (Some(ticks), Some(boot)) => CurrentStart::Present(format!("{boot}:{ticks}")),
+        _ => CurrentStart::Unproven,
+    }
 }
 
 fn validate(
     expected: &BTreeMap<u32, String>,
     observations: Census,
-    mut current_start: impl FnMut(u32) -> Option<String>,
+    mut current_start: impl FnMut(u32) -> CurrentStart,
 ) -> Result<BTreeMap<u32, ProcessObservation>, String> {
     if observations.len() != expected.len() {
         return Err("process_observer_census_response_incomplete".into());
@@ -98,16 +129,23 @@ fn validate(
             ProcessObservation::Observed(value)
                 if value.pid == pid
                     && value.start_token.as_ref() == Some(before)
-                    && after.as_ref() == Some(before)
                     && value.command_line.is_none()
                     && value
                         .executable_path
                         .as_ref()
                         .is_some_and(|p| std::path::Path::new(p).is_absolute()) =>
             {
-                ProcessObservation::Observed(value)
+                match after {
+                    CurrentStart::Present(token) if &token == before => {
+                        ProcessObservation::Observed(value)
+                    }
+                    CurrentStart::Absent => ProcessObservation::Missing,
+                    _ => return Err("process_observer_identity_changed_or_unproven".into()),
+                }
             }
-            ProcessObservation::Missing if after.is_none() => ProcessObservation::Missing,
+            ProcessObservation::Missing if after == CurrentStart::Absent => {
+                ProcessObservation::Missing
+            }
             ProcessObservation::Failed { reason } => ProcessObservation::Failed { reason },
             _ => return Err("process_observer_identity_changed_or_unproven".into()),
         };
@@ -281,15 +319,18 @@ mod tests {
             ("wrong_identity", vec![(7, identity(8)), (8, identity(8))]),
         ] {
             assert_eq!(
-                validate(&expected, response, |_| Some("linux:boot:100".into())).is_ok(),
+                validate(&expected, response, |_| CurrentStart::Present(
+                    "linux:boot:100".into()
+                ))
+                .is_ok(),
                 case == "complete",
                 "{case}"
             );
         }
         for after in [
-            None,
-            Some("linux:boot:101".into()),
-            Some("linux:other:100".into()),
+            CurrentStart::Unproven,
+            CurrentStart::Present("linux:boot:101".into()),
+            CurrentStart::Present("linux:other:100".into()),
         ] {
             assert!(
                 validate(&expected, vec![(7, identity(7)), (8, identity(8))], |_| {
@@ -304,7 +345,13 @@ mod tests {
         let result = validate(
             &expected,
             vec![(7, denied.clone()), (8, ProcessObservation::Missing)],
-            |pid| (pid == 7).then(|| "linux:boot:100".into()),
+            |pid| {
+                if pid == 7 {
+                    CurrentStart::Present("linux:boot:100".into())
+                } else {
+                    CurrentStart::Absent
+                }
+            },
         )
         .unwrap();
         assert_eq!(result[&7], denied);
@@ -314,14 +361,84 @@ mod tests {
             value.command_line = Some(vec!["private".into()]);
         }
         assert!(
-            validate(&expected, vec![(7, private), (8, identity(8))], |_| Some(
-                "linux:boot:100".into()
-            ))
+            validate(&expected, vec![(7, private), (8, identity(8))], |_| {
+                CurrentStart::Present("linux:boot:100".into())
+            })
             .is_err()
         );
         for pids in [vec![], vec![0], vec![7, 7], vec![7; MAX_PIDS + 1]] {
             assert!(requested(&pids).is_err());
         }
+    }
+
+    #[test]
+    fn cleanup_census_accepts_confirmed_exit_after_exact_observation() {
+        let expected = BTreeMap::from([(7, "linux:boot:100".into())]);
+        let absent = std::env::temp_dir().join(format!("census-absent-{}", uuid::Uuid::new_v4()));
+        let result = validate(&expected, vec![(7, identity(7))], |_| {
+            assert_eq!(
+                std::fs::symlink_metadata(&absent).unwrap_err().kind(),
+                std::io::ErrorKind::NotFound
+            );
+            start_at(&absent)
+        });
+        assert_eq!(result.unwrap()[&7], ProcessObservation::Missing);
+    }
+
+    #[test]
+    fn cleanup_census_confirmed_exit_preserves_response_validation() {
+        let expected = BTreeMap::from([(7, "linux:boot:100".into())]);
+        let mut private = identity(7);
+        if let ProcessObservation::Observed(value) = &mut private {
+            value.command_line = Some(vec!["private".into()]);
+        }
+        let mut wrong_start = identity(7);
+        if let ProcessObservation::Observed(value) = &mut wrong_start {
+            value.start_token = Some("linux:boot:101".into());
+        }
+        let mut relative = identity(7);
+        if let ProcessObservation::Observed(value) = &mut relative {
+            value.executable_path = Some("relative/chrome".into());
+        }
+        for observation in [identity(8), private, wrong_start, relative] {
+            assert!(validate(&expected, vec![(7, observation)], |_| CurrentStart::Absent).is_err());
+        }
+        for after in [
+            CurrentStart::Unproven,
+            CurrentStart::Present("linux:boot:101".into()),
+        ] {
+            assert!(
+                validate(&expected, vec![(7, ProcessObservation::Missing)], |_| after
+                    .clone())
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn cleanup_census_start_requires_absent_directory_not_missing_identity() {
+        let process = std::env::temp_dir().join(format!("census-proc-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&process).unwrap();
+        assert_eq!(start_at(&process), CurrentStart::Unproven);
+        std::fs::write(process.join("stat"), "malformed").unwrap();
+        assert_eq!(start_at(&process), CurrentStart::Unproven);
+        std::fs::remove_file(process.join("stat")).unwrap();
+        std::fs::create_dir(process.join("stat")).unwrap();
+        assert_eq!(start_at(&process), CurrentStart::Unproven);
+        std::fs::remove_dir(process.join("stat")).unwrap();
+        let stat = std::fs::read_to_string("/proc/self/stat").unwrap();
+        let (head, tail) = stat.rsplit_once(')').unwrap();
+        let mut fields = tail.split_whitespace().collect::<Vec<_>>();
+        fields[0] = "Z";
+        std::fs::write(
+            process.join("stat"),
+            format!("{head}) {}", fields.join(" ")),
+        )
+        .unwrap();
+        assert_eq!(start_at(&process), CurrentStart::Unproven);
+        std::fs::remove_file(process.join("stat")).unwrap();
+        std::fs::remove_dir(&process).unwrap();
+        assert_eq!(start_at(&process), CurrentStart::Absent);
     }
 
     #[test]
@@ -362,7 +479,9 @@ mod tests {
     #[test]
     fn fresh_cleanup_census_observes_local_process_without_namespace_services() {
         let pid = std::process::id();
-        let before = start(pid).unwrap();
+        let CurrentStart::Present(before) = start(pid) else {
+            panic!("current process identity unavailable");
+        };
         let values = observe(&BTreeMap::from([(pid, before.clone())])).unwrap();
         assert!(matches!(&values[&pid], ProcessObservation::Observed(value)
             if value.start_token.as_ref() == Some(&before) && value.command_line.is_none()));
