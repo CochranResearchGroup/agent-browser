@@ -30,7 +30,7 @@ Root owns compact workspace/launcher integration, public HTTP/service wiring, ce
 | #527 | Plan and execute independent profile copies through Profile Lab | none | validated/5f3f34009; tracker CLOSED |
 | #528 | Manage SiteGuides and teach through Remote View recordings | #525, #526 | validated/368ac49e9; tracker CLOSED |
 | #529 | Qualify the integrated Native workspace and narrated teaching journey | #524, #525, #526, #528 | blocked/root; private packet prepared, actual context/runtime missing |
-| #530 | Qualify real-account Chrome and Chromium profile portability | #527 | blocked/p300_copy527; private packet prepared, donor/context missing |
+| #530 | Qualify real-account Chrome and Chromium profile portability | #527 | human gate/root; three actual rows pass with exact cleanup; fourth awaits donor readiness |
 
 ## Validation and acceptance
 
@@ -201,3 +201,7 @@ post-review TDD remain unrun, pending ticket acceptance and closure.
 ### First actual portability row and cleanup diagnosis
 
 [Ticket530 census repair](../notes/2026-11-04-profile-copy-disposal-census.md) records the first real same-build CDP-free account and storage-isolation pass, normal probe closure, preserved Default usability and the retained original-operation quarantine. Three portability rows remain unrun. The sole source worker owns the bounded census regression; root serially owns documentation, canonical integration and runtime qualification in the existing acceptance auxiliary. No new checkout or foreign source is consumed. Final broad review and post-review TDD remain0.
+
+### Installed three-row checkpoint
+
+[The bounded acceptance note](../notes/2026-11-04-profile-copy-disposal-census.md) records merged/installed PR543, exact-binary fixture and doctor success, three independent account/storage/cleanup passes and the remaining human donor-readiness gate. No fourth copy was created. The donor task is intentionally retained for the human step; raw account/runtime artifacts and handoff links remain private.529 still needs actual narration/context and principal mapping. Final broad review/remediation remain0.
