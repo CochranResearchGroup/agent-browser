@@ -40,7 +40,7 @@ annotation does not verify recorder suppression.
 
 **Task briefing**: A read-only exact-ID projection of retained goal attribution,
 current logical identity, historical verified progress, local artifact references,
-pending assistance/control and original uncertain operations. It never launches,
+pending assistance/control and original uncertain operations. Its process ID is retained metadata for later physical verification, never live ownership evidence. It never launches,
 observes a live page, acknowledges human use or turns missing evidence into success.
 
 **Mode conversion readiness**: Exact replacement process, requested debugging

@@ -60,6 +60,19 @@ privacy and identity evidence are required. Unsupported paths hold. Owner
 `reconcile: true` cannot create or repeat credential use. Legacy checkpoints keep
 their original issuer. Input/submission acknowledgement never proves login.
 
+## Managed task receiving
+
+Agent Browser and the Auth Receipts service own the receiving integration.
+Agents pass the existing opaque browser task target through the supported login
+flow; operators do not maintain per-task receiving files. The Auth host resolves
+retained task metadata, checks live physical ownership and cooperative control,
+and obtains dashboard or Slack-via-Receipts approval before private input.
+Task-briefing process IDs are retained evidence and never authorize input alone.
+A missing service adapter or unsupported task control is an integration failure
+with the original request preserved. Do not request a redundant operator login,
+read vault values, substitute targets or replay an unknown input attempt.
+Installed workflow qualification remains separate from source support.
+
 ## Managed Runtime Profiles
 
 Managed runtime profiles are the default long-lived authentication path for

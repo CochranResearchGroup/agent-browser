@@ -1,4 +1,5 @@
-//! Public cooperative control adapter. Status/view are metadata only; return
+//! Public cooperative control adapter. Status/view also support ordinary managed
+//! tasks without an app-host attachment. Control changes require that attachment; return
 //! observes the same retained target through ordinary dispatch before resuming.
 use super::{required_string_argument, JsonRpcError};
 use crate::native::{
@@ -23,7 +24,7 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
         .sessions
         .get(task_id)
         .ok_or_else(|| issue("browser_control_task_missing"))?;
-    if !state.host_bindings.contains_key(task_id) {
+    if !state.host_bindings.contains_key(task_id) && !matches!(operation, "status" | "view") {
         return Err(issue("browser_control_hosted_task_required"));
     }
     let browser_id = task.browser_id.clone();

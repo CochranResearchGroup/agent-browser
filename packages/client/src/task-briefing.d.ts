@@ -4,6 +4,8 @@ export interface TaskBriefing {
   taskId: string;
   profileId: string;
   browserId: string;
+  /** Retained process ID only; consumers must verify current physical ownership. */
+  processPid?: number | null;
   tabId: string | null;
   targetId: string | null;
   contextEvidence: 'retained_not_live';

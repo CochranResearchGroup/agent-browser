@@ -12250,6 +12250,138 @@ mod tests {
     }
 
     #[test]
+    fn managed_task_control_status_public_cli_and_mcp_need_no_hosted_app_binding() {
+        use crate::native::browser_session_store::BrowserSessionSqliteStore;
+        use agent_browser_service_model::{
+            BrowserSessionState, ManagedBrowserInstance, ManagedBrowserSession,
+        };
+        let directory =
+            std::env::temp_dir().join(format!("managed-control-public-{}", uuid::Uuid::new_v4()));
+        let sockets = directory.join("sockets");
+        let guard = crate::test_utils::EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_SOCKET_DIR",
+        ]);
+        guard.set("HOME", directory.to_str().unwrap());
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        guard.set("AGENT_BROWSER_HOME", directory.to_str().unwrap());
+        guard.set("AGENT_BROWSER_SOCKET_DIR", sockets.to_str().unwrap());
+        let store = BrowserSessionSqliteStore::default_sqlite().unwrap();
+        let mut state = BrowserSessionState::default();
+        state.browsers.insert(
+            "browser".into(),
+            ManagedBrowserInstance {
+                id: "browser".into(),
+                profile_id: "profile".into(),
+                pid: std::process::id(),
+                cdp_endpoint: String::new(),
+                desktop: None,
+                active_session_ids: vec!["task".into()],
+            },
+        );
+        state.sessions.insert(
+            "task".into(),
+            ManagedBrowserSession {
+                id: "task".into(),
+                name: "ordinary task".into(),
+                profile_id: "profile".into(),
+                browser_id: "browser".into(),
+                created_at_ms: 1,
+                last_activity_at_ms: 1,
+                expires_at_ms: 0,
+                current_tab_id: Some("logical-tab".into()),
+            },
+        );
+        state.tabs.insert("logical-tab".into(), serde_json::from_value(json!({"id":"logical-tab","targetId":"physical-target","browserId":"browser","sessionId":"task","createdAtMs":1,"lastActivityAtMs":1})).unwrap());
+        assert!(state.host_bindings.is_empty());
+        store.save_session_state(&state).unwrap();
+        let before = serde_json::to_value(store.load_session_state().unwrap()).unwrap();
+        for operation in ["status", "view"] {
+            let cli = mcp_command_response(&[
+                "mcp".into(),
+                "host-control".into(),
+                "task".into(),
+                operation.into(),
+            ])
+            .unwrap();
+            let line = json!({"jsonrpc":"2.0","id":546,"method":"tools/call","params":{"name":"browser_control","arguments":{"taskId":"task","operation":operation}}}).to_string();
+            let response = handle_jsonrpc_line(&line, "unused-transport").unwrap();
+            assert!(response.get("error").is_none(), "{response}");
+            let mcp: Value =
+                serde_json::from_str(response["result"]["content"][0]["text"].as_str().unwrap())
+                    .unwrap();
+            for data in [&cli["data"], &mcp["data"]] {
+                assert_eq!(data["taskId"], "task");
+                assert_eq!(data["browserId"], "browser");
+                assert_eq!(data["control"]["owner"], "agent");
+                assert_eq!(data["control"]["epoch"], 0);
+            }
+        }
+        let briefing =
+            mcp_command_response(&["mcp".into(), "task-briefing".into(), "task".into()]).unwrap();
+        assert_eq!(briefing["data"]["processPid"], std::process::id());
+        assert_eq!(briefing["data"]["tabId"], "logical-tab");
+        assert_eq!(briefing["data"]["targetId"], "physical-target");
+        assert_eq!(briefing["data"]["contextEvidence"], "retained_not_live");
+        for operation in ["takeover", "return", "override", "reconcile"] {
+            assert_eq!(
+                mcp_command_response(&[
+                    "mcp".into(),
+                    "host-control".into(),
+                    "task".into(),
+                    operation.into()
+                ])
+                .unwrap_err(),
+                "browser_control_hosted_task_required"
+            );
+        }
+        assert_eq!(
+            mcp_command_response(&[
+                "mcp".into(),
+                "host-control".into(),
+                "missing".into(),
+                "status".into()
+            ])
+            .unwrap_err(),
+            "browser_control_task_missing"
+        );
+        assert_eq!(
+            serde_json::to_value(store.load_session_state().unwrap()).unwrap(),
+            before
+        );
+        assert!(
+            !sockets.exists(),
+            "metadata readback must not launch a transport"
+        );
+        drop(store);
+        fn remove_fixture(path: &std::path::Path) {
+            let metadata = std::fs::symlink_metadata(path).unwrap();
+            if metadata.is_dir() {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+                }
+                for entry in std::fs::read_dir(path).unwrap() {
+                    remove_fixture(&entry.unwrap().path());
+                }
+                std::fs::remove_dir(path).unwrap();
+            } else {
+                #[cfg(windows)]
+                {
+                    let mut permissions = metadata.permissions();
+                    permissions.set_readonly(false);
+                    std::fs::set_permissions(path, permissions).unwrap();
+                }
+                std::fs::remove_file(path).unwrap();
+            }
+        }
+        remove_fixture(&directory);
+    }
+
+    #[test]
     fn task_briefing_public_cli_and_mcp_preserve_exact_task_without_transport() {
         use crate::native::browser_session_store::BrowserSessionSqliteStore;
         use agent_browser_service_model::{
