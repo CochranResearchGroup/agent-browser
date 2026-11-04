@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P303
+    product_lane: PL-AUTH
+    objective: Integrate ordinary managed-task authentication through Auth Receipts
+    plan: docs/dev/plans/0303-2026-11-04-managed-auth-546.md
+    branch: auth/managed-task-receiving
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#546, CochranResearchGroup/auth-receipts#255]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [P300]
+    reconciled_overlaps: ["Separate source checkout from origin/main432d4c4c8; P300 unrelated dirty workspace/UI/skill source excluded; host_control adapter/test owned here; shared docs integrate serially; retain3 clean foreign checkouts"]
+    validation_status: Public CLI/MCP regression1, control23 and existing task-briefing1 pass; format check passes; source integration and installed adoption pending
+    limitations: ["No live credential input or production installation from source metadata checks", "Complete integrated authentication acceptance remains open"]
+    updated_at: 2026-11-04
   - id: FULLSCREEN538
     product_lane: PL-BUGFIX
     objective: Add Native fullscreen CDP mode control through existing owner operation

@@ -301,6 +301,7 @@ pub(super) fn inspect_briefing(task_id: &str) -> Result<Value, String> {
     Ok(
         json!({"schemaVersion":"agent-browser.task-briefing.v1","taskId":task_id,
         "profileId":task.profile_id,"browserId":task.browser_id,
+        "processPid":state.browsers.get(&task.browser_id).filter(|browser| browser.id==task.browser_id && browser.profile_id==task.profile_id).map(|browser|browser.pid),
         "tabId":tab.map(|tab| &tab.id),"targetId":tab.map(|tab| &tab.target_id),
         "contextEvidence":"retained_not_live","currentTargetState":if tab.is_some(){"retained_not_live"}else{"missing_or_conflicting"},
         "lastActivityAtMs":task.last_activity_at_ms,"goal":goal,"lastVerifiedOutcome":outcome,
