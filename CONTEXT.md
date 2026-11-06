@@ -54,6 +54,12 @@ owner identity. Missing, changed or stale evidence is unverified. Executable
 name/family, native input readiness, viewer delivery and authentication remain
 separate observations; inspection does not acquire or mutate a browser.
 
+**Native current-control inspection**: Private authenticated current mode and
+exact target evidence for Remote View input qualification. It retains current
+link, provider assignment, original process and Native binding checks, and does
+not wait for mode-operation history. Remote View independently owns input epochs,
+held-input arbitration and the final generation-to-effect guard.
+
 **Inspection review**: An explicit accepted or rejected judgment about one frozen inspection run, scoped to its original workspace, task, browser, tab and profile. Activity retains bounded identity and evidence-reference metadata. The judgment does not change observation validity, execution authority or readiness.
 
 **Exact task routing**: MCP page commands and authenticated dashboard browser

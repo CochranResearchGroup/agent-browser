@@ -1,6 +1,18 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: NATIVE798
+    product_lane: PL-BUGFIX
+    objective: Restore bounded current Native control proof without operation-history waits
+    plan: docs/dev/maintenance/native-control-proof-798.md
+    branch: fix/native-control-proof-798
+    target: main
+    work_items: [CochranResearchGroup/agent-browser#529, CochranResearchGroup/remote-view#798]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    overlaps: [P300]
+    reconciled_overlaps: ["Root sole callback/ingress writer in necessary main-based auxiliary; preserve dirty P300 workspace; PR508 and PR454 source surfaces separate"]
+    updated_at: 2026-11-06
   - id: CLEANUP548
     product_lane: PL-PLATFORM
     objective: Publish recurring worktree integration and aggregate build-storage cleanup rules

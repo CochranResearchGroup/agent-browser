@@ -19,7 +19,7 @@ impl ModeRequest {
     fn valid(&self) -> bool {
         self.slot > 0
             && self.generation > 0
-            && if self.choice == "inspect" {
+            && if matches!(self.choice.as_str(), "inspect" | "inspect_control") {
                 self.operation_id.is_none() && self.mode.is_none() && self.owner_confirmed.is_none()
             } else {
                 matches!(
@@ -124,7 +124,7 @@ pub(super) async fn handle(
 async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
     let handoff = id.to_owned();
     let slot = request.slot;
-    let inspect = request.choice == "inspect";
+    let inspect = matches!(request.choice.as_str(), "inspect" | "inspect_control");
     let generation = request.generation;
     let (target, mode, control_target) = tokio::task::spawn_blocking(move || {
         let store = BrowserSessionSqliteStore::open_read_only(
@@ -218,139 +218,164 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
     })
     .await
     .map_err(|_| "remote_view_native_mode_read_unavailable")??;
-    let mut command = json!({"action":"browser_session_mode_convert", "sessionId":target.session.id,
-        "sessionName":target.session.name,"sourceProfileId":target.session.profile_id,"browserId":target.browser.id,"choice":request.choice});
-    if !inspect {
-        command["operationId"] = json!(request.operation_id);
-        command["mode"] = json!(request.mode);
-        command["ownerConfirmed"] = json!(request.owner_confirmed.unwrap_or(false));
-    }
-    let response = tokio::time::timeout(
-        std::time::Duration::from_secs(90),
-        super::http::relay_command_to_daemon(&target.session.name, &command.to_string()),
+    // The snapshot above retains the provider assignment and fresh process checks.
+    // Control input does not consume operation history or wait on its daemon queue.
+    finish_current_inspection(
+        &request.choice,
+        mode.clone(),
+        control_target.clone(),
+        async {
+            let mut command = json!({"action":"browser_session_mode_convert", "sessionId":target.session.id,
+                "sessionName":target.session.name,"sourceProfileId":target.session.profile_id,"browserId":target.browser.id,"choice":request.choice});
+            if !inspect {
+                command["operationId"] = json!(request.operation_id);
+                command["mode"] = json!(request.mode);
+                command["ownerConfirmed"] = json!(request.owner_confirmed.unwrap_or(false));
+            }
+            let response = tokio::time::timeout(
+                std::time::Duration::from_secs(90),
+                super::http::relay_command_to_daemon(&target.session.name, &command.to_string()),
+            )
+            .await
+            .map_err(|_| "remote_view_native_mode_result_unknown")??;
+            if response.len() > 128 * 1024 {
+                return Err("remote_view_native_mode_reply_invalid".into());
+            }
+            let reply: Value =
+                serde_json::from_str(&response).map_err(|_| "remote_view_native_mode_reply_invalid")?;
+            if reply["success"] == false {
+                let code = reply["error"]
+                    .as_str()
+                    .unwrap_or("remote_view_native_mode_refused")
+                    .split(':')
+                    .next()
+                    .unwrap_or("remote_view_native_mode_refused");
+                let code = if code.len() <= 128
+                    && (code.starts_with("mode_operation_") || code.starts_with("browser_operation_"))
+                    && code
+                        .bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+                {
+                    code
+                } else {
+                    "remote_view_native_mode_refused"
+                };
+                return Ok(json!({"success":false,"error":code}));
+            }
+            if reply["success"] != true {
+                return Err("remote_view_native_mode_reply_invalid".into());
+            }
+            if inspect {
+                if reply["data"]["schemaVersion"] != "agent-browser.browser-operations.v1" {
+                    return Err("remote_view_native_mode_reply_invalid".into());
+                }
+                let operations = reply["data"]["operations"]
+                    .as_array()
+                    .ok_or("remote_view_native_mode_reply_invalid")?;
+                if operations.iter().any(|row| {
+                    row["schemaVersion"] != "agent-browser.mode-operation.v1"
+                        || !row["operationId"].is_string()
+                }) {
+                    return Err("remote_view_native_mode_reply_invalid".into());
+                }
+                let active: Vec<_> = operations
+                    .iter()
+                    .filter(|row| !matches!(row["phase"].as_str(), Some("completed" | "cancelled")))
+                    .collect();
+                // The owner relay may have waited. Do not export input target evidence
+                // unless the same original process and binding remain current afterward.
+                let control_target = if let Some(expected) = control_target {
+                    let handoff = id.to_owned();
+                    tokio::task::spawn_blocking(move || {
+                        let store = BrowserSessionSqliteStore::open_read_only(
+                            &BrowserSessionSqliteStore::default_sqlite_path()?,
+                        )?;
+                        let state = store.load_session_state()?;
+                        let target =
+                            agent_browser_service_model::resolve_remote_view_tab_handoff(&state, &handoff)?;
+                        let digest = agent_browser_service_model::remote_view_native_target_digest(
+                            &handoff, &target,
+                        )?;
+                        let link = state
+                            .remote_view_tab_handoffs
+                            .get(&handoff)
+                            .ok_or("remote_view_tab_handoff_missing")?;
+                        link.check_link_at(
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map_err(|_| "remote_view_clock_invalid")?
+                                .as_millis() as u64,
+                        )?;
+                        let original = store.original_browser_identity(&state, &target.browser);
+                        let mode = store.inspect_task_mode(&target.session.id)?;
+                        let current = store.load_session_state()?;
+                        let current_target = agent_browser_service_model::resolve_remote_view_tab_handoff(
+                            &current, &handoff,
+                        )?;
+                        if agent_browser_service_model::remote_view_native_target_digest(
+                            &handoff,
+                            &current_target,
+                        )? != digest
+                            || current
+                                .remote_view_tab_handoffs
+                                .get(&handoff)
+                                .and_then(|l| l.native_observation.as_ref())
+                                != link.native_observation.as_ref()
+                        {
+                            return Ok::<_, String>(None);
+                        }
+                        let current_original =
+                            store.original_browser_identity(&current, &current_target.browser);
+                        let binding = link
+                            .native_observation
+                            .as_ref()
+                            .filter(|b| b.target_digest == digest);
+                        let observed = native_control_target(
+                            mode["mode"].as_str().unwrap_or("unverified"),
+                            generation,
+                            &digest,
+                            original.as_ref(),
+                            current_original.as_ref(),
+                            binding.map(|b| &b.provider_target),
+                        );
+                        Ok(observed.filter(|observed| observed == &expected))
+                    })
+                    .await
+                    .map_err(|_| "remote_view_native_mode_read_unavailable")??
+                } else {
+                    None
+                };
+                return Ok(
+                    json!({"success":true,"data":{"schemaVersion":"agent-browser.handoff-mode.v1","mode":mode,"operations":active,"nativeControlTarget":control_target}}),
+                );
+            }
+            if reply["data"]["schemaVersion"] == "agent-browser.mode-operation.v1"
+                && reply["data"]["operationId"] == command["operationId"]
+                || reply["data"]["schemaVersion"] == "agent-browser.browser-operations.v1"
+                    && reply["data"]["state"] == "busy"
+            {
+                Ok(reply)
+            } else {
+                Err("remote_view_native_mode_reply_invalid".into())
+            }
+        },
     )
     .await
-    .map_err(|_| "remote_view_native_mode_result_unknown")??;
-    if response.len() > 128 * 1024 {
-        return Err("remote_view_native_mode_reply_invalid".into());
+}
+
+async fn finish_current_inspection(
+    choice: &str,
+    mode: Value,
+    control_target: Option<Value>,
+    continuation: impl std::future::Future<Output = Result<Value, String>>,
+) -> Result<Value, String> {
+    if choice == "inspect_control" {
+        return Ok(json!({"success":true,"data":{
+            "schemaVersion":"agent-browser.handoff-mode.v1",
+            "mode":mode,"operations":[],"nativeControlTarget":control_target
+        }}));
     }
-    let reply: Value =
-        serde_json::from_str(&response).map_err(|_| "remote_view_native_mode_reply_invalid")?;
-    if reply["success"] == false {
-        let code = reply["error"]
-            .as_str()
-            .unwrap_or("remote_view_native_mode_refused")
-            .split(':')
-            .next()
-            .unwrap_or("remote_view_native_mode_refused");
-        let code = if code.len() <= 128
-            && (code.starts_with("mode_operation_") || code.starts_with("browser_operation_"))
-            && code
-                .bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
-        {
-            code
-        } else {
-            "remote_view_native_mode_refused"
-        };
-        return Ok(json!({"success":false,"error":code}));
-    }
-    if reply["success"] != true {
-        return Err("remote_view_native_mode_reply_invalid".into());
-    }
-    if inspect {
-        if reply["data"]["schemaVersion"] != "agent-browser.browser-operations.v1" {
-            return Err("remote_view_native_mode_reply_invalid".into());
-        }
-        let operations = reply["data"]["operations"]
-            .as_array()
-            .ok_or("remote_view_native_mode_reply_invalid")?;
-        if operations.iter().any(|row| {
-            row["schemaVersion"] != "agent-browser.mode-operation.v1"
-                || !row["operationId"].is_string()
-        }) {
-            return Err("remote_view_native_mode_reply_invalid".into());
-        }
-        let active: Vec<_> = operations
-            .iter()
-            .filter(|row| !matches!(row["phase"].as_str(), Some("completed" | "cancelled")))
-            .collect();
-        // The owner relay may have waited. Do not export input target evidence
-        // unless the same original process and binding remain current afterward.
-        let control_target = if let Some(expected) = control_target {
-            let handoff = id.to_owned();
-            tokio::task::spawn_blocking(move || {
-                let store = BrowserSessionSqliteStore::open_read_only(
-                    &BrowserSessionSqliteStore::default_sqlite_path()?,
-                )?;
-                let state = store.load_session_state()?;
-                let target =
-                    agent_browser_service_model::resolve_remote_view_tab_handoff(&state, &handoff)?;
-                let digest = agent_browser_service_model::remote_view_native_target_digest(
-                    &handoff, &target,
-                )?;
-                let link = state
-                    .remote_view_tab_handoffs
-                    .get(&handoff)
-                    .ok_or("remote_view_tab_handoff_missing")?;
-                link.check_link_at(
-                    std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map_err(|_| "remote_view_clock_invalid")?
-                        .as_millis() as u64,
-                )?;
-                let original = store.original_browser_identity(&state, &target.browser);
-                let mode = store.inspect_task_mode(&target.session.id)?;
-                let current = store.load_session_state()?;
-                let current_target = agent_browser_service_model::resolve_remote_view_tab_handoff(
-                    &current, &handoff,
-                )?;
-                if agent_browser_service_model::remote_view_native_target_digest(
-                    &handoff,
-                    &current_target,
-                )? != digest
-                    || current
-                        .remote_view_tab_handoffs
-                        .get(&handoff)
-                        .and_then(|l| l.native_observation.as_ref())
-                        != link.native_observation.as_ref()
-                {
-                    return Ok::<_, String>(None);
-                }
-                let current_original =
-                    store.original_browser_identity(&current, &current_target.browser);
-                let binding = link
-                    .native_observation
-                    .as_ref()
-                    .filter(|b| b.target_digest == digest);
-                let observed = native_control_target(
-                    mode["mode"].as_str().unwrap_or("unverified"),
-                    generation,
-                    &digest,
-                    original.as_ref(),
-                    current_original.as_ref(),
-                    binding.map(|b| &b.provider_target),
-                );
-                Ok(observed.filter(|observed| observed == &expected))
-            })
-            .await
-            .map_err(|_| "remote_view_native_mode_read_unavailable")??
-        } else {
-            None
-        };
-        return Ok(
-            json!({"success":true,"data":{"schemaVersion":"agent-browser.handoff-mode.v1","mode":mode,"operations":active,"nativeControlTarget":control_target}}),
-        );
-    }
-    if reply["data"]["schemaVersion"] == "agent-browser.mode-operation.v1"
-        && reply["data"]["operationId"] == command["operationId"]
-        || reply["data"]["schemaVersion"] == "agent-browser.browser-operations.v1"
-            && reply["data"]["state"] == "busy"
-    {
-        Ok(reply)
-    } else {
-        Err("remote_view_native_mode_reply_invalid".into())
-    }
+    continuation.await
 }
 
 /// No caller-provided locator becomes input authority. Remote View must join
@@ -468,5 +493,65 @@ mod control_target_tests {
             None
         )
         .is_none());
+    }
+    #[tokio::test]
+    async fn current_control_inspection_does_not_wait_for_operation_history() {
+        use std::{cell::Cell, time::Duration};
+        let called = Cell::new(false);
+        let blocked_history = async {
+            called.set(true);
+            std::future::pending::<Result<Value, String>>().await
+        };
+        let target = json!({"schemaVersion":"agent-browser.native-control-target.v1"});
+        let reply = tokio::time::timeout(
+            Duration::from_millis(50),
+            finish_current_inspection(
+                "inspect_control",
+                json!("cdp"),
+                Some(target.clone()),
+                blocked_history,
+            ),
+        )
+        .await
+        .expect("fresh control proof must not wait for operation history")
+        .unwrap();
+        assert!(!called.get());
+        assert_eq!(reply["data"]["nativeControlTarget"], target);
+        assert_eq!(reply["data"]["operations"], json!([]));
+        assert_eq!(reply["data"]["mode"], "cdp");
+
+        let normal = finish_current_inspection("inspect", json!("cdp"), None, async {
+            Ok(json!({"normalHistory":true}))
+        })
+        .await
+        .unwrap();
+        assert_eq!(normal["normalHistory"], true);
+        let absent =
+            finish_current_inspection("inspect_control", json!("unverified"), None, async {
+                panic!("control inspection cannot relay a mode operation")
+            })
+            .await
+            .unwrap();
+        assert!(absent["data"]["nativeControlTarget"].is_null());
+    }
+
+    #[test]
+    fn control_inspection_accepts_no_effect_fields() {
+        for choice in ["inspect", "inspect_control"] {
+            let valid: ModeRequest =
+                serde_json::from_value(json!({"slot":1,"generation":1,"choice":choice})).unwrap();
+            assert!(valid.valid());
+            for field in ["operationId", "mode", "ownerConfirmed"] {
+                let mut value = json!({"slot":1,"generation":1,"choice":choice});
+                value[field] = if field == "ownerConfirmed" {
+                    json!(true)
+                } else {
+                    json!("unexpected")
+                };
+                assert!(!serde_json::from_value::<ModeRequest>(value)
+                    .unwrap()
+                    .valid());
+            }
+        }
     }
 }
