@@ -60,3 +60,19 @@ remain rejected and existing mode-operation request semantics are unchanged.
 The unbound managed viewer remains locked. The provider-side repair and gateway
 input qualification are tracked by `CochranResearchGroup/remote-view#798`; this
 owner response alone does not establish usable human takeover or installed proof.
+
+
+## Control-only inspection
+
+Remote View may send private `choice: inspect_control` with only the same slot
+and generation. It receives the same handoff-mode envelope with current physical
+mode, an empty operations list and the current nativeControlTarget or null.
+This path performs the same retained link, live provider route, original process
+and current binding qualification as ordinary inspection. It does not relay to
+the mode-operation history queue. Ordinary `inspect` still returns operation
+history and rechecks target freshness after that awaited relay. Control-only
+inspection is not a public toolbar choice or permission to mutate. The existing
+private capability authentication and input ownership guards remain required.
+
+Stable ingress retains the bounded owner callback response window for this route;
+it never replays an admitted POST onto a fallback backend.

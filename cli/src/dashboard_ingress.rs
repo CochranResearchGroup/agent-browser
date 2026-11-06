@@ -1515,13 +1515,15 @@ fn dashboard_ingress_first_response_timeout(request: &[u8]) -> Duration {
                 let path = path.split('?').next().unwrap_or(path);
                 path.starts_with("/api/remote-view/") && path.ends_with("/presentation")
             });
-    let native_resume = request.starts_with(b"POST ")
+    let native_owner_callback = request.starts_with(b"POST ")
         && std::str::from_utf8(request)
             .ok()
             .and_then(|request| request.lines().next()?.split_whitespace().nth(1))
             .and_then(|path| {
-                path.strip_prefix("/api/native-remote-view/")?
+                let relative = path.strip_prefix("/api/native-remote-view/")?;
+                relative
                     .strip_suffix("/resume")
+                    .or_else(|| relative.strip_suffix("/mode"))
             })
             .is_some_and(|id| {
                 !id.is_empty()
@@ -1530,8 +1532,8 @@ fn dashboard_ingress_first_response_timeout(request: &[u8]) -> Duration {
                         .bytes()
                         .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
             });
-    if native_handoff || native_resume {
-        // Both handoff paths can prepare the owner before their first response.
+    if native_handoff || native_owner_callback {
+        // Handoff and mode callbacks can consult the owner before their first response.
         // Preserve the existing 20-second preparation and 90-second resolution
         // budget. POST delivery still cannot replay to a fallback backend.
         return Duration::from_secs(120);
@@ -3293,10 +3295,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn native_resume_waits_for_owner_without_replaying_to_fallback() {
+    async fn native_owner_callbacks_wait_without_replaying_to_fallback() {
         for (path, ready) in [
             ("/api/native-remote-view/opaque-a/resume", true),
+            ("/api/native-remote-view/opaque-a/mode", true),
             ("/api/native-remote-view/opaque-a/nested/resume", false),
+            ("/api/native-remote-view/opaque-a/nested/mode", false),
         ] {
             let backend_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
             let backend_port = backend_listener.local_addr().unwrap().port();
