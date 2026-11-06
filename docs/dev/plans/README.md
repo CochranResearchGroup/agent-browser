@@ -1,6 +1,6 @@
 # Active plan index
 
-[P300 compact workspace, Profiles and SiteGuides](0300-2026-11-01-workspace-siteguides-523.md), spec523:524–528 CLOSED; workspace and PR543 cleanup repair are integrated/installed. Actual portability has 3 of 4 passing rows with exact cleanup;530 awaits human donor readiness for the final row.529 needs narrated context/principal mapping. Final review/remediation remain0.
+[P300 compact workspace, Profiles and SiteGuides](0300-2026-11-01-workspace-siteguides-523.md), spec523:524–528 CLOSED; workspace and PR543 cleanup repair are integrated/installed. Actual portability has 3 of 4 passing rows with exact cleanup;530 awaits human donor readiness for the final row.529 needs narrated context/principal mapping. Final review/remediation remain0. [Native control repair](../maintenance/native-control-proof-798.md) is installed accepted with eight same-browser cycles, reconnect, continued automation and cleanup.
 
 [P302 owned manual copy closure](0302-2026-11-02-profile-copy-lifecycle-530.md): source and installed repair checkpoint complete; actual account qualification remains under #530.
 
