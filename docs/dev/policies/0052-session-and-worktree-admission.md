@@ -72,6 +72,11 @@ attributable and disposable.
 
 ## Handoff And Closure
 
+- Apply the recurring integration and storage review in
+  [policy 0004](0004-git-worktree-hygiene.md) at startup, merge and closeout,
+  and at least weekly during ongoing development. A retained checkout needs
+  a current owner, concrete reason and next review date; stale catalog custody
+  must be reconciled against actual Git state before another admission.
 - A top-level session handoff reports its primary worktree, local and remote
   checkpoint, pull request or branch disposition, and every parent-owned
   auxiliary. A missing report is drift evidence, not proof that the checkout

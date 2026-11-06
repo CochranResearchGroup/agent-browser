@@ -70,7 +70,7 @@
     },
     {
       "path": "docs/dev/policies/0004-git-worktree-hygiene.md",
-      "sha256": "6a69a16996dffcfbf1ea351a7ed17f9b7b0a26fee547af0c33543c5f9bc25158"
+      "sha256": "ef166ab27d71ac950593d8ef51075e7f9ae7fbe8ad71d795f0e8cfba994421ef"
     },
     {
       "path": "docs/dev/policies/0005-commit-history-discipline.md",
@@ -238,7 +238,7 @@
     },
     {
       "path": "docs/dev/policies/0052-session-and-worktree-admission.md",
-      "sha256": "005f558a9cfff75171639ee911238ce2468747f9f0e46b5b120d68b9b5838a35"
+      "sha256": "c7ff18f8898fd6b3b13746bd6255ba9bcc440ac08b31dc7c91fb86aa06077947"
     },
     {
       "path": "docs/dev/policies/0053-policy-context-pilot.md",
@@ -259,7 +259,7 @@
       "sources": [
         {
           "path": "docs/dev/policies/0004-git-worktree-hygiene.md",
-          "sha256": "6a69a16996dffcfbf1ea351a7ed17f9b7b0a26fee547af0c33543c5f9bc25158",
+          "sha256": "ef166ab27d71ac950593d8ef51075e7f9ae7fbe8ad71d795f0e8cfba994421ef",
           "sections": [
             {
               "heading_path": [
@@ -382,7 +382,7 @@
         },
         {
           "path": "docs/dev/policies/0052-session-and-worktree-admission.md",
-          "sha256": "005f558a9cfff75171639ee911238ce2468747f9f0e46b5b120d68b9b5838a35",
+          "sha256": "c7ff18f8898fd6b3b13746bd6255ba9bcc440ac08b31dc7c91fb86aa06077947",
           "sections": [
             {
               "heading_path": [
@@ -596,7 +596,7 @@
       "sources": [
         {
           "path": "docs/dev/policies/0004-git-worktree-hygiene.md",
-          "sha256": "6a69a16996dffcfbf1ea351a7ed17f9b7b0a26fee547af0c33543c5f9bc25158",
+          "sha256": "ef166ab27d71ac950593d8ef51075e7f9ae7fbe8ad71d795f0e8cfba994421ef",
           "sections": [
             {
               "heading_path": [
@@ -731,7 +731,7 @@
         },
         {
           "path": "docs/dev/policies/0052-session-and-worktree-admission.md",
-          "sha256": "005f558a9cfff75171639ee911238ce2468747f9f0e46b5b120d68b9b5838a35",
+          "sha256": "c7ff18f8898fd6b3b13746bd6255ba9bcc440ac08b31dc7c91fb86aa06077947",
           "sections": [
             {
               "heading_path": [
@@ -965,7 +965,7 @@
       "sources": [
         {
           "path": "docs/dev/policies/0004-git-worktree-hygiene.md",
-          "sha256": "6a69a16996dffcfbf1ea351a7ed17f9b7b0a26fee547af0c33543c5f9bc25158",
+          "sha256": "ef166ab27d71ac950593d8ef51075e7f9ae7fbe8ad71d795f0e8cfba994421ef",
           "sections": [
             {
               "heading_path": [
@@ -1088,7 +1088,7 @@
         },
         {
           "path": "docs/dev/policies/0052-session-and-worktree-admission.md",
-          "sha256": "005f558a9cfff75171639ee911238ce2468747f9f0e46b5b120d68b9b5838a35",
+          "sha256": "c7ff18f8898fd6b3b13746bd6255ba9bcc440ac08b31dc7c91fb86aa06077947",
           "sections": [
             {
               "heading_path": [
@@ -1301,7 +1301,7 @@
       "sources": [
         {
           "path": "docs/dev/policies/0004-git-worktree-hygiene.md",
-          "sha256": "6a69a16996dffcfbf1ea351a7ed17f9b7b0a26fee547af0c33543c5f9bc25158",
+          "sha256": "ef166ab27d71ac950593d8ef51075e7f9ae7fbe8ad71d795f0e8cfba994421ef",
           "sections": [
             {
               "heading_path": [
@@ -1436,7 +1436,7 @@
         },
         {
           "path": "docs/dev/policies/0052-session-and-worktree-admission.md",
-          "sha256": "005f558a9cfff75171639ee911238ce2468747f9f0e46b5b120d68b9b5838a35",
+          "sha256": "c7ff18f8898fd6b3b13746bd6255ba9bcc440ac08b31dc7c91fb86aa06077947",
           "sections": [
             {
               "heading_path": [

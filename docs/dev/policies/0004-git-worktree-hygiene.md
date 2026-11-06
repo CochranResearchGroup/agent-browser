@@ -49,6 +49,43 @@
 - If overlapping dirty work exists across branches or worktrees, open a reconciliation step rather than calling it a normal merge.
 - Keep branch scope narrow and avoid mixing unrelated lanes unless the active slice requires it.
 
+## Recurring Integration And Storage Review
+
+- At session startup, before another checkout or candidate build, and after
+  every merge, reconcile registered worktrees, branch divergence, open pull
+  requests, dirty state, candidate pins, and active-lane claims. During ongoing
+  development repeat this review at least weekly; record its date and the next
+  review date in the lane handoff.
+- Finish each bounded slice by integrating validated work through its normal
+  pull request, or naming the exact remaining gate, owner, checkpoint and next
+  review date. Review idle branches after seven days. Age triggers review and
+  never substitutes for validation, merge authority or preservation.
+- In the same slice as integration, close clean lane and auxiliary checkouts
+  that are no longer needed through the governed helper. Retain the canonical
+  integration checkout and any checkout with a recorded continuing purpose.
+  For paused work, preserve verified remote branch custody and
+  archive pinned candidates before closing a checkout that is no longer needed.
+  An open pull request can retain its branch without retaining its checkout.
+- Include allocated build-directory sizes across all registered worktrees and
+  their declared external target directories in this review. Count shared
+  targets once. Review aggregate repository build storage above 20 GiB before
+  adding another build. Prune qualified,
+  disposable incremental and abandoned fixture outputs first. Keep an explicit
+  exception with an owner and review date when active work needs more space.
+- Before cache deletion, record exact paths and allocated sizes outside Git,
+  check active builders and executable, mapped-file and descriptor references,
+  reject symlinks and nested mounts, and hold the actual Cargo target lock with
+  Cargo-compatible locking. Skip a busy target; do not stop another build to
+  reclaim its files. Recheck identities immediately before deletion.
+- Preserve source, lockfiles, build receipts, sealed candidates, candidate
+  manifests, installed runtimes and active fixture evidence. Candidate custody
+  uses explicit retain, archive or discard dispositions. Cache age alone does
+  not authorize deletion of those artifacts.
+- Record before and after filesystem usage, removed paths, archive locators,
+  remaining exceptions and rebuild cost. Cleanup is complete only after fresh
+  worktree and storage readback. These rules require recurring session review;
+  they do not install an unattended deletion or automatic merge service.
+
 ## Adoption Notes
 
 Use this module in repos where multiple lanes, multiple worktrees, or parallel agents regularly overlap.
