@@ -8,11 +8,13 @@ lanes:
     branch: fix/native-control-proof-798
     target: main
     work_items: [CochranResearchGroup/agent-browser#529, CochranResearchGroup/remote-view#798]
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    plan_state: CLOSED
+    custody_state: INTEGRATED
     overlaps: [P300]
     reconciled_overlaps: ["Root sole callback/ingress writer in necessary main-based auxiliary; preserve dirty P300 workspace; PR508 and PR454 source surfaces separate"]
     updated_at: 2026-11-06
+    validation_status: Installed same-browser eight-cycle control, reconnect, exact automation and owned cleanup pass; parent narration/account gates remain separate
+    checkpoint: 51302239d4140c102dec8368498defc11072c2d3
   - id: CLEANUP548
     product_lane: PL-PLATFORM
     objective: Publish recurring worktree integration and aggregate build-storage cleanup rules
