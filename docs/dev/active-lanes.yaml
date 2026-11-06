@@ -1,6 +1,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: CLEANUP548
+    product_lane: PL-PLATFORM
+    objective: Publish recurring worktree integration and aggregate build-storage cleanup rules
+    branch: platform/worktree-storage-hygiene
+    target: main
+    accountable_owner: ecochran76
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    work_items: [CochranResearchGroup/agent-browser#548]
+    dependencies: []
+    overlaps: [P300]
+    reconciled_overlaps: ["Cleanup owns policies 0004 and 0052, their hash bindings and this catalog entry only; preserve P300 and browser-mode dirty bytes; one temporary integration checkout closes in this slice"]
+    validation_status: Reviewed policy source; canonical integration is effective on merge of the issue548 PR; exact merge and temporary-checkout closeout receipts are linked from issue548
+    limitations: ["Source policy delivery only; no runtime deployment or unattended deletion; issue548 owns final integration and closeout readback"]
+    updated_at: 2026-11-06
   - id: P303
     product_lane: PL-AUTH
     objective: Integrate ordinary managed-task authentication through Auth Receipts
