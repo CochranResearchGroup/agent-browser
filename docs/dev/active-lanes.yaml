@@ -14,7 +14,7 @@ lanes:
     dependencies: [P300]
     overlaps: [P300]
     reconciled_overlaps: ["Serial bounded maintenance in the existing checkout; owns native-task-viewport and continuity fixtures; preserve existing browser-mode context-menu edits and shared documentation hunks; no new checkout or branch transition"]
-    validation_status: Current-main continuity and full rail regressions and API/MCP parity pass; remaining final source gates and authorized deployment are pending; archived old checkout on remote archive/tab552-pre-integration-20261106
+    validation_status: Current-main continuity/full rail, API parity, builds, docs, selector, format and strict workspace Clippy pass on088f23377; PR553 owns integration and authorized deployment is pending; prior checkout archived remotely
     limitations: ["Source and synthetic validation only; no installed Native transport acceptance or runtime publication"]
     updated_at: 2026-11-06
   - id: NATIVE798

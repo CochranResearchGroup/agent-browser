@@ -91,3 +91,16 @@ bytes and preserves its tool inventory and safety semantics. The API/MCP
 parity gate now passes. Current-main mounted task-selection, focused continuity
 and full compact workspace tests pass after conflict resolution. Earlier
 baseline failures above remain historical evidence rather than current gates.
+
+Final source gates pass on `088f23377`: task-selection/continuity and full rail
+tests, API/MCP parity, dashboard/docs builds, policy wiring, changed documentation
+links, handoff docs and validation-selector contracts. Workspace format and
+strict Clippy pass with cache disabled, four Cargo jobs, one invocation,
+`AGENT_BROWSER_CARGO_MEMORY_CLAIM_KIB=8388608`, `MemoryHigh=6G` and
+`MemoryMax=8G`. The 16 GiB host reserve is unchanged. Clippy finishes in
+1 minute 35 seconds. The original default-limit invocations were still waiting
+for admission and were stopped before compilation. No hosted CI ran.
+
+The local-source patches were self-checked against the published PR diff and
+current main. Browser mode and Native fullscreen controls are preserved. Runtime
+installation and actual Native transport acceptance remain subsequent gates.
