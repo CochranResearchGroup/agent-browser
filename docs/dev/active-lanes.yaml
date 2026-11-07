@@ -9,13 +9,13 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#558]
-    plan_state: ACTIVE
+    plan_state: COMPLETED
     custody_state: ACTIVE_WORKTREE
     dependencies: [P300]
     overlaps: [P300-RECOVERY]
     reconciled_overlaps: ["Operator expanded this lane to host publication reconciliation; canonical recovery source checkout remains untouched; integrated host fixes preserved; reuse existing isolated worktree"]
-    validation_status: PR557 issue558; final25 host plus71 changed-surface checks and strict Clippy pass; preserving sealed adoption pending
-    limitations: ["Installed original-task acceptance pending", "No shared runtime installation or provider effects", "Parent530 remains open"]
+    validation_status: Issue 558 CLOSED; PRs 557/560 and acceptance 561 merged. Installed acd74b accepted, 97 functional tests and strict workspace Clippy pass, doctor exit zero; original workflow and independent P300 donor handoff/input accepted without effect replay.
+    limitations: ["Retain sealed artifact and original checkout custody until governed closeout", "Parent 530 and Plan 0321 calendar acceptance remain separate", "Expanded all-targets baseline test lints are not a passing gate"]
     updated_at: 2026-11-07
   - id: P300-RECOVERY
     product_lane: PL-BUGFIX
@@ -25,13 +25,13 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#530]
-    plan_state: ACTIVE
+    plan_state: COMPLETED
     custody_state: ACTIVE_WORKTREE
     dependencies: [P300, CochranResearchGroup/agent-browser#558]
     overlaps: [P300, P300-OPERATOR-DIAGNOSIS]
     reconciled_overlaps: ["Reuse the canonical recovery checkout; preserve existing candidate and branch custody", "Operator-diagnostic lane is primary writer for host/SQLite publication reconciliation under558; P300 consumes its qualified canonical source only. Its source tests and processes remain untouched. Root retains serial donor/runtime acceptance and Native811 custody; no duplicate diagnostic deployment."]
-    validation_status: PR555 and PR556 preserving installs accepted; restored donor retained. Native PR812 input acceptance passes and issue811 is closed. PR557 and corrected handoff PR560 are canonical;97 regressions pass. One corrected sealed preserving update is building; earlier candidate superseded uninstalled. No duplicate deployment.
-    limitations: ["Original input failure and subsequent donor retirement remain distinct", "No state-file edits, effect replay or raw shared-host restart", "P300 final broad review and remediation remain zero"]
+    validation_status: Installed acd74b accepted with doctor exit zero. Same preserved donor has fresh owned-window ready handoff and authenticated Native input proof, exact toolbar text, normal return and released keys; private test artifacts retained and owned viewer closed. Native 811 and shared 558 closed; no duplicate installation.
+    limitations: ["Parent 530 fourth copy still awaits human Google verification; 529 needs actual narration/media inputs", "Retain canonical checkout and candidate custody for P300 continuation", "P300 final broad review and remediation remain zero"]
     updated_at: 2026-11-07
   - id: TAB552
     product_lane: PL-BUGFIX

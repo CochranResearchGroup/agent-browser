@@ -4,7 +4,7 @@ Product lane: PL-BUGFIX
 Parent: P300, ticket 530
 Branch: fix/p300-donor-retirement-readback
 Base: e2785ee97a273d192bc9a8985c3f37795be3e6fe
-State: ACTIVE
+State: CLOSED; donor recovery and input/handoff acceptance passed
 
 ## Bounded outcome
 
@@ -206,3 +206,36 @@ not a claim that the expanded all-targets baseline passed.
 
 Ticket 530 remains open with three accepted and disposed copy rows. Its fourth
 row and P300 final broad review/remediation remain unrun.
+
+## Installed donor handoff acceptance
+
+The coordinated preserving installation accepted transaction
+`upgrade-91498402-31ed-4edf-bcb5-cc9140c20923`, generation
+`0.28.0-acd74b124577-2f0ec3b99bee`. Installed SHA256 is
+`acd74b124577d9e9129fa51e3378b3de9937606470b6368ad5c882369b0d239e`.
+The exact-binary workstation fixture and fresh installed doctor passed. Canonical
+acceptance PR 561 records the shared installation and original-workflow results.
+The older sealed candidate remains superseded and uninstalled.
+
+P300 independently verified the same donor process, start token, executable,
+selected profile and absence of CDP flags. Its fresh handoff reports ready with
+owned-browser-window proof. Dev-browser followed that authenticated opaque link
+into the Native WebSocket viewer. Normal takeover enabled mouse control; actual
+Chrome toolbar focus and exact public text entry were observed. Escape restored
+the original account-verification route without Enter, authentication-form input
+or page-body capture. Normal return completed, all physical keys were released,
+and only the owned viewer tab closed. The borrowed blank tab remains retained.
+
+All 125 prior Native process identities and both protected browser processes
+survived. One unrelated stock-Chrome root was absent across the longer observation
+interval; its cause is unattributed, so full-host browser preservation is not
+claimed. Screenshots and raw process/account evidence remain private.
+
+This closes the bounded input and handoff recovery, not ticket 530's remaining
+account/profile-copy experiment. The original profile and browser stay preserved
+for human Google verification. No fourth copy or original fourth operation was
+prepared, and no account usability is inferred from the verification screen.
+Ticket 529 still needs actual recording/narration inputs. P300 final broad review
+and findings-remediation counters remain zero. Keep the canonical checkout and
+existing candidate custody for that parent continuation; do not remove a source
+owner's retained artifact cache as part of this closeout.
