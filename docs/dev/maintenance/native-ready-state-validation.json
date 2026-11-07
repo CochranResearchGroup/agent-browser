@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "work_item": 575,
+  "tested_base": "371acd19e50afaaf3364a5203d92ae31b3416aa7",
+  "tested_source_commit": "0dd3ead25a85a1496e79cf9502e9982335386860",
+  "red": {
+    "test": "native_readiness_accepts_public_ready_lifecycle_without_dispatching_input",
+    "error": "browser_native_input_unverified:inspect_consumer_input_policy"
+  },
+  "green": {
+    "readiness_tests": 6,
+    "public_native_host_disabled_input_tests": 2,
+    "existing_native_task_selection_tests": 1,
+    "warnings": 0
+  },
+  "quality": {
+    "format": "passed",
+    "strict_workspace_clippy": "passed_zero_warnings"
+  },
+  "documentation": {
+    "policy_cases": 11,
+    "links": "passed",
+    "handoff_docs": "passed",
+    "build": "passed44pages; existing lockfile-root warning"
+  },
+  "commands": [
+    "scripts/ci/rust-tests.sh --focused native_readiness_",
+    "scripts/ci/rust-tests.sh --focused native_host_readiness_",
+    "scripts/ci/rust-tests.sh --focused native_task_",
+    "scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check",
+    "scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings",
+    "pnpm test:policy-wiring",
+    "pnpm test:documentation-links -- --base 371acd19e50afaaf3364a5203d92ae31b3416aa7",
+    "pnpm test:remote-view-handoff-docs",
+    "pnpm --dir docs build"
+  ],
+  "rust_sha256": {
+    "cli/src/native/browser_native_readiness.rs": "f79a2a8a2d44fc65f2c1cd5b8eea1f01078e9974ff0cbbfc3484d27f84f2fe42",
+    "cli/src/output.rs": "a3ea3536d6c73a988274e3ef79259ae6c9f601fcb8420f5b0754c6edfef336fc"
+  },
+  "runtime_effects": false,
+  "installed": false,
+  "limitations": [
+    "Hosted CI disabled by operator policy",
+    "Preserving installation and original conversion continuation remain separate",
+    "Readiness does not grant Native control or prove provider/account acceptance"
+  ],
+  "p300_final_review": 0,
+  "p300_final_tdd": 0
+}

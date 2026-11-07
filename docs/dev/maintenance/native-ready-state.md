@@ -4,7 +4,7 @@ Product lane: PL-BUGFIX
 Work item: 575
 Branch: fix/native-ready-state
 Base: 371acd19e50afaaf3364a5203d92ae31b3416aa7
-State: ACTIVE
+State: SOURCE_QUALIFIED
 
 Reuse the existing P321 owning checkout and preserve the paused interview patch
 privately. Restore guarded Native input for schema-1 public desktop inspection
@@ -24,3 +24,13 @@ and non-ready-state refusals. Run affected Native tests, format and strict
 workspace Clippy, documentation/policy checks locally. Do not use hosted CI.
 Source qualification, preserving installation, original conversion continuation,
 Native input authority and Google account acceptance remain distinct gates.
+
+Qualification: exact public-ready HTTP fixture first failed with
+`browser_native_input_unverified`; all six readiness tests then passed, including
+wrong target/schema/policy and non-ready-state controls. Both public Native-host
+disabled-input guards and the existing Native-task selection regression pass.
+Formatting, strict workspace Clippy, policy wiring (11 cases), changed links,
+handoff documentation and the 44-page docs build pass. The existing docs
+lockfile-root warning remains. See the adjacent validation receipt. No Native
+input, original close retry, conversion or runtime installation was performed
+for these source gates.
