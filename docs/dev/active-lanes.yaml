@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: LOCAL-WORKER-STATUS-ROUTING
+    product_lane: PL-BUGFIX
+    objective: Keep supervisor worker status on the control plane when managed tasks exist
+    plan: docs/dev/maintenance/worker-status-routing.md
+    branch: fix/worker-status-routing
+    target: main
+    accountable_owner: ecochran76
+    work_items: [LOCAL-WORKER-STATUS-ROUTING]
+    plan_state: COMPLETED
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [P300-RECOVERY, P300-OPERATOR-DIAGNOSIS]
+    reconciled_overlaps: ["Separate clean primary checkout from origin/main; own status classification, regression and lane docs only; preserve both existing checkouts and installed runtime"]
+    validation_status: Exact-error RED then candidate GREEN; build, fmt, strict workspace Clippy, 11 policy cases and documentation checks pass
+    limitations: ["No installed-runtime, bank or messaging effects", "Existing adjacent service-status smoke calls an absent MCP tool; reproduced in unchanged debug and repaired CI binaries", "Retain primary for source review through 2026-11-08; integration and installed acceptance pending"]
+    updated_at: 2026-11-07
   - id: P300-OPERATOR-DIAGNOSIS
     product_lane: PL-BUGFIX
     objective: Reconcile publication differences internally while preserving valid work and uncertain operations

@@ -280,6 +280,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_viewer_lease_release"
             | "service_controller_lease_takeover"
             | "service_status"
+            | "worker_status"
             | "service_reconcile"
             | "service_browser_close"
             | "service_browser_repair"
