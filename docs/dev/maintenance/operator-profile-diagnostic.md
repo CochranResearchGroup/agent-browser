@@ -1,60 +1,68 @@
-# Advisory profile lock diagnosis
+# Reconcile valid browser work internally
 
 Product lane: PL-BUGFIX
-Parent: P300, ticket 530
+Work item: 558; P300/ticket530 is context
 Branch: fix/operator-profile-diagnostic
 Base: db8da1e3f1571b9750eb205dfeb0eba68b23f903
-State: COMPLETED (source qualification only)
+State: ACTIVE; source validated, preserving adoption pending
 
 ## Bounded outcome
 
-The legacy ServiceState profile diagnosis must not reject an operator-authorized
-workflow solely because a live Chrome singleton lock has no legacy browser join.
-Preserve the observation and lock; leave actual process binding, foreign custody
-and uncertain-effect checks in the execution path.
+An existing calendar task must continue when resident and durable session
+metadata diverge. Reconcile independent edits under the SQLite writer
+transaction instead of returning a host-wide publication veto. Current resource
+identity wins overlapping observations; private atomic receipts retain their
+differences. Never replay a browser effect to publish metadata.
 
-This source lane owns service_profile_diagnosis.rs and its documentation. The
-existing P300 recovery lane retains host publication, desktop allocation, shared
-runtime deployment and donor custody. The additional primary checkout was admitted
-after a clean inventory and remote refresh under the repository admission lock.
+Retain the earlier advisory repair for legacy singleton-lock diagnosis. Missing
+legacy process metadata does not prove a current browser absent or prohibit an
+operator-authorized workflow. Actual resource checks remain in execution.
+
+## Implementation and ownership
+
+This isolated lane owns diagnosis, session publication reconciliation, the
+related capacity distinction, tests and documentation. The canonical P300
+recovery checkout is preserved. Its owner retains donor/account/copy acceptance;
+no competing build or install is requested. Final program review/TDD remain0/0.
+
+Ordinary, launch and acknowledged-retirement publication reconcile inside their
+existing SQLite IMMEDIATE transaction, retaining current release/retirement
+checks. Conflict evidence stays in the private runtime database's append-only
+browser_session_reconciliation_receipts table; failed publication rolls back
+its receipt. Unknown operation records remain retained, including when a
+caller-selected request ID resembles an identity field.
+
+Known occupied or reserved capacity can justify separate bounded capacity for
+independent work. Failed new observations never trigger another acquisition or
+qualify an unknown desktop; an eligible positively observed peer can be reused.
 
 ## Acceptance and stop condition
 
-A real current-process singleton-lock fixture must first fail the nonblocking
-assertion, then pass with truthful processState=not_recorded, Ready state and
-continue_authorized_workflow recourse. Diagnosis must preserve state and the lock.
-All diagnosis regressions and applicable local formatting checks must pass.
+- The exact public-host publication regression fails before the fix, then
+  permits independent work while retaining both writers' state and the original
+  uncertain operation. Navigation and settled-close counts must not increase.
+- Current resource identity, archive bounds and atomic conflict receipts pass
+  focused regressions; actual unknown-process and conflicting-effect checks stay.
+- Local changed-surface tests, strict workspace Clippy, format and relevant
+  documentation gates pass. No hosted CI or other-platform claim is required.
+- Qualify a sealed normal checkpoint through preserving installation, retain
+  both coordinated existing browsers/desktops, and observe the original calendar
+  task through fresh MCP without replaying either uncertain request.
+- Stop when that bounded installed repair is accepted and ticket558 is closed.
 
-The installed live reproduction showed a blocked legacy diagnosis while ordinary
-commands on the exact existing browser subsequently succeeded. Native install
-doctor independently reported convergence and operatorJourneyReady. A later
-browser_session_publication_conflict recurred; this advisory fix does not claim
-to resolve that separate failure. No effect replay or shared runtime restart is
-in scope. Installation acceptance is separate from source completion.
+Formal release, broad reset, state-file repair, private-data export and calendar
+provider mutations are outside this repair. Parent530 and calendar acceptance
+remain separate. Normal checkpoint installation is authorized by AGENTS.md.
 
 ## Validation
 
-RED: focused occupied_lock_diagnostic_does_not_veto_authorized_workflow failed
-at the nonblocking-finding assertion, with zero compiler errors (0.01s test).
-Command: scripts/ci/rust-tests.sh --focused occupied_lock_diagnostic_does_not_veto_authorized_workflow
-through Cargo Signal and cargo-safe, using the existing shared target cache.
-GREEN: all six service_profile_acquisition::diagnosis::tests pass (133.98s
-build and run, zero compiler warnings/errors). The suite retains foreign-profile
-join rejection and stale-lock repair coverage.
-Private build evidence remains outside Git. Source checkpoint: 99c9716dca34b3321742cabb7ad0b0bbef0a5830, PR557.
-Formatting and strict workspace Clippy (-D warnings, 163.845s) pass. The docs
-site builds all44pages; policy wiring, changed documentation links, remote-view
-handoff guidance and git diff --check pass. The initial formatting check exposed
-layout differences; formatting was applied and the repeated check passed.
-Local WSL native checks replace hosted CI; no hosted matrix or macOS/Windows
-run is claimed. The repo skill is updated; global skill publication is excluded.
-Source qualification is complete. Installed acceptance and the separate runtime
-publication failure remain unqualified. Memory disposition: forbidden, no
-explicit persistent-memory update request; no Graphiti write attempted.
+[Source receipt](../notes/2026-11-07-publication-reconciliation-validation.json):
+exact RED5.29s; final25host/reconciliation and71changed-surface tests pass. The
+initial broader browser compartment passed403, failed6 and ignored11live cases.
+Its failures are preserved and resolved through the final selected checks; this
+is not reported as a fresh clean full-compartment run. Strict Clippy and format
+pass. Documentation build finalization and sealed adoption are next.
 
-The identified cause is the legacy diagnosis treating occupied_unproven or
-observation_failed lock evidence as blocking without a canonical runtime join.
-The repair retains the evidence as a warning and recommends continuation through
-actual exact-resource checks. It grants no authority to clear locks or replay
-an uncertain effect. No debug instrumentation was introduced.
-Hosted CI is excluded; no provider writes or production installation occurred.
+Private raw receipts retain the initial compiler mistakes, superseded refusal
+assertions, disproved first capacity hypothesis, intermediate92/95result and
+final corrected evidence. No debug instrumentation remains in product code.

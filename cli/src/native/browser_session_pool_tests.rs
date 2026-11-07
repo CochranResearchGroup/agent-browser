@@ -1202,7 +1202,7 @@ fn pool_demand_acquires_a_free_desktop_for_an_independent_browser() {
 }
 
 #[test]
-fn pool_demand_unknown_new_desktop_stops_before_another_acquisition() {
+fn pool_demand_unknown_new_desktop_reuses_healthy_peer_without_another_acquisition() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider {
         pool_maximum: Some(3),
@@ -1220,13 +1220,17 @@ fn pool_demand_unknown_new_desktop_stops_before_another_acquisition() {
         .occupied_desktops
         .insert(first.assignments[0].desktop_id.clone());
     provider.borrow_mut().fail_new_windows = true;
+    let continued = prepare_remote_view_session_pool(&mut adapter, &mut store, &pool).unwrap();
+    assert_eq!(continued.desktops.len(), 1);
     assert_eq!(
-        prepare_remote_view_session_pool(&mut adapter, &mut store, &pool)
-            .err()
-            .unwrap(),
-        "remote_view_runtime_assignment_unavailable"
+        continued.desktops[0].desktop.desktop_id,
+        first.assignments[0].desktop_id
     );
-    assert_eq!(provider.borrow().acquisitions.len(), 2);
+    assert_eq!(
+        provider.borrow().acquisitions.len(),
+        2,
+        "failed new observation must not acquire a third desktop"
+    );
 }
 
 #[test]
@@ -2418,7 +2422,7 @@ fn terminal_view_renewal_stops_after_one_replacement() {
 }
 
 #[test]
-fn completed_view_with_failed_publication_reuses_ledger_outcome_after_restart() {
+fn completed_view_reconciles_peer_publication_and_reuses_ledger_after_restart() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));
     let calls = Rc::new(Cell::new(0));
@@ -2428,7 +2432,8 @@ fn completed_view_with_failed_publication_reuses_ledger_outcome_after_restart() 
     })).unwrap().unwrap();
     let id = opened["browserSession"]["handoffId"].as_str().unwrap();
     provider.borrow_mut().competing_view_publication = true;
-    assert!(consumer.resolve_tab_handoff_view(id, 2000).is_err());
+    let issued = consumer.resolve_tab_handoff_view(id, 2000).unwrap();
+    assert_eq!(issued.presentation_state, "grant_issued");
     assert!(fixture
         .store(false)
         .load_session_state()
@@ -2438,7 +2443,7 @@ fn completed_view_with_failed_publication_reuses_ledger_outcome_after_restart() 
         .as_ref()
         .unwrap()
         .issuance
-        .is_none());
+        .is_some());
     drop(consumer);
     let mut restarted = host(&fixture, provider.clone(), calls.clone());
     let recovered = restarted.resolve_tab_handoff_view(id, 2001).unwrap();
@@ -8262,7 +8267,7 @@ fn completed_peer_retirement_does_not_poison_an_ordinary_host_command() {
 }
 
 #[test]
-fn unknown_peer_retirement_completion_still_refuses_an_ordinary_host_command() {
+fn unknown_peer_retirement_completion_does_not_veto_an_independent_task() {
     peer_retirement_publication_cases(true);
 }
 
@@ -8312,22 +8317,32 @@ fn peer_retirement_publication_cases(completion_unknown: bool) {
         let unknown = fixture.store(false).idle_retirement_records().unwrap();
         assert!(unknown[0].published_state_digest.is_some());
         assert!(unknown[0].completed.is_none());
-        let provider_operations = provider.borrow().operations.len();
-        let refused = consumer.handle_command(&serde_json::json!({
+        let continued = consumer.handle_command(&serde_json::json!({
             "action":"browser_session_open", "sessionName":"Bob", "profileId":"profile-b",
             "activityAtMs":300_103
         }));
-        assert_eq!(refused["error"], "browser_session_publication_conflict");
+        assert_eq!(
+            continued["success"], true,
+            "independent task must continue: {continued}"
+        );
         assert_eq!(
             calls.get(),
-            1,
-            "unknown completion cannot admit a new launch"
+            2,
+            "only the independent requested browser may launch"
         );
-        assert_eq!(provider.borrow().operations.len(), provider_operations);
+        let retained = fixture.store(false).idle_retirement_records().unwrap();
+        assert_eq!(retained.len(), 1);
+        assert_eq!(retained[0].intent, unknown[0].intent);
         assert_eq!(
-            fixture.store(false).idle_retirement_records().unwrap(),
-            unknown
+            std::fs::read_to_string(fixture.root.join("retirement-effect-count")).unwrap(),
+            "1",
+            "reconciliation must not repeat the settled original close"
         );
+        assert!(
+            retained[0].completed.is_some(),
+            "original owner readback must complete the original journal"
+        );
+        return;
     }
     peer.reap(300_104).unwrap();
     let completed = fixture.store(false).idle_retirement_records().unwrap();

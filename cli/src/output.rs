@@ -5999,6 +5999,11 @@ A Ready retained owner reconnects to the exact handoff target after identity che
 Recovery preserves its known route and display across pending or orphaned
 presentation when current-boot custody matches; physical ownership and visibility
 must still pass before the view is ready.
+Session publication reconciles resident and durable metadata internally without
+replaying browser effects. Current resource identity wins overlapping observations;
+private runtime receipts preserve their differences. Independent tasks continue.
+Known occupied or reserved desktops can justify separate bounded capacity;
+failed window observations never qualify a target or justify another acquisition.
 Legacy Chrome lock ownership diagnostics are advisory and cannot veto an authorized
 workflow. Continue through exact browser/process checks; actual execution failures
 retain their request evidence and must be inspected before any effect replay.

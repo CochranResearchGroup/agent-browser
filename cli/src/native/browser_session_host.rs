@@ -30,6 +30,8 @@ pub(crate) mod browser_mode_host;
 mod browser_native_host;
 #[path = "browser_operation_lookup.rs"]
 mod browser_operation_lookup;
+#[path = "browser_session_reconciliation.rs"]
+pub(crate) mod reconciliation;
 
 #[path = "workspace_browser_launch.rs"]
 pub(crate) mod workspace_browser_launch;
@@ -720,10 +722,9 @@ impl BrowserSessionPersistence for super::browser_session_store::BrowserSessionJ
         expected: &BrowserSessionState,
         state: &BrowserSessionState,
     ) -> Result<(), String> {
-        if self.load_session_state()? != *expected {
-            return Err("browser_session_publication_conflict".into());
-        }
-        self.save_session_state(state)
+        let current = self.load_session_state()?;
+        let (merged, _) = reconciliation::reconcile(expected, state, &current)?;
+        self.save_session_state(&merged)
     }
 
     fn load_or_import_profile_catalog(
@@ -2144,7 +2145,8 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
 
     /// Start a new ordinary command from current durable state. This is not an
     /// effect retry: keep the adapter and all of its original-operation journals.
-    /// Unpublished local state or launch/retirement work cannot be discarded.
+    /// Reconcile unpublished state through atomic publication; never retry an
+    /// original effect or discard its launch/retirement/operation evidence.
     fn refresh_before_ordinary_command(&mut self) -> Result<(), String> {
         let (current, catalog) = self.persistence.load_owner_snapshot()?;
         if current == self.persisted_state {
@@ -2164,7 +2166,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             || self.effects.pending_launch_intent().is_some()
             || !self.effects.pending_idle_retirement_ids().is_empty()
         {
-            return Err("browser_session_publication_conflict".into());
+            self.catalog = catalog;
+            self.commit_state()?;
+            return Ok(());
         }
         current.retention_policy.validate()?;
         self.catalog = catalog;
@@ -2174,9 +2178,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     }
 
     fn borrowed_retirement_manager(&mut self) -> Result<BrowserSessionManager<'_, E>, String> {
-        if self.persistence.load_session_state()? != self.persisted_state {
-            return Err("browser_session_publication_conflict".into());
-        }
+        self.refresh_before_ordinary_command()?;
         self.effects
             .begin_borrowed_retirement_operation(&self.persisted_state)?;
         Ok(BrowserSessionManager::new(
@@ -2188,9 +2190,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     }
 
     fn manager(&mut self) -> Result<BrowserSessionManager<'_, E>, String> {
-        if self.persistence.load_session_state()? != self.persisted_state {
-            return Err("browser_session_publication_conflict".into());
-        }
+        self.refresh_before_ordinary_command()?;
         self.effects.begin_operation(&self.persisted_state)?;
         Ok(BrowserSessionManager::new(
             &mut self.state,
@@ -4064,12 +4064,12 @@ mod tests {
         competing.next_session_sequence += 1;
         peer.compare_and_save_session_state(&initial, &competing)
             .unwrap();
-        assert!(host.commit_state().is_err());
-        assert_eq!(acknowledgements.get(), 0);
-        assert_eq!(peer.load_session_state().unwrap(), competing);
-        peer.compare_and_save_session_state(&competing, &initial)
-            .unwrap();
         host.commit_state().unwrap();
+        assert_eq!(
+            host.state.next_session_sequence,
+            competing.next_session_sequence
+        );
+        assert_eq!(peer.load_session_state().unwrap(), host.state);
         assert_eq!(acknowledgements.get(), 1);
         assert!(host.effects.pending_launch_intent().is_none());
         assert_eq!(host.persisted_state, host.state);
@@ -4646,7 +4646,7 @@ mod tests {
     }
 
     #[test]
-    fn ordinary_refresh_preserves_unpublished_navigation_after_peer_advances() {
+    fn ordinary_refresh_reconciles_unpublished_navigation_after_peer_advances() {
         let directory = TempDirectory::new();
         let legacy_path = directory.0.join("state.json");
         fs::write(
@@ -4685,7 +4685,39 @@ mod tests {
             "sessionName":"alice", "profileId":"work", "url":"https://synthetic.example/unknown",
             "activityAtMs":1_000}));
         assert_eq!(failed["error"], "synthetic_navigation_outcome_unknown");
+        let task = uncertain
+            .state()
+            .sessions
+            .values()
+            .find(|task| task.name == "alice")
+            .unwrap()
+            .clone();
+        let tab = &uncertain.state().tabs[task.current_tab_id.as_ref().unwrap()];
+        let operation = agent_browser_service_model::BrowserTaskOperation {
+            request_id: "original-uncertain-navigation".into(),
+            task_id: task.id.clone(),
+            profile_id: task.profile_id.clone(),
+            browser_id: task.browser_id.clone(),
+            tab_id: tab.id.clone(),
+            target_id: tab.target_id.clone(),
+            process_pid: uncertain.state().browsers[&task.browser_id].pid,
+            process_identity: None,
+            control_epoch: 0,
+            action: "navigate".into(),
+            fingerprint: "synthetic-original".into(),
+            state: agent_browser_service_model::BrowserTaskOperationState::Uncertain,
+            created_at_ms: 1000,
+            completed_at_ms: None,
+            evidence_references: Default::default(),
+        };
+        uncertain
+            .state
+            .task_operations
+            .entry(task.id)
+            .or_default()
+            .insert(operation.request_id.clone(), operation);
         let held = uncertain.state().clone();
+        assert!(!held.task_operations.is_empty());
         let mut peer = BrowserSessionHost::load(
             BrowserSessionSqliteStore::open(&directory.0).unwrap(),
             BrowserSessionEffectAdapter::new(FixtureRuntime {
@@ -4700,11 +4732,39 @@ mod tests {
         peer.open(OpenBrowserSession::exact_profile("bob", "work", 2_000))
             .unwrap();
         let durable = peer.state().clone();
-        let rejected = uncertain
+        let continued = uncertain
             .handle_command(&serde_json::json!({"action":"browser_session_open",
             "sessionName":"charlie", "profileId":"work", "activityAtMs":3_000}));
-        assert_eq!(rejected["error"], "browser_session_publication_conflict");
-        assert_eq!(uncertain.state(), &held);
+        assert_eq!(
+            continued["success"], true,
+            "valid independent work must continue: {continued}"
+        );
+        for (id, operation) in &held.task_operations {
+            assert_eq!(uncertain.state().task_operations.get(id), Some(operation));
+        }
+        for (id, session) in &durable.sessions {
+            if session.name != "alice" {
+                assert_eq!(uncertain.state().sessions.get(id), Some(session));
+            }
+        }
+        let alice = held
+            .sessions
+            .values()
+            .find(|session| session.name == "alice")
+            .unwrap();
+        assert_eq!(
+            uncertain.state().sessions[&alice.id].current_tab_id,
+            alice.current_tab_id
+        );
+        assert_eq!(
+            uncertain.state().tabs[alice.current_tab_id.as_ref().unwrap()],
+            held.tabs[alice.current_tab_id.as_ref().unwrap()]
+        );
+        assert!(uncertain
+            .state()
+            .sessions
+            .values()
+            .any(|session| session.name == "charlie"));
         let status =
             uncertain.handle_command(&serde_json::json!({"action":"browser_session_status"}));
         assert_eq!(
@@ -4721,7 +4781,7 @@ mod tests {
                 .unwrap()
                 .load_session_state()
                 .unwrap(),
-            durable
+            *uncertain.state()
         );
     }
 
@@ -4873,20 +4933,16 @@ mod tests {
         assert!(restarted.state().browsers.is_empty());
 
         // A different persistence owner advances state after this host loaded it.
-        // Refuse the next manager operation before it can launch a browser.
+        // Reconcile the peer advance before the next manager operation.
         let peer = BrowserSessionJsonStore::new(&directory.0);
         let mut newer = peer.load_session_state().unwrap();
         newer.next_session_sequence += 1;
         peer.save_session_state(&newer).unwrap();
-        let before = restarted.state().clone();
-        assert_eq!(
-            restarted
-                .open(OpenBrowserSession::exact_profile("alice", "work", 4_000))
-                .unwrap_err(),
-            "browser_session_publication_conflict"
-        );
-        assert_eq!(*restarted.state(), before);
-        assert_eq!(peer.load_session_state().unwrap(), newer);
+        restarted
+            .open(OpenBrowserSession::exact_profile("alice", "work", 4_000))
+            .unwrap();
+        assert!(restarted.state().next_session_sequence >= newer.next_session_sequence);
+        assert_eq!(peer.load_session_state().unwrap(), *restarted.state());
     }
 }
 

@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "work_item": "CochranResearchGroup/agent-browser#558",
+  "pull_request": 557,
+  "source_base": "db8da1e3f1571b9750eb205dfeb0eba68b23f903",
+  "tier": "presubmit_selected_local",
+  "red": {
+    "test": "ordinary_refresh_reconciles_unpublished_navigation_after_peer_advances",
+    "observed_error": "browser_session_publication_conflict",
+    "test_seconds": 5.29
+  },
+  "initial_browser_compartment": {
+    "passed": 403,
+    "failed": 6,
+    "ignored_live": 11,
+    "total_seconds": 1348.452,
+    "status": "superseded_before_final_repairs"
+  },
+  "final_validation": {
+    "host_and_reconciliation": {
+      "passed": 25,
+      "failed": 0,
+      "test_seconds": 53.69
+    },
+    "changed_surface": {
+      "passed": 71,
+      "failed": 0,
+      "test_seconds": 138.74,
+      "pinned_test_binary_sha256": "2049dbbd6f7306de46f803b2e1b494b2b72216f0e9d10115a213297d248b8fe2"
+    },
+    "strict_workspace_clippy": "passed_D_warnings",
+    "format": "passed",
+    "documentation_links": "passed",
+    "policy_wiring": "passed",
+    "handoff_guidance": "passed"
+  },
+  "impact_rationale": "Retain unchanged earlier coverage; final selection revalidates every failed criterion and changed publication, archive, custody, retention and capacity branch. This is not a fresh clean run of the full browser compartment.",
+  "initial_failure_resolutions": [
+    "Peer launch publication now reconciles; the readback fixture uses the resulting actual snapshot.",
+    "Competing publication proceeds once; unknown process outcomes remain unreplayed.",
+    "Known completed view survives publication reconciliation and restart without reissuing.",
+    "Known reserved capacity permits separate bounded demand while retaining the original reservation.",
+    "Lost peer completion is reconciled from original owner evidence before independent work.",
+    "Stale history publication preserves newer metadata and bounded archival."
+  ],
+  "additional_invariants": [
+    "Caller request IDs cannot erase independent uncertain-operation records.",
+    "Overlapping physical identity is never spliced with stale fields.",
+    "Conflict evidence rolls back atomically with failed publication.",
+    "Unknown new capacity cannot trigger another acquisition; only a verified peer may be reused."
+  ],
+  "source_sha256": {
+    "cli/src/native/browser_session_host.rs": "a0ff5f2fa8ce729601d0112ef012aa4247f0110d27b24edfd36c80de336f29dd",
+    "cli/src/native/browser_session_store.rs": "264b4389a46926a9d9b36cb374fa00da796ac7db47714eca7029fcc1f3fcafd7",
+    "cli/src/native/browser_session_reconciliation.rs": "fafeb44d81d58d799068b89f9c4c6f644c29d710755c6ca94b325f5b4572532a",
+    "cli/src/native/browser_launch_custody_store.rs": "dc10a6aacca24c4b34122b5cbc2879a6321ca65509231b9e143a6e84d5805751",
+    "cli/src/native/browser_idle_retirement_store.rs": "6aac4e447116bd97145cd276158682db0f24c13be319e6e8a4360110e501357a",
+    "crates/agent-browser-service-model/src/remote_view_session_pool.rs": "aee76ec01d93f077528fa1d086e2a470e7e70b55613a6e2650e41737dce02ca1"
+  },
+  "environment": {
+    "platform": "Linux/WSL",
+    "hosted_ci": "excluded_by_operator_policy",
+    "macos_windows_matrix": "not_run",
+    "provider_writes": 0,
+    "production_installation": "pending_sealed_preserving_adoption"
+  },
+  "final_broad_review_count": 0,
+  "final_findings_tdd_count": 0
+}

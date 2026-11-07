@@ -1086,12 +1086,36 @@ fn consumer_shared_profile_tabs_route_independently_and_close_preserves_peer() {
 }
 
 #[test]
-fn consumer_host_failed_launch_or_publication_retains_claim_without_restart_retry() {
+fn consumer_host_reconciles_publication_and_retains_unknown_launch_without_retry() {
     for mode in [Mode::UnknownProcess, Mode::CompetingPublication] {
         let fixture = Fixture::new();
         let calls = Rc::new(Cell::new(0));
         let requests = Rc::new(Cell::new(0));
         let mut host = fixture.host(mode, calls.clone(), requests.clone());
+        if matches!(mode, Mode::CompetingPublication) {
+            let opened = host
+                .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+                .unwrap();
+            let again = host
+                .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 101))
+                .unwrap();
+            assert_eq!(opened.session_id, again.session_id);
+            assert_eq!(
+                calls.get(),
+                1,
+                "metadata reconciliation cannot launch again"
+            );
+            let mut peer = fixture.store(false);
+            assert!(peer.unpublished_launch_records().unwrap().is_empty());
+            drop(host);
+            let mut restarted = fixture.host(Mode::Success, calls.clone(), requests.clone());
+            let resumed = restarted
+                .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 102))
+                .unwrap();
+            assert_eq!(resumed.session_id, opened.session_id);
+            assert_eq!(calls.get(), 1, "restart must retain the original launch");
+            continue;
+        }
         assert!(host
             .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
             .is_err());
