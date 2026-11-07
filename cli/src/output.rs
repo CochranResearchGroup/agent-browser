@@ -7456,7 +7456,7 @@ Workflow tools (16):
   browser_fill          Fill an input; native dates use YYYY-MM-DD
   browser_screenshot    Capture current page
   browser_tab           Task tabs; reuse tabKey for new
-  browser_handoff       Ready HTTPS Remote View link
+  browser_handoff       Interactive human assistance; interaction=view for passive viewing
   browser_continue      Observe task after human input
   browser_close         Close task; preserve peers/profile/borrowed process
   browser_control       Explicit takeover/return; view never pauses

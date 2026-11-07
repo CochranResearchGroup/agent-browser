@@ -21,6 +21,12 @@ impl ModeRequest {
             && self.generation > 0
             && if matches!(self.choice.as_str(), "inspect" | "inspect_control") {
                 self.operation_id.is_none() && self.mode.is_none() && self.owner_confirmed.is_none()
+            } else if self.choice == "return_handoff" {
+                self.operation_id
+                    .as_ref()
+                    .is_some_and(|id| !id.is_empty() && id.len() <= 128)
+                    && self.mode.is_none()
+                    && self.owner_confirmed.is_none()
             } else {
                 matches!(
                     self.choice.as_str(),
@@ -124,8 +130,14 @@ pub(super) async fn handle(
 async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
     let handoff = id.to_owned();
     let slot = request.slot;
-    let inspect = matches!(request.choice.as_str(), "inspect" | "inspect_control");
+    let inspect = matches!(
+        request.choice.as_str(),
+        "inspect" | "inspect_control" | "return_handoff"
+    );
     let generation = request.generation;
+    let returning = (request.choice == "return_handoff")
+        .then(|| request.operation_id.clone())
+        .flatten();
     let (target, mode, control_target) = tokio::task::spawn_blocking(move || {
         let store = BrowserSessionSqliteStore::open_read_only(
             &BrowserSessionSqliteStore::default_sqlite_path()?,
@@ -202,7 +214,7 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
                         && observation.target == binding.provider_target
                 })
         });
-        let control_target = if inspect {
+        let mut control_target = if inspect {
             native_control_target(
                 mode.as_str().unwrap_or("unverified"),
                 generation,
@@ -214,6 +226,19 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
         } else {
             None
         };
+        if let Some(proof) = control_target.as_mut() {
+            use crate::native::browser_host_control as control;
+            if let Some(request) = &returning {
+                control::return_handoff(&target.browser.id, &handoff, &digest, request)?;
+            }
+            proof["handoffIntent"] = json!(control::handoff_intent(
+                &target.browser.id,
+                &handoff,
+                &digest
+            )?);
+        } else if returning.is_some() {
+            return Err("browser_handoff_target_unconfirmed".into());
+        }
         Ok::<_, String>((target, mode, control_target))
     })
     .await
@@ -330,7 +355,7 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
                             .native_observation
                             .as_ref()
                             .filter(|b| b.target_digest == digest);
-                        let observed = native_control_target(
+                        let mut observed = native_control_target(
                             mode["mode"].as_str().unwrap_or("unverified"),
                             generation,
                             &digest,
@@ -338,6 +363,11 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
                             current_original.as_ref(),
                             binding.map(|b| &b.provider_target),
                         );
+                        if let Some(proof) = observed.as_mut() {
+                            proof["handoffIntent"] = json!(crate::native::browser_host_control::handoff_intent(
+                                &current_target.browser.id, &handoff, &digest
+                            )?);
+                        }
                         Ok(observed.filter(|observed| observed == &expected))
                     })
                     .await
@@ -369,7 +399,7 @@ async fn finish_current_inspection(
     control_target: Option<Value>,
     continuation: impl std::future::Future<Output = Result<Value, String>>,
 ) -> Result<Value, String> {
-    if choice == "inspect_control" {
+    if matches!(choice, "inspect_control" | "return_handoff") {
         return Ok(json!({"success":true,"data":{
             "schemaVersion":"agent-browser.handoff-mode.v1",
             "mode":mode,"operations":[],"nativeControlTarget":control_target

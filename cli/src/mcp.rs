@@ -565,8 +565,8 @@ fn service_operating_guide() -> Value {
         "workflow":[
             {"tool":"browser_open","rule":"Supply profile, profileMode, taskKey, URL, serviceName, agentName and taskName. For app attachment supply hostBinding and attachment instead of URL; preserve app lifecycle. Reuse taskKey when retrying."},
             {"tool":"browser_snapshot","rule":"Use the returned taskId for page actions and task-scoped tabs."},
-            {"tool":"browser_handoff","rule":"Share the returned ready HTTPS handoffUrl. Remote View owns the native viewer."},
-            {"tool":"browser_continue","rule":"Continue with the same taskId after human input."},
+            {"tool":"browser_handoff","rule":"Human assistance defaults interactive and pauses automation. Use interaction=view for passive viewing. Share the returned ready HTTPS handoffUrl; the Native viewer confirms input readiness."},
+            {"tool":"browser_continue","rule":"Give control back in the Native viewer, then continue with the same taskId after human input."},
             {"tool":"browser_reconnect","rule":"Explicit app disconnect/reconnect/rebind/loss policy; preserve control and never replay uncertain website effects."},
             {"tool":"browser_policy","rule":"Optional app defaults and task rules; unrestricted operations need no grant. Overrides name one task/action/request."},
             {"tool":"browser_artifact","rule":"Write only to an authorized local handle; publication remains explicit."},

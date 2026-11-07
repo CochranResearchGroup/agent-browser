@@ -18,6 +18,10 @@ use sha2::{Digest, Sha256};
 
 use super::browser_session_store::BrowserSessionSqliteStore;
 
+#[path = "browser_human_handoff.rs"]
+mod human_handoff;
+pub(crate) use human_handoff::{begin_handoff, handoff_intent, prepare_handoff, return_handoff};
+
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct Control {
@@ -459,14 +463,7 @@ pub(crate) fn check_state(
             || command["profileId"].as_str() == Some(task.profile_id.as_str())
             || command["runtimeProfile"].as_str() == Some(task.profile_id.as_str())
     }) {
-        if state.host_bindings.keys().any(|id| {
-            state
-                .sessions
-                .get(id)
-                .is_some_and(|owned| owned.browser_id == task.browser_id)
-        }) {
-            check(&task.browser_id, action)?;
-        }
+        check(&task.browser_id, action)?;
     }
     Ok(())
 }
@@ -716,14 +713,6 @@ pub(crate) fn admit_command(
     let Some(task) = browser else {
         return Ok(None);
     };
-    if !state.host_bindings.keys().any(|id| {
-        state
-            .sessions
-            .get(id)
-            .is_some_and(|peer| peer.browser_id == task.browser_id)
-    }) {
-        return Ok(None);
-    }
     if check_only {
         check(
             &task.browser_id,

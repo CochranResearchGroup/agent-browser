@@ -61,13 +61,13 @@ pub(super) fn tools() -> Vec<Value> {
         }),
         json!({
             "name":"browser_handoff", "title":"Hand a browser task to a person",
-            "description":"Focus task; return durable authenticated HTTPS Remote View link; preserve task/profile/page.",
+            "description":"Hand the current task to a person for interactive assistance, pausing automation. Use interaction=view for passive viewing. Preserve task/profile/page.",
             "inputSchema":{"type":"object","additionalProperties":false,
-                "properties":{"taskId":{"type":"string"}},"required":["taskId"]}
+                "properties":{"taskId":{"type":"string"},"interaction":{"enum":["interactive","view"],"default":"interactive"}},"required":["taskId"]}
         }),
         json!({
             "name":"browser_continue", "title":"Continue a browser task",
-            "description":"Read task identity/URL without navigation. Human takeover requires browser_control return before mutation; continuation cannot return control.",
+            "description":"Read task identity/URL without navigation. Human control must be returned in the viewer or browser_control before automation; continuation cannot return control.",
             "inputSchema":{"type":"object","additionalProperties":false,
                 "properties":{"taskId":{"type":"string"}},"required":["taskId"]}
         }),
@@ -798,6 +798,11 @@ pub(super) fn continue_task(
 /// provider route or a caller-supplied URL. Remote View retains viewer ownership.
 pub(super) fn handoff(arguments: &Value, transport_session: &str) -> Result<Value, JsonRpcError> {
     let task_id = required_string_argument(arguments, "taskId")?;
+    let interaction = optional_string_argument(arguments, "interaction")?.unwrap_or("interactive");
+    if !matches!(interaction, "interactive" | "view") {
+        return Err(issue("browser_handoff_interaction_invalid"));
+    }
+    use crate::native::browser_host_control as control;
     let path = BrowserSessionSqliteStore::default_sqlite_path().map_err(issue)?;
     let store = BrowserSessionSqliteStore::open_read_only(&path).map_err(issue)?;
     let before = store.load_session_state().map_err(issue)?;
@@ -817,35 +822,39 @@ pub(super) fn handoff(arguments: &Value, transport_session: &str) -> Result<Valu
     let session_name = task_session(task_id)?;
     // A harmless current-URL read retains the task's handoff through its existing
     // owner. It neither navigates the page nor issues a temporary viewer grant.
-    execute(
-        json!({"id":uuid::Uuid::new_v4().to_string(),"action":"url",
+    if !before.sessions.get(task_id).is_some_and(|task| {
+        control::metadata(&task.browser_id).is_ok_and(|value| value["owner"] == "human")
+    }) {
+        execute(
+            json!({"id":uuid::Uuid::new_v4().to_string(),"action":"url",
         "sessionName":session_name,"sessionId":task_id}),
-        transport_session,
-    )?;
+            transport_session,
+        )?;
+    }
     let path = BrowserSessionSqliteStore::default_sqlite_path().map_err(issue)?;
     let store = BrowserSessionSqliteStore::open_read_only(&path).map_err(issue)?;
     let state = store.load_session_state().map_err(issue)?;
-    let task = state
-        .sessions
-        .get(task_id)
-        .ok_or_else(|| issue("browser_task_not_found_after_handoff"))?;
-    let tab_id = task
-        .current_tab_id
-        .as_deref()
-        .ok_or_else(|| issue("browser_task_current_tab_missing"))?;
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|_| issue("remote_view_clock_invalid"))?
         .as_millis() as u64;
-    let retained = state
-        .remote_view_tab_handoffs
-        .values()
-        .find(|link| {
-            link.session_id == task_id
-                && link.tab_id == tab_id
-                && link.check_link_at(now_ms).is_ok()
-        })
-        .ok_or_else(|| issue("remote_view_tab_handoff_missing"))?;
+    let retained = control::prepare_handoff(&state, task_id, interaction, now_ms).map_err(issue)?;
+    if interaction == "interactive" {
+        let current = BrowserSessionSqliteStore::open_read_only(&path)
+            .map_err(issue)?
+            .load_session_state()
+            .map_err(issue)?;
+        let target =
+            agent_browser_service_model::resolve_remote_view_tab_handoff(&current, &retained.id)
+                .map_err(issue)?;
+        execute(
+            json!({"id":uuid::Uuid::new_v4().to_string(),
+            "action":"service_remote_view_handoff_resolve", "handoffId":retained.id,
+            "handoffOperation":"prepare_native_use", "expectedTabId":target.tab.id,
+            "expectedTargetId":target.tab.target_id}),
+            transport_session,
+        )?;
+    }
     let presentation = execute(
         json!({"id":uuid::Uuid::new_v4().to_string(),
         "action":"service_remote_view_handoff_resolve","handoffId":retained.id,
@@ -854,6 +863,30 @@ pub(super) fn handoff(arguments: &Value, transport_session: &str) -> Result<Valu
     )?;
     if presentation["operatorVisible"]["state"] != "ready" {
         return Err(issue("browser_handoff_presentation_pending"));
+    }
+    if interaction == "interactive" {
+        let current = BrowserSessionSqliteStore::open_read_only(&path)
+            .map_err(issue)?
+            .load_session_state()
+            .map_err(issue)?;
+        let target =
+            agent_browser_service_model::resolve_remote_view_tab_handoff(&current, &retained.id)
+                .map_err(issue)?;
+        let digest =
+            agent_browser_service_model::remote_view_native_target_digest(&retained.id, &target)
+                .map_err(issue)?;
+        if current.host_bindings.get(task_id) != hosted.as_ref()
+            || !current
+                .remote_view_tab_handoffs
+                .get(&retained.id)
+                .and_then(|link| link.native_observation.as_ref())
+                .is_some_and(|binding| {
+                    binding.target_digest == digest && binding.observation.is_some()
+                })
+        {
+            return Err(issue("browser_handoff_target_changed_before_pause"));
+        }
+        control::begin_handoff(&target.browser.id, &retained.id, &digest).map_err(issue)?;
     }
     let handoff_url = if let Some(binding) = &hosted {
         if state.host_bindings.get(task_id) != Some(binding) {
@@ -868,12 +901,20 @@ pub(super) fn handoff(arguments: &Value, transport_session: &str) -> Result<Valu
             .map_err(|_| issue("remote_view_handoff_url_invalid"))?
             .to_string()
     };
+    let controller = control::metadata(
+        &state
+            .sessions
+            .get(task_id)
+            .ok_or_else(|| issue("browser_task_not_found_after_handoff"))?
+            .browser_id,
+    )
+    .map_err(issue)?;
     Ok(super::tool_response_from_payload(
         "browser_handoff",
         transport_session,
         json!({}),
         json!({"taskId":task_id,"handoffId":retained.id,"handoffUrl":handoff_url.as_str(),
-            "operatorVisible":presentation["operatorVisible"]}),
+            "operatorVisible":presentation["operatorVisible"],"interaction":{"intent":interaction,"automationPaused":controller["owner"]=="human","cooperativeOnly":true,"state":if interaction=="interactive" {"awaiting_recipient"} else {"view"}}}),
         false,
     ))
 }
@@ -969,6 +1010,23 @@ pub(super) fn tab(arguments: &Value, transport_session: &str) -> Result<Value, J
 #[cfg(test)]
 mod context_tests {
     use super::*;
+
+    #[test]
+    fn handoff_interaction_is_explicit_and_defaults_to_human_assistance() {
+        let tool = tools()
+            .into_iter()
+            .find(|tool| tool["name"] == "browser_handoff")
+            .unwrap();
+        assert_eq!(
+            tool["inputSchema"]["properties"]["interaction"]["default"],
+            "interactive"
+        );
+        assert_eq!(
+            tool["inputSchema"]["properties"]["interaction"]["enum"],
+            json!(["interactive", "view"])
+        );
+        assert!(handoff(&json!({"taskId":"task", "interaction":"unknown"}), "unused").is_err());
+    }
 
     #[test]
     fn manual_login_rejects_cdp_attachment_before_profile_or_transport_effects() {
