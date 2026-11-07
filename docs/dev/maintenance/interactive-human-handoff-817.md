@@ -1,7 +1,7 @@
 # Interactive human assistance
 
-State: ACTIVE
-Consolidation: required
+State: COMPLETED
+Consolidation: completed
 Product lane: PL-BUGFIX
 Owner: ecochran76
 Branch: fix/interactive-human-handoff
@@ -71,3 +71,36 @@ Supplemental lint also caught the new module placing its test module before
 a production helper. The test module is now at the end, with function bodies
 unchanged. Remaining supplemental diagnostics are on unchanged source lines;
 the retained private origin map separates them from introduced findings.
+
+## Installed outcome
+
+Completed through PR573, merged at add0cf3a89f174879372bb39e77ea0b59b5118a4,
+with consumer Remote View PR818 at f39e4c4. Combined source ad059420f passes41
+focused tests, required workspace strict Clippy and formatting. The Native
+integration fixture passes29 tests with its single-thread environment convention;
+an earlier parallel environment race is retained as a failed sample.
+
+The clean merged source produced a sealed `production_shaped` artifact through
+the maintained packager. Its exact bytes pass the provider-free candidate kernel
+and real stdio MCP/Chrome/private callback handoff workflow, with synthetic Native
+transport and zero fixture process residue. Normal preserving installation is
+complete and the installed executable hash matches the seal. Fresh OS readbacks
+preserve the original Native processes; no reset or unrelated repair was used.
+
+Actual Cooper-authenticated Native acceptance proves initial interaction without
+confirmation, reconnect, cooperative automation denial while handed off, confirmed
+return and same task/browser/profile/tab. Physical Shift input and the installed
+text helper preserve exactly `Original Aa$4ZzBb$4Cc`; automation then resumes.
+All owned acceptance tasks closed. Initial Playwright synthetic typing samples
+are retained: that method emitted capitals and `$` without Shift events, so the
+final human keyboard test sends physical modifiers and independently uses the
+product helper. No source change was needed for that fixture correction.
+
+Live acceptance uses the existing configured administrator; authorized non-admin
+first input is covered by companion gateway/browser fixtures. No additional grant
+was created. Native readiness PR576 is preserved; its separate provider/account
+work is not claimed complete here. Exact runtime identities, artifacts, process
+census, rollback data and all attempts remain outside Git under operator
+diagnostics `interactive-handoff-817`. Source refs and artifact worktrees are
+retained intentionally. See the companion Remote View acceptance note dated
+2026-11-07 for the coordinated consumer rollout and evidence boundaries.
