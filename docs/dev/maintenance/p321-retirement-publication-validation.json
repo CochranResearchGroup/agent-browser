@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "work_item": 570,
+  "tested_base": "0b9575e035f06535e8e3ab9ee9c5a699709ad998",
+  "red": {
+    "test": "requested_profile_recovers_its_settled_unpublished_retirement_after_scope_ended",
+    "error": "remote_view_session_launch_readback_required"
+  },
+  "green": {
+    "cli_retirement_passed": 72,
+    "cli_retirement_ignored": 1,
+    "service_model_passed": 416,
+    "warnings": 0
+  },
+  "quality": {
+    "format": "passed",
+    "strict_workspace_clippy": "passed"
+  },
+  "documentation": {
+    "policy_cases": 11,
+    "links": "passed",
+    "handoff_docs": "passed",
+    "build": "passed44pages; existing lockfile-root warning"
+  },
+  "commands": [
+    "scripts/ci/rust-tests.sh --focused retirement",
+    "scripts/ci/cargo-safe.sh test --manifest-path Cargo.toml -p agent-browser-service-model -- --test-threads=1",
+    "scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check",
+    "scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings",
+    "pnpm test:policy-wiring",
+    "pnpm test:documentation-links -- --base 0b9575e035f06535e8e3ab9ee9c5a699709ad998",
+    "pnpm test:remote-view-handoff-docs",
+    "pnpm --dir docs build"
+  ],
+  "rust_sha256": {
+    "crates/agent-browser-service-model/src/remote_view_session_effects.rs": "a45fd7092ec9fb3e5f4d92c000aff2cf240427056f5e0698d835174593cded5f",
+    "cli/src/native/browser_session_pool_tests.rs": "9328e3831d5200ddd9c860030deb54eb2587c54eab3e8dc5451bbb15f1b413b5",
+    "cli/src/output.rs": "71a399a35063c03ec28322b6099975ad79c1cba666e8c6c043f4a89aa44fcb45"
+  },
+  "runtime_effects": false,
+  "installed": false,
+  "p300_final_review": 0,
+  "p300_final_tdd": 0,
+  "limitations": [
+    "Hosted CI disabled by operator policy",
+    "Production preserving installation and actual profile continuation remain separate gates",
+    "No reset, manual runtime edit, lock removal or private-input replay"
+  ]
+}

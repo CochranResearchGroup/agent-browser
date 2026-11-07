@@ -1,6 +1,7 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+<<<<<<< HEAD
   - id: HUMAN-HANDOFF-571
     product_lane: PL-BUGFIX
     objective: Open explicit human assistance interactive with coordinated automation custody
@@ -16,6 +17,23 @@ lanes:
     reconciled_overlaps: ["Isolated primary; preserve canonical dirty retirement-publication work and retained peers; no shared runtime effects"]
     validation_status: Viewer red reproduced and first browser slice green; cross-repository custody validation pending
     limitations: ["No installed or live acceptance claimed"]
+=======
+  - id: P321-RETIREMENT-570
+    product_lane: PL-BUGFIX
+    objective: Finish the requested profiles settled retirement publication without repeating close
+    plan: docs/dev/maintenance/p321-retirement-publication.md
+    branch: fix/p321-retirement-publication
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#570]
+    plan_state: ACTIVE
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [P321-OWNER-567]
+    overlaps: [P300-RECOVERY, IDLE-ACTIVITY-562]
+    reconciled_overlaps: ["Reuse current owning checkout after567 source integration; one writer; Mailroot owns provider work; no competing production build or reset; preserve interview patch"]
+    validation_status: Exact-code RED then72 CLI retirement and416 model tests passed; fmt strict workspace Clippy and docs passed; source qualified
+    limitations: ["No unrelated retained-task changes or private-input replay", "No reset, state clearing or lock removal", "Installed workflow qualification remains separate"]
+>>>>>>> origin/main
     updated_at: 2026-11-07
   - id: P321-OWNER-567
     product_lane: PL-BUGFIX
@@ -25,8 +43,8 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#567]
-    plan_state: ACTIVE
-    custody_state: ACTIVE_WORKTREE
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
     dependencies: [IDLE-ACTIVITY-562]
     overlaps: [IDLE-ACTIVITY-562, P300-RECOVERY]
     reconciled_overlaps: ["Reuse canonical owning checkout; one source/build writer; Mailroot owns provider work; retention interview patch preserved privately"]

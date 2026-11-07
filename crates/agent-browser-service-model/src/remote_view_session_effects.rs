@@ -483,6 +483,123 @@ impl<
         self.update_retirement(&record, next)
     }
 
+    /// Rejoin original Native custody. Startup retains its existing eligibility;
+    /// an explicit profile request may additionally publish settled ended scopes.
+    fn reconcile_native_retirements(
+        &mut self,
+        expected: &BrowserSessionState,
+        requested_profile: Option<&str>,
+    ) -> Result<(), String> {
+        // Recover exact native preparation before attempting any new effect.
+        // A known prepared operation with no admitted effects can publish an
+        // unchanged state atomically. That publication fences a delayed actor's
+        // future effect admission before native exclusion is completed.
+        let reconcilable = self
+            .retirements
+            .values()
+            .filter(|record| match requested_profile {
+                Some(profile) => {
+                    // A request may finish only its own proven settled scope.
+                    // No current browser identity or unresolved effect is bypassed.
+                    record
+                        .intent
+                        .scopes
+                        .iter()
+                        .all(|scope| scope.browser.profile_id == profile)
+                        && record.published_state_digest.is_none()
+                        && record.has_effect_attempts()
+                        && (**record).clone().record_publication(expected).is_ok()
+                }
+                None => {
+                    record.published_state_digest.is_some()
+                        || (record.preparation_started() && !record.has_effect_attempts())
+                }
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        for original in reconcilable {
+            let Ok(observed) = self
+                .adapter
+                .reconcile_idle_retirement(&original.intent.provider, original.prepared.as_ref())
+            else {
+                continue;
+            };
+            let mut record = self
+                .store
+                .idle_retirement_records()
+                .map_err(|_| "browser_session_idle_custody_unavailable")?
+                .into_iter()
+                .find(|record| record.intent == original.intent)
+                .ok_or("browser_session_idle_readback_required")?;
+            self.retirements
+                .insert(record.intent.id.clone(), record.clone());
+            if record.is_terminal() {
+                continue;
+            }
+            if record.published_state_digest.is_none() {
+                let publishable = if record.has_effect_attempts() {
+                    requested_profile.is_some()
+                        && record.clone().record_publication(expected).is_ok()
+                        && matches!(
+                            observed.state,
+                            RemoteViewIdleRetirementReceiptState::Prepared
+                                | RemoteViewIdleRetirementReceiptState::Completed
+                        )
+                } else {
+                    observed.state == RemoteViewIdleRetirementReceiptState::Prepared
+                };
+                if !publishable {
+                    continue;
+                }
+                if record.prepared.is_none() {
+                    let mut next = record.clone();
+                    next.record_prepared(observed.clone())
+                        .map_err(|_| "browser_session_idle_readback_required")?;
+                    match self.store.update_idle_retirement(&record, &next) {
+                        Ok(()) => record = next,
+                        Err(BrowserIdleRetirementStoreError::Conflict) => continue,
+                        Err(_) => return Err("browser_session_idle_custody_unavailable".into()),
+                    }
+                }
+                match self.store.publish_idle_retirement_state(
+                    expected,
+                    expected,
+                    std::slice::from_ref(&record.intent.id),
+                ) {
+                    Ok(()) => (),
+                    Err(BrowserIdleRetirementStoreError::Conflict) => continue,
+                    Err(_) => return Err("browser_session_idle_custody_unavailable".into()),
+                }
+                record = self
+                    .store
+                    .idle_retirement_records()
+                    .map_err(|_| "browser_session_idle_custody_unavailable")?
+                    .into_iter()
+                    .find(|current| current.intent == record.intent)
+                    .ok_or("browser_session_idle_readback_required")?;
+            }
+            let completed = if observed.state == RemoteViewIdleRetirementReceiptState::Completed {
+                Ok(observed)
+            } else {
+                self.adapter.complete_idle_retirement(
+                    &record.intent.provider,
+                    record
+                        .prepared
+                        .as_ref()
+                        .ok_or("browser_session_idle_readback_required")?,
+                    true,
+                )
+            };
+            if let Ok(completed) = completed {
+                let mut next = record.clone();
+                next.record_completed(completed)
+                    .map_err(|_| "browser_session_idle_readback_required")?;
+                self.update_retirement(&record, next)?;
+            }
+        }
+        Ok(())
+    }
+
     fn begin_operation_scope(
         &mut self,
         expected: &BrowserSessionState,
@@ -548,91 +665,7 @@ impl<
             .map(|record| (record.intent.id.clone(), record))
             .collect();
         if reconcile_native {
-            // Recover exact native preparation before attempting any new effect.
-            // A known prepared operation with no admitted effects can publish an
-            // unchanged state atomically. That publication fences a delayed actor's
-            // future effect admission before native exclusion is completed.
-            let reconcilable = self
-                .retirements
-                .values()
-                .filter(|record| {
-                    record.published_state_digest.is_some()
-                        || (record.preparation_started() && !record.has_effect_attempts())
-                })
-                .cloned()
-                .collect::<Vec<_>>();
-            for original in reconcilable {
-                let Ok(observed) = self.adapter.reconcile_idle_retirement(
-                    &original.intent.provider,
-                    original.prepared.as_ref(),
-                ) else {
-                    continue;
-                };
-                let mut record = self
-                    .store
-                    .idle_retirement_records()
-                    .map_err(|_| "browser_session_idle_custody_unavailable")?
-                    .into_iter()
-                    .find(|record| record.intent == original.intent)
-                    .ok_or("browser_session_idle_readback_required")?;
-                self.retirements
-                    .insert(record.intent.id.clone(), record.clone());
-                if record.is_terminal() {
-                    continue;
-                }
-                if record.published_state_digest.is_none() {
-                    if record.has_effect_attempts()
-                        || observed.state != RemoteViewIdleRetirementReceiptState::Prepared
-                    {
-                        continue;
-                    }
-                    if record.prepared.is_none() {
-                        let mut next = record.clone();
-                        next.record_prepared(observed.clone())
-                            .map_err(|_| "browser_session_idle_readback_required")?;
-                        match self.store.update_idle_retirement(&record, &next) {
-                            Ok(()) => record = next,
-                            Err(BrowserIdleRetirementStoreError::Conflict) => continue,
-                            Err(_) => return Err("browser_session_idle_custody_unavailable".into()),
-                        }
-                    }
-                    match self.store.publish_idle_retirement_state(
-                        expected,
-                        expected,
-                        std::slice::from_ref(&record.intent.id),
-                    ) {
-                        Ok(()) => (),
-                        Err(BrowserIdleRetirementStoreError::Conflict) => continue,
-                        Err(_) => return Err("browser_session_idle_custody_unavailable".into()),
-                    }
-                    record = self
-                        .store
-                        .idle_retirement_records()
-                        .map_err(|_| "browser_session_idle_custody_unavailable")?
-                        .into_iter()
-                        .find(|current| current.intent == record.intent)
-                        .ok_or("browser_session_idle_readback_required")?;
-                }
-                let completed = if observed.state == RemoteViewIdleRetirementReceiptState::Completed
-                {
-                    Ok(observed)
-                } else {
-                    self.adapter.complete_idle_retirement(
-                        &record.intent.provider,
-                        record
-                            .prepared
-                            .as_ref()
-                            .ok_or("browser_session_idle_readback_required")?,
-                        true,
-                    )
-                };
-                if let Ok(completed) = completed {
-                    let mut next = record.clone();
-                    next.record_completed(completed)
-                        .map_err(|_| "browser_session_idle_readback_required")?;
-                    self.update_retirement(&record, next)?;
-                }
-            }
+            self.reconcile_native_retirements(expected, None)?;
         }
         self.operation_retirements.clear();
 
@@ -838,6 +871,12 @@ impl<
         navigation: &[BrowserNavigationRecord],
     ) -> Result<Option<BrowserRecovery>, String> {
         self.require_operation()?;
+        let expected = self
+            .expected
+            .as_ref()
+            .ok_or("remote_view_session_operation_baseline_missing")?
+            .clone();
+        self.reconcile_native_retirements(&expected, Some(&profile.id))?;
         let Some(mut recovered) = self
             .effects
             .reconcile_profile_browser(profile, browser, tabs, navigation)?
