@@ -36,7 +36,8 @@ Use current `discover_credentials`, not empty legacy scopes, to distinguish
 missing authority, unavailable/partial sources, no match and account choice.
 Before saved-password Native input, use `native_ready`: owner authentication and
 consumer input policy must be ready for the exact target; viewer readiness alone
-is insufficient. Owner decisions, delivery and exact browser binding gate input. Managed-task receiving is product-owned: do not ask operators to create per-task enrollment or read vault secrets as a fallback. Approval comes through the Auth dashboard or Slack via Receipts. `browser_control` status/view can inspect ordinary managed tasks; control changes keep hosted-app requirements. Retained task-briefing process IDs require independent physical verification. Keep unknown
+is insufficient. Public `ready` and legacy `local_ready` desktop states require
+matching lifecycle identity and enabled input policy; Native control remains separate. Owner decisions, delivery and exact browser binding gate input. Managed-task receiving is product-owned: do not ask operators to create per-task enrollment or read vault secrets as a fallback. Approval comes through the Auth dashboard or Slack via Receipts. `browser_control` status/view can inspect ordinary managed tasks; control changes keep hosted-app requirements. Retained task-briefing process IDs require independent physical verification. Keep unknown
 attempts on their original requests; never replay private use.
 
 ## Hosted workflow guidance v1

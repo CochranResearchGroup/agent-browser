@@ -45,8 +45,13 @@ pub(crate) fn qualify_readiness(
             "refresh_owned_task",
         ));
     }
+    // Public lifecycle inspection uses `ready`; retain the legacy local spelling.
+    // Neither state replaces the exact identity, input policy or final owner fences.
     if response["schemaVersion"] != 1
-        || response.pointer("/desktop/state").and_then(Value::as_str) != Some("local_ready")
+        || !matches!(
+            response.pointer("/desktop/state").and_then(Value::as_str),
+            Some("ready" | "local_ready")
+        )
     {
         return Ok(projection(
             false,
@@ -300,6 +305,15 @@ mod tests {
     }
 
     #[test]
+    fn native_readiness_accepts_public_ready_lifecycle_without_dispatching_input() {
+        let mut response = inspection("enabled");
+        response["desktop"]["state"] = json!("ready");
+        let mut fixture = OwnerFixture::new(response, "200 OK", 1);
+        assert_eq!(require_input_ready(&mut fixture.http, &target()), Ok(()));
+        fixture.finish();
+    }
+
+    #[test]
     fn native_readiness_changed_or_unverified_lifecycle_never_permits_input() {
         for condition in [
             "other-desktop",
@@ -310,6 +324,7 @@ mod tests {
             "missing-policy",
         ] {
             let mut response = inspection("enabled");
+            response["desktop"]["state"] = json!("ready");
             match condition {
                 "other-desktop" => {
                     response["desktop"]["desktopId"] = json!(target().viewing_desktop_id)
