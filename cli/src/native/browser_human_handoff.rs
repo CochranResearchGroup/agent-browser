@@ -19,18 +19,24 @@ fn begin(control: &mut Control, id: &str, digest: &str) -> Result<(), String> {
     if intent(control, id, digest) == "interactive" {
         return Ok(());
     }
-    if control.human || control.awaiting_observation {
+    if control.human {
         return Err("browser_handoff_control_already_held".into());
     }
-    // Do not publish an invitation while an effect can still be running.
-    if !flight_clear(control) {
-        return Err("browser_handoff_work_in_flight".into());
+    // Match ordinary cooperative takeover: preserve dispatched uncertainty;
+    // human assistance may be needed to finish that very operation.
+    for outcome in control
+        .flights
+        .values_mut()
+        .filter(|state| state.as_str() == "dispatched")
+    {
+        *outcome = "uncertain_in_flight".into();
     }
     control.epoch = control
         .epoch
         .checked_add(1)
         .ok_or("browser_control_epoch_exhausted")?;
     control.human = true;
+    control.awaiting_observation = false;
     control.pause_reads = true;
     control.actor = "browser_handoff".into();
     control.reason = "Explicit human assistance requested".into();
@@ -48,17 +54,18 @@ fn begin(control: &mut Control, id: &str, digest: &str) -> Result<(), String> {
 
 // Keep extension data inside the existing extensible audit envelope so older
 // cooperating runtimes can still read human/pauseReads and observe the return.
-fn invitation(control: &Control) -> Option<HumanHandoff> {
+fn invitation(control: &Control, id: &str) -> Option<HumanHandoff> {
     control
         .audit
         .iter()
         .rev()
-        .find_map(|event| event.get("humanHandoff"))
+        .filter_map(|event| event.get("humanHandoff"))
+        .find(|value| value["id"].as_str() == Some(id))
         .and_then(|value| serde_json::from_value(value.clone()).ok())
 }
 
 fn intent(control: &Control, id: &str, digest: &str) -> &'static str {
-    if invitation(control).is_some_and(|handoff| {
+    if invitation(control, id).is_some_and(|handoff| {
         handoff.id == id
             && handoff.target_digest == digest
             && handoff.epoch == control.epoch
@@ -92,7 +99,7 @@ pub(crate) fn return_handoff(
 }
 
 fn relinquish(control: &mut Control, id: &str, digest: &str, request: &str) -> Result<(), String> {
-    let Some(mut handoff) = invitation(control) else {
+    let Some(mut handoff) = invitation(control, id) else {
         return Ok(());
     };
     if handoff.id != id || handoff.target_digest != digest {
@@ -101,7 +108,7 @@ fn relinquish(control: &mut Control, id: &str, digest: &str, request: &str) -> R
     if handoff.returned_by.as_deref() == Some(request) {
         return Ok(());
     }
-    if intent(control, id, digest) != "interactive" || !flight_clear(control) {
+    if intent(control, id, digest) != "interactive" {
         return Err("browser_handoff_control_changed".into());
     }
     control.epoch = control
@@ -126,8 +133,12 @@ mod tests {
     #[test]
     fn invitation_pauses_same_browser_and_return_is_idempotent() {
         let mut state = Control::default();
+        state
+            .flights
+            .insert("pending-operation".into(), "dispatched".into());
         begin(&mut state, "invitation", "target").unwrap();
         assert_eq!(intent(&state, "invitation", "target"), "interactive");
+        assert_eq!(state.flights["pending-operation"], "uncertain_in_flight");
         assert_eq!(intent(&state, "passive", "target"), "view");
         assert_eq!(intent(&state, "invitation", "replacement"), "view");
         assert!(permits(&state, "click").is_err());
@@ -140,10 +151,14 @@ mod tests {
         relinquish(&mut state, "invitation", "target", "return-1").unwrap();
         assert_eq!(intent(&state, "invitation", "target"), "view");
         assert!(!state.human);
+        assert_eq!(state.flights["pending-operation"], "uncertain_in_flight");
         assert!(permits(&state, "click").is_ok());
         assert!(permits(&state, "url").is_ok());
         relinquish(&mut state, "invitation", "target", "return-1").unwrap();
         assert_eq!(state.epoch, epoch + 1);
+        begin(&mut state, "next-invitation", "target").unwrap();
+        relinquish(&mut state, "invitation", "target", "return-1").unwrap();
+        assert_eq!(intent(&state, "next-invitation", "target"), "interactive");
     }
 }
 

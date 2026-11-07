@@ -890,7 +890,7 @@ pub(super) fn handoff(arguments: &Value, transport_session: &str) -> Result<Valu
         transport_session,
         json!({}),
         json!({"taskId":task_id,"handoffId":retained.id,"handoffUrl":handoff_url.as_str(),
-            "operatorVisible":presentation["operatorVisible"],"interaction":{"intent":interaction,"automationPaused":interaction=="interactive","state":if interaction=="interactive" {"awaiting_recipient"} else {"view"}}}),
+            "operatorVisible":presentation["operatorVisible"],"interaction":{"intent":interaction,"automationPaused":interaction=="interactive","cooperativeOnly":true,"state":if interaction=="interactive" {"awaiting_recipient"} else {"view"}}}),
         false,
     ))
 }
