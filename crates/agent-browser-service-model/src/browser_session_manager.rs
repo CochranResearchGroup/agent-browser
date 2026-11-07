@@ -215,6 +215,12 @@ pub trait BrowserSessionEffects {
         Vec::new()
     }
 
+    /// Acknowledge only exact durable completed retirement receipts. This must
+    /// not observe a process, call a provider, publish state or replay effects.
+    fn acknowledge_completed_idle_retirements(&mut self) -> Result<(), String> {
+        Ok(())
+    }
+
     /// Called after atomic publication, never from guard destruction. Unknown
     /// provider completion retains original-operation readback obligations.
     fn finish_idle_retirement_publication(&mut self, _ids: &[String]) -> Result<(), String> {

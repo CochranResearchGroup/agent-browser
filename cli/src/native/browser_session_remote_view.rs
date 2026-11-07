@@ -574,6 +574,12 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
             Self::Remote(effects) => effects.pending_idle_retirement_ids(),
         }
     }
+    fn acknowledge_completed_idle_retirements(&mut self) -> Result<(), String> {
+        match self {
+            Self::Local(effects) => effects.acknowledge_completed_idle_retirements(),
+            Self::Remote(effects) => effects.acknowledge_completed_idle_retirements(),
+        }
+    }
     fn finish_idle_retirement_publication(&mut self, ids: &[String]) -> Result<(), String> {
         match self {
             Self::Local(effects) => effects.finish_idle_retirement_publication(ids),

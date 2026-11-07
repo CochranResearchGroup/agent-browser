@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P300-RECOVERY
+    product_lane: PL-BUGFIX
+    objective: Reconcile proven completed retirement custody before ordinary donor recovery
+    plan: docs/dev/maintenance/donor-retirement-readback.md
+    branch: fix/p300-donor-retirement-readback
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#530]
+    plan_state: ACTIVE
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [P300]
+    overlaps: [P300]
+    reconciled_overlaps: ["Reuse the sole clean canonical checkout at e2785ee97; worker owns host/effect source and regressions; root owns documentation, integration and runtime; preserve all existing candidate and branch custody"]
+    validation_status: Exact source regression red then green; 18 focused and 416 model tests pass; format and strict workspace Clippy pass; canonical integration and live donor recovery pending
+    limitations: ["Original input failure and subsequent donor retirement remain distinct", "No state-file edits, effect replay or raw shared-host restart", "P300 final broad review and remediation remain zero"]
+    updated_at: 2026-11-07
   - id: TAB552
     product_lane: PL-BUGFIX
     objective: Preserve the connected Native viewer during same-desktop tab selection

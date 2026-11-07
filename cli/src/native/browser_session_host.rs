@@ -2151,6 +2151,15 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             self.catalog = catalog;
             return Ok(());
         }
+        if self.state == self.persisted_state
+            && self.effects.pending_launch_intent().is_none()
+            && !self.effects.pending_idle_retirement_ids().is_empty()
+        {
+            // A peer may have completed our exact settled retirement. Read its
+            // receipt before treating the cached ID as unpublished work. Never
+            // discard a local state delta or an unresolved launch/effect.
+            self.effects.acknowledge_completed_idle_retirements()?;
+        }
         if self.state != self.persisted_state
             || self.effects.pending_launch_intent().is_some()
             || !self.effects.pending_idle_retirement_ids().is_empty()

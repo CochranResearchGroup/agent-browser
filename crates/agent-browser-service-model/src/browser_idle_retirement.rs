@@ -237,6 +237,30 @@ impl BrowserIdleRetirementRecord {
     pub fn is_terminal(&self) -> bool {
         self.deferred || self.completed.is_some()
     }
+
+    /// Publication and exact native completion may acknowledge this cached
+    /// record, but cannot change its intent, preparation or effect settlement.
+    pub(crate) fn acknowledges_completed_publication(&self, completed: &Self) -> bool {
+        if completed.completed.is_none()
+            || completed.published_state_digest.is_none()
+            || completed.validate().is_err()
+            || self
+                .published_state_digest
+                .as_ref()
+                .is_some_and(|digest| completed.published_state_digest.as_ref() != Some(digest))
+            || self
+                .completed
+                .as_ref()
+                .is_some_and(|receipt| completed.completed.as_ref() != Some(receipt))
+        {
+            return false;
+        }
+        let mut published = self.clone();
+        published.published_state_digest = completed.published_state_digest.clone();
+        published.completed = completed.completed.clone();
+        published == *completed
+    }
+
     pub fn validate(&self) -> Result<()> {
         self.intent.validate()?;
         let invalid = BrowserIdleRetirementStoreError::InvalidRecord;
