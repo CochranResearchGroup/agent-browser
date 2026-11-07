@@ -25,13 +25,13 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#570]
-    plan_state: ACTIVE
-    custody_state: ACTIVE_WORKTREE
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
     dependencies: [P321-OWNER-567]
     overlaps: [P300-RECOVERY, IDLE-ACTIVITY-562]
     reconciled_overlaps: ["Reuse current owning checkout after567 source integration; one writer; Mailroot owns provider work; no competing production build or reset; preserve interview patch"]
-    validation_status: Exact-code RED then72 CLI retirement and416 model tests passed; fmt strict workspace Clippy and docs passed; source qualified
-    limitations: ["No unrelated retained-task changes or private-input replay", "No reset, state clearing or lock removal", "Installed workflow qualification remains separate"]
+    validation_status: Exact-code RED then72 CLI retirement and416 model tests passed; fmt strict workspace Clippy and docs passed; installed preserve accepted; doctor inventory and both existing-profile continuations passed
+    limitations: ["No unrelated retained-task changes or private-input replay", "No reset, state clearing or lock removal", "Consumer provider/account acceptance remains separate"]
     updated_at: 2026-11-07
   - id: P321-OWNER-567
     product_lane: PL-BUGFIX
