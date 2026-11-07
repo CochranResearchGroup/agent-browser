@@ -885,12 +885,20 @@ pub(super) fn handoff(arguments: &Value, transport_session: &str) -> Result<Valu
             .map_err(|_| issue("remote_view_handoff_url_invalid"))?
             .to_string()
     };
+    let controller = control::metadata(
+        &state
+            .sessions
+            .get(task_id)
+            .ok_or_else(|| issue("browser_task_not_found_after_handoff"))?
+            .browser_id,
+    )
+    .map_err(issue)?;
     Ok(super::tool_response_from_payload(
         "browser_handoff",
         transport_session,
         json!({}),
         json!({"taskId":task_id,"handoffId":retained.id,"handoffUrl":handoff_url.as_str(),
-            "operatorVisible":presentation["operatorVisible"],"interaction":{"intent":interaction,"automationPaused":interaction=="interactive","cooperativeOnly":true,"state":if interaction=="interactive" {"awaiting_recipient"} else {"view"}}}),
+            "operatorVisible":presentation["operatorVisible"],"interaction":{"intent":interaction,"automationPaused":controller["owner"]=="human","cooperativeOnly":true,"state":if interaction=="interactive" {"awaiting_recipient"} else {"view"}}}),
         false,
     ))
 }
