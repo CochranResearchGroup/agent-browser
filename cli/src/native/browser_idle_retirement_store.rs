@@ -10,6 +10,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 const DOCUMENT: &str = "browser_idle_retirement_custody";
 const SCHEMA: &str = "agent-browser.browser-idle-retirement-custody.v1";
+// Separate from custody so older readers can retain their existing schema.
+const ACTIVITY_PUBLICATIONS: &str = "browser_activity_publications";
+const ACTIVITY_PUBLICATIONS_SCHEMA: &str = "agent-browser.browser-activity-publications.v1";
+const ACTIVITY_PUBLICATIONS_LIMIT: usize = 4096;
+
 type Error = BrowserIdleRetirementStoreError;
 type Result<T> = std::result::Result<T, Error>;
 
@@ -609,13 +614,52 @@ impl BrowserSessionSqliteStore {
         if activity_ids.iter().collect::<BTreeSet<_>>().len() != activity_ids.len() {
             return Err(Error::InvalidRecord);
         }
+        let mut completed: Vec<BrowserActivityRecord> = load_optional_document(
+            &transaction,
+            ACTIVITY_PUBLICATIONS,
+            ACTIVITY_PUBLICATIONS_SCHEMA,
+        )
+        .map_err(|_| Error::Unavailable)?;
         for id in activity_ids {
-            if !records
-                .activities
-                .get(id)
-                .is_some_and(|record| record.acknowledged || record.original_ended)
-            {
-                return Err(Error::Conflict);
+            if let Some(record) = records.activities.get(id) {
+                if !record.acknowledged && !record.original_ended {
+                    return Err(Error::Conflict);
+                }
+            } else {
+                // Absence is not completion evidence. Only this exact receipt,
+                // committed with the original publication, permits idempotency.
+                let receipt = completed
+                    .iter()
+                    .find(|record| &record.id == id)
+                    .ok_or(Error::Conflict)?;
+                let same_root = |candidate: Option<&ManagedBrowserInstance>| {
+                    candidate.is_some_and(|root| {
+                        root.id == receipt.browser.id
+                            && root.pid == receipt.browser.pid
+                            && root.profile_id == receipt.browser.profile_id
+                            && root.cdp_endpoint == receipt.browser.cdp_endpoint
+                            && root.desktop == receipt.browser.desktop
+                    })
+                };
+                if !receipt.acknowledged
+                    || receipt.original_ended
+                    || !same_root(expected.browsers.get(&receipt.browser.id))
+                    || !same_root(state.browsers.get(&receipt.browser.id))
+                {
+                    return Err(Error::Conflict);
+                }
+                if let Some(identity) = &receipt.process_identity {
+                    if super::browser_launch_custody_store::published_process_identity(
+                        &transaction,
+                        &receipt.browser,
+                    )
+                    .map_err(|_| Error::Conflict)?
+                    .as_ref()
+                        != Some(identity)
+                    {
+                        return Err(Error::Conflict);
+                    }
+                }
             }
         }
 
@@ -661,8 +705,21 @@ impl BrowserSessionSqliteStore {
                 .get(id)
                 .is_some_and(|record| !record.original_ended)
             {
-                records.activities.remove(id);
+                let receipt = records.activities.remove(id).ok_or(Error::Conflict)?;
+                completed.retain(|old| old.id != receipt.id);
+                completed.push(receipt);
             }
+        }
+        if !activity_ids.is_empty() {
+            let excess = completed.len().saturating_sub(ACTIVITY_PUBLICATIONS_LIMIT);
+            completed.drain(..excess);
+            save_document(
+                &transaction,
+                ACTIVITY_PUBLICATIONS,
+                ACTIVITY_PUBLICATIONS_SCHEMA,
+                &completed,
+            )
+            .map_err(|_| Error::Unavailable)?;
         }
         // History projection may archive terminal rows in this transaction.
         // Bind custody to the actual retained session document, not a pre-archive copy.

@@ -76,6 +76,14 @@ valid independent work; do not reset the profile, remove locks or repeat an
 uncertain action to resolve a metadata difference. Current resource identity and
 private reconciliation receipts preserve the competing observations.
 
+Acknowledged command activity is removed only with an atomic publication receipt.
+The latest 4096 receipts allow bookkeeping retries after a lost reply without
+replaying browser actions. Unknown or expired IDs and changed physical browser
+identities remain rejected. Idle-publication errors distinguish `unavailable`,
+`invalid_record`, `activity_active` and `conflict` using the
+`browser_session_idle_publication_` prefix. Preserve the original action record;
+these errors do not authorize replay, profile reset or clearing activity state.
+
 Known occupied or reserved capacity can justify separate bounded capacity for
 an independent task. The original reservation stays intact. Failed window
 observations never qualify a desktop or justify another acquisition.

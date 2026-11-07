@@ -4478,6 +4478,14 @@ Positive original-process exit permits resource recovery while preserving the
 unknown command record. Unavailable observation retains the veto; recovery does
 not replay the original command or adopt a replacement process as its evidence.
 
+Acknowledged command activity is removed only with an atomic publication receipt.
+The latest 4096 receipts allow bookkeeping retries after a lost reply without
+replaying browser actions. Unknown or expired IDs and changed physical browser
+identities remain rejected. Idle-publication errors distinguish `unavailable`,
+`invalid_record`, `activity_active` and `conflict` using the
+`browser_session_idle_publication_` prefix. Preserve the original action record;
+these errors do not authorize replay, profile reset or clearing activity state.
+
 The automatic-close candidate persists its exact operation before preparing
 native viewer exclusion, records each close attempt before the physical effect,
 and publishes session state with retirement custody before completing the fence.

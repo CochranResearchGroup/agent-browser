@@ -826,6 +826,41 @@ impl ManagedBrowserCommandEffects for Process {
         session_name: &str,
         command: &Value,
     ) -> Result<Value, String> {
+        if command["action"] == "navigate" && self.root.join("count-navigation-dispatches").exists()
+        {
+            let path = self.root.join("navigation-dispatch-count");
+            let count = std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|value| value.parse::<u32>().ok())
+                .unwrap_or(0);
+            std::fs::write(path, (count + 1).to_string()).unwrap();
+        }
+        if self
+            .root
+            .join("fail-activity-publication-after-dispatch")
+            .exists()
+        {
+            let path = self.root.join("command-dispatch-count");
+            let count = std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|value| value.parse::<u32>().ok())
+                .unwrap_or(0);
+            std::fs::write(path, (count + 1).to_string()).unwrap();
+            std::fs::write(
+                self.root.join("activity-publication-baseline.json"),
+                serde_json::to_vec(&open_store(&self.root, false).load_session_state().unwrap())
+                    .unwrap(),
+            )
+            .unwrap();
+            open_store(&self.root, false)
+                .remote_view_mutation_connection()
+                .execute_batch(
+                    "CREATE TRIGGER fail_activity_session_publication BEFORE UPDATE ON state_documents
+                     WHEN NEW.kind='browser_session_state'
+                     BEGIN SELECT RAISE(ABORT, 'fixture storage unavailable'); END;",
+                )
+                .unwrap();
+        }
         assert!(tab.target_id.starts_with(&format!("target:{}", browser.id)));
         assert!(!session_id.is_empty());
         assert!(matches!(session_name, "Alice" | "Bob"));
