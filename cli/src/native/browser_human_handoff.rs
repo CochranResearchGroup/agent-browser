@@ -127,41 +127,6 @@ fn relinquish(control: &mut Control, id: &str, digest: &str, request: &str) -> R
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn invitation_pauses_same_browser_and_return_is_idempotent() {
-        let mut state = Control::default();
-        state
-            .flights
-            .insert("pending-operation".into(), "dispatched".into());
-        begin(&mut state, "invitation", "target").unwrap();
-        assert_eq!(intent(&state, "invitation", "target"), "interactive");
-        assert_eq!(state.flights["pending-operation"], "uncertain_in_flight");
-        assert_eq!(intent(&state, "passive", "target"), "view");
-        assert_eq!(intent(&state, "invitation", "replacement"), "view");
-        assert!(permits(&state, "click").is_err());
-        assert!(permits(&state, "url").is_err());
-        let epoch = state.epoch;
-        begin(&mut state, "invitation", "target").unwrap();
-        assert_eq!(state.epoch, epoch);
-        let serialized = serde_json::to_vec(&state).unwrap();
-        let mut state: Control = serde_json::from_slice(&serialized).unwrap();
-        relinquish(&mut state, "invitation", "target", "return-1").unwrap();
-        assert_eq!(intent(&state, "invitation", "target"), "view");
-        assert!(!state.human);
-        assert_eq!(state.flights["pending-operation"], "uncertain_in_flight");
-        assert!(permits(&state, "click").is_ok());
-        assert!(permits(&state, "url").is_ok());
-        relinquish(&mut state, "invitation", "target", "return-1").unwrap();
-        assert_eq!(state.epoch, epoch + 1);
-        begin(&mut state, "next-invitation", "target").unwrap();
-        relinquish(&mut state, "invitation", "target", "return-1").unwrap();
-        assert_eq!(intent(&state, "next-invitation", "target"), "interactive");
-    }
-}
-
 /// Retain a purpose-specific invitation without promoting an existing passive
 /// recipient. Publication uses the owner's normal SQLite reconciliation fences.
 pub(crate) fn prepare_handoff(
@@ -226,4 +191,39 @@ pub(crate) fn prepare_handoff(
         template.clone()
     };
     Ok(retained)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn invitation_pauses_same_browser_and_return_is_idempotent() {
+        let mut state = Control::default();
+        state
+            .flights
+            .insert("pending-operation".into(), "dispatched".into());
+        begin(&mut state, "invitation", "target").unwrap();
+        assert_eq!(intent(&state, "invitation", "target"), "interactive");
+        assert_eq!(state.flights["pending-operation"], "uncertain_in_flight");
+        assert_eq!(intent(&state, "passive", "target"), "view");
+        assert_eq!(intent(&state, "invitation", "replacement"), "view");
+        assert!(permits(&state, "click").is_err());
+        assert!(permits(&state, "url").is_err());
+        let epoch = state.epoch;
+        begin(&mut state, "invitation", "target").unwrap();
+        assert_eq!(state.epoch, epoch);
+        let serialized = serde_json::to_vec(&state).unwrap();
+        let mut state: Control = serde_json::from_slice(&serialized).unwrap();
+        relinquish(&mut state, "invitation", "target", "return-1").unwrap();
+        assert_eq!(intent(&state, "invitation", "target"), "view");
+        assert!(!state.human);
+        assert_eq!(state.flights["pending-operation"], "uncertain_in_flight");
+        assert!(permits(&state, "click").is_ok());
+        assert!(permits(&state, "url").is_ok());
+        relinquish(&mut state, "invitation", "target", "return-1").unwrap();
+        assert_eq!(state.epoch, epoch + 1);
+        begin(&mut state, "next-invitation", "target").unwrap();
+        relinquish(&mut state, "invitation", "target", "return-1").unwrap();
+        assert_eq!(intent(&state, "next-invitation", "target"), "interactive");
+    }
 }

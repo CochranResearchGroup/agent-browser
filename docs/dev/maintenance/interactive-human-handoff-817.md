@@ -66,3 +66,8 @@ integration tests and encountered a shared sccache startup timeout. Those failed
 samples remain recorded; no unrelated test-suite rewrite or shared-cache reset
 is included. The required workspace gate and changed Native fixture are verified
 with the local cache wrapper disabled, preserving all cached files.
+
+Supplemental lint also caught the new module placing its test module before
+a production helper. The test module is now at the end, with function bodies
+unchanged. Remaining supplemental diagnostics are on unchanged source lines;
+the retained private origin map separates them from introduced findings.
