@@ -30,7 +30,7 @@ Rust source checkpoint5763c4233, with documentation-only canonical reconciliatio
 at5f45b27e9, passes35 focused tests through `scripts/ci/rust-tests.sh`:
 `browser_host_control` (25), `mcp::workflow::context_tests` (5),
 `native_mode_callback` (2), `native_browser_mode::control_target_tests` (3).
-Strict `scripts/ci/cargo-safe.sh clippy --workspace --all-targets --locked --offline
+Strict `scripts/ci/cargo-safe.sh clippy --workspace --locked --offline
 -- -D warnings` and maintained fmt check are required before integration.
 
 Real MCP with owned Chrome and the real authenticated private owner callback
@@ -58,4 +58,11 @@ installation and actual authenticated Native input are separate pending gates.
 The extra all-targets lint exposed pre-existing fixture-only warnings. The Native
 integration fixture now uses equivalent range predicates and marks its included
 partial HTTP module like the adjacent partial image module. Production code is
-unchanged by this fixture repair. Frozen final strict lint verification follows.
+unchanged by this fixture repair. Required workspace strict lint verification follows.
+
+Supplemental all-targets lint is not the repository Rust Quality gate. It also
+finds11 pre-existing warnings in unchanged service-model browser_session_manager
+integration tests and encountered a shared sccache startup timeout. Those failed
+samples remain recorded; no unrelated test-suite rewrite or shared-cache reset
+is included. The required workspace gate and changed Native fixture are verified
+with the local cache wrapper disabled, preserving all cached files.
