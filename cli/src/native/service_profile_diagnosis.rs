@@ -225,8 +225,8 @@ pub(crate) fn diagnose_service_profile(
         findings.push(finding(
             "chrome_singleton_lock_ownership_unproven",
             "chrome_locks",
-            "error",
-            true,
+            "warning",
+            false,
             "Chrome singleton lock ownership is live or could not be proven.",
             Vec::new(),
             "inspect_exact_lock_process_without_removal",
@@ -266,6 +266,15 @@ pub(crate) fn diagnose_service_profile(
         ProfileDiagnosisState::Ready
     };
     let eligible_action = match diagnosis_state {
+        // Legacy lock observations cannot veto an authorized workflow. Execution
+        // still checks the exact browser/process binding before taking control.
+        ProfileDiagnosisState::Ready
+            if findings
+                .iter()
+                .any(|finding| finding.code == "chrome_singleton_lock_ownership_unproven") =>
+        {
+            "continue_authorized_workflow"
+        }
         ProfileDiagnosisState::Ready => "normal_launch",
         ProfileDiagnosisState::Repairable => "service_profile_repair_plan",
         ProfileDiagnosisState::ManualAction => "service_profile_reset_plan_authentication",
@@ -640,6 +649,44 @@ mod tests {
         assert_eq!(
             diagnosis.readiness["missingAuthenticationTargetIds"][0],
             "bill"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn occupied_lock_diagnostic_does_not_veto_authorized_workflow() {
+        use std::os::unix::fs::symlink;
+        let root = std::env::temp_dir().join(format!("profile-advisory-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let target = format!("host-{}", std::process::id());
+        symlink(&target, root.join("SingletonLock")).unwrap();
+        let mut state = ServiceState::default();
+        state
+            .profiles
+            .insert("shared-profile".into(), profile(&root));
+        let before = state.clone();
+        let diagnosis = diagnose_service_profile(
+            &state,
+            "shared-profile",
+            "2026-11-07T00:00:00Z",
+            "operator-request",
+        )
+        .unwrap();
+        assert_eq!(diagnosis.chrome_locks["verdict"], "occupied_unproven");
+        assert_eq!(diagnosis.runtime["processState"], "not_recorded");
+        assert!(diagnosis.findings.iter().any(|finding| finding.code
+            == "chrome_singleton_lock_ownership_unproven"
+            && !finding.blocking));
+        assert_eq!(diagnosis.state, ProfileDiagnosisState::Ready);
+        assert_eq!(
+            diagnosis.decision["eligibleAction"],
+            "continue_authorized_workflow"
+        );
+        assert_eq!(state, before);
+        assert_eq!(
+            fs::read_link(root.join("SingletonLock")).unwrap(),
+            Path::new(&target)
         );
         fs::remove_dir_all(root).unwrap();
     }

@@ -70,6 +70,11 @@ Use a separate task/session and tab for each workflow. Shared profiles share log
 
 Idle capability registration reports `registered_idle` and `acquire_profile`, without claiming ownership. Read [Idle registration](references/cli-and-service.md#idle-registration) before diagnosing a missing binding.
 
+Legacy Chrome singleton-lock ownership diagnostics are advisory. An otherwise ready
+profile recommends `continue_authorized_workflow`; continue the authorized task
+through exact browser/process checks without removing locks. Inspect actual
+execution failures and uncertain requests before replaying any effect.
+
 ## CLI fallback
 
 If browser_open is absent, report missing Agent Browser MCP integration.

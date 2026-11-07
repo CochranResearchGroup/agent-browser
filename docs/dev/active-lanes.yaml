@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P300-OPERATOR-DIAGNOSIS
+    product_lane: PL-BUGFIX
+    objective: Keep legacy singleton lock observations advisory for authorized workflows
+    plan: docs/dev/maintenance/operator-profile-diagnostic.md
+    branch: fix/operator-profile-diagnostic
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#530]
+    plan_state: ACTIVE
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [P300]
+    overlaps: [P300-RECOVERY]
+    reconciled_overlaps: ["Own diagnosis and documentation only; preserve canonical recovery host/allocator source and shared runtime custody; new isolated checkout admitted under repository lock after clean inventory"]
+    validation_status: Occupied lock regression RED before fix; all 6 diagnosis tests GREEN; final formatting Clippy and docs checks in progress
+    limitations: ["Separate publication conflict remains unresolved", "No shared runtime installation or provider effects", "Parent530 remains open"]
+    updated_at: 2026-11-07
   - id: P300-RECOVERY
     product_lane: PL-BUGFIX
     objective: Restore ordinary donor recovery through completed retirement readback and eligible desktop selection
