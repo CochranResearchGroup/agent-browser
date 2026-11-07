@@ -99,6 +99,7 @@
     "test:runtime-host-supervisor-no-launch": "node scripts/smoke-runtime-host-supervisor-no-launch.js",
     "test:runtime-host-supervisor-takeover-no-launch": "node scripts/smoke-runtime-host-supervisor-takeover-no-launch.js",
     "test:runtime-host-multi-lane": "node scripts/smoke-runtime-host-multi-lane.js",
+    "test:worker-status-routing": "node scripts/smoke-worker-status-routing.js",
     "test:runtime-host-convergence-no-launch": "node scripts/smoke-runtime-host-convergence-no-launch.js",
     "test:runtime-host-hot-handoff": "node scripts/smoke-runtime-host-hot-handoff.js",
     "test:dashboard-view-streams": "node --no-warnings --experimental-strip-types scripts/test-dashboard-view-streams.js",

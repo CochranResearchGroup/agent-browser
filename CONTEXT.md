@@ -320,6 +320,8 @@ _Avoid_: Log message, caller label, lane selector
 
 **Daemon command**:
 A requested browser or control-plane operation executed in the serialized native runtime.
+Control-plane status requests, including `worker_status`, stay on their runtime
+lane and do not execute against a managed browser task with the same name.
 _Avoid_: Action handler, request handler
 
 **Service State**:
