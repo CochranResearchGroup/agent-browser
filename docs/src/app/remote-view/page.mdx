@@ -886,6 +886,8 @@ Existing-tab operator selection talks directly to its browser owner without
 creating an HTTP launch lane or scheduler job. Signed focus, display ordering
 and current Native readiness are still checked.
 An already verified desktop stays connected when census metadata expires.
+Switching tabs within the same browser and desktop preserves the connected
+viewer while the owner focuses the selected tab.
 Stale metadata cannot open a new selection; a changed binding or confirmed
 absence clears the viewer. Remote View continues to own connection authority.
 

@@ -96,6 +96,11 @@ workstation transaction before retrying.
 
 **Embedded Native page evidence**: A prepared handoff, a readable viewer document and an authenticated Native display connection are separate observations. An unreadable frame may be an access redirect or a framing restriction; it does not prove expired authentication. A readable non-viewer page is unavailable for embedding without establishing why.
 
+**Native viewer continuity**: Exact task focus and desktop viewer lifetime are
+separate. Selecting another current tab in the same browser and desktop retains
+the connected viewer document while the owner authorizes and performs focus.
+An authoritative failure or a different desktop clears that binding.
+
 **Subsystem health evidence**: Separately scoped inventory availability, runtime diagnostic readiness, Native slot readiness and observed selected-view connection state. Unchecked, stale, timed-out or malformed evidence is unverified. Service reachability and handoff preparation do not prove display delivery.
 
 **SiteGuide**: Versioned knowledge for recognizing a website's states, locating
