@@ -355,7 +355,7 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
                             .native_observation
                             .as_ref()
                             .filter(|b| b.target_digest == digest);
-                        let observed = native_control_target(
+                        let mut observed = native_control_target(
                             mode["mode"].as_str().unwrap_or("unverified"),
                             generation,
                             &digest,
@@ -363,6 +363,11 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
                             current_original.as_ref(),
                             binding.map(|b| &b.provider_target),
                         );
+                        if let Some(proof) = observed.as_mut() {
+                            proof["handoffIntent"] = json!(crate::native::browser_host_control::handoff_intent(
+                                &current_target.browser.id, &handoff, &digest
+                            )?);
+                        }
                         Ok(observed.filter(|observed| observed == &expected))
                     })
                     .await

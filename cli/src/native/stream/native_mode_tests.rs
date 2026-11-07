@@ -249,13 +249,18 @@ async fn native_mode_callback_relays_only_the_retained_task_and_never_acquires_a
         assert_eq!(status, 200);
         assert_eq!(
             inspection["data"]["nativeControlTarget"]["schemaVersion"],
-            "agent-browser.native-control-target.v1"
+            "agent-browser.native-control-target.v1",
+            "{inspection}"
         );
         assert_eq!(
             inspection["data"]["nativeControlTarget"]["targetDigest"],
             digest
         );
         assert_eq!(inspection["data"]["nativeControlTarget"]["target"], target);
+        assert_eq!(
+            inspection["data"]["nativeControlTarget"]["handoffIntent"],
+            "view"
+        );
         let (status, changed_generation) =
             exchange(json!({"slot":1,"generation":5,"choice":"inspect"})).await;
         assert_eq!(status, 200);
