@@ -28,10 +28,15 @@ use super::service_store::default_service_state_path;
 pub(crate) mod mode_inspection;
 #[path = "browser_profile_build_store.rs"]
 pub(crate) mod profile_build;
+#[path = "browser_runtime_reset_store.rs"]
+mod runtime_reset;
 #[path = "browser_terminal_history.rs"]
 mod terminal_history;
 #[path = "browser_workspace_observation.rs"]
 mod workspace_observation;
+pub(crate) use runtime_reset::{
+    commit_reset, reset_backup, reset_backup_digest, reset_preview, reset_result,
+};
 
 const BROWSER_SESSION_STATE_FILENAME: &str = "browser-session-state.json";
 const BROWSER_PROFILE_CATALOG_FILENAME: &str = "browser-profile-catalog.json";
