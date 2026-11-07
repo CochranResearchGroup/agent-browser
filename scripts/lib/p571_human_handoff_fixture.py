@@ -50,7 +50,7 @@ def run_human_handoff_fixture(env, artifacts, sockets, spawn, cli, log):
             headers['Authorization']='Bearer '+Path(env['AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE']).read_text().strip()
         body = {'slot':1,'generation':19,'choice':choice}
         if choice == 'return_handoff':
-            body['operationId']='synthetic-return-571'
+            body['operationId']='synthetic-return-'+handoff
         try:
             connection.request('POST',f'/api/native-remote-view/{handoff}/mode',json.dumps(body),headers)
             response = connection.getresponse()
@@ -72,6 +72,11 @@ def run_human_handoff_fixture(env, artifacts, sockets, spawn, cli, log):
         'serviceName':'HumanHandoffFixture','agentName':'SourceRegression','taskName':'Manual assistance',
         'url':'data:text/html,<title>Human handoff fixture</title><input id="draft" aria-label="Draft">'})
     call('browser_fill', {'taskId':task['taskId'],'selector':'#draft','value':'Original draft'})
+    first = call('browser_handoff', {'taskId':task['taskId']})
+    assert first['operatorVisible']['state'] == 'ready'
+    assert first.get('interaction', {}).get('intent') == 'interactive', 'default handoff reports visibility without requested human interaction'
+    assert owner(first['handoffId'])['handoffIntent'] == 'interactive'
+    assert owner(first['handoffId'], 'return_handoff')['handoffIntent'] == 'view'
     passive = call('browser_handoff', {'taskId':task['taskId'],'interaction':'view'})
     assert passive['interaction']['automationPaused'] is False
     handoff = call('browser_handoff', {'taskId':task['taskId']})
@@ -82,6 +87,8 @@ def run_human_handoff_fixture(env, artifacts, sockets, spawn, cli, log):
     owner(handoff['handoffId'], authenticated=False)
     proof = owner(handoff['handoffId'])
     assert proof['handoffIntent'] == 'interactive'
+    assert owner(first['handoffId'], 'return_handoff')['handoffIntent'] == 'view'
+    assert owner(handoff['handoffId'])['handoffIntent'] == 'interactive', 'old return cannot resume a later invitation'
     assert owner(passive['handoffId'])['handoffIntent'] == 'view'
     call('browser_fill', {'taskId':task['taskId'],'selector':'#draft','value':'must not arrive'}, success=False)
     repeated = call('browser_handoff', {'taskId':task['taskId']})
@@ -103,3 +110,5 @@ def run_human_handoff_fixture(env, artifacts, sockets, spawn, cli, log):
         'sameTarget':True,'automationPausedAndResumed':True,'unauthenticatedDenied':True,
         'scope':'Real MCP and owned browser; synthetic Native provider; Native input epoch covered by companion gateway/browser tests'
     }, indent=2)+'\n')
+    log.write('runtime-host-workflow: passed human-handoff\n')
+    log.flush()
