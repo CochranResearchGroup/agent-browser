@@ -119,6 +119,18 @@ pub(super) fn reject_profile_metadata_mutation(
     Ok(())
 }
 
+/// Pool selection cannot reuse a desktop while retirement still owns it.
+/// Final launch admission rechecks this reservation under its transaction.
+pub(super) fn assignment_available(
+    connection: &Connection,
+    assignment: &RemoteViewAssignmentRecord,
+) -> Result<bool> {
+    Ok(!ledger(connection)?.records.values().any(|record| {
+        !record.is_terminal()
+            && record.intent.provider.assignment.desktop_id == assignment.desktop_id
+    }))
+}
+
 /// Check under the caller's immediate transaction, before admitting a launch
 /// or release. Pending native completion still protects its original profile.
 pub(super) fn reject_retirement_admission(

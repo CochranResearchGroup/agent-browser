@@ -65,11 +65,14 @@ impl RemoteViewPoolRequestStore for BrowserSessionSqliteStore {
         &mut self,
         assignment: &RemoteViewAssignmentRecord,
     ) -> Result<bool, RemoteViewApplicationMutationStoreError> {
-        super::browser_launch_custody_store::assignment_available(
-            self.remote_view_mutation_connection(),
-            assignment,
-        )
-        .map_err(|_| RemoteViewApplicationMutationStoreError::Unavailable)
+        let connection = self.remote_view_mutation_connection();
+        let launch_available =
+            super::browser_launch_custody_store::assignment_available(connection, assignment)
+                .map_err(|_| RemoteViewApplicationMutationStoreError::Unavailable)?;
+        let retirement_available =
+            super::browser_idle_retirement_store::assignment_available(connection, assignment)
+                .map_err(|_| RemoteViewApplicationMutationStoreError::Unavailable)?;
+        Ok(launch_available && retirement_available)
     }
     fn confirmed_pool_acquisitions(
         &mut self,
