@@ -4,7 +4,7 @@ Product lane: PL-BUGFIX
 Parent: P300, ticket 530
 Branch: fix/operator-profile-diagnostic
 Base: db8da1e3f1571b9750eb205dfeb0eba68b23f903
-State: ACTIVE
+State: COMPLETED (source qualification only)
 
 ## Bounded outcome
 
@@ -41,8 +41,16 @@ through Cargo Signal and cargo-safe, using the existing shared target cache.
 GREEN: all six service_profile_acquisition::diagnosis::tests pass (133.98s
 build and run, zero compiler warnings/errors). The suite retains foreign-profile
 join rejection and stale-lock repair coverage.
-Private build evidence remains outside Git. Formatting, strict workspace Clippy
-and docs-site compilation are being finalized before the source checkpoint.
+Private build evidence remains outside Git. Source checkpoint: 99c9716dca34b3321742cabb7ad0b0bbef0a5830, PR557.
+Formatting and strict workspace Clippy (-D warnings, 163.845s) pass. The docs
+site builds all44pages; policy wiring, changed documentation links, remote-view
+handoff guidance and git diff --check pass. The initial formatting check exposed
+layout differences; formatting was applied and the repeated check passed.
+Local WSL native checks replace hosted CI; no hosted matrix or macOS/Windows
+run is claimed. The repo skill is updated; global skill publication is excluded.
+Source qualification is complete. Installed acceptance and the separate runtime
+publication failure remain unqualified. Memory disposition: forbidden, no
+explicit persistent-memory update request; no Graphiti write attempted.
 
 The identified cause is the legacy diagnosis treating occupied_unproven or
 observation_failed lock evidence as blocking without a canonical runtime join.

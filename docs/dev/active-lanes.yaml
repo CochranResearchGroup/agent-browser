@@ -9,12 +9,12 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#530]
-    plan_state: ACTIVE
-    custody_state: ACTIVE_WORKTREE
+    plan_state: COMPLETED
+    custody_state: INTEGRATION_READY
     dependencies: [P300]
     overlaps: [P300-RECOVERY]
     reconciled_overlaps: ["Own diagnosis and documentation only; preserve canonical recovery host/allocator source and shared runtime custody; new isolated checkout admitted under repository lock after clean inventory"]
-    validation_status: Occupied lock regression RED before fix; all 6 diagnosis tests GREEN; final formatting Clippy and docs checks in progress
+    validation_status: Source99c9716dc PR557; occupied lock regression RED then all6 diagnosis tests GREEN; format strict workspace Clippy docs build policy wiring and changed links pass
     limitations: ["Separate publication conflict remains unresolved", "No shared runtime installation or provider effects", "Parent530 remains open"]
     updated_at: 2026-11-07
   - id: P300-RECOVERY
