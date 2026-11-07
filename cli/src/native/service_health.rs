@@ -1052,7 +1052,8 @@ pub(crate) fn validate_protected_browser_owner_observation(
     Ok(())
 }
 
-fn validate_protected_browser_owner_observation_record(
+/// Validate retained receipt structure without claiming a current browser exists.
+pub(crate) fn validate_protected_browser_owner_observation_record(
     observation: &crate::native::service_model::ProtectedBrowserOwnerObservation,
     browser_id: &str,
     session_id: &str,

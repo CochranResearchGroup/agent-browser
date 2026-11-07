@@ -4648,6 +4648,12 @@ An acquired Linux response contains `leaseAuthority.kind=protected` with the cur
 
 The JSON response from `service browsers` includes `protectedBrowserOwnerObservations` keyed by browser ID for protected launches and adoptions. Each entry is linked through `authorityReceiptId`, carries exact owner and process axes, has a bounded freshness interval, and always reports `operationalAuthority: false`. It is a candidate locator for inspection only. Adoption, cleanup, transfer, or denial must revalidate reservation, holder, physical occupancy, and effect-channel custody through the protected root authority.
 
+Structurally valid historical protected-owner observations remain readable even
+when their browser row has ended or been removed. They do not create a browser
+record or grant current authority. Invalid structure, forged authority and
+inconsistent live PID bindings still return
+`protected_browser_owner_observation_invalid`.
+
 On Linux, effect-channel custody is derived from the established loopback TCP connections to the exact observed CDP listener and the user-owned processes holding those socket inodes. A vanished executor with no remaining holder is absent, while inherited, additional, or unresolved holders remain uncertain. Adoption rechecks that the selected candidate is the sole holder before committing the new owner generation.
 
 An expired prepared or uncertain adoption cannot remain an operational blocker after the exact listener has no effect-channel holder. The next serialized prepare terminalizes it as aborted and may admit a fresh idempotency key. Aborted and superseded terminal receipts are compactable history; only a receipt backing the current owner remains protected from operational compaction.

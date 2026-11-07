@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P321-OWNER-567
+    product_lane: PL-BUGFIX
+    objective: Preserve orphan historical owner evidence without blocking unrelated browser inventory
+    plan: docs/dev/maintenance/p321-owner-inventory.md
+    branch: fix/p321-owner-inventory
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#567]
+    plan_state: ACTIVE
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [IDLE-ACTIVITY-562]
+    overlaps: [IDLE-ACTIVITY-562, P300-RECOVERY]
+    reconciled_overlaps: ["Reuse canonical owning checkout; one source/build writer; Mailroot owns provider work; retention interview patch preserved privately"]
+    validation_status: Exact-error action RED then20 tests GREEN; format, strict workspace Clippy, policy11, links and docs build pass. Source qualification only; retirement publication and installed workflow remain separate.
+    limitations: ["No runtime reset, manual state edit, lock removal or private-input replay", "No568/569 changes", "Initial launch readback and installed qualification remain separate"]
+    updated_at: 2026-11-07
   - id: RUNTIME-RESET-565
     product_lane: PL-PLATFORM
     objective: Provide a production runtime reset that preserves profiles and operation history

@@ -2197,3 +2197,9 @@ or remove browser locks.
 Known occupied or reserved capacity can justify separate bounded capacity for
 an independent task. The original reservation stays intact. Failed window
 observations never qualify a desktop or justify another acquisition.
+
+Structurally valid historical protected-owner observations remain readable even
+when their browser row has ended or been removed. They do not create a browser
+record or grant current authority. Invalid structure, forged authority and
+inconsistent live PID bindings still return
+`protected_browser_owner_observation_invalid`.
