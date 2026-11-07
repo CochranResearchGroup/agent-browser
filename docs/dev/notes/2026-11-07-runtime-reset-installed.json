@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "product_lane": "PL-PLATFORM",
+  "work_item": "CochranResearchGroup/agent-browser#565",
+  "owning_plan": "docs/dev/maintenance/runtime-reset.md",
+  "disposition": "installed_accepted",
+  "source_commit": "f31882882aa6ebb91fc520fcb1bfcde89b0ced31",
+  "source_pull_request": 566,
+  "validated_source_commit": "6f48e411c72eb97dd6de801ef29cf607ad2d98e9",
+  "merged_tree_matches_validated_source": true,
+  "candidate": {
+    "id": "candidate-ebb6900dcf3f7f51-94ec05f29f124968",
+    "artifact_class": "production_shaped",
+    "binary_sha256": "94ec05f29f1249685a58f17afaadcc6a5ed9ae0337debc8a0f3fef7577cb53fb",
+    "build_profile": "release",
+    "lto": "fat",
+    "codegen_units": 1
+  },
+  "installation": {
+    "transaction_id": "upgrade-62378899-40ef-4a1f-a3dc-1cc88e413bec",
+    "policy": "preserve",
+    "generation": "0.28.0-94ec05f29f12-8d316aaca1b4",
+    "state": "accepted",
+    "terminal_result": "accepted",
+    "outstanding_owner_obligations": 0,
+    "installed_bytes_match_seal": true,
+    "install_doctor_exit_code": 0
+  },
+  "qualification": {
+    "reset_tests_passed": 9,
+    "coordination_tests_passed": 7,
+    "format": "passed",
+    "strict_workspace_clippy": "passed",
+    "exact_binary_installer_fixture": "passed_zero_residue",
+    "exact_binary_cli_no_write": "passed",
+    "installed_reset_preview_database_unchanged": true,
+    "fresh_mcp_open_snapshot_close": "passed",
+    "original_production_process_identities_preserved": true,
+    "synthetic_profile_root_residue": false,
+    "installed_skill_matches_source": true,
+    "hosted_ci": "not_run_operator_cost_policy",
+    "platform": "Linux x86_64 / WSL",
+    "sealed_executable_inputs_rehashed_unchanged": 632
+  },
+  "limitations": [
+    "No runtime reset executed during deployment; production apply remains covered by source orchestration/store/process seams rather than another live reset",
+    "Previously connected MCP clients may require reconnect; fresh installed MCP connection passed",
+    "Initial writer-busy refusal and selected-candidate close/rollback refusals are retained in private evidence; no lock deletion or force shutdown",
+    "Not a formal release or target-platform matrix qualification"
+  ],
+  "private_receipt_sha256": {
+    "production-build.json": "3135c595e82314c5371ff4dfa70c4dba9d426038308050f5de6a694e17714a3b",
+    "exact-binary-installer-fixture.log": "4cb917374caf1c49d4b6c59453c93090b97658e8d365c99de5a40a4c91a0d5ec",
+    "exact-binary-cli.json": "fc4395ad954b80e05b9f158716727346ccea8408cff1b558ddad7ad3ca978b82",
+    "install-result.json": "dd9aad8c82ed3e8e768350f8ef331db24c711f970c3cb59a761cb61826bf8df8",
+    "preserve-install-result.json": "19ccf6719e2bf4e61d3ef0091e0027bde7f5cce40a3316986e9e95c0b2d2981f",
+    "installed-doctor.json": "822eba59869dcf03d13cb35414a7daea61a315ca1b95e19d67c3612d04ec70bd",
+    "installed-reset-preview.json": "d8f4f4c42eff85525a432bcf71acd9deec0feba3acaf4991624177c5a4267809",
+    "fresh-mcp-smoke.json": "8cfc3b39e6e9cbe5aac41911df1848fc4971ee07167c26758d6898c90afd369d",
+    "post-install-os-readback.json": "09694e947b4f1b4880c7e26c9a782031f3ee51c878608e7bf73900e482e5b151",
+    "guarded-recovery-refusals.json": "5f1b05a3d8133d72b2ca4ab7dfa5787bdceb061d0f9f8d6e99efc146e81cda8f",
+    "post-docs-closure-verification.json": "8483c3fc8c6d502a0824a7678d3dbb63e02d53f1184aa7d264be017c7479c0e1"
+  }
+}
