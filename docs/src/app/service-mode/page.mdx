@@ -2159,7 +2159,9 @@ requests before replaying an effect.
 ### Internal session reconciliation
 
 Session publication joins resident and durable state under the SQLite writer
-transaction. Independent task changes continue together. Current resource
+transaction. Handoff inspection, viewer issuance and native desktop opening refresh
+shared state before selecting the target. Independent task changes continue
+together. Current resource
 identity wins overlapping observations, with differences retained in private
 append-only runtime receipts. Original uncertain actions remain unreplayed.
 The receipt table belongs to the private runtime database; its contents are not
