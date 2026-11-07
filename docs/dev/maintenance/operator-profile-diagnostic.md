@@ -4,7 +4,7 @@ Product lane: PL-BUGFIX
 Work item: 558; P300/ticket530 is context
 Branch: fix/operator-profile-diagnostic
 Base: db8da1e3f1571b9750eb205dfeb0eba68b23f903
-State: ACTIVE; source validated, preserving adoption pending
+State: CLOSED; installed acceptance passed
 
 ## Bounded outcome
 
@@ -76,3 +76,18 @@ resource and effect fences. All three cases pass in9.91s; the surrounding97
 selected regressions pass. The earlier2ce production artifact is sealed but
 superseded without installation. A corrected sealed candidate and preserving
 installed acceptance remain required before closing558.
+
+## Installed acceptance | 2026-11-07
+
+[Installed receipt](../notes/2026-11-07-publication-reconciliation-installed.json)
+binds sourceffd3432d7/mainc2a8b879a, the sealed production binary, exact-binary
+fixture and accepted preserving transaction. Doctor passes. The original calendar
+task completes fresh snapshot, ready native handoff, post-handoff snapshot, normal
+keep-open and another snapshot. Both original uncertain requests remain uncertain
+with matching retained context and explicit no-replay guidance. Both coordinated
+browser processes retain their original kernel start tokens and executables;
+both tasks remain kept open. No provider write, profile reset or lock removal.
+
+The remaining consumer gap is closed, strict workspace Clippy passes with zero
+warnings, and97 surrounding regressions pass. Ticket558 is complete. Calendar
+and P300 acceptance are separate; their reserved final passes remain unconsumed.
