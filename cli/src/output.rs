@@ -6488,6 +6488,11 @@ Pending scope changes are fenced inside SQLite publication and launch/recovery
 admission transactions; unrelated profiles remain usable. The error
 browser_session_publication_idle_retirement_fenced preserves the original operation
 and does not authorize a fresh close or replacement launch.
+Acknowledged activity publication retains its latest 4096 completion receipts.
+Bookkeeping retries require an exact receipt and unchanged physical browser;
+unknown or expired IDs remain rejected. Errors with browser_session_idle_publication_
+use unavailable, invalid_record, activity_active or conflict to retain the cause.
+Preserve original actions: these errors never authorize replay or activity clearing.
 A stale actor cannot repeat an unresolved close. Same-command reopening completes
 old retirement publication before launching its replacement.
 Preparation also requires fresh atomic admission. Restart reads the original fence;

@@ -17,6 +17,22 @@ lanes:
     validation_status: Exact-error RED then candidate GREEN; build, fmt, strict workspace Clippy, 11 policy cases and documentation checks pass
     limitations: ["No installed-runtime, bank or messaging effects", "Existing adjacent service-status smoke calls an absent MCP tool; reproduced in unchanged debug and repaired CI binaries", "Retain primary for source review through 2026-11-08; integration and installed acceptance pending"]
     updated_at: 2026-11-07
+  - id: IDLE-ACTIVITY-562
+    product_lane: PL-BUGFIX
+    objective: Diagnose and repair idle activity publication after dispatched work without replay
+    plan: docs/dev/maintenance/idle-activity-publication.md
+    branch: fix/idle-activity-publication
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#562]
+    plan_state: ACTIVE
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [P300]
+    overlaps: [P300-RECOVERY, P300-OPERATOR-DIAGNOSIS]
+    reconciled_overlaps: ["Reuse canonical checkout; primary owns source/tests/docs after delegated worker stopped on a network-permission error. Completed source-provider checkout and sealed artifacts remain untouched. Calendar owner keeps live provider work; no competing install or replay."]
+    validation_status: Actual post-dispatch failure retained privately; generic wrapper hides cause. Real SQLite RED and typed-cause qualification pending.
+    limitations: ["No source diagnosis inferred from generic error label", "No browser/form/body reads, state clear, provider action replay or runtime effect", "P300 donor human-verification gate and final review/TDD remain unchanged"]
+    updated_at: 2026-11-07
   - id: P300-OPERATOR-DIAGNOSIS
     product_lane: PL-BUGFIX
     objective: Reconcile publication differences internally while preserving valid work and uncertain operations

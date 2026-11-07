@@ -7491,6 +7491,371 @@ fn acknowledged_activity_exit_clears_local_ids_and_preserves_history() {
 }
 
 #[test]
+fn sqlite_activity_publication_storage_failure_preserves_its_typed_cause_after_dispatch() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider, calls.clone());
+    consumer
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    std::fs::write(
+        fixture
+            .root
+            .join("fail-activity-publication-after-dispatch"),
+        "armed",
+    )
+    .unwrap();
+    let error = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "id":"original-dispatched-action", "action":"navigate",
+        "url":"https://synthetic.example/activity", "runtimeProfile":"profile-a", "activityAtMs":101
+    })).unwrap_err();
+    assert_eq!(
+        std::fs::read_to_string(fixture.root.join("command-dispatch-count")).unwrap_or_default(),
+        "1",
+        "fixture must reach exactly one original dispatch before publication fails: {error}"
+    );
+    let baseline: BrowserSessionState = serde_json::from_slice(
+        &std::fs::read(fixture.root.join("activity-publication-baseline.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        fixture.store(false).load_session_state().unwrap(),
+        baseline,
+        "failed SQLite transaction cannot publish staged state"
+    );
+    let activities = fixture.store(false).browser_activity_records().unwrap();
+    assert_eq!(activities.len(), 1);
+    assert!(
+        activities[0].acknowledged && !activities[0].original_ended,
+        "original dispatch receipt remains protected"
+    );
+    assert_eq!(
+        error, "browser_session_idle_publication_unavailable",
+        "storage failure must not be mislabeled as a publication conflict"
+    );
+}
+
+#[test]
+fn changed_activity_publication_lost_reply_allows_next_command_without_replay() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mode = Rc::new(Cell::new(0));
+    let attempts = Rc::new(Cell::new(0));
+    let mut consumer = host_with_persistence(
+        &fixture,
+        provider,
+        calls.clone(),
+        Mode::Success,
+        || 2001,
+        NativeUseReplyFailure {
+            store: fixture.store(false),
+            mode: mode.clone(),
+            attempts: attempts.clone(),
+        },
+    );
+    let read =
+        serde_json::json!({"action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100});
+    consumer
+        .execute_managed_command("Alice", &read)
+        .unwrap()
+        .unwrap();
+    std::fs::write(fixture.root.join("count-navigation-dispatches"), "armed").unwrap();
+    mode.set(4);
+    let navigate = serde_json::json!({"action":"navigate", "runtimeProfile":"profile-a", "activityAtMs":101, "url":"https://synthetic.example/once"});
+    assert_eq!(
+        consumer
+            .execute_managed_command("Alice", &navigate)
+            .unwrap_err(),
+        "synthetic_activity_publication_reply_lost"
+    );
+    assert_eq!(attempts.get(), 1);
+    let published = fixture.store(false).load_session_state().unwrap();
+    assert_eq!(published.navigation_history.len(), 1);
+    assert!(fixture
+        .store(false)
+        .browser_activity_records()
+        .unwrap()
+        .is_empty());
+    let mut peer = published.clone();
+    peer.next_session_sequence += 10;
+    fixture
+        .store(false)
+        .compare_and_save_session_state(&published, &peer)
+        .unwrap();
+    consumer
+        .execute_managed_command("Alice", &read)
+        .expect("completed SQLite publication must not poison an independent next command")
+        .unwrap();
+    assert_eq!(
+        fixture
+            .store(false)
+            .load_session_state()
+            .unwrap()
+            .navigation_history
+            .len(),
+        1,
+        "original navigation is never replayed"
+    );
+    assert_eq!(
+        consumer.state().next_session_sequence,
+        peer.next_session_sequence,
+        "independent peer metadata survives reconciliation"
+    );
+    assert_eq!(
+        std::fs::read_to_string(fixture.root.join("navigation-dispatch-count")).unwrap(),
+        "1",
+        "the original browser effect executes exactly once"
+    );
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn activity_publication_receipts_preserve_unknown_and_current_identity_fences() {
+    let fixture = Fixture::new();
+    let mut consumer = host(
+        &fixture,
+        Rc::new(RefCell::new(Provider::default())),
+        Rc::new(Cell::new(0)),
+    );
+    let read =
+        serde_json::json!({"action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100});
+    consumer
+        .execute_managed_command("Alice", &read)
+        .unwrap()
+        .unwrap();
+    consumer
+        .execute_managed_command("Alice", &read)
+        .unwrap()
+        .unwrap();
+    let mut store = fixture.store(false);
+    let state = store.load_session_state().unwrap();
+    let json: String = store
+        .remote_view_mutation_connection()
+        .query_row(
+            "SELECT json FROM state_documents WHERE kind='browser_activity_publications'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let receipts: Vec<BrowserActivityRecord> = serde_json::from_str(&json).unwrap();
+    let id = receipts.last().unwrap().id.clone();
+    // Exact durable completion is idempotent, even after its active row is gone.
+    BrowserSessionPersistence::publish_session_effects(
+        &mut store,
+        &state,
+        &state,
+        None,
+        &[],
+        std::slice::from_ref(&id),
+    )
+    .unwrap();
+    let unknown = uuid::Uuid::new_v4().to_string();
+    assert_eq!(
+        BrowserSessionPersistence::publish_session_effects(
+            &mut store,
+            &state,
+            &state,
+            None,
+            &[],
+            std::slice::from_ref(&unknown)
+        )
+        .unwrap_err(),
+        "browser_session_idle_publication_conflict"
+    );
+    let browser = state.browsers.values().next().unwrap().clone();
+    let mut changed_root = state.clone();
+    changed_root.browsers.get_mut(&browser.id).unwrap().pid += 1;
+    assert_eq!(
+        BrowserSessionPersistence::publish_session_effects(
+            &mut store,
+            &state,
+            &changed_root,
+            None,
+            &[],
+            std::slice::from_ref(&id)
+        )
+        .unwrap_err(),
+        "browser_session_idle_publication_conflict"
+    );
+    store
+        .admit_browser_activity(&unknown, &browser, &state)
+        .unwrap();
+    assert_eq!(
+        BrowserSessionPersistence::publish_session_effects(
+            &mut store,
+            &state,
+            &state,
+            None,
+            &[],
+            std::slice::from_ref(&unknown)
+        )
+        .unwrap_err(),
+        "browser_session_idle_publication_conflict"
+    );
+    assert!(
+        !store
+            .browser_activity_records()
+            .unwrap()
+            .iter()
+            .find(|record| record.id == unknown)
+            .unwrap()
+            .acknowledged
+    );
+    let mut replacement = state.clone();
+    replacement.browsers.get_mut(&browser.id).unwrap().pid += 1;
+    assert_eq!(
+        BrowserSessionPersistence::publish_session_effects(
+            &mut store,
+            &state,
+            &replacement,
+            None,
+            &[],
+            std::slice::from_ref(&id)
+        )
+        .unwrap_err(),
+        "browser_session_idle_publication_activity_active"
+    );
+    assert_eq!(store.load_session_state().unwrap(), state);
+}
+
+#[test]
+fn activity_publication_receipt_window_and_atomic_failure_keep_exact_evidence() {
+    let fixture = Fixture::new();
+    let mut consumer = host(
+        &fixture,
+        Rc::new(RefCell::new(Provider::default())),
+        Rc::new(Cell::new(0)),
+    );
+    let read =
+        serde_json::json!({"action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100});
+    consumer
+        .execute_managed_command("Alice", &read)
+        .unwrap()
+        .unwrap();
+    consumer
+        .execute_managed_command("Alice", &read)
+        .unwrap()
+        .unwrap();
+    let mut store = fixture.store(false);
+    let state = store.load_session_state().unwrap();
+    let json: String = store
+        .remote_view_mutation_connection()
+        .query_row(
+            "SELECT json FROM state_documents WHERE kind='browser_activity_publications'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let mut receipts: Vec<BrowserActivityRecord> = serde_json::from_str(&json).unwrap();
+    let oldest = receipts[0].id.clone();
+    while receipts.len() < 4096 {
+        let mut receipt = receipts[0].clone();
+        receipt.id = uuid::Uuid::new_v4().to_string();
+        receipts.push(receipt);
+    }
+    let seeded = serde_json::to_string(&receipts).unwrap();
+    store
+        .remote_view_mutation_connection()
+        .execute(
+            "UPDATE state_documents SET json=?1 WHERE kind='browser_activity_publications'",
+            [&seeded],
+        )
+        .unwrap();
+    let next = uuid::Uuid::new_v4().to_string();
+    store
+        .admit_browser_activity(&next, state.browsers.values().next().unwrap(), &state)
+        .unwrap();
+    store.acknowledge_browser_activity(&next).unwrap();
+    store
+        .remote_view_mutation_connection()
+        .execute_batch(
+            "CREATE TRIGGER fail_activity_receipt BEFORE INSERT ON state_documents
+         WHEN NEW.kind='browser_activity_publications'
+         BEGIN SELECT RAISE(ABORT, 'fixture receipt failure'); END;",
+        )
+        .unwrap();
+    let mut staged = state.clone();
+    staged.next_session_sequence += 1;
+    assert_eq!(
+        BrowserSessionPersistence::publish_session_effects(
+            &mut store,
+            &state,
+            &staged,
+            None,
+            &[],
+            std::slice::from_ref(&next)
+        )
+        .unwrap_err(),
+        "browser_session_idle_publication_unavailable"
+    );
+    assert_eq!(
+        store.load_session_state().unwrap(),
+        state,
+        "receipt failure rolls back the preceding state write"
+    );
+    assert!(store
+        .browser_activity_records()
+        .unwrap()
+        .iter()
+        .any(|record| record.id == next && record.acknowledged));
+    store
+        .remote_view_mutation_connection()
+        .execute_batch("DROP TRIGGER fail_activity_receipt")
+        .unwrap();
+    BrowserSessionPersistence::publish_session_effects(
+        &mut store,
+        &state,
+        &staged,
+        None,
+        &[],
+        std::slice::from_ref(&next),
+    )
+    .unwrap();
+    let json: String = store
+        .remote_view_mutation_connection()
+        .query_row(
+            "SELECT json FROM state_documents WHERE kind='browser_activity_publications'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let receipts: Vec<BrowserActivityRecord> = serde_json::from_str(&json).unwrap();
+    assert_eq!(receipts.len(), 4096);
+    assert_eq!(receipts.last().unwrap().id, next);
+    assert!(!receipts.iter().any(|record| record.id == oldest));
+    assert_eq!(
+        BrowserSessionPersistence::publish_session_effects(
+            &mut store,
+            &staged,
+            &staged,
+            None,
+            &[],
+            &[oldest]
+        )
+        .unwrap_err(),
+        "browser_session_idle_publication_conflict",
+        "expired receipt cannot be inferred from an absent activity row"
+    );
+    BrowserSessionPersistence::publish_session_effects(
+        &mut store,
+        &staged,
+        &staged,
+        None,
+        &[],
+        &[next],
+    )
+    .unwrap();
+}
+
+#[test]
 fn unchanged_activity_publication_lost_reply_does_not_block_next_command() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));

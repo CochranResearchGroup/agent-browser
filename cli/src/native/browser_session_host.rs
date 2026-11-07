@@ -671,7 +671,23 @@ impl BrowserSessionPersistence for BrowserSessionSqliteStore {
             self.publish_session_state(expected, state, intent)
         } else {
             self.publish_session_retirements(expected, state, retirement_ids, intent, activity_ids)
-                .map_err(|_| "browser_session_idle_publication_conflict".into())
+                .map_err(|error| {
+                    match error {
+                        agent_browser_service_model::BrowserIdleRetirementStoreError::Unavailable => {
+                            "browser_session_idle_publication_unavailable"
+                        }
+                        agent_browser_service_model::BrowserIdleRetirementStoreError::InvalidRecord => {
+                            "browser_session_idle_publication_invalid_record"
+                        }
+                        agent_browser_service_model::BrowserIdleRetirementStoreError::ActivityActive => {
+                            "browser_session_idle_publication_activity_active"
+                        }
+                        agent_browser_service_model::BrowserIdleRetirementStoreError::Conflict => {
+                            "browser_session_idle_publication_conflict"
+                        }
+                    }
+                    .into()
+                })
         }
     }
     fn publish_session_state(
