@@ -5,7 +5,7 @@ lanes:
     product_lane: PL-PLATFORM
     objective: Provide a production runtime reset that preserves profiles and operation history
     plan: docs/dev/maintenance/runtime-reset.md
-    branch: platform/runtime-reset
+    branch: docs/runtime-reset-deployment
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#565]
@@ -14,8 +14,8 @@ lanes:
     dependencies: [CochranResearchGroup/agent-browser#562]
     overlaps: [IDLE-ACTIVITY-562]
     reconciled_overlaps: ["Separate primary checkout; reset owns new orchestration/store-retirement modules and documentation; consume merged publication repair without editing its algorithms"]
-    validation_status: Source-qualified; 9 reset and 7 coordination tests, strict workspace Clippy, format, build, public no-write CLI checks and documentation gates pass
-    limitations: ["Source PR review pending; retain primary through 2026-11-08", "New command is not installed or applied in production; no profile-data deletion or foreign/development cleanup"]
+    validation_status: PR566 merged; sealed production 94ec05f29f12 installed accepted; doctor, preview, exact installer fixture, fresh MCP and process preservation pass; 16 focused source tests and quality/docs gates pass
+    limitations: ["Retain clean primary for sealed production candidate custody through 2026-11-08", "Existing MCP clients may need reconnect; no reset apply executed during deployment", "Profile-data reset and target-platform matrix remain outside scope"]
     updated_at: 2026-11-07
   - id: LOCAL-WORKER-STATUS-ROUTING
     product_lane: PL-BUGFIX

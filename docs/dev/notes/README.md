@@ -1,5 +1,7 @@
 # Agent Browser Notes Index
 
+[Runtime reset installed](2026-11-07-runtime-reset-installed.json): PL-PLATFORM / #565; PR566 and sealed production 94ec05f29f12 accepted with exact-binary fixture, doctor, read-only preview and fresh MCP proof; profiles and existing process identities preserved.
+
 [P300 copy disposal census repair](2026-11-04-profile-copy-disposal-census.md): #530 first actual row passes usability and storage checks; repair installed, original cleanup complete, three actual portability rows pass; fourth awaits human readiness.
 
 [Registered idle lease repair](2026-10-31-registered-idle-lease.md): #515 separates pre-launch capability registration from runtime ownership without identity mutation.

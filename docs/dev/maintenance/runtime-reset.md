@@ -71,10 +71,23 @@ only this task's waiting clients were cancelled, and final Cargo validation used
 the supported cache opt-out. Local debug/Linux evidence replaces hosted CI;
 it does not establish macOS/Windows support or a comprehensive Rust-suite pass.
 
-Production operational reset and disposable open/close acceptance have separate
-private receipts. The new command has not been installed or applied to production.
-Its whole-command service effects remain qualified through injected orchestration,
-SQLite and real process-handle seams, rather than a second production reset.
-The installed shared skill stays unchanged with the installed binary; repository
-guidance documents the source command. Retain this primary checkout for PR review
-through 2026-11-08. Profile-data reset under #74 remains out of scope.
+Production operational reset and its disposable open/close acceptance retain
+separate private receipts. Whole-command service effects are qualified through
+injected orchestration, SQLite and real process-handle seams.
+
+## Installed checkpoint
+
+PR566 is merged as `f31882882aa6ebb91fc520fcb1bfcde89b0ced31`. The
+[installed receipt](../notes/2026-11-07-runtime-reset-installed.json) binds sealed
+production binary `94ec05f29f12`, exact installer/CLI qualification and accepted
+preserve transaction `upgrade-62378899-40ef-4a1f-a3dc-1cc88e413bec`.
+Install doctor, read-only reset preview, fresh MCP open/snapshot/close, original
+process-identity preservation and synthetic cleanup pass. Installed guidance is
+synchronized. Previously connected MCP clients may need reconnect.
+
+The initial writer-busy refusal and guarded selected-candidate close/rollback
+refusals remain in private evidence. Deployment did not run another reset, remove
+locks or force browser shutdown. The new command is available; this is not an
+additional live qualification of reset apply. Profile-data reset under #74 stays
+out of scope. Retain the clean primary through 2026-11-08 for custody of the sealed
+production candidate and rollback/reproduction evidence.
