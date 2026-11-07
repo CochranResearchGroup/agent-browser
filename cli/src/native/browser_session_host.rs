@@ -1445,9 +1445,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         handoff_id: &str,
         now_ms: u64,
     ) -> Result<agent_browser_service_model::RemoteViewApplicationViewIssuance, String> {
-        if self.persistence.load_session_state()? != self.persisted_state {
-            return Err("browser_session_publication_conflict".into());
-        }
+        self.refresh_before_ordinary_command()?;
         let retained =
             agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, handoff_id)?;
         self.require_explicit_hosted_recovery(&retained.browser.id)?;
@@ -1655,6 +1653,11 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             // consequence choices before a close. It never changes human control.
             return self.profile_duplicate(command);
         }
+        if action == "service_remote_view_handoff_resolve" {
+            // Handoff is an ordinary consumer of shared owner state too. Refresh
+            // before policy checks or target selection, without replaying effects.
+            self.refresh_before_ordinary_command()?;
+        }
         super::browser_host_control::check_state(&self.state, "", command)?;
         if action.starts_with("browser_session_") && action != "browser_session_status" {
             self.refresh_before_ordinary_command()?;
@@ -1709,9 +1712,6 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         match action {
             "service_remote_view_handoff_resolve" => {
                 let handoff_id = required_string(command, "handoffId")?;
-                if self.persistence.load_session_state()? != self.persisted_state {
-                    return Err("browser_session_publication_conflict".into());
-                }
                 if command["handoffOperation"] == "delete" {
                     // Revoke only the durable link. Tab lifetime and pending-human
                     // retention belong to the target, independent of this record.
@@ -1900,9 +1900,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 }
                 self.recreate_expired_handoff(handoff_id, now_ms)?;
                 if command["nativeDesktop"] == true {
-                    if self.persistence.load_session_state()? != self.persisted_state {
-                        return Err("browser_session_publication_conflict".into());
-                    }
+                    self.refresh_before_ordinary_command()?;
                     let retained = agent_browser_service_model::resolve_remote_view_tab_handoff(
                         &self.state,
                         handoff_id,

@@ -5999,7 +5999,7 @@ A Ready retained owner reconnects to the exact handoff target after identity che
 Recovery preserves its known route and display across pending or orphaned
 presentation when current-boot custody matches; physical ownership and visibility
 must still pass before the view is ready.
-Session publication reconciles resident and durable metadata internally without
+Task continuation and handoff resolution reconcile resident and durable metadata without
 replaying browser effects. Current resource identity wins overlapping observations;
 private runtime receipts preserve their differences. Independent tasks continue.
 Known occupied or reserved desktops can justify separate bounded capacity;

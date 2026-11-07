@@ -66,3 +66,13 @@ pass. Documentation build finalization and sealed adoption are next.
 Private raw receipts retain the initial compiler mistakes, superseded refusal
 assertions, disproved first capacity hypothesis, intermediate92/95result and
 final corrected evidence. No debug instrumentation remains in product code.
+
+## Handoff consumer completion
+
+The pre-entry peer-publication regression failed with the exact publication
+conflict in3.98s. View issuance, handoff inspection and native desktop opening
+now refresh shared state before current target selection, preserving the existing
+resource and effect fences. All three cases pass in9.91s; the surrounding97
+selected regressions pass. The earlier2ce production artifact is sealed but
+superseded without installation. A corrected sealed candidate and preserving
+installed acceptance remain required before closing558.
