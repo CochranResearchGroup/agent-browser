@@ -526,11 +526,18 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.getByTitle('Native Remote View desktop', { exact: true }).waitFor();
     await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
     await page.getByRole('searchbox').fill('');
-    const aliceFrame = page.waitForResponse('**/remote-view/task-link');
+    await page.evaluate(() => { window.connectedNativeFrame = document.querySelector('iframe[title="Native Remote View desktop"]'); window.connectedNativeDocument = window.connectedNativeFrame.contentDocument; });
+    const aliceFocus = page.waitForResponse(response => response.url().endsWith('/api/service/request')
+      && response.request().postDataJSON()?.params?.targetId === 'target-alice');
     await page.getByRole('button', { name: 'Alice invoice', exact: true }).click();
-    await aliceFrame;
+    await aliceFocus;
+    await page.locator('[data-native-task-state=opened]').waitFor();
+    assert(await page.evaluate(() => window.connectedNativeFrame === document.querySelector('iframe[title="Native Remote View desktop"]')
+      && window.connectedNativeDocument === window.connectedNativeFrame.contentDocument), 'same-desktop rail selection preserves the connected Native viewer');
     frameAllowed = false;
     await page.getByRole('button', { name: 'Bob invoice', exact: true }).click();
+    // Framing policy is checked on an actual page load, not a tab focus.
+    await page.reload();
     await page.getByRole('alert').filter({ hasText: 'Check Remote View sign-in or access' }).waitFor({ timeout: 2000 });
     assert.equal(await page.getByRole('region', { name: 'Native desktop', exact: true }).getAttribute('data-native-task-failure'), 'viewer-access');
     assert.equal(await page.getByRole('link', { name: 'Open Remote View' }).getAttribute('href'), `http://127.0.0.1:${server.address().port}/remote-view/task-link`);
@@ -594,13 +601,18 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
         selectionHold = { targetId: older.targetId, started: announce, reply };
         const beforeSelections = selections().length;
         const beforeHandoffs = requests.filter(request => request.action === 'remote_view_open').length;
+        const previousViewerUrl = await page.getByTitle('Native Remote View desktop', { exact: true }).getAttribute('src');
+        await page.frameLocator('iframe[title="Native Remote View desktop"]').locator('body').evaluate(body => { body.dataset.continuity = 'keep-current-frame'; });
         await page.getByRole('button', { name: older.title, exact: true }).click();
         await started;
+        const latestSelection = page.waitForResponse(response => response.url().endsWith('/api/service/request')
+          && response.request().postDataJSON()?.params?.targetId === 'target-alice');
         await page.getByRole('button', { name: 'Alice invoice', exact: true }).click();
         if (older.sameDesktop) {
           assert.equal(selections().length, beforeSelections + 1,
             'one desktop must serialize older and newer combined selections');
-          assert.equal(await page.getByTitle('Native Remote View desktop', { exact: true }).count(), 0);
+          assert.equal(await page.getByTitle('Native Remote View desktop', { exact: true }).count(), 1,
+            'same-desktop queued focus must preserve the connected viewer');
         } else {
           await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
           await page.frameLocator('iframe[title="Native Remote View desktop"]').locator('body').evaluate(body => { body.dataset.continuity = 'keep-current-frame'; });
@@ -612,9 +624,12 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
         releaseHeldSelection(rejects ? { status: 400, code: 'operator_focus_profile_policy_denied' } : null);
         releaseHeldSelection = null;
         await (await oldResponse).finished();
+        await latestSelection;
+        await page.locator('[data-native-task-state=opened]').waitFor();
         await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-        assert.ok((await page.getByTitle('Native Remote View desktop', { exact: true }).getAttribute('src')).endsWith('/remote-view/task-link-target-alice'));
+        assert.equal(await page.getByTitle('Native Remote View desktop', { exact: true }).getAttribute('src'),
+          older.sameDesktop ? previousViewerUrl : `http://127.0.0.1:${server.address().port}/remote-view/task-link-target-alice`);
         assert.equal(new URL(page.url()).searchParams.get('tab'), 'alice');
         assert.equal(await page.getByRole('region', { name: 'Native desktop', exact: true }).getByRole('alert').count(), 0);
         assert.deepEqual(selections().slice(beforeSelections).map(request => request.params.targetId),
@@ -622,10 +637,8 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
         assert.deepEqual(requests.filter(request => request.action === 'remote_view_open').slice(beforeHandoffs).map(request => request.params.targetId),
           [older.targetId, 'target-alice'], 'each selection must use one combined handoff');
         assert.equal(requests.filter(request => request.action === 'view_focus').length, 0);
-        if (!older.sameDesktop) {
-          assert.equal(await page.frameLocator('iframe[title="Native Remote View desktop"]').locator('body').getAttribute('data-continuity'),
-            'keep-current-frame', 'late work from another desktop must not remount the current viewer');
-        }
+        assert.equal(await page.frameLocator('iframe[title="Native Remote View desktop"]').locator('body').getAttribute('data-continuity'),
+          'keep-current-frame', 'late work must not remount the current viewer');
         lateSelections.push({
           olderTarget: older.targetId,
           syntheticScope: older.sameDesktop ? 'same-desktop' : 'independent-desktop',
@@ -633,7 +646,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
           selectionRequestTargets: selections().slice(beforeSelections).map(request => request.params.targetId),
           handoffRequestTargets: requests.filter(request => request.action === 'remote_view_open').slice(beforeHandoffs).map(request => request.params.targetId),
           selectedTab: new URL(page.url()).searchParams.get('tab'),
-          viewerDocumentPreserved: older.sameDesktop ? null : await page.frameLocator('iframe[title="Native Remote View desktop"]').locator('body').getAttribute('data-continuity') === 'keep-current-frame',
+          viewerDocumentPreserved: await page.frameLocator('iframe[title="Native Remote View desktop"]').locator('body').getAttribute('data-continuity') === 'keep-current-frame',
         });
       }
     }

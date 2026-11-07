@@ -26,7 +26,7 @@ Read [Native journey qualification](references/cli-and-service.md#native-journey
 
 For human assistance, call `browser_handoff({ "taskId": "<returned-task-id>" })`. Require `operatorVisible.state=ready` before giving the person its complete `data.handoffUrl`; continue with the same task ID. For `remote_view_public_origin_missing`, check reviewed `AGENT_BROWSER_PUBLIC_ORIGIN` configuration and stale MCP startup. Set it in `~/.agent-browser/.env` or `AGENT_BROWSER_ENV_FILE`; explicit process settings win. MCP connections pin startup configuration: reconnect after changes, preserving the task. Never assemble provider URLs.
 
-Standalone handoffs use Native authentication and the current owned desktop. Reuse the opaque URL; require native display confirmation.
+Standalone handoffs use Native authentication and the current owned desktop. Reuse the opaque URL; require native display confirmation. Same-browser/desktop rail tab switches retain the viewer connection.
 
 After human input, `browser_continue` with the same `taskId` reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff.
 
@@ -125,7 +125,7 @@ For sign-in and workspace teaching, read [workspace tools](references/workspace-
 
 ## Browser mode and builds
 
-Use `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build and CDP mode are independent. For copy checkpoints, source-mode uncertainty and original-operation readback, read [copy experiments](references/cli-and-service.md#profile-lab-independent-copies) and [build recovery](references/cli-and-service.md#browser-build-selection).
+Use `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build and mode are independent. Details: [copy experiments](references/cli-and-service.md#profile-lab-independent-copies) and [build recovery](references/cli-and-service.md#browser-build-selection).
 
 Owned manual copies use normal close without desktop agent input. Inspect uncertain closes; cancel the original operation before reviewing a new attempt. A reboot is not clean-close proof. Window readiness is separate from agent input authority.
 
@@ -148,3 +148,5 @@ Dates: YYYY-MM-DD; downloads need live process proof.
 ### Owner service waits
 
 Use the owning service’s bounded lifecycle retention for authentication waits. Read [Owner service waits](references/cli-and-service.md#owner-service-waits); never transfer a claim to a replacement browser or treat retention as credential/control authority.
+
+Right-click a managed dashboard browser/tab to review CDP or CDP-free relaunch.

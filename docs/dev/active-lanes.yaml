@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: TAB552
+    product_lane: PL-BUGFIX
+    objective: Preserve the connected Native viewer during same-desktop tab selection
+    plan: docs/dev/maintenance/native-tab-continuity.md
+    branch: platform/spec523-workspace
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#552]
+    plan_state: ACTIVE
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [P300]
+    overlaps: [P300]
+    reconciled_overlaps: ["Serial bounded maintenance in the existing checkout; owns native-task-viewport and continuity fixtures; preserve existing browser-mode context-menu edits and shared documentation hunks; no new checkout or branch transition"]
+    validation_status: Local continuity and full rail regressions, TypeScript, builds, docs, selector, format and strict workspace Clippy pass; baseline parity has three reproduced failures; patch remains uncommitted and uninstalled
+    limitations: ["Source and synthetic validation only; no installed Native transport acceptance or runtime publication"]
+    updated_at: 2026-11-06
   - id: P302
     product_lane: PL-BUGFIX
     objective: Restore consistent profile copy through owned manual lifecycle closure

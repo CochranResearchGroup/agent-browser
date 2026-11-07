@@ -68,9 +68,12 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.getByRole('button', { name: 'Expire census', exact: true }).click();
     await page.getByRole('button', { name: 'Fresh census', exact: true }).click();
 
+    const latestFocus = page.waitForResponse(response => response.url().endsWith('/api/service/request')
+      && response.request().postDataJSON()?.params?.targetId === 'alpha');
     await page.getByRole('button', { name: 'Alpha', exact: true }).click();
     hold = null; release(); release = null;
-    await page.waitForFunction(() => document.querySelector('iframe')?.getAttribute('src')?.endsWith('/alpha'));
+    await latestFocus;
+    await page.locator('[data-native-task-state=opened]').waitFor();
     assert.deepEqual(requests.map(x => x.params.targetId), ['alpha', 'alpha', 'beta', 'alpha'], 'latest selection must execute after earlier in-flight native effects');
 
     await page.getByRole('button', { name: 'Confirm absence', exact: true }).click();

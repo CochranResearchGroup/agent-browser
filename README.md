@@ -1096,6 +1096,8 @@ Existing-tab operator selection talks directly to its browser owner without
 creating an HTTP launch lane or scheduler job. Signed focus, display ordering
 and current Native readiness are still checked.
 An already verified desktop stays connected when census metadata expires.
+Switching tabs within the same browser and desktop preserves the connected
+viewer while the owner focuses the selected tab.
 Stale metadata cannot open a new selection; a changed binding or confirmed
 absence clears the viewer. Remote View continues to own connection authority.
 
@@ -7381,7 +7383,7 @@ prepare another copy or replay closure merely because a reply was lost.
 
 ### Convert an existing task
 
-The browser mode menu offers **Relaunch with CDP** and **Relaunch without CDP** for managed tasks. A successful explicit replacement preserves the logical task, durable profile and original handoff; it changes the physical browser process. Review the affected tasks before selecting relaunch. Unsaved page state and downloads may be lost; unknown URLs and uncertain website submissions are never replayed.
+Right-click a managed browser heading or tab in the left rail to choose **Relaunch with CDP** or **Relaunch without CDP**. The tab actions button and browser mode menu offer the same controls. Review applies to the entire shared browser, including its other tasks. A successful explicit replacement preserves the logical task, durable profile and original handoff; it changes the physical browser process. Review the affected tasks before selecting relaunch. Unsaved page state and downloads may be lost; unknown URLs and uncertain website submissions are never replayed.
 
 MCP uses `browser_command` with `taskId`, action `mode_convert`, and params containing `operationId`, `mode` (`cdp` or `cdp_free`) and `choice`. Start with `prepare`, then select an offered action. CLI accepts `agent-browser --json mcp mode-convert '{"taskId":"TASK","operationId":"mode-one","mode":"cdp_free","choice":"prepare"}'`. HTTP uses `POST /api/command` with action `browser_session_mode_convert`, the exact `sessionId` and owner `sessionName`, and the same operation fields.
 
