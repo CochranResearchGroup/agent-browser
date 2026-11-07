@@ -187,5 +187,22 @@ its failures and scoped resolutions; this is not a new full-suite pass. The
 primary writer is building one sealed production candidate and will preserve
 both programs' owned browsers. Installation and fresh donor handoff are pending.
 
+Before adoption, a focused consumer check found three remaining handoff entry
+guards comparing stale state before reconciliation. The real peer-advance test
+failed with the exact publication conflict, then passed viewer issuance,
+handoff inspection and Native opening with no effect replay. All 97 surrounding
+regressions pass against the pinned test binary. The primary writer performed
+this qualification in the receiving checkout while its first release checkout
+remained frozen, then preserved the patches and restored the exact clean head.
+
+PR 560 integrated the corrected source `ffd3432d75f9c0179fcf826c874d77edffd8932f`
+at canonical `c2a8b879aed6bab3b57b087120ff8d392e145780`. The earlier sealed
+candidate is superseded and uninstalled. One corrected production build is now
+running under the same primary writer; installation and live handoff acceptance
+remain pending. P300 does not start a second build or competing installation.
+The exact required workspace Clippy receipt was read independently: exit zero,
+zero warnings or errors, 174.806 seconds. This is the required workspace command,
+not a claim that the expanded all-targets baseline passed.
+
 Ticket 530 remains open with three accepted and disposed copy rows. Its fourth
 row and P300 final broad review/remediation remain unrun.
