@@ -1,7 +1,6 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
-<<<<<<< HEAD
   - id: HUMAN-HANDOFF-571
     product_lane: PL-BUGFIX
     objective: Open explicit human assistance interactive with coordinated automation custody
@@ -17,7 +16,7 @@ lanes:
     reconciled_overlaps: ["Isolated primary; preserve canonical dirty retirement-publication work and retained peers; no shared runtime effects"]
     validation_status: Viewer red reproduced and first browser slice green; cross-repository custody validation pending
     limitations: ["No installed or live acceptance claimed"]
-=======
+    updated_at: 2026-11-07
   - id: P321-RETIREMENT-570
     product_lane: PL-BUGFIX
     objective: Finish the requested profiles settled retirement publication without repeating close
@@ -33,7 +32,6 @@ lanes:
     reconciled_overlaps: ["Reuse current owning checkout after567 source integration; one writer; Mailroot owns provider work; no competing production build or reset; preserve interview patch"]
     validation_status: Exact-code RED then72 CLI retirement and416 model tests passed; fmt strict workspace Clippy and docs passed; source qualified
     limitations: ["No unrelated retained-task changes or private-input replay", "No reset, state clearing or lock removal", "Installed workflow qualification remains separate"]
->>>>>>> origin/main
     updated_at: 2026-11-07
   - id: P321-OWNER-567
     product_lane: PL-BUGFIX
