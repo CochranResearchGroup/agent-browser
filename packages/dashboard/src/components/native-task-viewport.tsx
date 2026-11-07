@@ -10,10 +10,11 @@ import { requestNativeTaskFocus, type NativeTaskFocusTarget } from "@/lib/native
 export type NativeTaskViewportTarget = NativeTaskFocusTarget;
 
 type ViewFailure = "handoff" | "operator-access" | "viewer-page" | "viewer-access";
-type ViewState = { identity: string; status: "opening" | "opened" | "failed"; url?: string; failure?: ViewFailure };
+type ViewState = { identity: string; desktopIdentity: string; status: "opening" | "opened" | "failed"; url?: string; failure?: ViewFailure };
 
 /** Native Remote View supplies the viewer and its authentication. This component
  * selects the exact owned task and embeds only its ready durable handoff.
+ * Same-browser, same-desktop tab focus preserves the connected viewer document.
  * Census expiry preserves only an already requested exact binding; stale metadata
  * cannot authorize a new selection. Missing or absent bindings clear the viewer.
  * Failure guidance distinguishes preparation, explicit operator policy and the
@@ -35,6 +36,7 @@ export function NativeTaskViewport({ target, unverifiedTarget = null, hasSelecti
   const targetId = binding?.targetId;
   const displayAllocationId = binding?.displayAllocationId;
   const identity = JSON.stringify([browserId, sessionName, targetId, displayAllocationId]);
+  const desktopIdentity = JSON.stringify([browserId, displayAllocationId]);
   const [attempt, setAttempt] = useState(0);
   const [view, setView] = useState<ViewState | null>(null);
   const generation = useRef(0);
@@ -57,7 +59,9 @@ export function NativeTaskViewport({ target, unverifiedTarget = null, hasSelecti
     if (requested.current?.identity === identity && requested.current.attempt === attempt) return;
     const current = ++generation.current;
     requested.current = { identity, attempt };
-    setView({ identity, status: "opening" });
+    setView(previous => ({ identity, desktopIdentity, status: "opening",
+      url: previous?.desktopIdentity === desktopIdentity && previous.status !== "failed" ? previous.url : undefined,
+    }));
     void queueWorkspaceFocusRequest(JSON.stringify(["native-desktop", displayAllocationId]), async () => {
       if (generation.current !== current) return;
       try {
@@ -67,18 +71,22 @@ export function NativeTaskViewport({ target, unverifiedTarget = null, hasSelecti
         if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {
           throw new Error("native_handoff_url_invalid");
         }
-        setView({ identity, status: "opened", url: url.toString() });
+        // The handoff performs exact authorized focus. Another tab on this
+        // desktop does not require navigating the already connected viewer.
+        setView(previous => ({ identity, desktopIdentity, status: "opened",
+          url: previous?.desktopIdentity === desktopIdentity && previous.url ? previous.url : url.toString(),
+        }));
       } catch (error) {
         const failure = error instanceof ServiceOperationError || error instanceof ServiceRequestHttpError
           ? error.failure : null;
         const accessCheckRequired = failure?.code === "operator_focus_profile_policy_denied"
           || failure?.code === "operator_focus_authority_required";
-        if (generation.current === current) setView({ identity, status: "failed", failure: accessCheckRequired ? "operator-access" : "handoff" });
+        if (generation.current === current) setView({ identity, desktopIdentity, status: "failed", failure: accessCheckRequired ? "operator-access" : "handoff" });
       }
     });
-  }, [canRequest, browserId, sessionName, targetId, displayAllocationId, identity, attempt, unverifiedTarget]);
+  }, [canRequest, browserId, sessionName, targetId, displayAllocationId, identity, desktopIdentity, attempt, unverifiedTarget]);
 
-  const current = view?.identity === identity ? view : null;
+  const current = view && (view.identity === identity || (canRequest && view.desktopIdentity === desktopIdentity && view.status !== "failed")) ? view : null;
   const hasBinding = Boolean(target || (unverifiedTarget && current));
   const selectionMissing = !hasBinding && hasSelection === true;
   return <section className="native-task-viewport" aria-label="Native desktop" data-native-task-failure={current?.status === "failed" ? current.failure : undefined} data-native-task-state={selectionMissing ? loading ? "refreshing" : desktopUnavailable || presenceUnavailable ? "unavailable" : "missing" : current?.status ?? "unselected"}>
@@ -109,7 +117,7 @@ export function NativeTaskViewport({ target, unverifiedTarget = null, hasSelecti
         {onRefresh && <button type="button" disabled={loading} onClick={() => void onRefresh()}>{loading ? "Refreshing browsers" : "Refresh browsers"}</button>}
         <button type="button" disabled={!canRequest} aria-label="Retry native desktop" onClick={() => setAttempt(value => value + 1)}>Retry</button>
       </div>
-        : current?.status === "opened" && current.url ? <iframe
+        : current?.url ? <iframe
           title="Native Remote View desktop" src={current.url} allow="clipboard-read; clipboard-write; fullscreen"
           allowFullScreen referrerPolicy="same-origin"
           onLoad={event => {
