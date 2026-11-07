@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "work_item": "CochranResearchGroup/agent-browser#558",
+  "status": "installed_accepted",
+  "source_commit": "ffd3432d75f9c0179fcf826c874d77edffd8932f",
+  "canonical_merge": "c2a8b879aed6bab3b57b087120ff8d392e145780",
+  "pull_requests": [
+    557,
+    560
+  ],
+  "candidate": {
+    "id": "candidate-785c01da733e79b5-acd74b124577d9e9",
+    "binary_sha256": "acd74b124577d9e9129fa51e3378b3de9937606470b6368ad5c882369b0d239e",
+    "executable_input_sha256": "785c01da733e79b5d93c4873dd2cf4e529c4bd15c66c576a0c58d1806126fadd",
+    "seal_sha256": "1339ed7d3de73bb39816302d9eb9ded4fc5ea9a2001d697b2006ace2a8cd2ec5",
+    "artifact_class": "production_shaped",
+    "source_clean": true,
+    "source_is_canonical_ancestor": true,
+    "canonical_executable_inputs_unchanged": true
+  },
+  "validation": {
+    "functional_tests_passed": 97,
+    "functional_tests_failed": 0,
+    "strict_workspace_clippy": {
+      "passed": true,
+      "seconds": 174.806,
+      "warnings": 0
+    },
+    "format_passed": true,
+    "policy_wiring_passed": true,
+    "changed_documentation_links_passed": true,
+    "documentation_site_build_passed": true,
+    "exact_binary_workstation_fixture_exit_code": 0,
+    "hosted_ci": "excluded_by_operator_cost_policy",
+    "platform": "Linux x86_64 / WSL; rustc1.94.1",
+    "expanded_all_targets_clippy": "unchanged_baseline_test_lints_retained_separately"
+  },
+  "installation": {
+    "transaction_id": "upgrade-91498402-31ed-4edf-bcb5-cc9140c20923",
+    "policy": "preserve",
+    "state": "accepted",
+    "result_ready": true,
+    "generation": "0.28.0-acd74b124577-2f0ec3b99bee",
+    "installed_binary_matches_seal": true,
+    "doctor_exit_code": 0,
+    "original_calendar_process_preserved": true,
+    "coordinated_peer_process_preserved": true,
+    "process_start_tokens_and_executables_rechecked": true,
+    "both_task_keep_open_claims_retained": true
+  },
+  "original_workflow": {
+    "fresh_snapshot": true,
+    "handoff_ready": true,
+    "handoff_proof_scope": "owned_browser_window",
+    "post_handoff_snapshot": true,
+    "normal_keep_open_request": true,
+    "post_keep_open_snapshot": true,
+    "both_original_uncertain_requests_retained": true,
+    "current_context": "retained_matches",
+    "original_effects_replayed": false,
+    "profile_reset": false,
+    "lock_removed": false,
+    "calendar_provider_writes": 0,
+    "calendar_pilot_attempts_unchanged": 3
+  },
+  "scope": "Closes the installed browser repair only. P300/530 and Plan0321 calendar acceptance remain separate; no final program review/TDD consumed.",
+  "private_receipt_sha256": {
+    "corrected-candidate-qualification.private.json": "1462ab5e28d60fbb94e86afff2b163b55f92ddc39bfdd00f4895d76383a8f77c",
+    "preserving-install-result.private.json": "2bb476cbb6bf368dbe089e9838fb6b16ffc364f00eb37d23d2b7f76d971b51d6",
+    "installed-doctor.private.json": "21dbdbad10d76288255022c7255c659a919c70c90dd2fa4c003170e9f6eb785b",
+    "27-installed-snapshot.response.private.json": "f82e963c9e16ec0eba6d6c47423613576d8c89b77bfd45acd5a17ede57bf07ef",
+    "28-installed-handoff.response.private.json": "10f0538205e3b59a38a45098c5413322aae5963a8c1701179352b266f3172638",
+    "29-installed-original-operation.response.private.json": "fba2819812a01eebbaee0a4dd4b2a628efac402e27d472f2fc4749dddf13ad2e",
+    "30-installed-original-evaluate.response.private.json": "05092d534796845ae5d113f04c0afa1f4badb1dd9dd68f0f79e82095f45f4d5b",
+    "31-installed-post-handoff-snapshot.response.private.json": "a30767b0cc5601c2752a676cf917f8606aab07b9070e6f3cfbf557d2bedb9cbe",
+    "32-retain-repaired-task.response.json": "3fe140844da39b2ca84bfec06e9c19b69ff67f610ee62a05a45ccfd3028019b1",
+    "33-installed-retained-task-snapshot.response.private.json": "17800a69bb2b92f2fe41c94ccb0485f8b48a165a1e171243dd5eabdf9395bff6",
+    "34-final-owner-status.response.json": "e6687b4484eb7009487effa815981793490fbf70eb59348d452dce53669fbb73"
+  }
+}

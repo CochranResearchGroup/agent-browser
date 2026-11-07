@@ -24,13 +24,20 @@
     "total_seconds": 172.449,
     "test_binary_sha256": "2d3663a5ab610b56e839a92a4f8eb3fc3b4b562214cbf2bc0d4828a700cc9d68"
   },
-  "strict_clippy": "pending",
+  "strict_clippy": {
+    "status": "passed",
+    "seconds": 174.806,
+    "warnings": 0
+  },
   "production_candidate": {
     "source_commit": "2ce59d78205dfb3c0b5879d8c6938998ebdb6571",
     "binary_sha256": "9170b04a728a6652d642901baafe34e3de434a3575ce427f7ffa84320b631da3",
     "status": "sealed_superseded_uninstalled"
   },
-  "corrected_installation": "pending",
+  "corrected_installation": {
+    "status": "accepted",
+    "receipt": "2026-11-07-publication-reconciliation-installed.json"
+  },
   "hosted_ci": "not_run_operator_cost_policy",
   "platform": "Linux x86_64 WSL; rustc1.94.1",
   "reserved_final_review_and_tdd": {
@@ -47,5 +54,6 @@
     "patch": "same host fix and regression; final Rustfmt changes whitespace only; help prose updated afterward",
     "custody": "private SHA-pinned binary harness; canonical checkout restored clean"
   },
-  "strict_clippy_command": "scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings"
+  "strict_clippy_command": "scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings",
+  "strict_clippy_at_source_checkpoint": "pending"
 }
