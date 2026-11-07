@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "work_item": 567,
+  "tested_base": "f31882882aa6ebb91fc520fcb1bfcde89b0ced31",
+  "integration_base": "75ee7405d97e84fc399ae39db97f73e028ab6697",
+  "integration_delta": "Only main documentation/installed acceptance changed; tested production Rust unchanged",
+  "red": {
+    "test": "orphan_owner_history_does_not_block_unrelated_browser_inventory",
+    "error": "protected_browser_owner_observation_invalid",
+    "seconds": 0.01
+  },
+  "green": {
+    "service_inventory": 19,
+    "managed_inventory": 1,
+    "warnings": 0
+  },
+  "quality": {
+    "format": "passed",
+    "strict_workspace_clippy": "passed zero warnings"
+  },
+  "documentation": {
+    "policy_cases": 11,
+    "links": "passed",
+    "handoff_docs": "passed",
+    "production_build": "passed44pages, existing lockfile-root warning"
+  },
+  "commands": [
+    "scripts/ci/rust-tests.sh --focused service_inventory_tests",
+    "scripts/ci/rust-tests.sh --focused managed_inventory",
+    "scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check",
+    "scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings",
+    "pnpm test:policy-wiring",
+    "pnpm test:documentation-links -- --base f31882882aa6ebb91fc520fcb1bfcde89b0ced31",
+    "pnpm test:remote-view-handoff-docs",
+    "pnpm --dir docs build"
+  ],
+  "rust_sha256": {
+    "cli/src/native/service_health.rs": "9e7a76b7ff246d04f5beaa8db1f37a232965f664552ea4cd71dec68decbf6911",
+    "cli/src/native/service_inventory.rs": "8d6a0e3129ca7405d13ddde8f1b70d9bb651b07c6f04481d4eb5ff0ed82147e3",
+    "cli/src/native/actions/service_inventory_tests.rs": "5f90dd3a39cdf448820b982534b2c9492e22cc524f2fa3a43187b9aed2f805c5",
+    "cli/src/output.rs": "2adfb1b1b8f40ebb146c5b9be97a7833845f53292f34ec61e7835f6e6db77b42"
+  },
+  "runtime_effects": false,
+  "installed": false,
+  "launch_retirement_recovery": "separate unresolved gate",
+  "p300_final_review": 0,
+  "p300_final_tdd": 0,
+  "excluded": [
+    "Hosted CI by operator policy",
+    "Installer fixtures: help prose only; no installer logic changed",
+    "No live browser/page replay or profile mutation"
+  ]
+}

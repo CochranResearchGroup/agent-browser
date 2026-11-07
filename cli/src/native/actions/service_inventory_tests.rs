@@ -795,3 +795,48 @@ async fn test_service_challenges_via_actions_returns_challenge_collection() {
     assert_eq!(result["data"]["challenges"][0]["kind"], "captcha");
     assert!(state.browser.is_none());
 }
+
+#[tokio::test]
+async fn orphan_owner_history_does_not_block_unrelated_browser_inventory() {
+    let mut state = DaemonState::new();
+    let service = json!({
+        "browsers": {"session:healthy": {"id":"session:healthy", "pid":43211, "health":"ready"}},
+        "protectedBrowserOwnerObservations": {"session:historical": {
+            "schemaVersion":"agent-browser.protected-browser-owner-observation.v1",
+            "source":"protected_lease_authority_receipt", "operationalAuthority":false,
+            "authorityReceiptId":"effect-receipt:historical", "ownerId":"owner:historical",
+            "ownerGeneration":7, "logicalBrowserId":"browser:historical",
+            "daemonSessionRoute":"historical", "processInstanceDigest":format!("sha256:{}", "7".repeat(64)),
+            "processPid":43210, "ownerRevision":9,
+            "observedAt":"2026-09-01T12:00:00Z", "freshnessExpiresAt":"2026-09-01T12:00:30Z"
+        }}
+    });
+    let result = execute_command(&json!({"action":"service_browsers", "id":"orphan-owner-history", "serviceState":service.clone()}), &mut state).await;
+    assert_eq!(
+        result["success"], true,
+        "valid historical orphan must not refuse independent inventory: {result}"
+    );
+    assert_eq!(result["data"]["count"], 1);
+    assert_eq!(result["data"]["browsers"][0]["id"], "session:healthy");
+    assert_eq!(
+        result["data"]["protectedBrowserOwnerObservations"]["session:historical"]
+            ["authorityReceiptId"],
+        "effect-receipt:historical"
+    );
+    assert_eq!(
+        result["data"]["protectedBrowserOwnerObservations"]["session:historical"]
+            ["operationalAuthority"],
+        false
+    );
+    assert!(state.browser.is_none());
+    let mut forged = service;
+    forged["protectedBrowserOwnerObservations"]["session:historical"]["operationalAuthority"] =
+        json!(true);
+    let result = execute_command(&json!({"action":"service_browsers", "id":"forged-orphan-owner-history", "serviceState":forged}), &mut state).await;
+    assert_eq!(result["success"], false);
+    assert!(result["error"]
+        .as_str()
+        .unwrap()
+        .contains("protected_browser_owner_observation_invalid"));
+    assert!(state.browser.is_none());
+}

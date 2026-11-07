@@ -115,14 +115,20 @@ pub(crate) mod service_commands {
             .unwrap_or_default();
         service_state.refresh_service_tab_handles();
         for (browser_id, observation) in &service_state.protected_browser_owner_observations {
-            let browser = service_state
-                .browsers
-                .get(browser_id)
-                .ok_or_else(|| "protected_browser_owner_observation_invalid".to_string())?;
-            crate::native::service_health::validate_protected_browser_owner_observation_for_inventory(
-                observation,
-                browser,
-            )?;
+            if let Some(browser) = service_state.browsers.get(browser_id) {
+                crate::native::service_health::validate_protected_browser_owner_observation_for_inventory(
+                    observation,
+                    browser,
+                )?;
+            } else {
+                // Retain valid orphan history without inventing a browser or
+                // letting historical evidence refuse unrelated inventory.
+                crate::native::service_health::validate_protected_browser_owner_observation_record(
+                    observation,
+                    browser_id,
+                    &observation.daemon_session_route,
+                )?;
+            }
         }
         if let Some(managed) = crate::native::browser_session_store::BrowserSessionSqliteStore::default_session_state_read_only()? {
             for record in managed_browser_inventory_records(&service_state, &managed)? {

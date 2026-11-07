@@ -168,3 +168,9 @@ target cannot authorize relocation.
 
 Review CDP/CDP-free relaunch from dashboard right-click menus or fullscreen Native handoff CDP toggle.
 Mode conversion verifies visibility without input; selective input is governed separately.
+
+Structurally valid historical protected-owner observations remain readable even
+when their browser row has ended or been removed. They do not create a browser
+record or grant current authority. Invalid structure, forged authority and
+inconsistent live PID bindings still return
+`protected_browser_owner_observation_invalid`.
