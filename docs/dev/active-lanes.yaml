@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: HUMAN-HANDOFF-571
+    product_lane: PL-BUGFIX
+    objective: Open explicit human assistance interactive with coordinated automation custody
+    plan: docs/dev/maintenance/interactive-human-handoff-817.md
+    branch: fix/interactive-human-handoff
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#571, CochranResearchGroup/remote-view#817]
+    plan_state: ACTIVE
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [P321-OWNER-567]
+    reconciled_overlaps: ["Isolated primary; preserve canonical dirty retirement-publication work and retained peers; no shared runtime effects"]
+    validation_status: Viewer red reproduced and first browser slice green; cross-repository custody validation pending
+    limitations: ["No installed or live acceptance claimed"]
+    updated_at: 2026-11-07
   - id: P321-OWNER-567
     product_lane: PL-BUGFIX
     objective: Preserve orphan historical owner evidence without blocking unrelated browser inventory

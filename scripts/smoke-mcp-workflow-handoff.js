@@ -183,7 +183,7 @@ try {
   task = await call('browser_open', {
     profile: 'native-fixture',
     profileMode: 'persistent',
-    taskKey: 'alice',
+    taskKey: 'alice',serviceName:'HumanHandoffFixture',agentName:'SourceRegression',taskName:'Alice assistance',
     url: 'data:text/html,<title>P238 native input</title><textarea aria-label="Draft" id="draft" style="width:100vw;height:100vh;font-size:32px;box-sizing:border-box"></textarea>',
   });
   evidence.task = task;
@@ -191,7 +191,7 @@ try {
   peer = await call('browser_open', {
     profile: 'native-fixture',
     profileMode: 'persistent',
-    taskKey: 'bob',
+    taskKey: 'bob',serviceName:'HumanHandoffFixture',agentName:'SourceRegression',taskName:'Bob preservation',
     url: 'data:text/html,<title>P238 peer</title><input id="draft" aria-label="Draft">',
   });
   assert.equal(peer.browserId, task.browserId);
@@ -202,7 +202,14 @@ try {
     value: 'Bob untouched draft',
   });
   evidence.peer = peer;
+  const passive = await call('browser_handoff', { taskId: task.taskId, interaction: 'view' });
+  assert.equal(passive.interaction.automationPaused, false);
   const handoff = await call('browser_handoff', { taskId: task.taskId });
+  assert.equal(handoff.interaction.intent, 'interactive');
+  assert.equal(handoff.interaction.automationPaused, true);
+  assert.notEqual(handoff.handoffId, passive.handoffId);
+  const paused = await client.send('tools/call', { name: 'browser_fill', arguments: {taskId:task.taskId, selector:'#draft', value:'must never arrive'} });
+  assert(paused.isError || paused.error || JSON.parse(paused.content.find(c=>c.type==='text').text).success === false, 'automation must pause during human assistance');
   assert.equal(handoff.operatorVisible.state, 'ready');
   assert(handoff.handoffUrl.startsWith('https://browser.p238.test:55440/remote-view/'));
   evidence.handoff = handoff;
@@ -256,13 +263,21 @@ try {
     await page.screenshot({ path: `${root}/synthetic-viewer-failure.png` });
     throw e;
   }
-  console.log('Native viewer connected');
+  await page.waitForFunction(() => document.getElementById('view-only').getAttribute('aria-pressed') === 'false');
+  const passivePage = await viewing.newPage();
+  await passivePage.goto(passive.handoffUrl);
+  await passivePage.locator('#connection-status[data-state="connected"]').waitFor();
+  assert.equal(await passivePage.locator('#view-only').getAttribute('aria-pressed'), 'true');
+  await passivePage.close();
+  console.log('Native viewer connected interactive; passive link stays view-only');
   const surface = page.locator('#desktop-surface');
   const box = await surface.boundingBox();
   assert(box);
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await page.keyboard.type('P238 human viewer input');
   await page.waitForTimeout(800);
+  await page.getByRole('button', {name:'Give control back', exact:true}).click();
+  await page.waitForFunction(() => document.getElementById('view-only').getAttribute('aria-pressed') === 'true');
   const continued = await call('browser_continue', { taskId: task.taskId });
   assert.equal(continued.taskId, task.taskId);
   assert.equal(continued.browserId, task.browserId);

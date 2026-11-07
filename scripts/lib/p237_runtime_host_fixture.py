@@ -14,7 +14,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 
-def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_log, ui_bundle=None, controller_fence=False, native_eof=False, peer_read_only=False, cli_bootstrap=False, public_background=False, managed_session=False, managed_replay=False, cross_client_focus=False, managed_operator=False, managed_restart=False):
+def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_log, ui_bundle=None, controller_fence=False, native_eof=False, peer_read_only=False, cli_bootstrap=False, public_background=False, managed_session=False, managed_replay=False, cross_client_focus=False, managed_operator=False, managed_restart=False, human_handoff=False):
     sockets = root / 'runtime-sockets'
     sockets.mkdir(mode=0o700)
     token = secrets.token_hex(32)
@@ -36,7 +36,7 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
     managed_provider = None
     if managed_session:
         env['AGENT_BROWSER_SESSION_DISPLAY'] = env['DISPLAY']
-        if managed_operator or env.get('P237_NATIVE_MANAGED_RECOVERY') == '1':
+        if human_handoff or managed_operator or env.get('P237_NATIVE_MANAGED_RECOVERY') == '1':
             from lib.p237_native_provider_fixture import start_native_provider_fixture
             managed_provider = start_native_provider_fixture(env, artifacts)
     if cli_bootstrap:
@@ -149,7 +149,11 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
     if managed_session:
         from lib.p237_managed_session_fixture import run_managed_session_fixture
         try:
-            run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, workflow_log, managed_replay, managed_operator, restart_owned_host if managed_restart else None, spawn, cli)
+            if human_handoff:
+                from lib.p571_human_handoff_fixture import run_human_handoff_fixture
+                run_human_handoff_fixture(env, artifacts, sockets, spawn, cli, workflow_log)
+            else:
+                run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, workflow_log, managed_replay, managed_operator, restart_owned_host if managed_restart else None, spawn, cli)
         finally:
             if managed_provider:
                 managed_provider.viewer_fixture.shutdown()

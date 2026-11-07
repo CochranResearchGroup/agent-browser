@@ -1941,9 +1941,15 @@ Creation requires a stable `tabKey`; repeating it returns the retained tab.
 Selection and closure accept only this task's tabs. `browser_close` ends this
 task while preserving peer work and persistent profile data.
 
-Use `browser_handoff` to obtain a ready, complete native Remote View URL. The
-person opens that URL using the native viewer's existing authentication. After
-human input, `browser_continue` retains the task and current page.
+Use `browser_handoff` with `taskId` to request human assistance. Its default
+`interaction: "interactive"` pauses cooperative automation and returns a complete
+native Remote View URL for the same browser/profile/task/tab. The authorized
+person opens it with interaction enabled, without an administrator override.
+Use `interaction: "view"` for passive viewing without pausing automation.
+`operatorVisible` reports presentation only; `interaction` separately reports
+intent and automation pause. The Native viewer confirms actual input readiness. Give control
+back in the viewer before `browser_continue` resumes the same task and page.
+An interrupted return retains its original request across reconnects.
 
 `browser_discover` also supplies diagnostic and administrative CLI/API metadata
 on demand. It does not execute maintenance. Old service tools, raw tab tools and

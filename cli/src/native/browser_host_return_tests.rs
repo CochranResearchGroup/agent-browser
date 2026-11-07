@@ -389,3 +389,27 @@ fn host_control_return_fifo_sidecar_cannot_block_takeover_or_legacy_fallback() {
         assert!(!read("browser").unwrap().human);
     });
 }
+
+#[test]
+fn human_handoff_standalone_dispatch_and_reconnect_share_durable_custody() {
+    fixture(|| {
+        let mut state = return_observation_state();
+        state.host_bindings.clear();
+        BrowserSessionSqliteStore::default_sqlite().unwrap().save_session_state(&state).unwrap();
+        let command = json!({"id":"before","action":"click","sessionId":"task"});
+        admit_command(None, None, &command, false).unwrap().unwrap().finish(true).unwrap();
+        begin_handoff("browser", "invitation", "exact-target").unwrap();
+        assert_eq!(metadata("browser").unwrap()["owner"], "human");
+        assert_eq!(handoff_intent("browser", "invitation", "exact-target").unwrap(), "interactive");
+        assert_eq!(handoff_intent("browser", "passive", "exact-target").unwrap(), "view");
+        assert!(check_state(&state, "", &command).is_err());
+        assert!(admit_command(None, None, &command, true).is_err());
+        assert!(return_handoff("browser", "invitation", "different-target", "return").is_err());
+        assert_eq!(metadata("browser").unwrap()["owner"], "human");
+        return_handoff("browser", "invitation", "exact-target", "return").unwrap();
+        return_handoff("browser", "invitation", "exact-target", "return").unwrap();
+        assert_eq!(metadata("browser").unwrap()["owner"], "agent");
+        let command = json!({"id":"after","action":"click","sessionId":"task"});
+        admit_command(None, None, &command, false).unwrap().unwrap().finish(true).unwrap();
+    });
+}
