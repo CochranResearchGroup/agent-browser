@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "work_item": 562,
+  "source_commit": "97d510bba57f590d19ccc60a50ade2d4b5062b6f",
+  "base_commit": "3335d480407fb3655d88913c13cbc041ea20c6aa",
+  "previous_base": "3d7a8141f1f6dbe55a74e6c9a5760d989b21f2e8",
+  "source_rust_equivalence": "Touched Rust files byte-identical to6046fd308 after rebase; main adds worker_status routing classification outside direct host regression path. Integrated strict quality passed.",
+  "red": {
+    "storage_error": "one dispatch, SQLite rollback and ACK preserved; expected unavailable, received conflict",
+    "continuation": "actual SQLite commit, removed ACK row, lost reply, next independent read fails idle publication conflict",
+    "live_cause": "not established by generic actual error"
+  },
+  "green": {
+    "activity_suite": 30,
+    "final_publication_and_retirement": 21,
+    "distinct_passed": 41,
+    "peer_metadata_preserved": true,
+    "original_navigation_dispatches": 1,
+    "receipt_write_failure_atomic": true,
+    "unknown_and_expired_receipts_rejected": true,
+    "identity_fences_retained": true
+  },
+  "quality": {
+    "format": "passed on integrated97d510bba",
+    "strict_workspace_clippy": "passed on integrated97d510bba, zero warnings,52.555seconds"
+  },
+  "documentation": {
+    "policy_cases": 11,
+    "links": "passed",
+    "handoff_docs": "passed",
+    "production_build": "passed44pages; existing multiple-lockfile warning"
+  },
+  "scope": {
+    "installed": false,
+    "live_replay": false,
+    "current_pre_upgrade_missing_ids_recovered": false,
+    "p300_final_review": 0,
+    "p300_final_tdd": 0
+  },
+  "limitations": [
+    "WSL Linux only; no hosted CI",
+    "Historical live cause and current blocked session recovery remain unqualified",
+    "Completion window retains4096 receipts; expired IDs reject",
+    "Shared installed skill not overwritten; installation remains separate"
+  ],
+  "commands": [
+    "scripts/ci/rust-tests.sh --focused activity",
+    "scripts/ci/rust-tests.sh --focused activity_publication",
+    "scripts/ci/rust-tests.sh --focused idle_retirement",
+    "scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check",
+    "scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings",
+    "pnpm test:policy-wiring",
+    "pnpm test:documentation-links -- --base origin/main",
+    "pnpm test:remote-view-handoff-docs",
+    "pnpm --dir docs build"
+  ],
+  "environment": "Linux x86_64 WSL; Rust commands admitted through cargo-safe with CARGO_NET_OFFLINE=true and AGENT_BROWSER_CARGO_CACHE=off"
+}

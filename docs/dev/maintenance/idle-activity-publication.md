@@ -68,3 +68,27 @@ fail closed; unresolved activities and retirement fences remain authoritative.
 Old binaries ignore this separate document and retain their existing behavior.
 Do not clear process-local IDs based only on absence. Preserve storage error
 classification. This adds no action retry, ownership acquisition or runtime effect.
+
+## Source qualification and remaining live gate
+
+The deterministic SQLite regression went red with the exact idle-publication
+conflict on the next independent command. Its repair preserves a peer metadata
+update and counts one original navigation dispatch. Storage failures retain their
+typed cause; failed receipt writes roll back state and leave acknowledged activity
+intact. Unknown IDs, expired receipts, current identities and unresolved activities
+remain rejected. The local activity and retirement runs cover 41 distinct passing
+tests; see [the validation receipt](idle-activity-publication-validation.json).
+
+The integration conflict was two independent lane insertions. Preserve both
+records; all existing main lane records remain byte-for-byte unchanged after
+removing this lane's insertion. The intervening main change adds worker-status
+control-plane classification outside the direct host regression path. This
+repair's tested Rust files are byte-identical across integration; integrated
+format and strict workspace Clippy also passed. The docs build and 11 policy cases passed.
+
+The generic live error does not establish the historical trigger. Pre-receipt
+missing IDs have no completion proof retroactively. Keep issue 562 open for the
+affected workflow gate; this source change is not installed acceptance. Do not
+clear those IDs, replay the uncertain action, or deploy diagnostics speculatively.
+The shared installed skill is unchanged until a separately coordinated publication.
+P300 human verification and final broad review/TDD remain unchanged.
