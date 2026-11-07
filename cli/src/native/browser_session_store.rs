@@ -560,8 +560,9 @@ impl BrowserSessionSqliteStore {
         )
     }
 
-    /// Publish only against the state loaded by this host. A concurrent
-    /// retention or session writer must not be erased by a stale host snapshot.
+    /// Reconcile against the current snapshot under the SQLite writer lock.
+    /// A concurrent retention/session writer is preserved without replaying
+    /// browser effects; actual resource release and retirement fences still apply.
     pub(crate) fn compare_and_save_session_state(
         &mut self,
         expected: &BrowserSessionState,
@@ -579,9 +580,14 @@ impl BrowserSessionSqliteStore {
             SESSION_STATE_DOCUMENT,
             BROWSER_SESSION_STATE_SCHEMA_V1,
         )?;
-        if current != *expected {
-            return Err("browser_session_publication_conflict".into());
-        }
+        let merged = super::browser_session_host::reconciliation::reconcile_and_record(
+            &transaction,
+            expected,
+            state,
+            &current,
+        )?;
+        let expected = &current;
+        let state = &merged;
         super::browser_idle_retirement_store::reject_retirement_publication(
             &transaction,
             &current,
@@ -2190,11 +2196,13 @@ mod tests {
             BrowserProfileKind::Named
         );
         assert_eq!(fs::read(data.join("retained-marker")).unwrap(), b"retained");
+        store
+            .compare_and_save_session_state(&stale, &stale)
+            .unwrap();
         assert_eq!(
-            store
-                .compare_and_save_session_state(&stale, &stale)
-                .unwrap_err(),
-            "browser_session_publication_conflict"
+            store.load_session_state().unwrap(),
+            after,
+            "stale no-op cannot undo profile promotion"
         );
         assert_eq!(
             store
@@ -2299,9 +2307,9 @@ mod tests {
         restarted
             .compare_and_save_session_state(&active, &newer)
             .unwrap();
-        assert!(restarted
+        restarted
             .compare_and_save_session_state(&active, &proposed)
-            .is_err());
+            .unwrap();
         assert_eq!(restarted.load_session_state().unwrap(), newer);
         assert_eq!(
             restarted
@@ -2391,7 +2399,7 @@ mod tests {
     }
 
     #[test]
-    fn sqlite_session_publication_rejects_stale_snapshot_without_overwriting_current_state() {
+    fn sqlite_session_publication_reconciles_stale_snapshot_without_losing_peer_changes() {
         let directory = TempDirectory::new("session-publication");
         let database_path = directory.0.join("runtime.sqlite3");
         let connection = Connection::open(&database_path).unwrap();
@@ -2409,12 +2417,15 @@ mod tests {
             .unwrap();
         let mut stale = initial.clone();
         stale.next_session_sequence = 99;
-        assert_eq!(
-            peer.compare_and_save_session_state(&initial, &stale)
-                .unwrap_err(),
-            "browser_session_publication_conflict"
-        );
-        assert_eq!(store.load_session_state().unwrap(), current);
+        current
+            .profile_executables
+            .insert("peer".into(), "/synthetic/peer".into());
+        store.save_session_state(&current).unwrap();
+        peer.compare_and_save_session_state(&initial, &stale)
+            .unwrap();
+        let merged = store.load_session_state().unwrap();
+        assert_eq!(merged.next_session_sequence, 99);
+        assert_eq!(merged.profile_executables, current.profile_executables);
         store
             .compare_and_save_session_state(&current, &stale)
             .unwrap();

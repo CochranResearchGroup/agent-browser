@@ -2146,3 +2146,26 @@ CLI and HTTP discovery, explicit confirmation, independent CDP mode, retained
 copy recovery and login-portability limits. An omitted open mode inherits the
 profile's selected posture. `buildSelectionOperationId` binds a managed open
 to the reviewed profile, executable bytes and mode.
+
+### Advisory profile lock observations
+
+A live or unobserved Chrome singleton lock reports a nonblocking warning. An
+otherwise ready profile diagnosis recommends <code>continue_authorized_workflow</code>.
+Continue the authorized task through exact browser/process checks and preserve
+the lock. Missing legacy runtime records do not prove a live browser is absent.
+Actual execution failures retain their request evidence; inspect uncertain
+requests before replaying an effect.
+
+### Internal session reconciliation
+
+Session publication joins resident and durable state under the SQLite writer
+transaction. Independent task changes continue together. Current resource
+identity wins overlapping observations, with differences retained in private
+append-only runtime receipts. Original uncertain actions remain unreplayed.
+The receipt table belongs to the private runtime database; its contents are not
+exported through public command responses. Reconciliation does not reset profiles
+or remove browser locks.
+
+Known occupied or reserved capacity can justify separate bounded capacity for
+an independent task. The original reservation stays intact. Failed window
+observations never qualify a desktop or justify another acquisition.

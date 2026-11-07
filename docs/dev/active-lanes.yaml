@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P300-OPERATOR-DIAGNOSIS
+    product_lane: PL-BUGFIX
+    objective: Reconcile publication differences internally while preserving valid work and uncertain operations
+    plan: docs/dev/maintenance/operator-profile-diagnostic.md
+    branch: fix/operator-profile-diagnostic
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#558]
+    plan_state: ACTIVE
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [P300]
+    overlaps: [P300-RECOVERY]
+    reconciled_overlaps: ["Operator expanded this lane to host publication reconciliation; canonical recovery source checkout remains untouched; integrated host fixes preserved; reuse existing isolated worktree"]
+    validation_status: PR557 issue558; final25 host plus71 changed-surface checks and strict Clippy pass; preserving sealed adoption pending
+    limitations: ["Installed original-task acceptance pending", "No shared runtime installation or provider effects", "Parent530 remains open"]
+    updated_at: 2026-11-07
   - id: P300-RECOVERY
     product_lane: PL-BUGFIX
     objective: Restore donor recovery and durable handoff through exact custody readback and eligible desktop selection

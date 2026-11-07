@@ -1,5 +1,7 @@
 # Roadmap
 
+[P300 profile diagnosis repair](docs/dev/maintenance/operator-profile-diagnostic.md), #530: an occupied Chrome lock is advisory; exact runtime binding and actual publication failures remain separate. PR557/558 now qualifies internal publication reconciliation: final25 host plus71 changed-surface checks and strict Clippy pass. Sealed preserving adoption and original-task acceptance are next.
+
 P300/530 checkpoint: workspace delivery and PR543 cleanup repair are integrated and installed. [Three actual portability rows](docs/dev/notes/2026-11-04-profile-copy-disposal-census.md) pass usability, storage isolation and exact cleanup. The fourth awaits human donor readiness;529 narrated acceptance and principal mapping remain open. Final review/remediation remain0. [Native control](docs/dev/maintenance/native-control-proof-798.md) is installed accepted; eight same-browser cycles, reconnect, continued automation and cleanup pass.
 
 [Native operator-journey acceptance](docs/dev/notes/2026-10-31-native-journey-receipt.md), #512 / PR513, is installed accepted on sealed binary5a9f1250acef. Authenticated Native input, same-link reconnect, continued same-task automation and exact cleanup pass; operatorJourneyReady is now true. The idle profile-lease advisory remains separate.

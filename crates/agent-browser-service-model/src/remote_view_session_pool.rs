@@ -48,6 +48,9 @@ pub fn replenish_remote_view_session_pool<
 /// including a matching native Released record. Observed assignments include
 /// terminal records; inventory absence alone cannot retire a previous request.
 pub trait RemoteViewPoolRequestStore: RemoteViewApplicationMutationStore {
+    /// False retains an existing launch/retirement exclusion. It does not
+    /// prevent separate bounded capacity for an independent task. Observation
+    /// failures return an error rather than qualifying a placement target.
     fn pool_assignment_available(
         &mut self,
         assignment: &RemoteViewAssignmentRecord,
@@ -134,12 +137,16 @@ pub fn prepare_remote_view_session_pool<
             .collect::<Vec<_>>()
     };
     let mut assignments = active(&inventory);
+    let initial_assignments = assignments
+        .iter()
+        .map(|assignment| assignment.assignment_id.clone())
+        .collect::<std::collections::BTreeSet<_>>();
     loop {
         let mut desktop_ids = std::collections::BTreeSet::new();
         let mut candidates = Vec::new();
         let mut observed = Vec::new();
-        let mut occupied = false;
-        let mut unavailable = false;
+        let mut capacity_in_use = false;
+        let mut new_observation_failed = false;
         for assignment in &assignments {
             if !desktop_ids.insert(assignment.desktop_id.clone()) {
                 return Err("remote_view_session_assignment_invalid".into());
@@ -153,12 +160,14 @@ pub fn prepare_remote_view_session_pool<
                 .pool_assignment_available(assignment)
                 .map_err(|_| "remote_view_pool_custody_unavailable".to_string())?
             {
-                unavailable = true;
+                // An existing custody exclusion is positive capacity demand,
+                // not an observation failure. Preserve it and grow elsewhere.
+                capacity_in_use = true;
                 continue;
             }
             // A failed observation never qualifies a desktop as free.
             let Ok(windows) = adapter.windows(assignment) else {
-                unavailable = true;
+                new_observation_failed |= !initial_assignments.contains(&assignment.assignment_id);
                 continue;
             };
             let candidate = RemoteViewDesktopCandidate {
@@ -171,7 +180,7 @@ pub fn prepare_remote_view_session_pool<
             };
             observed.push(candidate.clone());
             if !windows.windows.is_empty() {
-                occupied = true;
+                capacity_in_use = true;
                 continue;
             }
             candidates.push(candidate);
@@ -183,8 +192,23 @@ pub fn prepare_remote_view_session_pool<
                 desktops: candidates,
             });
         }
-        if unresolved {
-            return Err("remote_view_pool_acquisition_readback_required".into());
+        if unresolved || new_observation_failed {
+            // Reuse only positively observed, eligible existing capacity. A
+            // failed new observation never causes another acquisition, nor
+            // makes that unknown desktop a placement candidate.
+            return if observed.is_empty() {
+                Err(if unresolved {
+                    "remote_view_pool_acquisition_readback_required"
+                } else {
+                    "remote_view_runtime_assignment_unavailable"
+                }
+                .into())
+            } else {
+                Ok(RemoteViewPreparedSessionPool {
+                    assignments,
+                    desktops: observed,
+                })
+            };
         }
         // At the growth limit known healthy occupied desktops are eligible
         // for wrap-around. Unknown peers never become placement candidates.
@@ -194,11 +218,8 @@ pub fn prepare_remote_view_session_pool<
                 desktops: observed,
             });
         }
-        if warm_minimum_met && unavailable {
-            return Err("remote_view_runtime_assignment_unavailable".into());
-        }
         if assignments.len() >= maximum as usize {
-            return Err(if occupied {
+            return Err(if capacity_in_use {
                 "remote_view_pool_capacity_exhausted"
             } else {
                 "remote_view_runtime_assignment_unavailable"
@@ -206,7 +227,9 @@ pub fn prepare_remote_view_session_pool<
             .into());
         }
         // Once the minimum is met, unknown observations cannot justify growth.
-        if warm_minimum_met && !occupied {
+        // A known occupied or reserved peer can justify ordinary bounded
+        // growth independently; an unavailable observation cannot veto it.
+        if warm_minimum_met && !capacity_in_use {
             return Err("remote_view_runtime_assignment_unavailable".into());
         }
         let key = store

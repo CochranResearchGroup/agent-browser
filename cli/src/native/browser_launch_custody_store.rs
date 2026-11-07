@@ -619,17 +619,23 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
         if record.intent != *intent {
             return Err(Error::Conflict);
         }
-        if actual != *expected {
-            // Concurrent or interrupted publication of the identical result is
-            // already complete. A different state still requires fresh readback.
-            if record.published && actual == *state {
-                record
-                    .confirm_publication(&actual)
-                    .map_err(|_| Error::Conflict)?;
-                return Ok(());
-            }
-            return Err(Error::Conflict);
+        // An identical completed publication is idempotent. Otherwise reconcile
+        // metadata under this writer transaction before checking launch custody.
+        if actual != *expected && record.published && actual == *state {
+            record
+                .confirm_publication(&actual)
+                .map_err(|_| Error::Conflict)?;
+            return Ok(());
         }
+        let merged = super::browser_session_host::reconciliation::reconcile_and_record(
+            &transaction,
+            expected,
+            state,
+            &actual,
+        )
+        .map_err(|_| Error::Unavailable)?;
+        let expected = &actual;
+        let state = &merged;
         super::browser_idle_retirement_store::reject_retirement_publication(
             &transaction,
             expected,
@@ -1757,19 +1763,17 @@ mod tests {
         store
             .compare_and_save_session_state(&initial, &newer)
             .unwrap();
-        assert_eq!(
-            store
-                .publish_launch_intent(&intent, &initial, &published)
-                .unwrap_err(),
-            LaunchCustodyStoreError::Conflict
-        );
-        assert_eq!(store.load_session_state().unwrap(), newer);
+        store
+            .publish_launch_intent(&intent, &initial, &published)
+            .unwrap();
+        published.next_session_sequence = newer.next_session_sequence;
+        assert_eq!(store.load_session_state().unwrap(), published);
         let LaunchCustodyAdmission::Existing(record) =
-            store.admit_launch_intent(&intent, &newer).unwrap()
+            store.admit_launch_intent(&intent, &published).unwrap()
         else {
             panic!("claim missing");
         };
-        assert!(!record.published);
+        assert!(record.published);
         published.next_session_sequence = newer.next_session_sequence;
         store
             .publish_launch_intent(&intent, &newer, &published)

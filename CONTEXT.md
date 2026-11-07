@@ -4,6 +4,12 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Session publication reconciliation**: A three-way merge of a host's loaded
+baseline, resident metadata and current durable metadata inside one SQLite
+writer transaction. Independent edits survive together. Current resource
+identity wins overlapping observations; private append-only receipts retain the
+conflicting evidence. Publication does not replay an effect or grant custody.
+
 **Workspace ingress identity**: A session verified directly by the configured
 Authelia owner against a fixed reviewed workspace GET/ACL target, explicitly
 mapped to a current local dashboard role. Caller identity headers establish

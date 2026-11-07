@@ -594,9 +594,16 @@ impl BrowserSessionSqliteStore {
             .remote_view_mutation_connection()
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|_| Error::Unavailable)?;
-        if current(&transaction)? != *expected {
-            return Err(Error::Conflict);
-        }
+        let actual = current(&transaction)?;
+        let merged = super::browser_session_host::reconciliation::reconcile_and_record(
+            &transaction,
+            expected,
+            state,
+            &actual,
+        )
+        .map_err(|_| Error::Unavailable)?;
+        let expected = &actual;
+        let state = &merged;
         let mut records = ledger(&transaction)?;
         reject_retirement_publication(&transaction, expected, state, ids, activity_ids)?;
         if activity_ids.iter().collect::<BTreeSet<_>>().len() != activity_ids.len() {
