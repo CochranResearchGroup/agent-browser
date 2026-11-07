@@ -85,6 +85,7 @@ def run_human_handoff_fixture(env, artifacts, sockets, spawn, cli, log):
     assert handoff['interaction']['automationPaused'] is True
     assert handoff['handoffId'] != passive['handoffId']
     owner(handoff['handoffId'], authenticated=False)
+    owner(handoff['handoffId'], 'return_handoff', authenticated=False)
     proof = owner(handoff['handoffId'])
     assert proof['handoffIntent'] == 'interactive'
     assert owner(first['handoffId'], 'return_handoff')['handoffIntent'] == 'view'
