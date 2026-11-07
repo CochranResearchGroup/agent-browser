@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "product_lane": "PL-BUGFIX",
+  "work_items": [
+    567,
+    570
+  ],
+  "source_commit": "82d166cd5f147c4486353aa9373dc1250ef88ed6",
+  "source_pull_requests": [
+    569,
+    572
+  ],
+  "disposition": "installed_browser_continuation_accepted",
+  "candidate": {
+    "id": "candidate-f56393fc06614a60-e1f10437f5fba405",
+    "artifact_class": "production_shaped",
+    "binary_sha256": "e1f10437f5fba4056d0a6a98b5f26417ce1998af025a8701aa22f47ad7ec0feb",
+    "build_profile": "release",
+    "lto": "fat",
+    "codegen_units": 1
+  },
+  "installation": {
+    "transaction_id": "upgrade-922a8ae1-3586-4b9d-8f6f-2c0a59818213",
+    "generation": "0.28.0-e1f10437f5fb-b45d4f39e276",
+    "policy": "preserve",
+    "state": "accepted",
+    "terminal_result": "accepted",
+    "selector_backend_and_runtime_host_bytes_match": true,
+    "install_doctor_exit_code": 0
+  },
+  "qualification": {
+    "inventory_tests_passed": 20,
+    "cli_retirement_tests_passed": 72,
+    "service_model_tests_passed": 416,
+    "strict_workspace_clippy": "passed",
+    "format": "passed",
+    "current_service_inventory": "passed",
+    "fresh_mcp_two_reviewed_existing_profile_opens": "passed_about_blank",
+    "current_task_identity_readbacks": "passed_both",
+    "original_retirement_publication_and_completion": "passed_both_original_fences",
+    "original_retirement_intents_and_effect_journals": "unchanged",
+    "unrelated_preinstall_retirement_records": "unchanged",
+    "current_browser_processes": "present_both",
+    "hosted_ci": "not_run_operator_cost_policy"
+  },
+  "limitations": [
+    "Browser continuation qualification only; private-site identity, authentication and calendar/provider acceptance remain with the consumer lane",
+    "Tasks left open on about:blank; stale MCP clients require normal reconnect",
+    "No reset, repeated original close, private-input replay or mail runtime change",
+    "Initial compiler-cache-default waiting claim was cancelled before compilation; supported exact failed-operation retry with cache opt-out built the accepted candidate",
+    "Not a formal release or target-platform matrix qualification"
+  ],
+  "private_receipt_sha256": {
+    "candidate-install-result.json": "3db4987644e1058390c6f21d3d2aa8062780e11f8f0d0a200972d29bf0b2bc0f",
+    "post-install-status.json": "bdd1d77c7a439fa8b0e3653bb60634c224751d02e3e0681412ca6702a11f6a55",
+    "installed-selector-readback.json": "15fba585c222102f0d763d43bf8a9e2bd61cea2de8bd005d72d3132303be13e9",
+    "installed-doctor.json": "c91dd99df05ec1421dfb886f2bf9c45d0921d890dfecc9ebc06fc2df67e2df05",
+    "installed-profile-acceptance.json": "61c1657f59ad3a1be885d3a08b8ffa1b4c639c0b817f67f49352a69b16f33c60",
+    "post-open-runtime-readback.json": "2bd7d12ee321a1b520b71075cb5fdc12a6ee1ed95d1c84552f93e24492ac3578"
+  }
+}

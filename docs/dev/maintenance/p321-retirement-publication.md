@@ -4,7 +4,7 @@ Product lane: PL-BUGFIX
 Work item: 570
 Branch: fix/p321-retirement-publication
 Base: 0b9575e035f06535e8e3ab9ee9c5a699709ad998
-State: SOURCE_QUALIFIED
+State: COMPLETED
 
 Continue in the existing owning checkout. #567/PR569 qualified historical owner
 inventory independently. One source writer; no competing production candidate.
@@ -35,3 +35,11 @@ changed documentation links, handoff documentation and docs build (44 pages)
 passed. The existing docs lockfile-root warning remains. See the adjacent
 validation receipt. Source qualification does not establish installation or
 provider workflow acceptance.
+
+Installed checkpoint: production source `82d166cd5` includes PR569 and PR572.
+The [sanitized installed receipt](../notes/2026-11-07-p321-owner-installed.json)
+records accepted preserving installation, exact running-byte identity, doctor,
+current inventory and both reviewed existing-profile blank-page continuations.
+Both original retirements published and completed through their original Native
+fences without changing their effect journals or unrelated original records.
+Provider account and consumer workflow acceptance remain separate.
