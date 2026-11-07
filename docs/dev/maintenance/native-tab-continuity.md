@@ -104,3 +104,54 @@ for admission and were stopped before compilation. No hosted CI ran.
 The local-source patches were self-checked against the published PR diff and
 current main. Browser mode and Native fullscreen controls are preserved. Runtime
 installation and actual Native transport acceptance remain subsequent gates.
+
+## Installed checkpoint and cleanup
+
+PR553 merged as `eb8cef70c610cc4a02da00d3b3793e3d68072202`. The clean merged
+source produced sealed production-shaped release binary
+`31dac9aa8a92b41908286b8412da5d5717c55bcb2a975a1f991b58f5ccb844fa` in
+28 minutes 12 seconds, using the bounded four-job configuration above. The
+exact-binary workstation installer fixture passed with zero owned host residue.
+Candidate review passed before the explicit preserving installation.
+
+Transaction `upgrade-033ed0aa-5ea3-4fd7-b15f-0f5b2129038e` accepted revision 13,
+with zero outstanding owner obligations. Installed generation
+`0.28.0-31dac9aa8a92-a41dd8a76003` reports ready. Doctor passes; its workspace
+candidate warning is advisory. The new continuity JavaScript chunk matches the
+built bytes at both loopback and public HTTPS, SHA256
+`2fc8ee51cb17882d7db2ca5a6d86ef354b87c7d2c387f3f5e80159c97c021778`.
+
+Keep these acceptance boundaries explicit:
+
+- The mounted production component and full rail regression pass. An installed
+  synthetic task also opened both expected pages and returned a ready Native
+  handoff. Its exact browser was normally closed and subsequently absent from
+  the OS; its loopback server and all harness browser contexts were closed.
+- The authenticated installed rail test remains unqualified: Cooper sign-in
+  succeeded, but workspace status returned HTTP200 with `authenticated:false`.
+  No access mapping, credential or ingress policy was changed. Early fixture
+  failures incorrectly expected an automatic sign-in redirect, used an outdated
+  form selector, and misread the successful sign-in response. The first actual
+  authentication effect was reconciled against the account's success-only audit
+  metadata before another isolated session was used. Raw authentication and
+  runtime artifacts stay outside Git.
+- A standalone Native probe did not establish frame delivery through its DOM
+  observer. Final installed status nevertheless has `operatorJourneyReady=true`
+  and a receiver-qualified ready frame receipt bound to the new backend. That
+  receipt belongs to a different handoff from concurrent activity; it is not
+  evidence for this run's repeated tab-selection test.
+- The install-window census retained 111 of 113 original browser process identities;
+  two exited with unproven cause while two new roots appeared. Of 134 Remote View
+  units, 132 retained exact identities. The other two MCP units were already in a
+  rapid restart loop before installation. This does not prove full-fleet
+  preservation and does not authorize broad recovery or cleanup of peer work.
+
+Cleanup removed 889,733,120 allocated bytes from this build's unsealed host and
+target outputs, then 5,715,894,272 bytes of disposable shared incremental cache.
+Both operations held real Cargo target locks, checked executable/mapping/FD
+references, rejected symlinks and nested mounts, and verified the sealed binary
+digest afterward. The target tree fell to 16,673,837,056 bytes. All 12 pinned
+candidates and their manifests/receipts have explicit retain decisions; no
+candidate or source checkout was discarded. The canonical checkout remains for
+integration. The earlier P300 source remains on its branch and verified remote
+archive; its checkout custody is a paused ref. The merged repair branch is removed.
