@@ -1131,6 +1131,23 @@ impl<
             .cloned()
             .collect()
     }
+    fn acknowledge_completed_idle_retirements(&mut self) -> Result<(), String> {
+        let records = self
+            .store
+            .idle_retirement_records()
+            .map_err(|_| "browser_session_idle_custody_unavailable")?;
+        for id in &self.operation_retirements {
+            let Some(previous) = self.retirements.get(id) else {
+                continue;
+            };
+            if let Some(completed) = records.iter().find(|record| {
+                record.intent.id == *id && previous.acknowledges_completed_publication(record)
+            }) {
+                self.retirements.insert(id.clone(), completed.clone());
+            }
+        }
+        Ok(())
+    }
     fn finish_idle_retirement_publication(&mut self, ids: &[String]) -> Result<(), String> {
         for id in ids {
             let record = self
@@ -1144,6 +1161,14 @@ impl<
                 return Err("browser_session_idle_readback_required".into());
             }
             if record.completed.is_some() {
+                if self
+                    .retirements
+                    .get(id)
+                    .is_none_or(|previous| !previous.acknowledges_completed_publication(&record))
+                {
+                    return Err("browser_session_idle_readback_required".into());
+                }
+                self.retirements.insert(id.clone(), record);
                 continue;
             }
             let completed = self

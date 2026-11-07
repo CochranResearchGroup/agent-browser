@@ -8204,6 +8204,105 @@ fn activity_readback_observes_each_exact_scope_once_per_operation() {
 }
 
 #[test]
+fn completed_peer_retirement_does_not_poison_an_ordinary_host_command() {
+    peer_retirement_publication_cases(false);
+}
+
+#[test]
+fn unknown_peer_retirement_completion_still_refuses_an_ordinary_host_command() {
+    peer_retirement_publication_cases(true);
+}
+
+fn peer_retirement_publication_cases(completion_unknown: bool) {
+    let fixture = Fixture::new();
+    std::fs::write(fixture.root.join("count-retirement-closes"), "check").unwrap();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let failure = Rc::new(Cell::new(0));
+    let mut consumer = host_with_persistence(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+        || 2001,
+        NativeUseReplyFailure {
+            store: fixture.store(false),
+            mode: failure.clone(),
+            attempts: Rc::new(Cell::new(0)),
+        },
+    );
+    let original = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    failure.set(5);
+    assert_eq!(
+        consumer.reap(300_101).unwrap_err(),
+        "synthetic_retirement_publication_unavailable"
+    );
+    let pending = fixture.store(false).idle_retirement_records().unwrap();
+    assert_eq!(pending.len(), 1);
+    assert!(pending[0].has_settled_browser_close(&original.browser_id));
+    assert!(pending[0].published_state_digest.is_none());
+
+    let mut peer = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    if completion_unknown {
+        provider.borrow_mut().lose_retirement_completion = true;
+        assert_eq!(
+            peer.reap(300_102).unwrap_err(),
+            "browser_session_idle_readback_required"
+        );
+        let unknown = fixture.store(false).idle_retirement_records().unwrap();
+        assert!(unknown[0].published_state_digest.is_some());
+        assert!(unknown[0].completed.is_none());
+        let provider_operations = provider.borrow().operations.len();
+        let refused = consumer.handle_command(&serde_json::json!({
+            "action":"browser_session_open", "sessionName":"Bob", "profileId":"profile-b",
+            "activityAtMs":300_103
+        }));
+        assert_eq!(refused["error"], "browser_session_publication_conflict");
+        assert_eq!(
+            calls.get(),
+            1,
+            "unknown completion cannot admit a new launch"
+        );
+        assert_eq!(provider.borrow().operations.len(), provider_operations);
+        assert_eq!(
+            fixture.store(false).idle_retirement_records().unwrap(),
+            unknown
+        );
+    }
+    peer.reap(300_104).unwrap();
+    let completed = fixture.store(false).idle_retirement_records().unwrap();
+    assert_eq!(completed.len(), 1);
+    assert_eq!(completed[0].intent, pending[0].intent);
+    assert!(completed[0].completed.is_some());
+    let response = consumer.handle_command(&serde_json::json!({
+        "action":"browser_session_open", "sessionName":"Bob", "profileId":"profile-b",
+        "activityAtMs":300_103
+    }));
+    assert_eq!(response["success"], true, "{response}");
+    assert_eq!(
+        calls.get(),
+        2,
+        "only the independent requested browser may launch"
+    );
+    assert_eq!(
+        std::fs::read_to_string(fixture.root.join("retirement-effect-count")).unwrap(),
+        "1",
+        "the settled original close must never replay"
+    );
+    assert_eq!(
+        fixture.store(false).idle_retirement_records().unwrap(),
+        completed
+    );
+}
+
+#[test]
 fn failed_retirement_publication_does_not_poison_an_unrelated_task() {
     let fixture = Fixture::new();
     std::fs::write(fixture.root.join("count-retirement-closes"), "check").unwrap();
