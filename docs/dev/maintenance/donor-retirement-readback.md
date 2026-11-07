@@ -82,3 +82,40 @@ Validation used Linux/WSL, Rust 1.94.1, synthetic providers and disposable SQLit
 fixtures. Hosted CI was skipped by operator policy. Canonical integration,
 sealed-artifact qualification, preserving installation and actual viewer input
 remain separate gates. No account acceptance is inferred from these checks.
+
+## Installed recovery checkpoint
+
+PR 555 integrated the first repair at canonical commit
+`2fab4b793ab835fed169911f1b591d4c32489f5b`. The qualified sealed production
+artifact passed its installer fixture and normal preserving installation.
+Installed doctor passed. The publication conflict cleared, and the ended donor
+task was normally retired while preserving its profile data.
+
+A fresh open then exposed a separate allocator blocker. Read-only inventory,
+window counts and durable custody show that selection chooses the first empty
+desktop despite its pending idle-retirement reservation. Admission correctly
+refuses it before creating a launch claim. Another empty desktop has no such
+reservation. Pool eligibility must exclude retirement reservations before
+selection, retaining the final admission fence. No reservation was settled or
+removed to work around this failure, and no blind launch retry was issued.
+
+The original viewer-input report remains unqualified until a live donor can be
+tested through dev-browser and independently observed desktop input. Ticket 530
+remains open; three copy rows are accepted and disposed, with the fourth unrun.
+
+## Allocator repair qualification
+
+The real SQLite pool regression failed before the patch because both desktops
+were offered instead of only the unreserved desktop. The repair composes the
+existing launch eligibility check with a validated read of nonterminal retirement
+desktop reservations. It preserves reservation history and leaves transactional
+launch admission unchanged. A concurrent reservation still fails at admission.
+
+The source patch digest is
+`81852f57aaf5aa093c6eb86945047df0ce13b45731c89d31dd03f1296cc860ee`.
+Local checks passed: nine `pool_demand_` tests, fourteen
+`automatic_retirement_` tests, workspace format and strict workspace Clippy.
+The initial format check found two wrapping differences in the new regression;
+formatting was corrected and the final check passed. Policy wiring passed all
+eleven tests. No hosted CI ran. Sealed build, preserving installation and actual
+viewer-input evidence remain pending for this second repair.

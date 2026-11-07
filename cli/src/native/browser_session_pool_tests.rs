@@ -1375,6 +1375,59 @@ fn pool_demand_excludes_occupied_desktops_and_retains_their_assignments() {
 }
 
 #[test]
+fn pool_demand_skips_pending_retirement_without_settling_its_reservation() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let baseline = consumer.state().clone();
+    let browser = baseline.browsers[&opened.browser_id].clone();
+    drop(consumer);
+    let intent = claim_fixture_retirement(&fixture, provider.clone(), &baseline, &browser);
+    let before = fixture_retirement_records(&fixture.root);
+    let mut coordinator = adapter(&fixture, provider.clone());
+    let mut store = fixture.store(false);
+    let prepared = prepare_remote_view_session_pool(
+        &mut coordinator,
+        &mut store,
+        &RemoteViewSessionPool {
+            name: "main".into(),
+            desired_desktops: 2,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        prepared.assignments.len(),
+        2,
+        "reservation retains its assignment"
+    );
+    assert_eq!(
+        prepared.desktops.len(),
+        1,
+        "only the unreserved desktop is eligible"
+    );
+    assert_ne!(
+        prepared.desktops[0].desktop.desktop_id,
+        intent.provider.assignment.desktop_id
+    );
+    assert_eq!(fixture_retirement_records(&fixture.root), before);
+    assert_eq!(calls.get(), 1, "pool selection performs no browser effects");
+    assert_eq!(provider.borrow().acquisitions.len(), 2);
+    assert!(
+        super::super::browser_idle_retirement_store::reject_retirement_admission(
+            store.remote_view_mutation_connection(),
+            "profile-b",
+            &intent.provider.assignment,
+        )
+        .is_err(),
+        "final admission still fences the reserved desktop"
+    );
+}
+
+#[test]
 fn ordinary_live_profile_reuse_joins_current_native_desktop_without_launch() {
     let fixture = Fixture::new();
     let assignment: RemoteViewAssignmentRecord =
