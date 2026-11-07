@@ -6,6 +6,7 @@ fixture proves producer intent, exact retained identity, pause and owner return.
 import http.client
 import json
 import select
+import socket
 import subprocess
 import time
 from pathlib import Path
@@ -13,6 +14,32 @@ from pathlib import Path
 
 def run_human_handoff_fixture(env, artifacts, sockets, spawn, cli, log):
     env['AGENT_BROWSER_PUBLIC_ORIGIN'] = 'https://p571.synthetic.invalid'
+    # Private Native callbacks are served by the dashboard backend, independently
+    # of the runtime's viewer stream transport.
+    with socket.socket() as reservation:
+        reservation.bind(('127.0.0.1', 0))
+        owner_port = reservation.getsockname()[1]
+    backend = spawn([cli], task_env={**env, 'AGENT_BROWSER_DASHBOARD':'1',
+        'AGENT_BROWSER_DASHBOARD_BACKEND_ONLY':'1', 'AGENT_BROWSER_DASHBOARD_PORT':str(owner_port)},
+        stdout=log, stderr=log)
+    (artifacts/'managed-dashboard-address.json').write_text(json.dumps({'port':owner_port})+'\n')
+    deadline = time.monotonic()+30
+    while True:
+        assert backend.poll() is None, 'private callback backend exited'
+        probe = http.client.HTTPConnection('127.0.0.1', owner_port, timeout=2)
+        try:
+            probe.request('GET', '/api/dashboard-auth/status')
+            response = probe.getresponse()
+            response.read()
+            if response.status == 200:
+                break
+        except (ConnectionError, TimeoutError):
+            pass
+        finally:
+            probe.close()
+        assert time.monotonic() < deadline, 'private callback backend readiness deadline'
+        time.sleep(0.025)
+
     client = spawn([cli, 'mcp', 'serve'], stdin=subprocess.PIPE,
                    stdout=subprocess.PIPE, stderr=log, bufsize=0)
     sequence = 0
@@ -43,8 +70,7 @@ def run_human_handoff_fixture(env, artifacts, sockets, spawn, cli, log):
         return payload.get('data', payload)
 
     def owner(handoff, choice='inspect_control', authenticated=True):
-        port = int((sockets/'default.stream').read_text())
-        connection = http.client.HTTPConnection('127.0.0.1',port,timeout=20)
+        connection = http.client.HTTPConnection('127.0.0.1',owner_port,timeout=20)
         headers = {'Content-Type':'application/json','X-Remote-View-Operator':'synthetic-nonadmin'}
         if authenticated:
             headers['Authorization']='Bearer '+Path(env['AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE']).read_text().strip()
