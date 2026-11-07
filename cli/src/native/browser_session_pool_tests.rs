@@ -2422,6 +2422,51 @@ fn terminal_view_renewal_stops_after_one_replacement() {
 }
 
 #[test]
+fn handoff_consumers_reconcile_peer_publication_before_entry() {
+    for operation in ["view", "inspect", "native"] {
+        let fixture = Fixture::new();
+        let provider = Rc::new(RefCell::new(Provider::default()));
+        let calls = Rc::new(Cell::new(0));
+        let mut consumer = host(&fixture, provider.clone(), calls.clone());
+        let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+            "action":"navigate", "url":"https://synthetic.example/", "profileId":"profile-a", "activityAtMs":100,
+        })).unwrap().unwrap();
+        let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+        let browser_id = opened["browserSession"]["browserId"].as_str().unwrap();
+        provider.borrow_mut().window_pid = Some(consumer.state().browsers[browser_id].pid);
+        let sequence = consumer.state().next_session_sequence;
+        competing_write(&fixture.root);
+        if operation == "view" {
+            let issued = consumer
+                .resolve_tab_handoff_view(id, 2000)
+                .expect("an independent publication must not veto view issuance");
+            assert_eq!(issued.presentation_state, "grant_issued");
+        } else {
+            let response = consumer.handle_command(&serde_json::json!({
+                "action":"service_remote_view_handoff_resolve", "handoffId":id,
+                "handoffOperation":if operation == "inspect" { "inspect" } else { "open" },
+                "nativeDesktop":operation == "native", "activityAtMs":2000,
+            }));
+            assert_eq!(response["success"], true, "{operation}: {response}");
+        }
+        assert_eq!(consumer.state().next_session_sequence, sequence + 1);
+        assert_eq!(
+            fixture
+                .store(false)
+                .load_session_state()
+                .unwrap()
+                .next_session_sequence,
+            sequence + 1
+        );
+        assert_eq!(calls.get(), 1, "no browser launch replay");
+        assert_eq!(
+            provider.borrow().view_requests.len(),
+            usize::from(operation == "view")
+        );
+    }
+}
+
+#[test]
 fn completed_view_reconciles_peer_publication_and_reuses_ledger_after_restart() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));

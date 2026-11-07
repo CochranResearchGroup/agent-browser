@@ -4,7 +4,8 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
-**Session publication reconciliation**: A three-way merge of a host's loaded
+**Session publication reconciliation**: Used by task continuation and handoff
+consumers before target selection. A three-way merge of a host's loaded
 baseline, resident metadata and current durable metadata inside one SQLite
 writer transaction. Independent edits survive together. Current resource
 identity wins overlapping observations; private append-only receipts retain the

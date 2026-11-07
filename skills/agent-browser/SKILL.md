@@ -70,7 +70,8 @@ Use a separate task/session and tab for each workflow. Shared profiles share log
 
 Idle capability registration reports `registered_idle` and `acquire_profile`, without claiming ownership. Read [Idle registration](references/cli-and-service.md#idle-registration) before diagnosing a missing binding.
 
-Session state differences are reconciled internally during publication. Continue
+Task continuation, handoff inspection and viewer/native opening reconcile session
+state differences internally before selecting the current target. Continue
 valid independent work; do not reset the profile, remove locks or repeat an
 uncertain action to resolve a metadata difference. Current resource identity and
 private reconciliation receipts preserve the competing observations.

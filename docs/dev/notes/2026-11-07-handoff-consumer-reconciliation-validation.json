@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "work_item": "CochranResearchGroup/agent-browser#558",
+  "base_commit": "a5639bc0fce82ff7cbe8cd3f61ca1e41bf8b4258",
+  "regression": "handoff_consumers_reconcile_peer_publication_before_entry",
+  "red": {
+    "error": "browser_session_publication_conflict",
+    "test_seconds": 3.98
+  },
+  "green": {
+    "cases": [
+      "viewer issuance",
+      "handoff inspection",
+      "native desktop opening"
+    ],
+    "test_seconds": 9.91,
+    "independent_sequence_preserved": true,
+    "browser_launches_per_case": 1,
+    "effect_replay": false
+  },
+  "surrounding_regressions": {
+    "passed": 97,
+    "failed": 0,
+    "total_seconds": 172.449,
+    "test_binary_sha256": "2d3663a5ab610b56e839a92a4f8eb3fc3b4b562214cbf2bc0d4828a700cc9d68"
+  },
+  "strict_clippy": "pending",
+  "production_candidate": {
+    "source_commit": "2ce59d78205dfb3c0b5879d8c6938998ebdb6571",
+    "binary_sha256": "9170b04a728a6652d642901baafe34e3de434a3575ce427f7ffa84320b631da3",
+    "status": "sealed_superseded_uninstalled"
+  },
+  "corrected_installation": "pending",
+  "hosted_ci": "not_run_operator_cost_policy",
+  "platform": "Linux x86_64 WSL; rustc1.94.1",
+  "reserved_final_review_and_tdd": {
+    "review": 0,
+    "tdd": 0
+  },
+  "expanded_all_targets_clippy": {
+    "status": "failed_unchanged_baseline_test_lints",
+    "command": "scripts/ci/cargo-safe.sh clippy --workspace --all-targets -- -D warnings",
+    "scope": "service-model tests and profile_duplicate_operation test include; unchanged against base; not the required workspace gate"
+  },
+  "test_source": {
+    "base_commit": "4f940caaad6e6f814ac2fb2f7c68918e24e56f9e",
+    "patch": "same host fix and regression; final Rustfmt changes whitespace only; help prose updated afterward",
+    "custody": "private SHA-pinned binary harness; canonical checkout restored clean"
+  },
+  "strict_clippy_command": "scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings"
+}
