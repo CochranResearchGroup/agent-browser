@@ -4,7 +4,7 @@ Product lane: PL-BUGFIX
 Parent: P300, ticket 530
 Branch: fix/p300-donor-retirement-readback
 Base: e2785ee97a273d192bc9a8985c3f37795be3e6fe
-State: ACTIVE
+State: CLOSED; donor recovery and input/handoff acceptance passed
 
 ## Bounded outcome
 
@@ -118,4 +118,124 @@ Local checks passed: nine `pool_demand_` tests, fourteen
 The initial format check found two wrapping differences in the new regression;
 formatting was corrected and the final check passed. Policy wiring passed all
 eleven tests. No hosted CI ran. Sealed build, preserving installation and actual
-viewer-input evidence remain pending for this second repair.
+viewer-input evidence were qualified in the following checkpoint.
+
+## Preserved donor and Native input checkpoint
+
+PR 556 integrated the allocator repair at canonical
+`db8da1e3f1571b9750eb205dfeb0eba68b23f903`. The source-bound production candidate
+passed its normal preserving installation and installed doctor. All nine prior
+browser roots and all 125 recorded Native process identities were preserved;
+one browser child exited without attributed cause. The restored donor uses the
+selected durable profile and remains explicitly preserved. No pending foreign
+retirement was settled to obtain it.
+
+Autonomous dev-browser diagnosis then proved a separate Native input defect:
+per-edge owner callbacks stretched a two millisecond tap into a 661 millisecond
+physical hold and generated an unwanted repeat. Remote View PR 812 fixed bounded
+read-ahead while preserving fresh proof per batch and live route/epoch checks.
+Its canonical source `98287ca9fca749903cb3b0dc96963674615951e4` passed 624 Rust
+tests, 83 viewer contracts, strict lint and formatting, then normal source-bound
+release assembly and 28-role software adoption. All 100 physical native processes,
+ten prior browser roots, generations and protected configuration were preserved.
+
+The actual Native viewer delivered exact repeated letters, digits and punctuation
+and a trusted click to an owned synthetic page. An initial immediate click/type
+attempt missed its first letter; the retained exact pass allowed focus to settle.
+Independent XI2 timing measured the repaired sample tap within one server
+millisecond. Both owned probe tabs and servers are closed, and normal control
+return passed. Remote View issue 811 is closed through its qualified plan 0228;
+its auxiliary checkout was archived and removed without touching foreign lanes.
+
+A later ordinary handoff refresh again reports publication conflict while the
+donor process remains alive and explicitly retained. Public resident state agrees
+with durable state, which excludes neither hidden operation drift nor a stale
+snapshot. The same normal preserve operation also refuses the conflict. The
+current bounded repair must establish a real hidden-metadata regression and
+refresh only a clean owner snapshot, preserving unsaved local work and unknown
+effects. No state-file editing, donor relaunch or raw shared-host restart is
+admitted. Original account navigation must be restored before human handoff;
+no protected account content has been captured or authentication entered.
+That navigation was restored through asserted active Native input, and an
+address-bar-only observation confirmed the account verification redirect.
+Fresh Native control status proves normal return to the agent afterward.
+
+Ordinary status does not expose the private baseline or effect cache needed to
+distinguish those guards. A bounded stderr-only diagnostic draft was prepared.
+Its regression failed at the missing-log assertion; its follow-up was cancelled
+without an accepted test result when fresh checkout inventory revealed the
+operator-diagnostic lane's explicit publication-reconciliation continuation.
+The draft is archived privately and removed from this checkout. No diagnostic
+candidate was built or deployed. A speculative hidden-metadata refresh is
+insufficient: external metadata drift already refreshes a clean local aggregate.
+
+The operator-diagnostic lane is now primary writer for host and SQLite
+publication reconciliation under work item 558. Its source contract preserves
+uncertain original effects and both writers' records, retries publication only,
+and confines conflicts to actual resources. P300 depends on that qualified
+canonical repair, then consumes one coordinated preserving deployment and exact donor
+readback. Consume no unmerged checkout bytes, duplicate source edits or competing
+runtime installation. The foreign checkout, candidate, tests and processes stay
+with that lane. This coordination does not claim the live conflict is solved.
+
+PR 557 integrated the qualified reconciliation at canonical
+`a5639bc0fce82ff7cbe8cd3f61ca1e41bf8b4258`, including source `2ce59d782`.
+The canonical validation receipt records 25 host/reconciliation and 71 affected
+tests, strict workspace Clippy, formatting and documentation gates. Source hashes
+match the receiving checkout. The earlier broader browser run is retained with
+its failures and scoped resolutions; this is not a new full-suite pass. The
+primary writer is building one sealed production candidate and will preserve
+both programs' owned browsers. Installation and fresh donor handoff are pending.
+
+Before adoption, a focused consumer check found three remaining handoff entry
+guards comparing stale state before reconciliation. The real peer-advance test
+failed with the exact publication conflict, then passed viewer issuance,
+handoff inspection and Native opening with no effect replay. All 97 surrounding
+regressions pass against the pinned test binary. The primary writer performed
+this qualification in the receiving checkout while its first release checkout
+remained frozen, then preserved the patches and restored the exact clean head.
+
+PR 560 integrated the corrected source `ffd3432d75f9c0179fcf826c874d77edffd8932f`
+at canonical `c2a8b879aed6bab3b57b087120ff8d392e145780`. The earlier sealed
+candidate is superseded and uninstalled. One corrected production build is now
+running under the same primary writer; installation and live handoff acceptance
+remain pending. P300 does not start a second build or competing installation.
+The exact required workspace Clippy receipt was read independently: exit zero,
+zero warnings or errors, 174.806 seconds. This is the required workspace command,
+not a claim that the expanded all-targets baseline passed.
+
+Ticket 530 remains open with three accepted and disposed copy rows. Its fourth
+row and P300 final broad review/remediation remain unrun.
+
+## Installed donor handoff acceptance
+
+The coordinated preserving installation accepted transaction
+`upgrade-91498402-31ed-4edf-bcb5-cc9140c20923`, generation
+`0.28.0-acd74b124577-2f0ec3b99bee`. Installed SHA256 is
+`acd74b124577d9e9129fa51e3378b3de9937606470b6368ad5c882369b0d239e`.
+The exact-binary workstation fixture and fresh installed doctor passed. Canonical
+acceptance PR 561 records the shared installation and original-workflow results.
+The older sealed candidate remains superseded and uninstalled.
+
+P300 independently verified the same donor process, start token, executable,
+selected profile and absence of CDP flags. Its fresh handoff reports ready with
+owned-browser-window proof. Dev-browser followed that authenticated opaque link
+into the Native WebSocket viewer. Normal takeover enabled mouse control; actual
+Chrome toolbar focus and exact public text entry were observed. Escape restored
+the original account-verification route without Enter, authentication-form input
+or page-body capture. Normal return completed, all physical keys were released,
+and only the owned viewer tab closed. The borrowed blank tab remains retained.
+
+All 125 prior Native process identities and both protected browser processes
+survived. One unrelated stock-Chrome root was absent across the longer observation
+interval; its cause is unattributed, so full-host browser preservation is not
+claimed. Screenshots and raw process/account evidence remain private.
+
+This closes the bounded input and handoff recovery, not ticket 530's remaining
+account/profile-copy experiment. The original profile and browser stay preserved
+for human Google verification. No fourth copy or original fourth operation was
+prepared, and no account usability is inferred from the verification screen.
+Ticket 529 still needs actual recording/narration inputs. P300 final broad review
+and findings-remediation counters remain zero. Keep the canonical checkout and
+existing candidate custody for that parent continuation; do not remove a source
+owner's retained artifact cache as part of this closeout.
