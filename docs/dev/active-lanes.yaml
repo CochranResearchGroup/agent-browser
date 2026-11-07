@@ -25,13 +25,13 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#575]
-    plan_state: ACTIVE
-    custody_state: ACTIVE_WORKTREE
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
     dependencies: [P321-RETIREMENT-570]
     overlaps: [P300-RECOVERY, INTERACTIVE-HANDOFF-571]
     reconciled_overlaps: ["One existing P321 source writer; PR573 owns handoff behavior; readiness parser disjoint; shared guidance limited to separate paragraphs; T0417 owns conversion/input; no competing runtime operation"]
-    validation_status: Exact-error RED then9 focused tests GREEN; format strict workspace Clippy policy11 links handoff docs and docs44pages passed; source qualified
-    limitations: ["No conversion, input, close, reset or mail runtime effects", "Installation and existing-operation acceptance separate"]
+    validation_status: Exact-error RED then9 focused tests GREEN; format strict workspace Clippy policy11 links handoff docs and docs44pages passed; installed in combined canonical candidate; read-only policy window doctor inventory and fresh MCP qualification passed
+    limitations: ["No conversion, input, close, reset or mail runtime effects", "Existing-operation continuation and provider acceptance remain consumer-owned"]
     updated_at: 2026-11-07
   - id: P321-RETIREMENT-570
     product_lane: PL-BUGFIX

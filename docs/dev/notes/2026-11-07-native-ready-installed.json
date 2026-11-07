@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "product_lane": "PL-BUGFIX",
+  "work_item": 575,
+  "disposition": "installed_client_fix_read_only_qualified",
+  "readiness_fix_pull_request": 576,
+  "readiness_fix_commit": "3f251e6818dda3f553b5d9ee4ab9bacdeb2dde2a",
+  "installed_source_commit": "add0cf3a89f174879372bb39e77ea0b59b5118a4",
+  "combined_source_pull_requests": [
+    576,
+    573
+  ],
+  "candidate": {
+    "id": "candidate-54e4e55ce67dadfa-0306d38224ac6a8c",
+    "artifact_class": "production_shaped",
+    "binary_sha256": "0306d38224ac6a8c1ad500ff9687ef1588aaeb9dc3b7e49120f282e81f17c16c",
+    "build_profile": "release",
+    "lto": "fat",
+    "codegen_units": 1
+  },
+  "installation": {
+    "generation": "0.28.0-0306d38224ac-29f975793010",
+    "transaction_id": "upgrade-552fd05f-d49c-424d-8070-4a970dc77eb5",
+    "state": "accepted",
+    "terminal_result": "accepted",
+    "execution": "Shared owning lane; read-only acceptance by this repair lane",
+    "selected_backend_and_runtime_host_bytes_match": true
+  },
+  "qualification": {
+    "readiness_http_tests": 6,
+    "public_native_host_disabled_input_guards": 2,
+    "native_task_selection_regression": 1,
+    "format_current_canonical_source": "passed",
+    "strict_workspace_clippy_current_canonical_source": "passed_zero_warnings",
+    "ready_source_bytes_match_tested_fix": true,
+    "install_doctor": "passed",
+    "current_inventory": "passed",
+    "fresh_mcp_mode_read": "passed",
+    "live_native_policy": "exact_schema1_ready_enabled",
+    "live_native_window_observation": "one_exact_original_process_window",
+    "native_target_stable": true,
+    "original_consumer_conversion_journal": "unchanged",
+    "original_browser_processes_preserved": 2,
+    "native_input_delivery_tested": false,
+    "provider_account_acceptance_qualified": false,
+    "hosted_ci": "not_run_operator_cost_policy",
+    "platform": "Linux x86_64 / WSL"
+  },
+  "limitations": [
+    "Original consumer conversion remains pending its sole owning lane; no close retry, relaunch or private input by this lane",
+    "Input policy and window observation do not grant Native control or establish delivered input",
+    "The standalone readiness candidate was sealed before canonical executable inputs advanced; it was retained, not promoted. This lane observed the existing combined build/install rather than starting a duplicate",
+    "No runtime reset or mail runtime changes by this repair lane",
+    "Not a formal release or target-platform matrix qualification"
+  ],
+  "private_receipt_sha256": {
+    "native-ready-installed-readback.json": "d522af5ae48ac152148a9f522e307e8874043017df5125f6beedf133efc9c722",
+    "google581-native-provider-readiness.json": "55fc4d0dad2214bfcf5a9ba0414ab494de9a20a388571de46725a9208b7842cb",
+    "native-ready-fresh-mcp-readback.json": "ca9efe4a075c0347c5aae2b3c90eec4e5226211eea271ecbc7cd0a7957e2c42f",
+    "native-ready-installed-doctor.json": "0121795db7d2f83e83ffb13dc4fff2452b9d318c0704b094460ee5ae77185203",
+    "native-ready-installed-status.json": "bb7c6817965f4a0511770957e2346df42258bb6a77d9729ed4ee2697d4666f40"
+  },
+  "qualified_at": "2026-11-07T19:12:48.623136+00:00",
+  "acceptance_scope": "Read-only client and exact Native-route qualification by this repair lane"
+}

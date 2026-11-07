@@ -4,7 +4,7 @@ Product lane: PL-BUGFIX
 Work item: 575
 Branch: fix/native-ready-state
 Base: 371acd19e50afaaf3364a5203d92ae31b3416aa7
-State: SOURCE_QUALIFIED
+State: COMPLETED
 
 Reuse the existing P321 owning checkout and preserve the paused interview patch
 privately. Restore guarded Native input for schema-1 public desktop inspection
@@ -34,3 +34,18 @@ handoff documentation and the 44-page docs build pass. The existing docs
 lockfile-root warning remains. See the adjacent validation receipt. No Native
 input, original close retry, conversion or runtime installation was performed
 for these source gates.
+
+## Installed checkpoint
+
+PR576 merged as `3f251e681`. Canonical `add0cf3a8` additionally incorporates
+independently owned interactive-handoff PR573. Native readiness source bytes
+match this qualified repair. The existing shared production candidate installed
+through an accepted transaction; this lane observed rather than competing with
+its build or installation. The standalone candidate remains retained.
+
+The [sanitized installed receipt](../notes/2026-11-07-native-ready-installed.json)
+binds running bytes, current-main strict quality, doctor, inventory, fresh MCP
+mode inspection and exact live Native policy/window evidence. Both existing
+browser processes and the original conversion journal are unchanged. Native
+input delivery, conversion continuation and provider/account acceptance remain
+with the consumer; none was dispatched for this qualification.
