@@ -6493,6 +6493,10 @@ Bookkeeping retries require an exact receipt and unchanged physical browser;
 unknown or expired IDs remain rejected. Errors with browser_session_idle_publication_
 use unavailable, invalid_record, activity_active or conflict to retain the cause.
 Preserve original actions: these errors never authorize replay or activity clearing.
+Opening a requested profile may finish a settled retirement after its logical scope
+ended. Exact original Native fence readback and atomic publication precede completion;
+physical close is never repeated and other profiles remain untouched. Unknown effects,
+changed identity and unavailable Native proof retain their reconciliation requirement.
 A stale actor cannot repeat an unresolved close. Same-command reopening completes
 old retirement publication before launching its replacement.
 Preparation also requires fresh atomic admission. Restart reads the original fence;

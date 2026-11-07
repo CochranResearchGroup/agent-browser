@@ -10357,3 +10357,202 @@ fn copy_disposal_missing_unacknowledged_payload_never_becomes_terminal() {
         copy_disposal_case(case);
     }
 }
+
+#[test]
+fn requested_profile_recovers_its_settled_unpublished_retirement_after_scope_ended() {
+    let fixture = Fixture::new();
+    std::fs::write(fixture.root.join("count-retirement-closes"), "check").unwrap();
+    let provider = Rc::new(RefCell::new(Provider {
+        pool_maximum: Some(4),
+        ..Default::default()
+    }));
+    let calls = Rc::new(Cell::new(0));
+    let mode = Rc::new(Cell::new(0));
+    let mut original = host_with_persistence(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::Success,
+        || 2001,
+        NativeUseReplyFailure {
+            store: fixture.store(false),
+            mode: mode.clone(),
+            attempts: Rc::new(Cell::new(0)),
+        },
+    );
+    let first = original
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    mode.set(5);
+    assert_eq!(
+        original.reap(300_101).unwrap_err(),
+        "synthetic_retirement_publication_unavailable"
+    );
+    provider.borrow_mut().window_pid = Some(44);
+    let peer = original
+        .open(OpenBrowserSession::exact_profile(
+            "Bob",
+            "profile-b",
+            300_102,
+        ))
+        .unwrap();
+    mode.set(5);
+    assert_eq!(
+        original.reap(600_103).unwrap_err(),
+        "synthetic_retirement_publication_unavailable"
+    );
+    let records = fixture.store(false).idle_retirement_records().unwrap();
+    assert_eq!(records.len(), 2);
+    let own = records
+        .iter()
+        .find(|r| r.has_settled_browser_close(&first.browser_id))
+        .unwrap()
+        .clone();
+    let unrelated = records
+        .iter()
+        .find(|r| r.has_settled_browser_close(&peer.browser_id))
+        .unwrap()
+        .clone();
+    assert!(own.published_state_digest.is_none() && unrelated.published_state_digest.is_none());
+    let before = fixture.store(false).load_session_state().unwrap();
+    // Model an external operator ending logical inventory after the recorded
+    // physical closes. Keep real SQLite custody and both original Native fences.
+    let ended = BrowserSessionState {
+        next_session_sequence: before.next_session_sequence,
+        retention_policy: before.retention_policy.clone(),
+        ..Default::default()
+    };
+    fixture.store(false).save_session_state(&ended).unwrap();
+    drop(original);
+    provider.borrow_mut().window_pid = Some(45);
+    let mut restarted = host(&fixture, provider, calls.clone());
+    let fresh = restarted
+        .open(OpenBrowserSession::exact_profile(
+            "Alice",
+            "profile-a",
+            600_104,
+        ))
+        .expect("requested profile must finish its settled transaction before new admission");
+    assert_eq!(fresh.profile_id, "profile-a");
+    assert_eq!(calls.get(), 3);
+    assert_eq!(
+        std::fs::read_to_string(fixture.root.join("retirement-effect-count")).unwrap(),
+        "2",
+        "each original physical close executes once"
+    );
+    let records = fixture.store(false).idle_retirement_records().unwrap();
+    let completed = records.iter().find(|r| r.intent == own.intent).unwrap();
+    assert!(completed.published_state_digest.is_some() && completed.is_terminal());
+    assert_eq!(
+        records
+            .iter()
+            .find(|r| r.intent == unrelated.intent)
+            .unwrap(),
+        &unrelated,
+        "another profiles prepared retirement remains untouched"
+    );
+}
+
+#[test]
+fn scoped_settled_retirement_reconciliation_preserves_unqualified_evidence() {
+    for case in ["unknown_effect", "provider_unavailable", "changed_identity"] {
+        let fixture = Fixture::new();
+        std::fs::write(fixture.root.join("count-retirement-closes"), "check").unwrap();
+        let provider = Rc::new(RefCell::new(Provider::default()));
+        let calls = Rc::new(Cell::new(0));
+        let mode = Rc::new(Cell::new(0));
+        let mut original = host_with_persistence(
+            &fixture,
+            provider.clone(),
+            calls.clone(),
+            Mode::Success,
+            || 2001,
+            NativeUseReplyFailure {
+                store: fixture.store(false),
+                mode: mode.clone(),
+                attempts: Rc::new(Cell::new(0)),
+            },
+        );
+        let first = original
+            .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+            .unwrap();
+        if case == "unknown_effect" {
+            std::fs::write(fixture.root.join("fail-retirement-close"), "unknown").unwrap();
+        } else {
+            mode.set(5);
+        }
+        let _ = original.reap(300_101);
+        let records = fixture.store(false).idle_retirement_records().unwrap();
+        assert_eq!(records.len(), 1, "{case}");
+        assert!(
+            records[0].has_effect_attempts(),
+            "fixture must reach the original effect: {case}"
+        );
+        assert_eq!(
+            records[0].has_settled_browser_close(&first.browser_id),
+            case != "unknown_effect"
+        );
+        let before = fixture.store(false).load_session_state().unwrap();
+        let mut current = BrowserSessionState {
+            next_session_sequence: before.next_session_sequence,
+            retention_policy: before.retention_policy.clone(),
+            ..Default::default()
+        };
+        if case == "changed_identity" {
+            current = before;
+            current.browsers.get_mut(&first.browser_id).unwrap().pid += 100;
+        }
+        fixture.store(false).save_session_state(&current).unwrap();
+        drop(original);
+        if case == "provider_unavailable" {
+            provider.borrow_mut().unavailable_idle_retirement_assignment =
+                Some(records[0].intent.provider.assignment.assignment_id.clone());
+        }
+        let profile = fixture
+            .store(false)
+            .load_profile_catalog()
+            .unwrap()
+            .catalog
+            .profiles["profile-a"]
+            .clone();
+        let mut effects = RemoteViewSessionEffects::new(
+            Process {
+                mode: Mode::Success,
+                root: fixture.root.clone(),
+                calls,
+            },
+            adapter(&fixture, provider),
+            fixture.store(false),
+            Vec::new(),
+            || uuid::Uuid::new_v4().to_string(),
+        )
+        .unwrap()
+        .with_pool(RemoteViewSessionPool {
+            name: "main".into(),
+            desired_desktops: 1,
+        })
+        .unwrap();
+        effects.begin_operation(&current).unwrap();
+        let _ = effects.reconcile_profile_browser(
+            &profile,
+            current.browsers.get(&first.browser_id),
+            &[],
+            &[],
+        );
+        assert_eq!(
+            fixture.store(false).idle_retirement_records().unwrap(),
+            records,
+            "unqualified evidence must not publish or complete: {case}"
+        );
+        assert_eq!(
+            fixture.store(false).load_session_state().unwrap(),
+            current,
+            "{case}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(fixture.root.join("retirement-effect-count")).unwrap(),
+            "1",
+            "no physical close replay: {case}"
+        );
+    }
+}
