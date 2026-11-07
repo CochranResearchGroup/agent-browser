@@ -28,6 +28,7 @@ mod runtime_multiplicity;
 mod runtime_owner_transfer;
 mod runtime_profile;
 mod runtime_replacement;
+mod runtime_reset;
 mod runtime_retention;
 mod session_supervisor;
 #[cfg(test)]
@@ -914,6 +915,22 @@ fn daemon_profile_for_launch<'a>(
 }
 
 fn run_runtime_command(clean: &[String], flags: &Flags) {
+    if clean.get(1).map(String::as_str) == Some("reset") {
+        if flags.cli_session || flags.cli_profile || flags.cli_runtime_profile {
+            print_json_error(
+                "runtime_reset_is_global: omit --session, --profile and --runtime-profile",
+            );
+            exit(1);
+        }
+        match runtime_reset::run(&clean[2..]) {
+            Ok(data) => print_json_value(json!({"success":true,"data":data})),
+            Err(error) => {
+                print_json_error(error);
+                exit(1);
+            }
+        }
+        return;
+    }
     match clean.get(1).map(|s| s.as_str()) {
         Some("history") => {
             let result = (|| -> Result<serde_json::Value, String> {
@@ -2231,7 +2248,7 @@ fn main() {
                         print_command_help("runtime history");
                         return;
                     }
-                    if !["list", "status", "login", "attach", "history"]
+                    if !["list", "status", "login", "attach", "history", "reset"]
                         .contains(&subcommand.as_str())
                     {
                         let message = format!("Unknown runtime subcommand: {subcommand}\nUse agent-browser runtime create --help to create a profile, or agent-browser runtime --help for supported commands.");

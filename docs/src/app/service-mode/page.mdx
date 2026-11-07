@@ -97,6 +97,32 @@ agent-browser runtime history tabs 100 --json
 agent-browser runtime history sessions 100 42 --json
 ```
 
+## Reset production tasks
+
+For a fresh local production start on Linux with user-systemd, preview first:
+
+```bash
+agent-browser runtime reset --json
+agent-browser runtime reset --apply --json
+agent-browser runtime reset --apply --resume <reset-id> --json
+```
+
+Preview is read-only and never launches a daemon. Apply ends active tasks and
+unsaved page work, pauses production writers, backs up SQLite, closes verified
+browser processes in the production runtime host cgroup and moves task/tab rows
+into terminal history. Only previously active production units are restored.
+Profiles, logins, handoff records, replay identities and uncertain operation
+journals remain. Foreign browsers, development runtimes and Remote View desktops
+and infrastructure remain outside this operation.
+
+Interrupted operations retain their exact receipt and coordination identity.
+Services may remain stopped until the reported resume command is run. Completed
+resume does not close work created afterward. Private receipts and backups live
+under <code>~/.agent-browser/service/runtime-resets/&lt;reset-id&gt;/</code>.
+Reset does not erase profiles or authorize uncertain action replay. Unknown
+profile operations still require their original reconciliation.
+
+
 The last argument is <code>data.nextCursor</code> from the preceding page. Pages
 are newest-first, with a maximum of 1000 records. This command reads an existing
 database without migration, state creation or launch.

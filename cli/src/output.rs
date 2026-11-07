@@ -7717,6 +7717,7 @@ Usage:
   agent-browser runtime login [url] [--attachable]
   agent-browser runtime attach [name]
   agent-browser runtime history [sessions|tabs] [limit] [before-sequence] --json
+  agent-browser runtime reset [--dry-run|--apply] [--resume <reset-id>] --json
 
 Commands:
   create [name]         Create a named persistent profile for runtime and service planning
@@ -7725,6 +7726,18 @@ Commands:
   login [url]           Launch a detached headed browser for manual sign-in
   attach [name]         Bind the current automation session to a runtime profile
   history               Read a bounded page of archived completed session or tab records
+  reset                 Preview or explicitly reset production tasks and owned browsers
+
+Runtime reset (Linux user-systemd production workstation):
+  Preview is read-only. --apply ends active tasks and unsaved page work, stops
+  production writers, backs up the runtime database and closes only verified
+  production-owned browser processes. Profiles, logins, history, links and
+  uncertain operation journals remain. Development and foreign browsers remain.
+  Resume an interrupted receipt with --apply --resume <reset-id>. Completed
+  resume is idempotent. Receipts and backups are private under
+  ~/.agent-browser/service/runtime-resets/<reset-id>/.
+  An interrupted reset may leave production services stopped until resumed.
+  Remote View desktops and infrastructure are independently owned.
 
 Locked profiles:
   If the default runtime profile is locked by a live browser PID and the task
@@ -8039,7 +8052,7 @@ Setup:
   upgrade                    Upgrade to the latest version
   dashboard start            Start the observability dashboard
   profiles                   List available Chrome profiles
-  runtime <op>               Runtime profile create/list/status/login/attach workflow
+  runtime <op>               Runtime profile workflow, history, or production reset
 
 Snapshot Options:
   -i, --interactive          Only interactive elements

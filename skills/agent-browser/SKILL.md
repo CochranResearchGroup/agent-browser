@@ -123,6 +123,20 @@ Discover advanced operations with `browser_discover`.
 
 Sign-in and teaching: [workspace tools](references/workspace-sign-in.md); viewer failures: [diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics).
 
+## Explicit runtime reset
+
+For an operator-requested fresh production start, use local CLI
+`agent-browser runtime reset --json` to preview, then `--apply` to execute.
+This is a whole-production Linux user-systemd maintenance command, outside MCP
+page actions. It ends tasks and unsaved pages, backs up SQLite, closes verified
+production-owned browser processes and retires active task/tab records. It
+preserves profiles, login data, links, history and uncertain-effect journals;
+foreign/development browsers and Remote View infrastructure remain independent.
+An interrupted reset may leave services stopped: use its exact
+`runtime reset --apply --resume <reset-id>` command. Completed resume cannot close
+later work. Keep the private receipt/backup under the runtime home. Reset does not
+prove uncertain actions safe to replay or resolve an unknown profile operation.
+
 ## Browser mode and builds
 
 Inspect `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build and mode are independent; copies do not prove login. Read [copy experiments](references/cli-and-service.md#profile-lab-independent-copies) and [controls/recovery](references/cli-and-service.md#browser-build-selection). Reconcile the original operation after lost replies.
