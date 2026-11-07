@@ -4654,6 +4654,13 @@ record or grant current authority. Invalid structure, forged authority and
 inconsistent live PID bindings still return
 `protected_browser_owner_observation_invalid`.
 
+Opening a profile can finish its original retirement transaction when the close
+is already settled and its logical scope has ended. Agent Browser requires exact
+Native fence readback and atomic publication before completing that fence; it
+never repeats the physical close. This reconciliation is limited to the requested
+profile. Unresolved effects, changed identities and unavailable Native proof
+retain their original reconciliation requirement.
+
 On Linux, effect-channel custody is derived from the established loopback TCP connections to the exact observed CDP listener and the user-owned processes holding those socket inodes. A vanished executor with no remaining holder is absent, while inherited, additional, or unresolved holders remain uncertain. Adoption rechecks that the selected candidate is the sole holder before committing the new owner generation.
 
 An expired prepared or uncertain adoption cannot remain an operational blocker after the exact listener has no effect-channel holder. The next serialized prepare terminalizes it as aborted and may admit a fresh idempotency key. Aborted and superseded terminal receipts are compactable history; only a receipt backing the current owner remains protected from operational compaction.

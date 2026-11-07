@@ -174,3 +174,10 @@ when their browser row has ended or been removed. They do not create a browser
 record or grant current authority. Invalid structure, forged authority and
 inconsistent live PID bindings still return
 `protected_browser_owner_observation_invalid`.
+
+Opening a profile can finish its original retirement transaction when the close
+is already settled and its logical scope has ended. Agent Browser requires exact
+Native fence readback and atomic publication before completing that fence; it
+never repeats the physical close. This reconciliation is limited to the requested
+profile. Unresolved effects, changed identities and unavailable Native proof
+retain their original reconciliation requirement.
