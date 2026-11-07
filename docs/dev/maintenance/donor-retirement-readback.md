@@ -118,4 +118,65 @@ Local checks passed: nine `pool_demand_` tests, fourteen
 The initial format check found two wrapping differences in the new regression;
 formatting was corrected and the final check passed. Policy wiring passed all
 eleven tests. No hosted CI ran. Sealed build, preserving installation and actual
-viewer-input evidence remain pending for this second repair.
+viewer-input evidence were qualified in the following checkpoint.
+
+## Preserved donor and Native input checkpoint
+
+PR 556 integrated the allocator repair at canonical
+`db8da1e3f1571b9750eb205dfeb0eba68b23f903`. The source-bound production candidate
+passed its normal preserving installation and installed doctor. All nine prior
+browser roots and all 125 recorded Native process identities were preserved;
+one browser child exited without attributed cause. The restored donor uses the
+selected durable profile and remains explicitly preserved. No pending foreign
+retirement was settled to obtain it.
+
+Autonomous dev-browser diagnosis then proved a separate Native input defect:
+per-edge owner callbacks stretched a two millisecond tap into a 661 millisecond
+physical hold and generated an unwanted repeat. Remote View PR 812 fixed bounded
+read-ahead while preserving fresh proof per batch and live route/epoch checks.
+Its canonical source `98287ca9fca749903cb3b0dc96963674615951e4` passed 624 Rust
+tests, 83 viewer contracts, strict lint and formatting, then normal source-bound
+release assembly and 28-role software adoption. All 100 physical native processes,
+ten prior browser roots, generations and protected configuration were preserved.
+
+The actual Native viewer delivered exact repeated letters, digits and punctuation
+and a trusted click to an owned synthetic page. An initial immediate click/type
+attempt missed its first letter; the retained exact pass allowed focus to settle.
+Independent XI2 timing measured the repaired sample tap within one server
+millisecond. Both owned probe tabs and servers are closed, and normal control
+return passed. Remote View issue 811 is closed through its qualified plan 0228;
+its auxiliary checkout was archived and removed without touching foreign lanes.
+
+A later ordinary handoff refresh again reports publication conflict while the
+donor process remains alive and explicitly retained. Public resident state agrees
+with durable state, which excludes neither hidden operation drift nor a stale
+snapshot. The same normal preserve operation also refuses the conflict. The
+current bounded repair must establish a real hidden-metadata regression and
+refresh only a clean owner snapshot, preserving unsaved local work and unknown
+effects. No state-file editing, donor relaunch or raw shared-host restart is
+admitted. Original account navigation must be restored before human handoff;
+no protected account content has been captured or authentication entered.
+That navigation was restored through asserted active Native input, and an
+address-bar-only observation confirmed the account verification redirect.
+Fresh Native control status proves normal return to the agent afterward.
+
+Ordinary status does not expose the private baseline or effect cache needed to
+distinguish those guards. A bounded stderr-only diagnostic draft was prepared.
+Its regression failed at the missing-log assertion; its follow-up was cancelled
+without an accepted test result when fresh checkout inventory revealed the
+operator-diagnostic lane's explicit publication-reconciliation continuation.
+The draft is archived privately and removed from this checkout. No diagnostic
+candidate was built or deployed. A speculative hidden-metadata refresh is
+insufficient: external metadata drift already refreshes a clean local aggregate.
+
+The operator-diagnostic lane is now primary writer for host and SQLite
+publication reconciliation under work item 558. Its source contract preserves
+uncertain original effects and both writers' records, retries publication only,
+and confines conflicts to actual resources. P300 depends on that qualified
+canonical repair, then performs serial preserving deployment and exact donor
+readback. Consume no unmerged checkout bytes, duplicate source edits or competing
+runtime installation. The foreign checkout, candidate, tests and processes stay
+with that lane. This coordination does not claim the live conflict is solved.
+
+Ticket 530 remains open with three accepted and disposed copy rows. Its fourth
+row and P300 final broad review/remediation remain unrun.

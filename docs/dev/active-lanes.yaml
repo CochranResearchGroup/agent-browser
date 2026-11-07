@@ -3,7 +3,7 @@ work_item_tracking: required
 lanes:
   - id: P300-RECOVERY
     product_lane: PL-BUGFIX
-    objective: Restore ordinary donor recovery through completed retirement readback and eligible desktop selection
+    objective: Restore donor recovery and durable handoff through exact custody readback and eligible desktop selection
     plan: docs/dev/maintenance/donor-retirement-readback.md
     branch: fix/p300-donor-retirement-readback
     target: main
@@ -11,10 +11,10 @@ lanes:
     work_items: [CochranResearchGroup/agent-browser#530]
     plan_state: ACTIVE
     custody_state: ACTIVE_WORKTREE
-    dependencies: [P300]
-    overlaps: [P300]
-    reconciled_overlaps: ["Reuse the sole clean canonical checkout at e2785ee97; worker owns host/effect source and regressions; root owns documentation, integration and runtime; preserve all existing candidate and branch custody"]
-    validation_status: PR555 merged and installed; doctor passes and publication conflict cleared; allocator repair passes 9 pool and 14 retirement tests plus format and strict Clippy; sealed deployment and live donor input pending
+    dependencies: [P300, CochranResearchGroup/agent-browser#558]
+    overlaps: [P300, P300-OPERATOR-DIAGNOSIS]
+    reconciled_overlaps: ["Reuse the canonical recovery checkout; preserve existing candidate and branch custody", "Operator-diagnostic lane is primary writer for host/SQLite publication reconciliation under558; P300 consumes its qualified canonical source only. Its source tests and processes remain untouched. Root retains serial donor/runtime acceptance and Native811 custody; no duplicate diagnostic deployment."]
+    validation_status: PR555 and PR556 preserving installs accepted; restored donor retained. Native PR812 installed and actual text/click/tap timing accepted, issue811 closed. Later publication conflict awaits the operator-diagnostic primary writer's canonical reconciliation repair; overlapping diagnostic draft archived unqualified and its owned test cancelled.
     limitations: ["Original input failure and subsequent donor retirement remain distinct", "No state-file edits, effect replay or raw shared-host restart", "P300 final broad review and remediation remain zero"]
     updated_at: 2026-11-07
   - id: TAB552
