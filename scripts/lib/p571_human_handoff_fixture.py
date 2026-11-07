@@ -66,6 +66,8 @@ def run_human_handoff_fixture(env, artifacts, sockets, spawn, cli, log):
             connection.close()
 
     rpc('initialize', {'protocolVersion':'2025-06-18','capabilities':{},'clientInfo':{'name':'synthetic-human-handoff','version':'1'}})
+    client.stdin.write((json.dumps({'jsonrpc':'2.0','method':'notifications/initialized'})+'\n').encode())
+    client.stdin.flush()
     task = call('browser_open', {'profile':'handoff-fixture','profileMode':'persistent','taskKey':'human-help',
         'serviceName':'HumanHandoffFixture','agentName':'SourceRegression','taskName':'Manual assistance',
         'url':'data:text/html,<title>Human handoff fixture</title><input id="draft" aria-label="Draft">'})
