@@ -70,6 +70,20 @@ Use a separate task/session and tab for each workflow. Shared profiles share log
 
 Idle capability registration reports `registered_idle` and `acquire_profile`, without claiming ownership. Read [Idle registration](references/cli-and-service.md#idle-registration) before diagnosing a missing binding.
 
+Session state differences are reconciled internally during publication. Continue
+valid independent work; do not reset the profile, remove locks or repeat an
+uncertain action to resolve a metadata difference. Current resource identity and
+private reconciliation receipts preserve the competing observations.
+
+Known occupied or reserved capacity can justify separate bounded capacity for
+an independent task. The original reservation stays intact. Failed window
+observations never qualify a desktop or justify another acquisition.
+
+Legacy Chrome singleton-lock ownership diagnostics are advisory. An otherwise ready
+profile recommends `continue_authorized_workflow`; continue the authorized task
+through exact browser/process checks without removing locks. Inspect actual
+execution failures and uncertain requests before replaying any effect.
+
 ## CLI fallback
 
 If browser_open is absent, report missing Agent Browser MCP integration.
