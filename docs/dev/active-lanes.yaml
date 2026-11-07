@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: NATIVE-READY-575
+    product_lane: PL-BUGFIX
+    objective: Accept the exact public Native ready lifecycle in guarded input preflight
+    plan: docs/dev/maintenance/native-ready-state.md
+    branch: fix/native-ready-state
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#575]
+    plan_state: ACTIVE
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [P321-RETIREMENT-570]
+    overlaps: [P300-RECOVERY, INTERACTIVE-HANDOFF-571]
+    reconciled_overlaps: ["One existing P321 source writer; PR573 owns handoff behavior; readiness parser disjoint; shared guidance limited to separate paragraphs; T0417 owns conversion/input; no competing runtime operation"]
+    validation_status: Exact public ready HTTP fixture RED in progress
+    limitations: ["No conversion, input, close, reset or mail runtime effects", "Installation and existing-operation acceptance separate"]
+    updated_at: 2026-11-07
   - id: P321-RETIREMENT-570
     product_lane: PL-BUGFIX
     objective: Finish the requested profiles settled retirement publication without repeating close

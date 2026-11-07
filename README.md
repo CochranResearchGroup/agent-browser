@@ -7370,6 +7370,9 @@ An unavailable Native owner or changed process/window returns remediation.
 `native_ready` includes `inputReadiness` separately from its exact-window check.
 It requires owner control authentication and inspects the exact lifecycle desktop's
 consumer input policy; viewer delivery and control ownership remain separate.
+Schema-1 public `ready` and legacy `local_ready` lifecycle states are accepted
+only for the matching desktop generation with enabled input policy. Unknown or
+non-ready states remain unverified; this does not grant Native control.
 Before guarded input, the owner policy is rechecked without creating another task.
 Configure the private `AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE` and use the
 Remote View owner's supported consumer-scoped `selective_input = true` setup for

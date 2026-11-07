@@ -2070,7 +2070,10 @@ identity remains fenced for actual input. Viewer readiness grants neither input
 nor control ownership. Configure `selective_input = true` through the Remote View
 owner's supported consumer-scoped setup for current/future owned allocations,
 without borrowing another desktop or mutating fixture slots. Missing auth and
-disabled input have distinct actionable holds.
+disabled input have distinct actionable holds. Schema-1 public `ready` and legacy
+`local_ready` lifecycle states both qualify only with matching desktop identity
+and generation and enabled input policy. Unknown or non-ready states remain
+unverified. This compatibility does not grant Native control.
 
 Observation rejection reports no input dispatched. Uncertain input preserves
 its original request and cannot be replayed. Recovery diagnostics expose only
