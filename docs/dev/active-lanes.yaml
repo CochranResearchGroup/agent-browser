@@ -14,7 +14,7 @@ lanes:
     dependencies: []
     overlaps: [P321-OWNER-567]
     reconciled_overlaps: ["Isolated primary; preserve canonical dirty retirement-publication work and retained peers; no shared runtime effects"]
-    validation_status: Viewer red reproduced and first browser slice green; cross-repository custody validation pending
+    validation_status: 35 focused Rust and real MCP Chrome owner workflow pass; final strict lint and sealed installed Native acceptance pending
     limitations: ["No installed or live acceptance claimed"]
     updated_at: 2026-11-07
   - id: P321-RETIREMENT-570

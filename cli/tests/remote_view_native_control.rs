@@ -4,6 +4,8 @@ mod browser_native_control;
 #[allow(dead_code)]
 #[path = "../src/native/browser_native_image.rs"]
 mod browser_native_image;
+// This integration fixture exercises only the Native input HTTP subset.
+#[allow(dead_code)]
 #[path = "../src/native/remote_view_application_http.rs"]
 mod remote_view_application_http;
 #[path = "../src/test_utils.rs"]
@@ -448,7 +450,7 @@ impl browser_native_control::NativeOwner for ImagePuzzleOwner {
         }
         for y in 414..444 {
             for x in 100..180 {
-                if x < 102 || x >= 178 || y < 416 || y >= 442 {
+                if !(102..178).contains(&x) || !(416..442).contains(&y) {
                     image.put_pixel(x, y, image::Rgb([20, 20, 20]));
                 }
             }
