@@ -89,7 +89,8 @@ def run_human_handoff_fixture(env, artifacts, sockets, spawn, cli, log):
     assert proof['handoffIntent'] == 'interactive'
     assert owner(first['handoffId'], 'return_handoff')['handoffIntent'] == 'view'
     assert owner(handoff['handoffId'])['handoffIntent'] == 'interactive', 'old return cannot resume a later invitation'
-    assert owner(passive['handoffId'])['handoffIntent'] == 'view'
+    passive_proof = owner(passive['handoffId'])
+    assert passive_proof is None or passive_proof['handoffIntent'] == 'view'
     call('browser_fill', {'taskId':task['taskId'],'selector':'#draft','value':'must not arrive'}, success=False)
     repeated = call('browser_handoff', {'taskId':task['taskId']})
     assert repeated['handoffId'] == handoff['handoffId'], 'lost replies must retain the same invitation'

@@ -839,6 +839,22 @@ pub(super) fn handoff(arguments: &Value, transport_session: &str) -> Result<Valu
         .map_err(|_| issue("remote_view_clock_invalid"))?
         .as_millis() as u64;
     let retained = control::prepare_handoff(&state, task_id, interaction, now_ms).map_err(issue)?;
+    if interaction == "interactive" {
+        let current = BrowserSessionSqliteStore::open_read_only(&path)
+            .map_err(issue)?
+            .load_session_state()
+            .map_err(issue)?;
+        let target =
+            agent_browser_service_model::resolve_remote_view_tab_handoff(&current, &retained.id)
+                .map_err(issue)?;
+        execute(
+            json!({"id":uuid::Uuid::new_v4().to_string(),
+            "action":"service_remote_view_handoff_resolve", "handoffId":retained.id,
+            "handoffOperation":"prepare_native_use", "expectedTabId":target.tab.id,
+            "expectedTargetId":target.tab.target_id}),
+            transport_session,
+        )?;
+    }
     let presentation = execute(
         json!({"id":uuid::Uuid::new_v4().to_string(),
         "action":"service_remote_view_handoff_resolve","handoffId":retained.id,

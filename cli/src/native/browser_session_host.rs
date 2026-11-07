@@ -430,6 +430,7 @@ pub(crate) async fn resolve_shared_handoff_command(
             *host = Some(load_default_browser_session_host()?);
         }
         let host = host.as_mut().ok_or("browser_session_host_missing")?;
+        host.refresh_before_ordinary_command()?;
         if !host.state().remote_view_tab_handoffs.contains_key(&id) {
             return Ok(None);
         }
