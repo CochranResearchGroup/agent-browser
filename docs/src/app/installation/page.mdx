@@ -1,5 +1,7 @@
 # Installation
 
+Workstation candidates must include the built dashboard. `pnpm build:development-candidate` builds it before Cargo and stops if the frontend build fails. Installation and doctor reject missing or placeholder-only dashboard assets with `dashboard_build_incomplete`; rebuild the dashboard and then recompile the candidate. Rust-only compilation remains available for source development.
+
 Only an executing workstation writer delays a conflicting change. Renaming or
 unlinking its executable does not release that custody. Stale PID diagnostics
 do not establish writer custody or veto a valid request.
