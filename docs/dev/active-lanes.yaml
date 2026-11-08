@@ -9,13 +9,13 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#599]
-    plan_state: ACTIVE
-    custody_state: ACTIVE_WORKTREE
+    plan_state: OPEN
+    custody_state: INTEGRATED
     dependencies: [CDP-FREE-IDLE-585, P321-RETIREMENT-570, RETAINED-HANDOFF-579]
     overlaps: [CDP-FREE-IDLE-585]
     reconciled_overlaps: ["Canonical checkout reused; primary writer for manual runtime classification and tests;598 owns separate workspace auth; preserve both glossary/catalog intents; no new checkout or runtime replacement"]
-    validation_status: Actual runtime regression passes including changed-target refusal and retained human invitation;418 model tests and strict Clippy pass; installed browser acceptance pending
-    limitations: ["No production install or profile/state reset", "Public viewer GREEN remains unproven"]
+    validation_status: PR600 merged;455 Rust tests and strict local gates pass; production-shaped sealed candidate passes exact install fixture and six no-launch smokes with zero owned-host residue; MCP allowlist fixture corrected
+    limitations: ["Sealed candidate retained; production installation excluded from source repair", "Installed skill publication and original public viewer GREEN remain unproven"]
     updated_at: 2026-11-08
   - id: AUTHELIA-AUTHORITY-597
     product_lane: PL-BUGFIX
