@@ -6,6 +6,60 @@ use std::cell::RefCell;
 use std::path::Path;
 
 #[test]
+fn cdp_free_idle_retirement_os_close_does_not_request_native_window_context() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.handle_command(&serde_json::json!({
+        "action":"browser_session_open","sessionName":"Alice","profileId":"profile-a",
+        "url":"https://synthetic.example/","manualLogin":true,"activityAtMs":100,
+        "serviceName":"fixture","agentName":"fixture","taskName":"OS idle close"
+    }));
+    assert_eq!(opened["success"], true, "{opened}");
+    consumer
+        .tab_for_navigation(opened["data"]["sessionId"].as_str().unwrap(), 101)
+        .unwrap();
+    let mut baseline = consumer.state().clone();
+    let browser = baseline.browsers.values().next().unwrap().clone();
+    baseline.tabs.values_mut().next().unwrap().target_id = format!("manual-window:{}", browser.id);
+    drop(consumer);
+    fixture.store(false).save_session_state(&baseline).unwrap();
+    let mut effects = RemoteViewSessionEffects::new(
+        Process {
+            mode: Mode::Success,
+            root: fixture.root.clone(),
+            calls,
+        },
+        adapter(&fixture, provider),
+        fixture.store(false),
+        vec![],
+        || uuid::Uuid::new_v4().to_string(),
+    )
+    .unwrap();
+    effects.begin_operation(&baseline).unwrap();
+    let _guard = effects
+        .acquire_idle_retirement_guard(std::slice::from_ref(&browser))
+        .unwrap()
+        .unwrap();
+    std::fs::write(
+        fixture.root.join("native-close-context-unavailable"),
+        "unavailable",
+    )
+    .unwrap();
+    std::fs::write(fixture.root.join("count-retirement-closes"), "count").unwrap();
+    effects
+        .close_browser(&browser)
+        .expect("automatic OS close cannot depend on Native window-close context");
+    assert_eq!(
+        std::fs::read_to_string(fixture.root.join("retirement-effect-count")).unwrap(),
+        "1"
+    );
+    assert!(fixture.store(false).idle_retirement_records().unwrap()[0]
+        .has_settled_browser_close(&browser.id));
+}
+
+#[test]
 fn cdp_free_idle_retirement_live_original_handoff_supersedes_pending_close() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));

@@ -4534,6 +4534,8 @@ browser is still alive. Agent Browser retains the attempted-close history and
 its unsettled outcome, publishes unchanged task identity and completes the
 original Native reservation before restoring access. Handoff focus renews the
 existing task activity clock; ordinary retention continues to apply.
+An acknowledged handoff-link deletion also wins a concurrent lifetime edit;
+stale publication cannot restore that link.
 
 Acknowledged command activity is removed only with an atomic publication receipt.
 The latest 4096 receipts allow bookkeeping retries after a lost reply without

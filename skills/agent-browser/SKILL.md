@@ -114,6 +114,7 @@ CDP-free idle close uses verified original OS identity and exit confirmation.
 Explicit handoff can supersede idle cleanup after its worker ends and the exact
 original is verified alive. Attempt history stays intact; this retention decision
 requires a schema-5-capable runtime.
+Deleted handoff links cannot be restored by concurrent lifetime edits.
 
 
 CLI fallback: use installed `agent-browser <command> --help`, the exact profile

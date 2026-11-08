@@ -1510,7 +1510,6 @@ impl<
     }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         self.require_operation()?;
-        self.refresh_manual_native_context(browser)?;
         let effect = BrowserIdleRetirementEffect::CloseBrowser {
             browser_id: browser.id.clone(),
         };
@@ -1525,6 +1524,7 @@ impl<
                     .ok_or("browser_session_idle_custody_identity_changed")?;
                 self.effects.apply_idle_retirement_effect(scope, None)?;
             } else {
+                self.refresh_manual_native_context(browser)?;
                 self.effects.close_browser(browser)?;
             }
         }
@@ -1571,7 +1571,6 @@ impl<
         tab: &ManagedBrowserTab,
     ) -> Result<(), String> {
         self.require_operation()?;
-        self.refresh_manual_native_context(browser)?;
         let effect = BrowserIdleRetirementEffect::CloseTab {
             browser_id: browser.id.clone(),
             tab_id: tab.id.clone(),
@@ -1589,6 +1588,7 @@ impl<
                 self.effects
                     .apply_idle_retirement_effect(scope, Some(tab))?;
             } else {
+                self.refresh_manual_native_context(browser)?;
                 self.effects.close_tab(browser, tab)?;
             }
         }

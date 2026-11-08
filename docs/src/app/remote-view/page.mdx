@@ -1042,6 +1042,8 @@ This retention decision requires Browser Runtime SQLite schema 5. Keep a
 compatible binary with the database and backups. CDP-free idle closure uses
 OS termination bound to original PID, start identity and executable, and confirms
 exit without a debugging connection or force-kill fallback.
+An acknowledged link deletion wins a concurrent lifetime edit; stale publication
+cannot restore the deleted link or change its browser and tab.
 
 A physical close requires a fresh atomic attempt admission. A stale coordinator
 reads the original pending attempt instead of treating an idempotent record

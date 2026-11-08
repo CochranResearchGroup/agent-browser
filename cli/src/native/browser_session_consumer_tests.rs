@@ -186,6 +186,9 @@ impl RemoteViewBrowserProcessEffects for Process {
         environment: RemoteViewPrivateLaunchEnvironment,
         observation: &RemoteViewAssignmentObservation,
     ) -> Result<(), RemoteViewBrowserProcessError> {
+        if self.root.join("native-close-context-unavailable").exists() {
+            return Err(RemoteViewBrowserProcessError::Rejected);
+        }
         let desktop = browser
             .desktop
             .as_ref()

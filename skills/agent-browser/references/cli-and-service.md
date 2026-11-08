@@ -3932,6 +3932,8 @@ worker. The owner preserves the attempted-close history and unsettled physical
 outcome, publishes unchanged task identity and completes the original Native
 reservation before focus. A running worker or unavailable original identity
 still defers; repeat the same durable handoff after inspecting that condition.
+An explicit handoff-link deletion wins concurrent lifetime edits and retains
+revocation after restart, without closing its browser or tab.
 
 The automatic-close candidate persists its exact operation before preparing
 native viewer exclusion, records each close attempt before the physical effect,

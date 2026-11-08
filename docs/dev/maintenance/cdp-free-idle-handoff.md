@@ -2,6 +2,7 @@
 
 Product lane: PL-BUGFIX
 Work item: 585
+Related validation defect: 589
 Owner: ecochran76
 Branch: fix/cdp-free-idle-handoff
 Base: a779f3fe9
@@ -50,8 +51,15 @@ profile-copy disposal cases. It also exposed a metadata race fixture failure.
 The same failure reproduces against exact baseline Rust source a779f3fe9: both
 overlapping operations can acknowledge a serializable update-then-delete. The
 fixture now permits those acknowledgements while preserving its terminal deletion,
-restart, unchanged browser/tab/session and no-provider-effect assertions. No
-production publication-reconciliation change was made for that finding.
+restart, unchanged browser/tab/session and no-provider-effect assertions. The
+stronger final-state check exposed an actual pre-existing lost deletion: generic
+current-writer preference can discard an acknowledged local deletion. Issue589
+owns a narrow handoff-map deletion rule in the existing reconciler. This lane is
+its primary writer; no other collection or publication behavior is expanded.
 
-Final focused checks and source-bound receipts are pending. Local qualification
+An outer-adapter regression also reproduced automatic close being rejected by
+Native window-context refresh before reaching the verified process close.
+Automatic recorded retirement now bypasses that irrelevant window requirement;
+ordinary explicit window close keeps it. Final focused checks and source-bound
+receipts are pending. Local qualification
 is Linux/WSL; hosted CI, other platforms and production installation are separate.

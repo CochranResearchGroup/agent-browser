@@ -7038,6 +7038,7 @@ requires positive original-process exit and never replays the command.
 CDP-free idle close uses original OS identity and confirms exit without debugging
 or force kill. Explicit handoff can retain a verified live original after its idle
 worker ends, preserving the attempted-close history and unsettled outcome.
+Handoff-link deletion wins concurrent lifetime edits without closing the target.
 
 Use service --help or service -h for local help without starting a browser
 or rewriting Service State. Unsupported subcommands remain typed errors.
