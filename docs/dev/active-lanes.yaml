@@ -14,7 +14,7 @@ lanes:
     dependencies: [P321-RETIREMENT-570, HUMAN-HANDOFF-571]
     overlaps: [IDLE-ACTIVITY-562]
     reconciled_overlaps: ["Reuse canonical checkout from current origin/main; preserve pre-existing CONTEXT.md changes; primary writer for retirement readback, bounded handoff recovery and589 handoff-map deletion precedence; preserve other reconciliation behavior; no new checkout or shared runtime effects"]
-    validation_status: Source repair and two additional regressions implemented; final bounded local checks queued; draft PR588
+    validation_status: Source14ddb083c qualifies47 focused CLI passes and418 model passes; strict Clippy fmt policy links and docs pass; PR588 ready for review
     limitations: ["No installed repair or original browser termination", "Dispatched uncertainty cannot be treated as no effect"]
     updated_at: 2026-11-08
   - id: RECOVERED-INVITATION-583
