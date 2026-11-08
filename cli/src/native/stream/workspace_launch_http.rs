@@ -119,11 +119,9 @@ mod tests {
                 let mut bytes=vec![];tokio::time::timeout(std::time::Duration::from_secs(60),client.read_to_end(&mut bytes)).await.unwrap().unwrap();server.await.unwrap();
                 let raw=String::from_utf8(bytes).unwrap();let(head,body)=raw.split_once("\r\n\r\n").unwrap();(head.lines().next().unwrap().into(),serde_json::from_str(body).unwrap())
             }
-            let auth=dashboard_auth::ensure_dashboard_auth_config().unwrap();
-            let credentials=std::fs::read_to_string(auth.bootstrap_credential_file).unwrap();
-            let password=credentials.lines().find_map(|line|line.strip_prefix("AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD=\"").and_then(|s|s.strip_suffix('"'))).unwrap();
-            let login=String::from_utf8(dashboard_auth::login_response(&[],&json!({"username":"admin","password":password}).to_string(),false).into_http_bytes()).unwrap();
-            let cookie=login.lines().find_map(|line|line.strip_prefix("Set-Cookie: ").and_then(|s|s.split(';').next())).unwrap();
+            let ingress=dashboard_auth::test_ingress::TestIngress::start();
+            let cookie_owned=ingress.cookie("admin");
+            let cookie=cookie_owned.as_str();
             let endpoint="/api/dashboard/browser-launch";
             assert!(exchange("GET","/api/dashboard/siteguides","",Value::Null).await.0.contains("401"));
             let (guide_status,guides)=exchange("GET","/api/dashboard/siteguides",cookie,Value::Null).await;

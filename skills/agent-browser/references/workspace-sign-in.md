@@ -1,7 +1,7 @@
 # Workspace sign-in
 
 The ordinary workspace reuses existing ingress sign-in without a second password
-form. This is separate from website account authentication and Native viewer access.
+form. Agent Browser and Remote View require the same Authelia guard. Native dashboard password login and previously signed local cookies are disabled until compatible interoperation exists. Missing verifier configuration or an unavailable owner denies access. Current workspace role checks remain enforced. Website account authentication is separate.
 
 Configure all three settings in the backend's reviewed environment:
 
@@ -24,13 +24,11 @@ malformed/unavailable owner verification returns503. Partial/invalid config
 fails closed. Recovery retains the selected browser URL and distinguishes
 sign-in, denial, redirected content and service failure.
 
-With all three settings absent, supported local/machine login API and signed
-sessions remain available. Existing auth-directory/auth-file overrides remain
-supported. The private store defaults admin to superuser and codex to observer.
-A valid local session takes precedence and renews its thirty-day cookie on
-status read. Ingress identities never mint local cookies. The returned user's
-`authenticationSource` is ingress/local. End local session ends only the local
-cookie; ingress provider sign-out remains separate.
+Missing owner configuration denies access. Existing auth-directory/auth-file
+overrides remain supported for the private role and request-proof store. Native
+password login returns `native_auth_disabled`; signed native cookies never
+authenticate or renew. Authentication source is ingress. Authelia owns the shared
+sign-in and sign-out for Agent Browser and Remote View.
 
 Never read credentials into logs, tracked docs or command arguments. Configure
 or mutate installed ingress only within its explicit authority. Source fixtures

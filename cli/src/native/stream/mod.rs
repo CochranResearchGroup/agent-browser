@@ -24,14 +24,12 @@ mod websocket;
 pub use cdp_loop::{ack_screencast_frame, start_screencast, stop_screencast};
 pub(crate) use dashboard::ensure_dashboard_service_backend;
 pub use dashboard::run_dashboard_server;
+#[cfg(all(test, unix))]
+pub(crate) use dashboard::run_native_handoff_http_fixture;
 #[cfg(test)]
 pub(crate) use dashboard::{
     dashboard_service_status_with_transports, service_status_dashboard_cli_fallback_fixture,
     service_status_handler_fixture, service_status_http_body_fixture,
-};
-#[cfg(all(test, unix))]
-pub(crate) use dashboard::{
-    native_handoff_http_fixture_credentials, run_native_handoff_http_fixture,
 };
 #[cfg(test)]
 pub(crate) use http::runtime_manifest_json_for_executable;
@@ -571,3 +569,6 @@ mod tests {
         assert_eq!(meta.page_scale_factor, 1.0);
     }
 }
+
+#[cfg(test)]
+pub(crate) use dashboard_auth::test_ingress::TestIngress as NativeHandoffTestIngress;

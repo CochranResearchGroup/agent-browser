@@ -6439,16 +6439,8 @@ impl NativePublicHarness {
             );
             assert_eq!(store.load_session_state().unwrap(), original);
         }
-        let credentials = crate::native::stream::native_handoff_http_fixture_credentials();
-        let credentials = std::fs::read_to_string(credentials).unwrap();
-        let password = credentials
-            .lines()
-            .find_map(|line| {
-                line.strip_prefix("AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD=\"")
-                    .and_then(|value| value.strip_suffix('"'))
-            })
-            .unwrap()
-            .to_owned();
+        let ingress = crate::native::stream::NativeHandoffTestIngress::start();
+        let cookie = ingress.cookie("admin");
         let token = uuid::Uuid::new_v4().to_string();
         crate::connection::write_daemon_auth_token(session, &token).unwrap();
         let readiness = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -6564,25 +6556,6 @@ impl NativePublicHarness {
                     let request = if public_locator {
                         client.get(format!("{origin}/remote-view/{handoff}"))
                     } else {
-                        let login = client
-                            .post(format!("{origin}/api/dashboard-auth/login"))
-                            .json(&serde_json::json!({"username":"admin","password":password}))
-                            .send()
-                            .await
-                            .map_err(|e| e.to_string())?;
-                        if login.status().as_u16() != 200 {
-                            return Err("synthetic HTTP login failed".to_string());
-                        }
-                        let cookie = login
-                            .headers()
-                            .get("set-cookie")
-                            .ok_or("synthetic signed cookie missing")?
-                            .to_str()
-                            .map_err(|e| e.to_string())?
-                            .split(';')
-                            .next()
-                            .unwrap()
-                            .to_owned();
                         client
                             .get(format!("{origin}/api/remote-view/{handoff}/presentation"))
                             .header("cookie", cookie)

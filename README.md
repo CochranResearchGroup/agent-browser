@@ -3311,19 +3311,7 @@ closed. Missing sign-in, denial, redirects and service failures offer recovery
 without rewriting the selected browser URL. See the
 [Authelia ForwardAuth metadata contract](https://www.authelia.com/reference/guides/proxy-authorization/#forwardauth-metadata).
 
-With all three variables absent, supported local and machine authentication
-remains available through the dashboard login API and signed sessions. First
-start creates private `~/.agent-browser/dashboard-auth.json` and mode-0600
-`~/.agent-browser/dashboard-auth.env`; `admin` is a superuser and `codex` is an
-observer. Existing `AGENT_BROWSER_DASHBOARD_AUTH_FILE` and
-`AGENT_BROWSER_DASHBOARD_AUTH_DIR` overrides remain supported. A valid local
-session takes precedence and renews its thirty-day cookie on status read.
-Ingress identity never becomes a local cookie. Auth responses identify the
-user's `authenticationSource` as `ingress` or `local`. **End local session**
-ends only the local cookie; ingress sign-out belongs to its provider. Workspace
-access is separate from website account authentication and Native viewer access.
-Source fixture passes do not establish installed ingress, cookie delivery or
-Native workflow acceptance.
+Native dashboard password login and signed sessions are disabled until Agent Browser and Remote View support compatible authentication. Both require the same Authelia guard. Existing native cookies cannot authenticate or renew, and the login API returns `native_auth_disabled`. Every protected request verifies the shared Authelia session and applies current explicit workspace roles. Missing configuration and verifier failures deny access. Sign-in and sign-out belong to Authelia. The private auth store retains role mappings and request-proof signing; existing auth-file and auth-directory overrides remain supported. Website account authentication remains separate.
 
 Authenticated dashboard identity and Guacamole route identity are separate.
 For a hosted Guacamole request, forward authentication keeps the signed-in

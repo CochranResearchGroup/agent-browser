@@ -1,3 +1,6 @@
+#[cfg(test)]
+pub(crate) mod test_ingress;
+
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
@@ -32,8 +35,8 @@ const AUTH_FILE_NAME: &str = "dashboard-auth.json";
 const BOOTSTRAP_CREDENTIAL_FILE_NAME: &str = "dashboard-auth.env";
 const PBKDF2_ITERATIONS: u32 = 120_000;
 const SESSION_COOKIE: &str = "agent_browser_dashboard_session";
-/// Dashboard sessions persist for thirty days and are renewed by the
-/// authenticated status check that runs whenever the dashboard loads.
+/// Legacy format retained only for regressions proving old cookies are refused.
+#[cfg(test)]
 const SESSION_TTL_SECONDS: u64 = 30 * 24 * 60 * 60;
 pub(super) const DASHBOARD_ROLE_SUPERUSER: &str = "superuser";
 pub(super) const DASHBOARD_ROLE_OBSERVER: &str = "observer";
@@ -187,146 +190,43 @@ pub(super) fn ensure_dashboard_auth_config() -> Result<DashboardAuthPaths, Strin
     })
 }
 
+/// Only the shared Authelia owner can establish dashboard authentication.
+/// Native sessions stay disabled until Remote View can interoperate with them.
 pub(super) fn auth_status_response(
     headers: &[(String, String)],
     secure_cookie: bool,
 ) -> DashboardAuthResponse {
-    let paths = match ensure_dashboard_auth_config() {
-        Ok(paths) => paths,
-        Err(err) => {
-            return json_response(
-                "500 Internal Server Error",
-                json!({"success": false, "error": err}),
-            )
-        }
-    };
     let identity = match authenticate_headers(headers) {
         Ok(identity) => identity,
         Err(err) => return authentication_error_response(&err),
     };
-    let mut payload = json!({
-        "authenticated": identity.is_some(),
-        "user": identity.as_ref().map(identity_json),
-        "cookieSecure": secure_cookie,
-        "sessionPersistence": {
-            "maxAgeSeconds": identity.as_ref().filter(|identity| !identity.ingress).map(|_| SESSION_TTL_SECONDS),
-            "rollingRefresh": identity.as_ref().is_some_and(|identity| !identity.ingress),
-        },
-    });
-    if identity.is_some() {
-        payload["credentialStore"] = json!(paths.auth_file);
-        payload["bootstrapCredentialFile"] = json!(paths.bootstrap_credential_file);
-    }
-    let mut response = json_response("200 OK", payload);
-    if let Some(identity) = identity.as_ref().filter(|identity| !identity.ingress) {
-        let store = match load_auth_store() {
-            Ok(store) => store,
-            Err(err) => {
-                return json_response(
-                    "500 Internal Server Error",
-                    json!({
-                        "success": false,
-                        "authenticated": false,
-                        "errorCode": "dashboard_auth_refresh_failed",
-                        "error": err,
-                    }),
-                )
-            }
-        };
-        let cookie = match create_session_cookie(&store, identity, secure_cookie) {
-            Ok(cookie) => cookie,
-            Err(err) => {
-                return json_response(
-                    "500 Internal Server Error",
-                    json!({
-                        "success": false,
-                        "authenticated": false,
-                        "errorCode": "dashboard_auth_refresh_failed",
-                        "error": err,
-                    }),
-                )
-            }
-        };
-        response.headers.push(("Set-Cookie".to_string(), cookie));
-    }
-    response
+    json_response(
+        "200 OK",
+        json!({
+            "authenticated": identity.is_some(),
+            "user": identity.as_ref().map(identity_json),
+            "cookieSecure": secure_cookie,
+            "nativeAuthenticationEnabled": false,
+            "sessionPersistence": {"maxAgeSeconds": null, "rollingRefresh": false},
+        }),
+    )
 }
 
+/// Refuse native password login even for valid old credentials. Ingress owns
+/// sign-in for both the workspace and its Remote View dependency.
 pub(super) fn login_response(
-    headers: &[(String, String)],
-    body: &str,
-    secure_cookie: bool,
+    _headers: &[(String, String)],
+    _body: &str,
+    _secure_cookie: bool,
 ) -> DashboardAuthResponse {
-    let parsed: serde_json::Value = match serde_json::from_str(body) {
-        Ok(value) => value,
-        Err(_) => {
-            return json_response(
-                "400 Bad Request",
-                json!({"success": false, "authenticated": false, "error": "Invalid login payload"}),
-            )
-        }
-    };
-    let username = parsed
-        .get("username")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("")
-        .trim();
-    let password = parsed
-        .get("password")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("");
-
-    let store = match load_auth_store() {
-        Ok(store) => store,
-        Err(err) => {
-            return json_response(
-                "500 Internal Server Error",
-                json!({"success": false, "error": err}),
-            )
-        }
-    };
-    let Some(user) = store.users.iter().find(|user| user.username == username) else {
-        return json_response(
-            "401 Unauthorized",
-            json!({"success": false, "authenticated": false, "error": "Invalid username or password"}),
-        );
-    };
-    if !verify_password(password, &user.password_hash) {
-        return json_response(
-            "401 Unauthorized",
-            json!({"success": false, "authenticated": false, "error": "Invalid username or password"}),
-        );
-    }
-
-    let identity = DashboardAuthIdentity {
-        ingress: false,
-        username: user.username.clone(),
-        display_name: user.display_name.clone(),
-        role: user.role.clone(),
-    };
-    let cookie = match create_session_cookie(&store, &identity, secure_cookie) {
-        Ok(cookie) => cookie,
-        Err(err) => {
-            return json_response(
-                "500 Internal Server Error",
-                json!({"success": false, "error": err}),
-            )
-        }
-    };
-    let mut response = json_response(
-        "200 OK",
-        json!({"success": true, "authenticated": true, "user": identity_json(&identity)}),
-    );
-    response
-        .headers
-        .push(("Set-Cookie".to_string(), cookie.to_string()));
-
-    if let Some(next) = login_next_path(headers) {
-        response
-            .headers
-            .push(("X-Agent-Browser-Next".to_string(), next));
-    }
-    response
+    json_response(
+        "403 Forbidden",
+        json!({
+            "success": false, "authenticated": false,
+            "errorCode": "native_auth_disabled",
+            "error": "Sign in through the Authelia-protected workspace URL. Native dashboard authentication is disabled until Remote View authentication interoperates.",
+        }),
+    )
 }
 
 pub(super) fn logout_response(secure_cookie: bool) -> DashboardAuthResponse {
@@ -356,26 +256,7 @@ pub(super) fn verify_forward_auth_response(
                 json!({"success": false, "error": err}),
             )
         }),
-        Ok(None) => {
-            let next = forwarded_request_target(headers).unwrap_or_else(|| "/".to_string());
-            let location = forwarded_login_location(headers, &next);
-            DashboardAuthResponse {
-                status: if header_value(headers, "x-forwarded-uri").is_some() {
-                    "302 Found".to_string()
-                } else {
-                    "401 Unauthorized".to_string()
-                },
-                content_type: "application/json; charset=utf-8",
-                headers: vec![("Location".to_string(), location)],
-                body: json!({
-                    "success": false,
-                    "authenticated": false,
-                    "error": "Login required",
-                })
-                .to_string()
-                .into_bytes(),
-            }
-        }
+        Ok(None) => unauthorized_api_response(false),
         Err(err) => authentication_error_response(&err),
     }
 }
@@ -465,13 +346,8 @@ pub(super) fn require_authenticated(
 pub(super) fn authenticate_headers(
     headers: &[(String, String)],
 ) -> Result<Option<DashboardAuthIdentity>, String> {
-    if let Some(token) =
-        header_value(headers, "cookie").and_then(|value| cookie_value(value, SESSION_COOKIE))
-    {
-        if let Some(identity) = verify_session_token(&load_auth_store()?, &token)? {
-            return Ok(Some(identity));
-        }
-    }
+    // Never accept a native cookie, including a previously valid signed one.
+    // Each protected request must prove the shared dependency-owner session.
     authenticate_ingress(headers)
 }
 
@@ -501,7 +377,7 @@ fn authenticate_ingress(
     const USERS: &str = "AGENT_BROWSER_DASHBOARD_INGRESS_USERS";
     let values = [VERIFY, WORKSPACE, USERS].map(|key| std::env::var(key).ok());
     if values.iter().all(Option::is_none) {
-        return Ok(None);
+        return Err("workspace_ingress_configuration_missing".into());
     }
     let invalid = || "workspace_ingress_configuration_invalid".to_string();
     let [Some(endpoint), Some(workspace), Some(users)] = values else {
@@ -872,6 +748,7 @@ fn hash_password(password: &str) -> Result<String, String> {
     ))
 }
 
+#[cfg(test)]
 fn verify_password(password: &str, encoded: &str) -> bool {
     let parts = encoded.split('$').collect::<Vec<_>>();
     if parts.len() != 4 || parts[0] != "pbkdf2-sha256" {
@@ -910,6 +787,7 @@ fn pbkdf2_hmac_sha256(password: &[u8], salt: &[u8], iterations: u32) -> [u8; 32]
     output
 }
 
+#[cfg(test)]
 fn create_session_cookie(
     store: &DashboardAuthStore,
     identity: &DashboardAuthIdentity,
@@ -929,6 +807,7 @@ fn expired_session_cookie(secure_cookie: bool) -> String {
     )
 }
 
+#[cfg(test)]
 fn create_session_token(
     store: &DashboardAuthStore,
     identity: &DashboardAuthIdentity,
@@ -947,6 +826,7 @@ fn create_session_token(
     ))
 }
 
+#[cfg(test)]
 fn verify_session_token(
     store: &DashboardAuthStore,
     token: &str,
@@ -1007,6 +887,7 @@ fn sign_payload(store: &DashboardAuthStore, payload: &[u8]) -> Result<Vec<u8>, S
     Ok(mac.finalize().into_bytes().to_vec())
 }
 
+#[cfg(test)]
 fn cookie_value(cookie_header: &str, name: &str) -> Option<String> {
     cookie_header.split(';').find_map(|part| {
         let (candidate, value) = part.trim().split_once('=')?;
@@ -1037,31 +918,6 @@ fn json_response(status: &str, value: serde_json::Value) -> DashboardAuthRespons
         headers: Vec::new(),
         body: value.to_string().into_bytes(),
     }
-}
-
-fn forwarded_request_target(headers: &[(String, String)]) -> Option<String> {
-    let uri = header_value(headers, "x-forwarded-uri")?;
-    Some(uri.to_string())
-}
-
-fn forwarded_login_location(headers: &[(String, String)], next: &str) -> String {
-    let path = format!("/login?next={}", urlencoding::encode(next));
-    let Some(host) =
-        header_value(headers, "x-forwarded-host").or_else(|| header_value(headers, "host"))
-    else {
-        return path;
-    };
-    let proto = header_value(headers, "x-forwarded-proto").unwrap_or("http");
-    format!("{proto}://{host}{path}")
-}
-
-fn login_next_path(headers: &[(String, String)]) -> Option<String> {
-    header_value(headers, "referer")
-        .and_then(|referer| url::Url::parse(referer).ok())
-        .and_then(|url| {
-            url.query_pairs()
-                .find_map(|(key, value)| (key == "next").then(|| value.to_string()))
-        })
 }
 
 fn generate_secret(bytes_len: usize) -> Result<String, String> {
@@ -1223,7 +1079,9 @@ mod tests {
             let request = format!("{method} {path} HTTP/1.1\r\nHost: spoofed.example\r\nRemote-User: spoofed\r\nRemote-Groups: superuser\r\nCookie: {cookie}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
             client.write_all(request.as_bytes()).unwrap();
             let mut result = String::new();
-            client.read_to_string(&mut result).unwrap();
+            client.read_to_string(&mut result).unwrap_or_else(|error| {
+                panic!("{method} {path}: {error}; partial response: {result}")
+            });
             handler.join().unwrap();
             result
         }
@@ -1260,32 +1118,31 @@ mod tests {
         );
         server.join().unwrap();
         assert!(status().starts_with("HTTP/1.1 503 Service Unavailable"));
-        // Existing signed local sessions remain valid even while ingress is unavailable.
-        let credentials = fs::read_to_string(scratch.join(BOOTSTRAP_CREDENTIAL_FILE_NAME)).unwrap();
-        let password = credentials
-            .lines()
-            .find_map(|line| {
-                line.strip_prefix("AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD=\"")
-                    .and_then(|value| value.strip_suffix('"'))
-            })
-            .unwrap();
+        // Native credentials and a previously signed session cannot bypass a
+        // missing/expired dependency-owner session, including during outage.
+        let store = load_auth_store().unwrap();
+        let identity = DashboardAuthIdentity {
+            ingress: false,
+            username: "admin".into(),
+            display_name: "Default superuser".into(),
+            role: DASHBOARD_ROLE_SUPERUSER.into(),
+        };
+        let local_cookie = create_session_cookie(&store, &identity, true).unwrap();
         let login = exchange(
             "/api/dashboard-auth/login",
             "POST",
             "",
-            &json!({"username":"admin", "password": password}).to_string(),
+            &json!({"username":"admin", "password":fs::read_to_string(scratch.join(BOOTSTRAP_CREDENTIAL_FILE_NAME)).unwrap().lines().find_map(|line| line.strip_prefix("AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD=\"").and_then(|value|value.strip_suffix('"'))).unwrap()}).to_string(),
         );
-        assert!(login.starts_with("HTTP/1.1 200 OK"));
-        let local_cookie = login
-            .lines()
-            .find_map(|line| {
-                line.strip_prefix("Set-Cookie: ")
-                    .and_then(|value| value.split(';').next())
-            })
-            .unwrap();
-        let local = exchange("/api/dashboard-auth/status", "GET", local_cookie, "");
-        assert!(local.starts_with("HTTP/1.1 200 OK") && local.contains("Set-Cookie"));
-        assert!(local.contains(r#""authenticationSource":"local""#));
+        assert!(login.starts_with("HTTP/1.1 403 Forbidden"), "{login}");
+        assert!(login.contains("native_auth_disabled"));
+        assert!(!login.contains("Set-Cookie"));
+        let local = exchange("/api/dashboard-auth/status", "GET", &local_cookie, "");
+        assert!(
+            local.starts_with("HTTP/1.1 503 Service Unavailable"),
+            "{local}"
+        );
+        assert!(!local.contains("Set-Cookie"));
         assert!(
             authenticate_headers(&[("remote-user".into(), "admin".into())])
                 .unwrap()
@@ -1302,6 +1159,71 @@ mod tests {
             "http://unreviewed.example/api/authz/forward-auth",
         );
         assert!(status().starts_with("HTTP/1.1 503 Service Unavailable"));
+    }
+
+    #[test]
+    fn native_dashboard_auth_cannot_mask_dependency_owner_session() {
+        let scratch =
+            std::env::temp_dir().join(format!("native-auth-disabled-{}", uuid::Uuid::new_v4()));
+        let original = std::env::var_os(AUTH_DIR_ENV);
+        let original_file = std::env::var_os(AUTH_FILE_ENV);
+        std::env::set_var(AUTH_DIR_ENV, &scratch);
+        std::env::remove_var(AUTH_FILE_ENV);
+        let ingress = test_ingress::TestIngress::start();
+        let store = load_auth_store().unwrap();
+        let identity = DashboardAuthIdentity {
+            ingress: false,
+            username: "admin".into(),
+            display_name: "Admin".into(),
+            role: DASHBOARD_ROLE_SUPERUSER.into(),
+        };
+        let legacy = create_session_token(&store, &identity).unwrap();
+        let credentials = fs::read_to_string(scratch.join(BOOTSTRAP_CREDENTIAL_FILE_NAME)).unwrap();
+        let password = credentials
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD=\"")
+                    .and_then(|value| value.strip_suffix('"'))
+            })
+            .unwrap();
+        let login = login_response(
+            &[],
+            &json!({"username":"admin","password":password}).to_string(),
+            true,
+        );
+        assert_eq!(login.status, "403 Forbidden");
+        assert!(!login.headers.iter().any(|(name, _)| name == "Set-Cookie"));
+        let headers = |cookie: String| vec![("cookie".into(), cookie)];
+        assert!(
+            authenticate_headers(&headers(format!("{SESSION_COOKIE}={legacy}")))
+                .unwrap()
+                .is_none()
+        );
+        assert!(authenticate_headers(&headers(ingress.cookie("expired")))
+            .unwrap()
+            .is_none());
+        let both = headers(format!(
+            "{SESSION_COOKIE}={legacy}; {}",
+            ingress.cookie("codex")
+        ));
+        let observed = authenticate_headers(&both).unwrap().unwrap();
+        assert_eq!(observed.role, DASHBOARD_ROLE_OBSERVER);
+        assert!(observed.ingress);
+        let status = auth_status_response(&both, true);
+        assert!(status.headers.is_empty());
+        assert!(!String::from_utf8(status.body)
+            .unwrap()
+            .contains("credentialStore"));
+        drop(ingress);
+        match original {
+            Some(value) => std::env::set_var(AUTH_DIR_ENV, value),
+            None => std::env::remove_var(AUTH_DIR_ENV),
+        }
+        match original_file {
+            Some(value) => std::env::set_var(AUTH_FILE_ENV, value),
+            None => std::env::remove_var(AUTH_FILE_ENV),
+        }
+        fs::remove_dir_all(scratch).unwrap();
     }
 
     #[test]
@@ -1460,37 +1382,17 @@ mod tests {
     }
 
     #[test]
-    fn forwarded_verify_redirects_to_login_when_missing_cookie() {
-        let headers = vec![("x-forwarded-uri".to_string(), "/guacamole/".to_string())];
+    fn forwarded_verify_never_falls_back_to_native_login() {
+        let headers = vec![
+            ("x-forwarded-uri".into(), "/guacamole/".into()),
+            ("x-forwarded-host".into(), "spoofed.example".into()),
+        ];
         let response = verify_forward_auth_response(&headers, false);
-
-        assert_eq!(response.status, "302 Found");
-        assert!(response
-            .headers
-            .iter()
-            .any(|(name, value)| name == "Location" && value == "/login?next=%2Fguacamole%2F"));
+        assert!(!response.is_success());
         assert!(!response
             .headers
             .iter()
-            .any(|(name, _)| name == "Set-Cookie"));
-    }
-
-    #[test]
-    fn forwarded_verify_redirect_uses_forwarded_host() {
-        let headers = vec![
-            ("x-forwarded-uri".to_string(), "/guacamole/".to_string()),
-            (
-                "x-forwarded-host".to_string(),
-                "agent-browser.localhost".to_string(),
-            ),
-            ("x-forwarded-proto".to_string(), "http".to_string()),
-        ];
-        let response = verify_forward_auth_response(&headers, false);
-
-        assert!(response.headers.iter().any(|(name, value)| {
-            name == "Location"
-                && value == "http://agent-browser.localhost/login?next=%2Fguacamole%2F"
-        }));
+            .any(|(name, _)| matches!(name.as_str(), "Location" | "Set-Cookie")));
     }
 
     #[test]

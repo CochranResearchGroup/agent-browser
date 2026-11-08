@@ -29,9 +29,10 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     assert.equal(await page.getByRole('button',{name:'End local session',exact:true}).count(),0,'actual ingress entry must not offer local logout');
     assert.equal(new URL(page.url()).searchParams.get('browser'),'selected-task');
     authenticationSource='local';await page.reload();
-    await page.getByRole('button',{name:'End local session',exact:true}).waitFor();
+    await page.getByText('Workspace authentication returned an invalid identity.',{exact:false}).waitFor();
+    assert.equal(await page.getByRole('button',{name:'Open browser',exact:true}).count(),0,'native identity cannot open workspace');
     assert.equal(await page.locator('input[type=password]').count(),0);
-    console.log('Actual workspace auth entry passed: ingress hides local logout, local session retains it, selection survives.');
+    console.log('Actual workspace auth entry passed: ingress works, obsolete local identity is refused, selection survives.');
   } finally {
     if (browser) await browser.close();
     server.close();

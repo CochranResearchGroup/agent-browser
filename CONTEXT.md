@@ -4,6 +4,8 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Shared workspace authentication**: Authelia authenticates Agent Browser and Remote View. Native dashboard passwords and cookies remain disabled until compatible interoperation exists; workspace role authorization remains explicit and current. An Agent Browser identity never proves a separate dependency session.
+
 **Dashboard build readiness**: Installation requires embedded frontend assets, not only a responding HTTP listener and matching executable digest. The one-file Rust fallback is useful for source compilation but cannot qualify a workstation candidate. Dashboard presence is separate from authenticated viewer and browser workflow acceptance.
 
 **Live handoff retention**: An explicit human handoff supersedes automatic close

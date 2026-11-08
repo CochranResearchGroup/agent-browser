@@ -305,18 +305,7 @@ verification receives503. Partial or invalid configuration fails closed. Recover
 preserves the selected browser URL and distinguishes sign-in, access denial,
 redirected content and service failure.
 
-With all three settings absent, supported local and machine authentication
-continues through <code>POST /api/dashboard-auth/login</code> and signed sessions.
-First start creates private <code>~/.agent-browser/dashboard-auth.json</code> and
-mode-0600 <code>~/.agent-browser/dashboard-auth.env</code>. The admin user is a
-superuser; codex is an observer. The existing auth-file and auth-directory
-overrides remain supported. Valid local sessions take precedence and renew their
-thirty-day cookie on status read. Ingress identities never mint local cookies.
-The returned user has <code>authenticationSource</code> set to ingress or local.
-**End local session** ends a local cookie; ingress sign-out remains provider-owned.
-Website account authentication and Native viewer access remain separate.
-Installing or configuring this bridge and qualifying an actual ingress/Native
-workflow require their own evidence; source fixtures do not establish those results.
+Native dashboard password login and signed sessions are disabled until Agent Browser and Remote View support compatible authentication. Both require the same Authelia guard. Existing native cookies cannot authenticate or renew, and the login API returns <code>native_auth_disabled</code>. Every protected request verifies the shared Authelia session and applies current explicit workspace roles. Missing configuration and verifier failures deny access. Sign-in and sign-out belong to Authelia. The private auth store retains role mappings and request-proof signing; existing auth-file and auth-directory overrides remain supported. Website account authentication remains separate.
 
 ### Custom stream port
 

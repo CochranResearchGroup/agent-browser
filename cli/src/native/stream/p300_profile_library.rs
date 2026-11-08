@@ -40,15 +40,13 @@ fn profile_library_real_http_auth_write_read_and_no_launch() {
             let raw=String::from_utf8(bytes).unwrap();let (head,body)=raw.split_once("\r\n\r\n").unwrap();
             (head.lines().next().unwrap().into(),serde_json::from_str(body).unwrap_or(Value::Null))
         }
-        let auth=dashboard_auth::ensure_dashboard_auth_config().unwrap();
-        let credentials=std::fs::read_to_string(&auth.bootstrap_credential_file).unwrap();
-        let password=credentials.lines().find_map(|line|line.strip_prefix("AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD=\"").and_then(|s|s.strip_suffix('"'))).unwrap();
+        dashboard_auth::ensure_dashboard_auth_config().unwrap();
         let auth_path=std::env::var("AGENT_BROWSER_DASHBOARD_AUTH_FILE").unwrap();
         let mut store:Value=serde_json::from_slice(&std::fs::read(&auth_path).unwrap()).unwrap();
         let mut operator=store["users"][0].clone();operator["username"]=json!("operator");operator["displayName"]=json!("Operator");operator["bootstrap"]=json!(false);store["users"].as_array_mut().unwrap().push(operator);std::fs::write(&auth_path,serde_json::to_vec(&store).unwrap()).unwrap();
-        let login=dashboard_auth::login_response(&[],&json!({"username":"operator","password":password}).to_string(),false);
-        let login=String::from_utf8(login.into_http_bytes()).unwrap();
-        let cookie=login.lines().find_map(|line|line.strip_prefix("Set-Cookie: ").and_then(|s|s.split(';').next())).unwrap();
+        let ingress=dashboard_auth::test_ingress::TestIngress::start();
+        let cookie_owned=ingress.cookie("operator");
+        let cookie=cookie_owned.as_str();
         assert!(exchange("GET","",Value::Null).await.0.contains("401"));
         assert!(exchange_at("POST", "/api/command", "", json!({"action":"workspace_profile_library","operation":"replace_associations","profileId":"work","servicePrincipalId":"forged"})).await.0.contains("401"));
         let repository=crate::native::service_store::LockedServiceStateRepository::default_json().unwrap();
@@ -90,11 +88,8 @@ fn profile_library_real_http_auth_write_read_and_no_launch() {
         repository.mutate(|state|{state.browsers.clear();Ok(())}).unwrap();native.browsers.clear();native_store.save_session_state(&native).unwrap();
         let mut store:Value=serde_json::from_slice(&std::fs::read(&auth_path).unwrap()).unwrap();
         store["users"].as_array_mut().unwrap().iter_mut().find(|user|user["username"]=="operator").unwrap()["role"]=json!("observer");std::fs::write(&auth_path,serde_json::to_vec(&store).unwrap()).unwrap();
-        assert!(exchange("POST",cookie,write.clone()).await.0.contains("401"),"role change invalidates the old session");
-        let observer=String::from_utf8(dashboard_auth::login_response(&[],&json!({"username":"operator","password":password}).to_string(),false).into_http_bytes()).unwrap();
-        let observer_cookie=observer.lines().find_map(|line|line.strip_prefix("Set-Cookie: ").and_then(|s|s.split(';').next())).unwrap();
-        assert!(exchange("GET",observer_cookie,Value::Null).await.0.contains("200"));
-        assert!(exchange("POST",observer_cookie,write).await.0.contains("403"));
+        assert!(exchange("GET",cookie,Value::Null).await.0.contains("200"));
+        assert!(exchange("POST",cookie,write).await.0.contains("403"),"role downgrade applies immediately to ingress identity");
         assert!(crate::native::actions::action_skips_browser_launch("workspace_profile_library"));
         let result=execute_command(&json!({"id":"p300","action":"workspace_profile_library","operation":"list"}),&mut DaemonState::new()).await;assert_eq!(result["success"],true);
         let public=json!({"action":"workspace_profile_library","serviceName":"Profiles","agentName":"fixture","taskName":"Select","params":{"operation":"select","sitePolicyId":"site","profileId":"private","servicePrincipalId":"forged","servicePrincipalProvenance":"registered_capability","actor":{"assurance":"operator"}}});

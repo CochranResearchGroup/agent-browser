@@ -6,6 +6,8 @@ allowed-tools: Bash(agent-browser:*)
 
 # Browser Automation with agent-browser
 
+Workspace access requires the shared Authelia guard; native dashboard password login and session cookies are disabled pending compatible Remote View authentication.
+
 Native credentials: [Remote View setup](references/cli-and-service.md).
 
 A `dashboard_build_incomplete` install/doctor failure requires rebuilding the frontend and recompiling the candidate. The maintained `pnpm build:development-candidate` command includes both steps.
