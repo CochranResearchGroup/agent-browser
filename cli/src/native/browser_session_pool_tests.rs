@@ -3187,7 +3187,21 @@ fn valid_handoff_recreates_expired_task_tab_after_host_restart() {
     let requests = provider.borrow().view_requests.clone();
     assert_eq!(requests.len(), 1);
     let stale_result = stale.handle_command(&reopen);
-    assert_eq!(stale_result["success"], false, "{stale_result}");
+    // Native presentation refreshes the durable recreated target independently
+    // of the lost compatibility-view reply. It may focus that same owned window
+    // without relaunching or replaying compatibility-view issuance.
+    assert_eq!(stale_result["success"], true, "{stale_result}");
+    assert_eq!(stale_result["data"]["operatorVisible"]["state"], "ready");
+    assert_eq!(stale_result["data"]["handoffId"], handoff_id);
+    assert_eq!(
+        stale_result["data"]["browserId"],
+        recreated.tabs[&recreated_link.tab_id].browser_id
+    );
+    assert_eq!(stale_result["data"]["tabId"], recreated_link.tab_id);
+    assert_eq!(
+        stale_result["data"]["targetId"],
+        recreated.tabs[&recreated_link.tab_id].target_id
+    );
     assert_eq!(calls.get(), launches, "stale reopen must not launch");
     assert_eq!(provider.borrow().view_requests, requests);
     assert_eq!(
@@ -3972,7 +3986,7 @@ fn expired_link_deletion_fences_stale_policy_and_recovery_publication() {
         let rejected = stale.handle_command(&command);
         assert_eq!(rejected["success"], false, "{rejected}");
         assert_eq!(
-            rejected["error"], "browser_session_publication_conflict",
+            rejected["error"], "remote_view_tab_handoff_missing",
             "{rejected}"
         );
     }
