@@ -7028,11 +7028,16 @@ Examples:
             r##"
 agent-browser service - Inspect service-mode state
 
-Browser Runtime reads database schemas 1 through 4. Native idle-retirement custody
+Browser Runtime reads database schemas 1 through 5. Native idle-retirement custody
 requires schema 2; command activity requires at least schema 3. Original-process evidence
-and resource settlement require schema 4. Keep a schema-4-capable binary with its
-backups. Unknown effects retain their record; only positive original-process exit
-settles the resource veto without replaying the command.
+and resource settlement require schema 4. Explicit live handoff retention requires
+schema 5. Keep a schema-5-capable binary with its
+backups. Unknown effects retain their record. Automatic resource settlement
+requires positive original-process exit and never replays the command.
+
+CDP-free idle close uses original OS identity and confirms exit without debugging
+or force kill. Explicit handoff can retain a verified live original after its idle
+worker ends, preserving the attempted-close history and unsettled outcome.
 
 Use service --help or service -h for local help without starting a browser
 or rewriting Service State. Unsupported subcommands remain typed errors.

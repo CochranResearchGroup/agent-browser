@@ -80,7 +80,9 @@ fn ledger(connection: &Connection) -> Result<Ledger, LaunchCustodyStoreError> {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .map_err(|_| LaunchCustodyStoreError::Unavailable)?;
-        if !(2..=4).contains(&version) {
+        if !(2..=crate::native::browser_session_store::BROWSER_RUNTIME_DATABASE_MAX_SCHEMA)
+            .contains(&version)
+        {
             return Err(LaunchCustodyStoreError::InvalidRecord);
         }
     }

@@ -110,6 +110,11 @@ Help is launch-free. MCP returns `success/data/error`; CLI errors add `type`. Re
 
 Read [Runtime health and cleanup diagnostics](references/cli-and-service.md#runtime-health-and-cleanup-diagnostics) before maintenance, expiry diagnosis or unknown-effect interpretation. Preserve peers and scrub exported URLs.
 
+CDP-free idle close uses verified original OS identity and exit confirmation.
+Explicit handoff can supersede idle cleanup after its worker ends and the exact
+original is verified alive. Attempt history stays intact; this retention decision
+requires a schema-5-capable runtime.
+
 
 CLI fallback: use installed `agent-browser <command> --help`, the exact profile
 and named session. Preserve peers/authentication; opening never requires cleanup

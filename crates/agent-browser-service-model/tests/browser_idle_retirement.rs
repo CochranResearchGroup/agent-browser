@@ -1,6 +1,64 @@
 use agent_browser_service_model::*;
 use serde_json::{json, Value};
 
+#[test]
+fn live_handoff_retention_preserves_unknown_close_and_requires_unchanged_original() {
+    let (mut state, provider, prepared) = fixture();
+    state
+        .browsers
+        .get_mut("browser-a")
+        .unwrap()
+        .cdp_endpoint
+        .clear();
+    state.tabs.remove("tab-b");
+    state.tabs.get_mut("tab-a").unwrap().target_id = "manual-window:browser-a".into();
+    let mut intent = BrowserIdleRetirementIntent::new(
+        "11111111-1111-4111-8111-111111111111",
+        provider,
+        &state,
+        &["browser-a".into()],
+    )
+    .unwrap();
+    intent.scopes[0].process_identity = Some(RecordedProcessIdentity {
+        pid: 42,
+        start_token: "synthetic-original".into(),
+        executable_path: Some("/synthetic/chrome".into()),
+        browser_family: None,
+    });
+    let mut record = BrowserIdleRetirementRecord::new(intent).unwrap();
+    record.begin_preparation().unwrap();
+    record.record_prepared(prepared.clone()).unwrap();
+    let effect = BrowserIdleRetirementEffect::CloseBrowser {
+        browser_id: "browser-a".into(),
+    };
+    record.begin_effect(effect.clone()).unwrap();
+    let previous = record.clone();
+    record.retain_live_for_handoff().unwrap();
+    previous.validate_successor(&record).unwrap();
+    assert!(record.begin_effect(effect.clone()).is_err());
+    assert!(record.settle_effect(&effect).is_err());
+    assert!(!record.has_settled_browser_close("browser-a"));
+    assert_eq!(
+        serde_json::to_value(&record).unwrap()["effects"],
+        serde_json::to_value(&previous).unwrap()["effects"]
+    );
+    let mut closed = state.clone();
+    closed.idle_closed_browsers.insert("browser-a".into(), 2);
+    assert!(record.clone().record_publication(&closed).is_err());
+    let mut changed = state.clone();
+    changed.tabs.get_mut("tab-a").unwrap().target_id = "different".into();
+    assert!(record.clone().record_publication(&changed).is_err());
+    record.record_publication(&state).unwrap();
+    let mut completed = serde_json::to_value(prepared).unwrap();
+    completed["state"] = "completed".into();
+    record
+        .record_completed(serde_json::from_value(completed).unwrap())
+        .unwrap();
+    assert!(record.is_terminal());
+    record.validate().unwrap();
+    assert!(!record.has_settled_browser_close("browser-a"));
+}
+
 fn fixture() -> (
     BrowserSessionState,
     RemoteViewIdleRetirementIntent,

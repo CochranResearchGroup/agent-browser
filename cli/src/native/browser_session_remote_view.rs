@@ -658,6 +658,24 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
             Self::Remote(effects) => effects.acquire_idle_retirement_guard(browsers),
         }
     }
+    fn acquire_handoff_retention_guard(
+        &mut self,
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        match self {
+            Self::Local(effects) => effects.acquire_handoff_retention_guard(),
+            Self::Remote(effects) => effects.acquire_handoff_retention_guard(),
+        }
+    }
+    fn retain_live_browser_for_handoff(
+        &mut self,
+        expected: &BrowserSessionState,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        match self {
+            Self::Local(effects) => effects.retain_live_browser_for_handoff(expected, browser),
+            Self::Remote(effects) => effects.retain_live_browser_for_handoff(expected, browser),
+        }
+    }
     fn acquire_disposable_retirement_guard(
         &mut self,
         allocations: &[agent_browser_service_model::ManagedDisposableProfile],

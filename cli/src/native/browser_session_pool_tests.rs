@@ -6,6 +6,125 @@ use std::cell::RefCell;
 use std::path::Path;
 
 #[test]
+fn cdp_free_idle_retirement_live_original_handoff_supersedes_pending_close() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.handle_command(&serde_json::json!({
+        "action":"browser_session_open","sessionName":"Alice","profileId":"profile-a",
+        "url":"https://synthetic.example/","manualLogin":true,"activityAtMs":100,
+        "serviceName":"fixture","agentName":"fixture","taskName":"Human handoff"
+    }));
+    assert_eq!(opened["success"], true, "{opened}");
+    let session_id = opened["data"]["sessionId"].as_str().unwrap();
+    consumer.tab_for_navigation(session_id, 101).unwrap();
+    let mut baseline = consumer.state().clone();
+    let browser = baseline.browsers.values().next().unwrap().clone();
+    let tab = baseline.tabs.values_mut().next().unwrap();
+    tab.target_id = format!("manual-window:{}", browser.id);
+    let tab = tab.clone();
+    let link =
+        retain_remote_view_tab_handoff_at(&mut baseline, "cdp-free-live", session_id, &tab.id, 101)
+            .unwrap();
+    drop(consumer);
+    fixture.store(false).save_session_state(&baseline).unwrap();
+    let intent = claim_fixture_retirement(&fixture, provider.clone(), &baseline, &browser);
+    fixture
+        .store(false)
+        .admit_idle_retirement_preparation(&intent)
+        .unwrap();
+    let prepared = adapter(&fixture, provider.clone())
+        .prepare_idle_retirement(&intent.provider)
+        .unwrap();
+    let mut record = fixture
+        .store(false)
+        .idle_retirement_records()
+        .unwrap()
+        .remove(0);
+    let previous = record.clone();
+    record.record_prepared(prepared).unwrap();
+    fixture
+        .store(false)
+        .update_idle_retirement(&previous, &record)
+        .unwrap();
+    fixture
+        .store(false)
+        .admit_idle_retirement_effect(
+            &intent,
+            BrowserIdleRetirementEffect::CloseBrowser {
+                browser_id: browser.id.clone(),
+            },
+        )
+        .unwrap();
+    let attempted = fixture
+        .store(false)
+        .idle_retirement_records()
+        .unwrap()
+        .remove(0);
+    provider.borrow_mut().window_pid = Some(browser.pid);
+    let mut restarted = host(&fixture, provider.clone(), calls.clone());
+    let command = serde_json::json!({
+        "action":"service_remote_view_handoff_resolve","handoffId":link.id,
+        "nativeDesktop":true,"activityAtMs":102
+    });
+    for blocked in [
+        "handoff-cleanup-worker-active",
+        "activity-readback-unavailable",
+    ] {
+        std::fs::write(fixture.root.join(blocked), "blocked").unwrap();
+        std::fs::write(fixture.root.join("activity-original-readback"), "original").unwrap();
+        let refused = restarted.handle_command(&command);
+        assert_eq!(refused["success"], false, "{blocked}: {refused}");
+        assert_eq!(
+            fixture.store(false).idle_retirement_records().unwrap()[0],
+            attempted
+        );
+        std::fs::remove_file(fixture.root.join(blocked)).unwrap();
+    }
+    let response = restarted.handle_command(&command);
+    assert_eq!(
+        response["success"], true,
+        "live original handoff must recover: {response}"
+    );
+    assert_eq!(response["data"]["operatorVisible"]["state"], "ready");
+    assert_eq!(response["data"]["browserId"], browser.id);
+    assert_eq!(response["data"]["tabId"], tab.id);
+    assert_eq!(calls.get(), 1, "no replacement launch");
+    let completed = fixture
+        .store(false)
+        .idle_retirement_records()
+        .unwrap()
+        .remove(0);
+    assert!(completed.is_terminal());
+    assert!(!completed.has_settled_browser_close(&browser.id));
+    assert_eq!(
+        serde_json::to_value(&attempted).unwrap()["effects"],
+        serde_json::to_value(&completed).unwrap()["effects"],
+        "original close outcome remains recorded, not relabeled as no effect"
+    );
+    assert!(restarted.state().idle_closed_browsers.is_empty());
+    let mut delayed = attempted.clone();
+    delayed
+        .settle_effect(&BrowserIdleRetirementEffect::CloseBrowser {
+            browser_id: browser.id.clone(),
+        })
+        .unwrap();
+    assert_eq!(
+        fixture
+            .store(false)
+            .update_idle_retirement(&attempted, &delayed),
+        Err(BrowserIdleRetirementStoreError::Conflict),
+        "late original cannot overwrite explicit retention"
+    );
+    assert_eq!(
+        restarted.handle_command(&command)["success"],
+        true,
+        "same-link reconnect remains available"
+    );
+}
+
+#[test]
 fn native_policy_publication_focus_reuses_exact_owner_activity_snapshot() {
     native_policy_focus_cases(false);
 }

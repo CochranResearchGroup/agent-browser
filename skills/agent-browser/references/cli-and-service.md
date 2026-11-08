@@ -3912,17 +3912,26 @@ Headless development validation does not require legacy RDP helpers. Explicitly 
 
 ## Runtime custody diagnostics
 
-Browser Runtime reads SQLite schemas 1 through 4. The first native idle-retirement
+Browser Runtime reads SQLite schemas 1 through 5. The first native idle-retirement
 custody claim promotes schema 1 to schema 2 in the same transaction as its record.
 Command-activity reservations require at least schema 3. Original-process
 activity evidence and ended-resource settlement require schema 4. Each write
-atomically advances the database to its required reader version without downgrading it. Keep a schema-4-capable binary with that database and its
+atomically advances the database to its required reader version without downgrading it.
+Explicit live handoff retention requires schema 5. Keep a schema-5-capable binary with that database and its
 backups; older readers reject it. Activity reservations prevent automatic retirement
 through command execution and session publication. Unknown effects retain their
 veto and original readback obligation; acknowledgement alone does not release it.
 Positive original-process exit permits resource recovery while preserving the
 unknown command record. Unavailable observation retains the veto; recovery does
 not replay the original command or adopt a replacement process as its evidence.
+
+CDP-free idle closure uses a kernel handle bound to the original PID, start
+identity and executable, and confirms OS exit without debugging or force kill.
+An explicit handoff can retain a still-live original after excluding its cleanup
+worker. The owner preserves the attempted-close history and unsettled physical
+outcome, publishes unchanged task identity and completes the original Native
+reservation before focus. A running worker or unavailable original identity
+still defers; repeat the same durable handoff after inspecting that condition.
 
 The automatic-close candidate persists its exact operation before preparing
 native viewer exclusion, records each close attempt before the physical effect,

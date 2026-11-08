@@ -513,6 +513,7 @@ impl<
                 None => {
                     record.published_state_digest.is_some()
                         || (record.preparation_started() && !record.has_effect_attempts())
+                        || record.retained_live
                 }
             })
             .cloned()
@@ -538,7 +539,7 @@ impl<
             }
             if record.published_state_digest.is_none() {
                 let publishable = if record.has_effect_attempts() {
-                    requested_profile.is_some()
+                    (requested_profile.is_some() || record.retained_live)
                         && record.clone().record_publication(expected).is_ok()
                         && matches!(
                             observed.state,
@@ -731,6 +732,57 @@ impl<
         S: BrowserLaunchCustodyStore + RemoteViewPoolRequestStore + BrowserIdleRetirementCustodyStore,
     > BrowserSessionEffects for RemoteViewSessionEffects<E, T, S>
 {
+    fn acquire_handoff_retention_guard(
+        &mut self,
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        self.effects.acquire_handoff_retention_guard()
+    }
+
+    fn retain_live_browser_for_handoff(
+        &mut self,
+        expected: &BrowserSessionState,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        self.require_operation()?;
+        let records = self
+            .store
+            .idle_retirement_records()
+            .map_err(|_| "browser_session_idle_custody_unavailable")?;
+        let Some(record) = records.into_iter().find(|record| {
+            record
+                .live_handoff_scope()
+                .is_some_and(|scope| scope.browser == *browser)
+        }) else {
+            return Ok(());
+        };
+        let _guard = self
+            .effects
+            .acquire_handoff_retention_guard()?
+            .ok_or("browser_session_idle_readback_required: could not confirm browser cleanup has stopped; inspect service status before reopening this handoff")?;
+        let scope = record.live_handoff_scope().unwrap();
+        if self.expected.as_ref() != Some(expected)
+            || expected.browsers.get(&browser.id) != Some(browser)
+            || self.effects.observe_idle_retirement_effect(scope, None) != Ok(false)
+        {
+            return Err("browser_session_idle_readback_required: could not verify that the original browser is still running; inspect service status before reopening this handoff".into());
+        }
+        let mut next = record.clone();
+        next.retain_live_for_handoff()
+            .map_err(|_| "browser_session_idle_readback_required")?;
+        self.update_retirement(&record, next)?;
+        self.reconcile_native_retirements(expected, Some(&browser.profile_id))?;
+        if self
+            .store
+            .idle_retirement_records()
+            .map_err(|_| "browser_session_idle_custody_unavailable")?
+            .iter()
+            .any(|row| row.intent.id == record.intent.id && !row.is_terminal())
+        {
+            return Err("browser_session_idle_readback_required: the browser is retained but Remote View is not ready; inspect service status before reopening this handoff".into());
+        }
+        Ok(())
+    }
+
     fn attach_app_browser(
         &mut self,
         request: &BrowserAttachmentRequest,
