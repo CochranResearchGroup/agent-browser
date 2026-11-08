@@ -96,6 +96,11 @@ requires a schema-5-capable runtime.
 Deleted handoff links cannot be restored by concurrent lifetime edits.
 
 
+A valid retained handoff can wake its conclusively idle-closed CDP-free browser
+through the existing owner. Logical task/tab/link identity and the profile persist;
+the saved launch URL reopens, not unsaved in-memory page state. Unknown close proof
+or changed scope still defers. Do not close the task or reset its profile as a workaround.
+
 CLI fallback: use installed `agent-browser <command> --help`, the exact profile
 and named session. Preserve peers/authentication; opening never requires cleanup
 or profile resets.

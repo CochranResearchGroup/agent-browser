@@ -8,6 +8,11 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 **Dashboard build readiness**: Installation requires embedded frontend assets, not only a responding HTTP listener and matching executable digest. The one-file Rust fallback is useful for source compilation but cannot qualify a workstation candidate. Dashboard presence is separate from authenticated viewer and browser workflow acceptance.
 
+**Retained manual-browser recovery**: A valid handoff can wake the same logical
+CDP-free task after its exact original browser was conclusively closed by automatic
+retirement. Existing Native launch admission still applies. The profile and logical
+links survive; reopening the saved launch URL does not reconstruct in-memory state.
+
 **Live handoff retention**: An explicit human handoff supersedes automatic close
 only after excluding its worker and verifying the immutable original still lives.
 The original close attempt and unresolved physical outcome remain recorded.

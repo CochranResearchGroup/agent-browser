@@ -1359,7 +1359,7 @@ fn run_browser_worker(
                             return Err("browser_login_mode_conflict".into());
                         }
                         manual.verify(browser).and_then(|live| {
-                            if live {
+                            if live || manual::idle_recovery_authorized(&profile, browser)? {
                                 Ok(())
                             } else {
                                 Err("manual_login_ended: close the login task before reopening"
@@ -1378,12 +1378,13 @@ fn run_browser_worker(
                 reply,
             } if profile.manual_login_url.is_some() => {
                 let result = (|| {
-                    if recovery_browser.as_ref().is_some_and(|browser| {
-                        !super::browser_session_host::browser_mode_host::recovery_authorized(
+                    if let Some(browser) = recovery_browser.as_ref() {
+                        if !super::browser_session_host::browser_mode_host::recovery_authorized(
                             &profile, browser,
-                        )
-                    }) {
-                        return Err("manual_login_recovery_requires_explicit_reopen".into());
+                        ) && !manual::idle_recovery_authorized(&profile, browser)?
+                        {
+                            return Err("manual_login_recovery_requires_explicit_reopen".into());
+                        }
                     }
                     let private =
                         environment.ok_or("manual_login_requires_native_remote_desktop")?;

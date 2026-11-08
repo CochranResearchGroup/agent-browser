@@ -521,6 +521,11 @@ impl BrowserSessionEffects for Process {
         tabs: &[ManagedBrowserTab],
         _navigation: &[BrowserNavigationRecord],
     ) -> Result<Option<BrowserRecovery>, String> {
+        if self.root.join("real-manual-runtime-reconcile").exists() {
+            use super::browser_session_runtime::{BrowserManagerRuntime, BrowserRuntimeDriver};
+            let mut runtime = BrowserManagerRuntime::start(Default::default())?;
+            return runtime.reconcile_profile_browser(_profile, browser, tabs, _navigation);
+        }
         if !matches!(self.mode, Mode::LiveProfileReuse) {
             return Ok(None);
         }

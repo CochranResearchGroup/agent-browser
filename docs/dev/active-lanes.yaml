@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: MANUAL-IDLE-HANDOFF-599
+    product_lane: PL-BUGFIX
+    objective: Recover a retained manual handoff after conclusive automatic closure
+    plan: docs/dev/maintenance/manual-idle-handoff-reopen.md
+    branch: fix/manual-idle-handoff-reopen
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#599]
+    plan_state: ACTIVE
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [CDP-FREE-IDLE-585, P321-RETIREMENT-570, RETAINED-HANDOFF-579]
+    overlaps: [CDP-FREE-IDLE-585]
+    reconciled_overlaps: ["Canonical checkout reused; primary writer for manual runtime classification and tests;598 owns separate workspace auth; preserve both glossary/catalog intents; no new checkout or runtime replacement"]
+    validation_status: Actual runtime regression passes including changed-target refusal and retained human invitation;418 model tests and strict Clippy pass; installed browser acceptance pending
+    limitations: ["No production install or profile/state reset", "Public viewer GREEN remains unproven"]
+    updated_at: 2026-11-08
   - id: AUTHELIA-AUTHORITY-597
     product_lane: PL-BUGFIX
     objective: Remove local dashboard role enrollment from Authelia-admitted workspace access

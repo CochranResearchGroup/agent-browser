@@ -1045,6 +1045,13 @@ exit without a debugging connection or force-kill fallback.
 An acknowledged link deletion wins a concurrent lifetime edit; stale publication
 cannot restore the deleted link or change its browser and tab.
 
+After conclusive automatic closure, a valid retained CDP-free handoff can wake its
+logical browser through the existing Native owner. Matching completed retirement,
+unchanged task/tab scope and fresh original-process absence qualify recovery;
+ordinary ended manual tasks and unknown close outcomes remain refused. The same
+links and profile survive, and the profile's saved launch URL reopens. Unsaved
+in-memory page state cannot be reconstructed, and website actions are not replayed.
+
 A physical close requires a fresh atomic attempt admission. A stale coordinator
 reads the original pending attempt instead of treating an idempotent record
 update as permission to close again. When one command expires old work and
