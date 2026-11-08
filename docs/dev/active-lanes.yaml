@@ -1723,10 +1723,10 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#591]
     plan_state: OPEN
-    custody_state: ACTIVE
+    custody_state: INTEGRATION_READY
     dependencies: []
     overlaps: [DASHBOARD-BUILD-587, CDP-FREE-IDLE-585]
     reconciled_overlaps: ["Reuse retained587 checkout after merge; preserve pinned candidate;591 owns auth and sign-in paragraphs;588 owns idle-handoff paragraphs;508 owns access diagnostics"]
-    validation_status: Auth source and debug installer fixture pass; main588 composed without conflicts; composition Rust checks and production-shaped replacement pending
+    validation_status: Composed main588 passes fmt strict Clippy and267 stream cases plus5 children; auth CLI and source-free installer fixture pass; production-shaped replacement pending
     limitations: ["No new checkout; installed acceptance separate"]
     updated_at: 2026-11-08
