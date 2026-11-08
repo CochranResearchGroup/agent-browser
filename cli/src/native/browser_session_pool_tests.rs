@@ -5,6 +5,85 @@ use super::*;
 use std::cell::RefCell;
 use std::path::Path;
 
+#[cfg(target_os = "linux")]
+#[test]
+fn manual_idle_handoff_reopens_through_real_runtime_after_automatic_close() {
+    let sandbox = Fixture::new();
+    let service = sandbox.root.join(".agent-browser/service");
+    std::fs::create_dir_all(&service).unwrap();
+    let fixture = Fixture::with_root(service, true);
+    let env = crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+    env.set("HOME", sandbox.root.to_str().unwrap());
+    env.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+    assert_eq!(
+        fixture.root.join("runtime.sqlite3"),
+        BrowserSessionSqliteStore::default_sqlite_path().unwrap()
+    );
+    let _process_cleanup = CopyProcessFixture::new(&fixture.root);
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut original = host(&fixture, provider.clone(), calls.clone());
+    let opened = original.handle_command(&serde_json::json!({
+        "action":"browser_session_open", "sessionName":"Alice", "profileId":"profile-a",
+        "url":"https://synthetic.example/", "manualLogin":true, "activityAtMs":100,
+        "serviceName":"fixture", "agentName":"fixture", "taskName":"Retained manual handoff"
+    }));
+    assert_eq!(opened["success"], true, "{opened}");
+    assert!(
+        fixture.root.join("manual-launch-profile.json").exists(),
+        "fixture must select the actual manual profile branch"
+    );
+    let task = opened["data"]["sessionId"].as_str().unwrap().to_owned();
+    original.tab_for_navigation(&task, 101).unwrap();
+    let mut before = original.state().clone();
+    let browser_id = before.sessions[&task].browser_id.clone();
+    let original_pid = before.browsers[&browser_id].pid;
+    let tab = before.sessions[&task].current_tab_id.clone().unwrap();
+    before.tabs.get_mut(&tab).unwrap().target_id = format!("manual-window:{browser_id}");
+    let link =
+        retain_remote_view_tab_handoff_at(&mut before, "manual-idle-reopen", &task, &tab, 101)
+            .unwrap();
+    drop(original);
+    fixture.store(false).save_session_state(&before).unwrap();
+    let mut original = host(&fixture, provider.clone(), calls.clone());
+    original.reap(300_102).unwrap();
+    let closed = fixture.store(false).load_session_state().unwrap();
+    assert!(closed.idle_closed_browsers.contains_key(&browser_id));
+    assert!(closed.remote_view_tab_handoffs.contains_key(&link.id));
+    assert!(matches!(
+        crate::process_identity::observe_process(original_pid),
+        crate::process_identity::ProcessObservation::Missing
+    ));
+    let retirement = fixture_retirement_records(&fixture.root).remove(0);
+    assert!(retirement.completed.is_some());
+    assert!(retirement.has_settled_browser_close(&browser_id));
+    drop(original);
+    std::fs::write(
+        fixture.root.join("idle-process-absent"),
+        "OS absence verified above",
+    )
+    .unwrap();
+    std::fs::write(
+        fixture.root.join("real-manual-runtime-reconcile"),
+        "dispatch",
+    )
+    .unwrap();
+    let mut restarted = host_mode(&fixture, provider, calls.clone(), Mode::IdleRecovery);
+    let response = restarted.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":link.id,
+        "nativeDesktop":true, "activityAtMs":300_103
+    }));
+    assert_eq!(
+        response["success"], true,
+        "actual manual runtime must permit qualified retained recovery: {response}"
+    );
+    assert_eq!(response["data"]["operatorVisible"]["state"], "ready");
+    assert_eq!(response["data"]["browserId"], browser_id);
+    assert_eq!(response["data"]["tabId"], tab);
+    assert_eq!(calls.get(), 2, "one original and one replacement launch");
+    assert_ne!(restarted.state().browsers[&browser_id].pid, original_pid);
+}
+
 #[test]
 fn cdp_free_idle_retirement_os_close_does_not_request_native_window_context() {
     let fixture = Fixture::new();
