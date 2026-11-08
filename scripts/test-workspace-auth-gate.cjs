@@ -22,10 +22,10 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     let redirected = false;
     await page.route('**/api/dashboard-auth/status', route => route.fulfill(redirected
       ? { status: 200, contentType: 'text/html', body: '<html>Auth portal</html>' }
-      : { status, contentType: 'application/json', body: JSON.stringify({ authenticated: status === 200, user: status === 200 ? { username: 'reader', displayName: 'Reader', role: 'observer' } : null }) }));
+      : { status, contentType: 'application/json', body: JSON.stringify({ authenticated: status === 200, user: status === 200 ? { username: 'reader', displayName: 'Reader', role: 'observer', authenticationSource: 'ingress' } : null }) }));
     const url = `http://127.0.0.1:${server.address().port}/?browser=selected-task`;
     await page.goto(url);
-    await page.getByText('Sign in through the authenticated workspace URL', { exact: false }).waitFor();
+    await page.getByText('Sign in through the Authelia-protected workspace URL', { exact: false }).waitFor();
     assert.equal(await page.getByRole('main').getAttribute('aria-busy'), 'false');
     assert.equal(await page.locator('input[type=password]').count(), 0);
     status = 403;

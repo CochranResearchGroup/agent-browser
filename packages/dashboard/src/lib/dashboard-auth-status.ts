@@ -9,7 +9,7 @@ const DEFAULT_TIMEOUT_MS = 5_000;
 const DEFAULT_RETRY_DELAY_MS = 250;
 
 /**
- * Read the signed dashboard session without allowing a starved transport
+ * Read the shared Authelia session without allowing a starved transport
  * request to hold the authentication gate open indefinitely.
  */
 export async function fetchDashboardAuthStatus(

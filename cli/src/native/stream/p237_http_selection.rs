@@ -5,6 +5,7 @@
 struct P237SelectionHttp {
     address: SocketAddr,
     cookie: String,
+    _ingress: dashboard_auth::test_ingress::TestIngress,
     dispatchers: Vec<(crate::native::daemon::P237NativeDispatch, String)>,
     tasks: Vec<tokio::task::JoinHandle<()>>,
     advance_controller_before_execution: Arc<std::sync::atomic::AtomicBool>,
@@ -43,7 +44,7 @@ impl P237SelectionHttp {
         String::from_utf8(response).map_err(|e| e.to_string())
     }
 
-    async fn start(daemons: Arc<tokio::sync::Mutex<Vec<DaemonState>>>, credentials: &Path) -> Self {
+    async fn start(daemons: Arc<tokio::sync::Mutex<Vec<DaemonState>>>, _credentials: &Path) -> Self {
         let mut tasks = Vec::new();
         let mut dispatchers = Vec::new();
         let advance_controller_before_execution =
@@ -156,37 +157,12 @@ impl P237SelectionHttp {
         tasks.push(tokio::spawn(
             crate::native::stream::run_native_handoff_http_fixture(dashboard),
         ));
-        let text = std::fs::read_to_string(credentials).unwrap();
-        let password = text
-            .lines()
-            .find_map(|line| {
-                line.strip_prefix("AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD=\"")
-                    .and_then(|value| value.strip_suffix('"'))
-            })
-            .unwrap();
-        let login = Self::exchange(
-            address,
-            "/api/dashboard-auth/login",
-            &json!({"username":"admin","password":password}).to_string(),
-            "",
-        )
-        .await
-        .unwrap();
-        assert!(
-            login.starts_with("HTTP/1.1 200"),
-            "synthetic login failed: {login}"
-        );
-        let cookie = login
-            .lines()
-            .find_map(|line| {
-                line.strip_prefix("Set-Cookie: ")
-                    .and_then(|value| value.split(';').next())
-            })
-            .unwrap()
-            .to_owned();
+        let ingress = dashboard_auth::test_ingress::TestIngress::start();
+        let cookie = ingress.cookie("admin");
         Self {
             address,
             cookie,
+            _ingress: ingress,
             dispatchers,
             tasks,
             advance_controller_before_execution,

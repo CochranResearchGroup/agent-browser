@@ -1698,3 +1698,19 @@ lanes:
     validation_status: Build and manifest regressions RED then GREEN;156 dashboard and20 doctor tests, required quality gates, exact-source public installer fixture, public rejection/restore probe and tooling/docs checks pass; broad installer unit run explicitly not claimed
     limitations: ["Source repair only; restored production runtime remains unchanged", "Retain checkout for sealed production candidate custody; review2026-11-09"]
     updated_at: 2026-11-08
+  - id: AUTHELIA-ONLY-591
+    product_lane: PL-PLATFORM
+    objective: Require shared Authelia authentication across dashboard and Remote View
+    plan: docs/dev/maintenance/authelia-only-dashboard.md
+    branch: platform/authelia-only-dashboard
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#591]
+    plan_state: OPEN
+    custody_state: ACTIVE
+    dependencies: []
+    overlaps: [DASHBOARD-BUILD-587, CDP-FREE-IDLE-585]
+    reconciled_overlaps: ["Reuse retained587 checkout after merge; preserve pinned candidate;591 owns auth and sign-in paragraphs;588 owns idle-handoff paragraphs;508 owns access diagnostics"]
+    validation_status: Pending
+    limitations: ["No new checkout; installed acceptance separate"]
+    updated_at: 2026-11-08

@@ -10,3 +10,5 @@ Current Overleaf97 dependency packet:
 
 ROADMAP and RUNBOOK retain earlier maintenance outcomes and historical links.
 This bounded index does not reclassify unrelated retained maintenance records.
+
+- [Authelia-only dashboard](authelia-only-dashboard.md): retire native login while Remote View requires the shared guard.

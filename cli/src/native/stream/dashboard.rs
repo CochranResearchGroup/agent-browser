@@ -261,13 +261,6 @@ pub(crate) async fn run_native_handoff_http_fixture(listener: TcpListener) {
     }
 }
 
-#[cfg(all(test, unix))]
-pub(crate) fn native_handoff_http_fixture_credentials() -> std::path::PathBuf {
-    dashboard_auth::ensure_dashboard_auth_config()
-        .unwrap()
-        .bootstrap_credential_file
-}
-
 pub(crate) async fn ensure_dashboard_service_backend() {
     if let Err(err) = ensure_dashboard_service_backend_with_retry(
         || super::http::ensure_service_daemon_session(DASHBOARD_SERVICE_BACKEND_SESSION, None),
@@ -343,20 +336,9 @@ pub(super) async fn handle_dashboard_connection(mut stream: tokio::net::TcpStrea
     }
 
     if method == "POST" && path == "/api/dashboard-auth/login" {
-        let body_str = read_post_body(&mut stream, &buf, n).await;
-        let response = dashboard_auth::login_response(&headers, &body_str, secure_cookie);
-        if !response.is_success() {
-            append_service_failure_best_effort(
-                &ServiceFailureRecord::new(
-                    ServiceFailureCategory::DashboardAction,
-                    "dashboard_auth",
-                    "login",
-                    "dashboard_login_failed",
-                    "Dashboard authentication did not succeed.",
-                )
-                .with_action("dashboard_login"),
-            );
-        }
+        // Disabled endpoint: never read credentials or enter the former failed-
+        // login journal path. The shared owner handles authentication failures.
+        let response = dashboard_auth::login_response(&headers, "", secure_cookie);
         let _ = stream.write_all(&response.into_http_bytes()).await;
         return;
     }
@@ -4256,31 +4238,9 @@ mod tests {
             scratch.0.to_str().unwrap(),
         );
         env.remove("AGENT_BROWSER_DASHBOARD_AUTH_FILE");
-        let config = dashboard_auth::ensure_dashboard_auth_config().unwrap();
-        let credentials = std::fs::read_to_string(config.bootstrap_credential_file).unwrap();
-        let password = credentials
-            .lines()
-            .find_map(|line| {
-                line.strip_prefix("AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD=\"")
-                    .and_then(|s| s.strip_suffix('"'))
-            })
-            .unwrap();
-        let login = exchange(
-            "POST",
-            "/api/dashboard-auth/login",
-            "",
-            &json!({"username":"admin","password":password}).to_string(),
-        )
-        .await;
-        assert_eq!(http_response_status(&login), Some(200));
-        let login = String::from_utf8(login).unwrap();
-        let cookie = login
-            .lines()
-            .find_map(|line| {
-                line.strip_prefix("Set-Cookie: ")
-                    .and_then(|v| v.split(';').next())
-            })
-            .unwrap();
+        let ingress = dashboard_auth::test_ingress::TestIngress::start();
+        let cookie = ingress.cookie("admin");
+        let cookie = cookie.as_str();
         let backend = TcpListener::bind("127.0.0.1:0").await.unwrap();
         env.set(
             "AGENT_BROWSER_DASHBOARD_BACKEND_PORT",
@@ -4544,30 +4504,9 @@ mod tests {
             "AGENT_BROWSER_SOCKET_DIR",
             scratch.0.join("sockets").to_str().unwrap(),
         );
-        let auth = dashboard_auth::ensure_dashboard_auth_config().unwrap();
-        let credentials = std::fs::read_to_string(auth.bootstrap_credential_file).unwrap();
-        let password = credentials
-            .lines()
-            .find_map(|line| {
-                line.strip_prefix("AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD=\"")
-                    .and_then(|value| value.strip_suffix('"'))
-            })
-            .expect("synthetic bootstrap credential missing");
-        let login_body = json!({"username":"admin","password":password}).to_string();
-        let login = exchange(format!("POST /api/dashboard-auth/login HTTP/1.1\r\nHost: synthetic.example\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", login_body.len(), login_body)).await;
-        assert_eq!(
-            http_response_status(&login),
-            Some(200),
-            "synthetic HTTP login failed"
-        );
-        let login_text = String::from_utf8(login).unwrap();
-        let cookie = login_text
-            .lines()
-            .find_map(|line| {
-                line.strip_prefix("Set-Cookie: ")
-                    .and_then(|value| value.split(';').next())
-            })
-            .expect("synthetic signed session cookie missing");
+        let ingress = dashboard_auth::test_ingress::TestIngress::start();
+        let cookie = ingress.cookie("admin");
+        let cookie = cookie.as_str();
         let session = format!("p237-{}", uuid::Uuid::new_v4().simple());
         let id = uuid::Uuid::new_v4().to_string();
         let mut store = BrowserSessionSqliteStore::default_sqlite().unwrap();
@@ -4968,6 +4907,7 @@ mod tests {
 
     #[tokio::test]
     async fn tab_presentation_endpoint_authenticates_before_provider_resolution() {
+        let _ingress = dashboard_auth::test_ingress::TestIngress::start();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
@@ -5235,26 +5175,9 @@ mod tests {
                 }
             })
         };
-        let auth = dashboard_auth::ensure_dashboard_auth_config().unwrap();
-        let credentials = std::fs::read_to_string(auth.bootstrap_credential_file).unwrap();
-        let password = credentials
-            .lines()
-            .find_map(|line| {
-                line.strip_prefix("AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD=\"")
-                    .and_then(|value| value.strip_suffix('"'))
-            })
-            .unwrap();
-        let login = json!({"username":"admin","password":password}).to_string();
-        let response = exchange(format!("POST /api/dashboard-auth/login HTTP/1.1\r\nHost: synthetic.example\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{login}", login.len())).await;
-        assert_eq!(http_response_status(&response), Some(200));
-        let text = String::from_utf8(response).unwrap();
-        let cookie = text
-            .lines()
-            .find_map(|line| {
-                line.strip_prefix("Set-Cookie: ")
-                    .and_then(|value| value.split(';').next())
-            })
-            .unwrap();
+        let ingress = dashboard_auth::test_ingress::TestIngress::start();
+        let cookie = ingress.cookie("admin");
+        let cookie = cookie.as_str();
         let request = |marker: &str| {
             format!("GET /api/service/status?projection=dashboard-summary HTTP/1.1\r\nHost: synthetic.example\r\nCookie: {cookie}\r\nCache-Control: no-cache\r\n{marker}Connection: close\r\n\r\n")
         };

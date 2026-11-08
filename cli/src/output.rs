@@ -6271,12 +6271,11 @@ fixed workspace ACL target and explicit principal-to-local-user mapping.
 Caller Remote-* headers never authenticate. Ingress identities never mint
 local cookies. Owner redirects require sign-in without following Location;
 denied/unmapped identities return403 and verification failures return503.
-Partial/invalid configuration fails closed. With all three settings absent,
-local/machine login API sessions remain supported. The private auth store
-creates admin as superuser and codex as observer. Valid local sessions take
-precedence and renew their thirty-day cookie. authenticationSource identifies
-ingress/local; End local session ends only a local cookie, not ingress sign-in.
-Website accounts and Native viewer access retain their separate authentication.
+Missing, partial or invalid configuration fails closed. Native password login
+and signed dashboard sessions are disabled until Remote View authentication
+interoperates. Both services require the same Authelia guard. Old native cookies
+cannot authenticate or renew; the login API returns native_auth_disabled.
+Current private-store workspace roles still apply; website accounts are separate.
 After login, the dashboard polls authenticated /api/runtime/health every ten
 seconds. Its agent-browser.runtime-health.v1 response warns when active daemon
 executables, package versions, or stream metadata drift. Detection is read-only

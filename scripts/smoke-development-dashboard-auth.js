@@ -12,50 +12,34 @@ const json = removeFlag(args, '--json');
 if (args.length) fail(`Unknown arguments: ${args.join(' ')}`);
 
 try {
-  if (!existsSync(authEnv)) throw new Error(`Development dashboard auth env is missing: ${authEnv}`);
-  const credentials = dashboardCredentials(readFileSync(authEnv, 'utf8'));
+  // Native credentials are deliberately unusable, including valid retained
+  // bootstrap credentials. This probe never signs in to the shared owner.
+  const credentials = existsSync(authEnv) ? dashboardCredentials(readFileSync(authEnv, 'utf8'))
+    : { username: 'admin', password: 'disabled-native-auth-probe' };
   const login = await fetch(new URL('/api/dashboard-auth/login', dashboardUrl), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(credentials),
-    redirect: 'manual',
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(credentials), redirect: 'manual',
   });
-  const loginPayload = await login.json().catch(() => ({}));
-  if (!login.ok || loginPayload.authenticated !== true) {
-    throw new Error(`Development dashboard login failed with HTTP ${login.status}`);
+  const payload = await login.json().catch(() => ({}));
+  if (login.status !== 403 || payload.errorCode !== 'native_auth_disabled'
+    || login.headers.getSetCookie().length) {
+    throw new Error(`Native dashboard authentication was not disabled: HTTP ${login.status}`);
   }
-  const cookie = login.headers.getSetCookie()
-    .map((value) => value.split(';', 1)[0])
-    .join('; ');
-  if (!cookie) throw new Error('Development dashboard login did not issue a session cookie');
-
-  const statusResponse = await fetch(
-    new URL('/api/dashboard-auth/status', dashboardUrl),
-    { headers: { cookie } },
-  );
+  const response = await fetch(new URL('/api/dashboard-auth/status', dashboardUrl), { redirect: 'manual' });
+  const status = await response.json().catch(() => ({}));
+  if (status.authenticated === true || response.headers.getSetCookie().length) {
+    throw new Error('Anonymous status unexpectedly established a dashboard session');
+  }
   const manifestResponse = await fetch(new URL('/api/runtime/manifest', dashboardUrl));
-  const status = await statusResponse.json().catch(() => ({}));
   const manifest = await manifestResponse.json().catch(() => ({}));
-  if (!statusResponse.ok || status.authenticated !== true) {
-    throw new Error(`Development dashboard session verification failed with HTTP ${statusResponse.status}`);
-  }
   if (!manifestResponse.ok || manifest.runtimeEnvironment !== 'development') {
-    throw new Error(`Development runtime manifest identity failed with HTTP ${manifestResponse.status}`);
+    throw new Error('Development runtime manifest identity failed');
   }
-  const serviceResponse = await fetchServiceStatus(dashboardUrl, cookie);
-
-  const report = {
-    success: true,
-    dashboardOrigin: dashboardUrl.origin,
-    loginStatus: login.status,
-    authenticated: true,
-    authenticatedServiceStatus: serviceResponse.status,
-    runtimeEnvironment: manifest.runtimeEnvironment,
-    executable: manifest.executable || null,
-    dashboard: manifest.dashboard || null,
-  };
+  const report = { success: true, dashboardOrigin: dashboardUrl.origin,
+    nativeAuthenticationEnabled: false, authenticated: false,
+    ownerAuthenticationAcceptance: 'not_run', runtimeEnvironment: manifest.runtimeEnvironment };
   if (json) console.log(JSON.stringify(report, null, 2));
-  else console.log(`Development dashboard authenticated smoke passed: ${dashboardUrl.origin}`);
+  else console.log(`Development dashboard requires Authelia: ${dashboardUrl.origin}`);
 } catch (error) {
   fail(error instanceof Error ? error.message : String(error));
 }
@@ -69,18 +53,6 @@ function dashboardCredentials(text) {
     values.AGENT_BROWSER_DASHBOARD_CODEX_PASSWORD;
   if (!password) throw new Error('Development dashboard auth env has no usable password');
   return { username, password };
-}
-
-async function fetchServiceStatus(dashboardUrl, cookie) {
-  let response = null;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    response = await fetch(new URL('/api/service/status', dashboardUrl), {
-      headers: { cookie },
-    });
-    if (response.ok) return response;
-    await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
-  }
-  throw new Error(`Authenticated development service API failed with HTTP ${response?.status || 0}`);
 }
 
 function parseEnv(text) {
