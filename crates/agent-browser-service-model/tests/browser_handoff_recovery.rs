@@ -14,6 +14,7 @@ struct Evidence {
     missing_identities: std::collections::BTreeSet<String>,
     assignments: BTreeMap<String, RemoteViewAssignmentRecord>,
     original_ended: BTreeMap<String, Result<bool, String>>,
+    idle_publication_attempts: usize,
 }
 struct Store(Rc<RefCell<Evidence>>);
 impl BrowserIdleRetirementCustodyStore for Store {
@@ -83,6 +84,7 @@ impl BrowserIdleRetirementCustodyStore for Store {
         _: &BrowserSessionState,
         _: &[String],
     ) -> Result<(), BrowserIdleRetirementStoreError> {
+        self.0.borrow_mut().idle_publication_attempts += 1;
         Err(BrowserIdleRetirementStoreError::Unavailable)
     }
 }
@@ -1236,4 +1238,83 @@ fn missing_identity_on_nonretired_peer_defers_with_a_reason() {
     };
     assert_eq!(error, "browser_session_idle_original_identity_missing");
     assert!(evidence.borrow().retirements.is_empty());
+}
+
+#[test]
+fn retained_close_reconciliation_keeps_unqualified_original_scope_fenced() {
+    for case in [
+        "unsettled",
+        "changed_browser",
+        "extra_tab",
+        "original_live",
+        "profile_occupied",
+    ] {
+        let (mut effects, mut state, browser, evidence) = retirement_peer_fixture();
+        effects.begin_operation(&state).unwrap();
+        let guard = effects
+            .acquire_idle_retirement_guard(std::slice::from_ref(&browser))
+            .unwrap();
+        drop(guard);
+        let effect = BrowserIdleRetirementEffect::CloseBrowser {
+            browser_id: browser.id.clone(),
+        };
+        {
+            let mut retained = evidence.borrow_mut();
+            retained.retirements[0]
+                .begin_effect(effect.clone())
+                .unwrap();
+            if case != "unsettled" {
+                retained.retirements[0].settle_effect(&effect).unwrap();
+            }
+            retained
+                .original_ended
+                .insert(browser.id.clone(), Ok(case != "original_live"));
+        }
+        let mut current = browser.clone();
+        if case == "changed_browser" {
+            current.pid += 1;
+            state.browsers.insert(current.id.clone(), current.clone());
+        }
+        if case == "extra_tab" {
+            state.tabs.insert(
+                "new-tab".into(),
+                ManagedBrowserTab {
+                    id: "new-tab".into(),
+                    target_id: "new-target".into(),
+                    browser_id: browser.id.clone(),
+                    session_id: "current-task".into(),
+                    created_at_ms: 2,
+                    last_activity_at_ms: 2,
+                },
+            );
+        }
+        effects.begin_operation(&state).unwrap();
+        let before = evidence.borrow().retirements.clone();
+        let profile = BrowserProfileCatalogEntry {
+            id: browser.profile_id.clone(),
+            name: "Fixture".into(),
+            user_data_dir: "/synthetic/profile".into(),
+            kind: BrowserProfileKind::Named,
+            manual_login_url: None,
+        };
+        let result = effects.reconcile_retained_browser_close(&state, &current, &profile, 3);
+        assert!(
+            !matches!(result, Ok(Some(_))),
+            "unqualified scope must stay fenced: {case}"
+        );
+        assert_eq!(evidence.borrow().retirements, before, "{case}");
+        assert_eq!(
+            evidence.borrow().idle_publication_attempts,
+            0,
+            "no publication attempt: {case}"
+        );
+        assert!(
+            !evidence
+                .borrow()
+                .effects
+                .iter()
+                .any(|effect| effect == "launch"),
+            "{case}"
+        );
+    }
 }

@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "work_item": 579,
+  "base": "bfdf162b896aec462e8341a57bfcec89dc8fefad",
+  "source_state": "implemented; adjacent qualification pending",
+  "red": {
+    "public_host_sqlite_test": "retained_handoff_recovers_after_settled_close_publication_was_interrupted",
+    "error": "browser_session_recovery_custody_conflict",
+    "runtime_seconds": 3.08
+  },
+  "green": {
+    "public_host_sqlite_passed": 1,
+    "runtime_seconds": 3.15,
+    "original_physical_close_count": 1,
+    "logical_task_handoff_preserved": true
+  },
+  "environment": {
+    "profile": "ci",
+    "package_override": "profile.ci.package.agent-browser.opt-level=0",
+    "jobs": 2,
+    "cache": "off after hung sccache rustc-vV",
+    "test_home": "temporary isolated HOME/XDG",
+    "rust_min_stack_bytes": 16777216,
+    "compiled_test_binary_sha256": "6bddbe6f20fcb2d71390f30dd68e72f9722d38ce3536e31736b43ca788d0a2fc"
+  },
+  "pending": [
+    "cached CLI retirement/handoff/recovery selections",
+    "all service-model tests and unqualified-scope counterexamples",
+    "combined579/580 strict workspace Clippy and final format",
+    "preserving candidate preparation, installation and actual same viewer acceptance"
+  ],
+  "checks": {
+    "policy_wiring": 11,
+    "handoff_documentation": "passed",
+    "changed_links": "passed"
+  },
+  "runtime_effects": false,
+  "installed": false,
+  "hosted_ci": "skipped by operator policy",
+  "limitations": [
+    "Initial sccache startup and overbroad optimized compilation canceled without test verdict; retained logs",
+    "Added model-only integration counterexample changes trigger CLI build.rs rerun; cached qualified CLI test bytes reused because runtime/module implementation inputs are unchanged",
+    "Final CLI help adds explanatory text after behavioral qualification; no dispatch or recovery semantics change"
+  ]
+}
