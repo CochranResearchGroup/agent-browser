@@ -9,12 +9,12 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#586]
-    plan_state: ACTIVE
+    plan_state: CLOSED
     custody_state: ACTIVE_WORKTREE
     dependencies: []
     overlaps: [CDP-FREE-IDLE-585]
     reconciled_overlaps: ["Operator approved one isolated tracing checkout; pinned exact installed8db2; no585 source dependency or edits; root serializes build/runtime effects"]
-    validation_status: Instrumentation prepared; focused qualification pending
+    validation_status: Local controls and sealed production artifact fixture pass; preserving diagnostic cutover and owned neutral open/close pass; no rejection trace; original sealed runtime restored
     limitations: ["No exact-close RED yet; no live close replay; default tracing off; no source-fix claim"]
     updated_at: 2026-11-08
   - id: RECOVERED-INVITATION-583

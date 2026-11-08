@@ -673,12 +673,6 @@ impl BrowserSessionPersistence for BrowserSessionSqliteStore {
         } else {
             self.publish_session_retirements(expected, state, retirement_ids, intent, activity_ids)
                 .map_err(|error| {
-                    agent_browser_service_model::cleanup102_trace::guard(match &error {
-                        agent_browser_service_model::BrowserIdleRetirementStoreError::Unavailable => "host.publisher.unavailable",
-                        agent_browser_service_model::BrowserIdleRetirementStoreError::InvalidRecord => "host.publisher.invalid_record",
-                        agent_browser_service_model::BrowserIdleRetirementStoreError::ActivityActive => "host.publisher.activity_active",
-                        agent_browser_service_model::BrowserIdleRetirementStoreError::Conflict => "host.publisher.conflict",
-                    });
                     match error {
                         agent_browser_service_model::BrowserIdleRetirementStoreError::Unavailable => {
                             "browser_session_idle_publication_unavailable"
@@ -2315,9 +2309,6 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             // This is the original retirement's atomic publication, not a
             // competing writer or a synthetic change to task/control authority.
             if self.persistence.load_session_state()? != published {
-                agent_browser_service_model::cleanup102_trace::guard(
-                    "host.reconcile.readback_changed",
-                );
                 return Err("browser_session_idle_publication_conflict".into());
             }
             self.state = published.clone();

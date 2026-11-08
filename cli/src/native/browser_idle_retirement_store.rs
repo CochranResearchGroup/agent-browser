@@ -280,23 +280,6 @@ pub(super) fn reject_retirement_publication(
             || sessions(before) != sessions(after)
             || closed(before) != closed(after)
         {
-            cleanup102_trace::guard("sqlite.retirement.scope_changed");
-            if std::env::var_os("AGENT_BROWSER_DEBUG_CLEANUP102").as_deref()
-                == Some(std::ffi::OsStr::new("1"))
-            {
-                if browsers(before) != browsers(after) {
-                    cleanup102_trace::guard("sqlite.retirement.browsers_changed");
-                }
-                if tabs(before) != tabs(after) {
-                    cleanup102_trace::guard("sqlite.retirement.tabs_changed");
-                }
-                if sessions(before) != sessions(after) {
-                    cleanup102_trace::guard("sqlite.retirement.sessions_changed");
-                }
-                if closed(before) != closed(after) {
-                    cleanup102_trace::guard("sqlite.retirement.idle_closed_changed");
-                }
-            }
             return Err(Error::Conflict);
         }
     }
@@ -616,50 +599,25 @@ impl BrowserSessionSqliteStore {
             || ids.iter().collect::<BTreeSet<_>>().len() != ids.len()
             || state.schema_version != BROWSER_SESSION_STATE_SCHEMA_V1
         {
-            cleanup102_trace::guard("sqlite.publish.return.602.InvalidRecord");
             return Err(Error::InvalidRecord);
         }
-        let caller_expected = expected;
-        let caller_proposed = state;
         let transaction = self
             .remote_view_mutation_connection()
             .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(|_| {
-                cleanup102_trace::guard("sqlite.publish.map.6.Unavailable");
-                Error::Unavailable
-            })?;
-        let actual = current(&transaction)
-            .inspect_err(|_| cleanup102_trace::guard("sqlite.publish.current_read"))?;
+            .map_err(|_| Error::Unavailable)?;
+        let actual = current(&transaction)?;
         let merged = super::browser_session_host::reconciliation::reconcile_and_record(
             &transaction,
             expected,
             state,
             &actual,
         )
-        .map_err(|_| {
-            cleanup102_trace::guard("sqlite.publish.map.7.Unavailable");
-            Error::Unavailable
-        })?;
+        .map_err(|_| Error::Unavailable)?;
         let expected = &actual;
         let state = &merged;
-        let trace_context_seen = std::cell::Cell::new(false);
-        let trace = |label| {
-            cleanup102_trace::guard(label);
-            if cleanup102_trace::enabled() && !trace_context_seen.replace(true) {
-                cleanup102_trace::publication_context(
-                    caller_expected,
-                    &actual,
-                    caller_proposed,
-                    &merged,
-                );
-            }
-        };
-        let mut records =
-            ledger(&transaction).inspect_err(|_| trace("sqlite.publish.ledger_read"))?;
-        reject_retirement_publication(&transaction, expected, state, ids, activity_ids)
-            .inspect_err(|_| trace("sqlite.publish.retirement_fence"))?;
+        let mut records = ledger(&transaction)?;
+        reject_retirement_publication(&transaction, expected, state, ids, activity_ids)?;
         if activity_ids.iter().collect::<BTreeSet<_>>().len() != activity_ids.len() {
-            trace("sqlite.publish.return.621.InvalidRecord");
             return Err(Error::InvalidRecord);
         }
         let mut completed: Vec<BrowserActivityRecord> = load_optional_document(
@@ -667,14 +625,10 @@ impl BrowserSessionSqliteStore {
             ACTIVITY_PUBLICATIONS,
             ACTIVITY_PUBLICATIONS_SCHEMA,
         )
-        .map_err(|_| {
-            trace("sqlite.publish.map.8.Unavailable");
-            Error::Unavailable
-        })?;
+        .map_err(|_| Error::Unavailable)?;
         for id in activity_ids {
             if let Some(record) = records.activities.get(id) {
                 if !record.acknowledged && !record.original_ended {
-                    trace("sqlite.publish.return.632.Conflict");
                     return Err(Error::Conflict);
                 }
             } else {
@@ -683,10 +637,7 @@ impl BrowserSessionSqliteStore {
                 let receipt = completed
                     .iter()
                     .find(|record| &record.id == id)
-                    .ok_or_else(|| {
-                        trace("sqlite.publish.missing.1");
-                        Error::Conflict
-                    })?;
+                    .ok_or(Error::Conflict)?;
                 let same_root = |candidate: Option<&ManagedBrowserInstance>| {
                     candidate.is_some_and(|root| {
                         root.id == receipt.browser.id
@@ -701,7 +652,6 @@ impl BrowserSessionSqliteStore {
                     || !same_root(expected.browsers.get(&receipt.browser.id))
                     || !same_root(state.browsers.get(&receipt.browser.id))
                 {
-                    trace("sqlite.publish.return.655.Conflict");
                     return Err(Error::Conflict);
                 }
                 if let Some(identity) = &receipt.process_identity {
@@ -709,14 +659,10 @@ impl BrowserSessionSqliteStore {
                         &transaction,
                         &receipt.browser,
                     )
-                    .map_err(|_| {
-                        trace("sqlite.publish.map.9.Conflict");
-                        Error::Conflict
-                    })?
+                    .map_err(|_| Error::Conflict)?
                     .as_ref()
                         != Some(identity)
                     {
-                        trace("sqlite.publish.return.666.Conflict");
                         return Err(Error::Conflict);
                     }
                 }
@@ -724,16 +670,12 @@ impl BrowserSessionSqliteStore {
         }
 
         for id in ids {
-            let record = records.records.get(id).ok_or_else(|| {
-                trace("sqlite.publish.missing.2");
-                Error::Conflict
-            })?;
+            let record = records.records.get(id).ok_or(Error::Conflict)?;
             for scope in &record.intent.scopes {
                 if expected.idle_closed_browsers.get(&scope.browser.id)
                     != state.idle_closed_browsers.get(&scope.browser.id)
                     && !record.has_settled_browser_close(&scope.browser.id)
                 {
-                    trace("sqlite.publish.return.679.Conflict");
                     return Err(Error::Conflict);
                 }
             }
@@ -744,30 +686,21 @@ impl BrowserSessionSqliteStore {
                 intent,
                 state,
             )
-            .map_err(|_| {
-                trace("sqlite.publish.map.10.Conflict");
-                Error::Conflict
-            })?;
+            .map_err(|_| Error::Conflict)?;
             super::browser_launch_custody_store::record_handoff_recovery_bindings(
                 &transaction,
                 intent,
                 expected,
                 state,
             )
-            .map_err(|_| {
-                trace("sqlite.publish.map.11.Conflict");
-                Error::Conflict
-            })?;
+            .map_err(|_| Error::Conflict)?;
         } else {
             super::browser_launch_custody_store::reject_fenced_browser_publication(
                 &transaction,
                 expected,
                 state,
             )
-            .map_err(|_| {
-                trace("sqlite.publish.map.12.Conflict");
-                Error::Conflict
-            })?;
+            .map_err(|_| Error::Conflict)?;
         }
         save_document(
             &transaction,
@@ -775,10 +708,7 @@ impl BrowserSessionSqliteStore {
             BROWSER_SESSION_STATE_SCHEMA_V1,
             state,
         )
-        .map_err(|_| {
-            trace("sqlite.publish.map.13.Unavailable");
-            Error::Unavailable
-        })?;
+        .map_err(|_| Error::Unavailable)?;
         for id in activity_ids {
             // Resource-ended history is immutable outcome evidence, not a
             // transient reservation to delete. A delayed publisher can still
@@ -788,10 +718,7 @@ impl BrowserSessionSqliteStore {
                 .get(id)
                 .is_some_and(|record| !record.original_ended)
             {
-                let receipt = records.activities.remove(id).ok_or_else(|| {
-                    trace("sqlite.publish.missing.3");
-                    Error::Conflict
-                })?;
+                let receipt = records.activities.remove(id).ok_or(Error::Conflict)?;
                 completed.retain(|old| old.id != receipt.id);
                 completed.push(receipt);
             }
@@ -805,10 +732,7 @@ impl BrowserSessionSqliteStore {
                 ACTIVITY_PUBLICATIONS_SCHEMA,
                 &completed,
             )
-            .map_err(|_| {
-                trace("sqlite.publish.map.14.Unavailable");
-                Error::Unavailable
-            })?;
+            .map_err(|_| Error::Unavailable)?;
         }
         // History projection may archive terminal rows in this transaction.
         // Bind custody to the actual retained session document, not a pre-archive copy.
@@ -817,17 +741,10 @@ impl BrowserSessionSqliteStore {
             records
                 .records
                 .get_mut(id)
-                .ok_or_else(|| {
-                    trace("sqlite.publish.missing.4");
-                    Error::Conflict
-                })?
-                .record_publication(&published)
-                .inspect_err(|_| trace("sqlite.publish.record_publication"))?;
+                .ok_or(Error::Conflict)?
+                .record_publication(&published)?;
         }
-        save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| {
-            trace("sqlite.publish.map.15.Unavailable");
-            Error::Unavailable
-        })?;
+        save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)?;
         transaction.commit().map_err(|_| Error::Unavailable)
     }
 }

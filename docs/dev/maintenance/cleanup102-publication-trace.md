@@ -5,7 +5,7 @@ Work item: 586 (cleanup evidence only; Native capture cause remains separate)
 Owner: ecochran76
 Branch: fix/cleanup102-publication-trace
 Base: 8db2baf3f08022f007696c940a7daf1e2e21feb3
-State: ACTIVE
+State: CLOSED
 
 Operator approved the bounded tracing proposal in Overleaf cleanup101. One isolated
 checkout preserves all existing worktrees. Installed ffd614f is independently
@@ -49,3 +49,27 @@ not installed. Production packaging and exact artifact fixture remain pending.
 Private Cargo Signal receipts and source fingerprints are retained in the
 operator's cleanup102 diagnostic evidence directory. Temporary trace qualification
 is not a causal diagnosis, cleanup acceptance, release or final broad review.
+
+## Bounded live result
+
+Production candidate301d4cb4 built and sealed from657849860; exact source-free
+workstation install fixture passes. Preserving install selected the diagnostic
+binary across all three services with trace enabled only in the runtime host.
+Six existing browser/task/tab records and handoffs, browser immutable process
+identities and Overleaf service processes stayed unchanged. One owned disposable
+about:blank open and its own task-scope close passed. No rejection trace events
+were emitted. This does not reproduce the original retained-close failure; host
+replacement is a confounding intervention, not causal repair evidence.
+
+Temporary service drop-in removed; original sealed ffd restored through the
+preserving installer. Debug instrumentation is removed from current source.
+Diagnostic fixtures remain explicitly scoped and private replay stays opt-in.
+Original login100 task and credentials were never replayed. Issue586 and original
+Overleaf97 acceptance remain open; exact-close RED and causal repair are absent.
+No additional production probe is authorized by changing this plan's state.
+
+Post-removal focused CLI check passes1/1, private replay ignored by default,
+220.204s, zero compiler diagnostics. Production source files exactly match8db2;
+only diagnostic test seam and plan/catalog records remain in this branch.
+Retain sealed diagnostic artifact and private receipts for evidence; no main
+integration or original-conflict repair is claimed.
