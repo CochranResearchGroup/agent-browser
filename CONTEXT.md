@@ -193,7 +193,11 @@ still gate the effect.
 
 **Handoff link lifetime**: The configurable period during which a handoff link can be used. The default is perpetual. Link expiry does not end the target tab or delete the link record.
 
+**Tab lifecycle ownership**: Shared responsibility for tracking activity and applying retention to an individual tab, independent of exclusive input control. A targeted Agent Browser read or action adopts that tab when interaction begins, even if its reply is lost; discovery alone leaves unknown tabs untouched and adoption claims neither the profile nor peer tabs.
+
 **Tab lifetime**: The independent, configurable retention of a task's tab. An unused human handoff can protect its tab according to the pending-human retention policy. Ending one tab preserves its peers; the browser closes when its last live tab ends.
+
+**Tab activity**: Work addressed to one tab by a person or an agent. Another tab's activity, inventory discovery and background health checks do not renew that tab's inactivity clock.
 
 **Handoff link deletion**: Explicit revocation of a handoff link, separate from its lifetime and its target tab's lifetime. It does not close the target tab or browser.
 
