@@ -2,7 +2,7 @@
 
 Product lane: PL-BUGFIX
 Work item: #597
-Status: ACTIVE
+Status: INSTALLED_ACCEPTED
 Baseline: 812e436c9a808922d8cb610885536d9771d86bd0
 
 The operator clarified that Authelia admission governs workspace access.
@@ -140,3 +140,36 @@ unexecuted hosted/platform environments; no hosted CI was dispatched. The source
 candidate remains the clean cdf4b2b52 seal, with634 unchanged executable inputs
 after docs-only follow-ups. Standards and Spec reviews have no accepted blocker.
 Preserving runtime adoption and actual desktop viewing remain the next gate.
+
+## Installed acceptance and closeout
+
+PR598 is merged. Supported preserving adoption of the exact sealed release
+candidate is accepted. The live executable digest matches the seal and its
+dashboard manifest is built with82 assets. Doctor through the installed
+entrypoint passes; advisory workspace-build and operator-journey observations
+remain. An initial doctor invoked through the build-artifact path hit its
+expected executable-path comparison; live supervisor path/hash match the
+installed generation. No supervisor repair or broad restart was needed.
+
+Independent anonymous browser access redirects to the expected Cooper realm.
+The existing independent agent sign-in reaches the workspace with ingress
+authentication and native authentication disabled. A current managed-tab
+selection returns200 and operatorVisible ready, visibly renders the actual
+native browser desktop in about7.3seconds, and removes the empty-selection hint.
+Native login still returns403 native_auth_disabled inside that session. The
+original Manual login row is absent from current inventory, so this is a current
+managed-task acceptance, not a claim that the original target was replayed.
+
+All immediately preceding browser-root identities survive the upgrade. One
+child process is absent in the later comparison; no cause or universal process
+preservation is claimed. Both task-owned browser contexts are closed with fresh
+OS proof of zero owned residue. Shared daemon and unrelated browsers remain.
+Private instance, transaction, process, screenshot and authenticated acceptance
+evidence stays outside Git. No website login, desktop input, all-tile, broad
+rail-performance or cross-platform qualification is claimed.
+
+Installed guidance receives the reviewed auth paragraphs and sign-in reference
+in both skill roots. Preserve its other local customizations rather than
+claiming full installed/repository byte parity. Source and runtime acceptance
+are complete for597. Retain the existing checkout for sealed-candidate custody
+with next review2026-11-09; do not remove it outside governed closeout.

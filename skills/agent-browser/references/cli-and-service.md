@@ -759,7 +759,9 @@ separate path that may open and navigate a replacement target.
 Agent Browser and Remote View require the shared Authelia session. Native
 dashboard password login and previously signed local cookies are disabled until
 compatible native authentication interoperation exists. Open the same public
-workspace origin through its Authelia guard; role authorization remains explicit.
+workspace origin through its Authelia guard. Authelia admission grants operator
+access without local dashboard accounts or roles. Attribution uses the exact
+verified owner principal; the obsolete local-user mapping is ignored.
 Use service request action `service_remote_view_route_preflight`, HTTP
 `GET /api/service/remote-view/route-preflight`, MCP
 `service_remote_view_route_preflight`, or
