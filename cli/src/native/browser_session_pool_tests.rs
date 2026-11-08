@@ -37,6 +37,12 @@ fn cdp_free_idle_retirement_os_close_does_not_request_native_window_context() {
         || uuid::Uuid::new_v4().to_string(),
     )
     .unwrap();
+    effects = effects
+        .with_pool(RemoteViewSessionPool {
+            name: "main".into(),
+            desired_desktops: 1,
+        })
+        .unwrap();
     effects.begin_operation(&baseline).unwrap();
     let _guard = effects
         .acquire_idle_retirement_guard(std::slice::from_ref(&browser))
