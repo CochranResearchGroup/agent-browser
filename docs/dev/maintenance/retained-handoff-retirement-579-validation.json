@@ -24,7 +24,6 @@
     "compiled_test_binary_sha256": "6bddbe6f20fcb2d71390f30dd68e72f9722d38ce3536e31736b43ca788d0a2fc"
   },
   "pending": [
-    "all service-model tests and unqualified-scope counterexamples (running)",
     "corrected selected CLI cases and handoff/recovery selections on final combined source",
     "combined579/580 strict workspace Clippy and final format",
     "preserving candidate preparation, installation and actual same viewer acceptance"
@@ -32,7 +31,23 @@
   "checks": {
     "policy_wiring": 11,
     "handoff_documentation": "passed",
-    "changed_links": "passed"
+    "changed_links": "passed",
+    "service_model": {
+      "command": "AGENT_BROWSER_CARGO_BUILD_JOBS=2 AGENT_BROWSER_CARGO_CACHE=off scripts/ci/cargo-safe.sh test --manifest-path Cargo.toml --profile ci -p agent-browser-service-model -- --test-threads=1",
+      "exit": 0,
+      "groups": 25,
+      "passed": 417,
+      "failed": 0,
+      "ignored": 0,
+      "negative_scope_cases": [
+        "unsettled",
+        "changed_browser",
+        "extra_tab",
+        "original_live",
+        "profile_occupied",
+        "provider_unavailable"
+      ]
+    }
   },
   "runtime_effects": false,
   "installed": false,
@@ -43,7 +58,7 @@
     "Final CLI help adds explanatory text after behavioral qualification; no dispatch or recovery semantics change",
     "Adjacent fixture dispositions use exact source causal exclusion, not a baseline-binary execution claim; first failures retained in local logs"
   ],
-  "source_checkpoint": "142af0664d5c72e1e566c0652129992c1af95500",
+  "source_checkpoint": "83f355bed",
   "cached_selections": {
     "retirement": {
       "passed": 72,
@@ -83,7 +98,10 @@
       "test": "retirement_handoff_recovery_remains_bounded_and_preserves_identity",
       "first_failure": "initial snapshot 20ms lock timeout under compilation",
       "isolation": "same cached binary, isolated temporary HOME/XDG: passed",
-      "status": "timing-sensitive first failure retained; unchanged source; combined rerun pending"
+      "status": "timing-sensitive first failure retained; unchanged source; combined rerun pending",
+      "tracking_issue": "https://github.com/CochranResearchGroup/agent-browser/issues/581",
+      "owner": "ecochran76",
+      "followup_due": "2026-11-10"
     }
   ]
 }
