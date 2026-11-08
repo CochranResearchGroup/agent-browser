@@ -26,7 +26,7 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#583]
     plan_state: OPEN
-    custody_state: INTEGRATION_READY
+    custody_state: INTEGRATED
     dependencies: [RETAINED-HANDOFF-579]
     overlaps: [RETAINED-HANDOFF-579, HUMAN-HANDOFF-571]
     reconciled_overlaps: ["Reuse clean owned579 checkout; original published branch preserved; root serializes integration and runtime effects; foreign canonical CONTEXT preserved"]
@@ -1698,3 +1698,19 @@ lanes:
     validation_status: Installed hotfix accepted; canonical main6c composes with full model, selected native-MCP, provider-free contracts and strict Rust gates passed
     limitations: ["CI excluded", "No eligible batch opportunity in normal observation; helper positive and caller source-test qualified", "Branch and artifacts retained for PR491 integration; canonical main source composition is not installed"]
     updated_at: 2026-10-29
+  - id: DASHBOARD-BUILD-587
+    product_lane: PL-BUGFIX
+    objective: Prevent a missing dashboard from qualifying as an installable browser runtime
+    plan: docs/dev/maintenance/dashboard-build-readiness.md
+    branch: fix/dashboard-build-readiness
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#587]
+    plan_state: COMPLETED
+    custody_state: INTEGRATION_READY
+    dependencies: []
+    overlaps: [RECOVERED-INVITATION-583, CDP-FREE-IDLE-585]
+    reconciled_overlaps: ["583 source is merged through584; reuse its clean checkout and preserve immutable candidate bytes; no new checkout;587 is primary writer for build-readiness paragraphs, while published588 owns idle-handoff paragraphs; installer/manifest code is disjoint; preserve both shared-doc changes at integration"]
+    validation_status: Build and manifest regressions RED then GREEN;156 dashboard and20 doctor tests, required quality gates, exact-source public installer fixture, public rejection/restore probe and tooling/docs checks pass; broad installer unit run explicitly not claimed
+    limitations: ["Source repair only; restored production runtime remains unchanged", "Retain checkout for sealed production candidate custody; review2026-11-09"]
+    updated_at: 2026-11-08

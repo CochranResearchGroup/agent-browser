@@ -1299,6 +1299,15 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
         runtime_inventory: &runtime_inventory,
         daemon_listener_inventory: &daemon_listener_inventory,
     });
+    if let Err(error) =
+        crate::dashboard_ingress::validate_dashboard_asset_manifest(&dashboard_runtime)
+    {
+        issues.push(json!({
+            "code": "dashboard_build_incomplete",
+            "message": error,
+            "nextAction": "rebuild_dashboard_and_candidate",
+        }));
+    }
     if let Some(Err(reason)) = &binding {
         issues.push(json!({
             "code":"development_install_binding_unavailable",

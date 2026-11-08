@@ -302,6 +302,18 @@ fn runtime_environment_label(configured: Option<&str>) -> &'static str {
     }
 }
 
+/// The Rust fallback is never a built frontend, even beside stale script files.
+fn dashboard_assets_built(index: Option<&[u8]>, has_javascript: bool) -> bool {
+    const PLACEHOLDER: &[u8] = b"Dashboard not built.";
+    has_javascript
+        && index.is_some_and(|html| {
+            !html.is_empty()
+                && !html
+                    .windows(PLACEHOLDER.len())
+                    .any(|window| window == PLACEHOLDER)
+        })
+}
+
 fn dashboard_asset_manifest() -> Value {
     let mut names = DashboardAssets::iter()
         .map(|name| name.to_string())
@@ -318,7 +330,15 @@ fn dashboard_asset_manifest() -> Value {
         }
         hasher.update([0]);
     }
+    let index = DashboardAssets::get("index.html");
+    let built = dashboard_assets_built(
+        index.as_ref().map(|content| content.data.as_ref()),
+        names
+            .iter()
+            .any(|name| name.starts_with("_next/static/") && name.ends_with(".js")),
+    );
     json!({
+        "built": built,
         "assetCount": names.len(),
         "totalBytes": total_bytes,
         "sha256": format!("{:x}", hasher.finalize()),
@@ -7857,6 +7877,24 @@ mod dashboard_asset_tests {
             content_type_for_dashboard_asset("js"),
             "application/javascript; charset=utf-8"
         );
+    }
+
+    #[test]
+    fn dashboard_build_state_requires_index_and_scripts_without_fallback() {
+        assert!(!super::dashboard_assets_built(None, true));
+        assert!(!super::dashboard_assets_built(Some(b""), true));
+        assert!(!super::dashboard_assets_built(
+            Some(b"Dashboard not built. Run: pnpm build"),
+            true
+        ));
+        assert!(!super::dashboard_assets_built(
+            Some(b"<html>App</html>"),
+            false
+        ));
+        assert!(super::dashboard_assets_built(
+            Some(b"<html>App</html>"),
+            true
+        ));
     }
 
     #[test]

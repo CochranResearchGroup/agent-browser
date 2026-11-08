@@ -17,6 +17,8 @@ simpler or specialized task. See the [governing product contract](docs/dev/polic
 
 Implementation and acceptance status live in [RUNBOOK](RUNBOOK.md).
 
+Workstation candidates must include the built dashboard. `pnpm build:development-candidate` builds it before Cargo and stops if the frontend build fails. Installation and doctor reject missing or placeholder-only dashboard assets with `dashboard_build_incomplete`; rebuild the dashboard and then recompile the candidate. Rust-only compilation remains available for source development.
+
 Browser mode inspection is read-only. Use `browser_discover` with category
 `browser` and operation `mode`, then `browser_command` with the existing
 `taskId` and action `mode`. The CLI equivalent is

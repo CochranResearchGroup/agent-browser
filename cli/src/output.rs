@@ -5834,6 +5834,10 @@ candidate startup remains blocked while a source writer is active.
 Production and isolated development clients share one root-owned protected
 lease-authority socket; a development runtime must verify that endpoint rather
 than launching a second authority daemon.
+Workstation installation and doctor reject missing or placeholder dashboard assets
+with dashboard_build_incomplete. Rebuild the frontend and recompile the candidate;
+pnpm build:development-candidate includes both steps. Rust-only compilation is
+still available for source development.
 Workstation payload checks bind the installed binary and support assets to
 recorded SHA-256 provenance. Runtime-host transition checks bind each host to its PID,
 process start token, binary hash, generation, and socket identity. Real-host preflight
