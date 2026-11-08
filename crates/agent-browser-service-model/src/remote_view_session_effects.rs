@@ -1159,6 +1159,7 @@ impl<
     ) -> Result<Option<BrowserSessionState>, String> {
         self.require_operation()?;
         if self.expected.as_ref() != Some(expected) || browser.profile_id != profile.id {
+            crate::cleanup102_trace::guard("model.reconcile.input_mismatch");
             return Err("browser_session_idle_publication_conflict".into());
         }
         let candidate = self.retirements.values().find_map(|record| {
@@ -1213,7 +1214,10 @@ impl<
                 &closed,
                 std::slice::from_ref(&record.intent.id),
             )
-            .map_err(|_| "browser_session_idle_publication_conflict")?;
+            .map_err(|_| {
+                crate::cleanup102_trace::guard("model.reconcile.publisher_failed");
+                "browser_session_idle_publication_conflict"
+            })?;
         record = self
             .store
             .idle_retirement_records()

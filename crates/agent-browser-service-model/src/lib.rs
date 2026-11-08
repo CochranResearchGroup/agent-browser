@@ -3,6 +3,9 @@
 //! This module owns record compatibility and deterministic lifecycle decisions.
 //! Adapters own persistence, browser observation, process control, and transport.
 
+#[doc(hidden)]
+pub mod cleanup102_trace;
+
 mod browser_host_reconnect;
 pub use browser_host_reconnect::*;
 mod browser_host_policy;
