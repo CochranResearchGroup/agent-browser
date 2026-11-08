@@ -124,8 +124,11 @@ without browser launch. The MCP read smoke first exposed a pre-existing frozen
 allowlist omission: browser_retention has been implemented since4a627690f but
 was absent from that assertion. The one-entry correction preserves exact ordered
 inventory comparison. The initial failure remains preserved. This fixture-only
-correction and this receipt do not change the sealed executable-input closure;
-the binary is reused rather than rebuilt.
+correction and this receipt do not change application or embedded support inputs.
+All637 recorded input files match except the checkout's advancing Git branch
+reference. The sealed binary retains its original source793811e2e provenance,
+already verified in main ancestry; it is reused rather than rebuilt for merge
+metadata or qualification-only changes under policy0051.
 
 An earlier unpinned older-debug install fixture was cancelled and excluded from
 acceptance; its normal cleanup also verified2 owned hosts and zero residue.
