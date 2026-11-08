@@ -20,7 +20,10 @@ use super::browser_session_store::BrowserSessionSqliteStore;
 
 #[path = "browser_human_handoff.rs"]
 mod human_handoff;
-pub(crate) use human_handoff::{begin_handoff, handoff_intent, prepare_handoff, return_handoff};
+pub(crate) use human_handoff::{
+    begin_handoff, handoff_intent, prepare_handoff, reconcile_recovered_handoff,
+    recovery_rebind_pending, return_handoff,
+};
 
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

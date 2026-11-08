@@ -45,6 +45,12 @@ fn conflicts(a: &BrowserIdleRetirementIntent, b: &BrowserIdleRetirementIntent) -
                 .any(|b| a.browser.profile_id == b.browser.profile_id)
         })
 }
+pub(super) fn retirement_records(
+    connection: &Connection,
+) -> Result<Vec<BrowserIdleRetirementRecord>> {
+    Ok(ledger(connection)?.records.into_values().collect())
+}
+
 fn ledger(connection: &Connection) -> Result<Ledger> {
     let ledger: Ledger =
         load_optional_document(connection, DOCUMENT, SCHEMA).map_err(|_| Error::InvalidRecord)?;
@@ -678,6 +684,13 @@ impl BrowserSessionSqliteStore {
             super::browser_launch_custody_store::confirm_launch_publication(
                 &transaction,
                 intent,
+                state,
+            )
+            .map_err(|_| Error::Conflict)?;
+            super::browser_launch_custody_store::record_handoff_recovery_bindings(
+                &transaction,
+                intent,
+                expected,
                 state,
             )
             .map_err(|_| Error::Conflict)?;

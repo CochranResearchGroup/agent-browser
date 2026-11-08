@@ -2,7 +2,7 @@
 //! connection/input ownership remains Remote View's responsibility.
 use super::*;
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct HumanHandoff {
     id: String,
@@ -191,6 +191,101 @@ pub(crate) fn prepare_handoff(
         template.clone()
     };
     Ok(retained)
+}
+
+/// A physical replacement never promotes a passive or different invitation.
+pub(crate) fn recovery_rebind_pending(
+    browser: &str,
+    id: &str,
+    digest: &str,
+) -> Result<bool, String> {
+    Ok(invitation(&read(browser)?, id)
+        .is_some_and(|handoff| handoff.returned_by.is_none() && handoff.target_digest != digest))
+}
+
+/// The SQLite writer fence stays held through the existing atomic control-journal
+/// replacement. No aggregate fields change and neither physical input nor control
+/// release occurs. A lost reply is idempotent against the same current digest.
+pub(crate) fn reconcile_recovered_handoff(
+    database: &Path,
+    expected: &BrowserSessionState,
+    id: &str,
+    now_ms: u64,
+) -> Result<(), String> {
+    use crate::native::browser_session_store::{load_optional_document, SESSION_STATE_DOCUMENT};
+    use agent_browser_service_model::{
+        remote_view_native_target_digest, resolve_remote_view_tab_handoff,
+        BROWSER_SESSION_STATE_SCHEMA_V1,
+    };
+    let target = resolve_remote_view_tab_handoff(expected, id)?;
+    let digest = remote_view_native_target_digest(id, &target)?;
+    let before = read(&target.browser.id)?;
+    let Some(original) = invitation(&before, id) else {
+        return Ok(());
+    };
+    if original.target_digest == digest {
+        return Ok(());
+    }
+    if intent(&before, id, &original.target_digest) != "interactive" {
+        return Err("browser_handoff_control_changed".into());
+    }
+    let mut connection = rusqlite::Connection::open_with_flags(
+        database,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE,
+    )
+    .map_err(|_| "browser_handoff_recovery_store_unavailable")?;
+    connection
+        .busy_timeout(std::time::Duration::from_secs(5))
+        .map_err(|_| "browser_handoff_recovery_store_unavailable")?;
+    let transaction = connection
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(|_| "browser_handoff_recovery_store_unavailable")?;
+    let current: BrowserSessionState = load_optional_document::<Option<BrowserSessionState>>(
+        &transaction,
+        SESSION_STATE_DOCUMENT,
+        BROWSER_SESSION_STATE_SCHEMA_V1,
+    )?
+    .ok_or("browser_handoff_recovery_state_missing")?;
+    if current != *expected {
+        return Err("browser_handoff_recovery_publication_conflict".into());
+    }
+    current
+        .remote_view_tab_handoffs
+        .get(id)
+        .ok_or("remote_view_tab_handoff_missing")?
+        .check_link_at(now_ms)?;
+    let proof = crate::native::browser_launch_custody_store::retained_handoff_recovery_proof(
+        &transaction,
+        &current,
+        id,
+        &original.target_digest,
+    )?;
+    transaction_control_rebind(&target.browser.id, &original, &digest, proof)?;
+    transaction
+        .commit()
+        .map_err(|_| "browser_handoff_recovery_store_unavailable".into())
+}
+
+fn transaction_control_rebind(
+    browser: &str,
+    expected: &HumanHandoff,
+    digest: &str,
+    proof: Value,
+) -> Result<(), String> {
+    transaction(&path(browser)?, |control| {
+        if intent(control, &expected.id, digest) == "interactive" {
+            return Ok(());
+        }
+        if invitation(control, &expected.id).as_ref() != Some(expected)
+            || intent(control, &expected.id, &expected.target_digest) != "interactive"
+        {
+            return Err("browser_handoff_control_changed".into());
+        }
+        let mut next = expected.clone();
+        next.target_digest = digest.into();
+        control.audit.push(json!({"epoch":control.epoch,"operation":"human_handoff_recovery","previousTargetDigest":expected.target_digest,"recovery":proof,"humanHandoff":next}));
+        Ok(())
+    })
 }
 
 #[cfg(test)]

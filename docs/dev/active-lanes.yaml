@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: RECOVERED-INVITATION-583
+    product_lane: PL-BUGFIX
+    objective: Preserve the original interactive invitation through exact owned physical recovery
+    plan: docs/dev/maintenance/recovered-interactive-invitation-583.md
+    branch: fix/recovered-interactive-invitation
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#583]
+    plan_state: OPEN
+    custody_state: INTEGRATION_READY
+    dependencies: [RETAINED-HANDOFF-579]
+    overlaps: [RETAINED-HANDOFF-579, HUMAN-HANDOFF-571]
+    reconciled_overlaps: ["Reuse clean owned579 checkout; original published branch preserved; root serializes integration and runtime effects; foreign canonical CONTEXT preserved"]
+    validation_status: Public recovery positive and10 guard scenarios pass;373 related CLI passes plus3 existing ignored; maintained strict Clippy Rustfmt policy links and docs build pass; all first failures retained
+    limitations: ["No runtime effects; source qualification and installed acceptance remain separate"]
+    updated_at: 2026-11-08
   - id: OVERLEAF97-DEPS-579-580
     product_lane: PL-BUGFIX
     objective: Serially qualify retained handoff recovery and explicitly enrolled unattended Auth for Overleaf97
@@ -42,7 +58,7 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#579]
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     dependencies: [P321-RETIREMENT-570]
     overlaps: [P321-RETIREMENT-570, HUMAN-HANDOFF-571]
     reconciled_overlaps: ["Isolated sixth checkout; exact refreshed main base; preserve foreign canonical CONTEXT.md and four existing clean source checkouts; coordinator serializes runtime effects"]

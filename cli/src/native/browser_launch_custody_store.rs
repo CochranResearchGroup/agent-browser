@@ -645,6 +645,8 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
         )
         .map_err(|_| Error::Conflict)?;
         confirm_launch_publication(&transaction, intent, state)?;
+        record_handoff_recovery_bindings(&transaction, intent, expected, state)
+            .map_err(|_| Error::Conflict)?;
 
         save_document(
             &transaction,
@@ -2109,4 +2111,271 @@ impl BrowserSessionSqliteStore {
         transaction.commit().map_err(|_| Error::Unavailable)?;
         Ok(LaunchCustodyAdmission::New)
     }
+}
+
+/// Qualify only one completed physical recovery of the exact retained scope.
+/// Retirement admission excludes pending launches; launch admission excludes
+/// nonterminal retirement. With exactly two immutable publications, these fences
+/// establish old-publication -> terminal-retirement -> replacement-publication.
+fn single_retirement_recovery_proof(
+    connection: &Connection,
+    state: &BrowserSessionState,
+    handoff_id: &str,
+    previous_digest: &str,
+) -> Result<serde_json::Value, String> {
+    use agent_browser_service_model::{
+        remote_view_native_target_digest, resolve_remote_view_tab_handoff,
+        RemoteViewTabHandoffTarget,
+    };
+    let refused = || "browser_handoff_recovery_chain_unconfirmed".to_string();
+    let target = resolve_remote_view_tab_handoff(state, handoff_id)?;
+    let browser = &target.browser;
+    if state.idle_closed_browsers.contains_key(&browser.id)
+        || state.shared_browser_ids.contains(&browser.id)
+        || state.app_browser_attachments.contains_key(&browser.id)
+        || state
+            .profile_operation_ids
+            .contains_key(&browser.profile_id)
+        || state
+            .browsers
+            .values()
+            .any(|other| other.profile_id == browser.profile_id && other.id != browser.id)
+    {
+        return Err(refused());
+    }
+    let retirements = super::browser_idle_retirement_store::retirement_records(connection)
+        .map_err(|_| refused())?;
+    let matching = retirements
+        .iter()
+        .filter(|record| {
+            record
+                .intent
+                .scopes
+                .iter()
+                .any(|scope| scope.browser.profile_id == browser.profile_id)
+        })
+        .collect::<Vec<_>>();
+    let [retirement] = matching.as_slice() else {
+        return Err(refused());
+    };
+    if retirement.completed.is_none()
+        || retirement.published_state_digest.is_none()
+        || !retirement.has_settled_browser_close(&browser.id)
+    {
+        return Err(refused());
+    }
+    let scopes = retirement
+        .intent
+        .scopes
+        .iter()
+        .filter(|scope| scope.browser.id == browser.id)
+        .collect::<Vec<_>>();
+    let [scope] = scopes.as_slice() else {
+        return Err(refused());
+    };
+    let mut expected_browser = scope.browser.clone();
+    expected_browser.pid = browser.pid;
+    expected_browser.cdp_endpoint = browser.cdp_endpoint.clone();
+    if expected_browser != *browser
+        || scope.browser.pid == browser.pid
+        || scope.tabs.len()
+            != state
+                .tabs
+                .values()
+                .filter(|tab| tab.browser_id == browser.id)
+                .count()
+    {
+        return Err(refused());
+    }
+    for original in &scope.tabs {
+        let Some(current) = state.tabs.get(&original.id) else {
+            return Err(refused());
+        };
+        let mut expected_tab = original.clone();
+        expected_tab.target_id = current.target_id.clone();
+        expected_tab.last_activity_at_ms = current.last_activity_at_ms;
+        if expected_tab != *current {
+            return Err(refused());
+        }
+    }
+    let original_tab = scope
+        .tabs
+        .iter()
+        .find(|tab| tab.id == target.tab.id)
+        .ok_or_else(refused)?;
+    let original_target = RemoteViewTabHandoffTarget {
+        session: target.session.clone(),
+        tab: original_tab.clone(),
+        browser: scope.browser.clone(),
+    };
+    if remote_view_native_target_digest(handoff_id, &original_target)? != previous_digest
+        || !scope
+            .browser
+            .active_session_ids
+            .contains(&target.session.id)
+        || original_tab.session_id != target.session.id
+    {
+        return Err(refused());
+    }
+    let records = ledger(connection).map_err(|_| refused())?;
+    let matching = records
+        .records
+        .values()
+        .filter(|record| record.intent.profile_id == browser.profile_id)
+        .collect::<Vec<_>>();
+    if matching.len() != 2
+        || matching.iter().any(|record| {
+            !record.published
+                || record.observed_browser_id.as_deref() != Some(browser.id.as_str())
+                || record.observed_process_identity.is_none()
+        })
+    {
+        return Err(refused());
+    }
+    let prior = matching
+        .iter()
+        .copied()
+        .filter(|record| record.observed_pid == Some(scope.browser.pid))
+        .collect::<Vec<_>>();
+    let current = matching
+        .iter()
+        .copied()
+        .filter(|record| record.observed_pid == Some(browser.pid))
+        .collect::<Vec<_>>();
+    let ([prior], [current]) = (prior.as_slice(), current.as_slice()) else {
+        return Err(refused());
+    };
+    if prior.observed_process_identity != scope.process_identity
+        || assignment_fenced(&records, &current.intent.assignment)
+    {
+        return Err(refused());
+    }
+    let mut original_state = state.clone();
+    original_state
+        .browsers
+        .insert(browser.id.clone(), scope.browser.clone());
+    for tab in &scope.tabs {
+        original_state.tabs.insert(tab.id.clone(), tab.clone());
+    }
+    (**prior)
+        .clone()
+        .confirm_publication(&original_state)
+        .map_err(|_| refused())?;
+    (**current)
+        .clone()
+        .confirm_publication(state)
+        .map_err(|_| refused())?;
+    // A live or reused PID and unavailable kernel evidence stay fenced. The
+    // replacement's physical/process proof is freshly checked by Native focus
+    // and again by its private input callback; this check concerns the original.
+    if !matches!(
+        crate::process_identity::observe_process(scope.browser.pid),
+        crate::process_identity::ProcessObservation::Missing
+    ) {
+        return Err(refused());
+    }
+    Ok(
+        serde_json::json!({"retirementId":retirement.intent.id,"priorLaunchIntentId":prior.intent.intent_id,"launchIntentId":current.intent.intent_id}),
+    )
+}
+
+const HANDOFF_RECOVERY_SCHEMA: &str = "agent-browser.handoff-recovery-binding.v1";
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct HandoffRecoveryBinding {
+    handoff_id: String,
+    previous_target_digest: String,
+    target_digest: String,
+    recovery: serde_json::Value,
+}
+fn handoff_recovery_kind(id: &str, digest: &str) -> String {
+    use sha2::{Digest, Sha256};
+    format!(
+        "handoff_recovery_binding:{:x}",
+        Sha256::digest(format!("{id}:{digest}").as_bytes())
+    )
+}
+
+/// Record the exact per-tab physical mapping only in the replacement launch's
+/// own state/custody publication transaction. Legacy state is never backfilled.
+pub(super) fn record_handoff_recovery_bindings(
+    connection: &Connection,
+    intent: &BrowserLaunchIntent,
+    before: &BrowserSessionState,
+    after: &BrowserSessionState,
+) -> Result<(), String> {
+    use agent_browser_service_model::{
+        remote_view_native_target_digest, resolve_remote_view_tab_handoff,
+    };
+    for id in before.remote_view_tab_handoffs.keys() {
+        let (Ok(previous), Ok(current)) = (
+            resolve_remote_view_tab_handoff(before, id),
+            resolve_remote_view_tab_handoff(after, id),
+        ) else {
+            continue;
+        };
+        if previous.browser.pid == current.browser.pid {
+            continue;
+        }
+        let previous_target_digest = remote_view_native_target_digest(id, &previous)?;
+        let target_digest = remote_view_native_target_digest(id, &current)?;
+        let Ok(recovery) =
+            single_retirement_recovery_proof(connection, after, id, &previous_target_digest)
+        else {
+            continue;
+        };
+        if recovery["launchIntentId"] != intent.intent_id {
+            continue;
+        }
+        let binding = HandoffRecoveryBinding {
+            handoff_id: id.clone(),
+            previous_target_digest,
+            target_digest: target_digest.clone(),
+            recovery,
+        };
+        let kind = handoff_recovery_kind(id, &target_digest);
+        let recorded: Option<HandoffRecoveryBinding> =
+            load_optional_document(connection, &kind, HANDOFF_RECOVERY_SCHEMA)?;
+        if recorded
+            .as_ref()
+            .is_some_and(|recorded| recorded != &binding)
+        {
+            return Err("browser_handoff_recovery_binding_conflict".into());
+        }
+        save_document(connection, &kind, HANDOFF_RECOVERY_SCHEMA, &binding)?;
+    }
+    Ok(())
+}
+
+/// A valid browser chain cannot invent the per-tab mapping. Require the receipt
+/// created with that exact replacement publication, then freshly requalify it.
+pub(super) fn retained_handoff_recovery_proof(
+    connection: &Connection,
+    state: &BrowserSessionState,
+    handoff_id: &str,
+    previous_digest: &str,
+) -> Result<serde_json::Value, String> {
+    use agent_browser_service_model::{
+        remote_view_native_target_digest, resolve_remote_view_tab_handoff,
+    };
+    let target = resolve_remote_view_tab_handoff(state, handoff_id)?;
+    let digest = remote_view_native_target_digest(handoff_id, &target)?;
+    let receipt: Option<HandoffRecoveryBinding> = load_optional_document(
+        connection,
+        &handoff_recovery_kind(handoff_id, &digest),
+        HANDOFF_RECOVERY_SCHEMA,
+    )?;
+    let receipt = receipt.ok_or("browser_handoff_recovery_mapping_unrecorded")?;
+    if receipt.handoff_id != handoff_id
+        || receipt.previous_target_digest != previous_digest
+        || receipt.target_digest != digest
+    {
+        return Err("browser_handoff_recovery_mapping_changed".into());
+    }
+    let recovery =
+        single_retirement_recovery_proof(connection, state, handoff_id, previous_digest)?;
+    if receipt.recovery != recovery {
+        return Err("browser_handoff_recovery_chain_changed".into());
+    }
+    Ok(recovery)
 }
