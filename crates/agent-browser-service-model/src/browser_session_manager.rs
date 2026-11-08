@@ -57,6 +57,24 @@ pub trait BrowserIdleRetirementGuard {}
 impl BrowserIdleRetirementGuard for () {}
 
 pub trait BrowserSessionEffects {
+    /// An explicit handoff can retain an exact live browser after idle cleanup.
+    /// This is not proof that an attempted close had no effect or completed.
+    fn retain_live_browser_for_handoff(
+        &mut self,
+        _expected: &BrowserSessionState,
+        _browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// Exclude active automatic-close workers while retaining a live original.
+    /// Production owners must use the same fence held through close dispatch.
+    fn acquire_handoff_retention_guard(
+        &mut self,
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        Ok(None)
+    }
+
     /// Borrow an exact app browser using current local and Native observations.
     /// Unsupported adapters refuse before any launch or target effect.
     fn attach_app_browser(

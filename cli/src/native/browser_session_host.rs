@@ -1916,6 +1916,13 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     return Ok(response);
                 }
                 self.recreate_expired_handoff(handoff_id, now_ms)?;
+                let retained = agent_browser_service_model::resolve_remote_view_tab_handoff(
+                    &self.state,
+                    handoff_id,
+                )?;
+                self.effects.begin_operation(&self.persisted_state)?;
+                self.effects
+                    .retain_live_browser_for_handoff(&self.persisted_state, &retained.browser)?;
                 if command["nativeDesktop"] == true {
                     self.refresh_before_ordinary_command()?;
                     let retained = agent_browser_service_model::resolve_remote_view_tab_handoff(
@@ -2844,6 +2851,15 @@ where
         }
         validate_handoff_ttl(command, now_ms, &self.state.retention_policy)?;
         let ttl = pending_human_retention(command)?;
+        let browser = self
+            .state
+            .browsers
+            .get(browser_id)
+            .ok_or("operator_focus_browser_missing")?
+            .clone();
+        self.effects.begin_operation(&self.persisted_state)?;
+        self.effects
+            .retain_live_browser_for_handoff(&self.persisted_state, &browser)?;
         let id = self
             .state
             .remote_view_tab_handoffs

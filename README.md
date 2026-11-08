@@ -4515,17 +4515,29 @@ never persisted into Service State.
 
 Use `service status` to inspect the service-mode control plane and configured service entities without launching a browser. `service runtime-backup status` verifies the current Browser Runtime SQLite backup without changing it. `service runtime-backup create` performs one online backup, validates its SQLite integrity and digest, and retains at most one previous backup. These backup commands never restore data and do not modify the separate Service State store.
 
-Browser Runtime reads database schemas 1 through 4. The first native idle-retirement
+Browser Runtime reads database schemas 1 through 5. The first native idle-retirement
 custody claim atomically promotes schema 1 to schema 2 with its durable record.
 Command-activity reservations require at least schema 3. Original-process
 activity evidence and ended-resource settlement require schema 4. Each write
-atomically advances the database to its required reader version without downgrading it. Keep a schema-4-capable binary with that database and its
+atomically advances the database to its required reader version without downgrading it.
+Explicit live handoff retention requires schema 5. Keep a schema-5-capable binary with that database and its
 backups; older readers reject it. Activity reservations prevent automatic retirement
 through command execution and session publication. Unknown effects retain their
 veto and original readback obligation; acknowledgement alone does not release it.
 Positive original-process exit permits resource recovery while preserving the
 unknown command record. Unavailable observation retains the veto; recovery does
 not replay the original command or adopt a replacement process as its evidence.
+
+CDP-free idle closure binds OS termination to the original PID, process start
+identity and executable, then confirms exit without a debugging connection or
+force-kill fallback. An explicit human handoff can supersede unfinished idle
+cleanup after excluding its worker and freshly verifying that the original
+browser is still alive. Agent Browser retains the attempted-close history and
+its unsettled outcome, publishes unchanged task identity and completes the
+original Native reservation before restoring access. Handoff focus renews the
+existing task activity clock; ordinary retention continues to apply.
+An acknowledged handoff-link deletion also wins a concurrent lifetime edit;
+stale publication cannot restore that link.
 
 Acknowledged command activity is removed only with an atomic publication receipt.
 The latest 4096 receipts allow bookkeeping retries after a lost reply without

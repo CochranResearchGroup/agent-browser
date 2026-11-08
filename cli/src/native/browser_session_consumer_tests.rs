@@ -186,6 +186,9 @@ impl RemoteViewBrowserProcessEffects for Process {
         environment: RemoteViewPrivateLaunchEnvironment,
         observation: &RemoteViewAssignmentObservation,
     ) -> Result<(), RemoteViewBrowserProcessError> {
+        if self.root.join("native-close-context-unavailable").exists() {
+            return Err(RemoteViewBrowserProcessError::Rejected);
+        }
         let desktop = browser
             .desktop
             .as_ref()
@@ -471,6 +474,14 @@ struct TestRetirementGuard;
 impl BrowserIdleRetirementGuard for TestRetirementGuard {}
 
 impl BrowserSessionEffects for Process {
+    fn acquire_handoff_retention_guard(
+        &mut self,
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        if self.root.join("handoff-cleanup-worker-active").exists() {
+            return Ok(None);
+        }
+        Ok(Some(Box::new(())))
+    }
     fn select_profile_browser_executable(
         &mut self,
         profile_id: String,

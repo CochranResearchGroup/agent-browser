@@ -6,6 +6,12 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 **Dashboard build readiness**: Installation requires embedded frontend assets, not only a responding HTTP listener and matching executable digest. The one-file Rust fallback is useful for source compilation but cannot qualify a workstation candidate. Dashboard presence is separate from authenticated viewer and browser workflow acceptance.
 
+**Live handoff retention**: An explicit human handoff supersedes automatic close
+only after excluding its worker and verifying the immutable original still lives.
+The original close attempt and unresolved physical outcome remain recorded.
+Unchanged task publication and Native reservation completion restore access;
+neither asserts that the browser exited or the close was never dispatched.
+
 **Session publication reconciliation**: Used by task continuation and handoff
 consumers before target selection. A three-way merge of a host's loaded
 baseline, resident metadata and current durable metadata inside one SQLite

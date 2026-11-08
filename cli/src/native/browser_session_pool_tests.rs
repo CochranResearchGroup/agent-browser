@@ -6,6 +6,185 @@ use std::cell::RefCell;
 use std::path::Path;
 
 #[test]
+fn cdp_free_idle_retirement_os_close_does_not_request_native_window_context() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.handle_command(&serde_json::json!({
+        "action":"browser_session_open","sessionName":"Alice","profileId":"profile-a",
+        "url":"https://synthetic.example/","manualLogin":true,"activityAtMs":100,
+        "serviceName":"fixture","agentName":"fixture","taskName":"OS idle close"
+    }));
+    assert_eq!(opened["success"], true, "{opened}");
+    consumer
+        .tab_for_navigation(opened["data"]["sessionId"].as_str().unwrap(), 101)
+        .unwrap();
+    let mut baseline = consumer.state().clone();
+    let browser = baseline.browsers.values().next().unwrap().clone();
+    baseline.tabs.values_mut().next().unwrap().target_id = format!("manual-window:{}", browser.id);
+    drop(consumer);
+    fixture.store(false).save_session_state(&baseline).unwrap();
+    let mut effects = RemoteViewSessionEffects::new(
+        Process {
+            mode: Mode::Success,
+            root: fixture.root.clone(),
+            calls,
+        },
+        adapter(&fixture, provider),
+        fixture.store(false),
+        vec![],
+        || uuid::Uuid::new_v4().to_string(),
+    )
+    .unwrap();
+    effects = effects
+        .with_pool(RemoteViewSessionPool {
+            name: "main".into(),
+            desired_desktops: 1,
+        })
+        .unwrap();
+    effects.begin_operation(&baseline).unwrap();
+    let _guard = effects
+        .acquire_idle_retirement_guard(std::slice::from_ref(&browser))
+        .unwrap()
+        .unwrap();
+    std::fs::write(
+        fixture.root.join("native-close-context-unavailable"),
+        "unavailable",
+    )
+    .unwrap();
+    std::fs::write(fixture.root.join("count-retirement-closes"), "count").unwrap();
+    effects
+        .close_browser(&browser)
+        .expect("automatic OS close cannot depend on Native window-close context");
+    assert_eq!(
+        std::fs::read_to_string(fixture.root.join("retirement-effect-count")).unwrap(),
+        "1"
+    );
+    assert!(fixture.store(false).idle_retirement_records().unwrap()[0]
+        .has_settled_browser_close(&browser.id));
+}
+
+#[test]
+fn cdp_free_idle_retirement_live_original_handoff_supersedes_pending_close() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.handle_command(&serde_json::json!({
+        "action":"browser_session_open","sessionName":"Alice","profileId":"profile-a",
+        "url":"https://synthetic.example/","manualLogin":true,"activityAtMs":100,
+        "serviceName":"fixture","agentName":"fixture","taskName":"Human handoff"
+    }));
+    assert_eq!(opened["success"], true, "{opened}");
+    let session_id = opened["data"]["sessionId"].as_str().unwrap();
+    consumer.tab_for_navigation(session_id, 101).unwrap();
+    let mut baseline = consumer.state().clone();
+    let browser = baseline.browsers.values().next().unwrap().clone();
+    let tab = baseline.tabs.values_mut().next().unwrap();
+    tab.target_id = format!("manual-window:{}", browser.id);
+    let tab = tab.clone();
+    let link =
+        retain_remote_view_tab_handoff_at(&mut baseline, "cdp-free-live", session_id, &tab.id, 101)
+            .unwrap();
+    drop(consumer);
+    fixture.store(false).save_session_state(&baseline).unwrap();
+    let intent = claim_fixture_retirement(&fixture, provider.clone(), &baseline, &browser);
+    fixture
+        .store(false)
+        .admit_idle_retirement_preparation(&intent)
+        .unwrap();
+    let prepared = adapter(&fixture, provider.clone())
+        .prepare_idle_retirement(&intent.provider)
+        .unwrap();
+    let mut record = fixture
+        .store(false)
+        .idle_retirement_records()
+        .unwrap()
+        .remove(0);
+    let previous = record.clone();
+    record.record_prepared(prepared).unwrap();
+    fixture
+        .store(false)
+        .update_idle_retirement(&previous, &record)
+        .unwrap();
+    fixture
+        .store(false)
+        .admit_idle_retirement_effect(
+            &intent,
+            BrowserIdleRetirementEffect::CloseBrowser {
+                browser_id: browser.id.clone(),
+            },
+        )
+        .unwrap();
+    let attempted = fixture
+        .store(false)
+        .idle_retirement_records()
+        .unwrap()
+        .remove(0);
+    provider.borrow_mut().window_pid = Some(browser.pid);
+    let mut restarted = host(&fixture, provider.clone(), calls.clone());
+    let command = serde_json::json!({
+        "action":"service_remote_view_handoff_resolve","handoffId":link.id,
+        "nativeDesktop":true,"activityAtMs":102
+    });
+    for blocked in [
+        "handoff-cleanup-worker-active",
+        "activity-readback-unavailable",
+    ] {
+        std::fs::write(fixture.root.join(blocked), "blocked").unwrap();
+        std::fs::write(fixture.root.join("activity-original-readback"), "original").unwrap();
+        let refused = restarted.handle_command(&command);
+        assert_eq!(refused["success"], false, "{blocked}: {refused}");
+        assert_eq!(
+            fixture.store(false).idle_retirement_records().unwrap()[0],
+            attempted
+        );
+        std::fs::remove_file(fixture.root.join(blocked)).unwrap();
+    }
+    let response = restarted.handle_command(&command);
+    assert_eq!(
+        response["success"], true,
+        "live original handoff must recover: {response}"
+    );
+    assert_eq!(response["data"]["operatorVisible"]["state"], "ready");
+    assert_eq!(response["data"]["browserId"], browser.id);
+    assert_eq!(response["data"]["tabId"], tab.id);
+    assert_eq!(calls.get(), 1, "no replacement launch");
+    let completed = fixture
+        .store(false)
+        .idle_retirement_records()
+        .unwrap()
+        .remove(0);
+    assert!(completed.is_terminal());
+    assert!(!completed.has_settled_browser_close(&browser.id));
+    assert_eq!(
+        serde_json::to_value(&attempted).unwrap()["effects"],
+        serde_json::to_value(&completed).unwrap()["effects"],
+        "original close outcome remains recorded, not relabeled as no effect"
+    );
+    assert!(restarted.state().idle_closed_browsers.is_empty());
+    let mut delayed = attempted.clone();
+    delayed
+        .settle_effect(&BrowserIdleRetirementEffect::CloseBrowser {
+            browser_id: browser.id.clone(),
+        })
+        .unwrap();
+    assert_eq!(
+        fixture
+            .store(false)
+            .update_idle_retirement(&attempted, &delayed),
+        Err(BrowserIdleRetirementStoreError::Conflict),
+        "late original cannot overwrite explicit retention"
+    );
+    assert_eq!(
+        restarted.handle_command(&command)["success"],
+        true,
+        "same-link reconnect remains available"
+    );
+}
+
+#[test]
 fn native_policy_publication_focus_reuses_exact_owner_activity_snapshot() {
     native_policy_focus_cases(false);
 }
@@ -4073,21 +4252,26 @@ fn competing_link_delete_and_policy_write_publish_one_restart_safe_outcome() {
             .map(|worker| worker.join().unwrap())
             .collect::<Vec<_>>()
     });
-    assert_eq!(
+    // Overlapping operations may linearize as lifetime update then deletion.
+    // Both acknowledgements are valid; the final deletion must remain terminal.
+    assert!(
         results
             .iter()
-            .filter(|(_, response)| response["success"] == true)
-            .count(),
-        1,
+            .any(|(_, response)| response["success"] == true),
         "{results:?}"
     );
-    for (_, response) in results
+    for (operation, response) in results
         .iter()
         .filter(|(_, response)| response["success"] != true)
     {
-        assert_eq!(
-            response["error"], "browser_session_publication_conflict",
-            "{response}"
+        assert!(
+            response["error"] == "browser_session_publication_conflict"
+                || (*operation == "set_link_lifetime"
+                    && response["error"] == "remote_view_tab_handoff_missing"
+                    && results
+                        .iter()
+                        .any(|(op, reply)| *op == "delete" && reply["success"] == true)),
+            "{operation}: {response}"
         );
     }
     let provider = Rc::new(RefCell::new(Provider::default()));
