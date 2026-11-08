@@ -67,3 +67,42 @@ The candidate build uses the maintained isolated production-shaped builder
 through Cargo Signal CLI fallback. Existing dashboard assets are already built;
 no dashboard source changed. Preserve the original failed cache attempt and
 installer binary-selection failure. Runtime publication remains separate.
+
+Pre-build review caught two remaining local-role references in the workspace
+auth guide and denied-access UI. Stop the exact owned first candidate Cargo
+scope before qualification, retain its superseded failure receipt, correct both
+references and build a clean successor. No failed candidate is installable.
+
+## Final source review
+
+The complete stream compartment passes268 tests and five child fixtures; the
+same two producer drivers remain ignored. Strict workspace Clippy, Rustfmt,
+patch hygiene, owner-auth UI/transport/operator contracts, dashboard TypeScript
+and production build, policy wiring, changed links, handoff docs and docs site
+build pass. Five selected workstation/provider tooling checks pass. Installer
+qualification remains pending on the explicitly pinned successor binary.
+
+The first denied-access copy change removed the established Access denied.
+prefix and the mounted assertion timed out. Restoring that prefix while removing
+local-role guidance passes the unchanged UI test; retain the failed run.
+
+### Standards
+
+Review baseline812e436c9 through the complete working diff against AGENTS.md,
+code discovery/runtime proof, architecture and testing policies. No accepted
+blocking finding remains. The final follow-up changes only denied-access UI
+copy and guidance; all Rust source bytes are unchanged from the successful
+stream/Clippy checkpoint. Reuse those Rust behavior gates; freshly qualify
+embedded assets and the exact binary after the dashboard rebuild.
+
+### Spec
+
+Issue597 and the operator clarification supersede591's local-role requirement.
+Owner verification alone grants workspace operator access; old local mappings
+and roles cannot add a gate. Exact owner principal attribution, disabled native
+password/cookie authentication, private signing material, target/controller/
+generation checks and profile policies remain. No accepted blocking finding
+remains. Producer pixels, rail latency, footer behavior and live publication
+are separate from this source qualification.
+
+Review summary: Standards0 accepted blockers; Spec0 accepted blockers.

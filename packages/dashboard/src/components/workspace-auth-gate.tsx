@@ -22,7 +22,7 @@ export function WorkspaceAuthGate({ children }: {
         if (!response.headers.get("content-type")?.includes("application/json")) throw new Error("Workspace returned an unexpected sign-in response. Reopen its authenticated public URL.");
         const payload = await response.json().catch(() => { throw new Error("Workspace authentication returned invalid data. Check service access, then retry."); });
         if (cancelled) return;
-        if (response.status === 403) setFailure("Access denied. Ask the workspace administrator to check ingress permissions and your workspace role.");
+        if (response.status === 403) setFailure("Access denied. Ask the workspace administrator to check Authelia ingress permissions.");
         else if (payload.authenticated && payload.user?.authenticationSource === "ingress" && typeof payload.user?.username === "string" && payload.user.username
           && typeof payload.user.role === "string") setUser(payload.user);
         else if (payload.authenticated) throw new Error("Workspace authentication returned an invalid identity. Check service access, then retry.");
