@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: OVERLEAF97-DEPS-579-580
+    product_lane: PL-BUGFIX
+    objective: Serially qualify retained handoff recovery and explicitly enrolled unattended Auth for Overleaf97
+    plan: docs/dev/maintenance/overleaf97-dependencies579580.md
+    branch: fix/overleaf97-dependencies579580
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#579, CochranResearchGroup/agent-browser#580]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [RETAINED-HANDOFF-579, ENROLLED-AUTH-580]
+    overlaps: [RETAINED-HANDOFF-579, ENROLLED-AUTH-580]
+    reconciled_overlaps: ["Explicitly directed isolated serial integration; preserve both source owners and foreign canonical context; root owns runtime effects and final consumer acceptance"]
+    validation_status: SDK types CheckJS client selector policy links and handoff guidance pass; final579 model checkpoint and whole-slice Rust gates pending
+    limitations: ["No merge install enrollment or shared-runtime effects before root serialization", "No final broad review or remediation counter consumed"]
+    updated_at: 2026-11-08
   - id: ENROLLED-AUTH-580
     product_lane: PL-AUTH
     objective: Connect explicitly enrolled unattended Auth consumers without Codex caller impersonation
