@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   VALIDATION_SELECTION_SCHEMA_VERSION,
   classifyValidationSelection,
+  isAuthCompositionSurface,
 } from './lib/validation-selection.js';
 
 function selection(files, options) {
@@ -179,3 +180,12 @@ expectSelection('local validation runner uses repository tooling lane', [
   tier: 'repository-tooling',
   jobs: { repositoryTooling: true, rust: false, dashboard: false, workstation: false },
 });
+
+for (const file of ['scripts/test-enrolled-auth-helper.js', 'scripts/enrolled-auth-helper-types.ts']) {
+  assert.equal(isAuthCompositionSurface(file), true, `${file}: enrolled helper coverage belongs to Auth composition`);
+  expectSelection(`enrolled Auth helper fixture ${file}`, [file], {
+    tier: 'service-client',
+    jobs: { serviceClient: true, rust: false, workstation: false },
+  });
+}
+assert.equal(isAuthCompositionSurface('scripts/test-enrolled-auth-helper-unrelated.js'), false);

@@ -5335,6 +5335,7 @@ agent-browser auth - Manage authentication profiles
 
 Standalone website login helpers consume the verified Auth Receipts client SDK.
 Bots is not required; private discovery stays inside Auth Receipts.
+SDK: genuine Codex callers use connectHostedAuthHelper; enrolled applications use connectEnrolledAuthHelper with explicit discovery and operation context.
 Current owner login uses discover_credentials with service/account intent.
 Empty legacy scopes do not mean missing saved credentials. Missing authority,
 unavailable/partial sources, no match and account choice remain distinct holds.

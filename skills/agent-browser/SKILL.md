@@ -31,6 +31,11 @@ After human input, use Give control back in the viewer, then `browser_continue` 
 ## Standalone authentication
 
 Website credentials use standalone Auth Receipts through its verified SDK.
+Use `connectHostedAuthHelper` only for a genuine current Codex caller.
+An explicitly enrolled unattended application uses `connectEnrolledAuthHelper`
+with its own discovery file and exact operation/recovery/browser context; never
+copy CODEX_THREAD_ID or fall back to Codex discovery. Auth owns enrollment and
+current authority; the adapter does not expose bearer or credential contents.
 Before login, MFA or recovery, read [Standalone Auth](references/authentication.md#standalone-auth-receipts).
 Use current `discover_credentials`, not empty legacy scopes, to distinguish
 missing authority, unavailable/partial sources, no match and account choice.

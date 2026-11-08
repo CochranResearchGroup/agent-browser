@@ -1,5 +1,9 @@
-/** Connect to the verified standalone Auth Receipts SDK without exposing private bearer material. */
-export function connectHostedAuthHelper(options?:{installationRoot?:string;discoveryFile?:string}):Promise<{
+export type AuthOperationContext={
+  operationId:string;
+  recoveryId:string;
+  binding:{taskId:string;browserId:string;profileId:string;tabId:string;origin:string;controlGeneration:string};
+};
+export interface OwnerAuthHelper {
   callerTaskId:string;
   installation:{product:'auth-receipts';contractVersion:1;identity:string;sourceRevision:string};
   requestLogin(options:{idempotencyKey:string;sourceId:string;recordId:string;origin:string;targetId:string;purpose:string;expiresAt:number}):Promise<Record<string,any>>;
@@ -14,4 +18,9 @@ export function connectHostedAuthHelper(options?:{installationRoot?:string;disco
     heldFor?:string;
   }>;
   helper(operation:string,args:Record<string,unknown>):Promise<Record<string,any>>;
-}>;
+}
+/** Connect the genuine current Codex caller to the verified standalone Auth SDK. */
+export function connectHostedAuthHelper(options?:{installationRoot?:string;discoveryFile?:string}):Promise<OwnerAuthHelper>;
+/** Connect an explicitly enrolled service consumer. Auth validates its exact
+ * operation/recovery/browser binding. No Codex caller or discovery fallback. */
+export function connectEnrolledAuthHelper(options:{installationRoot?:string;discoveryFile:string;operationContext:AuthOperationContext}):Promise<OwnerAuthHelper>;
