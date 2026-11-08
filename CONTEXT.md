@@ -4,7 +4,7 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
-**Shared workspace authentication**: Authelia authenticates Agent Browser and Remote View. Native dashboard passwords and cookies remain disabled until compatible interoperation exists; workspace role authorization remains explicit and current. An Agent Browser identity never proves a separate dependency session.
+**Shared workspace authentication**: Authelia authenticates Agent Browser and Remote View. Native dashboard passwords and cookies remain disabled until compatible interoperation exists; Authelia admission grants workspace operator access without local dashboard enrollment or roles. An Agent Browser identity never proves a separate dependency session.
 
 **Dashboard build readiness**: Installation requires embedded frontend assets, not only a responding HTTP listener and matching executable digest. The one-file Rust fallback is useful for source compilation but cannot qualify a workstation candidate. Dashboard presence is separate from authenticated viewer and browser workflow acceptance.
 
@@ -27,10 +27,9 @@ identity wins overlapping observations; private append-only receipts retain the
 conflicting evidence. Publication does not replay an effect or grant custody.
 
 **Workspace ingress identity**: A session verified directly by the configured
-Authelia owner against a fixed reviewed workspace GET/ACL target, explicitly
-mapped to a current local dashboard role. Caller identity headers establish
-nothing. Ingress and local signed sessions retain distinct authentication
-sources; website account identity and Native viewer access remain separate.
+Authelia owner against a fixed reviewed workspace GET/ACL target, retained as the exact owner principal without local account or role mapping.
+Caller identity headers establish nothing. Local signed sessions are disabled;
+website account identity and Native viewer access remain separate.
 
 
 **Task operation receipt**: Existing-owner evidence for one original addressed

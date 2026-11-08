@@ -759,7 +759,9 @@ separate path that may open and navigate a replacement target.
 Agent Browser and Remote View require the shared Authelia session. Native
 dashboard password login and previously signed local cookies are disabled until
 compatible native authentication interoperation exists. Open the same public
-workspace origin through its Authelia guard; role authorization remains explicit.
+workspace origin through its Authelia guard. Authelia admission grants operator
+access without local dashboard accounts or roles. Attribution uses the exact
+verified owner principal; the obsolete local-user mapping is ignored.
 Use service request action `service_remote_view_route_preflight`, HTTP
 `GET /api/service/remote-view/route-preflight`, MCP
 `service_remote_view_route_preflight`, or
@@ -4524,3 +4526,93 @@ Mode conversion verifies the exact process, mode and Native window without synth
 If the original browser close settled before its state publication was interrupted, reopening the same retained handoff can finish that original retirement. Recovery requires unchanged original browser/tab identity, fresh process and profile absence, and the original Native fence. It atomically records the settled physical close, preserves the logical task and its control authority, then uses ordinary browser recovery. It does not repeat the close or replay website input. Unknown effects, changed identity and unavailable Native readback remain blocked.
 
 After a newly recorded retained-browser recovery, the original interactive handoff can keep its invitation and human control epoch. This requires the exact per-tab replacement mapping recorded with that recovery, completed original retirement and current launch custody. Missing legacy mapping, changed targets or ambiguous history remain refused; reopening a link does not turn a passive view into control or release the human hold.
+
+## Shared-profile workflow continuity
+
+Borrowed-browser expiry uses service activity guards and closes only owned tabs. Unknown ownership defers that browser; independent eligible tabs continue.
+
+Use a separate task/session and tab for each workflow. Shared profiles share login and persistent site state. Read [Sharing a profile between tasks](cli-and-service.md#sharing-a-profile-between-tasks) before coordinating shared-profile work, foreground input or closing a peer task.
+
+Idle capability registration reports `registered_idle` and `acquire_profile`, without claiming ownership. Read [Idle registration](cli-and-service.md#idle-registration) before diagnosing a missing binding.
+
+Task continuation, handoff inspection and viewer/native opening reconcile session
+state differences internally before selecting the current target. Continue
+valid independent work; do not reset the profile, remove locks or repeat an
+uncertain action to resolve a metadata difference. Current resource identity and
+private reconciliation receipts preserve the competing observations.
+
+Acknowledged command activity is removed only with an atomic publication receipt.
+The latest 4096 receipts allow bookkeeping retries after a lost reply without
+replaying browser actions. Unknown or expired IDs and changed physical browser
+identities remain rejected. Idle-publication errors distinguish `unavailable`,
+`invalid_record`, `activity_active` and `conflict` using the
+`browser_session_idle_publication_` prefix. Preserve the original action record;
+these errors do not authorize replay, profile reset or clearing activity state.
+
+Known occupied or reserved capacity can justify separate bounded capacity for
+an independent task. The original reservation stays intact. Failed window
+observations never qualify a desktop or justify another acquisition.
+
+Legacy Chrome singleton-lock ownership diagnostics are advisory. An otherwise ready
+profile recommends `continue_authorized_workflow`; continue the authorized task
+through exact browser/process checks without removing locks. Inspect actual
+execution failures and uncertain requests before replaying any effect.
+
+## Explicit runtime reset
+
+For an operator-requested fresh production start, use local CLI
+`agent-browser runtime reset --json` to preview, then `--apply` to execute.
+This is a whole-production Linux user-systemd maintenance command, outside MCP
+page actions. It ends tasks and unsaved pages, backs up SQLite, closes verified
+production-owned browser processes and retires active task/tab records. It
+preserves profiles, login data, links, history and uncertain-effect journals;
+foreign/development browsers and Remote View infrastructure remain independent.
+An interrupted reset may leave services stopped: use its exact
+`runtime reset --apply --resume <reset-id>` command. Completed resume cannot close
+later work. Keep the private receipt/backup under the runtime home. Reset does not
+prove uncertain actions safe to replay or resolve an unknown profile operation.
+
+## Browser mode and builds
+
+Inspect `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build and mode are independent; copies do not prove login. Read [copy experiments](cli-and-service.md#profile-lab-independent-copies) and [controls/recovery](cli-and-service.md#browser-build-selection). Reconcile the original operation after lost replies.
+
+Owned manual copies use normal close without desktop agent input. Inspect uncertain closes; cancel the original operation before reviewing a new attempt. A reboot is not clean-close proof. Window readiness is separate from agent input authority.
+
+After verification and normal task close, `profile_duplicate` choice `dispose_copy` uses only the original completed `operationId` and `ownerConfirmed: true`, without `taskId`. The owner protects source/peers, refuses live or uncertain custody, and retains exact disposal history. Continue the original interrupted disposal; cancellation does not remove a completed copy.
+
+### Tasks and teaching
+
+Read task_briefing / task_operation via browser_command (params.requestId).
+Never replay pending/uncertain input.
+See [recovery](session-management.md).
+Teaching: [A/V/Speech](../../../docs/src/app/teaching-evidence/page.mdx),
+inert [drafts](teaching-drafts.md), [review](teaching-review.md),
+[grilling](teaching-grilling.md), [repeat](report-repeat.md).
+Recheck Saved provenance; keep gaps. Proposals are not consent. Promotion needs fresh-repeat proof.
+Dates: YYYY-MM-DD; downloads need live process proof.
+[OCR](challenge-assistance.md), [elapsed image timing](image-challenge.md).
+
+### Owner service waits
+
+Use the owning service’s bounded lifecycle retention for authentication waits. Read [Owner service waits](cli-and-service.md#owner-service-waits); never transfer a claim to a replacement browser or treat retention as credential/control authority.
+
+Fresh Native assignment requires proven profile-process absence and exact owner
+`released` evidence. Preserve launch history and separate owner termination from
+local cleanup. Missing inventory, denial, mismatched identity or a fixed recovery
+target cannot authorize relocation.
+
+Review CDP/CDP-free relaunch from dashboard right-click menus or fullscreen Native handoff CDP toggle.
+Mode conversion verifies visibility without input; selective input is governed separately.
+
+Structurally valid historical protected-owner observations remain readable even
+when their browser row has ended or been removed. They do not create a browser
+record or grant current authority. Invalid structure, forged authority and
+inconsistent live PID bindings still return
+`protected_browser_owner_observation_invalid`.
+
+Opening a profile can finish its original retirement transaction when the close
+is already settled and its logical scope has ended. Agent Browser requires exact
+Native fence readback and atomic publication before completing that fence; it
+never repeats the physical close. This reconciliation is limited to the requested
+profile. Unresolved effects, changed identities and unavailable Native proof
+retain their original reconciliation requirement.

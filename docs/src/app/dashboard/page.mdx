@@ -283,29 +283,28 @@ operator workflow, takeover behavior, and troubleshooting steps.
 ## Workspace sign-in
 
 The ordinary workspace reuses ingress sign-in without another password form.
-Backend configuration requires all three reviewed values:
+Backend configuration requires the reviewed verifier and workspace URLs:
 
 <table>
 <thead><tr><th>Environment variable</th><th>Contract</th></tr></thead>
 <tbody>
 <tr><td><code>AGENT_BROWSER_DASHBOARD_INGRESS_VERIFY_URL</code></td><td>Trusted Authelia owner endpoint with exact path <code>/api/authz/forward-auth</code>. HTTPS or numeric-loopback HTTP only.</td></tr>
 <tr><td><code>AGENT_BROWSER_DASHBOARD_INGRESS_WORKSPACE_URL</code></td><td>Fixed public HTTPS workspace URL checked with GET. Review the owner ACL and verifier peer-IP semantics; caller Host and forwarded headers cannot select the target.</td></tr>
-<tr><td><code>AGENT_BROWSER_DASHBOARD_INGRESS_USERS</code></td><td>JSON mapping from exact owner principal to an existing dashboard username. Current private-store roles apply. Prefer one-to-one mappings for distinct actor attribution.</td></tr>
+<tr><td><code>AGENT_BROWSER_DASHBOARD_INGRESS_USERS</code></td><td>Obsolete setting, ignored. Actor attribution uses the exact verified Authelia principal; local accounts and roles do not gate access.</td></tr>
 </tbody>
 </table>
 
-For example, the synthetic mapping <code>{'{"operator":"admin","reader":"codex"}'}</code>
-preserves the default admin superuser and codex observer roles. It grants no role
-without explicit configuration. The backend sends the cookie directly to the
-owner with metadata derived from the reviewed URL. Only owner HTTP200 with one
-<code>Remote-User</code> and a known mapping establishes identity; caller
-identity headers never authenticate. Redirects are not followed. Owner302/303/401
-requires sign-in; denied or unmapped users receive403; malformed or unavailable
-verification receives503. Partial or invalid configuration fails closed. Recovery
+The backend sends the cookie directly to the owner with metadata derived from
+the reviewed URL. Only owner HTTP200 with one valid <code>Remote-User</code>
+establishes identity. The exact principal is retained for attribution; local
+accounts, roles and the obsolete mapping cannot grant or deny workspace access.
+Caller identity headers never authenticate. Redirects are not followed.
+Owner302/303/401 requires sign-in; owner-denied users receive403; malformed or
+unavailable verification receives503. Partial or invalid configuration fails closed. Recovery
 preserves the selected browser URL and distinguishes sign-in, access denial,
 redirected content and service failure.
 
-Native dashboard password login and signed sessions are disabled until Agent Browser and Remote View support compatible authentication. Both require the same Authelia guard. Existing native cookies cannot authenticate or renew, and the login API returns <code>native_auth_disabled</code>. Every protected request verifies the shared Authelia session and applies current explicit workspace roles. Missing configuration and verifier failures deny access. Sign-in and sign-out belong to Authelia. The private auth store retains role mappings and request-proof signing; existing auth-file and auth-directory overrides remain supported. Website account authentication remains separate.
+Native dashboard password login and signed sessions are disabled until Agent Browser and Remote View support compatible authentication. Both require the same Authelia guard. Existing native cookies cannot authenticate or renew, and the login API returns <code>native_auth_disabled</code>. Every protected request verifies the shared Authelia session. Authelia admission grants workspace operator access without local dashboard enrollment or roles. Missing configuration and verifier failures deny access. Sign-in and sign-out belong to Authelia. The private auth store retains request-proof signing; existing auth-file and auth-directory overrides remain supported. Website account authentication remains separate.
 
 ### Custom stream port
 

@@ -89,7 +89,7 @@ fn profile_library_real_http_auth_write_read_and_no_launch() {
         let mut store:Value=serde_json::from_slice(&std::fs::read(&auth_path).unwrap()).unwrap();
         store["users"].as_array_mut().unwrap().iter_mut().find(|user|user["username"]=="operator").unwrap()["role"]=json!("observer");std::fs::write(&auth_path,serde_json::to_vec(&store).unwrap()).unwrap();
         assert!(exchange("GET",cookie,Value::Null).await.0.contains("200"));
-        assert!(exchange("POST",cookie,write).await.0.contains("403"),"role downgrade applies immediately to ingress identity");
+        assert!(exchange("POST",cookie,write).await.0.contains("409"),"local role changes cannot deny ingress access; association concurrency still applies");
         assert!(crate::native::actions::action_skips_browser_launch("workspace_profile_library"));
         let result=execute_command(&json!({"id":"p300","action":"workspace_profile_library","operation":"list"}),&mut DaemonState::new()).await;assert_eq!(result["success"],true);
         let public=json!({"action":"workspace_profile_library","serviceName":"Profiles","agentName":"fixture","taskName":"Select","params":{"operation":"select","sitePolicyId":"site","profileId":"private","servicePrincipalId":"forged","servicePrincipalProvenance":"registered_capability","actor":{"assurance":"operator"}}});
@@ -97,7 +97,7 @@ fn profile_library_real_http_auth_write_read_and_no_launch() {
         assert!(normalized.command.get("servicePrincipalId").is_none());
         let dispatched=execute_command(&normalized.command,&mut DaemonState::new()).await;assert_eq!(dispatched["success"],true);assert_eq!(dispatched["data"]["profileId"],Value::Null);
         let mutation=json!({"action":"workspace_profile_library","params":{"operation":"replace_associations","profileId":"work","associations":[],"expectedAssociations":[]}}).to_string();
-        assert!(service_request_command_with_state_and_principal(&mutation,None,Some("operator"),"p300-no-browser").is_err(),"revoked operator cannot bypass dashboard role through generic service request");
+        assert!(service_request_command_with_state_and_principal(&mutation,None,Some("operator"),"p300-no-browser").is_ok(),"verified ingress actor needs no local role through generic service request");
         assert!(repository.load_snapshot().unwrap().browsers.is_empty());
     });
 }

@@ -17,6 +17,22 @@ lanes:
     validation_status: Exact authenticated browser RED and owner manual_login_ended; isolated runtime regression pending
     limitations: ["No production install or profile/state reset", "Public viewer GREEN remains unproven"]
     updated_at: 2026-11-08
+  - id: AUTHELIA-AUTHORITY-597
+    product_lane: PL-BUGFIX
+    objective: Remove local dashboard role enrollment from Authelia-admitted workspace access
+    plan: docs/dev/maintenance/authelia-workspace-authority.md
+    branch: fix/authelia-workspace-authority
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#597]
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    dependencies: [AUTHELIA-ONLY-591]
+    overlaps: [AUTHELIA-ONLY-591]
+    reconciled_overlaps: ["Reuse own clean591 checkout; preserve sealed candidates and former branch; own auth and auth documentation paragraphs;508 diagnostics remain untouched; no new checkout"]
+    validation_status: Source and exact production-shaped candidate pass268 stream cases plus5 children,13 refreshed assets, strict Rust gates, UI/client/docs/parity checks and33second installer fixture with2 owned hosts retired zero residue; installed preserving adoption doctor and authenticated managed desktop viewing accepted
+    limitations: ["Installed auth and current managed-desktop viewing accepted; no broad rail latency, all-tile, input or website-auth claim", "Retain checkout for sealed-candidate custody; review2026-11-09"]
+    updated_at: 2026-11-08
   - id: CDP-FREE-IDLE-585
     product_lane: PL-BUGFIX
     objective: Close CDP-free browsers through exact OS identity and let explicit handoff supersede idle cleanup
