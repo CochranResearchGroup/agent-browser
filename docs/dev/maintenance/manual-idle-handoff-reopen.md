@@ -5,7 +5,7 @@ Work item: 599
 Owner: ecochran76
 Branch: fix/manual-idle-handoff-reopen
 Base: 812e436c9a808922d8cb610885536d9771d86bd0
-State: ACTIVE
+State: SOURCE_INTEGRATED_AWAITING_INSTALL
 
 The exact authenticated browser loop renders the reported desktop-unavailable
 page. Direct Native navigation preserves RED in under one second; an absent
@@ -100,3 +100,42 @@ Strict workspace Clippy and the complete service-model package suite pass on
 the integrated product source. A changed-target refusal assertion is being
 qualified before candidate freeze. All compiler/setup failures are preserved
 separately from the three valid product REDs. No production effect has occurred.
+
+## Source integration and sealed candidate
+
+PR600 merged as dd8251b3d9e1c15d3ed6e0776f49c45be5bd7165.
+Source793811e2e passes both real-runtime regressions, including changed-target
+refusal without launch, plus35 related CLI cases and418 service-model tests.
+Workspace strict Clippy, final Rustfmt, policy wiring, changed links, handoff
+documentation and the docs build pass locally. No hosted CI was started.
+
+The clean-source production-shaped candidate is
+candidate-dfe2e2ecbacc3295-dca8b78d58435157, binary SHA-256
+dca8b78d58435157f4f0b51b2933499b16ab514cadc64372ad67cb24aeabb28c.
+Its exact source is in main ancestry. The first build's own sccache version
+probe stalled; its exact process was stopped and the failed claim archived by
+the supported retry. Cache-disabled full-release compilation and sealing passed.
+No source or resource ceilings were changed.
+
+The exact sealed binary passes workstation install qualification with2 owned
+fixture hosts retired and zero residue. Service contract metadata, MCP reads,
+profile sources, site-policy sources and HTTP/MCP incident summaries pass
+without browser launch. The MCP read smoke first exposed a pre-existing frozen
+allowlist omission: browser_retention has been implemented since4a627690f but
+was absent from that assertion. The one-entry correction preserves exact ordered
+inventory comparison. The initial failure remains preserved. This fixture-only
+correction and this receipt do not change the sealed executable-input closure;
+the binary is reused rather than rebuilt.
+
+An earlier unpinned older-debug install fixture was cancelled and excluded from
+acceptance; its normal cleanup also verified2 owned hosts and zero residue.
+Sealed install dry-run reports artifact_sealed, eligible production-shaped reuse,
+no integrity preconditions, recommendation install and no_effect_performed.
+
+Production installation remains excluded from this source repair. Installed
+workflow guidance is therefore not yet synchronized. The original public browser
+loop, real Chrome recovery and native viewer readiness remain unproven until an
+authorized preserving installation is followed by that same-link acceptance.
+Retain the canonical checkout and sealed candidate for that next operation.
+Memory disposition: queued for the source repair, with installed acceptance
+explicitly unproven; queue acceptance is not retrieval or persistence proof.
