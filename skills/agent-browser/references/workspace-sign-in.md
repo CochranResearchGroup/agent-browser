@@ -1,31 +1,30 @@
 # Workspace sign-in
 
 The ordinary workspace reuses existing ingress sign-in without a second password
-form. Agent Browser and Remote View require the same Authelia guard. Native dashboard password login and previously signed local cookies are disabled until compatible interoperation exists. Missing verifier configuration or an unavailable owner denies access. Current workspace role checks remain enforced. Website account authentication is separate.
+form. Agent Browser and Remote View require the same Authelia guard. Native dashboard password login and previously signed local cookies are disabled until compatible interoperation exists. Missing verifier configuration or an unavailable owner denies access. Authelia admission grants workspace operator access without local dashboard accounts or roles. Website account authentication is separate.
 
-Configure all three settings in the backend's reviewed environment:
+Configure the verifier and workspace URLs in the backend's reviewed environment:
 
 - `AGENT_BROWSER_DASHBOARD_INGRESS_VERIFY_URL`: trusted Authelia owner URL with
   exact path `/api/authz/forward-auth`; HTTPS or numeric-loopback HTTP only.
 - `AGENT_BROWSER_DASHBOARD_INGRESS_WORKSPACE_URL`: fixed public HTTPS workspace
   GET/ACL target. Review owner ACL and verifier peer-IP semantics. Caller Host
   and forwarded headers cannot select it.
-- `AGENT_BROWSER_DASHBOARD_INGRESS_USERS`: JSON exact owner-principal to existing
-  dashboard username mapping, such as `{"operator":"admin","reader":"codex"}`.
-  Current private-store roles apply; no automatic superuser grant. Prefer
-  one-to-one mappings for distinct actor attribution.
 
-Only a direct owner HTTP200 with one Remote-User and an explicit mapping
+The obsolete `AGENT_BROWSER_DASHBOARD_INGRESS_USERS` setting is ignored. Actor
+attribution retains the exact verified Authelia principal.
+
+Only a direct owner HTTP200 with one valid Remote-User
 establishes identity. The backend sends the session cookie and creates
 ForwardAuth metadata from the reviewed URL. Arbitrary caller Remote-* headers
 never authenticate. Redirects are not followed or exposed as navigation targets.
-Owner302/303/401 requires sign-in; denied/unmapped identities return403;
+Owner302/303/401 requires sign-in; owner-denied identities return403;
 malformed/unavailable owner verification returns503. Partial/invalid config
 fails closed. Recovery retains the selected browser URL and distinguishes
 sign-in, denial, redirected content and service failure.
 
 Missing owner configuration denies access. Existing auth-directory/auth-file
-overrides remain supported for the private role and request-proof store. Native
+overrides remain supported for the private request-proof store. Native
 password login returns `native_auth_disabled`; signed native cookies never
 authenticate or renew. Authentication source is ingress. Authelia owns the shared
 sign-in and sign-out for Agent Browser and Remote View.

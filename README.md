@@ -3299,19 +3299,19 @@ backend environment before relying on ingress identity:
 | --- | --- |
 | `AGENT_BROWSER_DASHBOARD_INGRESS_VERIFY_URL` | Trusted Authelia owner URL ending exactly in `/api/authz/forward-auth`; HTTPS or numeric-loopback HTTP only. |
 | `AGENT_BROWSER_DASHBOARD_INGRESS_WORKSPACE_URL` | Fixed public HTTPS workspace URL whose GET access is checked by the owner. Review the owner ACL and verifier peer-IP semantics; caller Host and forwarded headers never select this URL. |
-| `AGENT_BROWSER_DASHBOARD_INGRESS_USERS` | JSON map from exact owner principal to an existing local dashboard username, for example `{"operator":"admin","reader":"codex"}`. Roles come from the current private auth store. Prefer one-to-one mappings to preserve distinct actor attribution. |
+| `AGENT_BROWSER_DASHBOARD_INGRESS_USERS` | Obsolete setting, ignored. Actor attribution uses the exact verified Authelia principal; local accounts and roles do not gate access. |
 
 The backend forwards the session cookie and constructs ForwardAuth metadata
 from the reviewed workspace URL. It accepts identity only from an owner HTTP200
-with one `Remote-User` value and an explicit mapping. Caller `Remote-*` headers
+with one valid `Remote-User` value. Caller `Remote-*` headers
 never authenticate or grant a role. Redirects are not followed; owner302/303/401
-requests sign-in, denied or unmapped identities return403, and malformed or
+requests sign-in, owner-denied identities return403, and malformed or
 unavailable verification returns503. Partial or invalid configuration fails
 closed. Missing sign-in, denial, redirects and service failures offer recovery
 without rewriting the selected browser URL. See the
 [Authelia ForwardAuth metadata contract](https://www.authelia.com/reference/guides/proxy-authorization/#forwardauth-metadata).
 
-Native dashboard password login and signed sessions are disabled until Agent Browser and Remote View support compatible authentication. Both require the same Authelia guard. Existing native cookies cannot authenticate or renew, and the login API returns `native_auth_disabled`. Every protected request verifies the shared Authelia session and applies current explicit workspace roles. Missing configuration and verifier failures deny access. Sign-in and sign-out belong to Authelia. The private auth store retains role mappings and request-proof signing; existing auth-file and auth-directory overrides remain supported. Website account authentication remains separate.
+Native dashboard password login and signed sessions are disabled until Agent Browser and Remote View support compatible authentication. Both require the same Authelia guard. Existing native cookies cannot authenticate or renew, and the login API returns `native_auth_disabled`. Every protected request verifies the shared Authelia session. Authelia admission grants workspace operator access without local dashboard enrollment or roles. Missing configuration and verifier failures deny access. Sign-in and sign-out belong to Authelia. The private auth store retains request-proof signing; existing auth-file and auth-directory overrides remain supported. Website account authentication remains separate.
 
 Authenticated dashboard identity and Guacamole route identity are separate.
 For a hosted Guacamole request, forward authentication keeps the signed-in

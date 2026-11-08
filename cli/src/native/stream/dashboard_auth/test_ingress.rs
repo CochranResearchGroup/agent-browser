@@ -1,5 +1,5 @@
 //! Synthetic Authelia owner for authenticated HTTP fixtures. All requests still
-//! pass production owner verification and workspace role mapping.
+//! pass production owner verification; local accounts grant no workspace access.
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,

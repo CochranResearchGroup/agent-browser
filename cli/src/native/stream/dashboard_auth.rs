@@ -17,16 +17,13 @@ pub(crate) use operator_focus::{
     verify_operator_focus_scope, verify_operator_tab_close, OperatorFocusScope,
 };
 
-pub(super) fn require_current_operator_role(username: &str) -> Result<(), String> {
-    if load_auth_store()?
-        .users
-        .iter()
-        .any(|user| user.username == username && user.role == DASHBOARD_ROLE_SUPERUSER)
-    {
-        Ok(())
-    } else {
-        Err("operator_controller_authority_required: current superuser role required".into())
-    }
+/// Validate the exact principal supplied by the owner or a signed request proof.
+/// This is a shape check, not an authentication or local-role lookup.
+fn operator_principal_is_valid(principal: &str) -> bool {
+    !principal.is_empty()
+        && principal.len() <= 1024
+        && principal.trim() == principal
+        && !principal.chars().any(char::is_control)
 }
 
 const AUTH_FILE_ENV: &str = "AGENT_BROWSER_DASHBOARD_AUTH_FILE";
@@ -320,16 +317,13 @@ pub(super) fn forbidden_api_response(message: &str) -> DashboardAuthResponse {
     )
 }
 
+/// Compatibility entry for existing operator routes. Verified Authelia admission
+/// grants workspace access; local account roles cannot add a second gate.
 pub(super) fn require_superuser(
     headers: &[(String, String)],
     secure_cookie: bool,
 ) -> Result<DashboardAuthIdentity, DashboardAuthResponse> {
-    let identity = require_authenticated(headers, secure_cookie)?;
-    if identity.role == DASHBOARD_ROLE_SUPERUSER {
-        Ok(identity)
-    } else {
-        Err(forbidden_api_response("Superuser role required"))
-    }
+    require_authenticated(headers, secure_cookie)
 }
 
 pub(super) fn require_authenticated(
@@ -357,7 +351,7 @@ pub(super) fn authentication_error_response(error: &str) -> DashboardAuthRespons
     if error == "workspace_ingress_access_denied" {
         return json_response(
             "403 Forbidden",
-            json!({"success": false, "authenticated": false, "authorized": false, "errorCode": "workspace_access_denied", "error": "Workspace access denied. Check ingress permissions and the explicit workspace role mapping."}),
+            json!({"success": false, "authenticated": false, "authorized": false, "errorCode": "workspace_access_denied", "error": "Workspace access denied by Authelia. Check the workspace ingress permissions."}),
         );
     }
     json_response(
@@ -367,20 +361,19 @@ pub(super) fn authentication_error_response(error: &str) -> DashboardAuthRespons
 }
 
 /// Verify the existing ingress owner's session directly. Caller identity and
-/// forwarded headers never establish authority. Explicit local role mappings
-/// preserve dashboard access semantics; ingress sessions never mint local cookies.
+/// forwarded headers never establish authority. Authelia admission is the only
+/// workspace access gate; legacy local accounts and roles confer no authority.
 fn authenticate_ingress(
     headers: &[(String, String)],
 ) -> Result<Option<DashboardAuthIdentity>, String> {
     const VERIFY: &str = "AGENT_BROWSER_DASHBOARD_INGRESS_VERIFY_URL";
     const WORKSPACE: &str = "AGENT_BROWSER_DASHBOARD_INGRESS_WORKSPACE_URL";
-    const USERS: &str = "AGENT_BROWSER_DASHBOARD_INGRESS_USERS";
-    let values = [VERIFY, WORKSPACE, USERS].map(|key| std::env::var(key).ok());
+    let values = [VERIFY, WORKSPACE].map(|key| std::env::var(key).ok());
     if values.iter().all(Option::is_none) {
         return Err("workspace_ingress_configuration_missing".into());
     }
     let invalid = || "workspace_ingress_configuration_invalid".to_string();
-    let [Some(endpoint), Some(workspace), Some(users)] = values else {
+    let [Some(endpoint), Some(workspace)] = values else {
         return Err(invalid());
     };
     let endpoint = url::Url::parse(&endpoint).map_err(|_| invalid())?;
@@ -404,7 +397,6 @@ fn authenticate_ingress(
     {
         return Err(invalid());
     }
-    let users: BTreeMap<String, String> = serde_json::from_str(&users).map_err(|_| invalid())?;
     let Some(cookie) = header_value(headers, "cookie") else {
         return Ok(None);
     };
@@ -480,28 +472,15 @@ fn authenticate_ingress(
         return Err("workspace_ingress_unavailable".into());
     }
     let principal = principal
-        .filter(|value| !value.is_empty() && value.trim() == value)
+        .filter(|value| operator_principal_is_valid(value))
         .ok_or_else(|| "workspace_ingress_invalid_response".to_string())?;
-    let username = users
-        .get(&principal)
-        .ok_or("workspace_ingress_access_denied")?;
-    let store = load_auth_store()?;
-    let user = store
-        .users
-        .iter()
-        .find(|user| {
-            &user.username == username
-                && matches!(
-                    user.role.as_str(),
-                    DASHBOARD_ROLE_SUPERUSER | DASHBOARD_ROLE_OBSERVER
-                )
-        })
-        .ok_or("workspace_ingress_access_denied")?;
     Ok(Some(DashboardAuthIdentity {
         ingress: true,
-        username: user.username.clone(),
-        display_name: user.display_name.clone(),
-        role: user.role.clone(),
+        username: principal.clone(),
+        display_name: principal,
+        // Compatibility projection for existing operator UI and API consumers.
+        // This value comes from verified ingress admission, never a local role.
+        role: DASHBOARD_ROLE_SUPERUSER.into(),
     }))
 }
 
@@ -978,7 +957,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ingress_owner_verification_preserves_roles_and_ignores_spoofed_headers() {
+    fn authelia_admission_needs_no_local_account_or_role_mapping() {
+        let ingress = test_ingress::TestIngress::start();
+        std::env::remove_var("AGENT_BROWSER_DASHBOARD_INGRESS_USERS");
+        // codex has a legacy observer role; operator has no local account.
+        for principal in ["codex", "operator"] {
+            let headers = vec![("Cookie".into(), ingress.cookie(principal))];
+            let response = auth_status_response(&headers, false);
+            let body: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
+            assert_eq!(response.status, "200 OK", "{body}");
+            assert_eq!(body["authenticated"], true, "{body}");
+            assert_eq!(body["user"]["username"], principal);
+            assert_eq!(body["user"]["authenticationSource"], "ingress");
+            assert!(require_superuser(&headers, false).is_ok());
+        }
+        assert!(require_superuser(&[], false).is_err());
+        assert!(require_superuser(&[("Cookie".into(), ingress.cookie("expired"))], false).is_err());
+    }
+
+    #[test]
+    fn ingress_owner_admission_ignores_local_roles_and_spoofed_headers() {
         use std::io::{Read, Write};
         let scratch = std::env::temp_dir().join(format!("p524-auth-{}", std::process::id()));
         fs::create_dir_all(&scratch).unwrap();
@@ -1089,16 +1087,25 @@ mod tests {
         let status = || exchange("/api/dashboard-auth/status", "GET", cookie, "");
         let response = status();
         assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
-        assert!(response.contains(r#""username":"admin""#));
+        assert!(response.contains(r#""username":"operator""#));
         assert!(response.contains(r#""authenticationSource":"ingress""#));
         assert!(
             !response.contains("Set-Cookie"),
             "ingress identity must not become a local session"
         );
-        let denied = exchange("/api/app-intelligence/operator/turn", "POST", cookie, "{}");
-        assert!(denied.starts_with("HTTP/1.1 403 Forbidden"), "{denied}");
+        let admitted = exchange("/api/app-intelligence/operator/turn", "POST", cookie, "{}");
+        assert!(
+            admitted.starts_with("HTTP/1.1 400 Bad Request"),
+            "{admitted}"
+        );
+        assert!(admitted.contains("Missing operator prompt"));
         assert!(status().starts_with("HTTP/1.1 403 Forbidden"));
-        assert!(status().starts_with("HTTP/1.1 403 Forbidden"));
+        let unregistered = status();
+        assert!(
+            unregistered.starts_with("HTTP/1.1 200 OK"),
+            "{unregistered}"
+        );
+        assert!(unregistered.contains(r#""username":"unknown""#));
         assert!(status().starts_with("HTTP/1.1 503 Service Unavailable"));
         let redirect = status();
         assert!(
@@ -1109,7 +1116,7 @@ mod tests {
         let anonymous = status();
         assert!(anonymous.starts_with("HTTP/1.1 200 OK"));
         assert!(anonymous.contains(r#""authenticated":false"#));
-        // A mapped operator reaches request validation rather than the role gate.
+        // An admitted operator reaches request validation without a local role.
         let operator = exchange("/api/app-intelligence/operator/turn", "POST", cookie, "{}");
         assert!(
             operator.starts_with("HTTP/1.1 400 Bad Request")
@@ -1207,7 +1214,7 @@ mod tests {
             ingress.cookie("codex")
         ));
         let observed = authenticate_headers(&both).unwrap().unwrap();
-        assert_eq!(observed.role, DASHBOARD_ROLE_OBSERVER);
+        assert_eq!(observed.role, DASHBOARD_ROLE_SUPERUSER);
         assert!(observed.ingress);
         let status = auth_status_response(&both, true);
         assert!(status.headers.is_empty());

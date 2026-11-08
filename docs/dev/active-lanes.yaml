@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: AUTHELIA-AUTHORITY-597
+    product_lane: PL-BUGFIX
+    objective: Remove local dashboard role enrollment from Authelia-admitted workspace access
+    plan: docs/dev/maintenance/authelia-workspace-authority.md
+    branch: fix/authelia-workspace-authority
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#597]
+    plan_state: ACTIVE
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [AUTHELIA-ONLY-591]
+    overlaps: [AUTHELIA-ONLY-591]
+    reconciled_overlaps: ["Reuse own clean591 checkout; preserve sealed candidates and former branch; own auth and auth documentation paragraphs;508 diagnostics remain untouched; no new checkout"]
+    validation_status: Source and exact production-shaped candidate pass268 stream cases plus5 children,13 refreshed assets, strict Rust gates, UI/client/docs/parity checks and33second installer fixture with2 owned hosts retired zero residue
+    limitations: ["Source repair; production installation separate"]
+    updated_at: 2026-11-08
   - id: CDP-FREE-IDLE-585
     product_lane: PL-BUGFIX
     objective: Close CDP-free browsers through exact OS identity and let explicit handoff supersede idle cleanup

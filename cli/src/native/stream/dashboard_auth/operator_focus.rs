@@ -189,7 +189,7 @@ fn current_binding(
     })
 }
 
-/// Called only after HTTP has authenticated the dashboard cookie. The public
+/// Called only after HTTP has verified the shared Authelia session. The public
 /// normalizer removes caller-supplied proof tokens before this issuance step.
 pub(crate) fn issue_operator_focus(
     state: &crate::native::service_model::ServiceState,
@@ -576,14 +576,9 @@ fn issue(
     binding: OperatorFocusBinding,
     now: u64,
 ) -> Result<String, String> {
-    if !binding.valid()
-        || !store
-            .users
-            .iter()
-            .any(|user| user.username == username && user.role == DASHBOARD_ROLE_SUPERUSER)
-    {
+    if !binding.valid() || !operator_principal_is_valid(username) {
         return Err(
-            "operator_focus_authority_required: current superuser and exact target required".into(),
+            "operator_focus_authority_required: verified operator and exact target required".into(),
         );
     }
     let payload = serde_json::to_vec(&FocusProof {
@@ -625,10 +620,7 @@ fn verify(
         || proof.issued_at > now
         || proof.expires_at <= now
         || proof.expires_at.saturating_sub(proof.issued_at) != TTL_SECONDS
-        || !store
-            .users
-            .iter()
-            .any(|user| user.username == proof.username && user.role == DASHBOARD_ROLE_SUPERUSER)
+        || !operator_principal_is_valid(&proof.username)
     {
         return Err(denied());
     }
@@ -740,7 +732,7 @@ mod tests {
     }
 
     #[test]
-    fn operator_focus_proof_binds_request_target_and_current_role() {
+    fn operator_focus_proof_binds_request_target_without_local_roles() {
         let mut store = DashboardAuthStore {
             version: 1,
             created_at: String::new(),
@@ -807,7 +799,9 @@ mod tests {
         assert!(verify(&store, &format!("{token}x"), &binding, 1001).is_err());
         assert!(verify(&store, &token, &binding, 999).is_err());
         assert!(verify(&store, &token, &binding, 1030).is_err());
-        assert!(issue(&store, "unknown", binding.clone(), 1000).is_err());
+        for invalid in ["", " operator", "operator\n"] {
+            assert!(issue(&store, invalid, binding.clone(), 1000).is_err());
+        }
         let mut native = binding.clone();
         native.managed_identity = Some("owner-published-target-digest".into());
         native.authority = OperatorFocusAuthority::NativeAssignment {
@@ -851,7 +845,10 @@ mod tests {
             "native proof cannot become a legacy controller grant"
         );
         store.users[0].role = DASHBOARD_ROLE_OBSERVER.into();
-        assert!(issue(&store, "operator", binding.clone(), 1000).is_err());
-        assert!(verify(&store, &token, &binding, 1001).is_err());
+        assert!(issue(&store, "operator", binding.clone(), 1000).is_ok());
+        assert!(verify(&store, &token, &binding, 1001).is_ok());
+        store.users.clear();
+        assert!(issue(&store, "operator", binding.clone(), 1000).is_ok());
+        assert!(verify(&store, &token, &binding, 1001).is_ok());
     }
 }

@@ -4,6 +4,10 @@ Product lane: PL-PLATFORM
 Work item: #591
 Status: SOURCE_QUALIFIED
 
+The operator later clarified that local roles must not gate Authelia-admitted
+users. [Repair597](authelia-workspace-authority.md) supersedes the retained-role
+requirement below; prior acceptance evidence remains historical.
+
 The operator requires Agent Browser and its Remote View dependency to share
 Authelia authentication until compatible native authentication exists across
 both products. A native Agent Browser cookie must never mask an unauthenticated
