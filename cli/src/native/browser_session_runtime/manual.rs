@@ -1,6 +1,8 @@
 //! Managed CDP-free windows. Native control belongs to the Remote View owner.
 use super::*;
-use agent_browser_service_model::{BrowserLaunchCustodyStore, RecordedProcessIdentity};
+use agent_browser_service_model::{
+    BrowserIdleRetirementCustodyStore, BrowserLaunchCustodyStore, RecordedProcessIdentity,
+};
 use serde_json::json;
 
 // Connection inputs stay process-local and are never included in public or
@@ -24,6 +26,97 @@ pub(super) struct ManualBrowsers {
             RecordedProcessIdentity,
         ),
     >,
+}
+
+/// A retained Native handoff may wake a conclusively idle-closed manual browser.
+/// This classification grants no launch authority: the existing Native recovery
+/// coordinator still proves profile absence and admits the exact replacement.
+/// Ordinary ended manual tasks and mode-conversion authority remain separate.
+pub(super) fn idle_recovery_authorized(
+    profile: &BrowserProfileCatalogEntry,
+    browser: &ManagedBrowserInstance,
+) -> Result<bool, String> {
+    if profile.manual_login_url.is_none() || profile.id != browser.profile_id || !is_manual(browser)
+    {
+        return Ok(false);
+    }
+    let unavailable = || "manual_login_recovery_readback_required".to_owned();
+    let path =
+        super::super::browser_session_store::BrowserSessionSqliteStore::default_sqlite_path()?;
+    let mut store =
+        super::super::browser_session_store::BrowserSessionSqliteStore::open_read_only(&path)?;
+    let state = store.load_session_state()?;
+    if state.browsers.get(&browser.id) != Some(browser)
+        || !state.idle_closed_browsers.contains_key(&browser.id)
+        || state.shared_browser_ids.contains(&browser.id)
+        || state.app_browser_attachments.contains_key(&browser.id)
+        || state.profile_operation_ids.contains_key(&profile.id)
+    {
+        return Ok(false);
+    }
+    let Some(identity) = store
+        .published_launch_process_identity(browser)
+        .map_err(|_| unavailable())?
+    else {
+        return Ok(false);
+    };
+    let records = store.idle_retirement_records().map_err(|_| unavailable())?;
+    if records.iter().any(|record| {
+        !record.is_terminal()
+            && record
+                .intent
+                .scopes
+                .iter()
+                .any(|scope| scope.browser.profile_id == profile.id)
+    }) {
+        return Ok(false);
+    }
+    let completed = records
+        .iter()
+        .filter(|record| {
+            record.completed.is_some()
+                && record.published_state_digest.is_some()
+                && record.has_settled_browser_close(&browser.id)
+                && record.intent.scopes.len() == 1
+                && record.intent.scopes[0].browser == *browser
+                && record.intent.scopes[0].process_identity.as_ref() == Some(&identity)
+        })
+        .collect::<Vec<_>>();
+    let [record] = completed.as_slice() else {
+        return Ok(false);
+    };
+    let scope = &record.intent.scopes[0];
+    if scope.tabs.len()
+        != state
+            .tabs
+            .values()
+            .filter(|tab| tab.browser_id == browser.id)
+            .count()
+        || scope.tabs.iter().any(|tab| {
+            state.tabs.get(&tab.id).is_none_or(|current| {
+                let mut expected = tab.clone();
+                expected.last_activity_at_ms = current.last_activity_at_ms;
+                expected != *current
+            })
+        })
+    {
+        return Ok(false);
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| "remote_view_clock_invalid")?
+        .as_millis() as u64;
+    if !state.remote_view_tab_handoffs.values().any(|link| {
+        link.check_link_at(now).is_ok()
+            && agent_browser_service_model::resolve_remote_view_tab_handoff(&state, &link.id)
+                .is_ok_and(|target| target.browser == *browser)
+    }) {
+        return Ok(false);
+    }
+    Ok(matches!(
+        crate::process_identity::observe_process(identity.pid),
+        crate::process_identity::ProcessObservation::Missing
+    ))
 }
 
 impl ManualBrowsers {

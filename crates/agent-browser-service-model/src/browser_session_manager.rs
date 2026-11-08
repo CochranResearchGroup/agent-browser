@@ -1997,9 +1997,38 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         owner_replacement: bool,
     ) -> Result<(), String> {
         let targets = recovered.target_ids.values().collect::<BTreeSet<_>>();
+        // An automatically closed owned Native browser can retain its logical
+        // task without gaining debugging. Require the existing admitted Native
+        // launch and complete new kernel identity, never a caller-supplied flag.
+        let native_idle_recovery = self.state.idle_closed_browsers.contains_key(&browser.id)
+            && browser.cdp_endpoint.is_empty()
+            && !self.state.shared_browser_ids.contains(&browser.id)
+            && !self.state.app_browser_attachments.contains_key(&browser.id)
+            && recovered.launch.pid != browser.pid
+            && self.effects.pending_launch_intent().is_some_and(|intent| {
+                intent.profile_id == browser.profile_id
+                    && recovered.launch.desktop.as_ref().is_some_and(|desktop| {
+                        desktop.desktop_id == intent.assignment.desktop_id
+                            && desktop.generation == intent.assignment.generation
+                    })
+            })
+            && recovered
+                .launch
+                .process_identity
+                .as_ref()
+                .is_some_and(|identity| {
+                    identity.pid == recovered.launch.pid
+                        && !identity.start_token.trim().is_empty()
+                        && identity
+                            .executable_path
+                            .as_deref()
+                            .is_some_and(|path| !path.trim().is_empty())
+                });
         if recovered.launch.browser_id != browser.id
             || recovered.launch.pid == 0
-            || (recovered.launch.cdp_endpoint.is_empty() && !owner_replacement)
+            || (recovered.launch.cdp_endpoint.is_empty()
+                && !owner_replacement
+                && !native_idle_recovery)
             || (!current_desktop_rebind
                 && !self.state.shared_browser_ids.contains(&browser.id)
                 && browser.desktop.is_some()

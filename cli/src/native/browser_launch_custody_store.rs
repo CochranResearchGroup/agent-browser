@@ -2149,6 +2149,11 @@ fn single_retirement_recovery_proof(
         .map_err(|_| refused())?;
     let matching = retirements
         .iter()
+        // A completed owner decision to retain the live process is not a
+        // physical recovery step. Keep its uncertain effect history intact.
+        .filter(|record| {
+            !(record.retained_live && record.completed.is_some() && record.has_owner_resolution())
+        })
         .filter(|record| {
             record
                 .intent

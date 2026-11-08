@@ -3937,6 +3937,13 @@ still defers; repeat the same durable handoff after inspecting that condition.
 An explicit handoff-link deletion wins concurrent lifetime edits and retains
 revocation after restart, without closing its browser or tab.
 
+A retained manual browser with a valid handoff can recover after its exact original
+was conclusively automatically closed. Recovery requires matching completed
+retirement, immutable original identity, unchanged logical scope and fresh process
+absence before existing Native launch admission. It preserves the task, tab, profile
+and links and opens the profile's saved launch URL. It cannot restore unsaved page
+memory or replay website actions. Unqualified ended manual tasks remain refused.
+
 The automatic-close candidate persists its exact operation before preparing
 native viewer exclusion, records each close attempt before the physical effect,
 and publishes session state with retirement custody before completing the fence.

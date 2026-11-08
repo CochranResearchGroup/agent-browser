@@ -4524,6 +4524,11 @@ browser is still alive. Agent Browser retains the attempted-close history and
 its unsettled outcome, publishes unchanged task identity and completes the
 original Native reservation before restoring access. Handoff focus renews the
 existing task activity clock; ordinary retention continues to apply.
+A valid retained CDP-free handoff can also wake a conclusively idle-closed browser
+through existing Native recovery. It preserves the logical task, tab, links and
+profile, reopening the profile's saved launch URL. Unsaved in-memory page state
+cannot be reconstructed. Missing or uncertain close proof, changed targets and
+ordinary ended manual tasks remain refused; recovery never resets the profile.
 An acknowledged handoff-link deletion also wins a concurrent lifetime edit;
 stale publication cannot restore that link.
 

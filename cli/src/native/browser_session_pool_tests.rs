@@ -8,6 +8,17 @@ use std::path::Path;
 #[cfg(target_os = "linux")]
 #[test]
 fn manual_idle_handoff_reopens_through_real_runtime_after_automatic_close() {
+    manual_idle_handoff_fixture(false);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn manual_idle_handoff_preserves_human_invitation_after_live_retention() {
+    manual_idle_handoff_fixture(true);
+}
+
+#[cfg(target_os = "linux")]
+fn manual_idle_handoff_fixture(retain_live_first: bool) {
     let sandbox = Fixture::new();
     let service = sandbox.root.join(".agent-browser/service");
     std::fs::create_dir_all(&service).unwrap();
@@ -45,8 +56,59 @@ fn manual_idle_handoff_reopens_through_real_runtime_after_automatic_close() {
             .unwrap();
     drop(original);
     fixture.store(false).save_session_state(&before).unwrap();
+    let original_epoch = if retain_live_first {
+        let target =
+            agent_browser_service_model::resolve_remote_view_tab_handoff(&before, &link.id)
+                .unwrap();
+        let digest =
+            agent_browser_service_model::remote_view_native_target_digest(&link.id, &target)
+                .unwrap();
+        let control_path = crate::native::browser_host_control::path(&browser_id).unwrap();
+        std::fs::create_dir_all(control_path.parent().unwrap()).unwrap();
+        crate::native::browser_host_control::begin_handoff(&browser_id, &link.id, &digest).unwrap();
+        let epoch = crate::native::browser_host_control::read(&browser_id)
+            .unwrap()
+            .epoch;
+        let intent = claim_fixture_retirement(&fixture, provider.clone(), &before, &target.browser);
+        fixture
+            .store(false)
+            .admit_idle_retirement_preparation(&intent)
+            .unwrap();
+        let prepared = adapter(&fixture, provider.clone())
+            .prepare_idle_retirement(&intent.provider)
+            .unwrap();
+        let record = fixture_retirement_records(&fixture.root).remove(0);
+        let mut next = record.clone();
+        next.record_prepared(prepared).unwrap();
+        fixture
+            .store(false)
+            .update_idle_retirement(&record, &next)
+            .unwrap();
+        fixture
+            .store(false)
+            .admit_idle_retirement_effect(
+                &intent,
+                BrowserIdleRetirementEffect::CloseBrowser {
+                    browser_id: browser_id.clone(),
+                },
+            )
+            .unwrap();
+        let mut retained = host(&fixture, provider.clone(), calls.clone());
+        let response = retained.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":link.id,
+            "nativeDesktop":true, "activityAtMs":102
+        }));
+        assert_eq!(
+            response["success"], true,
+            "initial live retention: {response}"
+        );
+        assert!(fixture_retirement_records(&fixture.root)[0].retained_live);
+        Some(epoch)
+    } else {
+        None
+    };
     let mut original = host(&fixture, provider.clone(), calls.clone());
-    original.reap(300_102).unwrap();
+    original.reap(300_103).unwrap();
     let closed = fixture.store(false).load_session_state().unwrap();
     assert!(closed.idle_closed_browsers.contains_key(&browser_id));
     assert!(closed.remote_view_tab_handoffs.contains_key(&link.id));
@@ -54,7 +116,10 @@ fn manual_idle_handoff_reopens_through_real_runtime_after_automatic_close() {
         crate::process_identity::observe_process(original_pid),
         crate::process_identity::ProcessObservation::Missing
     ));
-    let retirement = fixture_retirement_records(&fixture.root).remove(0);
+    let retirement = fixture_retirement_records(&fixture.root)
+        .into_iter()
+        .find(|record| record.has_settled_browser_close(&browser_id))
+        .unwrap();
     assert!(retirement.completed.is_some());
     assert!(retirement.has_settled_browser_close(&browser_id));
     drop(original);
@@ -71,7 +136,7 @@ fn manual_idle_handoff_reopens_through_real_runtime_after_automatic_close() {
     let mut restarted = host_mode(&fixture, provider, calls.clone(), Mode::IdleRecovery);
     let response = restarted.handle_command(&serde_json::json!({
         "action":"service_remote_view_handoff_resolve", "handoffId":link.id,
-        "nativeDesktop":true, "activityAtMs":300_103
+        "nativeDesktop":true, "activityAtMs":300_104
     }));
     assert_eq!(
         response["success"], true,
@@ -82,6 +147,15 @@ fn manual_idle_handoff_reopens_through_real_runtime_after_automatic_close() {
     assert_eq!(response["data"]["tabId"], tab);
     assert_eq!(calls.get(), 2, "one original and one replacement launch");
     assert_ne!(restarted.state().browsers[&browser_id].pid, original_pid);
+    if let Some(epoch) = original_epoch {
+        let control = crate::native::browser_host_control::read(&browser_id).unwrap();
+        assert_eq!(control.epoch, epoch);
+        assert!(control.human);
+        assert!(control.pause_reads);
+        assert!(fixture_retirement_records(&fixture.root)
+            .iter()
+            .any(|record| record.retained_live && !record.has_settled_browser_close(&browser_id)));
+    }
 }
 
 #[test]

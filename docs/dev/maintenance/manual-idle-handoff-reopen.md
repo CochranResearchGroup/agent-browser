@@ -66,3 +66,23 @@ The isolated named probe browser was closed with verified own profile/process
 identity and fresh OS residue checks. The shared dev-browser daemon and its
 pre-existing attached session were preserved. No production browser, profile,
 auth rule, installed binary or custody record was reset or manually edited.
+
+## Resumed red-green cycle
+
+The real-runtime regression reached a valid RED at sourcef8fc1af39 with exactly
+manual_login_ended after all closed-scope fixture preconditions passed. The first
+runtime repair advances to replacement launch and then the model's existing
+CDP-free publication guard rejects browser_session_recovery_identity_conflict.
+This is a second boundary in the same retained automatic-close path. The lane
+therefore also owns the narrow model publication qualification: an idle-closed
+owned original plus exact pending Native launch, complete replacement process
+identity and unchanged logical scope. The general empty-CDP refusal remains.
+Do not reuse the boolean reserved for explicit owner replacement as a bypass.
+
+The fuller human-invitation fixture reaches a further valid RED:
+browser_handoff_recovery_mapping_unrecorded. The launch custody proof counts
+the earlier completed live-retention decision as a second physical recovery.
+This lane also owns the narrow selection correction in
+browser_launch_custody_store.rs: exclude only completed, owner-resolved live
+retention from physical recovery selection. Preserve its uncertain close
+attempt and retain all physical-close, publication and process identity checks.
