@@ -22,6 +22,18 @@ fn choose(
     if current == base {
         return local.cloned();
     }
+    // A handoff is a revocable locator. When either overlapping writer deletes
+    // a link from their shared baseline, a lifetime edit must not restore it.
+    // Keep this rule at the handoff-record boundary; other resource identities
+    // retain their existing current-writer precedence.
+    if depth == 2
+        && path.split('/').nth(1) == Some("remoteViewTabHandoffs")
+        && base.is_some()
+        && (local.is_none() || current.is_none())
+    {
+        conflicts.push(json!({"path":path,"base":base,"resident":local,"durable":current}));
+        return None;
+    }
     if let (Some(Value::Object(local)), Some(Value::Object(current))) = (local, current) {
         let base = base.and_then(Value::as_object);
         // Do not splice fields from different physical resources or task routes.
@@ -164,6 +176,40 @@ pub(crate) fn reconcile_and_record(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn handoff_deletion_survives_a_concurrent_lifetime_update_in_either_commit_order() {
+        let base = json!({"id":"link","sessionId":"task","tabId":"tab","expiresAtMs":500});
+        let updated = json!({"id":"link","sessionId":"task","tabId":"tab","expiresAtMs":1000});
+        for (local, current) in [(None, Some(&updated)), (Some(&updated), None)] {
+            let mut conflicts = Vec::new();
+            assert_eq!(
+                choose(
+                    Some(&base),
+                    local,
+                    current,
+                    "/remoteViewTabHandoffs/link",
+                    2,
+                    &mut conflicts
+                ),
+                None,
+                "a stale update cannot undo an acknowledged deletion"
+            );
+        }
+        let mut conflicts = Vec::new();
+        assert_eq!(
+            choose(
+                None,
+                Some(&updated),
+                None,
+                "/remoteViewTabHandoffs/new-link",
+                2,
+                &mut conflicts
+            ),
+            Some(updated)
+        );
+        assert!(conflicts.is_empty(), "independent creation remains valid");
+    }
 
     #[test]
     fn request_named_pid_cannot_erase_an_independent_uncertain_operation() {

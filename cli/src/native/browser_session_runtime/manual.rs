@@ -99,6 +99,25 @@ impl ManualBrowsers {
         }
     }
 
+    pub(super) fn acknowledge_idle_exit(
+        &mut self,
+        scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+    ) {
+        let ended = self
+            .owned
+            .get_mut(&scope.browser.id)
+            .is_some_and(|(child, identity)| {
+                scope.process_identity.as_ref() == Some(identity)
+                    && child
+                        .poll_exit()
+                        .is_some_and(|exit| exit.poll_error.is_none())
+            });
+        if ended {
+            self.owned.remove(&scope.browser.id);
+            self.native_contexts.remove(&scope.browser.id);
+        }
+    }
+
     pub(super) fn launch(
         &mut self,
         profile: &BrowserProfileCatalogEntry,

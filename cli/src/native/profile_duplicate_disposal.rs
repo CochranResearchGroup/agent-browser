@@ -490,7 +490,9 @@ impl CopyDisposalCustody {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .map_err(|_| "profile_duplicate_disposal_runtime_unavailable")?;
-        if !(2..=4).contains(&version) {
+        if !(2..=crate::native::browser_session_store::BROWSER_RUNTIME_DATABASE_MAX_SCHEMA)
+            .contains(&version)
+        {
             return Err("profile_duplicate_disposal_schema_unqualified".into());
         }
         connection

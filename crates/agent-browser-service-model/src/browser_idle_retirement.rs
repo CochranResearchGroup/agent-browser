@@ -204,6 +204,10 @@ pub struct BrowserIdleRetirementRecord {
     effects: Vec<Attempt>,
     pub published_state_digest: Option<String>,
     pub completed: Option<RemoteViewIdleRetirementReceipt>,
+    /// Explicit human handoff superseded idle closure while the original lived.
+    /// Physical attempt outcomes remain unchanged and must never be replayed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub retained_live: bool,
 }
 impl BrowserIdleRetirementRecord {
     pub fn new(intent: BrowserIdleRetirementIntent) -> Result<Self> {
@@ -216,6 +220,7 @@ impl BrowserIdleRetirementRecord {
             effects: vec![],
             published_state_digest: None,
             completed: None,
+            retained_live: false,
         })
     }
     /// Any admitted attempt, including an unknown one, prevents no-effect
@@ -236,6 +241,40 @@ impl BrowserIdleRetirementRecord {
 
     pub fn is_terminal(&self) -> bool {
         self.deferred || self.completed.is_some()
+    }
+
+    /// Native completion acknowledges the owner's resolved retirement intent.
+    /// Explicit live retention resolves that intent without acknowledging the
+    /// original physical close. Its unconfirmed attempt remains immutable.
+    pub fn has_owner_resolution(&self) -> bool {
+        self.validate().is_ok()
+            && self.published_state_digest.is_some()
+            && (self.retained_live || self.effects.iter().all(|attempt| attempt.settled))
+    }
+
+    pub fn live_handoff_scope(&self) -> Option<&BrowserIdleRetirementScope> {
+        let [scope] = self.intent.scopes.as_slice() else {
+            return None;
+        };
+        let [attempt] = self.effects.as_slice() else {
+            return None;
+        };
+        (scope.browser.cdp_endpoint.is_empty() && scope.process_identity.is_some()
+            && matches!(&attempt.effect, BrowserIdleRetirementEffect::CloseBrowser { browser_id } if *browser_id == scope.browser.id)
+            && !attempt.settled && !self.is_terminal()
+            && !self.retained_live && self.published_state_digest.is_none())
+            .then_some(scope)
+    }
+
+    /// Caller holds automatic-effect exclusion and has freshly verified the
+    /// original alive. This preserves, rather than settles, its close attempt.
+    pub fn retain_live_for_handoff(&mut self) -> Result<()> {
+        self.validate()?;
+        if self.live_handoff_scope().is_none() {
+            return Err(BrowserIdleRetirementStoreError::Conflict);
+        }
+        self.retained_live = true;
+        Ok(())
     }
 
     /// Publication and exact native completion may acknowledge this cached
@@ -264,6 +303,15 @@ impl BrowserIdleRetirementRecord {
     pub fn validate(&self) -> Result<()> {
         self.intent.validate()?;
         let invalid = BrowserIdleRetirementStoreError::InvalidRecord;
+        if self.retained_live {
+            let mut before = self.clone();
+            before.retained_live = false;
+            before.published_state_digest = None;
+            before.completed = None;
+            if before.live_handoff_scope().is_none() || self.prepared.is_none() {
+                return Err(invalid);
+            }
+        }
         if self.deferred
             && (!self.preparation_started
                 || self.prepared.is_some()
@@ -301,6 +349,7 @@ impl BrowserIdleRetirementRecord {
             .as_ref()
             .is_some_and(|value| !digest(value))
             || (self.published_state_digest.is_some()
+                && !self.retained_live
                 && self.effects.iter().any(|effect| !effect.settled))
         {
             return Err(invalid);
@@ -381,7 +430,11 @@ impl BrowserIdleRetirementRecord {
     ) -> Result<BrowserIdleRetirementEffectAdmission> {
         self.validate()?;
         self.validate_effect(&effect)?;
-        if self.prepared.is_none() || self.published_state_digest.is_some() || self.is_terminal() {
+        if self.prepared.is_none()
+            || self.published_state_digest.is_some()
+            || self.is_terminal()
+            || self.retained_live
+        {
             return Err(BrowserIdleRetirementStoreError::Conflict);
         }
         if let Some(old) = self
@@ -406,7 +459,7 @@ impl BrowserIdleRetirementRecord {
     }
     pub fn settle_effect(&mut self, effect: &BrowserIdleRetirementEffect) -> Result<()> {
         self.validate()?;
-        if self.published_state_digest.is_some() {
+        if self.published_state_digest.is_some() || self.retained_live {
             return Err(BrowserIdleRetirementStoreError::Conflict);
         }
         let attempt = self
@@ -423,11 +476,17 @@ impl BrowserIdleRetirementRecord {
         self.validate()?;
         if self.prepared.is_none()
             || self.is_terminal()
-            || self.effects.iter().any(|effect| !effect.settled)
+            || (!self.retained_live && self.effects.iter().any(|effect| !effect.settled))
         {
             return Err(BrowserIdleRetirementStoreError::Conflict);
         }
         for scope in &self.intent.scopes {
+            if self.retained_live
+                && (state.idle_closed_browsers.contains_key(&scope.browser.id)
+                    || state.browsers.get(&scope.browser.id) != Some(&scope.browser))
+            {
+                return Err(BrowserIdleRetirementStoreError::Conflict);
+            }
             let browser_closed = self.has_settled_browser_close(&scope.browser.id);
             match state.browsers.get(&scope.browser.id) {
                 Some(browser)
@@ -455,7 +514,7 @@ impl BrowserIdleRetirementRecord {
                 }
             }
         }
-        for attempt in &self.effects {
+        for attempt in self.effects.iter().filter(|_| !self.retained_live) {
             if match &attempt.effect {
                 BrowserIdleRetirementEffect::CloseTab { tab_id, .. } => {
                     state.tabs.contains_key(tab_id)
@@ -513,7 +572,9 @@ impl BrowserIdleRetirementRecord {
             return Ok(());
         }
         let mut candidate = self.clone();
-        if !self.preparation_started && next.preparation_started {
+        if !self.retained_live && next.retained_live {
+            candidate.retain_live_for_handoff()?;
+        } else if !self.preparation_started && next.preparation_started {
             candidate.begin_preparation()?;
         } else if !self.deferred && next.deferred {
             candidate.defer_preparation()?;

@@ -57,10 +57,10 @@ fn ledger(connection: &Connection) -> Result<Ledger> {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .map_err(|_| Error::Unavailable)?;
-    if !ledger.records.is_empty() && !(2..=4).contains(&version) {
+    if !ledger.records.is_empty() && !(2..=5).contains(&version) {
         return Err(Error::InvalidRecord);
     }
-    if !ledger.activities.is_empty() && !(3..=4).contains(&version) {
+    if !ledger.activities.is_empty() && !(3..=5).contains(&version) {
         return Err(Error::InvalidRecord);
     }
     for (id, activity) in &ledger.activities {
@@ -68,7 +68,7 @@ fn ledger(connection: &Connection) -> Result<Ledger> {
             || uuid::Uuid::parse_str(id).is_err()
             || activity.browser.pid == 0
             || activity.browser.profile_id.is_empty()
-            || ((activity.process_identity.is_some() || activity.original_ended) && version != 4)
+            || ((activity.process_identity.is_some() || activity.original_ended) && version < 4)
             || activity.process_identity.as_ref().is_some_and(|identity| {
                 identity.pid != activity.browser.pid
                     || identity.start_token.trim().is_empty()
@@ -85,6 +85,9 @@ fn ledger(connection: &Connection) -> Result<Ledger> {
     let mut pending: Vec<&BrowserIdleRetirementIntent> = vec![];
     for (id, record) in &ledger.records {
         record.validate()?;
+        if record.retained_live && version < 5 {
+            return Err(Error::InvalidRecord);
+        }
         if id != &record.intent.id || !operations.insert(wire_identity(&record.intent)?) {
             return Err(Error::InvalidRecord);
         }
@@ -308,8 +311,11 @@ impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
         }
         record.original_ended = true;
         save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)?;
+        let version: i64 = transaction
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .map_err(|_| Error::Unavailable)?;
         transaction
-            .pragma_update(None, "user_version", 4i64)
+            .pragma_update(None, "user_version", version.max(4))
             .map_err(|_| Error::Unavailable)?;
         transaction.commit().map_err(|_| Error::Unavailable)
     }
@@ -516,6 +522,14 @@ impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
         }
         records.records.insert(next.intent.id.clone(), next.clone());
         save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)?;
+        if next.retained_live {
+            let version: i64 = transaction
+                .query_row("PRAGMA user_version", [], |row| row.get(0))
+                .map_err(|_| Error::Unavailable)?;
+            transaction
+                .pragma_update(None, "user_version", version.max(5))
+                .map_err(|_| Error::Unavailable)?;
+        }
         transaction.commit().map_err(|_| Error::Unavailable)
     }
     fn admit_idle_retirement_preparation(

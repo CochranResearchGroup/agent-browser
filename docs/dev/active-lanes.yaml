@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: CDP-FREE-IDLE-585
+    product_lane: PL-BUGFIX
+    objective: Close CDP-free browsers through exact OS identity and let explicit handoff supersede idle cleanup
+    plan: docs/dev/maintenance/cdp-free-idle-handoff.md
+    branch: fix/cdp-free-idle-handoff
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#585, CochranResearchGroup/agent-browser#589]
+    plan_state: ACTIVE
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [P321-RETIREMENT-570, HUMAN-HANDOFF-571]
+    overlaps: [IDLE-ACTIVITY-562]
+    reconciled_overlaps: ["Reuse canonical checkout from current origin/main; preserve pre-existing CONTEXT.md changes; primary writer for retirement readback, bounded handoff recovery and589 handoff-map deletion precedence; preserve other reconciliation behavior; no new checkout or shared runtime effects"]
+    validation_status: Source14ddb083c qualifies47 focused CLI passes and418 model passes; strict Clippy fmt policy links and docs pass; PR588 ready for review
+    limitations: ["No installed repair or original browser termination", "Dispatched uncertainty cannot be treated as no effect"]
+    updated_at: 2026-11-08
   - id: RECOVERED-INVITATION-583
     product_lane: PL-BUGFIX
     objective: Preserve the original interactive invitation through exact owned physical recovery

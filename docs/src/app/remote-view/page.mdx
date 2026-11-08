@@ -1033,6 +1033,18 @@ Unrelated profiles can continue. `browser_session_publication_idle_retirement_fe
 means that publication would overwrite an unresolved original operation; it does
 not authorize another close or replacement launch.
 
+An explicit human handoff can supersede idle cleanup after excluding its worker
+and freshly verifying the original browser is still alive. The owner preserves
+the attempted close and unsettled physical outcome, publishes unchanged task
+identity and completes the original Native reservation before restoring access.
+The same link, browser and tab continue; normal focus updates task activity.
+This retention decision requires Browser Runtime SQLite schema 5. Keep a
+compatible binary with the database and backups. CDP-free idle closure uses
+OS termination bound to original PID, start identity and executable, and confirms
+exit without a debugging connection or force-kill fallback.
+An acknowledged link deletion wins a concurrent lifetime edit; stale publication
+cannot restore the deleted link or change its browser and tab.
+
 A physical close requires a fresh atomic attempt admission. A stale coordinator
 reads the original pending attempt instead of treating an idempotent record
 update as permission to close again. When one command expires old work and

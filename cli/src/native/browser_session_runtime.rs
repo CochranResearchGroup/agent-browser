@@ -38,6 +38,12 @@ pub(crate) struct BrowserManagerRuntimeConfig {
 }
 
 pub(crate) trait BrowserRuntimeDriver {
+    fn acquire_handoff_retention_guard(
+        &mut self,
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        Ok(None)
+    }
     fn attach_app_browser(
         &mut self,
         _request: &BrowserAttachmentRequest,
@@ -369,6 +375,12 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
     ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
     {
         self.runtime.acquire_idle_retirement_guard(browsers)
+    }
+    fn acquire_handoff_retention_guard(
+        &mut self,
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        self.runtime.acquire_handoff_retention_guard()
     }
     fn acquire_disposable_retirement_guard(
         &mut self,
@@ -973,6 +985,13 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
         }
         Ok(Some(Box::new(guarded)))
     }
+    fn acquire_handoff_retention_guard(
+        &mut self,
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        let repository = super::service_store::LockedServiceStateRepository::default_json()?;
+        Ok(Some(Box::new(repository.hold_snapshot_for_effect()?)))
+    }
     fn acquire_idle_retirement_guard(
         &mut self,
         browsers: &[ManagedBrowserInstance],
@@ -1479,21 +1498,6 @@ fn run_browser_worker(
                 ..
             } if manual::is_manual(&browser) => {
                 let _ = reply.send(manual.execute(&browser, &command));
-            }
-            BrowserRuntimeCommand::IdleRetirement {
-                scope,
-                apply,
-                reply,
-                ..
-            } if manual::is_manual(&scope.browser) => {
-                // A manual task owns one native window. Its only synthetic tab
-                // retires with that exact process; another task cannot share it.
-                let result = if apply {
-                    manual.close(&scope.browser).map(|()| true)
-                } else {
-                    manual.verify(&scope.browser).map(|live| !live)
-                };
-                let _ = reply.send(result);
             }
             BrowserRuntimeCommand::OperationBaseline {
                 shared_browser_ids,
@@ -2189,6 +2193,11 @@ fn run_browser_worker(
                 if release_original_cache && result.as_ref().is_ok_and(|settled| *settled) {
                     browsers.remove(&scope.browser.id);
                 }
+                if manual::is_manual(&scope.browser)
+                    && result.as_ref().is_ok_and(|settled| *settled)
+                {
+                    manual.acknowledge_idle_exit(&scope);
+                }
                 let _ = reply.send(result);
             }
             BrowserRuntimeCommand::Shutdown => break,
@@ -2717,7 +2726,6 @@ fn original_retirement_process(
 ) -> Result<Option<crate::process_identity::ObservedProcessIdentity>, String> {
     use crate::process_identity::ProcessObservation;
     if scope.browser.pid == 0
-        || scope.browser.cdp_endpoint.is_empty()
         || scope.process_identity.as_ref().is_some_and(|identity| {
             identity.pid != scope.browser.pid
                 || identity.start_token.is_empty()
@@ -2829,6 +2837,43 @@ async fn original_retirement_effect(
     else {
         return Ok(true);
     };
+    // CDP-free lifecycle effects use immutable original kernel identity. A
+    // retained handle cannot signal a replacement process after PID reuse.
+    // Observe OS exit directly, without depending on desktop/window messages.
+    if scope.browser.cdp_endpoint.is_empty() {
+        let original = scope
+            .process_identity
+            .as_ref()
+            .ok_or("browser_session_idle_original_identity_missing")?;
+        let Some(process) = crate::process_identity::VerifiedProcessTermination::open(original)
+            .map_err(|_| "browser_session_idle_effect_readback_unavailable")?
+        else {
+            return Ok(true);
+        };
+        if !process
+            .is_running()
+            .map_err(|_| "browser_session_idle_effect_readback_unavailable")?
+        {
+            return Ok(true);
+        }
+        if !apply {
+            return Ok(false);
+        }
+        process
+            .signal(crate::process_identity::VerifiedProcessSignal::Terminate)
+            .map_err(|_| "browser_session_idle_effect_readback_unavailable")?;
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while process
+            .is_running()
+            .map_err(|_| "browser_session_idle_effect_readback_unavailable")?
+        {
+            if Instant::now() >= deadline {
+                return Err("browser_session_idle_effect_readback_unavailable".into());
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        return Ok(true);
+    }
     if tab.is_none() && !apply {
         return Ok(false);
     }
@@ -3106,6 +3151,98 @@ fn tab_acquisition(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn cdp_free_idle_retirement_os_close_confirms_exit_without_native_context() {
+        struct Child(std::process::Child);
+        impl Drop for Child {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let mut child = Child(
+            std::process::Command::new("sleep")
+                .arg("30")
+                .spawn()
+                .unwrap(),
+        );
+        let pid = child.0.id();
+        let identity = crate::process_identity::capture_process_identity(pid, None, None).unwrap();
+        let scope = agent_browser_service_model::BrowserIdleRetirementScope {
+            browser: ManagedBrowserInstance {
+                id: "owned-cdp-free".into(),
+                profile_id: "fixture".into(),
+                pid,
+                cdp_endpoint: String::new(),
+                desktop: None,
+                active_session_ids: vec![],
+            },
+            process_identity: Some(identity),
+            tabs: vec![],
+        };
+        let mut driver = BrowserManagerRuntime::start(Default::default()).unwrap();
+        assert_eq!(
+            driver.observe_idle_retirement_effect(&scope, None),
+            Ok(false)
+        );
+        driver.apply_idle_retirement_effect(&scope, None).unwrap();
+        assert!(
+            child.0.try_wait().unwrap().is_some(),
+            "positive OS exit, not dispatch acknowledgement"
+        );
+        assert_eq!(
+            driver.observe_idle_retirement_effect(&scope, None),
+            Ok(true)
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn cdp_free_idle_retirement_original_identity_checks_do_not_depend_on_cdp() {
+        let pid = std::process::id();
+        let mut scope = agent_browser_service_model::BrowserIdleRetirementScope {
+            browser: ManagedBrowserInstance {
+                id: "owned-cdp-free".into(),
+                profile_id: "fixture".into(),
+                pid,
+                cdp_endpoint: String::new(),
+                desktop: None,
+                active_session_ids: vec![],
+            },
+            process_identity: crate::process_identity::capture_process_identity(pid, None, None),
+            tabs: vec![],
+        };
+        assert!(
+            original_retirement_process(&scope, crate::process_identity::observe_process(pid))
+                .unwrap()
+                .is_some()
+        );
+        assert!(original_retirement_process(
+            &scope,
+            crate::process_identity::ProcessObservation::Failed {
+                reason: "synthetic unknown".into()
+            }
+        )
+        .is_err());
+        scope
+            .process_identity
+            .as_mut()
+            .unwrap()
+            .start_token
+            .push_str(":old");
+        assert!(
+            original_retirement_process(&scope, crate::process_identity::observe_process(pid))
+                .unwrap()
+                .is_none()
+        );
+        scope.process_identity = None;
+        assert!(
+            original_retirement_process(&scope, crate::process_identity::observe_process(pid))
+                .is_err()
+        );
+    }
 
     #[test]
     fn profile_build_pin_does_not_change_unrelated_launches() {

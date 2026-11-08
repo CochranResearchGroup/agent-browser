@@ -820,6 +820,41 @@ pub(super) fn handoff(arguments: &Value, transport_session: &str) -> Result<Valu
         )
     };
     let session_name = task_session(task_id)?;
+    if hosted.is_none() {
+        use agent_browser_service_model::BrowserIdleRetirementCustodyStore;
+        let mut custody = BrowserSessionSqliteStore::open_read_only(&path).map_err(issue)?;
+        let records = custody
+            .idle_retirement_records()
+            .map_err(|_| issue("browser_session_idle_custody_unavailable"))?;
+        if let Some(task) = before.sessions.get(task_id).filter(|task| {
+            records.iter().any(|record| {
+                !record.is_terminal()
+                    && record
+                        .intent
+                        .scopes
+                        .iter()
+                        .any(|scope| scope.browser.id == task.browser_id)
+            })
+        }) {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| issue("remote_view_clock_invalid"))?
+                .as_millis() as u64;
+            if let Some(link) = before.remote_view_tab_handoffs.values().find(|link| {
+                link.session_id == task.id
+                    && task.current_tab_id.as_ref() == Some(&link.tab_id)
+                    && link.check_link_at(now).is_ok()
+            }) {
+                // Rejoin the original handoff owner before the ordinary URL
+                // read. That read remains blocked until idle custody clears.
+                execute(
+                    json!({"id":uuid::Uuid::new_v4().to_string(),
+                    "action":"service_remote_view_handoff_resolve","handoffId":link.id}),
+                    transport_session,
+                )?;
+            }
+        }
+    }
     // A harmless current-URL read retains the task's handoff through its existing
     // owner. It neither navigates the page nor issues a temporary viewer grant.
     if !before.sessions.get(task_id).is_some_and(|task| {
