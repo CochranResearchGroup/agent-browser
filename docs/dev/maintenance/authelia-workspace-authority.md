@@ -106,3 +106,25 @@ remains. Producer pixels, rail latency, footer behavior and live publication
 are separate from this source qualification.
 
 Review summary: Standards0 accepted blockers; Spec0 accepted blockers.
+
+## Exact artifact qualification
+
+The production-shaped release candidate seals successfully from clean source
+cdf4b2b52. All634 executable inputs and the binary digest verify unchanged.
+Its public isolated HTTP checks admit an owner-verified principal without any
+local account or mapping and reach operator request validation. Anonymous,
+spoofed, expired, denied and unavailable-owner cases remain refused. Valid old
+native credentials and a correctly signed legacy cookie cannot authenticate.
+The same public admission probe fails on the installed pre-repair artifact.
+Refreshed embedded assets pass13 tests after the final denied-access copy change.
+
+The API/MCP parity check exposed a pre-existing skill-size violation: baseline
+14995bytes exceeds the unchanged10000byte limit. Move detailed profile-sharing
+and operation guidance into the existing linked CLI reference, preserving those
+blocks and correcting only relative links/headings. The main skill is9585bytes;
+the real parity, handoff and changed-link checks now pass without weakening the
+checker. This docs-only repair changes none of the634 sealed executable inputs.
+
+The exact installer fixture and no-launch collection smoke remain pending at
+this custody checkpoint. Runtime publication and live desktop acceptance remain
+separate gates. No comprehensive-project or cross-platform claim is made.

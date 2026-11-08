@@ -75,34 +75,9 @@ Read [Workspace](references/cli-and-service.md#operator-workspace) for tabs, sha
 
 ## Sharing a profile between tasks
 
-Borrowed-browser expiry uses service activity guards and closes only owned tabs. Unknown ownership defers that browser; independent eligible tabs continue.
-
-Use a separate task/session and tab for each workflow. Shared profiles share login and persistent site state. Read [Sharing a profile between tasks](references/cli-and-service.md#sharing-a-profile-between-tasks) before coordinating shared-profile work, foreground input or closing a peer task.
-
-Idle capability registration reports `registered_idle` and `acquire_profile`, without claiming ownership. Read [Idle registration](references/cli-and-service.md#idle-registration) before diagnosing a missing binding.
-
-Task continuation, handoff inspection and viewer/native opening reconcile session
-state differences internally before selecting the current target. Continue
-valid independent work; do not reset the profile, remove locks or repeat an
-uncertain action to resolve a metadata difference. Current resource identity and
-private reconciliation receipts preserve the competing observations.
-
-Acknowledged command activity is removed only with an atomic publication receipt.
-The latest 4096 receipts allow bookkeeping retries after a lost reply without
-replaying browser actions. Unknown or expired IDs and changed physical browser
-identities remain rejected. Idle-publication errors distinguish `unavailable`,
-`invalid_record`, `activity_active` and `conflict` using the
-`browser_session_idle_publication_` prefix. Preserve the original action record;
-these errors do not authorize replay, profile reset or clearing activity state.
-
-Known occupied or reserved capacity can justify separate bounded capacity for
-an independent task. The original reservation stays intact. Failed window
-observations never qualify a desktop or justify another acquisition.
-
-Legacy Chrome singleton-lock ownership diagnostics are advisory. An otherwise ready
-profile recommends `continue_authorized_workflow`; continue the authorized task
-through exact browser/process checks without removing locks. Inspect actual
-execution failures and uncertain requests before replaying any effect.
+Use a separate task/session and tab per workflow. Shared profiles share login and
+persistent site state. Read [sharing and continuity](references/cli-and-service.md#shared-profile-workflow-continuity)
+before coordinating peers, foreground input or lifecycle effects.
 
 ## CLI fallback
 
@@ -140,61 +115,9 @@ Discover advanced operations with `browser_discover`.
 
 Sign-in and teaching: [workspace tools](references/workspace-sign-in.md); viewer failures: [diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics).
 
-## Explicit runtime reset
+## Additional operations
 
-For an operator-requested fresh production start, use local CLI
-`agent-browser runtime reset --json` to preview, then `--apply` to execute.
-This is a whole-production Linux user-systemd maintenance command, outside MCP
-page actions. It ends tasks and unsaved pages, backs up SQLite, closes verified
-production-owned browser processes and retires active task/tab records. It
-preserves profiles, login data, links, history and uncertain-effect journals;
-foreign/development browsers and Remote View infrastructure remain independent.
-An interrupted reset may leave services stopped: use its exact
-`runtime reset --apply --resume <reset-id>` command. Completed resume cannot close
-later work. Keep the private receipt/backup under the runtime home. Reset does not
-prove uncertain actions safe to replay or resolve an unknown profile operation.
-
-## Browser mode and builds
-
-Inspect `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build and mode are independent; copies do not prove login. Read [copy experiments](references/cli-and-service.md#profile-lab-independent-copies) and [controls/recovery](references/cli-and-service.md#browser-build-selection). Reconcile the original operation after lost replies.
-
-Owned manual copies use normal close without desktop agent input. Inspect uncertain closes; cancel the original operation before reviewing a new attempt. A reboot is not clean-close proof. Window readiness is separate from agent input authority.
-
-After verification and normal task close, `profile_duplicate` choice `dispose_copy` uses only the original completed `operationId` and `ownerConfirmed: true`, without `taskId`. The owner protects source/peers, refuses live or uncertain custody, and retains exact disposal history. Continue the original interrupted disposal; cancellation does not remove a completed copy.
-
-### Tasks and teaching
-
-Read task_briefing / task_operation via browser_command (params.requestId).
-Never replay pending/uncertain input.
-See [recovery](references/session-management.md).
-Teaching: [A/V/Speech](../../docs/src/app/teaching-evidence/page.mdx),
-inert [drafts](references/teaching-drafts.md), [review](references/teaching-review.md),
-[grilling](references/teaching-grilling.md), [repeat](references/report-repeat.md).
-Recheck Saved provenance; keep gaps. Proposals are not consent. Promotion needs fresh-repeat proof.
-Dates: YYYY-MM-DD; downloads need live process proof.
-[OCR](references/challenge-assistance.md), [elapsed image timing](references/image-challenge.md).
-
-### Owner service waits
-
-Use the owning service’s bounded lifecycle retention for authentication waits. Read [Owner service waits](references/cli-and-service.md#owner-service-waits); never transfer a claim to a replacement browser or treat retention as credential/control authority.
-
-Fresh Native assignment requires proven profile-process absence and exact owner
-`released` evidence. Preserve launch history and separate owner termination from
-local cleanup. Missing inventory, denial, mismatched identity or a fixed recovery
-target cannot authorize relocation.
-
-Review CDP/CDP-free relaunch from dashboard right-click menus or fullscreen Native handoff CDP toggle.
-Mode conversion verifies visibility without input; selective input is governed separately.
-
-Structurally valid historical protected-owner observations remain readable even
-when their browser row has ended or been removed. They do not create a browser
-record or grant current authority. Invalid structure, forged authority and
-inconsistent live PID bindings still return
-`protected_browser_owner_observation_invalid`.
-
-Opening a profile can finish its original retirement transaction when the close
-is already settled and its logical scope has ended. Agent Browser requires exact
-Native fence readback and atomic publication before completing that fence; it
-never repeats the physical close. This reconciliation is limited to the requested
-profile. Unresolved effects, changed identities and unavailable Native proof
-retain their original reconciliation requirement.
+For an operator-requested fresh start, [runtime reset](references/cli-and-service.md#explicit-runtime-reset)
+ends production tasks and unsaved pages. Read its preview and recovery procedure before applying it.
+Read [builds, modes, teaching and owner waits](references/cli-and-service.md#browser-mode-and-builds)
+before those operations. Copies do not prove login; never replay pending or uncertain input.
