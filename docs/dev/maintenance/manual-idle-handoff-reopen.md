@@ -86,3 +86,17 @@ This lane also owns the narrow selection correction in
 browser_launch_custody_store.rs: exclude only completed, owner-resolved live
 retention from physical recovery selection. Preserve its uncertain close
 attempt and retain all physical-close, publication and process identity checks.
+
+Both positive regressions pass at62cd5453c: the minimal automatic-close path
+and the fuller history with original human control, epoch and unsettled earlier
+close preserved. Current main through e7131fd05 is integrated at ac1f15257;
+the catalog conflict preserves both independent lane entries. Product changes
+remain limited to the three observed recovery boundaries. The fixture uses
+real RuntimeDriver reconciliation, SQLite and kernel process identities, with
+the process/provider launch boundary simulated. It does not yet prove real
+Chrome launch or the installed public viewer.
+
+Strict workspace Clippy and the complete service-model package suite pass on
+the integrated product source. A changed-target refusal assertion is being
+qualified before candidate freeze. All compiler/setup failures are preserved
+separately from the three valid product REDs. No production effect has occurred.

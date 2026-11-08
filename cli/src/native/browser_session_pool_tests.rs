@@ -133,6 +133,28 @@ fn manual_idle_handoff_fixture(retain_live_first: bool) {
         "dispatch",
     )
     .unwrap();
+    // A retained link cannot authorize reopening after its exact tab scope drifts.
+    let mut changed = closed.clone();
+    changed.tabs.get_mut(&tab).unwrap().target_id = "changed-target".into();
+    fixture.store(false).save_session_state(&changed).unwrap();
+    let mut refused = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    let refusal = refused.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":link.id,
+        "nativeDesktop":true, "activityAtMs":300_104
+    }));
+    assert_eq!(refusal["success"], false, "changed scope: {refusal}");
+    assert_eq!(
+        calls.get(),
+        1,
+        "changed scope must not launch a replacement"
+    );
+    drop(refused);
+    fixture.store(false).save_session_state(&closed).unwrap();
     let mut restarted = host_mode(&fixture, provider, calls.clone(), Mode::IdleRecovery);
     let response = restarted.handle_command(&serde_json::json!({
         "action":"service_remote_view_handoff_resolve", "handoffId":link.id,
