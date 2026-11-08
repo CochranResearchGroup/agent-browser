@@ -30,3 +30,12 @@ Causal finding: one settled close with exact frozen browser/tab equality is stil
 The initial qualified CLI artifact passed the new public/SQLite regression and 72 retirement tests. Handoff and recovery selections retained three first failures. Two stale fixture expectations conflict with byte-identical baseline dispatch: handoff resolution refreshes durable state before lookup, while Native presentation refreshes and reuses the already-recreated live owned target independently of compatibility view issuance. The coordinator accepted test-only corrections: require the exact ready browser/tab/target with unchanged launches, view requests and full saved aggregate; require a deleted refreshed handoff to report missing with all original peer/effect/state assertions retained. This is source-causal exclusion against the exact base, not a baseline-binary execution claim. A third unchanged 20ms-lock fixture failed its initial snapshot during compilation, then passed alone on the identical artifact; retain both receipts and rerun in the integrated gate. The integration worker owns corrected-case compilation and execution once model compilation exits. No product behavior changed for these fixture corrections.
 
 Service-model qualification: 417 tests across 25 groups passed, including all six unqualified original-scope cases. The active timing-sensitive setup test is tracked as #581, assigned to ecochran76 with followup due 2026-11-10. Final combined execution remains required; recurrence blocks the candidate.
+
+
+## Combined integration qualification
+
+The [serial integration](overleaf97-dependencies579580.md) and its
+[consolidated local results](overleaf97-dependencies579580-validation.json)
+record passed primary source gates and a sealed normal CI candidate. Runtime
+installation and original-consumer acceptance remain coordinator-owned; source
+qualification does not claim enrollment, private input or live Native success.

@@ -86,3 +86,12 @@ on the serially integrated source with579. Those gates, the remaining selector
 integration requirements, Auth290's actual producer integration, runtime install,
 enrollment and private input are pending; synthetic source checks do not establish
 them. No broad review or findings-remediation counter was consumed.
+
+
+## Combined integration qualification
+
+The [serial integration](overleaf97-dependencies579580.md) and its
+[consolidated local results](overleaf97-dependencies579580-validation.json)
+record passed primary source gates and a sealed normal CI candidate. Runtime
+installation and original-consumer acceptance remain coordinator-owned; source
+qualification does not claim enrollment, private input or live Native success.

@@ -11,12 +11,13 @@ Owner: ecochran76
 
 ## Current State
 
-This serial integration combines the frozen retained-handoff repair and explicitly
-enrolled unattended Auth helper for the original Overleaf97 workflow. Source579
-and580 remain separately attributable. The source-only coordinator prepares local
-qualification and a pull request; root retains merge, installation, enrollment,
-shared-runtime and original-consumer acceptance custody. No broad final review
-or findings-remediation pass is consumed by this dependency packet.
+The combined source is qualified and the normal optimized CI CLI is sealed from
+clean published integration source50fa92d. All selected primary checks pass,
+including the corrected CLI cases, handoff/recovery, reviewed-source Auth/parent
+composition and exact-candidate installer fixture. Root retains source merge,
+installation, enrollment, shared-runtime and original-consumer acceptance custody.
+See the [consolidated validation](overleaf97-dependencies579580-validation.json).
+No broad final review or findings-remediation pass was consumed by this packet.
 
 ## Concrete outcome and ownership
 
@@ -54,3 +55,39 @@ covered inputs. No whole-suite or installed success claim from selected fixtures
 Keep missing Auth composition inputs explicit rather than using unreviewed source
 or installed fallbacks. Merge/deploy only after root's serialized direction;
 original Overleaf97 and shared-runtime cleanup gates are not closed by this PR.
+
+## Qualified source and artifact
+
+579 is retained through source3c60a06e9 and580 throughed1ebee86, with original
+branch ancestry preserved. Whole-slice Rustfmt, strict workspace Clippy and
+primary combined CLI execution pass. The two stale expectations were corrected
+only after parent source-causal adjudication. Known setup flake581 remains active;
+no test was removed, ignored or retried after a final recurrence.
+
+Primary final CLI: four exact corrected/new cases,197 handoff passes and116
+recovery passes, with one existing ignored case per selected group. Delegated
+417 service-model passes are reused against exact unchanged model/dependency
+source bytes;72 unaffected retirement passes are separately attributed. These
+are selected source checks, not the full workspace suite or live provider proof.
+
+Official `pnpm build:development-candidate` with jobs2 produced the normal CI
+opt3/thinLTO/codegen16 candidate in568.39s, no compiler errors/warnings or TDD
+package override. Binary SHA256
+`57c6a866da8a063362781b5f867b343b58fcc3c01791a5e408e0052b19c9f93d`
+reports agent-browser0.28.0. It is built from50fa92d, not any later merge SHA.
+A private content-addressed immutable copy and source/toolchain/profile/lock/SDK
+inventory seal remain available to the coordinator. Exact-binary source-free
+installer fixture passed32.26s, with two owned hosts positively absent afterward.
+No shared installation occurred and no formal release is claimed.
+
+The explicit source-only composition uses Auth executable5ca88a9 (later
+8ab3097 documentation-only HEAD) and Receipts0062fa8d. Before/after content and
+dependency digests match and both sources are clean. Parent ABI is openRequestHub
+and openNotificationRelay; all five synthetic owner scenarios pass. No installed
+source fallback, credential read or live parent/provider adoption is implied.
+
+Cargo Signal's CLI fallback retains the one official build attempt; its receipt
+reports wall time but no CPU measurement. Earlier missing-input attempts, the
+canceled incorrectly selected no-run command, first fixture failures and repair
+causal evidence remain private or in579's source receipt. No success was inferred
+from a marker. Local CI replaces disabled hosted checks under operator policy.

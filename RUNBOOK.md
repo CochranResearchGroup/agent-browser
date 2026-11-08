@@ -3,8 +3,10 @@
 [Serial integration](docs/dev/maintenance/overleaf97-dependencies579580.md) combines
 [579](docs/dev/maintenance/retained-handoff-retirement-579.md) and
 [580](docs/dev/maintenance/enrolled-auth-helper-overleaf97.md). Public SDK, selector,
-client and explicit-source Auth composition pass; final corrected CLI execution
-and strict combined Rust gates remain pending. First missing fixture/source
+client, explicit-source Auth composition, corrected CLI cases and strict combined
+Rust gates pass. Normal optimized CI candidate50fa92d is sealed; exact-binary
+installer fixture passes with zero owned-host residue. See the
+[consolidated qualification](docs/dev/maintenance/overleaf97-dependencies579580-validation.json). First missing fixture/source
 inputs are retained, not product failures. Root retains runtime/adoption and
 original-consumer acceptance. No final broad review or findings pass consumed.
 

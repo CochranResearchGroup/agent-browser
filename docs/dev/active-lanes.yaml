@@ -10,11 +10,11 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#579, CochranResearchGroup/agent-browser#580]
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATION_READY
     dependencies: [RETAINED-HANDOFF-579, ENROLLED-AUTH-580]
     overlaps: [RETAINED-HANDOFF-579, ENROLLED-AUTH-580]
     reconciled_overlaps: ["Explicitly directed isolated serial integration; preserve both source owners and foreign canonical context; root owns runtime effects and final consumer acceptance"]
-    validation_status: SDK types CheckJS client selector policy links and handoff guidance pass; final579 model checkpoint and whole-slice Rust gates pending
+    validation_status: All selected source gates pass; corrected CLI4 and197handoff116recovery, strict workspace Clippy Rustfmt SDK client docs and reviewed-source Auth composition; normal optimized CI candidate sealed and exact installer fixture passes
     limitations: ["No merge install enrollment or shared-runtime effects before root serialization", "No final broad review or remediation counter consumed"]
     updated_at: 2026-11-08
   - id: ENROLLED-AUTH-580
@@ -30,7 +30,7 @@ lanes:
     dependencies: []
     overlaps: [P303, RETAINED-HANDOFF-579]
     reconciled_overlaps: ["580 owns SDK helper and auth guidance;579 owns browser recovery; catalog top entries and distinct guidance paragraphs integrate serially; preserve foreign canonical CONTEXT and retained clean checkouts"]
-    validation_status: Public SDK RED then GREEN; hosted compatibility types CheckJS selector policy and links pass; combined Rust/integration gates pending
+    validation_status: Public SDK RED then GREEN; primary combined SDK types CheckJS client selector policy links docs and strict Rust gates pass; source candidate prepared, actual consumer acceptance separate
     limitations: ["Source only; no runtime install or enrollment", "Actual consumer/private-input acceptance belongs to Overleaf97", "Goal final review and remediation counters remain0"]
     updated_at: 2026-11-08
   - id: RETAINED-HANDOFF-579
