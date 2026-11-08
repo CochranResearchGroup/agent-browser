@@ -74,6 +74,22 @@ is implied. Saved-password fallback first requires the exact owned Native task,
 owner authentication and consumer input readiness. The public SDK/helper fixture
 qualifies these examples without proving installed real-login acceptance.
 
+### Explicitly enrolled applications
+
+A genuine Codex caller uses `connectHostedAuthHelper`. An unattended application
+uses `connectEnrolledAuthHelper` from the same
+`@agent-browser/client/hosted-auth-helper` module, passing an explicit discovery
+file and operation context. The context binds operationId/recoveryId UUIDs and
+exact taskId/browserId/profileId/tabId/origin/controlGeneration. Auth's verified
+async `createEnrolledAuthClient` validates the enrolled consumer and current
+browser binding. It does not use CODEX_THREAD_ID or fall back to Codex discovery.
+
+Both helpers expose the same private owner-login methods, current capability
+checks and original-attempt handling. Unknown input never authorizes replay.
+Missing enrolled SDK support or authority requires producer setup; do not read
+connection contents, borrow a caller identity or export credentials. This source
+adapter does not itself install or enroll an application.
+
 ## Owner-authority login and factors
 
 Import `createOwnerLoginPlaybook`, `createOwnerTotpContinuation` and

@@ -63,3 +63,24 @@ unknown private attempts cannot be repeated. Existing hosted helper/follow tests
 remain unchanged and green. Declare source readiness only after affected checks,
 commit and remote readback. Runtime installation/enrollment and actual private
 input remain NOT_RUN and cannot be inferred from synthetic qualification.
+
+## Source checkpoint qualification
+
+The public module fixture failed first because the enrolled export was absent,
+then passed against an explicitly enrolled asynchronous provider with no Codex
+caller. The common owner helper retains hosted behavior. Local passing checks:
+`pnpm test:hosted-auth-helper` (hosted loader, hosted follow, enrolled fixture and
+both TypeScript callsites), `pnpm test:validation-selection` (including exact
+enrolled fixture classification and documentation links), `pnpm test:policy-wiring`
+(11 policy wiring cases), explicit CheckJS for hosted-auth-helper.js and
+`git diff --check`. The selector's initially unresolved new fixtures were
+registered with exact paths after a regression fixture failed; classifier and
+package-script changes still deliberately select broad integration qualification.
+A mistakenly named standalone doc-link command was unavailable; the actual
+documentation-link test passes in the validation-selection aggregate.
+
+The one Auth SDK CLI help sentence requires combined Rustfmt/strict Clippy gates
+on the serially integrated source with579. Those gates, the remaining selector
+integration requirements, Auth290's actual producer integration, runtime install,
+enrollment and private input are pending; synthetic source checks do not establish
+them. No broad review or findings-remediation counter was consumed.

@@ -1219,6 +1219,17 @@ or incompatible SDKs report installation diagnostics without legacy fallback.
 An explicit `installationRoot` is a diagnostic override, not required per task.
 The retained legacy callback playbook below is separate from owner-login methods.
 
+Unattended applications use the distinct `connectEnrolledAuthHelper` export from
+`@agent-browser/client/hosted-auth-helper`. Supply explicit `discoveryFile` and
+`operationContext` with operationId/recoveryId UUIDs and the exact
+taskId/browserId/profileId/tabId/origin/controlGeneration binding. Auth's verified
+`createEnrolledAuthClient` validates enrollment and that current context; no
+CODEX_THREAD_ID or Codex-discovery fallback is used. Both adapters provide the
+same private owner-login methods and unknown-attempt guards. Missing enrolled SDK
+support is an installation prerequisite, never a reason to borrow a caller or
+read connection/credential contents. Source support does not enroll or install
+an unattended consumer.
+
 
 For new owner-authority requests, import `createOwnerLoginPlaybook`,
 `createOwnerTotpContinuation` and `createOwnerNumberMatchingContinuation` from
