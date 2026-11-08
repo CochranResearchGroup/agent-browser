@@ -24,8 +24,8 @@
     "compiled_test_binary_sha256": "6bddbe6f20fcb2d71390f30dd68e72f9722d38ce3536e31736b43ca788d0a2fc"
   },
   "pending": [
-    "cached CLI retirement/handoff/recovery selections",
-    "all service-model tests and unqualified-scope counterexamples",
+    "all service-model tests and unqualified-scope counterexamples (running)",
+    "corrected selected CLI cases and handoff/recovery selections on final combined source",
     "combined579/580 strict workspace Clippy and final format",
     "preserving candidate preparation, installation and actual same viewer acceptance"
   ],
@@ -40,6 +40,50 @@
   "limitations": [
     "Initial sccache startup and overbroad optimized compilation canceled without test verdict; retained logs",
     "Added model-only integration counterexample changes trigger CLI build.rs rerun; cached qualified CLI test bytes reused because runtime/module implementation inputs are unchanged",
-    "Final CLI help adds explanatory text after behavioral qualification; no dispatch or recovery semantics change"
+    "Final CLI help adds explanatory text after behavioral qualification; no dispatch or recovery semantics change",
+    "Adjacent fixture dispositions use exact source causal exclusion, not a baseline-binary execution claim; first failures retained in local logs"
+  ],
+  "source_checkpoint": "142af0664d5c72e1e566c0652129992c1af95500",
+  "cached_selections": {
+    "retirement": {
+      "passed": 72,
+      "failed": 0,
+      "ignored": 1,
+      "seconds": 86.26
+    },
+    "handoff": {
+      "passed": 196,
+      "failed": 1,
+      "ignored": 1,
+      "seconds": 87.89
+    },
+    "recovery": {
+      "passed": 114,
+      "failed": 2,
+      "ignored": 1,
+      "seconds": 64.43
+    }
+  },
+  "adjacent_failure_dispositions": [
+    {
+      "test": "valid_handoff_recreates_expired_task_tab_after_host_restart",
+      "first_failure": "stale Native reopen succeeded where old assertion expected failure; isolated same failure",
+      "proof": "fixture, Native refresh/recover/focus path and early-live guard byte-identical to base; explicit durable refresh reuses recreated owned window before new hook",
+      "correction": "expect ready same browser/tab/target; retain launch, view request and full durable aggregate invariants",
+      "status": "test-only correction accepted; corrected execution pending combined compile"
+    },
+    {
+      "test": "expired_link_deletion_fences_stale_policy_and_recovery_publication",
+      "first_failure": "missing handoff instead of publication conflict; isolated same failure",
+      "proof": "fixture and unconditional handoff refresh-before-lookup identical to base; no Native/recovery path",
+      "correction": "expect remote_view_tab_handoff_missing; retain all peer, state, effect and launch invariants",
+      "status": "test-only correction accepted; corrected execution pending combined compile"
+    },
+    {
+      "test": "retirement_handoff_recovery_remains_bounded_and_preserves_identity",
+      "first_failure": "initial snapshot 20ms lock timeout under compilation",
+      "isolation": "same cached binary, isolated temporary HOME/XDG: passed",
+      "status": "timing-sensitive first failure retained; unchanged source; combined rerun pending"
+    }
   ]
 }

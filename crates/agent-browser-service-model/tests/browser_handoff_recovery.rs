@@ -15,6 +15,8 @@ struct Evidence {
     assignments: BTreeMap<String, RemoteViewAssignmentRecord>,
     original_ended: BTreeMap<String, Result<bool, String>>,
     idle_publication_attempts: usize,
+    unavailable_retirement_read: bool,
+    idle_retirement_reads: usize,
 }
 struct Store(Rc<RefCell<Evidence>>);
 impl BrowserIdleRetirementCustodyStore for Store {
@@ -238,10 +240,16 @@ impl RemoteViewApplicationTransport for Transport {
                 }
                 self.fixture["launchEnvironment"].clone()
             }
-            RemoteViewApplicationRequest::ReadIdleRetirement { .. } => serde_json::json!({
-                "schemaVersion":1,"target":self.fixture["assignmentObservation"]["target"],
-                "readinessScope":"native_admission","retirement":{"revision":0,"fence":null,"completed":true}
-            }),
+            RemoteViewApplicationRequest::ReadIdleRetirement { .. } => {
+                self.evidence.borrow_mut().idle_retirement_reads += 1;
+                if self.evidence.borrow().unavailable_retirement_read {
+                    return Err(RemoteViewApplicationTransportError::Rejected);
+                }
+                serde_json::json!({
+                    "schemaVersion":1,"target":self.fixture["assignmentObservation"]["target"],
+                    "readinessScope":"native_admission","retirement":{"revision":0,"fence":null,"completed":true}
+                })
+            }
             RemoteViewApplicationRequest::PrepareIdleRetirement {
                 ref idempotency_key,
                 ref expected_retirement,
@@ -1046,6 +1054,17 @@ fn retirement_peer_fixture() -> (
     ManagedBrowserInstance,
     Rc<RefCell<Evidence>>,
 ) {
+    retirement_peer_fixture_with_absence(false)
+}
+
+fn retirement_peer_fixture_with_absence(
+    absent: bool,
+) -> (
+    RemoteViewSessionEffects<Runtime, Transport, Store>,
+    BrowserSessionState,
+    ManagedBrowserInstance,
+    Rc<RefCell<Evidence>>,
+) {
     let fixture: Value = serde_json::from_str(include_str!(
         "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
     ))
@@ -1075,7 +1094,7 @@ fn retirement_peer_fixture() -> (
     let effects = RemoteViewSessionEffects::new(
         Runtime {
             evidence: evidence.clone(),
-            absent: false,
+            absent,
             fail_restoration: false,
             next_target: 0,
         },
@@ -1248,8 +1267,10 @@ fn retained_close_reconciliation_keeps_unqualified_original_scope_fenced() {
         "extra_tab",
         "original_live",
         "profile_occupied",
+        "provider_unavailable",
     ] {
-        let (mut effects, mut state, browser, evidence) = retirement_peer_fixture();
+        let (mut effects, mut state, browser, evidence) =
+            retirement_peer_fixture_with_absence(case != "profile_occupied");
         effects.begin_operation(&state).unwrap();
         let guard = effects
             .acquire_idle_retirement_guard(std::slice::from_ref(&browser))
@@ -1289,6 +1310,8 @@ fn retained_close_reconciliation_keeps_unqualified_original_scope_fenced() {
             );
         }
         effects.begin_operation(&state).unwrap();
+        evidence.borrow_mut().idle_retirement_reads = 0;
+        evidence.borrow_mut().unavailable_retirement_read = case == "provider_unavailable";
         let before = evidence.borrow().retirements.clone();
         let profile = BrowserProfileCatalogEntry {
             id: browser.profile_id.clone(),
@@ -1315,6 +1338,11 @@ fn retained_close_reconciliation_keeps_unqualified_original_scope_fenced() {
                 .iter()
                 .any(|effect| effect == "launch"),
             "{case}"
+        );
+        assert_eq!(
+            evidence.borrow().idle_retirement_reads != 0,
+            case == "provider_unavailable",
+            "qualify original scope before provider read: {case}"
         );
     }
 }
