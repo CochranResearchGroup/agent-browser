@@ -93,6 +93,8 @@ After human assistance, call `browser_continue` with the same `taskId`. It retur
 
 Retained-task recovery rechecks interrupted launch custody when the host is already running. Only proven process and profile absence settles that launch's occupancy; its history remains intact, and unproven absence still blocks replacement.
 
+If the original browser close settled before its state publication was interrupted, reopening the same retained handoff can finish that original retirement. Recovery requires unchanged original browser/tab identity, fresh process and profile absence, and the original Native fence. It atomically records the settled physical close, preserves the logical task and its control authority, then uses ordinary browser recovery. It does not repeat the close or replay website input. Unknown effects, changed identity and unavailable Native readback remain blocked.
+
 ## Hosted reconnect, rules and artifacts
 
 The connected MCP catalog has 17 workflow tools. Discover actual schemas before

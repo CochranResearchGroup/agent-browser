@@ -1150,6 +1150,98 @@ impl<
     fn begin_operation(&mut self, expected: &BrowserSessionState) -> Result<(), String> {
         self.begin_operation_scope(expected, true)
     }
+    fn reconcile_retained_browser_close(
+        &mut self,
+        expected: &BrowserSessionState,
+        browser: &ManagedBrowserInstance,
+        profile: &BrowserProfileCatalogEntry,
+        ended_at_ms: u64,
+    ) -> Result<Option<BrowserSessionState>, String> {
+        self.require_operation()?;
+        if self.expected.as_ref() != Some(expected) || browser.profile_id != profile.id {
+            return Err("browser_session_idle_publication_conflict".into());
+        }
+        let candidate = self.retirements.values().find_map(|record| {
+            let [scope] = record.intent.scopes.as_slice() else {
+                return None;
+            };
+            if scope.browser != *browser
+                || record.published_state_digest.is_some()
+                || !record.has_settled_browser_close(&browser.id)
+                || expected.browsers.get(&browser.id) != Some(browser)
+                || expected
+                    .tabs
+                    .values()
+                    .filter(|tab| tab.browser_id == browser.id)
+                    .count()
+                    != scope.tabs.len()
+                || scope
+                    .tabs
+                    .iter()
+                    .any(|tab| expected.tabs.get(&tab.id) != Some(tab))
+            {
+                return None;
+            }
+            let mut closed = expected.clone();
+            closed
+                .idle_closed_browsers
+                .insert(browser.id.clone(), ended_at_ms);
+            record.clone().record_publication(&closed).ok()?;
+            Some((record.clone(), closed))
+        });
+        let Some((mut record, closed)) = candidate else {
+            return Ok(None);
+        };
+        let scope = &record.intent.scopes[0];
+        // Settlement is historical evidence. Recheck immutable original exit
+        // and the entire profile before publishing that physical projection.
+        if self.effects.observe_idle_retirement_effect(scope, None) != Ok(true)
+            || self
+                .effects
+                .prove_recovery_absence(browser, profile)
+                .is_err()
+        {
+            return Err("browser_session_idle_readback_required".into());
+        }
+        let observed = self
+            .adapter
+            .reconcile_idle_retirement(&record.intent.provider, record.prepared.as_ref())
+            .map_err(|_| "browser_session_idle_readback_required")?;
+        self.store
+            .publish_idle_retirement_state(
+                expected,
+                &closed,
+                std::slice::from_ref(&record.intent.id),
+            )
+            .map_err(|_| "browser_session_idle_publication_conflict")?;
+        record = self
+            .store
+            .idle_retirement_records()
+            .map_err(|_| "browser_session_idle_custody_unavailable")?
+            .into_iter()
+            .find(|row| row.intent == record.intent)
+            .ok_or("browser_session_idle_readback_required")?;
+        let completed = if observed.state == RemoteViewIdleRetirementReceiptState::Completed {
+            observed
+        } else {
+            self.adapter
+                .complete_idle_retirement(
+                    &record.intent.provider,
+                    record
+                        .prepared
+                        .as_ref()
+                        .ok_or("browser_session_idle_readback_required")?,
+                    true,
+                )
+                .map_err(|_| "browser_session_idle_readback_required")?
+        };
+        let mut next = record.clone();
+        next.record_completed(completed)
+            .map_err(|_| "browser_session_idle_readback_required")?;
+        self.update_retirement(&record, next)?;
+        self.expected = Some(closed.clone());
+        Ok(Some(closed))
+    }
     fn begin_borrowed_retirement_operation(
         &mut self,
         expected: &BrowserSessionState,

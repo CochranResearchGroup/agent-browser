@@ -1,6 +1,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: RETAINED-HANDOFF-579
+    product_lane: PL-BUGFIX
+    objective: Recover retained Native handoff after settled close publication interruption
+    plan: docs/dev/maintenance/retained-handoff-retirement-579.md
+    branch: fix/retained-handoff-retirement-579
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#579]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [P321-RETIREMENT-570]
+    overlaps: [P321-RETIREMENT-570, HUMAN-HANDOFF-571]
+    reconciled_overlaps: ["Isolated sixth checkout; exact refreshed main base; preserve foreign canonical CONTEXT.md and four existing clean source checkouts; coordinator serializes runtime effects"]
+    limitations: ["No shared install or runtime mutation in source packet", "Original consumer viewer acceptance remains pending"]
+    updated_at: 2026-11-07
   - id: HUMAN-HANDOFF-571
     product_lane: PL-BUGFIX
     objective: Open explicit human assistance interactive with coordinated automation custody

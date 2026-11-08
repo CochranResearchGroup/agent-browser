@@ -553,6 +553,22 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
             Self::Remote(effects) => effects.begin_operation(expected),
         }
     }
+    fn reconcile_retained_browser_close(
+        &mut self,
+        expected: &BrowserSessionState,
+        browser: &ManagedBrowserInstance,
+        profile: &BrowserProfileCatalogEntry,
+        ended_at_ms: u64,
+    ) -> Result<Option<BrowserSessionState>, String> {
+        match self {
+            Self::Local(effects) => {
+                effects.reconcile_retained_browser_close(expected, browser, profile, ended_at_ms)
+            }
+            Self::Remote(effects) => {
+                effects.reconcile_retained_browser_close(expected, browser, profile, ended_at_ms)
+            }
+        }
+    }
     fn begin_borrowed_retirement_operation(
         &mut self,
         expected: &BrowserSessionState,

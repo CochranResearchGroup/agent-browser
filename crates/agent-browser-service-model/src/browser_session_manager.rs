@@ -198,6 +198,19 @@ pub trait BrowserSessionEffects {
         Ok(())
     }
 
+    /// Finish only an already-settled original close before retained recovery.
+    /// Returning a state means it was atomically published against `expected`;
+    /// the host must adopt that exact baseline before attempting a new launch.
+    fn reconcile_retained_browser_close(
+        &mut self,
+        _expected: &BrowserSessionState,
+        _browser: &ManagedBrowserInstance,
+        _profile: &BrowserProfileCatalogEntry,
+        _ended_at_ms: u64,
+    ) -> Result<Option<BrowserSessionState>, String> {
+        Ok(None)
+    }
+
     /// Initialize the borrowed task-expiry phase without allowing unrelated
     /// Native preparation recovery to precede its durable publication.
     fn begin_borrowed_retirement_operation(

@@ -1,3 +1,5 @@
+[#579 retained Native handoff recovery](docs/dev/maintenance/retained-handoff-retirement-579.md), PL-BUGFIX: qualify the retained-scope counterpart of #570 through original settled close publication and same-task recovery. [RUNBOOK](RUNBOOK.md) owns current source/runtime evidence. No shared runtime effect in the source packet.
+
 # Roadmap
 
 [Publication reconciliation repair](docs/dev/maintenance/operator-profile-diagnostic.md), #558: CLOSED, installed accepted through PR557/560, sourceffd3432d7/mainc2a8b879a and sealed binaryacd74b124577.97 regressions, strict workspace Clippy, exact-binary install fixture and installed doctor pass. The original calendar task continues through ready handoff and normal keep-open; both original uncertain requests and both coordinated browser processes are preserved. [Installed receipt](docs/dev/notes/2026-11-07-publication-reconciliation-installed.json). P300/530 and calendar acceptance remain separate.
