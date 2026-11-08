@@ -1928,6 +1928,21 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         handoff_id,
                     )?;
                     self.focus_browser(&target.browser.id, Some(&target.tab.target_id), now_ms)?;
+                    let digest = agent_browser_service_model::remote_view_native_target_digest(
+                        handoff_id, &target,
+                    )?;
+                    if super::browser_host_control::recovery_rebind_pending(
+                        &target.browser.id,
+                        handoff_id,
+                        &digest,
+                    )? {
+                        super::browser_host_control::reconcile_recovered_handoff(
+                            &self.persistence.runtime_database_path()?,
+                            &self.persisted_state,
+                            handoff_id,
+                            now_ms,
+                        )?;
+                    }
                     return Ok(serde_json::json!({
                         "handoffId":handoff_id, "status":"opened",
                         "createdAtMs":self.state.remote_view_tab_handoffs[handoff_id].created_at_ms,

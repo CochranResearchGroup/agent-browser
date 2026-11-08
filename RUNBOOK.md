@@ -1,3 +1,7 @@
+## Interactive invitation recovery | 2026-11-08
+
+[#583](https://github.com/CochranResearchGroup/agent-browser/issues/583), [bounded source plan](docs/dev/maintenance/recovered-interactive-invitation-583.md): physical recovery changes the original invitation digest and leaves Native view intent. Public host regression reproduces this in3.21s. Repair requires an exact per-tab mapping receipt committed with future recovery publication; existing legacy mapping cannot be invented and remains refused with the hold intact. Source qualification passes the public recovery case plus10 guarded refusals,373 related CLI tests (3 existing ignored), maintained strict workspace Clippy, Rustfmt and documentation gates. All first failures and environment corrections remain in the [validation receipt](docs/dev/maintenance/recovered-interactive-invitation-583-validation.json). PR integration and normal optimized candidate remain with the coordinator; no runtime effect or broad review counter consumed.
+
 ## Overleaf97 dependency integration | 2026-11-08
 
 [Serial integration](docs/dev/maintenance/overleaf97-dependencies579580.md) combines

@@ -76,3 +76,12 @@ private capability authentication and input ownership guards remain required.
 
 Stable ingress retains the bounded owner callback response window for this route;
 it never replays an admitted POST onto a fallback backend.
+
+
+## Interactive invitation after retained recovery
+
+An invitation remains bound to its physical target digest. A new owned replacement launch may record `agent-browser.handoff-recovery-binding.v1` in the same SQLite transaction as launch custody and the exact published per-tab target mapping. The receipt binds one handoff's old and new digest to the unique completed settled-close retirement and original/replacement launch intent IDs. Retained browser/session/tab identity stays unchanged; only PID/CDP endpoint, physical tab endpoint and activity telemetry may differ. Desktop changes, extra launches or logical changes are outside this bounded transition.
+
+Authenticated Native continuation first rejoins and focuses the current owned target. It may then reconcile the same original invitation against that recorded mapping while the SQLite writer fence and existing control journal lock protect exact current state and the original unreturned human epoch. The journal appends the old/new target transition and custody references without incrementing the epoch, changing human/pauseReads, releasing control, replaying input or creating another invitation. Native input still requires its independent fresh authenticated process/provider/epoch checks.
+
+Two launch records and an old retirement alone do not prove the per-tab replacement mapping. Already-recovered legacy handoffs without the atomic mapping receipt return `browser_handoff_recovery_mapping_unrecorded`; they are never backfilled or automatically promoted. Stale state/control, live original identity, foreign holds, ambiguous custody and target swaps remain refused. The original hold remains in place. This source contract does not establish installed acceptance or permission to dispose of a retained legacy task.

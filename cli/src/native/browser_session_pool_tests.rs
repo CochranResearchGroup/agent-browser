@@ -10573,7 +10573,62 @@ fn scoped_settled_retirement_reconciliation_preserves_unqualified_evidence() {
 
 #[test]
 fn retained_handoff_recovers_after_settled_close_publication_was_interrupted() {
+    retained_handoff_retirement_fixture(false, None);
+}
+
+#[test]
+fn retained_interactive_handoff_recovers_with_original_invitation() {
+    retained_handoff_retirement_fixture(true, None);
+}
+
+#[test]
+fn retained_interactive_recovery_rejects_unqualified_scope_and_control() {
+    for case in [
+        "missing_prior",
+        "ambiguous_launch",
+        "nonterminal_retirement",
+        "changed_tab",
+        "target_swap",
+        "legacy_mapping",
+        "original_live",
+        "stale_control",
+        "foreign_hold",
+        "stale_snapshot",
+    ] {
+        retained_handoff_retirement_fixture(true, Some(case));
+    }
+}
+
+fn retained_handoff_retirement_fixture(interactive: bool, refusal: Option<&str>) {
     let fixture = Fixture::new();
+    // Synthetic browser IDs are stable across fixture instances; their control
+    // journal must have the same per-fixture isolation as the SQLite database.
+    let environment_guard = crate::test_utils::EnvGuard::new(&[
+        "HOME",
+        "AGENT_BROWSER_HOME",
+        "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+        "AGENT_BROWSER_CONFIG",
+        "XDG_CONFIG_HOME",
+        "XDG_STATE_HOME",
+        "XDG_CACHE_HOME",
+    ]);
+    environment_guard.set("HOME", fixture.root.to_str().unwrap());
+    environment_guard.set("AGENT_BROWSER_HOME", fixture.root.to_str().unwrap());
+    environment_guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+    environment_guard.remove("AGENT_BROWSER_CONFIG");
+    environment_guard.set(
+        "XDG_CONFIG_HOME",
+        fixture.root.join("config").to_str().unwrap(),
+    );
+    environment_guard.set(
+        "XDG_STATE_HOME",
+        fixture.root.join("state").to_str().unwrap(),
+    );
+    environment_guard.set(
+        "XDG_CACHE_HOME",
+        fixture.root.join("cache").to_str().unwrap(),
+    );
+    std::fs::create_dir_all(fixture.root.join(".agent-browser/service")).unwrap();
     std::fs::write(fixture.root.join("count-retirement-closes"), "check").unwrap();
     let provider = Rc::new(RefCell::new(Provider::default()));
     let calls = Rc::new(Cell::new(0));
@@ -10617,10 +10672,281 @@ fn retained_handoff_recovers_after_settled_close_publication_was_interrupted() {
     assert!(retirement.published_state_digest.is_none());
     assert!(!before.idle_closed_browsers.contains_key(browser_id));
     assert!(before.remote_view_tab_handoffs.contains_key(handoff_id));
+    let original_digest = if interactive {
+        let target =
+            agent_browser_service_model::resolve_remote_view_tab_handoff(&before, handoff_id)
+                .unwrap();
+        let digest =
+            agent_browser_service_model::remote_view_native_target_digest(handoff_id, &target)
+                .unwrap();
+        let control_path = crate::native::browser_host_control::path(browser_id).unwrap();
+        std::fs::create_dir_all(control_path.parent().unwrap()).unwrap();
+        if refusal.is_none() {
+            crate::native::browser_host_control::begin_handoff(browser_id, handoff_id, &digest)
+                .unwrap();
+        }
+        Some(digest)
+    } else {
+        None
+    };
     drop(original);
     std::fs::write(fixture.root.join("idle-process-absent"), "absent").unwrap();
     provider.borrow_mut().window_pid = Some(44);
     let mut restarted = host_mode(&fixture, provider, calls.clone(), Mode::IdleRecovery);
+    if let Some(case) = refusal {
+        // Use the exact public Native recovery path proven by the positive case.
+        // Receipt publication is independent of interactive control. Reconstruct
+        // the old invitation afterward only for adversarial guard qualification;
+        // the positive case retains invitation-before-recovery ordering.
+        let prepared = restarted.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":handoff_id,
+            "nativeDesktop":true, "activityAtMs":300_102
+        }));
+        assert_eq!(prepared["success"], true, "{case}: {prepared}");
+        assert_eq!(prepared["data"]["operatorVisible"]["state"], "ready");
+        crate::native::browser_host_control::begin_handoff(
+            browser_id,
+            handoff_id,
+            original_digest.as_deref().unwrap(),
+        )
+        .unwrap();
+        let database = fixture.store(false).runtime_database_path().unwrap();
+        let connection = rusqlite::Connection::open(&database).unwrap();
+        let read_document = |kind: &str| -> Value {
+            serde_json::from_str(
+                &connection
+                    .query_row(
+                        "SELECT json FROM state_documents WHERE kind=?1",
+                        [kind],
+                        |row| row.get::<_, String>(0),
+                    )
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        let published = fixture.store(false).load_session_state().unwrap();
+        let target =
+            agent_browser_service_model::resolve_remote_view_tab_handoff(&published, handoff_id)
+                .unwrap();
+        let digest =
+            agent_browser_service_model::remote_view_native_target_digest(handoff_id, &target)
+                .unwrap();
+        let mappings = connection
+            .prepare(
+                "SELECT json FROM state_documents WHERE kind LIKE 'handoff_recovery_binding:%'",
+            )
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let matching = mappings
+            .iter()
+            .map(|raw| serde_json::from_str::<Value>(raw).unwrap())
+            .filter(|receipt| receipt["handoffId"] == handoff_id)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            matching.len(),
+            1,
+            "{case}: replacement mapping must be durably published before adverse mutation"
+        );
+        assert_eq!(
+            matching[0]["previousTargetDigest"],
+            original_digest.as_deref().unwrap(),
+            "{case}"
+        );
+        assert_eq!(matching[0]["targetDigest"], digest, "{case}");
+        assert_eq!(
+            matching[0]["recovery"]["retirementId"], retirement.intent.id,
+            "{case}"
+        );
+        if case == "missing_prior" || case == "ambiguous_launch" {
+            let mut ledger = read_document("browser_launch_custody");
+            let records = ledger["records"].as_object_mut().unwrap();
+            if case == "missing_prior" {
+                records
+                    .retain(|_, record| record["observedPid"] != before.browsers[browser_id].pid);
+            } else {
+                let mut record = records
+                    .values()
+                    .find(|record| record["observedPid"] != before.browsers[browser_id].pid)
+                    .unwrap()
+                    .clone();
+                let id = uuid::Uuid::new_v4().to_string();
+                record["intent"]["intentId"] = id.clone().into();
+                records.insert(id, record);
+            }
+            connection
+                .execute(
+                    "UPDATE state_documents SET json=?1 WHERE kind='browser_launch_custody'",
+                    [ledger.to_string()],
+                )
+                .unwrap();
+        }
+        if case == "nonterminal_retirement" {
+            let mut ledger = read_document("browser_idle_retirement_custody");
+            for record in ledger["records"].as_object_mut().unwrap().values_mut() {
+                record["completed"] = Value::Null;
+                record["publishedStateDigest"] = Value::Null;
+            }
+            connection.execute("UPDATE state_documents SET json=?1 WHERE kind='browser_idle_retirement_custody'", [ledger.to_string()]).unwrap();
+        }
+        let stale = fixture.store(false).load_session_state().unwrap();
+        if case == "legacy_mapping" {
+            connection
+                .execute(
+                    "DELETE FROM state_documents WHERE kind LIKE 'handoff_recovery_binding:%'",
+                    [],
+                )
+                .unwrap();
+        }
+        if case == "changed_tab" || case == "target_swap" || case == "stale_snapshot" {
+            let mut next = stale.clone();
+            let tab = next
+                .tabs
+                .get_mut(identity["tabId"].as_str().unwrap())
+                .unwrap();
+            if case == "changed_tab" {
+                tab.created_at_ms += 1;
+            } else if case == "target_swap" {
+                tab.target_id = "unrelated-target".into();
+            } else {
+                tab.last_activity_at_ms += 1;
+            }
+            fixture
+                .store(false)
+                .compare_and_save_session_state(&stale, &next)
+                .unwrap();
+        }
+        let control_path = crate::native::browser_host_control::path(browser_id).unwrap();
+        if case == "stale_control" || case == "foreign_hold" {
+            let mut control: Value =
+                serde_json::from_slice(&std::fs::read(&control_path).unwrap()).unwrap();
+            control["epoch"] = (control["epoch"].as_u64().unwrap() + 1).into();
+            if case == "foreign_hold" {
+                let epoch = control["epoch"].clone();
+                control["audit"].as_array_mut().unwrap().push(serde_json::json!({"epoch":epoch,"operation":"human_handoff","humanHandoff":{"id":"foreign","targetDigest":"a".repeat(64),"epoch":epoch,"returnedBy":null}}));
+            }
+            std::fs::write(&control_path, serde_json::to_vec(&control).unwrap()).unwrap();
+        }
+        if case == "original_live" {
+            let crate::process_identity::ProcessObservation::Observed(observed) =
+                crate::process_identity::observe_process(std::process::id())
+            else {
+                panic!("fixture process must be observable");
+            };
+            let live_identity = RecordedProcessIdentity {
+                pid: observed.pid,
+                start_token: observed.start_token.unwrap(),
+                executable_path: observed.executable_path,
+                browser_family: None,
+            };
+            let mut retirements = read_document("browser_idle_retirement_custody");
+            let record = retirements["records"]
+                .as_object_mut()
+                .unwrap()
+                .values_mut()
+                .next()
+                .unwrap();
+            let scope = &mut record["intent"]["scopes"][0];
+            scope["browser"]["pid"] = live_identity.pid.into();
+            scope["processIdentity"] = serde_json::to_value(&live_identity).unwrap();
+            let original_target = agent_browser_service_model::RemoteViewTabHandoffTarget {
+                session: stale.sessions[identity["sessionId"].as_str().unwrap()].clone(),
+                tab: serde_json::from_value(
+                    scope["tabs"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .find(|tab| tab["id"] == identity["tabId"])
+                        .unwrap()
+                        .clone(),
+                )
+                .unwrap(),
+                browser: serde_json::from_value(scope["browser"].clone()).unwrap(),
+            };
+            let previous_digest = agent_browser_service_model::remote_view_native_target_digest(
+                handoff_id,
+                &original_target,
+            )
+            .unwrap();
+            connection.execute("UPDATE state_documents SET json=?1 WHERE kind='browser_idle_retirement_custody'", [retirements.to_string()]).unwrap();
+            let mut launches = read_document("browser_launch_custody");
+            let prior = launches["records"]
+                .as_object_mut()
+                .unwrap()
+                .values_mut()
+                .find(|record| record["observedPid"] == before.browsers[browser_id].pid)
+                .unwrap();
+            prior["observedPid"] = live_identity.pid.into();
+            prior["observedProcessIdentity"] = serde_json::to_value(&live_identity).unwrap();
+            connection
+                .execute(
+                    "UPDATE state_documents SET json=?1 WHERE kind='browser_launch_custody'",
+                    [launches.to_string()],
+                )
+                .unwrap();
+            let mut control: Value =
+                serde_json::from_slice(&std::fs::read(&control_path).unwrap()).unwrap();
+            for event in control["audit"].as_array_mut().unwrap() {
+                if event["humanHandoff"]["id"] == handoff_id {
+                    event["humanHandoff"]["targetDigest"] = previous_digest.clone().into();
+                }
+            }
+            std::fs::write(&control_path, serde_json::to_vec(&control).unwrap()).unwrap();
+            let rows = connection.prepare("SELECT kind,json FROM state_documents WHERE kind LIKE 'handoff_recovery_binding:%'").unwrap().query_map([], |row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?))).unwrap().collect::<Result<Vec<_>,_>>().unwrap();
+            for (kind, raw) in rows {
+                let mut receipt: Value = serde_json::from_str(&raw).unwrap();
+                if receipt["handoffId"] == handoff_id {
+                    receipt["previousTargetDigest"] = previous_digest.clone().into();
+                    connection
+                        .execute(
+                            "UPDATE state_documents SET json=?1 WHERE kind=?2",
+                            [receipt.to_string(), kind],
+                        )
+                        .unwrap();
+                }
+            }
+        }
+        let expected = fixture.store(false).load_session_state().unwrap();
+        let control_before = std::fs::read(&control_path).unwrap();
+        let ledger_before = read_document("browser_launch_custody");
+        let error = crate::native::browser_host_control::reconcile_recovered_handoff(
+            &database,
+            if case == "stale_snapshot" {
+                &stale
+            } else {
+                &expected
+            },
+            handoff_id,
+            300_102,
+        )
+        .unwrap_err();
+        let expected_error = match case {
+            "target_swap" | "legacy_mapping" => "browser_handoff_recovery_mapping_unrecorded",
+            "stale_control" | "foreign_hold" => "browser_handoff_control_changed",
+            "stale_snapshot" => "browser_handoff_recovery_publication_conflict",
+            _ => "browser_handoff_recovery_chain_unconfirmed",
+        };
+        assert_eq!(error, expected_error, "{case}");
+        assert_eq!(
+            std::fs::read(&control_path).unwrap(),
+            control_before,
+            "{case}"
+        );
+        assert_eq!(
+            fixture.store(false).load_session_state().unwrap(),
+            expected,
+            "{case}"
+        );
+        assert_eq!(
+            read_document("browser_launch_custody"),
+            ledger_before,
+            "{case}"
+        );
+        assert_eq!(calls.get(), 2, "{case}: no additional launch");
+        return;
+    }
     let resumed = restarted.handle_command(&serde_json::json!({
         "action":"service_remote_view_handoff_resolve", "handoffId":handoff_id,
         "nativeDesktop":true, "activityAtMs":300_102
@@ -10652,4 +10978,24 @@ fn retained_handoff_recovers_after_settled_close_publication_was_interrupted() {
         .remove(0);
     assert_eq!(completed.intent, retirement.intent);
     assert!(completed.is_terminal() && completed.published_state_digest.is_some());
+    if interactive {
+        let target = agent_browser_service_model::resolve_remote_view_tab_handoff(
+            restarted.state(),
+            handoff_id,
+        )
+        .unwrap();
+        let digest =
+            agent_browser_service_model::remote_view_native_target_digest(handoff_id, &target)
+                .unwrap();
+        assert_eq!(
+            crate::native::browser_host_control::handoff_intent(browser_id, handoff_id, &digest)
+                .unwrap(),
+            "interactive",
+            "qualified recovery must retain the original interactive invitation"
+        );
+        let control = crate::native::browser_host_control::metadata(browser_id).unwrap();
+        assert_eq!(control["owner"], "human");
+        assert_eq!(control["epoch"], 1);
+        assert_eq!(control["pauseReads"], true);
+    }
 }

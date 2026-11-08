@@ -1,0 +1,146 @@
+{
+  "schema": "agent-browser.recovered-interactive-invitation-validation.v1",
+  "workItem": 583,
+  "base": "a4dce26e421884adee19b21a00b2b61a79d09e83",
+  "state": "source_qualified; merge and installed acceptance pending",
+  "red": {
+    "test": "retained_interactive_handoff_recovers_with_original_invitation",
+    "outcome": "view instead of interactive after successful exact retained recovery",
+    "runtimeSeconds": 3.21,
+    "binarySha256": "11465f9b49883ae958cd7ed75cfc177bb7e6821a42a0afdd033994743abbf396",
+    "setupFailuresRetained": 2,
+    "setupRepair": "Create journal parent and bind cfg(test) service home to a fresh temporary HOME; no actual operator home fallback"
+  },
+  "supersededStage": {
+    "outcome": "owned Cargo canceled after process chain was found insufficient for per-tab attribution",
+    "exit": 143,
+    "wallSeconds": 169.99,
+    "testVerdict": null
+  },
+  "repair": {
+    "atomicMapping": "Per-handoff old/new physical target digest receipt is saved in the same SQLite transaction as exact replacement launch/session publication",
+    "controlRebind": "Current snapshot writer fence and existing atomic control journal lock; same original invitation and human/pauseReads epoch; append attributed recovery audit",
+    "legacy": "No mapping backfill; browser_handoff_recovery_mapping_unrecorded preserves existing hold",
+    "negativeCases": [
+      "missing_prior",
+      "ambiguous_launch",
+      "nonterminal_retirement",
+      "changed_tab",
+      "target_swap",
+      "legacy_mapping",
+      "original_live",
+      "stale_control",
+      "foreign_hold",
+      "stale_snapshot"
+    ]
+  },
+  "environment": {
+    "profile": "ci",
+    "packageOverride": "profile.ci.package.agent-browser.opt-level=0",
+    "jobs": 2,
+    "cache": "off",
+    "target": "reused existing CLI target",
+    "home": "New fixtures own isolated HOME and all XDG paths via EnvGuard. Related selection runner corrected to leave outer AGENT_BROWSER_TEST_ALLOW_LIVE_HOME unset; no actual user home fallback.",
+    "rustMinStackBytes": 16777216,
+    "cargoWrapper": "scripts/ci/cargo-safe.sh",
+    "sourceRustPatchSha256": "edf74358834b408f9bfc6d389dfed85666b5f89e47c1c5e6e8d8e091f01dd758"
+  },
+  "checks": {
+    "policyWiring": "passed",
+    "handoffDocumentation": "passed",
+    "changedDocumentationLinks": "passed",
+    "docsBuild": "passed",
+    "rustfmt": {
+      "passed": true,
+      "command": "scripts/ci/cargo-safe.sh fmt --all -- --check",
+      "cwd": "repository root"
+    },
+    "maintainedStrictClippy": {
+      "passed": true,
+      "command": "scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings",
+      "profile": "default; no TDD override",
+      "wallSeconds": 125.258,
+      "errors": 0,
+      "warnings": 0,
+      "receipt": "/tmp/ab583-maintained-clippy/job-20261108T034012Z-f1fa559fe32b/20261108T034012Z-e568642036b9/receipt.json"
+    }
+  },
+  "pending": [
+    "PR review and merge by coordinator",
+    "One source-frozen normal optimized CI candidate; TDD package optimization override must not be used for installation",
+    "Exact candidate installer fixture and preserving installed acceptance by coordinator",
+    "Already-recovered legacy handoff remains unqualified and held; no receipt backfill or cleanup authority added"
+  ],
+  "runtimeEffects": false,
+  "hostedCi": "skipped by operator policy",
+  "reviewCounters": "No final broad review or remediation pass consumed",
+  "intermediateGreen": {
+    "publicPositive": "passed",
+    "negativeGroup": "fixture control journal collision before first refusal assertion",
+    "runtimeSeconds": 5.81,
+    "receipt": "ab583-attributable-green.log",
+    "fix": "Per-fixture EnvGuard HOME/control journal and SQLite scope; no product behavior change"
+  },
+  "green": {
+    "passedTestGroups": 2,
+    "refusalScenarios": 10,
+    "failed": 0,
+    "ignored": 0,
+    "testRuntimeSeconds": 29.16,
+    "buildAndTestWallSeconds": 293.202,
+    "binarySha256": "1d66bdfbf1cdb89e23a51b8c12a4934a87446c0a1d585e24a5305a0bab86ac78",
+    "command": "scripts/ci/cargo-safe.sh test --manifest-path Cargo.toml --profile ci --config profile.ci.package.agent-browser.opt-level=0 --bin agent-browser retained_interactive -- --nocapture --test-threads=1",
+    "receipt": "/tmp/ab583-cargo-last-fixture/job-20261108T032449Z-66f81dd2cf28/20261108T032449Z-8921ad694173/receipt.json"
+  },
+  "relatedSelection": {
+    "filters": [
+      "handoff",
+      "recovery",
+      "retirement"
+    ],
+    "skip": "retained_interactive (already qualified on identical binary)",
+    "testThreads": 1,
+    "initial": {
+      "passed": 371,
+      "failedEnvironmentPreconditions": 2,
+      "ignored": 3,
+      "wallSeconds": 190.181
+    },
+    "correction": {
+      "passed": 2,
+      "failed": 0,
+      "wallSeconds": 1.269,
+      "sameBinary": true,
+      "change": "Unset outer test-home override as required by those two existing fixtures; fresh private HOME/XDG retained"
+    },
+    "adjudicatedCoverage": {
+      "passed": 373,
+      "ignored": 3
+    },
+    "firstFailureDisposition": "Preserved; coordinator accepted exact runner-precondition causal proof and only two-case correction, not a pristine first-run claim",
+    "timingFixture581": "Passed in the initial union; tracked issue remains active"
+  },
+  "extendedLintLimit": {
+    "command": "clippy --workspace --all-targets --profile ci --config profile.ci.package.agent-browser.opt-level=0 -- -D warnings",
+    "passed": false,
+    "wallSeconds": 118.775,
+    "classification": "Extra test-target lint failures outside added lines; no baseline lint sweep or allowances added",
+    "diagnosticPrimaryLocations": 89,
+    "locationsOnAddedLines": 0,
+    "authority": "AGENTS.md required gate and disabled CI workflow omit --all-targets; maintained exact gate passed"
+  },
+  "additionalFixtureFailure": {
+    "stage": "first per-fixture-isolated negative group",
+    "wallSeconds": 327.139,
+    "positive": "passed",
+    "negativeSetup": "compatibility view recovery bypassed retained-retirement reconciliation; failed before guard assertions",
+    "correction": "Use same public Native recovery as positive, verify exact atomic receipt before adverse mutation, then reconstruct old invitation only for guard fixture",
+    "productionChanged": false
+  },
+  "unchangedEvidenceReuse": {
+    "modelCratesManifestsLockAndSdk": "git diff --quiet base -- crates Cargo.lock Cargo.toml packages returned 0",
+    "serviceModel417": "Unchanged source/dependency closure reused from prior qualified batch; not rerun or claimed new-feature coverage"
+  },
+  "economics": "Focused execution 29.16s after native CLI compilation4m23s. Initial setup failures, superseded compile and invalid runner preconditions are retained; no resource ceiling or timeout was raised.",
+  "memoryDisposition": "Parent coordinator retains product-memory custody; no separate child product-memory write."
+}

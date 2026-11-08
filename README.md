@@ -95,6 +95,8 @@ Retained-task recovery rechecks interrupted launch custody when the host is alre
 
 If the original browser close settled before its state publication was interrupted, reopening the same retained handoff can finish that original retirement. Recovery requires unchanged original browser/tab identity, fresh process and profile absence, and the original Native fence. It atomically records the settled physical close, preserves the logical task and its control authority, then uses ordinary browser recovery. It does not repeat the close or replay website input. Unknown effects, changed identity and unavailable Native readback remain blocked.
 
+After a newly recorded retained-browser recovery, the original interactive handoff can keep its invitation and human control epoch. This requires the exact per-tab replacement mapping recorded with that recovery, completed original retirement and current launch custody. Missing legacy mapping, changed targets or ambiguous history remain refused; reopening a link does not turn a passive view into control or release the human hold.
+
 ## Hosted reconnect, rules and artifacts
 
 The connected MCP catalog has 17 workflow tools. Discover actual schemas before
