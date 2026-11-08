@@ -2,6 +2,12 @@
 
 # Roadmap
 
+[Overleaf97 dependency integration](docs/dev/maintenance/overleaf97-dependencies579580.md)
+combines [retained handoff579](docs/dev/maintenance/retained-handoff-retirement-579.md)
+and [enrolled Auth580](docs/dev/maintenance/enrolled-auth-helper-overleaf97.md).
+Serial local qualification owns source readiness; root owns matching installation
+and original-consumer acceptance. No shared runtime effect in this packet.
+
 [Publication reconciliation repair](docs/dev/maintenance/operator-profile-diagnostic.md), #558: CLOSED, installed accepted through PR557/560, sourceffd3432d7/mainc2a8b879a and sealed binaryacd74b124577.97 regressions, strict workspace Clippy, exact-binary install fixture and installed doctor pass. The original calendar task continues through ready handoff and normal keep-open; both original uncertain requests and both coordinated browser processes are preserved. [Installed receipt](docs/dev/notes/2026-11-07-publication-reconciliation-installed.json). P300/530 and calendar acceptance remain separate.
 
 P300/530 checkpoint: workspace delivery and PR543 cleanup repair are integrated and installed. [Three actual portability rows](docs/dev/notes/2026-11-04-profile-copy-disposal-census.md) pass usability, storage isolation and exact cleanup. The fourth awaits human donor readiness;529 narrated acceptance and principal mapping remain open. Final review/remediation remain0. [Native control](docs/dev/maintenance/native-control-proof-798.md) is installed accepted; eight same-browser cycles, reconnect, continued automation and cleanup pass.

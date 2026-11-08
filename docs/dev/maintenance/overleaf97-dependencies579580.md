@@ -7,6 +7,8 @@ Branch: fix/overleaf97-dependencies579580
 Base: bfdf162b896aec462e8341a57bfcec89dc8fefad
 Work items: [579](https://github.com/CochranResearchGroup/agent-browser/issues/579), [580](https://github.com/CochranResearchGroup/agent-browser/issues/580)
 
+Owner: ecochran76
+
 ## Current State
 
 This serial integration combines the frozen retained-handoff repair and explicitly

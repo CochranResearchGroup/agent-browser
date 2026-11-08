@@ -7,6 +7,8 @@ Work item: [Agent Browser580](https://github.com/CochranResearchGroup/agent-brow
 Branch: auth/enrolled-helper-overleaf97
 Base: bfdf162b896aec462e8341a57bfcec89dc8fefad
 
+Owner: ecochran76
+
 ## Current State
 
 The supported Codex helper requires a genuine current caller. Overleaf97's

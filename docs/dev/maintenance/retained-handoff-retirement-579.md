@@ -6,6 +6,8 @@ Branch: fix/retained-handoff-retirement-579
 Base: bfdf162b896aec462e8341a57bfcec89dc8fefad
 State: OPEN
 
+Owner: ecochran76
+
 ## Current State
 
 Public viewer reproduction is unavailable after a durably settled original browser close. The exact Native retirement remains prepared and nonterminal because physical close publication was interrupted; logical task/browser/handoff rows still exist. #570 qualified only already-ended logical scopes. No shared runtime state has been edited.
