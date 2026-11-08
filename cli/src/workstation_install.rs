@@ -2996,6 +2996,17 @@ fn run_workstation_install_with_observer(
         );
     }
 
+    // Reviewed external payloads are checked through their sealed asset closure
+    // and candidate backend. Ordinary installation uses this executable's assets
+    // and must fail before creating any installation state or starting effects.
+    if reviewed_candidate.is_none() {
+        if let Err(error) = crate::dashboard_ingress::validate_dashboard_asset_manifest(
+            &crate::native::stream::runtime_manifest_json(),
+        ) {
+            fail(&error, parsed.json);
+        }
+    }
+
     let root = match workstation_root() {
         Ok(root) => root,
         Err(error) => fail(&error, parsed.json),
@@ -18086,6 +18097,7 @@ mod tests {
         let generation_id = "generation-candidate";
         let manifest = serde_json::json!({
             "schemaVersion": "agent-browser.runtime-manifest.v1",
+            "dashboard": {"assetCount": 82, "totalBytes": 3252390},
         });
         let manifest_body = manifest.to_string();
         let manifest_sha256 = workstation_bytes_sha256(manifest_body.as_bytes());
@@ -18194,6 +18206,7 @@ mod tests {
         let generation_id = "generation-candidate";
         let manifest = serde_json::json!({
             "schemaVersion": "agent-browser.runtime-manifest.v1",
+            "dashboard": {"assetCount": 82, "totalBytes": 3252390},
         });
         let manifest_body = manifest.to_string();
         let manifest_sha256 = workstation_bytes_sha256(manifest_body.as_bytes());

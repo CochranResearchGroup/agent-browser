@@ -1,5 +1,7 @@
 # Maintenance execution index
 
+[Dashboard build readiness587](dashboard-build-readiness.md) owns the missing-frontend build and installation regression.
+
 Current Overleaf97 dependency packet:
 
 - [Serial dependency integration579/580](overleaf97-dependencies579580.md).

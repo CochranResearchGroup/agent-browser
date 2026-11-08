@@ -1594,6 +1594,30 @@ fn request_with_connection_close(request: &[u8]) -> Vec<u8> {
     rewritten
 }
 
+/// A Next export needs HTML and script assets. Rust-only builds may retain a
+/// single fallback page, but that is not an installable dashboard. Keep this
+/// content gate separate from executable identity and Native journey proof.
+pub(crate) fn validate_dashboard_asset_manifest(
+    manifest: &serde_json::Value,
+) -> Result<(), String> {
+    let count = manifest
+        .pointer("/dashboard/assetCount")
+        .and_then(serde_json::Value::as_u64);
+    let bytes = manifest
+        .pointer("/dashboard/totalBytes")
+        .and_then(serde_json::Value::as_u64);
+    let explicitly_incomplete = manifest
+        .pointer("/dashboard/built")
+        .is_some_and(|built| built.as_bool() != Some(true));
+    if explicitly_incomplete
+        || count.is_none_or(|value| value <= 1)
+        || bytes.is_none_or(|value| value == 0)
+    {
+        return Err("dashboard_build_incomplete: build the dashboard with pnpm build:dashboard, then recompile the candidate (pnpm build:development-candidate includes both steps)".into());
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_dashboard_backend(backend: &DashboardBackend) -> Result<(), String> {
     let manifest = read_dashboard_runtime_manifest(backend.port, &backend.generation_id)?;
     let observed_sha256 = format!("{:x}", Sha256::digest(manifest.to_string().as_bytes()));
@@ -1679,6 +1703,7 @@ fn read_dashboard_runtime_manifest(
     {
         return Err("dashboard candidate runtime manifest schema is invalid".to_string());
     }
+    validate_dashboard_asset_manifest(&manifest)?;
     Ok(manifest)
 }
 
@@ -2164,6 +2189,7 @@ mod tests {
         let manifest = serde_json::json!({
             "schemaVersion": "agent-browser.runtime-manifest.v1",
             "generationId": "generation-new",
+            "dashboard": {"assetCount": 82, "totalBytes": 3252390},
         });
         let manifest_body = manifest.to_string();
         let manifest_sha256 = format!("{:x}", Sha256::digest(manifest_body.as_bytes()));
@@ -3505,12 +3531,70 @@ mod tests {
     }
 
     #[test]
+    fn dashboard_asset_gate_rejects_missing_empty_and_placeholder_metadata() {
+        for manifest in [
+            serde_json::json!({}),
+            serde_json::json!({"dashboard":{"assetCount":0,"totalBytes":0}}),
+            serde_json::json!({"dashboard":{"assetCount":1,"totalBytes":118}}),
+            serde_json::json!({"dashboard":{"assetCount":82}}),
+            serde_json::json!({"dashboard":{"assetCount":82,"totalBytes":0}}),
+            serde_json::json!({"dashboard":{"assetCount":82,"totalBytes":3252390,"built":false}}),
+            serde_json::json!({"dashboard":{"assetCount":82,"totalBytes":3252390,"built":"unknown"}}),
+        ] {
+            assert!(validate_dashboard_asset_manifest(&manifest)
+                .unwrap_err()
+                .contains("dashboard_build_incomplete"));
+        }
+        // Earlier complete runtimes need no new manifest field to qualify.
+        validate_dashboard_asset_manifest(&serde_json::json!({
+            "dashboard":{"assetCount":82,"totalBytes":3252390}
+        }))
+        .unwrap();
+    }
+
+    #[test]
+    fn candidate_manifest_probe_rejects_placeholder_dashboard() {
+        let listener = StdTcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        // Exact asset shape served by the incident binary. Its identity hash
+        // matches, so only a dashboard-content gate can reject this candidate.
+        let manifest = serde_json::json!({
+            "schemaVersion": "agent-browser.runtime-manifest.v1",
+            "packageVersion": "0.28.0",
+            "dashboard": {"assetCount": 1, "totalBytes": 118,
+                "sha256": "51964a227bb7863bffdc601bcb75a2ca8f93925c7975de1cc4569e96d3d3bff1"}
+        });
+        let body = manifest.to_string();
+        let expected = format!("{:x}", Sha256::digest(body.as_bytes()));
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0; 512];
+            let _ = stream.read(&mut request).unwrap();
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+        });
+        let result = validate_dashboard_backend(&DashboardBackend::new("incident", port, expected));
+        server.join().unwrap();
+        assert!(
+            result.is_err(),
+            "matching binary identity must not qualify the dashboard placeholder"
+        );
+        assert!(result.unwrap_err().contains("dashboard_build_incomplete"));
+    }
+
+    #[test]
     fn candidate_manifest_probe_binds_the_staged_generation_to_live_bytes() {
         let listener = StdTcpListener::bind(("127.0.0.1", 0)).unwrap();
         let port = listener.local_addr().unwrap().port();
         let manifest = serde_json::json!({
             "schemaVersion": "agent-browser.runtime-manifest.v1",
-            "packageVersion": "0.28.0"
+            "packageVersion": "0.28.0",
+            "dashboard": {"assetCount": 82, "totalBytes": 3252390}
         });
         let body = manifest.to_string();
         let expected_sha256 = format!("{:x}", Sha256::digest(body.as_bytes()));
@@ -3552,6 +3636,8 @@ mod tests {
             },
             "dashboard": {
                 "sha256": "candidate-embedded-assets",
+                "assetCount": 82,
+                "totalBytes": 3252390,
             }
         });
         let body = manifest.to_string();
