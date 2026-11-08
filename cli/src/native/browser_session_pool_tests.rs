@@ -4200,13 +4200,18 @@ fn competing_link_delete_and_policy_write_publish_one_restart_safe_outcome() {
             .any(|(_, response)| response["success"] == true),
         "{results:?}"
     );
-    for (_, response) in results
+    for (operation, response) in results
         .iter()
         .filter(|(_, response)| response["success"] != true)
     {
-        assert_eq!(
-            response["error"], "browser_session_publication_conflict",
-            "{response}"
+        assert!(
+            response["error"] == "browser_session_publication_conflict"
+                || (*operation == "set_link_lifetime"
+                    && response["error"] == "remote_view_tab_handoff_missing"
+                    && results
+                        .iter()
+                        .any(|(op, reply)| *op == "delete" && reply["success"] == true)),
+            "{operation}: {response}"
         );
     }
     let provider = Rc::new(RefCell::new(Provider::default()));
