@@ -1,0 +1,142 @@
+{
+  "schema": "agent-browser.overleaf97-dependencies-validation.v1",
+  "base": "bfdf162b896aec462e8341a57bfcec89dc8fefad",
+  "qualifiedExecutableSource": "50fa92d129f91f99665d33bfdd614afbfd074f10",
+  "sourceBranches": {
+    "579": "3c60a06e9e4dae170e480c0f988a861bf1dcc7ca",
+    "580": "ed1ebee86e3f21f99918e888706d997ccc060a2c"
+  },
+  "integrationMethod": "Merge source branch ancestry; retained both catalog additions; later documentation-only wiring changes",
+  "primaryChecks": {
+    "rustfmt": {
+      "pass": true,
+      "wallSeconds": 10.71,
+      "cpuSeconds": 10.6
+    },
+    "strictWorkspaceClippy": {
+      "pass": true,
+      "profile": "ci package.agent-browser.opt-level=0",
+      "wallSeconds": 180.74,
+      "cpuSeconds": 250.57
+    },
+    "cliHarnessBuild": {
+      "pass": true,
+      "profile": "ci package.agent-browser.opt-level=0",
+      "wallSeconds": 362.59,
+      "cpuSeconds": 566.22,
+      "sha256": "3d0ae1c254de3dd702a7559c199cbe2a77daacbed16dde6acdbb54205e1cec84"
+    },
+    "criticalCases": {
+      "passed": 4,
+      "failed": 0
+    },
+    "handoff": {
+      "passed": 197,
+      "failed": 0,
+      "ignored": 1,
+      "wallSeconds": 103.226,
+      "cpuSeconds": 71.965
+    },
+    "recovery": {
+      "passed": 116,
+      "failed": 0,
+      "ignored": 1,
+      "wallSeconds": 51.538,
+      "cpuSeconds": 38.47
+    },
+    "sdkFixturesTypesCheckJs": {
+      "pass": true,
+      "wallSeconds": 3.93,
+      "cpuSeconds": 5.67
+    },
+    "selectorPolicyLinksHandoffDocs": {
+      "pass": true,
+      "wallSeconds": 8.32,
+      "cpuSeconds": 6.73
+    },
+    "serviceClientAggregate": {
+      "pass": true,
+      "wallSeconds": 10.14,
+      "cpuSeconds": 13.71
+    },
+    "docsBuild": {
+      "pass": true,
+      "pages": 44,
+      "wallSeconds": 26.66,
+      "cpuSeconds": 84.68
+    },
+    "reviewedOwnerAuthComposition": {
+      "pass": true,
+      "scenarios": 5,
+      "wallSeconds": 91.68,
+      "cpuSeconds": 22.65,
+      "authExecutableSource": "5ca88a92813948f63cbdff0b5f00f72b481e7067",
+      "authCurrentDocSource": "8ab3097377192aeb6bf2529a6c1a7b97afc99383",
+      "parentSource": "0062fa8d07e0101873a395a43afb4d9f7e753e79",
+      "scope": "Synthetic public Auth plus parent request-hub/notification ABI; no installed discovery or live data"
+    },
+    "standaloneAuthBootstrap": "pass with explicit reviewed Auth source",
+    "hostProvisionAndVmFixtures": {
+      "pass": true,
+      "wallSeconds": 5.12,
+      "cpuSeconds": 4.66
+    },
+    "assetsPostgresRouteAndReleaseVerifier": "pass",
+    "selectorCoverage": {
+      "tier": "broad",
+      "complete": true,
+      "gaps": []
+    },
+    "selectedPlanningAudit": "pass all3 lanes",
+    "whitespace": "pass"
+  },
+  "delegatedReusedChecks": {
+    "serviceModel": {
+      "passed": 417,
+      "failed": 0,
+      "groups": 25,
+      "workerSource": "83f355beddcdaba8ab7e4d34f1c3dac43a75bc73",
+      "reuseProof": "Exact model and dependency crate diff to qualified integration is empty"
+    },
+    "retirement": {
+      "passed": 72,
+      "ignored": 1,
+      "failed": 0,
+      "reuseScope": "Unchanged retirement cases plus primary exact retained-handoff reproduction"
+    }
+  },
+  "normalCandidate": {
+    "source": "50fa92d129f91f99665d33bfdd614afbfd074f10",
+    "command": "pnpm build:development-candidate",
+    "profile": "normal optimized ci opt3/thinLTO/codegen16; no TDD override",
+    "version": "agent-browser 0.28.0",
+    "sha256": "57c6a866da8a063362781b5f867b343b58fcc3c01791a5e408e0052b19c9f93d",
+    "bytes": 57875000,
+    "wallSeconds": 568.39,
+    "cpuSeconds": "not reported by Cargo Signal",
+    "compilerErrors": 0,
+    "compilerWarnings": 0,
+    "identitySeal": "Private content-addressed immutable binary copy plus source/profile/toolchain/lock/SDK inventory receipt",
+    "installerFixture": {
+      "result": "pass",
+      "wallSeconds": 32.26,
+      "cpuSeconds": 18.82,
+      "cleanup": "2 owned hosts, zero residue"
+    },
+    "formalRelease": false
+  },
+  "retainedFirstFailures": [
+    "Missing explicit fixture binary and Auth source prerequisites; rerun only with qualified exact inputs",
+    "Incorrect workspace-excluding-CLI no-run invocation canceled130 before tests; intended CLI build qualified separately",
+    "579 stale expectations corrected only after source-causal adjudication; setup flake581 remains active and did not recur in final selected checks",
+    "Missing planning Owner headers/index links corrected and audit now passes"
+  ],
+  "hostedCi": "Not run; operator disabled paid hosted CI",
+  "broadReviewRuns": 0,
+  "findingsRemediationRuns": 0,
+  "remainingGates": [
+    "Root serialized source merge and matching installation",
+    "Actual enrolled consumer/private input and original Native handoff acceptance under Overleaf97",
+    "Existing shared-runtime cleanup obligations remain coordinator-owned"
+  ]
+}

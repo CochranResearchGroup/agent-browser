@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "work_item": 579,
+  "base": "bfdf162b896aec462e8341a57bfcec89dc8fefad",
+  "source_state": "implemented; adjacent qualification pending",
+  "red": {
+    "public_host_sqlite_test": "retained_handoff_recovers_after_settled_close_publication_was_interrupted",
+    "error": "browser_session_recovery_custody_conflict",
+    "runtime_seconds": 3.08
+  },
+  "green": {
+    "public_host_sqlite_passed": 1,
+    "runtime_seconds": 3.15,
+    "original_physical_close_count": 1,
+    "logical_task_handoff_preserved": true
+  },
+  "environment": {
+    "profile": "ci",
+    "package_override": "profile.ci.package.agent-browser.opt-level=0",
+    "jobs": 2,
+    "cache": "off after hung sccache rustc-vV",
+    "test_home": "temporary isolated HOME/XDG",
+    "rust_min_stack_bytes": 16777216,
+    "compiled_test_binary_sha256": "6bddbe6f20fcb2d71390f30dd68e72f9722d38ce3536e31736b43ca788d0a2fc"
+  },
+  "pending": [
+    "corrected selected CLI cases and handoff/recovery selections on final combined source",
+    "combined579/580 strict workspace Clippy and final format",
+    "preserving candidate preparation, installation and actual same viewer acceptance"
+  ],
+  "checks": {
+    "policy_wiring": 11,
+    "handoff_documentation": "passed",
+    "changed_links": "passed",
+    "service_model": {
+      "command": "AGENT_BROWSER_CARGO_BUILD_JOBS=2 AGENT_BROWSER_CARGO_CACHE=off scripts/ci/cargo-safe.sh test --manifest-path Cargo.toml --profile ci -p agent-browser-service-model -- --test-threads=1",
+      "exit": 0,
+      "groups": 25,
+      "passed": 417,
+      "failed": 0,
+      "ignored": 0,
+      "negative_scope_cases": [
+        "unsettled",
+        "changed_browser",
+        "extra_tab",
+        "original_live",
+        "profile_occupied",
+        "provider_unavailable"
+      ]
+    }
+  },
+  "runtime_effects": false,
+  "installed": false,
+  "hosted_ci": "skipped by operator policy",
+  "limitations": [
+    "Initial sccache startup and overbroad optimized compilation canceled without test verdict; retained logs",
+    "Added model-only integration counterexample changes trigger CLI build.rs rerun; cached qualified CLI test bytes reused because runtime/module implementation inputs are unchanged",
+    "Final CLI help adds explanatory text after behavioral qualification; no dispatch or recovery semantics change",
+    "Adjacent fixture dispositions use exact source causal exclusion, not a baseline-binary execution claim; first failures retained in local logs"
+  ],
+  "source_checkpoint": "83f355bed",
+  "cached_selections": {
+    "retirement": {
+      "passed": 72,
+      "failed": 0,
+      "ignored": 1,
+      "seconds": 86.26
+    },
+    "handoff": {
+      "passed": 196,
+      "failed": 1,
+      "ignored": 1,
+      "seconds": 87.89
+    },
+    "recovery": {
+      "passed": 114,
+      "failed": 2,
+      "ignored": 1,
+      "seconds": 64.43
+    }
+  },
+  "adjacent_failure_dispositions": [
+    {
+      "test": "valid_handoff_recreates_expired_task_tab_after_host_restart",
+      "first_failure": "stale Native reopen succeeded where old assertion expected failure; isolated same failure",
+      "proof": "fixture, Native refresh/recover/focus path and early-live guard byte-identical to base; explicit durable refresh reuses recreated owned window before new hook",
+      "correction": "expect ready same browser/tab/target; retain launch, view request and full durable aggregate invariants",
+      "status": "test-only correction accepted; corrected execution pending combined compile"
+    },
+    {
+      "test": "expired_link_deletion_fences_stale_policy_and_recovery_publication",
+      "first_failure": "missing handoff instead of publication conflict; isolated same failure",
+      "proof": "fixture and unconditional handoff refresh-before-lookup identical to base; no Native/recovery path",
+      "correction": "expect remote_view_tab_handoff_missing; retain all peer, state, effect and launch invariants",
+      "status": "test-only correction accepted; corrected execution pending combined compile"
+    },
+    {
+      "test": "retirement_handoff_recovery_remains_bounded_and_preserves_identity",
+      "first_failure": "initial snapshot 20ms lock timeout under compilation",
+      "isolation": "same cached binary, isolated temporary HOME/XDG: passed",
+      "status": "timing-sensitive first failure retained; unchanged source; combined rerun pending",
+      "tracking_issue": "https://github.com/CochranResearchGroup/agent-browser/issues/581",
+      "owner": "ecochran76",
+      "followup_due": "2026-11-10"
+    }
+  ]
+}

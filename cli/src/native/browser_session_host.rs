@@ -2270,6 +2270,35 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             return Err("browser_control_fresh_observation_cannot_recover_browser".into());
         }
         self.require_explicit_hosted_recovery(browser_id)?;
+        let profile = self
+            .catalog
+            .profiles
+            .get(&browser.profile_id)
+            .or_else(|| {
+                self.state
+                    .disposable_profiles
+                    .get(&browser.profile_id)
+                    .map(|row| &row.profile)
+            })
+            .ok_or("browser_session_recovery_profile_missing")?
+            .clone();
+        if let Some(published) = self.effects.reconcile_retained_browser_close(
+            &self.persisted_state,
+            &browser,
+            &profile,
+            command
+                .get("activityAtMs")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or_else(current_unix_ms),
+        )? {
+            // This is the original retirement's atomic publication, not a
+            // competing writer or a synthetic change to task/control authority.
+            if self.persistence.load_session_state()? != published {
+                return Err("browser_session_idle_publication_conflict".into());
+            }
+            self.state = published.clone();
+            self.persisted_state = published;
+        }
         self.manager()?.recover_retained_browser(browser_id)?;
         self.commit_state()
     }

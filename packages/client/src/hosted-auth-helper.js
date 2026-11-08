@@ -12,36 +12,63 @@ async function ownedInstallationArtifact(path,directory){
   if(stat.uid!==process.getuid()||stat.mode&0o022||(directory?!stat.isDirectory():!stat.isFile()))throw Object.assign(Error('Auth SDK installation is unsafe; rebuild the owner-controlled candidate'),{code:'auth_sdk_invalid'});
 }
 
-/**
- * Connect through the installed producer's supported SDK. Bearer discovery,
- * connection rotation and native caller attestation remain producer-owned.
- * Auth publishes the verified client at its data-directory client/current selector.
- * This Node-only adapter never reads or returns connection-file contents.
- * @param {{installationRoot?:string,discoveryFile?:string}} [options]
- */
-export async function connectHostedAuthHelper({installationRoot=join(process.env.XDG_DATA_HOME||join(homedir(),'.local/share'),'auth-receipts/client/current'),discoveryFile}={}) {
+const defaultInstallationRoot=()=>join(process.env.XDG_DATA_HOME||join(homedir(),'.local/share'),'auth-receipts/client/current');
+
+/** Shared owner-only installation admission; private discovery stays in Auth's SDK.
+ * @param {string} installationRoot */
+async function installedAuthSdk(installationRoot){
+  if(!isAbsolute(installationRoot))throw Error('Absolute installation required');
+  const app=await realpath(installationRoot);
+  await ownedInstallationArtifact(app,true);
+  await ownedInstallationArtifact(join(app,'scripts'),true);
+  await ownedInstallationArtifact(join(app,'src'),true);
+  await ownedInstallationArtifact(join(app,'scripts/verify-installation-candidate.mjs'),false);
+  const {verifyCandidate}=await import(pathToFileURL(join(app,'scripts/verify-installation-candidate.mjs')).href);
+  const verified=await verifyCandidate(app);
+  if(verified.product!=='auth-receipts'||verified.contractVersion!==1)throw Object.assign(Error('Install a compatible standalone Auth Receipts client SDK'),{code:'auth_sdk_incompatible'});
+  const sdk=await import(pathToFileURL(join(app,'src/auth-client.mjs')).href);
+  const installation={product:verified.product,contractVersion:verified.contractVersion,identity:verified.identity,sourceRevision:verified.sourceRevision};
+  return{sdk,installation};
+}
+function installationFailure(error,producerErrors=[]){
+  if(['auth_sdk_incompatible','auth_sdk_invalid',...producerErrors].includes(error?.code))throw error;
+  throw Object.assign(Error('Standalone Auth Receipts client SDK is unavailable; install its verified client/current candidate before retrying'),{code:'auth_unavailable'});
+}
+
+/** Connect for the genuine current Codex caller; enrolled consumers use the
+ * distinct entry point below. Connection contents never enter this adapter.
+ * @param {{installationRoot?:string,discoveryFile?:string}} [options] */
+export async function connectHostedAuthHelper({installationRoot=defaultInstallationRoot(),discoveryFile}={}){
   const callerTaskId=process.env.CODEX_THREAD_ID;
   if(!callerTaskId)throw Object.assign(Error('A current Codex caller is required'),{code:'auth_live_task_required'});
-  let client,installation,followCredentialLogin;
-  try {
-    if(!isAbsolute(installationRoot))throw Error('Absolute installation required');
-    const app=await realpath(installationRoot);
-    await ownedInstallationArtifact(app,true);
-    await ownedInstallationArtifact(join(app,'scripts'),true);
-    await ownedInstallationArtifact(join(app,'src'),true);
-    await ownedInstallationArtifact(join(app,'scripts/verify-installation-candidate.mjs'),false);
-    const {verifyCandidate}=await import(pathToFileURL(join(app,'scripts/verify-installation-candidate.mjs')).href);
-    const verified=await verifyCandidate(app);
-    if(verified.product!=='auth-receipts'||verified.contractVersion!==1)throw Object.assign(Error('Install a compatible standalone Auth Receipts client SDK'),{code:'auth_sdk_incompatible'});
-    const sdk=await import(pathToFileURL(join(app,'src/auth-client.mjs')).href);
-    const {createHostedAuthClient}=sdk;followCredentialLogin=sdk.followCredentialLogin;
-    if(typeof createHostedAuthClient!=='function')throw Object.assign(Error('Installed Auth SDK lacks the supported client export'),{code:'auth_sdk_incompatible'});
-    client=createHostedAuthClient({discoveryFile,threadId:()=>callerTaskId});
-    installation={product:verified.product,contractVersion:verified.contractVersion,identity:verified.identity,sourceRevision:verified.sourceRevision};
-  } catch(error) {
-    if(['auth_sdk_incompatible','auth_sdk_invalid'].includes(error?.code))throw error;
-    throw Object.assign(Error('Standalone Auth Receipts client SDK is unavailable; install its verified client/current candidate before retrying'),{code:'auth_unavailable'});
-  }
+  try{
+    const {sdk,installation}=await installedAuthSdk(installationRoot);
+    if(typeof sdk.createHostedAuthClient!=='function')throw Object.assign(Error('Installed Auth SDK lacks the supported client export'),{code:'auth_sdk_incompatible'});
+    const client=sdk.createHostedAuthClient({discoveryFile,threadId:()=>callerTaskId});
+    return ownerAuthHelper(client,installation,callerTaskId,sdk.followCredentialLogin);
+  }catch(error){return installationFailure(error);}
+}
+
+/** @typedef {{operationId:string,recoveryId:string,binding:{taskId:string,browserId:string,profileId:string,tabId:string,origin:string,controlGeneration:string}}} AuthOperationContext */
+/** Connect an explicitly enrolled unattended consumer through the verified Auth
+ * producer factory. Auth owns discovery/identity/context validation and private
+ * transport. No CODEX_THREAD_ID lookup or hosted/discovery fallback occurs here.
+ * @param {{installationRoot?:string,discoveryFile:string,operationContext:AuthOperationContext}} options */
+export async function connectEnrolledAuthHelper(options){
+  if(!options||Object.keys(options).some(key=>!['installationRoot','discoveryFile','operationContext'].includes(key))||typeof options.discoveryFile!=='string'||!isAbsolute(options.discoveryFile)||!options.operationContext||typeof options.operationContext!=='object'||Array.isArray(options.operationContext))throw Object.assign(Error('Invalid enrolled Auth helper request'),{code:'auth_invalid_request'});
+  const {installationRoot=defaultInstallationRoot(),discoveryFile,operationContext}=options;
+  try{
+    const {sdk,installation}=await installedAuthSdk(installationRoot);
+    if(typeof sdk.createEnrolledAuthClient!=='function')throw Object.assign(Error('Installed Auth SDK lacks enrolled consumer support'),{code:'auth_sdk_incompatible'});
+    const client=await sdk.createEnrolledAuthClient({discoveryFile,operationContext});
+    if(typeof client?.call!=='function'||typeof client.callerTaskId!=='string'||!client.callerTaskId)throw Object.assign(Error('Installed Auth SDK returned an incompatible enrolled client'),{code:'auth_sdk_incompatible'});
+    return ownerAuthHelper(client,installation,client.callerTaskId,sdk.followCredentialLogin);
+  }catch(error){return installationFailure(error,['auth_invalid_request','auth_unavailable','auth_not_authorized']);}
+}
+
+/** Keep private login policy and uncertain-attempt handling identical for both
+ * genuine Codex callers and explicitly enrolled service consumers. */
+function ownerAuthHelper(client,installation,callerTaskId,followCredentialLogin){
   const migration=()=>Object.assign(Error('Installed owner-authority login is unavailable'),{code:'auth_authority_migration_required'});
   const requireOwner=async()=>{
     if(typeof followCredentialLogin!=='function')throw migration();

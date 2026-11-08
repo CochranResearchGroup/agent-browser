@@ -1,6 +1,53 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: OVERLEAF97-DEPS-579-580
+    product_lane: PL-BUGFIX
+    objective: Serially qualify retained handoff recovery and explicitly enrolled unattended Auth for Overleaf97
+    plan: docs/dev/maintenance/overleaf97-dependencies579580.md
+    branch: fix/overleaf97-dependencies579580
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#579, CochranResearchGroup/agent-browser#580]
+    plan_state: OPEN
+    custody_state: INTEGRATION_READY
+    dependencies: [RETAINED-HANDOFF-579, ENROLLED-AUTH-580]
+    overlaps: [RETAINED-HANDOFF-579, ENROLLED-AUTH-580]
+    reconciled_overlaps: ["Explicitly directed isolated serial integration; preserve both source owners and foreign canonical context; root owns runtime effects and final consumer acceptance"]
+    validation_status: All selected source gates pass; corrected CLI4 and197handoff116recovery, strict workspace Clippy Rustfmt SDK client docs and reviewed-source Auth composition; normal optimized CI candidate sealed and exact installer fixture passes
+    limitations: ["No merge install enrollment or shared-runtime effects before root serialization", "No final broad review or remediation counter consumed"]
+    updated_at: 2026-11-08
+  - id: ENROLLED-AUTH-580
+    product_lane: PL-AUTH
+    objective: Connect explicitly enrolled unattended Auth consumers without Codex caller impersonation
+    plan: docs/dev/maintenance/enrolled-auth-helper-overleaf97.md
+    branch: auth/enrolled-helper-overleaf97
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#580]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [P303, RETAINED-HANDOFF-579]
+    reconciled_overlaps: ["580 owns SDK helper and auth guidance;579 owns browser recovery; catalog top entries and distinct guidance paragraphs integrate serially; preserve foreign canonical CONTEXT and retained clean checkouts"]
+    validation_status: Public SDK RED then GREEN; primary combined SDK types CheckJS client selector policy links docs and strict Rust gates pass; source candidate prepared, actual consumer acceptance separate
+    limitations: ["Source only; no runtime install or enrollment", "Actual consumer/private-input acceptance belongs to Overleaf97", "Goal final review and remediation counters remain0"]
+    updated_at: 2026-11-08
+  - id: RETAINED-HANDOFF-579
+    product_lane: PL-BUGFIX
+    objective: Recover retained Native handoff after settled close publication interruption
+    plan: docs/dev/maintenance/retained-handoff-retirement-579.md
+    branch: fix/retained-handoff-retirement-579
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#579]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [P321-RETIREMENT-570]
+    overlaps: [P321-RETIREMENT-570, HUMAN-HANDOFF-571]
+    reconciled_overlaps: ["Isolated sixth checkout; exact refreshed main base; preserve foreign canonical CONTEXT.md and four existing clean source checkouts; coordinator serializes runtime effects"]
+    limitations: ["No shared install or runtime mutation in source packet", "Original consumer viewer acceptance remains pending"]
+    updated_at: 2026-11-07
   - id: HUMAN-HANDOFF-571
     product_lane: PL-BUGFIX
     objective: Open explicit human assistance interactive with coordinated automation custody

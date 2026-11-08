@@ -25,12 +25,18 @@ Installed viewers: [Native journey qualification](references/cli-and-service.md#
 Use `browser_handoff({ "taskId": "<task-id>" })` for human assistance. It defaults to interactive input and pauses cooperative automation. Use `interaction:"view"` for passive viewing. The authorized recipient needs no administrator override; visibility alone does not prove input readiness. Require `operatorVisible.state=ready`; return the complete `data.handoffUrl` and keep the task ID. For `remote_view_public_origin_missing`, check reviewed `AGENT_BROWSER_PUBLIC_ORIGIN` in `~/.agent-browser/.env` or `AGENT_BROWSER_ENV_FILE`; process settings win. Reconnect MCP after configuration changes because its environment is pinned at startup. Preserve the task. Never assemble provider URLs.
 
 Same-browser and desktop rail tab switches retain the viewer connection.
+A retained handoff may finish its original settled browser-close publication before recovery; keep the same task and handoff, and preserve unresolved effect or identity failures for readback.
 
 After human input, use Give control back in the viewer, then `browser_continue` with the same `taskId` reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff.
 
 ## Standalone authentication
 
 Website credentials use standalone Auth Receipts through its verified SDK.
+Use `connectHostedAuthHelper` only for a genuine current Codex caller.
+An explicitly enrolled unattended application uses `connectEnrolledAuthHelper`
+with its own discovery file and exact operation/recovery/browser context; never
+copy CODEX_THREAD_ID or fall back to Codex discovery. Auth owns enrollment and
+current authority; the adapter does not expose bearer or credential contents.
 Before login, MFA or recovery, read [Standalone Auth](references/authentication.md#standalone-auth-receipts).
 Use current `discover_credentials`, not empty legacy scopes, to distinguish
 missing authority, unavailable/partial sources, no match and account choice.

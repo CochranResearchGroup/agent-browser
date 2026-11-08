@@ -5335,6 +5335,7 @@ agent-browser auth - Manage authentication profiles
 
 Standalone website login helpers consume the verified Auth Receipts client SDK.
 Bots is not required; private discovery stays inside Auth Receipts.
+SDK: genuine Codex callers use connectHostedAuthHelper; enrolled applications use connectEnrolledAuthHelper with explicit discovery and operation context.
 Current owner login uses discover_credentials with service/account intent.
 Empty legacy scopes do not mean missing saved credentials. Missing authority,
 unavailable/partial sources, no match and account choice remain distinct holds.
@@ -5684,6 +5685,8 @@ display descendants. Browser and route cleanup still require ownership checks.
 Supervisor startup recreates a missing socket directory with private
 permissions before writing its authentication token, including after reboot.
 Retained-task recovery rechecks interrupted launch custody without a host restart.
+A settled original close may finish its exact Native retirement before the same
+retained handoff recovers; task identity and control authority stay intact.
 New ordinary task commands refresh stale clean session state before acting;
 unpublished effects require reconciliation without automatic command replay.
 Only proven process and profile absence settles occupancy; history is preserved.

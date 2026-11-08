@@ -1,3 +1,19 @@
+## Overleaf97 dependency integration | 2026-11-08
+
+[Serial integration](docs/dev/maintenance/overleaf97-dependencies579580.md) combines
+[579](docs/dev/maintenance/retained-handoff-retirement-579.md) and
+[580](docs/dev/maintenance/enrolled-auth-helper-overleaf97.md). Public SDK, selector,
+client, explicit-source Auth composition, corrected CLI cases and strict combined
+Rust gates pass. Normal optimized CI candidate50fa92d is sealed; exact-binary
+installer fixture passes with zero owned-host residue. See the
+[consolidated qualification](docs/dev/maintenance/overleaf97-dependencies579580-validation.json). First missing fixture/source
+inputs are retained, not product failures. Root retains runtime/adoption and
+original-consumer acceptance. No final broad review or findings pass consumed.
+
+## Retained Native handoff recovery | 2026-11-07
+
+[#579](https://github.com/CochranResearchGroup/agent-browser/issues/579), [bounded repair](docs/dev/maintenance/retained-handoff-retirement-579.md): exact original browser close is settled but publication interrupted while logical task/handoff remain. The nonterminal retirement fences recovery. Isolated source regression is compiling; no runtime effects. Preserve canonical foreign CONTEXT.md and paused consumer authority. Next: RED host/SQLite retained-scope reproduction, scoped atomic close projection, focused local verification.
+
 2026-11-06 Native control checkpoint: [repair acceptance](docs/dev/maintenance/native-control-proof-798.md) passes eight consecutive same-browser takeover/input/return cycles, same-link reconnect, exact continued automation and normal owned cleanup. Provider PR550 and Remote View PR805–807 are installed with Native/peer preservation; doctor passes. Earlier failed receipts remain retained.529 narration/principal mapping and530 final donor readiness remain open; final broad review/TDD counters remain0.
 
 [Publication reconciliation repair](docs/dev/maintenance/operator-profile-diagnostic.md), #558: CLOSED, installed accepted through PR557/560, sourceffd3432d7/mainc2a8b879a and sealed binaryacd74b124577.97 regressions, strict workspace Clippy, exact-binary install fixture and installed doctor pass. The original calendar task continues through ready handoff and normal keep-open; both original uncertain requests and both coordinated browser processes are preserved. [Installed receipt](docs/dev/notes/2026-11-07-publication-reconciliation-installed.json). P300/530 and calendar acceptance remain separate.

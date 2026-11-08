@@ -93,6 +93,8 @@ After human assistance, call `browser_continue` with the same `taskId`. It retur
 
 Retained-task recovery rechecks interrupted launch custody when the host is already running. Only proven process and profile absence settles that launch's occupancy; its history remains intact, and unproven absence still blocks replacement.
 
+If the original browser close settled before its state publication was interrupted, reopening the same retained handoff can finish that original retirement. Recovery requires unchanged original browser/tab identity, fresh process and profile absence, and the original Native fence. It atomically records the settled physical close, preserves the logical task and its control authority, then uses ordinary browser recovery. It does not repeat the close or replay website input. Unknown effects, changed identity and unavailable Native readback remain blocked.
+
 ## Hosted reconnect, rules and artifacts
 
 The connected MCP catalog has 17 workflow tools. Discover actual schemas before
@@ -1218,6 +1220,17 @@ Use Auth's client-only candidate builder for installation preparation. Private
 or incompatible SDKs report installation diagnostics without legacy fallback.
 An explicit `installationRoot` is a diagnostic override, not required per task.
 The retained legacy callback playbook below is separate from owner-login methods.
+
+Unattended applications use the distinct `connectEnrolledAuthHelper` export from
+`@agent-browser/client/hosted-auth-helper`. Supply explicit `discoveryFile` and
+`operationContext` with operationId/recoveryId UUIDs and the exact
+taskId/browserId/profileId/tabId/origin/controlGeneration binding. Auth's verified
+`createEnrolledAuthClient` validates enrollment and that current context; no
+CODEX_THREAD_ID or Codex-discovery fallback is used. Both adapters provide the
+same private owner-login methods and unknown-attempt guards. Missing enrolled SDK
+support is an installation prerequisite, never a reason to borrow a caller or
+read connection/credential contents. Source support does not enroll or install
+an unattended consumer.
 
 
 For new owner-authority requests, import `createOwnerLoginPlaybook`,

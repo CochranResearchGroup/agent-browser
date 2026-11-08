@@ -3187,7 +3187,21 @@ fn valid_handoff_recreates_expired_task_tab_after_host_restart() {
     let requests = provider.borrow().view_requests.clone();
     assert_eq!(requests.len(), 1);
     let stale_result = stale.handle_command(&reopen);
-    assert_eq!(stale_result["success"], false, "{stale_result}");
+    // Native presentation refreshes the durable recreated target independently
+    // of the lost compatibility-view reply. It may focus that same owned window
+    // without relaunching or replaying compatibility-view issuance.
+    assert_eq!(stale_result["success"], true, "{stale_result}");
+    assert_eq!(stale_result["data"]["operatorVisible"]["state"], "ready");
+    assert_eq!(stale_result["data"]["handoffId"], handoff_id);
+    assert_eq!(
+        stale_result["data"]["browserId"],
+        recreated.tabs[&recreated_link.tab_id].browser_id
+    );
+    assert_eq!(stale_result["data"]["tabId"], recreated_link.tab_id);
+    assert_eq!(
+        stale_result["data"]["targetId"],
+        recreated.tabs[&recreated_link.tab_id].target_id
+    );
     assert_eq!(calls.get(), launches, "stale reopen must not launch");
     assert_eq!(provider.borrow().view_requests, requests);
     assert_eq!(
@@ -3972,7 +3986,7 @@ fn expired_link_deletion_fences_stale_policy_and_recovery_publication() {
         let rejected = stale.handle_command(&command);
         assert_eq!(rejected["success"], false, "{rejected}");
         assert_eq!(
-            rejected["error"], "browser_session_publication_conflict",
+            rejected["error"], "remote_view_tab_handoff_missing",
             "{rejected}"
         );
     }
@@ -10555,4 +10569,87 @@ fn scoped_settled_retirement_reconciliation_preserves_unqualified_evidence() {
             "no physical close replay: {case}"
         );
     }
+}
+
+#[test]
+fn retained_handoff_recovers_after_settled_close_publication_was_interrupted() {
+    let fixture = Fixture::new();
+    std::fs::write(fixture.root.join("count-retirement-closes"), "check").unwrap();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mode = Rc::new(Cell::new(0));
+    let mut original = host_with_persistence(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::Success,
+        || 2001,
+        NativeUseReplyFailure {
+            store: fixture.store(false),
+            mode: mode.clone(),
+            attempts: Rc::new(Cell::new(0)),
+        },
+    );
+    let opened = original
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    let identity = opened["browserSession"].clone();
+    let browser_id = identity["browserId"].as_str().unwrap();
+    let handoff_id = identity["handoffId"].as_str().unwrap();
+    mode.set(5);
+    assert_eq!(
+        original.reap(300_101).unwrap_err(),
+        "synthetic_retirement_publication_unavailable"
+    );
+    let before = fixture.store(false).load_session_state().unwrap();
+    let retirement = fixture
+        .store(false)
+        .idle_retirement_records()
+        .unwrap()
+        .remove(0);
+    assert!(retirement.has_settled_browser_close(browser_id));
+    assert!(retirement.published_state_digest.is_none());
+    assert!(!before.idle_closed_browsers.contains_key(browser_id));
+    assert!(before.remote_view_tab_handoffs.contains_key(handoff_id));
+    drop(original);
+    std::fs::write(fixture.root.join("idle-process-absent"), "absent").unwrap();
+    provider.borrow_mut().window_pid = Some(44);
+    let mut restarted = host_mode(&fixture, provider, calls.clone(), Mode::IdleRecovery);
+    let resumed = restarted.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":handoff_id,
+        "nativeDesktop":true, "activityAtMs":300_102
+    }));
+    assert_eq!(
+        resumed["success"], true,
+        "same retained handoff must recover: {resumed}"
+    );
+    assert_eq!(resumed["data"]["operatorVisible"]["state"], "ready");
+    assert!(restarted
+        .state()
+        .sessions
+        .contains_key(identity["sessionId"].as_str().unwrap()));
+    assert_eq!(resumed["data"]["browserId"], identity["browserId"]);
+    assert_eq!(resumed["data"]["tabId"], identity["tabId"]);
+    assert_eq!(
+        std::fs::read_to_string(fixture.root.join("retirement-effect-count")).unwrap(),
+        "1"
+    );
+    assert_eq!(
+        calls.get(),
+        2,
+        "one original launch plus one qualified recovery"
+    );
+    let completed = fixture
+        .store(false)
+        .idle_retirement_records()
+        .unwrap()
+        .remove(0);
+    assert_eq!(completed.intent, retirement.intent);
+    assert!(completed.is_terminal() && completed.published_state_digest.is_some());
 }

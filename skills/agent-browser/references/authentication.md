@@ -31,6 +31,18 @@ capabilities require Auth installation/enrollment diagnostics, not direct vault
 access or a legacy auth fallback. Private discovery and bearer material stay in
 the SDK. Owner decisions, required delivery and exact browser binding still gate
 input. Never repeat an unknown credential attempt.
+
+For an explicitly enrolled unattended application, use the separate
+`connectEnrolledAuthHelper({discoveryFile, operationContext})` export from
+`@agent-browser/client/hosted-auth-helper`. Context includes canonical UUID
+operationId/recoveryId and exactly taskId/browserId/profileId/tabId/origin/
+controlGeneration, with a canonical HTTPS origin. The verified Auth SDK's async
+`createEnrolledAuthClient` owns discovery, consumer identity and live binding
+validation. No Codex caller or environment discovery fallback is used. A missing
+factory or rejected enrollment is a producer/installation prerequisite; do not
+copy thread IDs, inspect connection files or export browser credentials.
+Both entry points share owner-capability checks and the original private attempt
+handling. This source API does not install or enroll a service consumer.
 Use current `auth_capabilities` before the owner login example in
 [playbooks.md](playbooks.md#private-login-composition). Current credential discovery
 is `discover_credentials({query, accountHint})`; legacy `list_accounts` only lists

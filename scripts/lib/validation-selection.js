@@ -129,5 +129,6 @@ function allRustCompartments() { return ['candidate', 'challenge-control', 'cli-
 
 /** Existing Auth owner composition, including test-only inputs. */
 export function isAuthCompositionSurface(file) {
+  if (file === 'scripts/test-enrolled-auth-helper.js' || file === 'scripts/enrolled-auth-helper-types.ts') return true;
   return /^(?:packages\/client\/src\/(?:owner-|hosted-auth-helper|login-playbook|playbooks)|scripts\/(?:test-owner-|test-installed-owner-auth|test-standalone-auth-bootstrap|test-hosted-auth-helper|test-hosted-credential-follow|test-auth-composition-preflight)|scripts\/fixtures\/owner-|scripts\/lib\/auth-composition-preflight|scripts\/dev\/run-owner-auth-source)/.test(file);
 }
