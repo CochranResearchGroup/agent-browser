@@ -53,12 +53,11 @@ fn siteguides_real_http_auth_classification_and_no_launch() {
         let (status,_) = exchange("POST",cookie,json!({"operation":"browser_open","actor":{"username":"operator"}})).await; assert!(status.contains("400"));
         let (status,read)=exchange("GET",cookie,Value::Null).await; assert!(status.contains("503")); assert!(read["error"].as_str().unwrap().starts_with("siteguides_configuration_required"));
         let (status,write)=exchange("POST",cookie,json!({"operation":"stage_draft","taskId":"forged","actor":{"username":"operator"},"configPath":"/forged","guide":{}})).await; assert!(status.contains("503")); assert!(write["error"].as_str().unwrap().starts_with("siteguides_configuration_required"));
-        // Revoke the current role without changing the session cookie. Existing
-        // authenticated reads remain reads; a stale role cannot write teaching.
+        // Local-role changes cannot override the same verified Authelia admission.
         let mut store:Value=serde_json::from_slice(&std::fs::read(&auth_path).unwrap()).unwrap();
         store["users"].as_array_mut().unwrap().iter_mut().find(|user|user["username"]=="operator").unwrap()["role"]=json!("observer");
         std::fs::write(&auth_path,serde_json::to_vec(&store).unwrap()).unwrap();
-        let (status,_) = exchange("POST",cookie,json!({"operation":"record_decision","servicePrincipalId":"forged","role":"superuser"})).await; assert!(status.contains("403"));
+        let (status,body) = exchange("POST",cookie,json!({"operation":"record_decision","servicePrincipalId":"forged","role":"superuser"})).await; assert!(status.contains("503")); assert!(body["error"].as_str().unwrap().starts_with("siteguides_configuration_required"));
         let (status,_) = exchange("GET",cookie,Value::Null).await; assert!(status.contains("503"));
         assert!(!std::path::Path::new(&std::env::var("AGENT_BROWSER_EXECUTABLE_PATH").unwrap()).exists());
     });

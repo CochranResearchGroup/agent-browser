@@ -6275,7 +6275,8 @@ Missing, partial or invalid configuration fails closed. Native password login
 and signed dashboard sessions are disabled until Remote View authentication
 interoperates. Both services require the same Authelia guard. Old native cookies
 cannot authenticate or renew; the login API returns native_auth_disabled.
-Current private-store workspace roles still apply; website accounts are separate.
+Authelia admission grants workspace access; no local account or role is required.
+Website accounts are separate.
 After login, the dashboard polls authenticated /api/runtime/health every ten
 seconds. Its agent-browser.runtime-health.v1 response warns when active daemon
 executables, package versions, or stream metadata drift. Detection is read-only
@@ -6294,7 +6295,7 @@ Environment:
   AGENT_BROWSER_DASHBOARD_INGRESS_WORKSPACE_URL
                        Fixed reviewed public HTTPS workspace GET/ACL target, never caller-derived
   AGENT_BROWSER_DASHBOARD_INGRESS_USERS
-                       JSON owner-principal to existing local-user map; current roles, explicit grants only
+                       Obsolete setting, ignored; actor identity is the verified Authelia principal
   AGENT_BROWSER_GUACAMOLE_HEADER_USER
                        Stable route-authorized Guacamole principal used as Remote-User for /guacamole/ forward auth; the dashboard actor remains in X-Agent-Browser-User
   AGENT_BROWSER_DASHBOARD_INGRESS_STATE
@@ -8293,7 +8294,7 @@ Environment:
   AGENT_BROWSER_DASHBOARD_INGRESS_WORKSPACE_URL
                        Fixed reviewed public HTTPS workspace GET/ACL target, never caller-derived
   AGENT_BROWSER_DASHBOARD_INGRESS_USERS
-                       JSON owner-principal to existing local-user map; current roles, explicit grants only
+                       Obsolete setting, ignored; actor identity is the verified Authelia principal
   AGENT_BROWSER_CONFIG           Path to config file (or use --config)
   AGENT_BROWSER_SESSION          Session name (default: "default")
   AGENT_BROWSER_SESSION_NAME     Auto-save/restore state persistence name

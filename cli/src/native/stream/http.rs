@@ -176,10 +176,6 @@ pub(super) async fn handle_siteguides_http(
                 let _ = stream.write_all(&response.into_http_bytes()).await;
                 return;
             }
-            if let Err(error) = dashboard_auth::require_current_operator_role(&identity.username) {
-                write_json_result(stream, Err(error), "403 Forbidden").await;
-                return;
-            }
         }
         Ok(false) => {}
         Err(error) => {
@@ -264,10 +260,6 @@ pub(super) async fn handle_profile_library_http(
     if command.get("operation").and_then(Value::as_str) == Some("replace_associations") {
         if let Err(response) = dashboard_auth::require_superuser(headers, secure_cookie) {
             let _ = stream.write_all(&response.into_http_bytes()).await;
-            return;
-        }
-        if let Err(error) = dashboard_auth::require_current_operator_role(&identity.username) {
-            write_json_result(stream, Err(error), "403 Forbidden").await;
             return;
         }
     }
@@ -2526,13 +2518,10 @@ fn service_request_command_with_state_and_authority(
     apply_service_request_attribution(&mut command, &normalized.attribution);
     if action_hint == "workspace_profile_library" {
         if command.get("operation").and_then(Value::as_str) == Some("replace_associations") {
-            let role = authenticated_dashboard_user
-                .ok_or_else(|| {
-                    "Profile association writes require an authenticated dashboard operator"
-                        .to_string()
-                })
-                .and_then(dashboard_auth::require_current_operator_role);
-            role.map_err(|message| {
+            let operator = authenticated_dashboard_user.ok_or_else(|| {
+                "Profile association writes require an authenticated dashboard operator".to_string()
+            });
+            operator.map_err(|message| {
                 ServiceRequestRejection::record(
                     "http_service_request",
                     Some(action_hint),
@@ -2625,22 +2614,6 @@ fn service_request_command_with_state_and_authority(
             action_hint,
             "service_viewer_lease_request" | "service_controller_lease_takeover"
         ) {
-            let controller = action_hint == "service_controller_lease_takeover"
-                || command.get("viewerRole").and_then(Value::as_str) == Some("controller");
-            if controller {
-                dashboard_auth::require_current_operator_role(username).map_err(|message| {
-                    ServiceRequestRejection::record(
-                        "http_service_request",
-                        Some(action_hint),
-                        &request_id,
-                        effective_session,
-                        ServiceRequestIssue::new(
-                            ServiceRequestIssueKind::OperatorFocusAuthority,
-                            message,
-                        ),
-                    )
-                })?;
-            }
             command["viewerId"] = json!(format!("dashboard:{username}"));
         }
     }
@@ -6286,8 +6259,10 @@ mod tests {
             let auth = root.join("dashboard-auth.json");
             std::fs::write(&auth, serde_json::to_vec(&json!({
                 "version":1,"createdAt":"fixture","sessionSecret":"ERERERERERERERERERERERERERERERERERERERERERE",
-                "users":[{"username":"operator","displayName":"Operator","role":"superuser",
-                "passwordHash":"","createdAt":"fixture","bootstrap":false}]
+                "users":[
+                    {"username":"admin","displayName":"Admin","role":"superuser","passwordHash":"","createdAt":"fixture","bootstrap":false},
+                    {"username":"codex","displayName":"Codex","role":"observer","passwordHash":"","createdAt":"fixture","bootstrap":false}
+                ]
             })).unwrap()).unwrap();
             let status = std::process::Command::new(std::env::current_exe().unwrap())
                 .args(["native::stream::http::tests::authenticated_operator_focus_survives_dashboard_proxy_and_daemon_verification", "--exact", "--nocapture"])
@@ -6305,6 +6280,14 @@ mod tests {
             std::fs::remove_dir_all(root).unwrap();
             return;
         }
+        // Real owner verification supplies an operator absent from the local store.
+        let ingress = dashboard_auth::test_ingress::TestIngress::start();
+        let identity = dashboard_auth::require_authenticated(
+            &[("Cookie".into(), ingress.cookie("operator"))],
+            false,
+        )
+        .unwrap();
+        assert_eq!(identity.username, "operator");
         let state: ServiceState = serde_json::from_value(json!({
             "profiles":{"profile-a":{"id":"profile-a"}},
             "browsers":{"browser-a":{"id":"browser-a","profileId":"profile-a","health":"ready","pid":100,
@@ -6326,7 +6309,7 @@ mod tests {
         let command = service_request_command_with_dashboard_generation(
             &body,
             Some(&state),
-            "operator",
+            &identity.username,
             "session-a",
             None,
         )

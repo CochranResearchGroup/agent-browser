@@ -6,7 +6,7 @@ allowed-tools: Bash(agent-browser:*)
 
 # Browser Automation with agent-browser
 
-Workspace access requires the shared Authelia guard; native dashboard password login and session cookies are disabled pending compatible Remote View authentication.
+Workspace access requires the shared Authelia guard; native dashboard password login and session cookies are disabled pending compatible Remote View authentication. Authelia admission grants operator access without local dashboard account enrollment or roles; attribution uses the exact verified owner principal.
 
 Native credentials: [Remote View setup](references/cli-and-service.md).
 
