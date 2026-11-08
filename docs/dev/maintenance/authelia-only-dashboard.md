@@ -85,3 +85,21 @@ Self-review against issue591 and current main finds no blocking standards or
 specification findings. The pre-existing journal source assertion remains a
 nonblocking baseline limitation; no comprehensive-project pass is claimed.
 Production runtime adoption and desktop/provider acceptance are separate.
+
+## Installed product acceptance
+
+PR592 is integrated. The production-shaped artifact passes the same native
+password and correctly signed legacy-cookie refusal probe, plus the exact
+source-free installer fixture with owned-host cleanup. Preserving installation
+is accepted, installed identity matches the seal, and doctor passes. A fresh
+shared-owner sign-in renders the workspace with ingress identity and native
+authentication disabled; its native login endpoint refuses authentication and
+the same session renders the Remote View desktop chooser. Existing workspace
+role permissions remain enforced.
+
+Per-user generation, transaction, process and configuration evidence remains in
+private runtime state. The preservation check counts Chromium processes,
+including children, rather than claiming every process is a browser root. The
+acceptance browser is closed and its owned process tree is absent. This closes
+the authentication outcome; broader rail/footer findings, producer pixels and
+actual desktop-control qualification remain separate.

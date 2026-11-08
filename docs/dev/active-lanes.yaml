@@ -1722,11 +1722,11 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#591]
-    plan_state: OPEN
-    custody_state: INTEGRATION_READY
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
     dependencies: []
     overlaps: [DASHBOARD-BUILD-587, CDP-FREE-IDLE-585]
     reconciled_overlaps: ["Reuse retained587 checkout after merge; preserve pinned candidate;591 owns auth and sign-in paragraphs;588 owns idle-handoff paragraphs;508 owns access diagnostics"]
-    validation_status: Composed main588 passes fmt strict Clippy and267 stream cases plus5 children; auth CLI and source-free installer fixture pass; production-shaped replacement pending
-    limitations: ["No new checkout; installed acceptance separate"]
+    validation_status: Composed main588 passes fmt strict Clippy and267 stream cases plus5 children; auth CLI and source-free installer fixture pass; production-shaped artifact and installed auth acceptance pass
+    limitations: ["Private runtime receipt retains instance details; no full-project or producer-pixel acceptance claim", "Retain sealed candidate custody; review2026-11-09"]
     updated_at: 2026-11-08
