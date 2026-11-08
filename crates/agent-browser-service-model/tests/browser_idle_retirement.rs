@@ -34,6 +34,10 @@ fn live_handoff_retention_preserves_unknown_close_and_requires_unchanged_origina
     record.begin_effect(effect.clone()).unwrap();
     let previous = record.clone();
     record.retain_live_for_handoff().unwrap();
+    assert!(
+        !record.has_owner_resolution(),
+        "publication is still required"
+    );
     previous.validate_successor(&record).unwrap();
     assert!(record.begin_effect(effect.clone()).is_err());
     assert!(record.settle_effect(&effect).is_err());
@@ -49,6 +53,10 @@ fn live_handoff_retention_preserves_unknown_close_and_requires_unchanged_origina
     changed.tabs.get_mut("tab-a").unwrap().target_id = "different".into();
     assert!(record.clone().record_publication(&changed).is_err());
     record.record_publication(&state).unwrap();
+    assert!(
+        record.has_owner_resolution(),
+        "Native completion is distinct from original-close confirmation"
+    );
     let mut completed = serde_json::to_value(prepared).unwrap();
     completed["state"] = "completed".into();
     record

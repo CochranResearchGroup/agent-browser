@@ -243,6 +243,15 @@ impl BrowserIdleRetirementRecord {
         self.deferred || self.completed.is_some()
     }
 
+    /// Native completion acknowledges the owner's resolved retirement intent.
+    /// Explicit live retention resolves that intent without acknowledging the
+    /// original physical close. Its unconfirmed attempt remains immutable.
+    pub fn has_owner_resolution(&self) -> bool {
+        self.validate().is_ok()
+            && self.published_state_digest.is_some()
+            && (self.retained_live || self.effects.iter().all(|attempt| attempt.settled))
+    }
+
     pub fn live_handoff_scope(&self) -> Option<&BrowserIdleRetirementScope> {
         let [scope] = self.intent.scopes.as_slice() else {
             return None;

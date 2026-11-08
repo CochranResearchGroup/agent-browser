@@ -259,10 +259,12 @@ impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
         Ok(receipt)
     }
 
-    /// Acknowledge only the runtime owner's conclusive, durably recorded
-    /// settlement of all application effects. This boolean is that owner's
-    /// assertion, not provider proof of a browser close. Unsettled effects and
-    /// unknown transport outcomes never clear a fence or trigger a retry.
+    /// Acknowledge the runtime owner's conclusive, durably published resolution.
+    /// This can be settled physical effects or explicit retention of the exact
+    /// live original under cleanup-worker exclusion. The latter preserves the
+    /// unconfirmed close attempt; it is not an assertion that the browser closed.
+    /// The wire boolean is an owner assertion, not provider browser-exit proof.
+    /// Unknown outcomes alone never clear a fence or authorize another attempt.
     pub fn complete_idle_retirement(
         &mut self,
         intent: &RemoteViewIdleRetirementIntent,

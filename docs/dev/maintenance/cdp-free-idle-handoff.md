@@ -35,3 +35,23 @@ worktree; other checkouts and candidates keep their existing custody. This lane
 owns the runtime close helper, retirement model, store and explicit handoff
 recovery. No installed replacement, original browser termination, state clearing
 or private input in this source packet.
+
+## Validation and review
+
+The actual host/SQLite/Native handoff fixture reproduced the exact idle-readback
+error before repair and passes after it, including worker exclusion, unavailable
+identity, unchanged attempted-close history, same-link reconnect and rejection
+of a delayed original writer. OS termination and positive exit plus original
+identity controls also pass. Native completion now receives the validated owner
+resolution, which can be explicit live retention without claiming physical close.
+
+An optional broad browser-session run was deliberately interrupted during slow
+profile-copy disposal cases. It also exposed a metadata race fixture failure.
+The same failure reproduces against exact baseline Rust source a779f3fe9: both
+overlapping operations can acknowledge a serializable update-then-delete. The
+fixture now permits those acknowledgements while preserving its terminal deletion,
+restart, unchanged browser/tab/session and no-provider-effect assertions. No
+production publication-reconciliation change was made for that finding.
+
+Final focused checks and source-bound receipts are pending. Local qualification
+is Linux/WSL; hosted CI, other platforms and production installation are separate.

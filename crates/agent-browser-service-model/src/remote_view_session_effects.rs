@@ -588,7 +588,7 @@ impl<
                         .prepared
                         .as_ref()
                         .ok_or("browser_session_idle_readback_required")?,
-                    true,
+                    record.has_owner_resolution(),
                 )
             };
             if let Ok(completed) = completed {
@@ -1283,7 +1283,7 @@ impl<
                         .prepared
                         .as_ref()
                         .ok_or("browser_session_idle_readback_required")?,
-                    true,
+                    record.has_owner_resolution(),
                 )
                 .map_err(|_| "browser_session_idle_readback_required")?
         };
@@ -1362,7 +1362,7 @@ impl<
                         .prepared
                         .as_ref()
                         .ok_or("browser_session_idle_readback_required")?,
-                    true,
+                    record.has_owner_resolution(),
                 )
                 .map_err(|_| "browser_session_idle_readback_required")?;
             let mut next = record.clone();
