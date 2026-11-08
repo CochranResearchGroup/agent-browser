@@ -1707,7 +1707,7 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#587]
     plan_state: COMPLETED
-    custody_state: INTEGRATION_READY
+    custody_state: INTEGRATED
     dependencies: []
     overlaps: [RECOVERED-INVITATION-583, CDP-FREE-IDLE-585]
     reconciled_overlaps: ["583 source is merged through584; reuse its clean checkout and preserve immutable candidate bytes; no new checkout;587 is primary writer for build-readiness paragraphs, while published588 owns idle-handoff paragraphs; installer/manifest code is disjoint; preserve both shared-doc changes at integration"]
@@ -1727,6 +1727,6 @@ lanes:
     dependencies: []
     overlaps: [DASHBOARD-BUILD-587, CDP-FREE-IDLE-585]
     reconciled_overlaps: ["Reuse retained587 checkout after merge; preserve pinned candidate;591 owns auth and sign-in paragraphs;588 owns idle-handoff paragraphs;508 owns access diagnostics"]
-    validation_status: Pending
+    validation_status: Auth source and debug installer fixture pass; main588 composed without conflicts; composition Rust checks and production-shaped replacement pending
     limitations: ["No new checkout; installed acceptance separate"]
     updated_at: 2026-11-08

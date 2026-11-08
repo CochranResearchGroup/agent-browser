@@ -50,3 +50,23 @@ production-shaped sealing and preserving installation remain separate gates.
 The two existing producer-driver tests remain ignored; no test was newly ignored
 or deleted to pass a gate. Their fixture authentication has been migrated but
 actual producer-composed acceptance is not claimed.
+
+## Integration checkpoint
+
+The corrected stream compartment passes 267 cases and five child fixtures with
+two existing ignored producer drivers. The exact debug CLI refuses valid native
+credentials and fails closed for a legacy cookie without owner configuration.
+Its initial five-second listener allowance was too short; the retained replay
+measured about seven seconds with a bounded thirty-second startup allowance.
+The source-free installer fixture passes and proves owned-host cleanup.
+
+PR588 entered main while the first production-shaped build was running. Stop
+that exact compiler before sealing or installation, retain its failed/superseded
+receipt, and compose main89852310a through merge9e2d66a4. Shared source and guide
+changes merge without conflicts. Requalify Rust quality and the stream seam on
+the composition, then seal a new candidate. Do not install the superseded build.
+
+An additional source-string journal check fails on its pre-existing assertion
+that page.tsx contains handoff_unusable. Both that page and the assertion are
+unchanged from base08f1dc2d6. This unrelated baseline failure is retained and is
+not represented as an authentication regression or a passing full-project suite.
