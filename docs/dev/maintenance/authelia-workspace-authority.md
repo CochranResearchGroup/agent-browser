@@ -128,3 +128,15 @@ checker. This docs-only repair changes none of the634 sealed executable inputs.
 The exact installer fixture and no-launch collection smoke remain pending at
 this custody checkpoint. Runtime publication and live desktop acceptance remain
 separate gates. No comprehensive-project or cross-platform claim is made.
+
+## Merge qualification
+
+Exact-candidate installer qualification passes in33.159seconds and retires its
+two owned hosts with zero residue. The exact-candidate collection smoke passes
+without browser launch. All source and artifact gates above are complete; the
+previous skill-size, UI-prefix and binary-selection failures are resolved.
+The maintained builder's release profile and local Linux/WSL target differ from
+unexecuted hosted/platform environments; no hosted CI was dispatched. The source
+candidate remains the clean cdf4b2b52 seal, with634 unchanged executable inputs
+after docs-only follow-ups. Standards and Spec reviews have no accepted blocker.
+Preserving runtime adoption and actual desktop viewing remain the next gate.
