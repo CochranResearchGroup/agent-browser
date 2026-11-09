@@ -1,3 +1,7 @@
+## Native deterministic saved login596 | 2026-11-09
+
+[596 source packet](docs/dev/maintenance/native-saved-login596.md) implements the ordinary password-manager flow through existing Native capture/input and original task-operation journals. Public missing-capability RED and first failures are retained. Final Native/MCP16cases, exactmodule10cases, SDK/types, strict workspace Clippy/Rustfmt and docs gates pass; clean production-shaped artifact preparation is next. No runtime replacement or live credential input.
+
 ## Interactive invitation recovery | 2026-11-08
 
 [#583](https://github.com/CochranResearchGroup/agent-browser/issues/583), [bounded source plan](docs/dev/maintenance/recovered-interactive-invitation-583.md): physical recovery changes the original invitation digest and leaves Native view intent. Public host regression reproduces this in3.21s. Repair requires an exact per-tab mapping receipt committed with future recovery publication; existing legacy mapping cannot be invented and remains refused with the hold intact. Source qualification passes the public recovery case plus10 guarded refusals,373 related CLI tests (3 existing ignored), maintained strict workspace Clippy, Rustfmt and documentation gates. All first failures and environment corrections remain in the [validation receipt](docs/dev/maintenance/recovered-interactive-invitation-583-validation.json). PR integration and normal optimized candidate remain with the coordinator; no runtime effect or broad review counter consumed.

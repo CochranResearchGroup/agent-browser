@@ -178,6 +178,10 @@ pub(super) fn completion_failure_cause(error: &str) -> &'static str {
         "browser_native_original_observation_expired" => {
             "browser_native_original_observation_expired"
         }
+        "browser_native_login_producer_contract_unavailable" => {
+            "browser_native_login_producer_contract_unavailable"
+        }
+        "browser_native_login_evidence_invalid" => "browser_native_login_evidence_invalid",
         "browser_native_image_observation_invalid" => "browser_native_image_observation_invalid",
         "browser_native_image_observation_expired" => "browser_native_image_observation_expired",
         "browser_native_image_round_invalid" => "browser_native_image_round_invalid",

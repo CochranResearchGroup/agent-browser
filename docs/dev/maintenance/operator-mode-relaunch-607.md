@@ -1,41 +1,49 @@
 # Operator-confirmed mode relaunch during human handoff
 
 Product lane: PL-BUGFIX
-Work item:607
+Work item: 607
 Branch: fix/607-operator-mode-relaunch
 State: OPEN
 
 ## Current state
 
-The explicit whole-browser close regression also reproduced the operator symptom:
-`browser_control_human` fired before attribution validation (1 failed, 9.15s).
-The follow-up source change admits an attributed owned-process close only after
-existing custody, peer and policy checks, retaining the old human epoch/history.
-Its regression verifies process absence, independent peer survival and persistent
-profile storage before reopening the same profile. GREEN passed (1 test, 12.63s after repair);
-the earlier validation below applies to source 071d463 only. Strict checks for
-the explicit-close extension and production candidate qualification remain open.
+The mode-lookup and explicit owned-close regressions failed with their exact
+control refusals before repair, then passed. Source `db48401b6` was sealed as
+candidate-98240c7127440729-7a208ba9dacee065. Its exact installer fixture passed
+(two owned hosts, zero residue), and isolated fg607 publication passed three
+open/read/close cycles with production unchanged. Development doctor passed all
+checks except optional unconfigured local ingress; no public dev viewer is claimed.
+Strict workspace Clippy, 3 control tests and 7 host-policy tests passed. The extra
+161-test consumer sweep timed out after 79 passing cases, including both repair
+regressions; it is not a complete-suite claim. No synthetic children remain.
 
-The premature URL-read guard is repaired in source. The public owner-dispatch
-regression failed with the exact installed observation-paused error before the
-fix, then passed. All six operation-lookup tests and 16 mode-operation state-machine
-tests pass. Strict workspace Clippy, Rustfmt, documentation build, handoff docs,
-policy wiring and changed-link checks pass. Installed runtime acceptance is still
-open: the original signed-in profile has not been closed or relaunched by this
-repair. The private public-MCP probe remains red against the installed binary.
+The operator's original process was explicitly closed through an identity-bound
+pidfd/SIGTERM. Exact exit, retained profile and no matching Chrome process were
+confirmed. Stale lock entries remain for lifecycle recovery. Public reopen still
+rejects the historical human hold. Account continuity remains unverified.
 
-Next: prepare and qualify a production-shaped sealed candidate, then the supported
-runtime transition and original same-profile close/relaunch under current operator
-authority. Source qualification, runtime installation, exact process replacement,
-account readback and scientific acceptance remain separate.
+A pre-install readback found newer installed source `8edb25b3` from #596. The first
+candidate is retained, not installed. Integrate both native-login commits from the
+common `ceac15364` base and preserve the installed native saved-login tooling.
+The only textual conflict is the lane catalog; both records are retained. Native
+login code matches `8edb25b3`, and close/relaunch code matches `db48401b6`.
+Combined qualification passes: 17 native-login tests, the explicit owned-close
+regression, 6 mode-lookup tests, strict workspace Clippy, Rustfmt, SDK/types,
+API/MCP parity, policy wiring, handoff docs, links and documentation build. The
+merge is ready for a clean combined production build.
 
-Reuse the clean canonical checkout at ceac15364. All nine registered checkouts
-were clean at admission; no additional checkout is created. This lane owns only
-operation lookup, explicit whole-browser close admission and their focused tests
-plus required public guidance. Existing
-585/599 own retirement and manual recovery; no edits to their custody logic.
+Reuse the canonical checkout; no additional checkout is created. This lane owns
+operation lookup and explicit-close admission plus required guidance. Retirement,
+manual recovery and native-login implementations retain their existing ownership.
+Next: qualify one combined production-shaped candidate and preserving runtime
+transition, then close/archive the ended task and reopen its same existing profile
+with CDP under current operator authority. Keep installation, process replacement,
+account readback and scientific acceptance separate.
 
 ## Scope and acceptance
+
+Explicit attributable whole-browser close must preserve profile storage and
+independent peers while ending its owned process during a human hold.
 
 Keep inert mode-operation lookup available during human handoff. Its lifecycle
 owner must retain explicit confirmation and exact process/profile/task fencing.

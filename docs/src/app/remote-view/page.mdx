@@ -1208,6 +1208,14 @@ with the exact active operation and pending work first. `historyTruncated`
 reports omitted retained history. Supply a known `operationId` for exact older
 readback; inspection and selection still have no browser effects.
 
+### Deterministic saved-login controls
+
+The opt-in `native_capture` parameter `loginControls` accepts profile `english-chrome-v1` and optional `expectedAccount`. Supported flat rectangular fields and saved-entry candidates require same-frame Native pixels plus pinned English Tesseract evidence. It returns safe labels and opaque references without raw OCR, pixels, passwords or field values. Candidate pixels do not independently prove browser-native origin.
+
+Select a returned reference through `native_input` parameter `loginTarget` with `observationRequestId`, `targetRef` and original `episodeId`. Native ownership, frame hash, process/window, geometry and controller checks precede one derived OS click. No caller coordinates or mixed raw actions are allowed. The durable per-task episode admits only username focus, configured-account entry and verified filled-form submission, within three clicks and60seconds. Pending or unknown input stops progression and cannot renew the episode.
+
+The `@agent-browser/client/native-saved-login` client composes these operations. The receiving host supplies a serialized durable store and independent intended-account access verifier. Reuse original task/episode IDs across interruptions. Unsupported or uncertain conditions require assistance; no semantic worker is invoked by the ordinary routine. Source/image qualification and installed real saved-login acceptance remain separate.
+
 Native capture returns PNG image content to MCP agents. Its default tile is bounded to one million pixels. Read `region`, `windowBounds` and `partialWindow`; request an explicit region for remaining pixels. A tile is not represented as a full-window screenshot.
 
 

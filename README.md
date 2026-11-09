@@ -7387,6 +7387,10 @@ Configure the native Remote View origin, pool, application and public origin in 
 
 
 Native task observation and input use the existing Remote View owner. MCP
+The opt-in `native_capture` parameter `loginControls: {profile: "english-chrome-v1", expectedAccount: "configured@example.invalid"}` enumerates supported login fields and saved-account entry candidates from current Native pixels and pinned English Tesseract evidence. It returns opaque frame-bound references and safe labels, with no raw OCR, image, password or field values. `native_input` parameter `loginTarget: {observationRequestId, targetRef, episodeId}` derives one OS click from the owner-retained observation. An immutable per-task episode permits username focus, the matching saved entry and independently observed filled-form submission, with at most three clicks in60seconds; unknown input never permits replay. Native window, generation, controller and visual fences remain required. Pixel candidates alone do not prove browser-native origin or authenticated access.
+
+`@agent-browser/client/native-saved-login` exports `createNativeSavedLoginClient({callTool, store, verifyAccess, expectedAccount})`. The host supplies a cross-process serialized durable episode store and independent intended-account access verification. Call `resolve({taskId, episodeId})` with the original IDs across interruptions. Unsupported geometry, stale evidence, missing credentials or challenges return a typed human/uncertain outcome. Source fixtures do not qualify installed real saved-login acceptance; this routine never invokes a semantic worker.
+
 `browser_command` supports `native_capture` and `native_input`; discover their
 arguments with `browser_discover`. CLI equivalent:
 `agent-browser --json mcp browser-native TASK native_input '{"actions":[{"kind":"key","chord":"Tab"}]}'`.

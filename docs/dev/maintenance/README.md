@@ -1,3 +1,5 @@
+- [Native deterministic saved login596](native-saved-login596.md): pinned perception, guarded selection and durable three-click client routine; installed acceptance remains separate.
+
 # Maintenance execution index
 
 [Dashboard build readiness587](dashboard-build-readiness.md) owns the missing-frontend build and installation regression.

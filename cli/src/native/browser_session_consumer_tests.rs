@@ -1520,5 +1520,6 @@ fn consumer_retention_claim_uses_owner_time_and_survives_sqlite_reopen() {
     assert_eq!(response["data"]["released"], true);
 }
 
+#[cfg(target_os = "linux")]
 #[path = "operator_lifecycle_tests.rs"]
 mod operator_lifecycle_tests;

@@ -70,6 +70,10 @@
     "./teaching-media": {
       "types": "./src/teaching-media.d.ts",
       "import": "./src/teaching-media.js"
+    },
+    "./native-saved-login": {
+      "types": "./src/native-saved-login.d.ts",
+      "import": "./src/native-saved-login.js"
     }
   },
   "scripts": {
