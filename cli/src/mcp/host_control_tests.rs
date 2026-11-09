@@ -13,6 +13,7 @@ struct Fixture {
     child: std::process::Child,
     commands: Arc<Mutex<Vec<Value>>>,
     response: Arc<Mutex<Value>>,
+    publication: Arc<Mutex<Option<&'static str>>>,
     stop: Arc<AtomicBool>,
     server: Option<std::thread::JoinHandle<()>>,
     _guard: crate::test_utils::EnvGuard<'static>,
@@ -94,6 +95,8 @@ fn fixture() -> Fixture {
         json!({"success":true,"data":{"url":"https://example.test/retained"}}),
     ));
     let reply = response.clone();
+    let publication = Arc::new(Mutex::new(None));
+    let publish = publication.clone();
     let stop = Arc::new(AtomicBool::new(false));
     let stopped = stop.clone();
     let server = std::thread::spawn(move || {
@@ -111,6 +114,38 @@ fn fixture() -> Fixture {
                     {
                         let command: Value = serde_json::from_str(&line).unwrap();
                         observed.lock().unwrap().push(command);
+                        if let Some(change) = *publish.lock().unwrap() {
+                            let store = BrowserSessionSqliteStore::default_sqlite().unwrap();
+                            let mut state =
+                                serde_json::to_value(store.load_session_state().unwrap()).unwrap();
+                            match change {
+                                "activity" => {
+                                    state["sessions"]["task"]["lastActivityAtMs"] = json!(2);
+                                    state["sessions"]["task"]["expiresAtMs"] = json!(200);
+                                    state["tabs"]["tab"]["lastActivityAtMs"] = json!(2);
+                                }
+                                "target" => {
+                                    state["tabs"]["tab"]["targetId"] = json!("another-target")
+                                }
+                                "process" => {
+                                    state["adoptedBrowserProcessIdentities"]["browser"]["process"]
+                                        ["startToken"] = json!("another-process-instance")
+                                }
+                                "epoch" => {
+                                    let path = control::path("browser").unwrap();
+                                    let mut current: Value =
+                                        serde_json::from_slice(&std::fs::read(&path).unwrap())
+                                            .unwrap();
+                                    current["epoch"] = json!(3);
+                                    std::fs::write(path, current.to_string()).unwrap();
+                                }
+                                _ => panic!("unsupported fixture publication"),
+                            }
+                            store
+                                .save_session_state(&serde_json::from_value(state).unwrap())
+                                .unwrap();
+                        }
+
                         let mut bytes = serde_json::to_vec(&*reply.lock().unwrap()).unwrap();
                         bytes.push(b'\n');
                         let _ = stream.write_all(&bytes);
@@ -128,6 +163,7 @@ fn fixture() -> Fixture {
         child,
         commands,
         response,
+        publication,
         stop,
         server: Some(server),
         _guard: guard,
@@ -283,5 +319,38 @@ fn terminal_control611_public_wrong_or_nonlive_observation_keeps_uncertainty() {
         assert_eq!(commands.len(), 1);
         assert_eq!(commands[0]["action"], "url");
         assert_eq!(commands[0]["retainedTaskOnly"], true);
+    }
+}
+
+#[test]
+fn terminal_control611_public_activity_publication_keeps_stable_identity() {
+    let f = fixture();
+    *f.publication.lock().unwrap() = Some("activity");
+    let result = call(request());
+    assert!(result.get("error").is_none(), "{result}");
+    assert_eq!(
+        read_control()["flights"]["original"],
+        "observed_uncertain_no_replay"
+    );
+    assert_eq!(read_control()["epoch"], 2);
+    assert_eq!(f.commands.lock().unwrap().len(), 1);
+}
+#[test]
+fn terminal_control611_public_target_process_epoch_races_preserve_original() {
+    for (change, expected) in [
+        ("target", "browser_control_observation_target_changed"),
+        ("process", "browser_control_original_process_changed"),
+        ("epoch", "browser_control_epoch_changed"),
+    ] {
+        let f = fixture();
+        *f.publication.lock().unwrap() = Some(change);
+        let result = call(request());
+        assert!(result.to_string().contains(expected), "{change}: {result}");
+        let control = read_control();
+        assert_eq!(control["flights"]["original"], "uncertain_no_replay");
+        assert_eq!(control["audit"], json!([]));
+        let commands = f.commands.lock().unwrap();
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0]["action"], "url");
     }
 }

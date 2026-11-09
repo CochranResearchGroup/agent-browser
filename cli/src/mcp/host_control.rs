@@ -92,19 +92,51 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
                 .map_err(issue)?
                 .load_session_state()
                 .map_err(issue)?;
-            if !fresh.sessions.get(task_id).is_some_and(|current| {
+            let same_task = fresh.sessions.get(task_id).is_some_and(|current| {
                 current.id == task.id
                     && current.created_at_ms == task.created_at_ms
                     && current.browser_id == task.browser_id
                     && current.profile_id == task.profile_id
                     && current.current_tab_id == task.current_tab_id
-            }) || fresh.browsers.get(&browser_id) != state.browsers.get(&browser_id)
-                || operation == "reconcile"
-                    && task
-                        .current_tab_id
-                        .as_ref()
-                        .is_none_or(|id| fresh.tabs.get(id) != state.tabs.get(id))
-            {
+                    && (operation != "reconcile" || current.name == task.name)
+            });
+            // Observation updates activity and peer indexes. Compare identity,
+            // including desktop generation, rather than mutable publication data.
+            let same_browser = if operation == "reconcile" {
+                state
+                    .browsers
+                    .get(&browser_id)
+                    .zip(fresh.browsers.get(&browser_id))
+                    .is_some_and(|(before, after)| {
+                        before.id == after.id
+                            && before.profile_id == after.profile_id
+                            && before.pid == after.pid
+                            && before.cdp_endpoint == after.cdp_endpoint
+                            && before
+                                .desktop
+                                .as_ref()
+                                .map(|d| (&d.desktop_id, d.generation))
+                                == after
+                                    .desktop
+                                    .as_ref()
+                                    .map(|d| (&d.desktop_id, d.generation))
+                    })
+            } else {
+                fresh.browsers.get(&browser_id) == state.browsers.get(&browser_id)
+            };
+            let same_tab = operation != "reconcile"
+                || task
+                    .current_tab_id
+                    .as_ref()
+                    .and_then(|id| state.tabs.get(id).zip(fresh.tabs.get(id)))
+                    .is_some_and(|(before, after)| {
+                        before.id == after.id
+                            && before.browser_id == after.browser_id
+                            && before.session_id == after.session_id
+                            && before.target_id == after.target_id
+                            && before.created_at_ms == after.created_at_ms
+                    });
+            if !same_task || !same_browser || !same_tab {
                 return Err(issue("browser_control_observation_target_changed"));
             }
             if operation == "reconcile" {

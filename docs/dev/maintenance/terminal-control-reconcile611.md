@@ -10,12 +10,13 @@ Consolidation: required
 
 ## Current state
 
-The existing public reconcile route requires a hosted task and awaiting-observation
-control state. A terminal uncertain request on an owned standalone task after
-human return cannot reconcile without manufacturing a control transition.
-The original dispatcher is positively absent; no original action is replayed.
-Source qualification passes; one sealed successor build and parent-owned installed
-acceptance remain pending.
+The c2a87186 candidate was adopted by the coordinator. One actual reconciliation
+returned the wrapper's generic refusal; its underlying typed reason was not
+retained or recovered, and the original uncertainty remains. A separate exact
+release fixture proves a stable-identity defect: routine activity publication
+alone causes browser_control_observation_target_changed. The narrow predicate
+repair and target/process/epoch race regressions are in focused qualification.
+No live request is replayed; a sealed successor waits for source gates.
 
 ## Scope
 
@@ -107,3 +108,33 @@ consumer acceptance. Refresh the actual account task/browser/process/epoch befor
 addressing its original request. Installed skill publication and actual Overleaf
 saved-password acceptance remain with the coordinator.611and610remain open for
 that installed acceptance; source and fixture qualification do not close them.
+
+## Accepted activity-publication continuation
+
+The actual installed refusal remains generic in its private wrapper receipt.
+Do not label the separately reproduced typed failure as that actual cause.
+Exact c2a87186 release fixture publication of session/tab lastActivityAtMs,
+with identities unchanged, deterministically returns
+browser_control_observation_target_changed. The first fixture setup hit a UNIX
+socket path limit before binary dispatch; cleanup was verified, then the bounded
+short-path fixture established the RED.
+
+Repair only reconciliation identity: task id/name/createdAt/browser/profile/tab;
+Tab id/target/browser/session/createdAt; browser id/profile/PID/CDP endpoint and
+desktop id/generation. Activity/expiry, derived peer indexes and friendly labels
+are not identity. These actual models contain no updatedAt field. Current original
+process start/executable proof and control epoch remain required before commit.
+Other control operations keep their existing comparisons. Source gate and one
+sealed successor are authorized; worker performs no live control or input.
+
+## Activity repair source qualification
+
+The six public MCP cases pass, including routine publication and identity races.
+A verified hash-pinned copy of that exact current test executable then passes35
+control cases, CLI610 and ordinary managed status in disposable HOME/XDG state.
+The copy contains both new regression names and its own source path; exact Rust
+blobs are in the validation receipt. Only the redundant owned Cargo lock waiter
+was stopped; foreign607 work was preserved. Strict workspace Clippy and Rustfmt
+check pass. Existing unchanged interface/docs/SDK/helper gates are retained.
+The actual installed refusal's typed cause remains unknown. One sealed successor
+will qualify the separately confirmed defect; no real request was replayed.

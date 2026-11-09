@@ -1,13 +1,12 @@
 ## Terminal control reconciliation611 | 2026-11-09
 
-[611 packet](docs/dev/maintenance/terminal-control-reconcile611.md) and its
-[validation receipt](docs/dev/maintenance/terminal-control-reconcile611-validation.json)
-qualify terminal request reconciliation without manufacturing human return, and
-CLI610 predispatch refusal. Local affected-control33, CLI1, ordinary metadata1,
-strict Rust, docs and selected provider-free fixture gates pass. One sealed
-production-shaped b87177fb3 candidate passed build and exact public/installer/no-launch
-qualification; preserving adoption and actual acceptance remain with the coordinator.
-No worker live browser control or input.
+[611 packet](docs/dev/maintenance/terminal-control-reconcile611.md): c2a87186
+candidate source/artifact gates passed and the coordinator adopted it. One actual
+reconciliation returned only a generic wrapper refusal; its typed reason is lost.
+A separate exact-release fixture proves routine activity publication falsely
+changes full-record equality. Stable identity repair with target/process/epoch
+race checks is now in focused qualification. No worker live replay/control/input;
+source qualification and a sealed successor precede parent-owned acceptance.
 
 ## Native deterministic saved login596 | 2026-11-09
 
