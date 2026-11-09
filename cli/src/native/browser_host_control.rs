@@ -96,8 +96,9 @@ fn load_return_key(_browser_id: &str) -> Option<agent_browser_lease_authority::C
 }
 
 // Optional provenance sidecar: failure disables the optimization, never the
-// existing control/reconciliation path. Only takeover may initialize it, under
-// the existing control lock; no return-path durability write is introduced.
+// existing control/reconciliation path. Takeover or explicit owner-side
+// reconstruction may initialize it under the control lock; no return-path
+// durability write is introduced.
 #[cfg(unix)]
 fn prepare_return_key(browser_id: &str) -> Result<(), String> {
     use std::os::unix::fs::OpenOptionsExt;

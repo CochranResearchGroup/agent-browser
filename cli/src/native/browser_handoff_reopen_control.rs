@@ -31,6 +31,7 @@ fn validate<'a>(state: &'a BrowserSessionState, command: &Value) -> Result<&'a s
         .and_then(|id| state.tabs.get(id))
         .ok_or_else(invalid)?;
     let intent = link.resume.as_ref().ok_or_else(invalid)?;
+    let browser = state.browsers.get(&task.browser_id).ok_or_else(invalid)?;
     if pending.request_id != choice.request_id
         || request.response.is_some()
         || command["id"] != choice.request_id
@@ -44,7 +45,8 @@ fn validate<'a>(state: &'a BrowserSessionState, command: &Value) -> Result<&'a s
         || tab.session_id != task.id
         || tab.browser_id != task.browser_id
         || tab.id == link.tab_id
-        || !state.host_bindings.contains_key(&task.id)
+        || browser.profile_id != task.profile_id
+        || browser.desktop.is_none()
         || (command["action"] != "navigate" && command["action"] != "get_url")
         || command["url"] != json!(intent.url)
         || (command["action"] == "navigate") != intent.url.is_some()
@@ -71,10 +73,15 @@ pub(crate) fn attest_reopen_command(
     state: &BrowserSessionState,
     command: &mut Value,
 ) -> Result<(), String> {
-    let browser = validate(state, command)?.to_owned();
-    if !read(&browser)?.human {
+    // Ordinary reconstruction needs no exception. A concurrent takeover still
+    // meets the ordinary guard below; only an existing human hold is attested.
+    let browser_id = command["browserId"]
+        .as_str()
+        .ok_or("browser_handoff_reopen_scope_invalid")?;
+    if !read(browser_id)?.human {
         return Ok(());
     }
+    let browser = validate(state, command)?.to_owned();
     let epoch = transaction(&path(&browser)?, |control| {
         if !human_handoff::permits_reopen(
             control,

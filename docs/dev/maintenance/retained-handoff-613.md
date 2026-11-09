@@ -65,3 +65,11 @@ Installation must preserve already-installed source d26086895fe18871e946fcf6fdff
 which is not an ancestor of this checkout's main baseline 48e87e5ee3575c5100511e853c6b3f3256235816.
 Coordinate that active source lane before runtime adoption. No production
 replacement or original handoff recreation has occurred in this implementation.
+
+Remediation checkpoint: shared named-browser reopening now passes, including its
+own human hold, forged command scopes and refusal of another invitation. The
+remaining regression is in ordinary disposable reconstruction unnecessarily
+validating the unused human-control exception. Narrow attestation preparation
+to an existing human hold; ordinary reconstruction retains ordinary admission.
+One further focused replay qualifies this correction. If it fails, preserve the
+draft and report the exact remaining defect rather than starting another cycle.

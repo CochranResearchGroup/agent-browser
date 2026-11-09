@@ -3654,6 +3654,9 @@ where
                 .get(id)
                 .is_some_and(|link| link.reopen.is_some())
         }) {
+            // Session admission is lazy about its initial tab. Publish that
+            // exact target before attesting the one reconstruction command.
+            self.tab_for_navigation(&session_id, now_ms)?;
             let task = &self.state.sessions[&session_id];
             let tab = &self.state.tabs[task
                 .current_tab_id
