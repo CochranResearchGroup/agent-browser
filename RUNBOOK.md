@@ -466,3 +466,11 @@ the real endpoint-unavailable error before fallback and passed afterward.
 Final lookup counterexamples and existing wrong-PID attachment regression remain
 pending at this checkpoint. Verified attachment is unchanged; only explicit
 metadata discovery input changes after exact profile/process qualification.
+
+## Native login #596 coverage regression — 2026-11-09
+
+The [SDK coverage successor](docs/dev/maintenance/native-login596-coverage.md)
+reproduced a chooser below the default 694-row capture at the public client seam.
+Bounded overlapping tiles and fresh selected-tile recapture pass focused guards;
+source qualification is in progress. Earlier uncertain live input has not been
+attributed, replayed or reset. No runtime adoption or live effects in this slice.

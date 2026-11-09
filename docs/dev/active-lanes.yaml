@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: NATIVE-LOGIN-596-COVERAGE
+    product_lane: PL-AUTH
+    objective: Cover complete login windows through bounded fresh SDK tile observations
+    plan: docs/dev/maintenance/native-login596-coverage.md
+    branch: fix/native-login596-coverage
+    target: fix/terminal-control-reconcile611
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#596]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [TERMINAL-CONTROL-611]
+    overlaps: [NATIVE-SAVED-LOGIN-596, TERMINAL-CONTROL-611]
+    reconciled_overlaps: ["Explicit successor SDK coverage repair; predecessor sealed artifacts and live episodes unchanged"]
+    validation_status: SDK lower-window and adverse guards, CheckJS, service-client, docs and exact-lane planning gates pass; installed acceptance pending
+    limitations: ["Source only; no install or live input", "Actual saved-login acceptance remains open"]
+    updated_at: 2026-11-09
   - id: TERMINAL-CONTROL-611
     product_lane: PL-BUGFIX
     objective: Reconcile terminal unknown requests through exact public owner observation
