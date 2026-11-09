@@ -4,7 +4,7 @@ Product lane: PL-BUGFIX
 Work item: 613
 Owner: ecochran76
 Branch: fix/retained-handoff-613
-State: AWAITING_LOCAL_RUST_VALIDATION
+State: SOURCE_QUALIFIED_AWAITING_RUNTIME_ADOPTION
 
 The original authenticated URL reports a closed task and requests a replacement
 link while owner inspect reports active, unexpired and perpetual. Repeated
@@ -44,32 +44,55 @@ Private-key unavailability fails closed on the held-browser path; normal
 agent-owned reconstruction uses ordinary admission. Cross-platform hosted
 runtime acceptance is not claimed by the Linux fixtures.
 
-Current validation checkpoint: the original public failure remains reproduced;
-the owner regressions exposed and repaired Native-context and held-browser
-admission gaps. Those final Rust changes are not yet qualified. The local Cargo
-resource guard is waiting for host capacity and is not bypassed. Final Rust
-format, strict Clippy, closed-handoff, human-control and presentation tests must
-pass before merge. The resource-wait approach is bounded to 30 minutes before
-recording the environmental blocker rather than polling indefinitely.
+Source qualification for PR616 covers executable source commit
+20b8a39cf640a10f41a93f7b69a324807c48f221. Subsequent changes only record this
+validation and integration custody. The final focused replay passed; the draft
+can advance to source integration. The issue remains open for runtime adoption.
 
-Passed source checks include the complete service-model package (419 tests),
-the earlier affected handoff selection (204 passed, one existing ignored),
-three actual-template browser scenarios, service-client checks, policy wiring,
-Remote View documentation checks, documentation links, docs production build,
-and repository tooling. Earlier Rust evidence is retained only for unaffected
-behavior; it does not qualify the later held-browser admission. Hosted CI is
-explicitly disabled. Linux provider-free fixtures do not establish installed,
-provider-backed or original-consumer acceptance.
+| Check | Result and scope |
+| --- | --- |
+| `scripts/ci/rust-tests.sh --focused closed_handoff` | 3 passed: default resolve has no effects, same-link explicit choices survive restart, named profile loss refuses, shared browser and human intent survive, other invitation refuses, forged scope rejects |
+| `scripts/ci/rust-tests.sh --focused handoff` | Final source: 207 passed, one pre-existing ignored; 356 seconds of test execution |
+| `scripts/ci/rust-tests.sh --focused browser_host_control` | 27 passed, including idempotent return and no reassertion of human ownership on a late retry |
+| `scripts/ci/rust-tests.sh --focused remote_view_presentation` | 7 passed, including actionable closed-link HTML and terminal expiry/deletion |
+| `scripts/ci/cargo-safe.sh test --manifest-path Cargo.toml -p agent-browser-service-model -- --test-threads=1` | 419 passed across binaries and doctests; retained for unchanged model inputs after the CLI-only review corrections |
+| `scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check` | Passed |
+| `scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings` | Passed on final executable source |
+| `pnpm exec node scripts/test-handoff-reopen-ui.js` | Three actual-template scenarios passed; same-origin synthetic backend, narrow viewport, exact error qualification, no native dialogs, fresh owned Chrome exit readback |
+| `pnpm run test:service-client` and `pnpm run test:service-api-mcp-parity` | Passed |
+| `pnpm run test:policy-wiring`, `pnpm run test:remote-view-handoff-docs`, `pnpm run test:repository-tooling` | Passed |
+| `node scripts/check-documentation-links.js --base origin/main --head HEAD`, `pnpm --dir docs build`, `git diff --check` | Passed |
+
+One exact debug binary was built through `cargo-safe.sh build` and copied to a
+private fixture location. Its SHA-256 is
+efe5e329907f2d326ec76e2aaafd9927ce58c0a902d37f68846fa4c0b889576a.
+Pinned through `AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD`, it passed all six scripts:
+`smoke-service-contracts-no-launch.js`, `smoke-mcp-read-no-launch.js`,
+`smoke-service-profile-sources.js`, `smoke-service-site-policy-sources.js`,
+`smoke-service-incident-summary-http.js` and `smoke-service-incident-summary-mcp.js`.
+Each used a disposable home. The session cleanup left six fixture daemons;
+private executable, disposable-home and PID-start identity were reverified,
+SIGTERM was sent through kernel PID descriptors, all six kernel exits were
+observed, and a fresh exact-binary census found zero residual processes.
+
+Preserved failed samples record the initial Native-context/control gaps and
+review-remediation errors: binding before lazy tab admission, requiring an
+optional hosted-task record, and unnecessarily validating an unused exception
+for ordinary reconstruction. The final candidate fixes these ordering and scope
+errors. Earlier passing samples never substituted for the final candidate.
+A separate cache version-query invocation was stopped before tests began;
+remaining tests used the documented `AGENT_BROWSER_CARGO_CACHE=off` setting.
+Resource admission, memory reserves and concurrency limits stayed enabled.
+
+This is focused provider-free Linux/WSL evidence with a debug binary, not the
+comprehensive Rust suite, supported-platform CI, a production-shaped candidate,
+or provider-backed/original-consumer acceptance. Hosted CI is disabled. The
+selector reports broad fallback for the new standalone UI test; that test runs
+directly. Installer, VM, PostgreSQL and RDP surfaces did not change and their
+unrelated fixture recommendations were not executed. Installed skill sync is
+reserved for a runtime that actually supports the new behavior.
 
 Installation must preserve already-installed source d26086895fe18871e946fcf6fdfffac3a020e847,
 which is not an ancestor of this checkout's main baseline 48e87e5ee3575c5100511e853c6b3f3256235816.
 Coordinate that active source lane before runtime adoption. No production
 replacement or original handoff recreation has occurred in this implementation.
-
-Remediation checkpoint: shared named-browser reopening now passes, including its
-own human hold, forged command scopes and refusal of another invitation. The
-remaining regression is in ordinary disposable reconstruction unnecessarily
-validating the unused human-control exception. Narrow attestation preparation
-to an existing human hold; ordinary reconstruction retains ordinary admission.
-One further focused replay qualifies this correction. If it fails, preserve the
-draft and report the exact remaining defect rather than starting another cycle.
