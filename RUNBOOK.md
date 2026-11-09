@@ -1,3 +1,12 @@
+## Terminal control reconciliation611 | 2026-11-09
+
+[611 packet](docs/dev/maintenance/terminal-control-reconcile611.md) and its
+[validation receipt](docs/dev/maintenance/terminal-control-reconcile611-validation.json)
+qualify terminal request reconciliation without manufacturing human return, and
+CLI610 predispatch refusal. Local affected-control33, CLI1, ordinary metadata1,
+strict Rust, docs and selected provider-free fixture gates pass. One sealed
+production-shaped candidate build is next. No live browser control or input.
+
 ## Native deterministic saved login596 | 2026-11-09
 
 [596 source packet](docs/dev/maintenance/native-saved-login596.md) implements the ordinary password-manager flow through existing Native capture/input and original task-operation journals. Public missing-capability RED and first failures are retained. Final Native/MCP16cases, exactmodule10cases, SDK/types, strict workspace Clippy/Rustfmt and docs gates pass; sealed production-shaped candidate8edb25b passes exact artifact review, MCP stdio metadata and isolated installer fixture. Preserving adoption belongs to the coordinator. Convenience CLI login remains blocked by follow-up610; use MCP stdio/SDK for acceptance. No runtime replacement or live credential input.

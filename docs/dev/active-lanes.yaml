@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: TERMINAL-CONTROL-611
+    product_lane: PL-BUGFIX
+    objective: Reconcile terminal unknown requests through exact public owner observation
+    plan: docs/dev/maintenance/terminal-control-reconcile611.md
+    branch: fix/terminal-control-reconcile611
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#611, CochranResearchGroup/agent-browser#610]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [NATIVE-SAVED-LOGIN-596]
+    overlaps: [NATIVE-SAVED-LOGIN-596]
+    reconciled_overlaps: ["Primary611 owns control and shared docs; auxiliary610 owns mcp CLI branch and tests; original596 sealed source retained unchanged"]
+    validation_status: Public control33 CLI1 ordinarymetadata1 strictClippy Rustfmt docs parity policy links planning and five providerfreefixtures pass; sealed candidate build next
+    limitations: ["No runtime control or input", "Actual Overleaf104 acceptance remains separate"]
+    updated_at: 2026-11-09
   - id: NATIVE-SAVED-LOGIN-596
     product_lane: PL-AUTH
     objective: Complete native deterministic saved-credential login tooling and retained routine
@@ -14,7 +30,7 @@ lanes:
     dependencies: [CochranResearchGroup/agent-browser#586]
     overlaps: [native-capture586]
     reconciled_overlaps: ["596 owns new read-only perception and Native capture option;586 owns capture transport; parent serializes integration; no installed effects"]
-    validation_status: FinalNativeMCP16pass; exactmodule10pass; SDK types parity policy links docs and strictworkspaceClippy Rustfmt pass; production-shaped artifact build next
+    validation_status: Source8edb25b and sealed production-shaped candidate qualified; successor611 owns terminal reconciliation and CLI610; actual saved-login acceptance remains open
     limitations: ["Installed real saved-login acceptance remains open", "No production replacement or live login"]
     updated_at: 2026-11-09
   - id: HANDOFF-MODAL-603

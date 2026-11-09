@@ -1,0 +1,88 @@
+{
+  "scope": "focused Linux provider-free source qualification; no live browser control or input",
+  "base": "66bf62d326c56cd69d9723494caf7c8086da768d",
+  "branch": "fix/terminal-control-reconcile611",
+  "validatedRustBlobs": {
+    "cli/src/mcp.rs": "806deb77735f6bfbd5502edbad611401d2252465",
+    "cli/src/mcp/host_control.rs": "8090e2ea914c953a0c0d214c32dae18c41b03c04",
+    "cli/src/mcp/host_control_tests.rs": "f8a5f1e72b59f57201914db251328ab4792bc610",
+    "cli/src/mcp/native_cli_tests.rs": "4c581f2d2b396afaeed7a9b1c644bcd858a23bb2",
+    "cli/src/native/browser_host_control.rs": "383eb444b1aaad1940ea8c3546c7275021acbbc8",
+    "cli/src/native/browser_host_return_tests.rs": "61f8d01363ad8be966d34a2355fc82105e8a5c4c",
+    "cli/src/output.rs": "fe6ef1104681f0bd5756e010f2c732ec04522dcf"
+  },
+  "gates": [
+    {
+      "command": "scripts/ci/rust-tests.sh --focused host_control",
+      "result": "33 passed; 0 failed; 0 ignored",
+      "executionSeconds": 6.74,
+      "compile": "1m46s"
+    },
+    {
+      "command": "scripts/ci/rust-tests.sh --focused native_cli_saved_login",
+      "result": "1 passed; 0 failed"
+    },
+    {
+      "command": "scripts/ci/rust-tests.sh --focused managed_task_control_status",
+      "result": "1 passed; 0 failed"
+    },
+    {
+      "command": "scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check",
+      "result": "passed"
+    },
+    {
+      "command": "scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings",
+      "result": "passed",
+      "elapsed": "1m37s"
+    },
+    {
+      "command": "pnpm --dir docs build",
+      "result": "passed"
+    },
+    {
+      "command": "pnpm test:service-api-mcp-parity",
+      "result": "passed"
+    },
+    {
+      "command": "pnpm test:remote-view-handoff-docs",
+      "result": "passed"
+    },
+    {
+      "command": "pnpm test:policy-wiring",
+      "result": "passed"
+    },
+    {
+      "command": "pnpm test:documentation-links -- --base 66bf62d326c56cd69d9723494caf7c8086da768d",
+      "result": "passed"
+    },
+    {
+      "command": "python .codex/skills/repo-policy-selector/scripts/audit_planning_contract.py --repo-root . --lane TERMINAL-CONTROL-611 --json",
+      "result": "passed"
+    },
+    {
+      "command": "workstation host, VM harness, Guacamole assets, Postgres durability, route user-sync provider-free fixture scripts",
+      "result": "all five passed"
+    }
+  ],
+  "resources": {
+    "jobs": 2,
+    "memoryClaimKiB": 4194304,
+    "memoryHigh": "6G",
+    "memoryMax": "8G",
+    "target": "existing warm canonical target, serialized with CLI610 worker"
+  },
+  "retainedFirstFailures": [
+    "Public sealed8ed CLI standalone reconciliation rejected hosted-task-required",
+    "CLI610 reached taskstore instead of predispatch typed refusal",
+    "Legacy synthetic terminal row without owner expected success; strengthened to refuse unknown owner and qualify known reuse",
+    "Fixture unused_mut warning removed",
+    "Clippy nonminimal_bool corrected with equivalent Option predicate"
+  ],
+  "limits": [
+    "No hosted CI; local checks satisfy cost policy",
+    "No comprehensive or cross-platform runtime claim",
+    "Installed skill publication remains with coordinator",
+    "Exact sealed artifact QA and actual Overleaf104 acceptance remain separate",
+    "No extra broad review or final findings-TDD allowance consumed"
+  ]
+}

@@ -1,5 +1,6 @@
 //! Public cooperative control adapter. Status/view also support ordinary managed
-//! tasks without an app-host attachment. Control changes require that attachment; return
+//! tasks without an app-host attachment. Reconciliation additionally proves exact
+//! original process custody; other control changes require that attachment. Return
 //! observes the same retained target through ordinary dispatch before resuming.
 use super::{required_string_argument, JsonRpcError};
 use crate::native::{
@@ -24,7 +25,9 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
         .sessions
         .get(task_id)
         .ok_or_else(|| issue("browser_control_task_missing"))?;
-    if !state.host_bindings.contains_key(task_id) && !matches!(operation, "status" | "view") {
+    if !state.host_bindings.contains_key(task_id)
+        && !matches!(operation, "status" | "view" | "reconcile")
+    {
         return Err(issue("browser_control_hosted_task_required"));
     }
     let browser_id = task.browser_id.clone();
@@ -45,6 +48,13 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
             .as_ref()
             .and_then(|id| state.tabs.get(id))
             .map(|tab| tab.target_id.clone());
+        let reconcile_process = if operation == "reconcile" {
+            let request_id = required_string_argument(arguments, "requestId")?;
+            control::check_reconcile(&browser_id, expected, request_id).map_err(issue)?;
+            Some(current_process(&store, &state, task)?)
+        } else {
+            None
+        };
         let atomic_return = operation == "return"
             && retained_target.is_some()
             && control::eligible_return_observation(&browser_id, expected, actor, reason)
@@ -59,23 +69,54 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
             // Awaiting-observation forbids physical recovery in the host. A lost target
             // remains blocked, preserving the original browser/task rather than reopening.
             let mut observation = json!({"id":uuid::Uuid::new_v4().to_string(),"action":"url","hostControlFreshObservation":true,"sessionName":task.name,"sessionId":task_id,"targetId":retained_target});
+            if operation == "reconcile" {
+                observation["retainedTaskOnly"] = json!(true);
+                observation["retainedTaskContext"] =
+                    crate::native::browser_task_operations::retained_context(task_id)
+                        .map_err(issue)?;
+            }
             if atomic_return {
                 observation["hostControlReturnObservation"] = control::attest_return_observation(json!({"browserId":browser_id,"taskId":task_id,"profileId":task.profile_id,"targetId":retained_target,"expectedEpoch":expected,"actor":actor,"reason":reason})).map_err(issue)?;
             }
-            super::workflow::execute(observation, transport)?;
+            let observed = super::workflow::execute(observation, transport)?;
+            if operation == "reconcile"
+                && (observed["urlObserved"] == false
+                    || observed["url"].as_str().is_none_or(|url| url.is_empty())
+                    || observed.get("targetId").is_some_and(|id| {
+                        Some(id.as_str().unwrap_or_default()) != retained_target.as_deref()
+                    }))
+            {
+                return Err(issue("browser_control_fresh_target_observation_required"));
+            }
             let fresh = BrowserSessionSqliteStore::open_read_only(&path)
                 .map_err(issue)?
                 .load_session_state()
                 .map_err(issue)?;
             if !fresh.sessions.get(task_id).is_some_and(|current| {
-                current.browser_id == task.browser_id
+                current.id == task.id
+                    && current.created_at_ms == task.created_at_ms
+                    && current.browser_id == task.browser_id
                     && current.profile_id == task.profile_id
                     && current.current_tab_id == task.current_tab_id
             }) || fresh.browsers.get(&browser_id) != state.browsers.get(&browser_id)
+                || operation == "reconcile"
+                    && task
+                        .current_tab_id
+                        .as_ref()
+                        .is_none_or(|id| fresh.tabs.get(id) != state.tabs.get(id))
             {
                 return Err(issue("browser_control_observation_target_changed"));
             }
             if operation == "reconcile" {
+                let fresh_store =
+                    BrowserSessionSqliteStore::open_read_only(&path).map_err(issue)?;
+                let fresh_task = fresh
+                    .sessions
+                    .get(task_id)
+                    .ok_or_else(|| issue("browser_control_task_missing"))?;
+                if Some(current_process(&fresh_store, &fresh, fresh_task)?) != reconcile_process {
+                    return Err(issue("browser_control_observation_process_changed"));
+                }
                 control::reconcile(
                     &browser_id,
                     epoch,
@@ -88,7 +129,7 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
             if atomic_return {
                 control::commit_observed_return(&browser_id, expected, actor, reason)
                     .map_err(issue)?;
-            } else {
+            } else if operation != "reconcile" {
                 control::observed(&browser_id, epoch).map_err(issue)?;
             }
         }
@@ -100,6 +141,41 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
         json!({"taskId":task_id,"browserId":browser_id,"control":control::metadata(&browser_id).map_err(issue)?}),
         false,
     ))
+}
+
+/// Require the existing owner journal and a current exact process instance;
+/// a PID, profile name or caller attribution alone cannot grant reconciliation.
+fn current_process(
+    store: &BrowserSessionSqliteStore,
+    state: &agent_browser_service_model::BrowserSessionState,
+    task: &agent_browser_service_model::ManagedBrowserSession,
+) -> Result<agent_browser_service_model::RecordedProcessIdentity, JsonRpcError> {
+    let browser = state
+        .browsers
+        .get(&task.browser_id)
+        .filter(|browser| browser.profile_id == task.profile_id)
+        .ok_or_else(|| issue("browser_control_original_process_required"))?;
+    let tab = task
+        .current_tab_id
+        .as_ref()
+        .and_then(|id| state.tabs.get(id))
+        .filter(|tab| tab.session_id == task.id && tab.browser_id == browser.id)
+        .ok_or_else(|| issue("browser_control_original_target_required"))?;
+    if tab.target_id.is_empty() {
+        return Err(issue("browser_control_original_target_required"));
+    }
+    let original = store
+        .original_browser_identity(state, browser)
+        .ok_or_else(|| issue("browser_control_original_process_required"))?;
+    let assessment = crate::process_identity::assess_process_ownership(
+        Some(&original),
+        crate::process_identity::observe_process(browser.pid),
+        crate::process_identity::LegacyProfileProof::Unproven,
+    );
+    if !assessment.authorizes_adoption() {
+        return Err(issue("browser_control_original_process_changed"));
+    }
+    Ok(original)
 }
 
 pub(super) fn cli(args: &[String]) -> Result<Value, String> {
@@ -134,3 +210,7 @@ pub(super) fn cli(args: &[String]) -> Result<Value, String> {
     )
     .map_err(|_| "browser_control_response_invalid".into())
 }
+
+#[cfg(all(test, target_os = "linux"))]
+#[path = "host_control_tests.rs"]
+mod tests;
