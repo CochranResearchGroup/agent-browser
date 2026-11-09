@@ -1377,6 +1377,39 @@ mod tests {
     }
 
     #[test]
+    fn closed_invalid_tab_keeps_history_without_restoring_effect_authority() {
+        let mut raw = json!({"tabs":{"target:closed":{"id":"target:closed",
+            "browserId":"closed-browser","targetId":"closed-target",
+            "sessionId":"closed-session","ownerSessionId":"closed-session",
+            "lifecycle":"closed","serviceTabHandle":{"browserId":"closed-browser",
+                "sessionName":"closed-session","tabId":"target:closed",
+                "targetId":"closed-target","valid":false,"staleReason":"tab_closed"}}}});
+        let staged = stage_service_state_migration(&raw.to_string()).unwrap();
+        let migrated: Value = serde_json::from_slice(&staged.bytes).unwrap();
+        assert_eq!(migrated["tabs"]["target:closed"]["lifecycle"], "closed");
+        assert_eq!(
+            migrated["tabs"]["target:closed"]["serviceTabHandle"]["staleReason"],
+            "tab_closed"
+        );
+        assert_eq!(
+            migrated["browsers"]["closed-browser"]["health"],
+            "not_started"
+        );
+        assert_eq!(migrated["sessions"]["closed-session"]["lease"], "released");
+        for (field, value) in [
+            ("lifecycle", json!("ready")),
+            ("principalId", json!("principal")),
+            ("workLeaseId", json!("lease")),
+        ] {
+            let mut active = raw.clone();
+            active["tabs"]["target:closed"][field] = value;
+            assert!(stage_service_state_migration(&active.to_string()).is_err());
+        }
+        raw["tabs"]["target:closed"]["serviceTabHandle"]["valid"] = json!(true);
+        assert!(stage_service_state_migration(&raw.to_string()).is_err());
+    }
+
+    #[test]
     fn registered_owner_bound_stale_invalid_tab_preserves_authority_through_placeholder() {
         let raw = json!({
             "profiles": {

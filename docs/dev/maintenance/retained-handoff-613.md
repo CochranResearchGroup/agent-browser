@@ -117,3 +117,42 @@ candidate executor, qualify its exact installer/no-launch fixtures, then use the
 canonical preserve installer with fresh transaction/census readbacks. Never
 replace missing original profile storage implicitly. Validate the original URL
 read-only and use a separately owned disposable target for any reopen exercise.
+
+## Deployment blocked before payload mutation
+
+PR617 merged at98b4f027861131099bafb034df748eee28022b83. Combined executable
+source158d464e327028bf7a2cb9eec8986fea51c0a36a passed209 handoff tests(one
+pre-existing ignored),27 control,2 lifecycle,1 saved-login CLI,7 presentation,
+419 model tests, Rust format, strict Clippy, UI, client/native-login client,
+parity, policy, links and docs build. Clippy passed with one job, a2GiB admission
+claim,3GiB MemoryHigh,4GiB MemoryMax and1GiB swap cap; host reserve and swap
+checks remained enabled. Source composition needed a same-link navigation wait
+in the UI fixture and a compact workflow skill with details in its existing
+reference. No product Rust repair was introduced by those two corrections.
+
+One production-shaped build completed in22m24s and sealed binary
+fbd108fc22defc0fe4ae870ee675f56c4ab6002d2501c46bcf0f3ee9e5bad6a4,
+candidate candidate-231682da55ee3443-fbd108fc22defc0f. Its exact installer fixture
+passed with2 owned hosts and zero residue. Six exact-binary no-launch service
+smokes passed; six remaining disposable-home daemons were verified, signalled
+through PID descriptors and kernel-exit confirmed, with zero fresh residue.
+
+Installation transaction upgrade-e4169ea5-fa13-44e9-a774-1cff6a47d32b stopped at
+revision4, blocked_migration, before payload mutation. A retained closed tab has
+an invalid tab_closed handle and absent browser/session records. No process
+identity or runtime-owner reference exists for that browser. The existing inert
+placeholder migration accepts browser_missing but not this closed-history case.
+The record and all history were preserved. Production still selects
+0.28.0-8fe86355e69f-5a7aae0e227f. This is not a successful deployment.
+
+A focused regression was added on fix/closed-tab-migration-613, but did not run:
+host available memory was about11GiB, below the16GiB reserve. Its unadmitted
+Cargo wait was terminated with kernel exit confirmation; no compiler started.
+No migration behavior has been changed. The checkout and sealed candidate are
+retained for this open obligation; do not remove or rebuild them casually.
+Private receipts reside under the user diagnostics directory. Next: qualify the
+regression, narrowly extend inert closed-history handling without granting
+principal/lease authority, rerun migration/quality gates, build the necessary
+successor candidate, inspect and recover the exact stopped transaction through
+the supported installer, then verify the original same-link page and an owned
+disposable reopen workflow. Do not hand-edit runtime state or bypass migration.
