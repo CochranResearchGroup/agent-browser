@@ -4304,6 +4304,10 @@ Fullscreen Native handoffs also show a **CDP on/off** control in the top row. Sw
 
 MCP uses `browser_command` with `taskId`, action `mode_convert`, and params containing `operationId`, `mode` (`cdp` or `cdp_free`) and `choice`. Start with `prepare`, then select an offered action. CLI accepts `agent-browser --json mcp mode-convert '{"taskId":"TASK","operationId":"mode-one","mode":"cdp_free","choice":"prepare"}'`. HTTP uses `POST /api/command` with action `browser_session_mode_convert`, the exact `sessionId` and owner `sessionName`, and the same operation fields.
 
+Mode-operation inspection and preparation do not read the page and remain available during an interactive human handoff. Confirmed lifecycle choices still verify the original process and affected tasks; unconfirmed relaunch does not release human control.
+
+An explicit operator request to close and reopen a signed-in profile uses whole-browser close with actor and reason, then opens the same existing profile with a new task key in automation mode. The close validates owned-process custody and peer isolation even during human handoff; it preserves the profile directory and old control history. It does not require another Return control click. CDP-free browser-scope closure terminates the verified original process and requires positive exit readback; on-disk profile data remains available for reopening.
+
 Keep the operation ID after an uncertain reply and select `reconcile`; do not issue another close/open sequence. Close prompts offer focus, graceful retry and consequentially confirmed force close. Native screenshots and input remain separate from authentication proof. Conversion and bounded recovery are qualified in isolated synthetic Native workflows. Installed Native qualification remains separate; source acceptance does not prove installed behavior.
 
 Select `pause_and_relaunch` to hold the operation in `paused` before closing
@@ -4616,3 +4620,54 @@ Native fence readback and atomic publication before completing that fence; it
 never repeats the physical close. This reconciliation is limited to the requested
 profile. Unresolved effects, changed identities and unavailable Native proof
 retain their original reconciliation requirement.
+
+
+## Native login controls
+
+Use browser_command native_capture with loginControls profile english-chrome-v1
+and expectedAccount to obtain deterministic current Native control candidates.
+The profile pins English Tesseract5.3.4/model metadata and flat rectangular
+control geometry. Return values exclude raw OCR/pixels, field values and passwords.
+Use native_input loginTarget with observationRequestId, opaque targetRef and the
+original episodeId. The owner derives the OS click and fences current Native
+window, geometry, control and pixels. Never supply coordinates or mix raw actions.
+
+The native-saved-login client exports createNativeSavedLoginClient with callTool,
+a serialized durable store, verifyAccess and expectedAccount. resolve takes taskId
+and original episodeId. It retains60seconds/three clicks across interruptions;
+unknown or pending input requires readback, never replay. The host independently
+verifies authenticated intended-account access. Semantic workers are exceptional
+fallbacks outside this deterministic routine. Current source/image proofs do not
+replace separately authorized installed saved-password acceptance.
+
+
+## Build readiness
+
+A `dashboard_build_incomplete` install/doctor failure requires rebuilding the frontend and recompiling the candidate. The maintained `pnpm build:development-candidate` command includes both steps.
+
+## Handoff search
+
+Handoffs supports instant search by task, profile, session, creator or link ID. Compact rows keep technical details under Inspect.
+
+
+## Terminal cooperative request reconciliation
+
+A terminal uncertain request can be reconciled on its exact owned task without
+creating another human return. Supply its original request ID, current epoch,
+actor and reason. The server freshly observes the retained target and checks
+original browser/process custody plus positive dispatcher absence or PID reuse.
+Human control, active or unknown dispatchers and changed identities are refused.
+The original row becomes `observed_uncertain_no_replay`; its history remains and
+it never grants retry authority. Other standalone control changes remain unsupported.
+
+Convenience `mcp browser-native` loginControls/loginTarget requests are refused before transport. Use journaled public MCP browser_command with the retained saved-login SDK.
+
+## Closed-task reopening
+
+A valid closed-task link offers **Reopen task** on the same URL. Navigation is
+read-only. Reopen reaches the existing owner; a missing disposable profile needs
+a separate **Reopen with a new profile** choice that discloses lost sign-ins and
+unsaved state. Never silently replace a named profile or send a replacement link.
+Software uses `service_remote_view_handoff_resolve` with `handoffOperation=reopen`;
+use `reopen_with_new_profile` only after that explicit choice. The request and
+choice survive retries; renewed assistance pauses cooperative automation.

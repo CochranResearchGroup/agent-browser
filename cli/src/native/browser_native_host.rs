@@ -391,6 +391,13 @@ fn run_native_owner<'a, P: BrowserSessionPersistence>(
             check(command)
         }
 
+        fn native_login_attempt(&mut self, command: &Value) -> Result<Value, String> {
+            if self.persistence.load_session_state()? != *self.expected {
+                return Err("browser_native_target_changed:refresh task".into());
+            }
+            super::super::browser_task_operations::native_login_attempt_observation(command)
+        }
+
         fn native_image_attempt(
             &mut self,
             command: &Value,
@@ -428,6 +435,11 @@ fn run_native_owner<'a, P: BrowserSessionPersistence>(
                 if self.persistence.load_session_state()? != *self.expected {
                     return Err("browser_native_target_changed:refresh task".into());
                 }
+            }
+            if operation == "input" && self.command.get("loginTarget").is_some() {
+                super::super::browser_task_operations::native_login_attempt_observation(
+                    self.command,
+                )?;
             }
             if operation == "input" {
                 super::super::browser_native_readiness::require_input_ready(

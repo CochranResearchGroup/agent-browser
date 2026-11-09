@@ -511,3 +511,41 @@ fn mode_binding_uses_actual_borrowed_process_posture_instead_of_catalog_intent()
     selection["choice"] = json!("cancel");
     assert_eq!(host.mode_convert(&selection).unwrap()["phase"], "cancelled");
 }
+
+#[test]
+fn human_handoff_keeps_inert_mode_operation_lookup_available() {
+    use crate::test_utils::EnvGuard;
+    let fixture = Fixture::new();
+    let guard = EnvGuard::new(&[
+        "HOME",
+        "AGENT_BROWSER_HOME",
+        "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+    ]);
+    guard.set("HOME", fixture.root.to_str().unwrap());
+    guard.set(
+        "AGENT_BROWSER_HOME",
+        fixture.root.join(".agent-browser").to_str().unwrap(),
+    );
+    guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+    std::fs::create_dir_all(fixture.root.join(".agent-browser/service")).unwrap();
+    let calls = Rc::new(Cell::new(0));
+    let requests = Rc::new(Cell::new(0));
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
+    let opened = host
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let browser = opened.browser_id.clone();
+    crate::native::browser_host_control::begin_handoff(&browser, "manual-signin", "exact-target")
+        .unwrap();
+    let before = host.state().clone();
+    let counts = (calls.get(), requests.get());
+    let result = host.handle_command(&json!({"action":"browser_session_mode_convert", "sessionId":opened.session_id, "sessionName":"Alice", "choice":"inspect"}));
+    assert_eq!(result["success"], true, "{result}");
+    assert_eq!(result["data"]["operations"], json!([]));
+    assert_eq!(host.state(), &before);
+    assert_eq!((calls.get(), requests.get()), counts);
+    let control = crate::native::browser_host_control::metadata(&browser).unwrap();
+    assert_eq!(control["owner"], "human");
+    assert_eq!(control["epoch"], 1);
+    assert!(crate::native::browser_host_control::check(&browser, "url").is_err());
+}

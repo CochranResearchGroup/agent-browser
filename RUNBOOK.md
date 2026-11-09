@@ -1,3 +1,17 @@
+## Terminal control reconciliation611 | 2026-11-09
+
+[611 packet](docs/dev/maintenance/terminal-control-reconcile611.md): c2a87186
+candidate source/artifact gates passed and the coordinator adopted it. One actual
+reconciliation returned only a generic wrapper refusal; its typed reason is lost.
+A separate exact-release fixture proves routine activity publication falsely
+changes full-record equality. Stable identity repair with target/process/epoch
+race checks is now in focused qualification. No worker live replay/control/input;
+source qualification and a sealed successor precede parent-owned acceptance.
+
+## Native deterministic saved login596 | 2026-11-09
+
+[596 source packet](docs/dev/maintenance/native-saved-login596.md) implements the ordinary password-manager flow through existing Native capture/input and original task-operation journals. Public missing-capability RED and first failures are retained. Final Native/MCP16cases, exactmodule10cases, SDK/types, strict workspace Clippy/Rustfmt and docs gates pass; sealed production-shaped candidate8edb25b passes exact artifact review, MCP stdio metadata and isolated installer fixture. Preserving adoption belongs to the coordinator. Convenience CLI login remains blocked by follow-up610; use MCP stdio/SDK for acceptance. No runtime replacement or live credential input.
+
 ## Interactive invitation recovery | 2026-11-08
 
 [#583](https://github.com/CochranResearchGroup/agent-browser/issues/583), [bounded source plan](docs/dev/maintenance/recovered-interactive-invitation-583.md): physical recovery changes the original invitation digest and leaves Native view intent. Public host regression reproduces this in3.21s. Repair requires an exact per-tab mapping receipt committed with future recovery publication; existing legacy mapping cannot be invented and remains refused with the hold intact. Source qualification passes the public recovery case plus10 guarded refusals,373 related CLI tests (3 existing ignored), maintained strict workspace Clippy, Rustfmt and documentation gates. All first failures and environment corrections remain in the [validation receipt](docs/dev/maintenance/recovered-interactive-invitation-583-validation.json). PR integration and normal optimized candidate remain with the coordinator; no runtime effect or broad review counter consumed.

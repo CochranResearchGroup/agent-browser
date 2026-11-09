@@ -12,6 +12,12 @@ mod host_reconnect;
 mod hosted;
 #[cfg(all(test, unix))]
 mod native_challenge_tests;
+#[cfg(all(test, target_os = "linux"))]
+#[path = "mcp/native_cli_tests.rs"]
+mod native_cli_tests;
+#[cfg(all(test, target_os = "linux"))]
+#[path = "mcp/native_login_tests.rs"]
+mod native_login_tests;
 #[cfg(all(test, unix))]
 mod native_policy_tests;
 mod playbooks;
@@ -287,6 +293,11 @@ fn mcp_command_response_with_config(
             }
             let params: Value =
                 serde_json::from_str(&args[4]).map_err(|_| "browser_native_params_invalid")?;
+            // Saved-login requests require the journaled MCP stdio context and
+            // its private evidence projection, absent from this convenience CLI.
+            if params.get("loginControls").is_some() || params.get("loginTarget").is_some() {
+                return Err("browser_native_login_requires_mcp_stdio".into());
+            }
             let mut arguments = json!({"taskId":args[2],"action":args[3],"params":params});
             // CLI JSON carries the same request context as top-level MCP arguments.
             for field in ["policyOverrideId", "requestId"] {
@@ -573,7 +584,7 @@ fn service_operating_guide() -> Value {
             {"tool":"browser_close","rule":"Close only this task; peer tasks remain open."}
         ],
         "advanced":{"tool":"browser_discover","rule":"Request browser, diagnostics or administration metadata only when needed."},
-        "ownership":{"agentBrowser":"Browser launch, profile and task continuity", "remoteView":"Native desktop and human viewer"},
+        "ownership":{"agentBrowser":"Browser launch, profile and task continuity", "remoteView":"Remote View owns the Native desktop and human viewer"},
         "profileModes":["persistent","existing","disposable"],
         "profileRule":"Use the requested persistent or existing profile; do not substitute a disposable profile to bypass a problem."
     })
@@ -5623,7 +5634,15 @@ fn call_service_mcp_tool_inner(
             let name = workflow::address_task_command(&mut command, task_id)
                 .map_err(|error| JsonRpcError::invalid_params(&error))?;
             let mut data = workflow::execute(command, &name)?;
-            let image = if arguments["action"] == "native_capture" {
+            if arguments["action"] == "native_capture"
+                && arguments["params"].get("loginControls").is_some()
+            {
+                data = crate::native::native_login_perception::curate_response(&data)
+                    .map_err(|error| JsonRpcError::invalid_params(&error))?;
+            }
+            let image = if arguments["action"] == "native_capture"
+                && arguments["params"].get("loginControls").is_none()
+            {
                 use base64::Engine;
                 let image = data.pointer("/capture/image").cloned().ok_or_else(|| {
                     JsonRpcError::invalid_params("native_capture_image_unavailable")
@@ -12325,7 +12344,7 @@ mod tests {
         assert_eq!(briefing["data"]["tabId"], "logical-tab");
         assert_eq!(briefing["data"]["targetId"], "physical-target");
         assert_eq!(briefing["data"]["contextEvidence"], "retained_not_live");
-        for operation in ["takeover", "return", "override", "reconcile"] {
+        for operation in ["takeover", "return", "override"] {
             assert_eq!(
                 mcp_command_response(&[
                     "mcp".into(),

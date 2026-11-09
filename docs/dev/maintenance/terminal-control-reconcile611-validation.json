@@ -1,0 +1,109 @@
+{
+  "scope": "focused Linux provider-free source qualification; no live browser control or input",
+  "base": "66bf62d326c56cd69d9723494caf7c8086da768d",
+  "branch": "fix/terminal-control-reconcile611",
+  "validatedRustBlobs": {
+    "cli/src/mcp.rs": "806deb77735f6bfbd5502edbad611401d2252465",
+    "cli/src/mcp/host_control.rs": "e181386bc059a85fa55106ce987e805de4a4d381",
+    "cli/src/mcp/host_control_tests.rs": "50104a4898c990e3952c1ea92fe8c4e249af5b7d",
+    "cli/src/mcp/native_cli_tests.rs": "4c581f2d2b396afaeed7a9b1c644bcd858a23bb2",
+    "cli/src/native/browser_host_control.rs": "383eb444b1aaad1940ea8c3546c7275021acbbc8",
+    "cli/src/native/browser_host_return_tests.rs": "61f8d01363ad8be966d34a2355fc82105e8a5c4c",
+    "cli/src/output.rs": "fe6ef1104681f0bd5756e010f2c732ec04522dcf"
+  },
+  "gates": [
+    {
+      "command": "scripts/ci/rust-tests.sh --focused host_control",
+      "result": "33 passed; 0 failed; 0 ignored",
+      "executionSeconds": 6.74,
+      "compile": "1m46s"
+    },
+    {
+      "command": "scripts/ci/rust-tests.sh --focused native_cli_saved_login",
+      "result": "1 passed; 0 failed"
+    },
+    {
+      "command": "scripts/ci/rust-tests.sh --focused managed_task_control_status",
+      "result": "1 passed; 0 failed"
+    },
+    {
+      "command": "scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check",
+      "result": "passed"
+    },
+    {
+      "command": "scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings",
+      "result": "passed",
+      "elapsed": "1m37s"
+    },
+    {
+      "command": "pnpm --dir docs build",
+      "result": "passed"
+    },
+    {
+      "command": "pnpm test:service-api-mcp-parity",
+      "result": "passed"
+    },
+    {
+      "command": "pnpm test:remote-view-handoff-docs",
+      "result": "passed"
+    },
+    {
+      "command": "pnpm test:policy-wiring",
+      "result": "passed"
+    },
+    {
+      "command": "pnpm test:documentation-links -- --base 66bf62d326c56cd69d9723494caf7c8086da768d",
+      "result": "passed"
+    },
+    {
+      "command": "python .codex/skills/repo-policy-selector/scripts/audit_planning_contract.py --repo-root . --lane TERMINAL-CONTROL-611 --json",
+      "result": "passed"
+    },
+    {
+      "command": "workstation host, VM harness, Guacamole assets, Postgres durability, route user-sync provider-free fixture scripts",
+      "result": "all five passed"
+    }
+  ],
+  "resources": {
+    "jobs": 2,
+    "memoryClaimKiB": 4194304,
+    "memoryHigh": "6G",
+    "memoryMax": "8G",
+    "target": "existing warm canonical target, serialized with CLI610 worker"
+  },
+  "retainedFirstFailures": [
+    "Public sealed8ed CLI standalone reconciliation rejected hosted-task-required",
+    "CLI610 reached taskstore instead of predispatch typed refusal",
+    "Legacy synthetic terminal row without owner expected success; strengthened to refuse unknown owner and qualify known reuse",
+    "Fixture unused_mut warning removed",
+    "Clippy nonminimal_bool corrected with equivalent Option predicate"
+  ],
+  "limits": [
+    "No hosted CI; local checks satisfy cost policy",
+    "No comprehensive or cross-platform runtime claim",
+    "Installed skill publication remains with coordinator",
+    "Exact sealed artifact QA and actual Overleaf104 acceptance remain separate",
+    "No extra broad review or final findings-TDD allowance consumed"
+  ],
+  "priorQualifiedRustBlobs": {
+    "cli/src/mcp.rs": "806deb77735f6bfbd5502edbad611401d2252465",
+    "cli/src/mcp/host_control.rs": "8090e2ea914c953a0c0d214c32dae18c41b03c04",
+    "cli/src/mcp/host_control_tests.rs": "f8a5f1e72b59f57201914db251328ab4792bc610",
+    "cli/src/mcp/native_cli_tests.rs": "4c581f2d2b396afaeed7a9b1c644bcd858a23bb2",
+    "cli/src/native/browser_host_control.rs": "383eb444b1aaad1940ea8c3546c7275021acbbc8",
+    "cli/src/native/browser_host_return_tests.rs": "61f8d01363ad8be966d34a2355fc82105e8a5c4c",
+    "cli/src/output.rs": "fe6ef1104681f0bd5756e010f2c732ec04522dcf"
+  },
+  "activityRepair": {
+    "actualInstalledRefusal": "generic browser_operation_refused; typed cause not retained or recovered",
+    "separateExactReleaseRed": "Routine activity-only publication reproduced browser_control_observation_target_changed on c2a87186",
+    "regression": "activity and expiry publication accepted; target/process/epoch races refused with original uncertainty retained",
+    "functionalGates": "hash-pinned current test executable: host_control35 passed, CLI1 passed, ordinary metadata1 passed",
+    "testExecutableSha256": "8de15e09249fefa078547c62a0c60ebc7e2beff3866b265e3439a7dd6b19aee7",
+    "provenance": "Both new regression names and own source path in pinned test artifact; source frozen since six-case official runner GREEN; disposable HOME/XDG matches runner",
+    "rustQuality": "Rustfmt check and strict workspace Clippy passed; Clippy CargoSignal job20261109T152110Z-971bd1255eea exit0 zero diagnostics",
+    "retainedInfrastructure": "Foreign shared-target lock waits; stopped only own redundant Cargo waiter after qualified artifact reuse; first socket path-length setup error retained, no actual binary call at that failed setup",
+    "reusedGates": "MCP schemas, CLI610 implementation, SDK, docs site, parity and five helper fixtures unchanged; prior passing gates retained",
+    "effects": "No worker live reconciliation, control or input; original real request not replayed"
+  }
+}

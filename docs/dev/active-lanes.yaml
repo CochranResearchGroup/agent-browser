@@ -6,17 +6,65 @@ lanes:
     product_lane: PL-BUGFIX
     objective: Keep a valid handoff actionable after explicit task closure
     plan: docs/dev/maintenance/retained-handoff-613.md
-    branch: fix/retained-handoff-613
+    branch: fix/handoff613-deploy
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#613]
     plan_state: OPEN
-    custody_state: INTEGRATED
+    custody_state: ACTIVE_WORKTREE
     dependencies: [MANUAL-IDLE-HANDOFF-599]
     overlaps: [OPERATOR-MODE-RELAUNCH-607, TERMINAL-CONTROL-611, NATIVE-SAVED-LOGIN-596]
     reconciled_overlaps: ["613 owns closed-link presentation and explicit reconstruction;607 mode relaunch and611 terminal requests retain their physical checkouts; shared host integration is serial"]
     validation_status: PR616 source qualified at20b8a39cf;207 handoff,27 control,7 presentation cases plus419 model tests, strict Rust gates, UI/client/docs/tooling and six exact-binary no-launch smokes pass; original installed acceptance pending
     limitations: ["Runtime adoption must preserve installed unmerged source d26086895fe18871e946fcf6fdfffac3a020e847; no production install or original task recreation", "Human-control warning remains a separate report"]
+    updated_at: 2026-11-09
+  - id: OPERATOR-MODE-RELAUNCH-607
+    product_lane: PL-BUGFIX
+    objective: Let operator-confirmed mode relaunch reach its existing owner during human handoff
+    plan: docs/dev/maintenance/operator-mode-relaunch-607.md
+    branch: fix/607-operator-mode-relaunch
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#607]
+    plan_state: COMPLETED
+    custody_state: INTEGRATION_READY
+    dependencies: [NATIVE-SAVED-LOGIN-596, TERMINAL-CONTROL-611]
+    overlaps: [HUMAN-HANDOFF-571, CDP-FREE-IDLE-585, MANUAL-IDLE-HANDOFF-599, NATIVE-SAVED-LOGIN-596, TERMINAL-CONTROL-611]
+    reconciled_overlaps: ["Reuse clean canonical checkout; no new checkout; own operation lookup and explicit close admission, preserve retirement/recovery and Native control ownership; 607 primary writer for process close; preserve596/610/611 source througha5fcfd3b7 and both lane records"]
+    validation_status: Sourced26086895 sealed8fe86355 installed accepted; doctor and exact installer fixture pass; isolated3cycles and real human-held process close, peer preservation and same-profile CDP reopen pass
+    limitations: ["PR608 not merged to main", "Shared global skill not published", "Private account evidence stays user-scoped", "First dev activation and preflight failures retained"]
+    updated_at: 2026-11-09
+  - id: TERMINAL-CONTROL-611
+    product_lane: PL-BUGFIX
+    objective: Reconcile terminal unknown requests through exact public owner observation
+    plan: docs/dev/maintenance/terminal-control-reconcile611.md
+    branch: fix/terminal-control-reconcile611
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#611, CochranResearchGroup/agent-browser#610]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [NATIVE-SAVED-LOGIN-596]
+    overlaps: [NATIVE-SAVED-LOGIN-596]
+    reconciled_overlaps: ["Primary611 owns control and shared docs; auxiliary610 owns mcp CLI branch and tests; original596 sealed source retained unchanged"]
+    validation_status: Separate exactrelease activity RED confirmed; stableidentity public6 and pinnedcontrol35 CLI1 metadata1 fmt strictClippy pass; one sealed successor next
+    limitations: ["No runtime control or input", "Actual Overleaf104 acceptance remains separate"]
+    updated_at: 2026-11-09
+  - id: NATIVE-SAVED-LOGIN-596
+    product_lane: PL-AUTH
+    objective: Complete native deterministic saved-credential login tooling and retained routine
+    plan: docs/dev/maintenance/native-saved-login596.md
+    branch: auth/native-saved-login596
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#596]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [CochranResearchGroup/agent-browser#586]
+    overlaps: [native-capture586]
+    reconciled_overlaps: ["596 owns new read-only perception and Native capture option;586 owns capture transport; parent serializes integration; no installed effects"]
+    validation_status: Source8edb25b and sealed production-shaped candidate qualified; successor611 owns terminal reconciliation and CLI610; actual saved-login acceptance remains open
+    limitations: ["Installed real saved-login acceptance remains open", "No production replacement or live login"]
     updated_at: 2026-11-09
   - id: HANDOFF-MODAL-603
     product_lane: PL-BUGFIX
@@ -697,7 +745,7 @@ lanes:
     custody_state: INTEGRATED
     overlaps: [P283, P284]
     reconciled_overlaps: ["Own dashboard/http routing, bounded startup catch-up in selected-context/read-coordinator and rail freshness prose; P283/P284 retain profile/store/observation and installer source; reuse primary and retain pinned artifacts"]
-    validation_status: PR410 and PR416 installed on final e0d5525e92cc; cold visit1955.6ms versus3999.8ms, median776.8ms across five contexts;11 browser roots preserved and16 probe generations absent
+    validation_status: PR410 and PR416 installed on final e0d5525e92cc; cold visit1955.6ms versus3999.8ms, median776.8ms across five contexts;11 browser roots preserved and 16 probe generations absent
     limitations: ["Finite samples; no universal latency guarantee", "Native pixels and acquisition acceptance owned by P289", "Retain primary checkout and pinned candidates"]
     updated_at: 2026-10-24
   - id: P284

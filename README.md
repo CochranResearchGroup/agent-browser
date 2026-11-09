@@ -318,7 +318,17 @@ must cooperate with the current state. See the [control contract](https://github
 agent-browser --json mcp host-control TASK status
 agent-browser --json mcp host-control TASK takeover 0 operator 'Assist with this task'
 agent-browser --json mcp host-control TASK return 1 operator 'Continue after assistance'
+agent-browser --json mcp host-control TASK reconcile 2 operator 'Observe terminal request' ORIGINAL
 ```
+
+A terminal uncertain request can be reconciled on its exact owned task without
+creating another human return. Supply its original request ID, current epoch,
+actor and reason. The server freshly observes the retained target and checks
+original browser/process custody plus positive dispatcher absence or PID reuse.
+Human control, active or unknown dispatchers and changed identities are refused.
+The original row becomes `observed_uncertain_no_replay`; its history remains and
+it never grants retry authority. Other standalone control changes remain unsupported.
+
 
 
 ## Installation
@@ -7398,6 +7408,10 @@ Configure the native Remote View origin, pool, application and public origin in 
 
 
 Native task observation and input use the existing Remote View owner. MCP
+The opt-in `native_capture` parameter `loginControls: {profile: "english-chrome-v1", expectedAccount: "configured@example.invalid"}` enumerates supported login fields and saved-account entry candidates from current Native pixels and pinned English Tesseract evidence. It returns opaque frame-bound references and safe labels, with no raw OCR, image, password or field values. `native_input` parameter `loginTarget: {observationRequestId, targetRef, episodeId}` derives one OS click from the owner-retained observation. An immutable per-task episode permits username focus, the matching saved entry and independently observed filled-form submission, with at most three clicks in60seconds; unknown input never permits replay. Native window, generation, controller and visual fences remain required. Pixel candidates alone do not prove browser-native origin or authenticated access.
+
+`@agent-browser/client/native-saved-login` exports `createNativeSavedLoginClient({callTool, store, verifyAccess, expectedAccount})`. The host supplies a cross-process serialized durable episode store and independent intended-account access verification. Call `resolve({taskId, episodeId})` with the original IDs across interruptions. Unsupported geometry, stale evidence, missing credentials or challenges return a typed human/uncertain outcome. Source fixtures do not qualify installed real saved-login acceptance; this routine never invokes a semantic worker.
+
 `browser_command` supports `native_capture` and `native_input`; discover their
 arguments with `browser_discover`. CLI equivalent:
 `agent-browser --json mcp browser-native TASK native_input '{"actions":[{"kind":"key","chord":"Tab"}]}'`.
@@ -7513,6 +7527,10 @@ governed and may be unavailable. Reopening the durable handoff reconciles an
 already-dispatched conversion through its original operation without relaunch.
 
 MCP uses `browser_command` with `taskId`, action `mode_convert`, and params containing `operationId`, `mode` (`cdp` or `cdp_free`) and `choice`. Start with `prepare`, then select an offered action. CLI accepts `agent-browser --json mcp mode-convert '{"taskId":"TASK","operationId":"mode-one","mode":"cdp_free","choice":"prepare"}'`. HTTP uses `POST /api/command` with action `browser_session_mode_convert`, the exact `sessionId` and owner `sessionName`, and the same operation fields.
+
+Mode-operation inspection and preparation do not read the page and remain available during an interactive human handoff. Confirmed lifecycle choices still verify the original process and affected tasks; unconfirmed relaunch does not release human control.
+
+An explicit operator request to close and reopen a signed-in profile uses whole-browser close with actor and reason, then opens the same existing profile with a new task key in automation mode. The close validates owned-process custody and peer isolation even during human handoff; it preserves the profile directory and old control history. It does not require another Return control click. CDP-free browser-scope closure terminates the verified original process and requires positive exit readback; on-disk profile data remains available for reopening.
 
 Keep the operation ID after an uncertain reply and select `reconcile`; do not issue another close/open sequence. Close prompts offer focus, graceful retry and consequentially confirmed force close. Native screenshots and input remain separate from authentication proof. Conversion and bounded recovery are qualified in isolated synthetic Native workflows. Installed Native qualification remains separate; source acceptance does not prove installed behavior.
 
@@ -7795,3 +7813,5 @@ available. The `AI_GATEWAY_URL`, `AI_GATEWAY_API_KEY` and `AI_GATEWAY_MODEL`
 settings are shared with existing chat configuration; teaching uses a separate
 inert request with no browser tools. Keep configuration, tokens, transcripts,
 recordings and actual account evidence outside the source repository.
+
+Convenience `mcp browser-native` loginControls/loginTarget calls are refused before transport. Use journaled public MCP `browser_command` and the retained saved-login SDK.
