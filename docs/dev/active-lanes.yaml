@@ -14,7 +14,7 @@ lanes:
     dependencies: []
     overlaps: [HUMAN-HANDOFF-571, CDP-FREE-IDLE-585, MANUAL-IDLE-HANDOFF-599, NATIVE-SAVED-LOGIN-596]
     reconciled_overlaps: ["Reuse clean canonical checkout; no new checkout; own operation lookup and explicit close admission, preserve retirement/recovery and Native control ownership; integrate installed native-login source8edb25b3 without changing its implementation"]
-    validation_status: Combined installed596 carry passes17 native-login,1 owned-close,6 mode-lookup tests plus strict Clippy,fmt,SDK/types,parity,docs and policy; combined sealed candidate and installed repair next
+    validation_status: Installed6b17 guard repair and same-profile authenticated CDP reopen accepted; live manual window close remains RED; explicit original-process scope repair and focused checks running
     limitations: ["Production profile and live state remain outside Git; installed qualification separate"]
     updated_at: 2026-11-09
   - id: NATIVE-SAVED-LOGIN-596

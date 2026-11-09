@@ -5,6 +5,15 @@ use serde_json::json;
 #[cfg(target_os = "linux")]
 #[test]
 fn human_handoff_allows_attributed_owned_browser_close_and_preserves_profile_and_peers() {
+    qualify_operator_close(false);
+}
+
+#[test]
+fn explicit_process_close_does_not_wait_for_manual_window_close() {
+    qualify_operator_close(true);
+}
+
+fn qualify_operator_close(window_stays_live: bool) {
     use crate::test_utils::EnvGuard;
     let fixture = Fixture::new();
     let guard = EnvGuard::new(&[
@@ -20,6 +29,10 @@ fn human_handoff_allows_attributed_owned_browser_close_and_preserves_profile_and
     guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
     std::fs::create_dir_all(fixture.root.join(".agent-browser/service")).unwrap();
     let _processes = CopyProcessFixture::new(&fixture.root);
+    std::fs::write(fixture.root.join("operator-os-close-readback"), "").unwrap();
+    if window_stays_live {
+        std::fs::write(fixture.root.join("manual-window-close-stays-live"), "").unwrap();
+    }
     let mut host = fixture.host(Mode::Success, Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
     let original = host
         .open(OpenBrowserSession::exact_profile(

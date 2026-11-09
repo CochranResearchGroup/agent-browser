@@ -72,6 +72,8 @@ explicit confirmation and exact original-process checks remain with the mode own
 only after process custody, peer isolation and lifecycle policy validation. A human
 handoff does not veto this operator request. The close retains profile storage,
 control epoch and prior uncertainty; it does not assert page observation.
+CDP-free browser scope uses original-kernel process termination and positive exit
+readback. Ordinary task closure keeps its graceful window-close path.
 
 **Mode conversion readiness**: Exact replacement process, requested debugging
 posture and Native window observation. Selective-input permission is independent;

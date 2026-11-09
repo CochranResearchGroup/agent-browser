@@ -73,7 +73,7 @@ Never send providerExternalUrl or raw Guacamole URLs.
 
 Read [Workspace](references/cli-and-service.md#operator-workspace) for tabs, sharing and handoffs. Focus needs an owned tab; reviews are opt-in. Rail catches up once. Remote View owns view/auth. Terminal pool replay retains history.
 
-[Manual login](references/cli-and-service.md#manual-login) is CDP-free. For CDP, close with browser scope and actor/reason, then reopen that profile.
+[Manual login](references/cli-and-service.md#manual-login) is CDP-free. For CDP, end the process with browser scope and actor/reason, then reopen that profile.
 
 ## Sharing a profile between tasks
 

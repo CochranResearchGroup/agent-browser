@@ -2052,11 +2052,13 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                                 command["actor"].as_str().unwrap_or_default(),
                                 command["reason"].as_str().unwrap_or_default(),
                             )?;
-                            let closed = self.close_session(
+                            let expected_browser = &before.browsers[browser_id];
+                            let closed = self.manager()?.close_browser_scope(
                                 &session_id,
-                                SessionEndReason::ExplicitClose,
+                                expected_browser,
                                 now_ms,
                             )?;
+                            self.commit_state()?;
                             Ok(
                                 serde_json::json!({"closed":true,"sessionId":closed.session_id,"browserId":closed.browser_id,
                             "disposition":session_close_disposition_name(closed.disposition)}),

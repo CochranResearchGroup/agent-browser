@@ -1508,6 +1508,39 @@ impl<
         self.refresh_manual_native_context(browser)?;
         self.effects.dispatch_graceful_browser_close(browser)
     }
+    fn close_browser_for_operator(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        self.require_operation()?;
+        if !browser.cdp_endpoint.is_empty() {
+            return self.close_browser(browser);
+        }
+        self.require_clear_profile_custody(&browser.profile_id)?;
+        let identity = self
+            .store
+            .published_launch_process_identity(browser)
+            .map_err(|_| "browser_lifecycle_original_identity_unavailable")?
+            .ok_or("browser_lifecycle_original_identity_missing")?;
+        let scope = BrowserIdleRetirementScope {
+            browser: browser.clone(),
+            process_identity: Some(identity),
+            tabs: Vec::new(),
+        };
+        if self.effects.observe_idle_retirement_effect(&scope, None)? {
+            return Ok(());
+        }
+        // Reuse original-kernel process termination, not WM_DELETE_WINDOW.
+        // This separate explicit close keeps its own durable intent and never
+        // replays or clears an earlier uncertain window-close operation.
+        self.with_browser_activity(browser, |effects| {
+            effects.apply_idle_retirement_effect(&scope, None)?;
+            if !effects.observe_idle_retirement_effect(&scope, None)? {
+                return Err("browser_lifecycle_process_exit_unproven".into());
+            }
+            Ok(())
+        })
+    }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         self.require_operation()?;
         let effect = BrowserIdleRetirementEffect::CloseBrowser {

@@ -7,38 +7,39 @@ State: OPEN
 
 ## Current state
 
-The mode-lookup and explicit owned-close regressions failed with their exact
-control refusals before repair, then passed. Source `db48401b6` was sealed as
-candidate-98240c7127440729-7a208ba9dacee065. Its exact installer fixture passed
-(two owned hosts, zero residue), and isolated fg607 publication passed three
-open/read/close cycles with production unchanged. Development doctor passed all
-checks except optional unconfigured local ingress; no public dev viewer is claimed.
-Strict workspace Clippy, 3 control tests and 7 host-policy tests passed. The extra
-161-test consumer sweep timed out after 79 passing cases, including both repair
-regressions; it is not a complete-suite claim. No synthetic children remain.
+Combined source `dfcb6c105` is installed as generation
+`0.28.0-6b17b58a38f0-10036adf76ec`, SHA256
+`6b17b58a38f0bd155f191cb256614a70994747ebc281d102e8eb5be4b81445ec`.
+The exact installer fixture and three isolated browser cycles pass; public
+installed doctor passes. The source preserves installed native-login source
+`8edb25b3`. No shared global skill was published.
 
-The operator's original process was explicitly closed through an identity-bound
-pidfd/SIGTERM. Exact exit, retained profile and no matching Chrome process were
-confirmed. Stale lock entries remain for lifecycle recovery. Public reopen still
-rejects the historical human hold. Account continuity remains unverified.
+The corrected unfiltered metadata probe now passes. The original operator-owned
+process was closed through an identity-bound pidfd; public browser-scope close
+then archived its ended task. The same profile reopened with CDP, and the
+application's signed-in account was independently confirmed. Private account and
+profile evidence remains in the user-scoped debug directory.
 
-A pre-install readback found newer installed source `8edb25b3` from #596. The first
-candidate is retained, not installed. Integrate both native-login commits from the
-common `ceac15364` base and preserve the installed native saved-login tooling.
-The only textual conflict is the lane catalog; both records are retained. Native
-login code matches `8edb25b3`, and close/relaunch code matches `db48401b6`.
-Combined qualification passes: 17 native-login tests, the explicit owned-close
-regression, 6 mode-lookup tests, strict workspace Clippy, Rustfmt, SDK/types,
-API/MCP parity, policy wiring, handoff docs, links and documentation build. The
-merge is ready for a clean combined production build.
+A separate empty live Chrome qualification exposed a remaining defect: public
+browser-scope close reached the owner but selected normal manual window close.
+It returned `manual_login_close_readback_required` with the original process
+still live. No close was replayed. A profile-creation database-lock failure was
+first reconciled as zero task/process effects before one serialized retry.
 
-Reuse the canonical checkout; no additional checkout is created. This lane owns
-operation lookup and explicit-close admission plus required guidance. Retirement,
-manual recovery and native-login implementations retain their existing ownership.
-Next: qualify one combined production-shaped candidate and preserving runtime
-transition, then close/archive the ended task and reopen its same existing profile
-with CDP under current operator authority. Keep installation, process replacement,
-account readback and scientific acceptance separate.
+The refined owner regression reproduces the same manual-window refusal (1 failed,
+8.50s). The new explicit browser-scope path revalidates the exact refreshed
+browser and exclusive task scope, then uses the existing original-kernel shutdown
+primitive with durable activity and positive exit observation. Ordinary task
+closure keeps its prior behavior; earlier uncertain window-close history remains.
+Focused GREEN: both owned-process lifecycle cases pass (2 tests, 29.74s).
+The complete service-model package passes (418 tests across 25 suites). Strict
+workspace Clippy, formatting, policy wiring, MCP/skill parity, handoff docs,
+documentation links and the docs build pass. A new sealed candidate is pending.
+
+Retain this canonical checkout and both sealed artifacts. No new checkout is
+created. Next: finish source qualification, build/qualify the corrected candidate,
+perform a preserving update and complete the retained empty live-browser cycle.
+The actual FigureLabs profile is separately usable for read-only research.
 
 ## Scope and acceptance
 
