@@ -7406,7 +7406,7 @@ Commands:
   resources/read    Diagnostics
   host-task TASK    Read app metadata
   task-briefing TASK Read retained task context without browser effects
-  host-control TASK status|view reads any retained managed task; control changes require hosted app binding.
+  host-control TASK status|view reads any retained managed task; reconcile checks exact owned task and terminal dispatcher; other control changes require hosted app binding.
   Task briefing processPid is retained metadata; authentication verifies current physical ownership separately.
   task-operation TASK REQUEST Read original addressed CDP operation without retry
   Teaching evidence: client teaching-evidence / teaching-evidence-http; recheck Saved provenance before Speech ranges
@@ -7432,6 +7432,9 @@ Commands:
   Native policy: verified CDP origin/provider required; CDP-free uses human assistance
   Native return: original opaque handoff, explicit takeover/return, separate access checks
   browser-mode TASK Inspect mode
+  Native saved login: capture loginControls english-chrome-v1; select opaque loginTarget
+  Native login episode: same task/episode;60 seconds/3 clicks; unknown input never replays
+  Native login proof: no password/OCR/image export; independent account verification required
   browser-native TASK ACTION JSON Input/capture <=1Mpx
   browser-build JSON Inspect/select/open profile build
   Workspace Open browser: compact toolbar; disposable CDP-free is the default.
@@ -7461,10 +7464,12 @@ Commands:
   Copy/publication do not prove account identity, usable login or storage divergence.
   Reload/inspect reads the original operation; reconcile lost replies without replay.
   mode-convert JSON Inspect/relaunch/pause/cancel/restore_previous/select_build
+    Metadata remains available during human handoff; lifecycle choices keep confirmation checks.
     Conversion verifies mode/window without input; retained handoffs reconcile the original launch
     Fullscreen Native handoffs offer a top-row CDP on/off control with relaunch review
   watch-host-task TASK Changed NDJSON; fresh reconnect
-  host-control      Status/view/takeover/return/override/reconcile; inspect failed return.
+  host-control      Reconcile terminal uncertainty on the exact owned task; never replay.
+  Native saved login uses journaled MCP browser_command; convenience CLI refuses login controls/targets.
   host-reconnect TASK OP [options-json] Status/disconnect/reconnect/rebind/configure/reopen
   host-policy JSON  App/task rules and scoped override
 
@@ -7511,6 +7516,7 @@ Rules:
   No grant for unrestricted tasks. Artifacts: handle/relative name; download selector.
   Refuse existing files/symlinks/traversal; publication remains explicit.
   Close scope=browser needs actor/reason, no peers/borrowed custody; verify OS residue.
+  Explicit owned close ends the verified original process; reopen the same profile for CDP.
   Watch DB/WAL every 250 ms, not provider polling; events have watchId/sequence.
   SiteGuide: prepare_login/validate_plan, verify_login, collect_posts.
   Keep secrets private; inspect unknown delivery.

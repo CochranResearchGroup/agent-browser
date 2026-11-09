@@ -8,11 +8,9 @@ allowed-tools: Bash(agent-browser:*)
 
 Workspace access requires the shared Authelia guard; native dashboard password login and session cookies are disabled pending compatible Remote View authentication. Authelia admission grants operator access without local dashboard account enrollment or roles; attribution uses the exact verified owner principal.
 
-Native credentials: [Remote View setup](references/cli-and-service.md).
+Control and credentials: [setup and reconcile](references/cli-and-service.md).
 
-A `dashboard_build_incomplete` install/doctor failure requires rebuilding the frontend and recompiling the candidate. The maintained `pnpm build:development-candidate` command includes both steps.
-
-Handoffs supports instant search by task, profile, session, creator or link ID. Compact rows keep technical details under Inspect.
+Build failures: [readiness guidance](references/cli-and-service.md#build-readiness).
 
 ## Handoff creator context
 
@@ -20,7 +18,7 @@ Creation requires `serviceName`, `agentName`, concrete `taskName`. CLI: `--servi
 
 ## MCP task workflow
 
-Warnings advise; writer custody survives executable unlink.
+Writer custody survives executable unlink.
 
 Use `browser_open` with `{"serviceName":"my-app","agentName":"editor","taskName":"Edit draft","profile":"editorial","profileMode":"persistent","taskKey":"editing","url":"https://example.com"}`. Read `data.taskId`, `profileId`, `browserId`, `tabId`, `url`. Address actions with `taskId`. Reuse `taskKey` to preserve the page/edits without navigation; distinct keys separate tasks. `browser_close` ends only the addressed task.
 
@@ -34,6 +32,8 @@ Same-browser and desktop rail tab switches retain the viewer connection.
 A retained handoff may finish its original settled browser-close publication before recovery; keep the same task and handoff, and preserve unresolved effect or identity failures for readback. An interactive invitation survives physical replacement only through its recorded exact recovery mapping; missing legacy mapping or changed targets stay fenced, with the human hold preserved.
 
 After human input, use Give control back in the viewer, then `browser_continue` with the same `taskId` reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff.
+
+Saved login: use [native login controls](references/cli-and-service.md#native-login-controls) with the retained episode; no password export or input replay.
 
 ## Standalone authentication
 
@@ -61,7 +61,7 @@ Page actions require `taskId`. `browser_tab` manages this task's tabs; retry cre
 with the same `tabKey`. After restart, creation rejoins the verified browser
 and preserves tabs; peer tabs remain outside scope. Discover actions with `browser_discover`; use `browser_command` with `taskId`, `action`, `params`.
 Close rejects changed selection. A pre-commit return failure keeps human control
-and epoch; inspect status and use a fresh explicit intent, never replay uncertainty.
+and epoch; inspect status and use a explicit intent, never replay uncertainty.
 
 Read [retained workflow transport](references/cli-and-service.md#retained-workflow-transport)
 before downloads, stale transport recovery, retirement or advanced administration.
@@ -73,7 +73,7 @@ Never send providerExternalUrl or raw Guacamole URLs.
 
 Read [Workspace](references/cli-and-service.md#operator-workspace) for tabs, sharing and handoffs. Focus needs an owned tab; reviews are opt-in. Rail catches up once. Remote View owns view/auth. Terminal pool replay retains history.
 
-[Manual login](references/cli-and-service.md#manual-login) is CDP-free. Native control and human takeover are separate.
+[Manual login](references/cli-and-service.md#manual-login) is CDP-free. For CDP, end the process with browser scope and actor/reason, then reopen that profile.
 
 ## Sharing a profile between tasks
 

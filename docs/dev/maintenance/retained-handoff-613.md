@@ -96,3 +96,24 @@ Installation must preserve already-installed source d26086895fe18871e946fcf6fdff
 which is not an ancestor of this checkout's main baseline 48e87e5ee3575c5100511e853c6b3f3256235816.
 Coordinate that active source lane before runtime adoption. No production
 replacement or original handoff recreation has occurred in this implementation.
+
+## Authorized preserving deployment
+
+Product lane: PL-BUGFIX. The operator requested "pr merge deploy" after source
+integration. The new deployment primary is fix/handoff613-deploy at
+/tmp/agent-browser-deploy613. Six existing checkouts were reconciled and retained;
+this necessary primary owns composition, validation, one sealed production build,
+one preserving installation and original-link readback. Other lane checkouts and
+candidates remain untouched. The existing installed source d26086895 is preserved
+through parent2ba47635; their difference is accepted runtime evidence only.
+The only merge conflict is the active-lane catalog; preserve both intents.
+
+The deployment window has a 120-minute overall ceiling, including build/waits,
+one serial integration review and one bounded repair if a new defect appears.
+Reassess after30 minutes without outcome progress. Reuse unchanged source gates;
+run combined owner/control, lifecycle, model and client contracts, strict Rust
+quality and docs checks. Build one production-shaped candidate through the
+candidate executor, qualify its exact installer/no-launch fixtures, then use the
+canonical preserve installer with fresh transaction/census readbacks. Never
+replace missing original profile storage implicitly. Validate the original URL
+read-only and use a separately owned disposable target for any reopen exercise.

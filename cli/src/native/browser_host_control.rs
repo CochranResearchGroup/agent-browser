@@ -553,8 +553,56 @@ pub(crate) fn observed(browser_id: &str, expected: u64) -> Result<(), String> {
     })
 }
 
-/// Explicit observation reconciliation records uncertainty without replaying the
-/// effect. The caller first freshly observes the same existing page.
+/// Read-first reconciliation admission. Terminal uncertainty is not a new
+/// human-return intent; the original dispatcher must be positively gone.
+fn reconcile_ready(control: &Control, expected: u64, request_id: &str) -> Result<(), String> {
+    if control.epoch != expected {
+        return Err("browser_control_epoch_changed".into());
+    }
+    if control.human {
+        return Err("browser_control_human".into());
+    }
+    let outcome = control
+        .flights
+        .get(request_id)
+        .ok_or("browser_control_request_missing")?;
+    if !matches!(
+        outcome.as_str(),
+        "dispatched" | "uncertain_in_flight" | "uncertain_no_replay"
+    ) {
+        return Err("browser_control_outcome_already_observed".into());
+    }
+    let (pid, start) = control
+        .owners
+        .get(request_id)
+        .filter(|(pid, start)| *pid > 0 && !start.is_empty())
+        .ok_or("browser_control_dispatch_owner_unknown")?;
+    match crate::process_identity::observe_process(*pid) {
+        crate::process_identity::ProcessObservation::Missing => Ok(()),
+        crate::process_identity::ProcessObservation::Observed(process)
+            if process
+                .start_token
+                .as_ref()
+                .is_some_and(|actual| actual != start) =>
+        {
+            Ok(())
+        }
+        _ => Err("browser_control_dispatch_still_in_flight".into()),
+    }
+}
+
+/// Check the retained original before a fresh existing-target observation.
+/// No history or control state is changed by this preflight.
+pub(crate) fn check_reconcile(
+    browser_id: &str,
+    expected: u64,
+    request_id: &str,
+) -> Result<(), String> {
+    reconcile_ready(&read(browser_id)?, expected, request_id)
+}
+
+/// The public caller first observes the same existing page and process. Commit
+/// an attributable observation of uncertainty without replay or epoch changes.
 pub(crate) fn reconcile(
     browser_id: &str,
     expected: u64,
@@ -562,47 +610,18 @@ pub(crate) fn reconcile(
     actor: &str,
     reason: &str,
 ) -> Result<(), String> {
-    if actor.trim().is_empty()
-        || reason.trim().is_empty()
-        || actor.len() > 160
-        || reason.len() > 320
-    {
-        return Err("browser_control_attribution_required".into());
-    }
+    validate_attribution(actor, reason)?;
     transaction(&path(browser_id)?, |control| {
-        if control.epoch != expected || control.human || !control.awaiting_observation {
-            return Err("browser_control_return_required".into());
+        reconcile_ready(control, expected, request_id)?;
+        if control.flights.iter().any(|(id, state)| {
+            id != request_id && matches!(state.as_str(), "dispatched" | "uncertain_in_flight")
+        }) {
+            return Err("browser_control_in_flight_requires_reconciliation".into());
         }
-        let retained = control
+        control
             .flights
-            .get(request_id)
-            .ok_or("browser_control_request_missing")?;
-        if matches!(retained.as_str(), "dispatched" | "uncertain_in_flight") {
-            let (pid, start) = control
-                .owners
-                .get(request_id)
-                .ok_or("browser_control_dispatch_owner_unknown")?;
-            match crate::process_identity::observe_process(*pid) {
-                crate::process_identity::ProcessObservation::Missing => {}
-                crate::process_identity::ProcessObservation::Observed(process)
-                    if process
-                        .start_token
-                        .as_ref()
-                        .is_some_and(|actual| actual != start) => {}
-                _ => return Err("browser_control_dispatch_still_in_flight".into()),
-            }
-        }
-        let outcome = control
-            .flights
-            .get_mut(request_id)
-            .ok_or("browser_control_request_missing")?;
-        if !matches!(
-            outcome.as_str(),
-            "dispatched" | "uncertain_in_flight" | "uncertain_no_replay"
-        ) {
-            return Err("browser_control_outcome_already_observed".into());
-        }
-        *outcome = "observed_uncertain_no_replay".into();
+            .insert(request_id.into(), "observed_uncertain_no_replay".into());
+        control.awaiting_observation = false;
         control.audit.push(json!({"epoch":control.epoch,"operation":"reconcile","requestId":request_id,"actor":actor,"reason":reason}));
         Ok(())
     })
@@ -641,6 +660,33 @@ pub(crate) fn admit(browser_id: &str, action: &str, id: &str) -> Result<Option<A
         check(browser_id, action)?;
         return Ok(None);
     }
+    admit_mutation(browser_id, action, id, None)
+}
+
+/// Only the owned whole-browser lifecycle path may call this, after validating
+/// process custody, peer isolation, attribution and close policy. Closing is not
+/// a page observation or a return of an interactive invitation.
+pub(crate) fn admit_owned_browser_close(
+    browser_id: &str,
+    id: &str,
+    actor: &str,
+    reason: &str,
+) -> Result<Option<Admission>, String> {
+    validate_attribution(actor, reason)?;
+    admit_mutation(
+        browser_id,
+        "browser_session_close",
+        id,
+        Some((actor, reason)),
+    )
+}
+
+fn admit_mutation(
+    browser_id: &str,
+    action: &str,
+    id: &str,
+    owned_close: Option<(&str, &str)>,
+) -> Result<Option<Admission>, String> {
     let path = path(browser_id)?;
     let id = if id.is_empty() {
         uuid::Uuid::new_v4().to_string()
@@ -654,9 +700,16 @@ pub(crate) fn admit(browser_id: &str, action: &str, id: &str) -> Result<Option<A
         _ => return Err("browser_control_dispatch_owner_unknown".into()),
     };
     transaction(&path, |control| {
-        permits(control, action)?;
+        if owned_close.is_none() {
+            permits(control, action)?;
+        }
         if control.flights.contains_key(&id) {
             return Err("browser_control_request_already_dispatched: inspect retained outcome; do not replay".into());
+        }
+        if let Some((actor, reason)) = owned_close {
+            control.audit.push(json!({"epoch":control.epoch,
+                "operation":"owned_browser_close", "actor":actor,
+                "reason":reason, "requestId":id}));
         }
         control.flights.insert(id.clone(), "dispatched".into());
         control

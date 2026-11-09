@@ -1,3 +1,7 @@
+[Terminal control reconciliation611](terminal-control-reconcile611.md) repairs exact public reconciliation and combines CLI610.
+
+- [Native deterministic saved login596](native-saved-login596.md): pinned perception, guarded selection and durable three-click client routine; installed acceptance remains separate.
+
 # Maintenance execution index
 
 [Worktree reconciliation, 2026-11-09](worktree-reconciliation-2026-11-09.md): six closures, five verified candidate archives, five explicit retention exceptions.

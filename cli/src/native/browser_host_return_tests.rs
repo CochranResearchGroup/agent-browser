@@ -274,8 +274,15 @@ fn host_control_return_unresolved_flights_and_legacy_awaiting_keep_existing_reco
         let epoch = change("legacy", "return", 1, "operator", "Legacy return", false).unwrap();
         assert!(!eligible_return_observation("legacy", epoch, "operator", "Resume").unwrap());
         assert!(commit_observed_return("legacy", epoch, "operator", "Resume").is_err());
+        assert_eq!(reconcile("legacy", epoch, "uncertain", "operator", "Observed uncertainty").unwrap_err(), "browser_control_dispatch_owner_unknown");
+        // A different retained start token proves PID reuse on every platform.
+        let pid = std::process::id();
+        transaction(&path("legacy").unwrap(), |control| {
+            control.owners.insert("uncertain".into(), (pid, "previous-dispatcher-instance".into()));
+            Ok(())
+        }).unwrap();
         reconcile("legacy", epoch, "uncertain", "operator", "Observed uncertainty").unwrap();
-        observed("legacy", epoch).unwrap();
+        assert_eq!(metadata("legacy").unwrap()["owner"], "agent");
         assert_eq!(read("legacy").unwrap().flights["uncertain"], "observed_uncertain_no_replay");
     });
 }
