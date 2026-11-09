@@ -30,6 +30,8 @@ P300/530 continuation: PR542 source is locally qualified on 780b4275d, including
 
 # Runbook
 
+[Worktree reconciliation](docs/dev/maintenance/worktree-reconciliation-2026-11-09.md): registered population11 to5; six governed closures, five verified candidate archives, active/runtime-dependent checkouts retained. Next custody review2026-11-10. Handoff repair613 remains open.
+
 [P300 workspace execution](docs/dev/plans/0300-2026-11-01-workspace-siteguides-523.md): 524–528 source validated/CLOSED through368ac49e9; sealed fast_iteration candidate built, not installed. Three owned worker checkouts governed-closed.529 remains OPEN/needs-info for actual recording/context selection;530 is OPEN/ready-for-agent with donor selection complete and copy cleanup source qualified; combined integration underway. Actual narrated/copy rows remain NOT_RUN. Final review and TDD counts remain0.
 
 [Native operator-journey acceptance](docs/dev/notes/2026-10-31-native-journey-receipt.md), #512 / PR513, is installed accepted on sealed binary5a9f1250acef. Authenticated Native input, same-link reconnect, continued same-task automation and exact cleanup pass; operatorJourneyReady is now true. The idle profile-lease advisory remains separate.

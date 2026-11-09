@@ -1,3 +1,4 @@
+# Worktree custody reviewed 2026-11-09; see maintenance/worktree-reconciliation-2026-11-09.md.
 schema_version: 1
 work_item_tracking: required
 lanes:
@@ -47,8 +48,8 @@ lanes:
     overlaps: [AUTHELIA-ONLY-591]
     reconciled_overlaps: ["Reuse own clean591 checkout; preserve sealed candidates and former branch; own auth and auth documentation paragraphs;508 diagnostics remain untouched; no new checkout"]
     validation_status: Source and exact production-shaped candidate pass268 stream cases plus5 children,13 refreshed assets, strict Rust gates, UI/client/docs/parity checks and33second installer fixture with2 owned hosts retired zero residue; installed preserving adoption doctor and authenticated managed desktop viewing accepted
-    limitations: ["Installed auth and current managed-desktop viewing accepted; no broad rail latency, all-tile, input or website-auth claim", "Retain checkout for sealed-candidate custody; review2026-11-09"]
-    updated_at: 2026-11-08
+    limitations: ["Installed auth and current managed-desktop viewing accepted; no broad rail latency, all-tile, input or website-auth claim", "Retain former579 checkout and its three pinned candidates for a live executable reference; do not archive or remove while in use; review2026-11-10"]
+    updated_at: 2026-11-09
   - id: CDP-FREE-IDLE-585
     product_lane: PL-BUGFIX
     objective: Close CDP-free browsers through exact OS identity and let explicit handoff supersede idle cleanup
@@ -90,13 +91,13 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#579, CochranResearchGroup/agent-browser#580]
     plan_state: OPEN
-    custody_state: INTEGRATION_READY
+    custody_state: INTEGRATED
     dependencies: [RETAINED-HANDOFF-579, ENROLLED-AUTH-580]
     overlaps: [RETAINED-HANDOFF-579, ENROLLED-AUTH-580]
     reconciled_overlaps: ["Explicitly directed isolated serial integration; preserve both source owners and foreign canonical context; root owns runtime effects and final consumer acceptance"]
     validation_status: All selected source gates pass; corrected CLI4 and197handoff116recovery, strict workspace Clippy Rustfmt SDK client docs and reviewed-source Auth composition; normal optimized CI candidate sealed and exact installer fixture passes
-    limitations: ["No merge install enrollment or shared-runtime effects before root serialization", "No final broad review or remediation counter consumed"]
-    updated_at: 2026-11-08
+    limitations: ["PR582 source is merged; clean integration checkout closed; consumer acceptance remains separate; review2026-11-10", "No final broad review or remediation counter consumed"]
+    updated_at: 2026-11-09
   - id: ENROLLED-AUTH-580
     product_lane: PL-AUTH
     objective: Connect explicitly enrolled unattended Auth consumers without Codex caller impersonation
@@ -106,13 +107,13 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#580]
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     dependencies: []
     overlaps: [P303, RETAINED-HANDOFF-579]
     reconciled_overlaps: ["580 owns SDK helper and auth guidance;579 owns browser recovery; catalog top entries and distinct guidance paragraphs integrate serially; preserve foreign canonical CONTEXT and retained clean checkouts"]
     validation_status: Public SDK RED then GREEN; primary combined SDK types CheckJS client selector policy links docs and strict Rust gates pass; source candidate prepared, actual consumer acceptance separate
-    limitations: ["Source only; no runtime install or enrollment", "Actual consumer/private-input acceptance belongs to Overleaf97", "Goal final review and remediation counters remain0"]
-    updated_at: 2026-11-08
+    limitations: ["Source only; no runtime install or enrollment", "Actual consumer/private-input acceptance belongs to Overleaf97", "Goal final review and remediation counters remain0", "Clean checkout closed; exact source checkpoint remains in origin/main; consumer acceptance is separate; review2026-11-10"]
+    updated_at: 2026-11-09
   - id: RETAINED-HANDOFF-579
     product_lane: PL-BUGFIX
     objective: Recover retained Native handoff after settled close publication interruption
@@ -142,8 +143,8 @@ lanes:
     overlaps: [P321-OWNER-567]
     reconciled_overlaps: ["Isolated primary; preserve canonical dirty retirement-publication work and retained peers; no shared runtime effects"]
     validation_status: 41 focused and29 Native fixture tests required lint exact sealed workflow and installed authenticated Native acceptance pass
-    limitations: ["Live uses existing configured administrator; non-admin first input is source-qualified"]
-    updated_at: 2026-11-07
+    limitations: ["Live uses existing configured administrator; non-admin first input is source-qualified", "Deployment auxiliary closed through governed closeout; its sealed candidate is archived and fresh-process lookup verified; review2026-11-10"]
+    updated_at: 2026-11-09
   - id: NATIVE-READY-575
     product_lane: PL-BUGFIX
     objective: Accept the exact public Native ready lifecycle in guarded input preflight
@@ -201,13 +202,13 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#565]
     plan_state: COMPLETED
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     dependencies: [CochranResearchGroup/agent-browser#562]
     overlaps: [IDLE-ACTIVITY-562]
     reconciled_overlaps: ["Separate primary checkout; reset owns new orchestration/store-retirement modules and documentation; consume merged publication repair without editing its algorithms"]
     validation_status: PR566 merged; sealed production 94ec05f29f12 installed accepted; doctor, preview, exact installer fixture, fresh MCP and process preservation pass; 16 focused source tests and quality/docs gates pass
-    limitations: ["Retain clean primary for sealed production candidate custody through 2026-11-08", "Existing MCP clients may need reconnect; no reset apply executed during deployment", "Profile-data reset and target-platform matrix remain outside scope"]
-    updated_at: 2026-11-07
+    limitations: ["Primary checkout closed; sealed candidate archived and independently verified; source checkpoint remains in origin/main; review2026-11-10", "Existing MCP clients may need reconnect; no reset apply executed during deployment", "Profile-data reset and target-platform matrix remain outside scope"]
+    updated_at: 2026-11-09
   - id: LOCAL-WORKER-STATUS-ROUTING
     product_lane: PL-BUGFIX
     objective: Keep supervisor worker status on the control plane when managed tasks exist
@@ -222,8 +223,8 @@ lanes:
     overlaps: [P300-RECOVERY, P300-OPERATOR-DIAGNOSIS]
     reconciled_overlaps: ["Separate clean primary checkout from origin/main; own status classification, regression and lane docs only; preserve both existing checkouts and installed runtime"]
     validation_status: Exact-error RED then candidate GREEN; build, fmt, strict workspace Clippy, 11 policy cases and documentation checks pass
-    limitations: ["No installed-runtime, bank or messaging effects", "Existing adjacent service-status smoke calls an absent MCP tool; reproduced in unchanged debug and repaired CI binaries", "Retain primary for source review through 2026-11-08; integration and installed acceptance pending"]
-    updated_at: 2026-11-07
+    limitations: ["No installed-runtime, bank or messaging effects", "Existing adjacent service-status smoke calls an absent MCP tool; reproduced in unchanged debug and repaired CI binaries", "PR563 is merged; retain checkout solely for three live process cwd references; no process termination or runtime migration authorized by reconciliation; review2026-11-10"]
+    updated_at: 2026-11-09
   - id: IDLE-ACTIVITY-562
     product_lane: PL-BUGFIX
     objective: Diagnose and repair idle activity publication after dispatched work without replay
@@ -249,13 +250,13 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#558]
     plan_state: COMPLETED
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     dependencies: [P300]
     overlaps: [P300-RECOVERY]
     reconciled_overlaps: ["Operator expanded this lane to host publication reconciliation; canonical recovery source checkout remains untouched; integrated host fixes preserved; reuse existing isolated worktree"]
     validation_status: Issue 558 CLOSED; PRs 557/560 and acceptance 561 merged. Installed acd74b accepted, 97 functional tests and strict workspace Clippy pass, doctor exit zero; original workflow and independent P300 donor handoff/input accepted without effect replay.
-    limitations: ["Retain sealed artifact and original checkout custody until governed closeout", "Parent 530 and Plan 0321 calendar acceptance remain separate", "Expanded all-targets baseline test lints are not a passing gate"]
-    updated_at: 2026-11-07
+    limitations: ["Primary checkout closed; both sealed candidates archived and independently verified; source checkpoint remains in origin/main; review2026-11-10", "Parent 530 and Plan 0321 calendar acceptance remain separate", "Expanded all-targets baseline test lints are not a passing gate"]
+    updated_at: 2026-11-09
   - id: P300-RECOVERY
     product_lane: PL-BUGFIX
     objective: Restore donor recovery and durable handoff through exact custody readback and eligible desktop selection
