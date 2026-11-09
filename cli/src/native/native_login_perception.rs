@@ -526,3 +526,103 @@ fn value_state(image: &RgbaImage, b: Bounds) -> &'static str {
         "text_present"
     }
 }
+
+/// Receiver-side allowlist. In particular a newer client cannot accidentally
+/// export raw PNG/OCR from an older Native host that ignored the opt-in flag.
+pub(crate) fn curate_observation(value: &Value) -> Result<Value, String> {
+    let b = &value["binding"];
+    let c = &value["controls"];
+    let id = b["desktopId"]
+        .as_str()
+        .filter(|s| {
+            !s.is_empty()
+                && s.len() <= 256
+                && s.bytes()
+                    .all(|v| v.is_ascii_alphanumeric() || b"-_: .".contains(&v))
+        })
+        .ok_or(INVALID)?;
+    let n = |key: &str| b[key].as_u64().ok_or(INVALID);
+    let window = bounds(&b["window"])?;
+    let region = bounds(&b["region"])?;
+    let width = n("displayWidth")?;
+    let height = n("displayHeight")?;
+    if !window.contains(region)
+        || u64::from(region.x) + u64::from(region.width) > width
+        || u64::from(region.y) + u64::from(region.height) > height
+        || u64::from(region.width) * u64::from(region.height) > 1_000_000
+        || n("generation")? == 0
+        || n("windowId")? == 0
+    {
+        return Err(INVALID.into());
+    }
+    if c["schemaVersion"] != "agent-browser.native-login-controls.v1"
+        || c["profile"] != PROFILE
+        || !matches!(
+            c["status"].as_str(),
+            Some("observed" | "ambiguous" | "not_found")
+        )
+    {
+        return Err(INVALID.into());
+    }
+    let sha = c["frameSha256"]
+        .as_str()
+        .filter(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()))
+        .ok_or(INVALID)?;
+    let items = c["controls"]
+        .as_array()
+        .filter(|items| items.len() <= 64)
+        .ok_or(INVALID)?;
+    let mut controls = vec![];
+    for item in items {
+        let reference = item["targetRef"]
+            .as_str()
+            .filter(|s| {
+                s.strip_prefix("login:")
+                    .is_some_and(|h| h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit()))
+            })
+            .ok_or(INVALID)?;
+        let kind = item["kind"]
+            .as_str()
+            .filter(|k| matches!(*k, "username" | "password" | "submit" | "credential_entry"))
+            .ok_or(INVALID)?;
+        let bb = bounds(&item["bounds"])?;
+        if !region.contains(bb) {
+            return Err(INVALID.into());
+        }
+        let state = item["fieldValueState"]
+            .as_str()
+            .filter(|s| matches!(*s, "empty" | "masked" | "text_present" | "unverified"))
+            .ok_or(INVALID)?;
+        let matched = item
+            .get("configuredAccountMatch")
+            .map(|v| v.as_bool().ok_or(INVALID))
+            .transpose()?
+            .unwrap_or(false);
+        let mut clean = json!({"targetRef":reference,"kind":kind,"label":match kind{"username"=>"Username","password"=>"Password","submit"=>"Sign in",_=>"Saved account"},"bounds":bb,"configuredAccountMatch":matched,"fieldValueState":state});
+        if let Some(score) = item.get("confidence") {
+            let score = score
+                .as_f64()
+                .filter(|v| v.is_finite() && (0.0..=100.0).contains(v))
+                .ok_or(INVALID)?;
+            clean["confidence"] = json!(score);
+            clean["confidenceKind"] = json!("rule_score_not_probability");
+        }
+        controls.push(clean);
+    }
+    let binding = json!({"desktopId":id,"generation":n("generation")?,"windowId":n("windowId")?,"window":window,"region":region,"displayWidth":width,"displayHeight":height,"nativeControlEpoch":n("nativeControlEpoch")?,"observedAtMs":n("observedAtMs")?});
+    Ok(
+        json!({"binding":binding,"controls":{"schemaVersion":"agent-browser.native-login-controls.v1","profile":PROFILE,"status":c["status"],"controls":controls,"frameSha256":sha,"coordinateSpace":"desktop_physical_pixels","detector":{"id":"native-login-pixel-ocr","version":"1","minimumOcrConfidence":80,"rgbTolerance":12,"maskMinimumInkPercent":70,"maximumPixels":1000000,"ocrEngine":"tesseract","ocrEngineVersion":"5.3.4","ocrLanguage":"eng","ocrModelSha256":"7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2"},"inputAuthorized":false,"authenticated":false}}),
+    )
+}
+pub(crate) fn curate_response(value: &Value) -> Result<Value, String> {
+    if value["source"] != "remote_view_native"
+        || value["binding"] != value["nativeLoginObservation"]["binding"]
+        || value["loginControls"] != value["nativeLoginObservation"]["controls"]
+    {
+        return Err("browser_native_login_producer_contract_unavailable".into());
+    }
+    let observation = curate_observation(&value["nativeLoginObservation"])?;
+    Ok(
+        json!({"source":"remote_view_native","binding":observation["binding"],"loginControls":observation["controls"],"nativeLoginObservation":observation,"taskCompleted":false}),
+    )
+}

@@ -243,3 +243,19 @@ fn native_login_perception_plaintext_rings_are_not_masked_password_dots() {
     let r = detect(&c, None);
     assert_eq!(r["controls"][0]["fieldValueState"], "text_present");
 }
+
+#[test]
+fn native_login_perception_receiver_refuses_legacy_raw_capture_and_curates_owned_metadata() {
+    let legacy = json!({"source":"remote_view_native","capture":{"image":{"data":"private-image-canary"},"ocr":{"lines":[{"text":"private-field-canary"}]}}});
+    assert!(curate_response(&legacy).is_err());
+    let c = corpus_capture(
+        &[(100, 150, 300, 41)],
+        json!([line("Email", 100, 120, 100)]),
+    );
+    let controls = detect(&c, None);
+    let b = json!({"desktopId":"desktop","generation":7,"windowId":11,"window":{"x":0,"y":0,"width":800,"height":600},"displayWidth":800,"displayHeight":600,"region":{"x":0,"y":0,"width":800,"height":600},"nativeControlEpoch":4,"observedAtMs":1000});
+    let source = json!({"source":"remote_view_native","binding":b,"loginControls":controls,"nativeLoginObservation":{"binding":b,"controls":controls},"unreviewed":"private-field-canary"});
+    let clean = curate_response(&source).unwrap();
+    assert!(!clean.to_string().contains("private-field-canary"));
+    assert_eq!(clean["loginControls"]["controls"][0]["kind"], "username");
+}

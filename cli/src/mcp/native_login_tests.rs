@@ -65,8 +65,8 @@ fn observed(kind: &str) -> Value {
         json!({"kind":kind,"targetRef":reference,"label":match kind{"username"=>"Username","credential_entry"=>"Saved account",_=>"Sign in"},"bounds":{"x":100,"y":150,"width":300,"height":40},"configuredAccountMatch":true,"fieldValueState":"empty"}),
     ];
     if kind == "submit" {
-        controls.push(json!({"kind":"username","configuredAccountMatch":true}));
-        controls.push(json!({"kind":"password","fieldValueState":"masked"}));
+        controls.push(json!({"kind":"username","label":"Username","targetRef":format!("login:{}","c".repeat(64)),"bounds":{"x":100,"y":50,"width":300,"height":40},"configuredAccountMatch":true,"fieldValueState":"text_present"}));
+        controls.push(json!({"kind":"password","label":"Password","targetRef":format!("login:{}","d".repeat(64)),"bounds":{"x":100,"y":100,"width":300,"height":40},"configuredAccountMatch":false,"fieldValueState":"masked"}));
     }
     json!({"binding":{"desktopId":"desktop","generation":7,"windowId":11,"window":{"x":0,"y":0,"width":800,"height":600},"displayWidth":800,"displayHeight":600,"region":{"x":0,"y":0,"width":800,"height":600},"nativeControlEpoch":4,"observedAtMs":clock()},"controls":{"schemaVersion":"agent-browser.native-login-controls.v1","profile":"english-chrome-v1","status":"observed","controls":controls,"frameSha256":"b".repeat(64)}})
 }
@@ -225,4 +225,26 @@ fn native_login_perception_public_journal_fresh_capture_cannot_reset_first_input
     .unwrap_err()
     .contains("budget_exhausted"));
     assert_eq!(calls, 1);
+}
+
+#[test]
+fn native_login_perception_public_journal_legacy_capture_is_not_acknowledged_or_replayed() {
+    let _fixture = fixture();
+    let params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_capture","requestId":"legacy-capture","params":{"loginControls":{"profile":"english-chrome-v1"}}}});
+    let mut calls = 0;
+    task_operations::with_context(Some(&params),||{let failure=task_operations::transport(json!({"action":"native_capture","loginControls":{"profile":"english-chrome-v1"}}),|_|{calls+=1;Ok(crate::connection::Response{success:true,data:Some(json!({"source":"remote_view_native","capture":{"image":{"data":"private-legacy-image-canary"},"ocr":{"text":"private-password-canary"}}})),..Default::default()})}).err().expect("legacy producer must refuse completion");assert!(!failure.contains("canary"));assert!(failure.contains("browser_native_login_producer_contract_unavailable"));Ok(Value::Null)}).unwrap();
+    assert_eq!(calls, 1);
+    let original = task_operations::lookup("task", "legacy-capture").unwrap();
+    assert_eq!(original["operation"]["state"], "pending");
+    assert!(!original.to_string().contains("canary"));
+    task_operations::with_context(Some(&params), || {
+        let replay = task_operations::transport(
+            json!({"action":"native_capture","loginControls":{"profile":"english-chrome-v1"}}),
+            |_| panic!("legacy capture must not replay"),
+        )
+        .unwrap();
+        assert!(!replay.success);
+        Ok(Value::Null)
+    })
+    .unwrap();
 }

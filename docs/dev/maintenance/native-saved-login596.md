@@ -14,7 +14,7 @@ Installed browser metadata exposes capture, raw input and challenge locators but
 no deterministic login-field or Chrome credential-entry enumeration. Overleaf104
 requires this capability and real saved-login acceptance. The approved expanded packet implements production perception, guarded opaque
 target selection, the original durable episode and deterministic client routine.
-Source validation is in progress; installed real saved-login acceptance remains
+Source validation passes; installed real saved-login acceptance remains
 required before596 or104 can close.
 
 ## Scope and seams
@@ -207,3 +207,26 @@ lock waits, initial test-harness lifetime/JSON-RPC conversions, the actual absen
 Native control response, chooser and mask-dot false-positive tracers. The lean
 harness compiles the actual production module with PNG-only dependencies; it is a
 fast developer seam, not a substitute for actual Native/MCP and installed proof.
+
+
+## Qualified source result
+
+Final primary Native/MCP/login/privacy gate passes16tests,0fail/ignore in3.22s.
+It includes OS-derived input fences, the retained SQLite journal across reopen,
+three-step/replay/unknown/deadline rules and legacy-producer no-export refusal.
+The public operating-guide failure in the broader113-case selection is repaired
+by explicitly naming Remote View ownership; its unchanged test passes separately.
+That earlier broad selection remains111pass/1fail/1ignored in261.77s, not a clean
+first attempt. Reuse its unaffected guards, not a comprehensive-suite claim.
+
+Final Rustfmt check and strict workspace Clippy pass (final Clippy41.18s after the
+first2m41s pass). Current SDK/CheckJS, parity, handoff docs, policy wiring, own-lane
+planning, changed-link and Next docs build gates above remain valid. The last
+receiver change is confined to new login captures: it curates typed known metadata
+before journal acknowledgment and MCP export; an old host returning PNG/OCR is
+refused with the original retained, without input or replay. The exact production
+module lean harness passes10cases in0.29s, including plaintext-ring rejection.
+
+The source is qualified for one clean immutable production-shaped candidate build.
+Build/seal and exact-artifact checks are next; no installation, adoption, browser
+login or596/104 closure is claimed. SDK bytes remain the61fcde77c artifact pin.

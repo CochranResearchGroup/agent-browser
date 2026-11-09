@@ -405,6 +405,8 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
                     .into(),
                 ),
             ])
+        } else if command.get("loginControls").is_some() {
+            BTreeMap::from([("nativeLoginProfile".into(), "english-chrome-v1".into())])
         } else {
             BTreeMap::new()
         },
@@ -1103,13 +1105,24 @@ pub(crate) fn finish(
             references.insert("artifactId".into(), original.request_id.clone());
             references.insert("artifactKind".into(), "screenshot".into());
         }
+        if original.action == "native_capture"
+            && references.contains_key("nativeLoginProfile")
+            && response
+                .data
+                .as_ref()
+                .and_then(|d| d.get("nativeLoginObservation"))
+                .is_none()
+        {
+            return Err("browser_native_login_producer_contract_unavailable".into());
+        }
         if original.action == "native_capture" {
             if let Some(observation) = response
                 .data
                 .as_ref()
                 .and_then(|d| d.get("nativeLoginObservation"))
             {
-                let encoded = serde_json::to_string(observation)
+                let curated = super::native_login_perception::curate_observation(observation)?;
+                let encoded = serde_json::to_string(&curated)
                     .map_err(|_| "browser_native_login_observation_invalid")?;
                 if encoded.len() > 32768 {
                     return Err("browser_native_login_observation_invalid".into());
