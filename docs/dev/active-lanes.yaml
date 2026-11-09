@@ -13,8 +13,8 @@ lanes:
     custody_state: ACTIVE_WORKTREE
     dependencies: []
     overlaps: [HUMAN-HANDOFF-571, CDP-FREE-IDLE-585, MANUAL-IDLE-HANDOFF-599]
-    reconciled_overlaps: ["Reuse clean canonical checkout; no new checkout; own operation lookup only, preserve retirement/recovery and Native control ownership"]
-    validation_status: Exact RED then GREEN; 6 operation lookup and 16 mode state tests, strict workspace Clippy, fmt, docs build and wiring pass; installed repair pending
+    reconciled_overlaps: ["Reuse clean canonical checkout; no new checkout; own operation lookup and explicit close admission, preserve retirement/recovery and Native control ownership"]
+    validation_status: Mode lookup and explicit owned-close regressions RED then GREEN; extended strict checks and installed repair pending
     limitations: ["Production profile and live state remain outside Git; installed qualification separate"]
     updated_at: 2026-11-09
   - id: HANDOFF-MODAL-603

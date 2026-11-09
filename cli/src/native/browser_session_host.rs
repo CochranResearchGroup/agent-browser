@@ -1675,7 +1675,11 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             // before policy checks or target selection, without replaying effects.
             self.refresh_before_ordinary_command()?;
         }
-        super::browser_host_control::check_state(&self.state, "", command)?;
+        // Whole-browser close has its own custody, peer and attribution checks.
+        // An operator-authorized lifecycle close may end a human-held process.
+        if !(action == "browser_session_close" && command["scope"] == "browser") {
+            super::browser_host_control::check_state(&self.state, "", command)?;
+        }
         if action.starts_with("browser_session_") && action != "browser_session_status" {
             self.refresh_before_ordinary_command()?;
         }
@@ -2041,8 +2045,12 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         || {
                             // Only admitted effects enter the flight journal. Known
                             // scope/attribution refusals remain undispatched.
-                            admission = super::browser_host_control::admit_command(
-                                None, None, command, false,
+                            let browser_id = &before.sessions[&session_id].browser_id;
+                            admission = super::browser_host_control::admit_owned_browser_close(
+                                browser_id,
+                                command["id"].as_str().unwrap_or_default(),
+                                command["actor"].as_str().unwrap_or_default(),
+                                command["reason"].as_str().unwrap_or_default(),
                             )?;
                             let closed = self.close_session(
                                 &session_id,

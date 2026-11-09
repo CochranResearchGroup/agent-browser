@@ -68,6 +68,11 @@ observes a live page, acknowledges human use or turns missing evidence into succ
 profile. Human page-read pauses do not prevent inspection or preparation;
 explicit confirmation and exact original-process checks remain with the mode owner.
 
+**Owned browser lifecycle close**: An attributable whole-browser close admitted
+only after process custody, peer isolation and lifecycle policy validation. A human
+handoff does not veto this operator request. The close retains profile storage,
+control epoch and prior uncertainty; it does not assert page observation.
+
 **Mode conversion readiness**: Exact replacement process, requested debugging
 posture and Native window observation. Selective-input permission is independent;
 conversion does not inject input to qualify publication. An already-dispatched

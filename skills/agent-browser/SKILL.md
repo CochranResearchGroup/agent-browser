@@ -128,3 +128,5 @@ For an operator-requested fresh start, [runtime reset](references/cli-and-servic
 ends production tasks and unsaved pages. Read its preview and recovery procedure before applying it.
 Read [builds, modes, teaching and owner waits](references/cli-and-service.md#browser-mode-and-builds)
 before those operations. Copies do not prove login; never replay pending or uncertain input.
+
+An explicit operator request to close and reopen a signed-in profile uses whole-browser close with actor and reason, then opens the same existing profile with a new task key in automation mode. The close validates owned-process custody and peer isolation even during human handoff; it preserves the profile directory and old control history. It does not require another Return control click.

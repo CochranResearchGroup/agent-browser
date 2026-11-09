@@ -7,6 +7,15 @@ State: OPEN
 
 ## Current state
 
+The explicit whole-browser close regression also reproduced the operator symptom:
+`browser_control_human` fired before attribution validation (1 failed, 9.15s).
+The follow-up source change admits an attributed owned-process close only after
+existing custody, peer and policy checks, retaining the old human epoch/history.
+Its regression verifies process absence, independent peer survival and persistent
+profile storage before reopening the same profile. GREEN passed (1 test, 12.63s after repair);
+the earlier validation below applies to source 071d463 only. Strict checks for
+the explicit-close extension and production candidate qualification remain open.
+
 The premature URL-read guard is repaired in source. The public owner-dispatch
 regression failed with the exact installed observation-paused error before the
 fix, then passed. All six operation-lookup tests and 16 mode-operation state-machine
@@ -22,7 +31,8 @@ account readback and scientific acceptance remain separate.
 
 Reuse the clean canonical checkout at ceac15364. All nine registered checkouts
 were clean at admission; no additional checkout is created. This lane owns only
-operation lookup and its focused tests plus required public guidance. Existing
+operation lookup, explicit whole-browser close admission and their focused tests
+plus required public guidance. Existing
 585/599 own retirement and manual recovery; no edits to their custody logic.
 
 ## Scope and acceptance

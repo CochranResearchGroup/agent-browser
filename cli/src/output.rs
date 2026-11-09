@@ -7507,6 +7507,7 @@ Rules:
   No grant for unrestricted tasks. Artifacts: handle/relative name; download selector.
   Refuse existing files/symlinks/traversal; publication remains explicit.
   Close scope=browser needs actor/reason, no peers/borrowed custody; verify OS residue.
+  Explicit owned close may end human handoff; reopen the same profile for CDP.
   Watch DB/WAL every 250 ms, not provider polling; events have watchId/sequence.
   SiteGuide: prepare_login/validate_plan, verify_login, collect_posts.
   Keep secrets private; inspect unknown delivery.
