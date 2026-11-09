@@ -3,9 +3,45 @@
 Product lane: PL-BUGFIX
 Work item: 607
 Branch: fix/607-operator-mode-relaunch
-State: OPEN
+State: COMPLETED
 
 ## Current state
+
+Source `d26086895fe18871e946fcf6fdfffac3a020e847` is qualified and installed.
+Binary SHA256 `8fe86355e69f7e78931cd658a1bd03ae051c8937d1dbc4ad3c899a927abb6a9f`;
+selected generation `0.28.0-8fe86355e69f-5a7aae0e227f`;
+preserving transaction `upgrade-ab749400-5931-4dcc-a8fd-08c0310035dc`
+accepted. Public installed doctor passes. The source preserves installed611
+successor `a5fcfd3b7`, including610/596 saved-login boundaries.
+
+The exact sealed installer fixture passes (two owned hosts, zero residue).
+Three isolated development browser cycles pass with production unchanged;
+only optional unconfigured development local-ingress is outside this headless
+qualification. A first development activation stopped on a changed production
+process and restored its prior generation. The process-exit cause is not
+established. Two stable snapshots preceded one serialized passing retry;
+the original failure is retained, not reclassified as a clean first pass.
+
+Real installed public MCP acceptance passes: the retained human-held CDP-free
+Chrome closes through explicit browser scope, fresh OS readback confirms its
+absence, and an independent empty browser remains the same process. The same
+test profile reopens with CDP, closes, and retains its storage. All owned test
+Chrome roots are freshly absent. Earlier uncertain window-close history remains.
+Two harness preflight failures (a renamed input path and an absent historical
+peer) occurred before any close; fixed setup and a controlled empty peer
+qualified the actual effect without replaying either old close request.
+
+The operator's dedicated signed-in profile has also been freshly reopened with
+CDP. The authenticated home and200 credits are observed; read-only SiteGuide
+research continues on the fresh task. No FigureLabs credits were spent. Private
+account/profile identifiers and raw browser evidence stay user-scoped.
+
+Source PR608 remains unmerged; no main integration, formal release or global
+shared-skill publication is claimed. Retain the canonical checkout and sealed
+artifacts for PR integration and candidate custody. No extra checkout was made.
+No final FigureLabs broad-review or findings-TDD allowance was consumed.
+
+## Retained earlier checkpoints
 
 Combined source `dfcb6c105` is installed as generation
 `0.28.0-6b17b58a38f0-10036adf76ec`, SHA256
