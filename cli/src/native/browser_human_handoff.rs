@@ -15,6 +15,78 @@ pub(crate) fn begin_handoff(browser: &str, id: &str, digest: &str) -> Result<(),
     transaction(&path(browser)?, |control| begin(control, id, digest))
 }
 
+/// Record renewal once per frozen reconstruction, including across a later
+/// explicit return. A retry acknowledges the old acceptance without taking
+/// human control again or treating that receipt as current physical proof.
+pub(crate) fn begin_reopened_handoff(
+    browser: &str,
+    id: &str,
+    digest: &str,
+    request: &str,
+) -> Result<(), String> {
+    transaction(&path(browser)?, |control| {
+        begin_reopen(control, id, digest, request)
+    })
+}
+
+pub(super) fn permits_reopen(control: &Control, id: &str) -> bool {
+    !control.human
+        || invitation(control, id).is_some_and(|previous| {
+            previous.epoch == control.epoch && previous.returned_by.is_none()
+        })
+}
+
+fn begin_reopen(
+    control: &mut Control,
+    id: &str,
+    digest: &str,
+    request: &str,
+) -> Result<(), String> {
+    if request.is_empty() || request.len() > 128 {
+        return Err("browser_handoff_reopen_request_invalid".into());
+    }
+    if let Some(accepted) = control
+        .audit
+        .iter()
+        .find(|event| event["handoffReopenRequestId"] == request)
+    {
+        return if accepted["handoffId"] == id {
+            Ok(())
+        } else {
+            Err("browser_handoff_reopen_request_conflict".into())
+        };
+    }
+    // A frozen explicit reconstruction may replace this same invitation's
+    // closed tab while its browser and peer tabs survive. This is not an
+    // automatic physical rebind or permission to take another current hold.
+    if let Some(previous) = invitation(control, id).filter(|previous| {
+        control.human
+            && previous.epoch == control.epoch
+            && previous.returned_by.is_none()
+            && previous.target_digest != digest
+    }) {
+        control.epoch = control
+            .epoch
+            .checked_add(1)
+            .ok_or("browser_control_epoch_exhausted")?;
+        control.pause_reads = true;
+        control.awaiting_observation = false;
+        let next = HumanHandoff {
+            target_digest: digest.into(),
+            epoch: control.epoch,
+            ..previous
+        };
+        control.audit.push(json!({"epoch":control.epoch,"operation":"human_handoff_reopened_target","humanHandoff":next}));
+    } else {
+        begin(control, id, digest)?;
+    }
+    control.audit.push(
+        json!({"operation":"human_handoff_reopen_accepted", "epoch":control.epoch,
+        "handoffReopenRequestId":request, "handoffId":id, "targetDigest":digest}),
+    );
+    Ok(())
+}
+
 fn begin(control: &mut Control, id: &str, digest: &str) -> Result<(), String> {
     if intent(control, id, digest) == "interactive" {
         return Ok(());
@@ -291,6 +363,44 @@ fn transaction_control_rebind(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn explicit_reopen_rebinds_its_own_hold_without_taking_another_hold() {
+        let mut state = Control::default();
+        begin(&mut state, "same-link", "closed-target").unwrap();
+        let epoch = state.epoch;
+        begin_reopen(&mut state, "same-link", "reopened-target", "reopen-request").unwrap();
+        assert_eq!(state.epoch, epoch + 1);
+        assert_eq!(
+            intent(&state, "same-link", "reopened-target"),
+            "interactive"
+        );
+        assert_eq!(intent(&state, "same-link", "closed-target"), "view");
+        let before = serde_json::to_value(&state).unwrap();
+        assert!(begin_reopen(
+            &mut state,
+            "another-link",
+            "another-target",
+            "another-request"
+        )
+        .is_err());
+        assert_eq!(serde_json::to_value(&state).unwrap(), before);
+    }
+
+    #[test]
+    fn reopen_retry_after_return_never_reasserts_human_control() {
+        let mut state = Control::default();
+        begin_reopen(&mut state, "same-link", "target", "reopen-request").unwrap();
+        relinquish(&mut state, "same-link", "target", "human-return").unwrap();
+        let returned = serde_json::to_value(&state).unwrap();
+        let mut restarted: Control = serde_json::from_value(returned.clone()).unwrap();
+        begin_reopen(&mut restarted, "same-link", "target", "reopen-request").unwrap();
+        assert_eq!(serde_json::to_value(&restarted).unwrap(), returned);
+        assert_eq!(intent(&restarted, "same-link", "target"), "view");
+        assert!(begin_reopen(&mut restarted, "another-link", "target", "reopen-request").is_err());
+        begin_reopen(&mut restarted, "same-link", "target", "new-reopen-request").unwrap();
+        assert_eq!(intent(&restarted, "same-link", "target"), "interactive");
+    }
+
     #[test]
     fn invitation_pauses_same_browser_and_return_is_idempotent() {
         let mut state = Control::default();

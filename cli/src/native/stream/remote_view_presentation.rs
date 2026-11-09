@@ -11,12 +11,10 @@ pub(super) fn failure_response(reason: &str, html: bool) -> String {
             "remote_view_handoff_expired",
             "This handoff link expired. Ask the task owner for a current link.",
         ),
-        "remote_view_tab_handoff_session_unavailable"
-        | "remote_view_tab_handoff_tab_unavailable"
-        | "remote_view_tab_handoff_browser_unavailable" => (
-            "410 Gone",
-            "remote_view_handoff_target_closed",
-            "The browser task behind this link is no longer available. Start a new task and use its new handoff link.",
+        "remote_view_handoff_reopen_required" => (
+            if html { "200 OK" } else { "409 Conflict" },
+            "remote_view_handoff_reopen_required",
+            "The browser task was closed. This handoff link remains valid; explicitly reopen the task using this same link.",
         ),
         "remote_view_tab_handoff_missing" => (
             "404 Not Found",
@@ -31,14 +29,22 @@ pub(super) fn failure_response(reason: &str, html: bool) -> String {
     };
     let (content_type, body) = if html {
         // Only the fixed messages above enter this page, never the raw reason.
-        ("text/html; charset=utf-8", format!("<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Browser handoff</title><body><main><h1>Browser handoff</h1><p>{message}</p></main></body></html>"))
+        if reason == "remote_view_handoff_reopen_required" {
+            (
+                "text/html; charset=utf-8",
+                include_str!("handoff-reopen.html").to_owned(),
+            )
+        } else {
+            ("text/html; charset=utf-8", format!("<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Browser handoff</title><body><main><h1>Browser handoff</h1><p>{message}</p></main></body></html>"))
+        }
     } else {
-        (
-            "application/json",
-            serde_json::json!({"success":false,"error":error,"message":message}).to_string(),
-        )
+        let mut body = serde_json::json!({"success":false,"error":error,"message":message});
+        if reason == "remote_view_handoff_reopen_required" {
+            body["reopenRequired"] = true.into();
+        }
+        ("application/json", body.to_string())
     };
-    format!("HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    format!("HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'\r\nX-Content-Type-Options: nosniff\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
 }
 
 pub(super) fn handoff_id(path: &str) -> Option<&str> {
@@ -587,13 +593,14 @@ mod tests {
             "remote_view_tab_handoff_browser_unavailable",
         ] {
             let json = failure_response(reason, false);
-            assert!(json.starts_with("HTTP/1.1 410 Gone\r\n"));
-            assert!(json.contains("remote_view_handoff_target_closed"));
-            assert!(json.contains("Start a new task"));
+            assert!(json.starts_with("HTTP/1.1 503 Service Unavailable\r\n"));
+            assert!(json.contains("Keep this link"));
+            assert!(!json.contains("Start a new task"));
             assert!(!json.contains(reason));
             let html = failure_response(reason, true);
             assert!(html.contains("Content-Type: text/html; charset=utf-8"));
-            assert!(html.contains("Start a new task"));
+            assert!(html.contains("Keep this link"));
+            assert!(!html.contains("Start a new task"));
             assert!(!html.contains("remote_view_"));
         }
         assert!(
@@ -608,6 +615,19 @@ mod tests {
             assert!(!response.contains(private_reason));
             assert!(response.contains("Keep this link"));
         }
+    }
+
+    #[test]
+    fn valid_closed_link_is_actionable_without_disclosing_or_revoking_its_target() {
+        let html = failure_response("remote_view_handoff_reopen_required", true);
+        assert!(html.starts_with("HTTP/1.1 200 OK\r\n"));
+        assert!(html.contains("Reopen task"));
+        assert!(html.contains("reopen_with_new_profile"));
+        assert!(!html.contains("Start a new task"));
+        assert!(html.contains("frame-ancestors 'self'"));
+        let json = failure_response("remote_view_handoff_reopen_required", false);
+        assert!(json.starts_with("HTTP/1.1 409 Conflict\r\n"));
+        assert!(json.contains("\"reopenRequired\":true"));
     }
 
     #[test]

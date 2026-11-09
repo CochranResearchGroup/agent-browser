@@ -21,9 +21,13 @@ use super::browser_session_store::BrowserSessionSqliteStore;
 #[path = "browser_human_handoff.rs"]
 mod human_handoff;
 pub(crate) use human_handoff::{
-    begin_handoff, handoff_intent, prepare_handoff, reconcile_recovered_handoff,
-    recovery_rebind_pending, return_handoff,
+    begin_handoff, begin_reopened_handoff, handoff_intent, prepare_handoff,
+    reconcile_recovered_handoff, recovery_rebind_pending, return_handoff,
 };
+
+#[path = "browser_handoff_reopen_control.rs"]
+mod reopen_control;
+pub(crate) use reopen_control::{attest_reopen_command, preflight as preflight_reopen};
 
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -92,8 +96,9 @@ fn load_return_key(_browser_id: &str) -> Option<agent_browser_lease_authority::C
 }
 
 // Optional provenance sidecar: failure disables the optimization, never the
-// existing control/reconciliation path. Only takeover may initialize it, under
-// the existing control lock; no return-path durability write is introduced.
+// existing control/reconciliation path. Takeover or explicit owner-side
+// reconstruction may initialize it under the control lock; no return-path
+// durability write is introduced.
 #[cfg(unix)]
 fn prepare_return_key(browser_id: &str) -> Result<(), String> {
     use std::os::unix::fs::OpenOptionsExt;
@@ -454,6 +459,9 @@ pub(crate) fn check_state(
     name: &str,
     command: &Value,
 ) -> Result<(), String> {
+    if command.get("hostControlReopen").is_some() {
+        return reopen_control::authorize(state, command);
+    }
     if command.get("hostControlReturnObservation").is_some() {
         return authorize_return_observation(state, command);
     }
@@ -692,6 +700,9 @@ pub(crate) fn admit_command(
 ) -> Result<Option<Admission>, String> {
     let name = command["sessionName"].as_str().or(name);
     let Some(state) = BrowserSessionSqliteStore::default_session_state_read_only()? else {
+        if command.get("hostControlReopen").is_some() {
+            return Err("browser_handoff_reopen_scope_invalid".into());
+        }
         if command.get("hostControlReturnObservation").is_some() {
             return Err("browser_control_return_observation_scope_invalid".into());
         }
@@ -699,6 +710,10 @@ pub(crate) fn admit_command(
     };
     super::browser_host_reconnect::check_state(&state, name.unwrap_or_default(), command)?;
     super::browser_host_policy::check_state(&state, name.unwrap_or_default(), command)?;
+    if command.get("hostControlReopen").is_some() {
+        reopen_control::authorize(&state, command)?;
+        return Ok(None);
+    }
     if command.get("hostControlReturnObservation").is_some() {
         authorize_return_observation(&state, command)?;
         return Ok(None);

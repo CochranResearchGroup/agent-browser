@@ -3370,3 +3370,97 @@ fn disposable_launch_pins_the_selected_executable_before_launch_and_after_reload
     assert!(error.contains("build_conflict"), "{error}");
     assert_eq!(effects.launch_executables.len(), 1);
 }
+
+#[test]
+fn explicit_closed_handoff_keeps_link_valid_and_binds_reopen_to_one_request() {
+    use agent_browser_service_model::{
+        remote_view_handoff_reopen_intent, remote_view_handoff_resume_intent,
+        retain_remote_view_tab_handoff_at, RemoteViewTabHandoffRecreation,
+        RemoteViewTabHandoffReopen,
+    };
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        initial_tab: Some(BrowserTabAcquisition {
+            tab_id: "closed-tab".into(),
+            target_id: "closed-target".into(),
+            source: BrowserTabSource::SessionInitial,
+        }),
+        ..FixtureEffects::default()
+    };
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 1000,
+        remote_view_desktops: Vec::new(),
+    };
+    let opened = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1000,
+        ))
+        .unwrap();
+    let tab = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .tab_for_navigation(&opened.session_id, 1001)
+        .unwrap();
+    retain_remote_view_tab_handoff_at(
+        &mut state,
+        "same-link",
+        &opened.session_id,
+        &tab.tab_id,
+        1001,
+    )
+    .unwrap();
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .close_session(&opened.session_id, SessionEndReason::ExplicitClose, 1002)
+        .unwrap();
+    assert!(state.remote_view_tab_handoffs["same-link"]
+        .check_link_at(5000)
+        .is_ok());
+    assert_eq!(
+        remote_view_handoff_resume_intent(&state, "same-link", 5000).unwrap_err(),
+        "remote_view_handoff_reopen_required"
+    );
+    let intent = remote_view_handoff_reopen_intent(&state, "same-link", 5000).unwrap();
+    assert_eq!(intent.profile_id, "profile-a");
+    let link = state.remote_view_tab_handoffs.get_mut("same-link").unwrap();
+    link.recreation = Some(RemoteViewTabHandoffRecreation {
+        request_id: "original-request".into(),
+        requested_at_ms: 5000,
+    });
+    link.reopen = Some(RemoteViewTabHandoffReopen {
+        request_id: "wrong-request".into(),
+        fresh_profile: false,
+        reopened_tab_id: None,
+    });
+    assert!(remote_view_handoff_resume_intent(&state, "same-link", 5000).is_err());
+    state
+        .remote_view_tab_handoffs
+        .get_mut("same-link")
+        .unwrap()
+        .reopen
+        .as_mut()
+        .unwrap()
+        .request_id = "original-request".into();
+    let restarted: BrowserSessionState =
+        serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+    assert_eq!(
+        remote_view_handoff_resume_intent(&restarted, "same-link", 5001).unwrap(),
+        intent
+    );
+    state
+        .remote_view_tab_handoffs
+        .get_mut("same-link")
+        .unwrap()
+        .set_link_lifetime(5000, 1)
+        .unwrap();
+    assert_eq!(
+        remote_view_handoff_reopen_intent(&state, "same-link", 5001).unwrap_err(),
+        "remote_view_handoff_expired"
+    );
+    state.remote_view_tab_handoffs.remove("same-link");
+    assert_eq!(
+        remote_view_handoff_reopen_intent(&state, "same-link", 5001).unwrap_err(),
+        "remote_view_tab_handoff_missing"
+    );
+}

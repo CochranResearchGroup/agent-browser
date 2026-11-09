@@ -367,7 +367,7 @@ remain separate remaining work; retained handoff resolution is described below.
 Browser Runtime retains `remoteViewTabHandoffs`, keyed by opaque URL-safe IDs
 and bound to logical session and tab IDs. Resolution joins the retained target,
 profile and active-session membership, rather than the mutable current tab.
-A deliberately closed target cannot become a replacement. The shared owner
+Ordinary resolution never replaces a deliberately closed target. The shared owner
 recovers an idle-cleaned browser and focuses the addressed owned window before
 returning native presentation readiness. Logical identities stay stable during
 recovery; physical targets and CDP endpoints may change.
@@ -380,6 +380,23 @@ binding on the original handoff only after successful navigation. Link identity
 and its original expiry stay unchanged. Unknown creation outcomes require
 readback rather than another creation attempt. This restores access to the task
 destination, not lost in-memory page state.
+
+A valid link to an explicitly closed task instead exposes a read-only same-link
+reopen page. The authenticated `service_remote_view_handoff_resolve` operation
+`reopen` freezes its creation request and an optional `reopen` choice record
+containing `requestId`, `freshProfile`, and `reopenedTabId`. The choice binds to
+the existing recreation request, then the published exact tab. Missing saved
+profile storage cannot cause a silent replacement: `reopen_with_new_profile`
+requires a separate explicit choice and a current disposable policy. A missing
+named profile remains unavailable. Link deletion and expiry stay terminal.
+
+After publication the owner prepares renewed interactive assistance and clears
+the pending choice only after the cooperative journal accepts that request.
+Acceptance is recorded once per reconstruction; retry after an explicit return
+acknowledges the old acceptance without taking control again. This receipt is
+not current physical-target proof. Existing native qualification and viewer
+authentication still apply. The original link and expiry are preserved, and
+historical close records are not rewritten as automatic expiry.
 
 Ordinary configured commands publish their handoff through the existing SQLite
 aggregate transaction and return `browserSession.handoffId` and `handoffUrl`.
@@ -469,3 +486,11 @@ are initialized by explicit existing-client build requests, not profile inspecti
 ## Absent retained recovery claims
 
 An unobserved recovery claim is retired from occupancy only after exact retained-profile process absence, unchanged published browser state and matching prior assignment are proved. The original claim remains in the durable ledger with its terminal reconciliation marker. Observed claims and release fences retain their existing checks. Recovery validates current provider environment and assignment before creating a new process claim.
+
+Explicit reconstruction in a surviving shared browser keeps cooperative human
+ownership. Before creating a tab, reject another invitation's current hold or
+unresolved operation. The owner may attest only the frozen request's initial URL
+command for its newly admitted exact tab. Runtime admission verifies the private
+attestation, unchanged control epoch, retained request, target and URL. Public
+fields alone do not admit automation; publication invalidates the exception.
+Where private attestation is unavailable, this held-browser path fails closed.

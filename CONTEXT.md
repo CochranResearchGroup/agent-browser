@@ -13,6 +13,13 @@ CDP-free task after its exact original browser was conclusively closed by automa
 retirement. Existing Native launch admission still applies. The profile and logical
 links survive; reopening the saved launch URL does not reconstruct in-memory state.
 
+**Closed-task handoff**: Link validity and target lifecycle are separate. A valid
+closed-task URL offers explicit reopening on that same link. The owner freezes
+its reconstruction request and profile choice before effects. Missing saved
+profile data requires a disclosed choice before a fresh disposable profile;
+reopening does not reconstruct unsaved page state. A new exact-target human
+invitation precedes native viewing, and retry retains the same operation.
+
 **Live handoff retention**: An explicit human handoff supersedes automatic close
 only after excluding its worker and verifying the immutable original still lives.
 The original close attempt and unresolved physical outcome remain recorded.

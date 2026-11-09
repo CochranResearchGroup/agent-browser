@@ -56,6 +56,9 @@ pub struct RemoteViewTabHandoff {
     /// A frozen creation request prevents duplicate tabs after an uncertain effect.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recreation: Option<RemoteViewTabHandoffRecreation>,
+    /// Explicit same-link reconstruction choice; old readers safely ignore it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reopen: Option<RemoteViewTabHandoffReopen>,
     /// Automatic retirement permits recreation; explicit close remains distinct.
     #[serde(default)]
     pub target_expired: bool,
@@ -114,6 +117,16 @@ pub struct RemoteViewTabHandoffRecreation {
     pub requested_at_ms: u64,
 }
 
+/// Choice bound to one frozen reconstruction, then its published exact tab.
+/// The pending interaction survives a host restart after tab publication.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RemoteViewTabHandoffReopen {
+    pub request_id: String,
+    pub fresh_profile: bool,
+    pub reopened_tab_id: Option<String>,
+}
+
 /// A request retained before issuance, with its qualified outcome when known.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -167,6 +180,7 @@ pub fn retain_remote_view_tab_handoff_at(
         expires_at_ms: None,
         resume: None,
         recreation: None,
+        reopen: None,
         target_expired: false,
         native_observation: None,
     };
@@ -218,6 +232,25 @@ pub fn remote_view_handoff_resume_intent(
     handoff_id: &str,
     now_ms: u64,
 ) -> Result<RemoteViewTabHandoffResumeIntent, String> {
+    handoff_resume_intent(state, handoff_id, now_ms, false)
+}
+
+/// Read retained intent for an explicit authenticated reopen. This does not
+/// authorize an effect; the owner freezes the choice and verifies profile data.
+pub fn remote_view_handoff_reopen_intent(
+    state: &BrowserSessionState,
+    handoff_id: &str,
+    now_ms: u64,
+) -> Result<RemoteViewTabHandoffResumeIntent, String> {
+    handoff_resume_intent(state, handoff_id, now_ms, true)
+}
+
+fn handoff_resume_intent(
+    state: &BrowserSessionState,
+    handoff_id: &str,
+    now_ms: u64,
+    explicit_reopen: bool,
+) -> Result<RemoteViewTabHandoffResumeIntent, String> {
     let link = state
         .remote_view_tab_handoffs
         .get(handoff_id)
@@ -266,8 +299,19 @@ pub fn remote_view_handoff_resume_intent(
         .find(|session| session.id == link.session_id);
     let automatic =
         ended.is_some_and(|session| session.reason != crate::SessionEndReason::ExplicitClose);
-    if !link.target_expired && !automatic {
-        return Err(live.unwrap_err());
+    let pending_reopen = link
+        .reopen
+        .as_ref()
+        .zip(link.recreation.as_ref())
+        .is_some_and(|(choice, pending)| choice.request_id == pending.request_id);
+    if !link.target_expired && !automatic && !pending_reopen {
+        if ended.is_some_and(|session| session.reason == crate::SessionEndReason::ExplicitClose) {
+            if !explicit_reopen {
+                return Err("remote_view_handoff_reopen_required".into());
+            }
+        } else {
+            return Err(live.unwrap_err());
+        }
     }
     if let Some(intent) = &link.resume {
         return Ok(intent.clone());

@@ -5457,7 +5457,7 @@ requested provider. Until then it reports a
 retryable converging state on the same durable URL. Resolution fails closed when
 neither the retained target nor a current intent-matching target exists. A tab
 recorded as deliberately closed stays closed until the operator
-explicitly chooses **Reopen tab**; that explicit action is the separate path
+explicitly chooses **Reopen task** on the retained-link page or **Reopen tab** in the native viewer; that explicit action is the separate path
 that may open and navigate a replacement target.
 Software clients should call `requestServiceRemoteViewHandoff()` when they
 need a link for a user. It returns only `handoffId` and `handoffUrl`, so callers
@@ -7306,7 +7306,18 @@ not establish operator viewing readiness.
 
 Opening a durable handoff restores an idle-cleaned retained browser before redirecting to its current Remote View desktop. Ordinary automation commands also recover the same retained browser after idle cleanup, so continuation does not require opening the handoff link first. Explicitly closed sessions stay closed. The existing profile and handoff identity are preserved; no temporary viewer grant is required.
 
-A still-valid handoff for an automatically expired task recreates its addressed tab from retained task intent. It reuses an eligible recorded profile and browser, or wakes a browser through the existing owner. A cleaned disposable allocation can be recreated through its recorded policy. The original handoff URL and link expiry remain unchanged; the resolver does not select an unrelated current tab. Page memory is not restored. If a tab-creation outcome is unknown, obtain readback instead of blindly retrying. Explicitly closed tasks and expired links follow their separate terminal behavior.
+A valid handoff remains usable after its task is closed. Open the same link and
+select **Reopen task**. Reading the page does not recreate the task. If its saved
+profile is unavailable, the page explains that previous sign-ins and unsaved work
+will not be restored and offers a separate **Reopen with a new profile** choice
+for disposable tasks. Named profiles are never silently replaced. Expired and
+deleted links remain terminal. Software callers use
+`service_remote_view_handoff_resolve` with `handoffOperation="reopen"`, or
+`handoffOperation="reopen_with_new_profile"` after accepting the disclosed loss.
+Retries rejoin the retained request; explicit reopening prepares interactive
+assistance on the resulting exact target.
+
+A still-valid handoff for an automatically expired task recreates its addressed tab from retained task intent. It reuses an eligible recorded profile and browser, or wakes a browser through the existing owner. A cleaned disposable allocation can be recreated through its recorded policy. The original handoff URL and link expiry remain unchanged; the resolver does not select an unrelated current tab. Page memory is not restored. If a tab-creation outcome is unknown, obtain readback instead of blindly retrying. This automatic path leaves explicitly closed tasks awaiting an operator choice; expired links remain terminal.
 
 Software callers configure an addressed tab through `service_remote_view_handoff_resolve` with `params.handoffOperation="set_tab_lifetime"` and `params.tabInactivityMs`. A positive value expires the tab after that many milliseconds without tab activity; 0 makes its retention perpetual. The policy is persisted separately from link lifetime. `inspect` reports `tabLifetime` alongside link expiry. Configuration does not navigate, open a viewer or renew link validity. Reaping an expired tab preserves its peer tabs and link; active external custody and viewer protection still apply.
 
@@ -7371,7 +7382,7 @@ to 0 to make newly issued links perpetual.
 Policy changes apply to newly issued links. Existing finite links keep their
 expiry, including already-expired links. Legacy links with no creation marker
 receive creation metadata once without adding or changing their expiry. Extending an unlimited
-link preserves its unlimited lifetime. Explicitly closed tasks remain closed.
+link preserves its unlimited lifetime. Explicitly closed tasks await an explicit same-link reopen choice.
 
 
 Explicit native Remote View build selections are retained per runtime profile.

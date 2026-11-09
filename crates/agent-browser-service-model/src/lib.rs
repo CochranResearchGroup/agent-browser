@@ -63,11 +63,12 @@ mod remote_view_native_handoff;
 mod remote_view_retention;
 mod remote_view_tab_handoff;
 pub use remote_view_tab_handoff::{
-    remote_view_handoff_resume_intent, remote_view_native_target_digest,
-    resolve_remote_view_tab_handoff, retain_remote_view_tab_handoff,
-    retain_remote_view_tab_handoff_at, BrowserRetentionPolicy, RemoteViewTabHandoff,
-    RemoteViewTabHandoffRecreation, RemoteViewTabHandoffResumeIntent, RemoteViewTabHandoffTarget,
-    RemoteViewTabNativeObservation, RemoteViewTabView, DEFAULT_REMOTE_VIEW_HANDOFF_TTL_MS,
+    remote_view_handoff_reopen_intent, remote_view_handoff_resume_intent,
+    remote_view_native_target_digest, resolve_remote_view_tab_handoff,
+    retain_remote_view_tab_handoff, retain_remote_view_tab_handoff_at, BrowserRetentionPolicy,
+    RemoteViewTabHandoff, RemoteViewTabHandoffRecreation, RemoteViewTabHandoffReopen,
+    RemoteViewTabHandoffResumeIntent, RemoteViewTabHandoffTarget, RemoteViewTabNativeObservation,
+    RemoteViewTabView, DEFAULT_REMOTE_VIEW_HANDOFF_TTL_MS,
 };
 mod request_provenance;
 mod runtime_owner_projection;

@@ -3470,6 +3470,135 @@ fn configured_durable_retention_survives_restart_and_applies_to_new_links() {
 }
 
 #[test]
+fn closed_handoff_reopens_only_after_explicit_profile_choice_on_the_same_link() {
+    for remove_profile in [false, true] {
+        let sandbox = Fixture::new();
+        let service = sandbox.root.join(".agent-browser/service");
+        std::fs::create_dir_all(&service).unwrap();
+        let env = crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        env.set("HOME", sandbox.root.to_str().unwrap());
+        env.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        let fixture = Fixture::with_root(service, true);
+        assert_eq!(
+            fixture.root.join("runtime.sqlite3"),
+            BrowserSessionSqliteStore::default_sqlite_path().unwrap()
+        );
+        let provider = Rc::new(RefCell::new(Provider::default()));
+        let calls = Rc::new(Cell::new(0));
+        let mut consumer = host(&fixture, provider.clone(), calls.clone());
+        let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+            "action":"navigate", "url":"https://synthetic.example/closed-task", "activityAtMs":100
+        })).unwrap().unwrap();
+        let id = opened["browserSession"]["handoffId"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let session = opened["browserSession"]["sessionId"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let profile = opened["browserSession"]["profileId"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let link = consumer.state().remote_view_tab_handoffs[&id].clone();
+        let data = consumer.state().disposable_profiles[&profile]
+            .profile
+            .user_data_dir
+            .clone();
+        std::fs::create_dir_all(&data).unwrap();
+        consumer
+            .close_session(&session, SessionEndReason::ExplicitClose, 101)
+            .unwrap();
+        drop(consumer);
+        if remove_profile {
+            let mut store = fixture.store(false);
+            let original = store.load_session_state().unwrap();
+            let mut next = original.clone();
+            next.disposable_profiles.remove(&profile);
+            store
+                .compare_and_save_session_state(&original, &next)
+                .unwrap();
+            std::fs::remove_dir_all(&data).unwrap();
+        }
+        let mut consumer = host(&fixture, provider.clone(), calls.clone());
+        let before = consumer.state().clone();
+        let launches = calls.get();
+        let inspect = consumer.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":id,
+            "handoffOperation":"inspect", "activityAtMs":102
+        }));
+        assert_eq!(inspect["data"]["status"], "active", "{inspect}");
+        let automatic = consumer.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":id, "nativeDesktop":true, "activityAtMs":102
+        }));
+        assert_eq!(automatic["success"], false, "{automatic}");
+        assert_eq!(consumer.state(), &before);
+        assert_eq!(calls.get(), launches);
+        provider.borrow_mut().window_pid = Some(44);
+        let mut reopen = serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":id,
+            "handoffOperation":"reopen", "nativeDesktop":true, "activityAtMs":103
+        });
+        if remove_profile {
+            let loss = consumer.handle_command(&reopen);
+            assert_eq!(
+                loss["error"], "remote_view_handoff_reopen_profile_replacement_required",
+                "{loss}"
+            );
+            assert_eq!(consumer.state(), &before);
+            assert_eq!(calls.get(), launches);
+            reopen["handoffOperation"] = serde_json::json!("reopen_with_new_profile");
+        }
+        let result = consumer.handle_command(&reopen);
+        assert_eq!(result["success"], true, "{result}");
+        assert_eq!(
+            result["data"]["operatorVisible"]["state"], "ready",
+            "{result}"
+        );
+        let recreated = &consumer.state().remote_view_tab_handoffs[&id];
+        assert_eq!(recreated.id, id);
+        assert_eq!(recreated.created_at_ms, link.created_at_ms);
+        assert_eq!(recreated.expires_at_ms, link.expires_at_ms);
+        assert!(
+            recreated
+                .native_observation
+                .as_ref()
+                .and_then(|binding| binding.observation.as_ref())
+                .is_some(),
+            "Native input context must precede ready"
+        );
+        assert_eq!(provider.borrow().native_observations.len(), 1);
+        assert_eq!(consumer.state().sessions.len(), 1);
+        assert!(consumer
+            .state()
+            .session_history
+            .iter()
+            .any(|ended| ended.id == session && ended.reason == SessionEndReason::ExplicitClose));
+        let target =
+            agent_browser_service_model::resolve_remote_view_tab_handoff(consumer.state(), &id)
+                .unwrap();
+        let digest =
+            agent_browser_service_model::remote_view_native_target_digest(&id, &target).unwrap();
+        assert_eq!(
+            super::super::browser_host_control::handoff_intent(&target.browser.id, &id, &digest)
+                .unwrap(),
+            "interactive"
+        );
+        let current = &consumer.state().sessions[&recreated.session_id];
+        assert_eq!(current.profile_id == profile, !remove_profile);
+        let launches = calls.get();
+        let retried = consumer.handle_command(&reopen);
+        assert_eq!(retried["success"], true, "{retried}");
+        assert_eq!(
+            calls.get(),
+            launches,
+            "retry must rejoin the same recreation"
+        );
+    }
+}
+
+#[test]
 fn valid_handoff_recreates_expired_task_tab_after_host_restart() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));
@@ -11329,5 +11458,169 @@ fn retained_handoff_retirement_fixture(interactive: bool, refusal: Option<&str>)
         assert_eq!(control["owner"], "human");
         assert_eq!(control["epoch"], 1);
         assert_eq!(control["pauseReads"], true);
+    }
+}
+
+#[test]
+fn closed_handoff_never_silently_replaces_a_missing_named_profile() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider, calls.clone());
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "profileId":"profile-a", "url":"https://synthetic.example/named", "activityAtMs":100
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let session = opened["browserSession"]["sessionId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    consumer
+        .close_session(&session, SessionEndReason::ExplicitClose, 101)
+        .unwrap();
+    let path = fixture
+        .store(false)
+        .load_profile_catalog()
+        .unwrap()
+        .catalog
+        .profiles["profile-a"]
+        .user_data_dir
+        .clone();
+    if Path::new(&path).exists() {
+        std::fs::remove_dir_all(path).unwrap();
+    }
+    let before = consumer.state().clone();
+    let launches = calls.get();
+    for operation in ["reopen", "reopen_with_new_profile"] {
+        let result = consumer.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":id,
+            "handoffOperation":operation, "nativeDesktop":true, "activityAtMs":102
+        }));
+        assert_eq!(
+            result["error"], "remote_view_handoff_resume_profile_unavailable",
+            "{result}"
+        );
+        assert_eq!(consumer.state(), &before);
+        assert_eq!(calls.get(), launches);
+    }
+}
+
+#[test]
+fn closed_handoff_reopens_in_shared_browser_preserving_peer_and_its_own_human_hold() {
+    for hold in ["none", "same", "other"] {
+        let held = hold == "same";
+        let sandbox = Fixture::new();
+        let service = sandbox.root.join(".agent-browser/service");
+        std::fs::create_dir_all(&service).unwrap();
+        let env = crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        env.set("HOME", sandbox.root.to_str().unwrap());
+        env.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        let fixture = Fixture::with_root(service, true);
+        let path = fixture
+            .store(false)
+            .load_profile_catalog()
+            .unwrap()
+            .catalog
+            .profiles["profile-a"]
+            .user_data_dir
+            .clone();
+        std::fs::create_dir_all(path).unwrap();
+        let provider = Rc::new(RefCell::new(Provider::default()));
+        let calls = Rc::new(Cell::new(0));
+        let mut consumer = host(&fixture, provider.clone(), calls.clone());
+        let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+            "action":"navigate", "profileId":"profile-a", "url":"https://synthetic.example/original", "activityAtMs":2001
+        })).unwrap().unwrap();
+        let peer = consumer.execute_managed_command("Bob", &serde_json::json!({
+            "action":"navigate", "profileId":"profile-a", "url":"https://synthetic.example/peer", "activityAtMs":2002
+        })).unwrap().unwrap();
+        let id = opened["browserSession"]["handoffId"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let session = opened["browserSession"]["sessionId"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let peer_id = peer["browserSession"]["sessionId"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let peer_before = consumer.state().sessions[&peer_id].clone();
+        provider.borrow_mut().window_pid =
+            Some(consumer.state().browsers[&peer_before.browser_id].pid);
+        let peer_tabs: Vec<_> = consumer
+            .state()
+            .tabs
+            .values()
+            .filter(|tab| tab.session_id == peer_id)
+            .cloned()
+            .collect();
+        if hold != "none" {
+            let held_id = if held {
+                id.as_str()
+            } else {
+                peer["browserSession"]["handoffId"].as_str().unwrap()
+            };
+            let target = agent_browser_service_model::resolve_remote_view_tab_handoff(
+                consumer.state(),
+                held_id,
+            )
+            .unwrap();
+            let digest =
+                agent_browser_service_model::remote_view_native_target_digest(held_id, &target)
+                    .unwrap();
+            super::super::browser_host_control::begin_handoff(&target.browser.id, held_id, &digest)
+                .unwrap();
+        }
+        consumer
+            .close_session(&session, SessionEndReason::ExplicitClose, 2003)
+            .unwrap();
+        let launches = calls.get();
+        drop(consumer);
+        let mut consumer = host(&fixture, provider, calls.clone());
+        let before_reopen = consumer.state().clone();
+        let reopened = consumer.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":id,
+            "handoffOperation":"reopen", "activityAtMs":2004
+        }));
+        if hold == "other" {
+            assert_eq!(reopened["success"], false);
+            assert_eq!(
+                reopened["error"],
+                "browser_handoff_reopen_control_unavailable"
+            );
+            assert_eq!(*consumer.state(), before_reopen);
+            assert_eq!(calls.get(), launches);
+            continue;
+        }
+        assert_eq!(reopened["success"], true, "held={held} {reopened}");
+        if held {
+            assert!(fixture.root.join("reopen-admission-tested").exists());
+        }
+        assert_eq!(reopened["data"]["operatorVisible"]["state"], "ready");
+        assert_eq!(calls.get(), launches, "named peer browser must survive");
+        assert_eq!(consumer.state().sessions[&peer_id], peer_before);
+        for tab in peer_tabs {
+            assert_eq!(consumer.state().tabs[&tab.id], tab);
+        }
+        let target =
+            agent_browser_service_model::resolve_remote_view_tab_handoff(consumer.state(), &id)
+                .unwrap();
+        let digest =
+            agent_browser_service_model::remote_view_native_target_digest(&id, &target).unwrap();
+        assert_eq!(
+            super::super::browser_host_control::handoff_intent(&target.browser.id, &id, &digest)
+                .unwrap(),
+            "interactive"
+        );
+        assert!(consumer.state().remote_view_tab_handoffs[&id]
+            .native_observation
+            .as_ref()
+            .and_then(|binding| binding.observation.as_ref())
+            .is_some());
     }
 }

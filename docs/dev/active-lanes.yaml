@@ -2,6 +2,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: RETAINED-HANDOFF-613
+    product_lane: PL-BUGFIX
+    objective: Keep a valid handoff actionable after explicit task closure
+    plan: docs/dev/maintenance/retained-handoff-613.md
+    branch: fix/retained-handoff-613
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#613]
+    plan_state: OPEN
+    custody_state: INTEGRATED
+    dependencies: [MANUAL-IDLE-HANDOFF-599]
+    overlaps: [OPERATOR-MODE-RELAUNCH-607, TERMINAL-CONTROL-611, NATIVE-SAVED-LOGIN-596]
+    reconciled_overlaps: ["613 owns closed-link presentation and explicit reconstruction;607 mode relaunch and611 terminal requests retain their physical checkouts; shared host integration is serial"]
+    validation_status: PR616 source qualified at20b8a39cf;207 handoff,27 control,7 presentation cases plus419 model tests, strict Rust gates, UI/client/docs/tooling and six exact-binary no-launch smokes pass; original installed acceptance pending
+    limitations: ["Runtime adoption must preserve installed unmerged source d26086895fe18871e946fcf6fdfffac3a020e847; no production install or original task recreation", "Human-control warning remains a separate report"]
+    updated_at: 2026-11-09
   - id: HANDOFF-MODAL-603
     product_lane: PL-BUGFIX
     objective: Simplify handoff discovery and add instant search

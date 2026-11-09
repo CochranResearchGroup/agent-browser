@@ -842,6 +842,28 @@ impl ManagedBrowserCommandEffects for Process {
         session_name: &str,
         command: &Value,
     ) -> Result<Value, String> {
+        if command.get("hostControlReopen").is_some() {
+            let state = open_store(&self.root, false).load_session_state().unwrap();
+            super::browser_host_control::check_state(&state, session_name, command)?;
+            for (field, value) in [
+                ("url", serde_json::json!("https://synthetic.example/forged")),
+                ("action", serde_json::json!("click")),
+                ("targetId", serde_json::json!("unrelated-target")),
+                ("resumeHandoffId", serde_json::json!("unrelated-handoff")),
+                (
+                    "hostControlReopen",
+                    serde_json::json!({"epoch":0,"attestation":"forged"}),
+                ),
+            ] {
+                let mut forged = command.clone();
+                forged[field] = value;
+                assert!(
+                    super::browser_host_control::check_state(&state, session_name, &forged)
+                        .is_err()
+                );
+            }
+            std::fs::write(self.root.join("reopen-admission-tested"), "synthetic").unwrap();
+        }
         if command["action"] == "navigate" && self.root.join("count-navigation-dispatches").exists()
         {
             let path = self.root.join("navigation-dispatch-count");
