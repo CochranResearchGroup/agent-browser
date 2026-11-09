@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: OPERATOR-MODE-RELAUNCH-607
+    product_lane: PL-BUGFIX
+    objective: Let operator-confirmed mode relaunch reach its existing owner during human handoff
+    plan: docs/dev/maintenance/operator-mode-relaunch-607.md
+    branch: fix/607-operator-mode-relaunch
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#607]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [HUMAN-HANDOFF-571, CDP-FREE-IDLE-585, MANUAL-IDLE-HANDOFF-599]
+    reconciled_overlaps: ["Reuse clean canonical checkout; no new checkout; own operation lookup only, preserve retirement/recovery and Native control ownership"]
+    validation_status: Exact RED then GREEN; 6 operation lookup and 16 mode state tests, strict workspace Clippy, fmt, docs build and wiring pass; installed repair pending
+    limitations: ["Production profile and live state remain outside Git; installed qualification separate"]
+    updated_at: 2026-11-09
   - id: HANDOFF-MODAL-603
     product_lane: PL-BUGFIX
     objective: Simplify handoff discovery and add instant search
@@ -680,7 +696,7 @@ lanes:
     custody_state: INTEGRATED
     overlaps: [P283, P284]
     reconciled_overlaps: ["Own dashboard/http routing, bounded startup catch-up in selected-context/read-coordinator and rail freshness prose; P283/P284 retain profile/store/observation and installer source; reuse primary and retain pinned artifacts"]
-    validation_status: PR410 and PR416 installed on final e0d5525e92cc; cold visit1955.6ms versus3999.8ms, median776.8ms across five contexts;11 browser roots preserved and16 probe generations absent
+    validation_status: PR410 and PR416 installed on final e0d5525e92cc; cold visit1955.6ms versus3999.8ms, median776.8ms across five contexts;11 browser roots preserved and 16 probe generations absent
     limitations: ["Finite samples; no universal latency guarantee", "Native pixels and acquisition acceptance owned by P289", "Retain primary checkout and pinned candidates"]
     updated_at: 2026-10-24
   - id: P284

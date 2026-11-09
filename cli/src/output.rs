@@ -7456,6 +7456,7 @@ Commands:
   Copy/publication do not prove account identity, usable login or storage divergence.
   Reload/inspect reads the original operation; reconcile lost replies without replay.
   mode-convert JSON Inspect/relaunch/pause/cancel/restore_previous/select_build
+    Metadata remains available during human handoff; lifecycle choices keep confirmation checks.
     Conversion verifies mode/window without input; retained handoffs reconcile the original launch
     Fullscreen Native handoffs offer a top-row CDP on/off control with relaunch review
   watch-host-task TASK Changed NDJSON; fresh reconnect

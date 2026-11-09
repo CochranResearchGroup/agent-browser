@@ -64,6 +64,10 @@ current logical identity, historical verified progress, local artifact reference
 pending assistance/control and original uncertain operations. Its process ID is retained metadata for later physical verification, never live ownership evidence. It never launches,
 observes a live page, acknowledges human use or turns missing evidence into success.
 
+**Mode-operation lookup**: Inert lifecycle metadata for the existing task and
+profile. Human page-read pauses do not prevent inspection or preparation;
+explicit confirmation and exact original-process checks remain with the mode owner.
+
 **Mode conversion readiness**: Exact replacement process, requested debugging
 posture and Native window observation. Selective-input permission is independent;
 conversion does not inject input to qualify publication. An already-dispatched
