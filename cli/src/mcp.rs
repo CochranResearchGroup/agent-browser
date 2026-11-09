@@ -13,11 +13,11 @@ mod hosted;
 #[cfg(all(test, unix))]
 mod native_challenge_tests;
 #[cfg(all(test, target_os = "linux"))]
-#[path = "mcp/native_login_tests.rs"]
-mod native_login_tests;
-#[cfg(all(test, target_os = "linux"))]
 #[path = "mcp/native_cli_tests.rs"]
 mod native_cli_tests;
+#[cfg(all(test, target_os = "linux"))]
+#[path = "mcp/native_login_tests.rs"]
+mod native_login_tests;
 #[cfg(all(test, unix))]
 mod native_policy_tests;
 mod playbooks;
