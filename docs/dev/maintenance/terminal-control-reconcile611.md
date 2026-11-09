@@ -160,3 +160,31 @@ This qualification does not recover the lost actual refusal code or prove a real
 saved-password login. Parent adoption, exact runtime convergence, current task
 assessment and raw typed MCP acceptance remain separate. No broad review or final
 findings-TDD allowance was consumed by these accepted-defect regressions.
+
+## Installed acceptance closeout — 2026-11-09
+
+Issues #611 and #610 are closed after coordinator-owned preserving installation
+and independent receipt verification. Installed binary and current runtime host
+match executable source `a5fcfd3b7f0fbb65478ebb844ec19b264880b608` and SHA256
+`a6793b20dbb4d3d1e2cb568ca6ac73ef4a724cdc69014d26e505fddbfb454351`;
+runtime convergence reports one current host and one generation.
+
+One bounded public metadata reconciliation succeeded for the retained original
+uncertain request. Independent status changed pending count from one to zero,
+with agent ownership and epoch unchanged. Original briefing history remains
+`observed_uncertain_no_replay` with `retryAllowed=false`. No original action was
+replayed and no Native input or ownership change occurred. The earlier failed
+live attempt's underlying typed cause remains unknown. Exact installed artifact
+qualification also verifies #610's convenience CLI typed predispatch refusal;
+full convenience CLI saved-login parity is not claimed.
+
+Issue #596 remains open: actual saved-password login has not run. Native owner
+route custody remains unresolved; this is a runtime ownership requirement, not a
+new approval gate. This documentation-only closeout changes neither executable
+source nor sealed artifact and requires no rebuild or additional broad review.
+Private raw receipts remain outside Git. The published lane worktree and ref
+remain retained for dependent integration and ongoing #104 acceptance.
+
+Memory consolidation for these new actual-acceptance facts is deferred to the
+coordinator's Overleaf closeout. The prior source-qualification queued job is not
+retried or treated as proof of these later facts.
