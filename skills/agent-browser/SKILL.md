@@ -6,7 +6,7 @@ allowed-tools: Bash(agent-browser:*)
 
 # Browser Automation with agent-browser
 
-Workspace access requires the shared Authelia guard; native dashboard password login and session cookies are disabled pending compatible Remote View authentication. Authelia admission grants operator access without local dashboard account enrollment or roles; attribution uses the exact verified owner principal.
+Authelia admission grants operator access without local dashboard enrollment or roles. Dashboard-local password/cookie login is disabled; attribution uses the verified owner principal.
 
 Control and credentials: [setup and reconcile](references/cli-and-service.md).
 
@@ -96,24 +96,16 @@ Explicit handoff can supersede idle cleanup after its worker ends and the exact
 original is verified alive. Attempt history stays intact; this retention decision
 requires a schema-5-capable runtime.
 Deleted handoff links cannot be restored by concurrent lifetime edits.
-A valid closed-task link offers **Reopen task** on the same URL. Navigation is
-read-only. Reopen reaches the existing owner; a missing disposable profile needs
-a separate **Reopen with a new profile** choice that discloses lost sign-ins and
-unsaved state. Never silently replace a named profile or send a replacement link.
-Software uses `service_remote_view_handoff_resolve` with `handoffOperation=reopen`;
-use `reopen_with_new_profile` only after that explicit choice. The request and
-choice survive retries; renewed assistance pauses cooperative automation.
+Closed-task links offer **Reopen task** on the same URL. GET is read-only;
+missing disposable storage needs a separate disclosed fresh-profile choice.
+Never substitute a named profile. Read [closed-task reopening](references/cli-and-service.md#closed-task-reopening)
+for software operations, retry and human-control semantics.
 
+Idle-closed CDP-free handoffs reopen through the owner, preserving task/tab/link
+and profile, but not unsaved page state. Unknown proof or changed scope defers;
+never reset the profile as a workaround.
 
-
-A valid retained handoff can wake its conclusively idle-closed CDP-free browser
-through the existing owner. Logical task/tab/link identity and the profile persist;
-the saved launch URL reopens, not unsaved in-memory page state. Unknown close proof
-or changed scope still defers. Do not close the task or reset its profile as a workaround.
-
-CLI fallback: use installed `agent-browser <command> --help`, the exact profile
-and named session. Preserve peers/authentication; opening never requires cleanup
-or profile resets.
+CLI fallback: use installed help, exact profile and named session; preserve peers.
 
 Read [CLI commands](references/commands.md) for examples.
 

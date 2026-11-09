@@ -58,6 +58,7 @@ try {
     await page.goto('https://fixture.example/remote-view/retained-link');
     assert.equal(requests.length, 0, 'GET must not recreate a target');
     assert.equal(await page.getByRole('heading', { name: 'Browser task closed' }).count(), 1);
+    const reconnect = unqualified ? null : page.waitForNavigation({ waitUntil: 'load' });
     await page.getByRole('button', { name: 'Reopen task', exact: true }).click();
     if (unqualified) {
       await page.getByRole('status').filter({ hasText: 'could not be reopened yet' }).waitFor();
@@ -76,8 +77,7 @@ try {
       assert.equal(await page.getByRole('button', { name: 'Reopen task', exact: true }).isVisible(), false);
       await fresh.click();
     }
-    await page.waitForFunction(() => document.readyState === 'complete');
-    for (let n = 0; n < 40 && visits < 2; n++) await page.waitForTimeout(25);
+    await reconnect;
     assert.equal(visits, 2, 'success must revisit exactly the same durable URL');
     assert.equal(page.url(), 'https://fixture.example/remote-view/retained-link');
     assert.deepEqual(requests.map(request => request.params.handoffOperation), missing ? ['reopen', 'reopen_with_new_profile'] : ['reopen']);

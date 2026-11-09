@@ -4661,3 +4661,13 @@ The original row becomes `observed_uncertain_no_replay`; its history remains and
 it never grants retry authority. Other standalone control changes remain unsupported.
 
 Convenience `mcp browser-native` loginControls/loginTarget requests are refused before transport. Use journaled public MCP browser_command with the retained saved-login SDK.
+
+## Closed-task reopening
+
+A valid closed-task link offers **Reopen task** on the same URL. Navigation is
+read-only. Reopen reaches the existing owner; a missing disposable profile needs
+a separate **Reopen with a new profile** choice that discloses lost sign-ins and
+unsaved state. Never silently replace a named profile or send a replacement link.
+Software uses `service_remote_view_handoff_resolve` with `handoffOperation=reopen`;
+use `reopen_with_new_profile` only after that explicit choice. The request and
+choice survive retries; renewed assistance pauses cooperative automation.
