@@ -16,3 +16,5 @@ ROADMAP and RUNBOOK retain earlier maintenance outcomes and historical links.
 This bounded index does not reclassify unrelated retained maintenance records.
 
 - [Authelia-only dashboard](authelia-only-dashboard.md): retire native login while Remote View requires the shared guard.
+
+- [Native login #596 coverage](native-login596-coverage.md): SDK successor for bounded full-window discovery and fresh selected-tile input evidence; actual saved-login acceptance separate.

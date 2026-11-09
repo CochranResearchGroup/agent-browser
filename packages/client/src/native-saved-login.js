@@ -39,19 +39,61 @@ export function createNativeSavedLoginClient({callTool,store,verifyAccess,expect
      const proposed={requestId,kind,state:'intent'};
      if(await original(proposed))fail(fresh?'native_saved_login_retained_episode_required':'native_saved_login_original_uncertain');
      const before=await briefing();if(!checkpoint.binding){checkpoint.binding=/** @type {import('./native-saved-login.d.ts').SavedLoginBinding} */(Object.fromEntries(logical.map(k=>[k,before[k]])));checkpoint.controlEpoch=before.control.epoch;await store.save(checkpoint);}
-     checkpoint.captureSequence=(checkpoint.captureSequence??0)+1;await store.save(checkpoint);
-     const observationRequestId=episodeId+':observation'+(index+1)+':'+checkpoint.captureSequence;
-     const frame=await call('native_capture',{requestId:observationRequestId,params:{loginControls:{profile:'english-chrome-v1',expectedAccount}}});
-     const controls=frame?.loginControls,binding=frame?.binding;
-     if(frame?.source!=='remote_view_native'||controls?.schemaVersion!=='agent-browser.native-login-controls.v1'||controls.status!=='observed'||!Array.isArray(controls.controls)||!same(binding,binding,physical)||typeof binding.desktopId!=='string'||!binding.desktopId||!['generation','windowId','nativeControlEpoch'].every(k=>Number.isSafeInteger(binding[k])&&binding[k]>=0)||!/^[a-f0-9]{64}$/.test(controls.frameSha256??'')||!Number.isSafeInteger(binding.observedAtMs)||now()-binding.observedAtMs>10000||binding.observedAtMs>now())fail('native_saved_login_frame_unverified');
-     if(checkpoint.physical&&!same(binding,checkpoint.physical,physical))fail('native_saved_login_native_binding_changed');
-     if(!checkpoint.physical){checkpoint.physical=Object.fromEntries(physical.map(k=>[k,binding[k]]));await store.save(checkpoint);}
-     let candidates=controls.controls.filter(c=>c.kind===kind&&(kind!=='credential_entry'||c.configuredAccountMatch===true));
-     if(candidates.length!==1||typeof candidates[0].targetRef!=='string'||!candidates[0].targetRef)fail('native_saved_login_target_ambiguous');
-     if(kind==='submit'){
-      const user=controls.controls.filter(c=>c.kind==='username'),password=controls.controls.filter(c=>c.kind==='password');
-      if(user.length!==1||user[0].configuredAccountMatch!==true||password.length!==1||password[0].fieldValueState!=='masked')fail('native_saved_login_filled_account_unverified');
+     // Cover the complete window using overlapping owner-sized tiles. Each
+     // input still binds one freshly recaptured tile; frames are never stitched.
+     async function capture(region){
+      checkpoint.captureSequence=(checkpoint.captureSequence??0)+1;await store.save(checkpoint);
+      const observationRequestId=episodeId+':observation'+(index+1)+':'+checkpoint.captureSequence;
+      const frame=await call('native_capture',{requestId:observationRequestId,params:{loginControls:{profile:'english-chrome-v1',expectedAccount},...(region?{region}:{})}});
+      const controls=frame?.loginControls,binding=frame?.binding;
+      if(frame?.source!=='remote_view_native'||controls?.schemaVersion!=='agent-browser.native-login-controls.v1'||!['observed','not_found'].includes(controls.status)||!Array.isArray(controls.controls)||!same(binding,binding,physical)||typeof binding.desktopId!=='string'||!binding.desktopId||!['generation','windowId','nativeControlEpoch'].every(k=>Number.isSafeInteger(binding[k])&&binding[k]>=0)||!/^[a-f0-9]{64}$/.test(controls.frameSha256??'')||!Number.isSafeInteger(binding.observedAtMs)||now()-binding.observedAtMs>10000||binding.observedAtMs>now())fail('native_saved_login_frame_unverified');
+      if(checkpoint.physical&&!same(binding,checkpoint.physical,physical))fail('native_saved_login_native_binding_changed');
+      if(!checkpoint.physical){checkpoint.physical=Object.fromEntries(physical.map(k=>[k,binding[k]]));await store.save(checkpoint);}
+      return {controls,binding,observationRequestId};
      }
+     const initial=await capture();
+     const window=initial.binding.window;
+     const validBounds=b=>b&&['x','y','width','height'].every(k=>Number.isSafeInteger(b[k]))&&b.x>=0&&b.y>=0&&b.width>0&&b.height>0;
+     const regions=[];
+     {
+      if(!validBounds(window)||window.x+window.width>initial.binding.displayWidth||window.y+window.height>initial.binding.displayHeight)fail('native_saved_login_frame_unverified');
+      if(window.width*window.height>1000000){
+       const height=Math.min(window.height,1000000),width=Math.min(window.width,Math.floor(1000000/height));
+       if(Math.ceil(window.width/width)*Math.ceil(window.height/height)>16)fail('native_saved_login_surface_unsupported');
+       for(let y=0;y<window.height;y+=height)for(let x=0;x<window.width;x+=width)regions.push({x:window.x+Math.min(x,window.width-width),y:window.y+Math.min(y,window.height-height),width,height});
+      }
+     }
+     const frames=regions.length?[]:[initial];
+     for(const region of regions){const frame=await capture(region);if(!same(frame.binding.region,region,['x','y','width','height'])||!same(frame.binding.window,window,['x','y','width','height'])||!same(frame.binding,initial.binding,['displayWidth','displayHeight']))fail('native_saved_login_native_binding_changed');frames.push(frame);}
+     const targetKey=c=>JSON.stringify([c.kind,c.bounds,c.configuredAccountMatch,c.fieldValueState]);
+     const choices=new Map();
+     for(const frame of frames){
+      const controls=frame.controls;
+      if(kind==='submit'){
+       const user=controls.controls.filter(c=>c.kind==='username'),password=controls.controls.filter(c=>c.kind==='password');
+       if(user.length!==1||user[0].configuredAccountMatch!==true||password.length!==1||password[0].fieldValueState!=='masked')continue;
+      }
+      for(const candidate of controls.controls.filter(c=>c.kind===kind&&(kind!=='credential_entry'||c.configuredAccountMatch===true))){
+       if(typeof candidate.targetRef!=='string'||!candidate.targetRef)fail('native_saved_login_target_ambiguous');
+       const key=regions.length?targetKey(candidate):candidate.targetRef;
+       if(!choices.has(key))choices.set(key,{candidate,frame});
+      }
+     }
+     if(choices.size!==1)fail(kind==='submit'?'native_saved_login_filled_account_unverified':'native_saved_login_target_ambiguous');
+     let {candidate,frame}=choices.values().next().value;
+     if(regions.length){
+      const fresh=await capture(frame.binding.region);
+      if(!same(fresh.binding.window,window,['x','y','width','height'])||!same(fresh.binding,initial.binding,['displayWidth','displayHeight'])||!same(fresh.binding.region,frame.binding.region,['x','y','width','height']))fail('native_saved_login_native_binding_changed');
+      const eligible=fresh.controls.controls.filter(c=>c.kind===kind&&(kind!=='credential_entry'||c.configuredAccountMatch===true));
+      const matches=eligible.filter(c=>targetKey(c)===targetKey(candidate));
+      if(eligible.length!==1||matches.length!==1)fail('native_saved_login_target_ambiguous');
+      if(kind==='submit'){
+       const user=fresh.controls.controls.filter(c=>c.kind==='username'),password=fresh.controls.controls.filter(c=>c.kind==='password');
+       if(user.length!==1||user[0].configuredAccountMatch!==true||password.length!==1||password[0].fieldValueState!=='masked')fail('native_saved_login_filled_account_unverified');
+      }
+      candidate=matches[0];frame=fresh;
+     }
+     const candidates=[candidate],observationRequestId=frame.observationRequestId;
      const after=await briefing();if(!same(before,after,logical)||before.control.epoch!==after.control.epoch)fail('native_saved_login_task_control_changed');remaining();
      proposed.targetRef=candidates[0].targetRef;proposed.observationRequestId=observationRequestId;checkpoint.inputs.push(proposed);await store.save(checkpoint);
      try{

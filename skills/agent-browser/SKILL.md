@@ -33,7 +33,7 @@ A retained handoff may finish its original settled browser-close publication bef
 
 After human input, use Give control back in the viewer, then `browser_continue` with the same `taskId` reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff.
 
-Saved login: use [native login controls](references/cli-and-service.md#native-login-controls) with the retained episode; no password export or input replay.
+Saved login: use [native login controls](references/cli-and-service.md#native-login-controls) with the retained episode; no password export or input replay. The SDK tiles oversized windows under the owner pixel limit and freshly recaptures its chosen region; it never stitches input evidence or extends the episode.
 
 ## Standalone authentication
 

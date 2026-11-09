@@ -11,5 +11,6 @@ export interface NativeSavedLoginOptions {
  expectedAccount:string;now?:()=>number;
 }
 export interface NativeSavedLoginClient {resolve(input:{taskId:string;episodeId:string}):Promise<SavedLoginResult>;}
-/** Three owner-guarded opaque-target clicks within one retained 60-second episode. */
+/** Covers the window with bounded owner tiles and freshly recaptures the selected tile.
+ * Three owner-guarded opaque-target clicks within one retained 60-second episode. */
 export function createNativeSavedLoginClient(options:NativeSavedLoginOptions):NativeSavedLoginClient;

@@ -122,3 +122,5 @@ The four-profile governance MCP policy pilot landed through PR #206. Use its com
 ## Historical material
 
 [Legacy planning archive](docs/history/2026-10-05-legacy-planning/README.md) preserves earlier roadmaps, runbooks, plans, identifiers, and evidence. It is reference-only and does not define current direction. Archival does not close unrelated issues or PRs. Do not reinstate old requirements from an archived OPEN state.
+
+Native login #596 successor: [bounded full-window SDK coverage](docs/dev/maintenance/native-login596-coverage.md) repairs lower chooser discovery; installed saved-login acceptance remains open.
