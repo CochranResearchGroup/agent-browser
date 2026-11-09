@@ -112,6 +112,9 @@ pub trait NativeOwner {
     fn native_attempt(&mut self, _command: &Value) -> Result<NativeChallengeObservation, String> {
         Err("browser_native_original_operation_unavailable".into())
     }
+    fn native_login_attempt(&mut self, _command: &Value) -> Result<Value, String> {
+        Err("browser_native_login_original_unavailable".into())
+    }
     /// Separate owner-minted static image evidence, never a checkbox envelope.
     fn native_image_attempt(
         &mut self,
@@ -143,6 +146,17 @@ pub fn execute(
     if classify && command["action"] != "native_capture" {
         return Err("browser_native_classification_requires_capture".into());
     }
+    let login = command.get("loginControls");
+    if let Some(request) = login {
+        if command["action"] != "native_capture"
+            || classify
+            || command.get("registeredActionId").is_some()
+            || command.get("imageCaptureScope").is_some()
+        {
+            return Err("browser_native_login_requires_exclusive_capture".into());
+        }
+        super::native_login_perception::validate_request(request)?;
+    }
     let image_scope = match command.get("imageCaptureScope") {
         None => super::browser_native_image::CaptureScope::CompleteWindow,
         Some(value)
@@ -158,6 +172,14 @@ pub fn execute(
         }
         Some(_) => return Err("browser_native_image_capture_scope_invalid".into()),
     };
+    if command.get("loginTarget").is_some()
+        && (command["action"] != "native_input"
+            || ["actions", "nativeAttempt", "imageAttempt", "controlEpoch"]
+                .iter()
+                .any(|k| command.get(k).is_some()))
+    {
+        return Err("browser_native_login_target_requires_exclusive_input".into());
+    }
     let observation_started = std::time::Instant::now();
     let image_clock = if command["registeredActionId"]
         .as_str()
@@ -212,11 +234,28 @@ pub fn execute(
     if registered_action.is_some() && !classify {
         return Err("browser_native_registered_action_requires_classification".into());
     }
+    let login_selection = if command.get("loginTarget").is_some() {
+        let observation = owner.native_login_attempt(command)?;
+        Some(super::native_login_perception::select_target(
+            &observation,
+            command["loginTarget"]["targetRef"]
+                .as_str()
+                .ok_or("browser_native_login_target_invalid")?,
+            observed_at_ms,
+        )?)
+    } else {
+        None
+    };
     let mut derived_actions = attempt.as_ref().map(|evidence| {
         vec![json!({"kind":"click","x":evidence.x,"y":evidence.y,"button":1,"count":1})]
     });
     if let (Some(evidence), Some(selected)) = (&image_attempt, &image_selected) {
         derived_actions = Some(evidence.actions(selected)?);
+    }
+    if let Some(selected) = &login_selection {
+        derived_actions = Some(vec![
+            json!({"kind":"click","x":selected.x,"y":selected.y,"button":1,"count":1}),
+        ]);
     }
     let actions = if let Some(actions) = derived_actions.as_ref() {
         Some(actions)
@@ -362,6 +401,28 @@ pub fn execute(
         body["controlEpoch"] = json!(evidence.native_control_epoch);
         body["expectedVisual"] = json!({"region":evidence.region,"sha256":evidence.frame_sha256});
     }
+    if let Some(selected) = &login_selection {
+        let b = &selected.binding;
+        if b["desktopId"] != target.viewing_desktop_id
+            || b["generation"] != target.viewing_generation
+            || b["windowId"] != window["id"]
+            || b["window"] != body["expectedWindow"]
+            || b["displayWidth"] != width
+            || b["displayHeight"] != height
+        {
+            return Err("browser_native_login_context_changed".into());
+        }
+        let control=owner.request("control",&json!({"desktopId":target.viewing_desktop_id,"expectedGeneration":target.viewing_generation,"operation":"status"}))?;
+        if control["desktopId"] != target.viewing_desktop_id
+            || control["generation"] != target.viewing_generation
+            || control["owner"] != "agent"
+            || control["epoch"] != b["nativeControlEpoch"]
+        {
+            return Err("browser_native_login_control_changed".into());
+        }
+        body["controlEpoch"] = b["nativeControlEpoch"].clone();
+        body["expectedVisual"] = json!({"region":b["region"],"sha256":selected.frame_sha256});
+    }
     if command["action"] == "native_close" {
         // Remote View window.close destroys the window. Normal WM close is
         // requested through native input; exit remains independent evidence.
@@ -369,7 +430,7 @@ pub fn execute(
     }
     if command["action"] == "native_capture" {
         body.as_object_mut().unwrap().remove("actions");
-        if classify {
+        if classify || login.is_some() {
             // Read the existing Native owner's epoch. The cooperative browser
             // epoch is a different authority and cannot authorize this capture.
             let control = owner.request(
@@ -403,7 +464,29 @@ pub fn execute(
                 "x":window["x"],"y":window["y"],"width":tile_width,"height":tile_height
             })
         });
-        let mut capture = owner.request(if classify { "ocr" } else { "capture_region" }, &body)?;
+        let mut capture = owner.request(
+            if classify || login.is_some() {
+                "ocr"
+            } else {
+                "capture_region"
+            },
+            &body,
+        )?;
+        if let Some(request) = login {
+            if capture["desktopId"] != target.viewing_desktop_id
+                || capture["generation"] != target.viewing_generation
+                || capture["windowId"] != window["id"]
+                || capture["processIdentity"] != window["processIdentity"]
+            {
+                return Err("browser_native_login_context_changed".into());
+            }
+            let controls =
+                super::native_login_perception::observe(&capture, &body["region"], request)?;
+            let binding = json!({"desktopId":target.viewing_desktop_id,"generation":target.viewing_generation,"windowId":window["id"],"window":body["expectedWindow"],"displayWidth":width,"displayHeight":height,"region":body["region"],"nativeControlEpoch":body["controlEpoch"],"observedAtMs":observed_at_ms});
+            return Ok(
+                json!({"source":"remote_view_native","loginControls":controls,"binding":binding,"nativeLoginObservation":{"binding":binding,"controls":controls},"taskCompleted":false}),
+            );
+        }
         let mut classification = None;
         let mut recognition = None;
         let mut native_observation = None;
@@ -631,8 +714,26 @@ pub fn execute(
             .as_millis() as u64;
         evidence.validate(now)?;
     }
+    if login_selection.is_some() {
+        let observation = owner.native_login_attempt(command)?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| "browser_native_observation_clock_invalid")?
+            .as_millis() as u64;
+        super::native_login_perception::select_target(
+            &observation,
+            command["loginTarget"]["targetRef"]
+                .as_str()
+                .ok_or("browser_native_login_target_invalid")?,
+            now,
+        )?;
+    }
     let reply = owner.request("input", &body)?;
     Ok(
         json!({"source":"remote_view_native","delivery":reply["delivery"].as_str().unwrap_or("unknown"),"taskCompleted":false}),
     )
 }
+
+#[cfg(test)]
+#[path = "native_login_perception_tests.rs"]
+mod login_perception_tests;

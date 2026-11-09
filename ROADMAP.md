@@ -1,3 +1,5 @@
+[Native deterministic saved login596](docs/dev/maintenance/native-saved-login596.md), PL-AUTH: build pinned pixel/OCR perception, guarded opaque selection and one retained three-click episode. Source qualification in progress; installed Overleaf104 acceptance remains separate.
+
 [Interactive invitation recovery583](docs/dev/maintenance/recovered-interactive-invitation-583.md) preserves the original human invitation only through an attributable per-tab recovery mapping. Legacy unrecorded mappings remain fenced. Source qualification and installed consumer acceptance stay separate; [RUNBOOK](RUNBOOK.md) owns current progress.
 
 [#579 retained Native handoff recovery](docs/dev/maintenance/retained-handoff-retirement-579.md), PL-BUGFIX: qualify the retained-scope counterpart of #570 through original settled close publication and same-task recovery. [RUNBOOK](RUNBOOK.md) owns current source/runtime evidence. No shared runtime effect in the source packet.

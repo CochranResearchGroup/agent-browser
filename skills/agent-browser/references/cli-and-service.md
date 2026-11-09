@@ -4616,3 +4616,31 @@ Native fence readback and atomic publication before completing that fence; it
 never repeats the physical close. This reconciliation is limited to the requested
 profile. Unresolved effects, changed identities and unavailable Native proof
 retain their original reconciliation requirement.
+
+
+## Native login controls
+
+Use browser_command native_capture with loginControls profile english-chrome-v1
+and expectedAccount to obtain deterministic current Native control candidates.
+The profile pins English Tesseract5.3.4/model metadata and flat rectangular
+control geometry. Return values exclude raw OCR/pixels, field values and passwords.
+Use native_input loginTarget with observationRequestId, opaque targetRef and the
+original episodeId. The owner derives the OS click and fences current Native
+window, geometry, control and pixels. Never supply coordinates or mix raw actions.
+
+The native-saved-login client exports createNativeSavedLoginClient with callTool,
+a serialized durable store, verifyAccess and expectedAccount. resolve takes taskId
+and original episodeId. It retains60seconds/three clicks across interruptions;
+unknown or pending input requires readback, never replay. The host independently
+verifies authenticated intended-account access. Semantic workers are exceptional
+fallbacks outside this deterministic routine. Current source/image proofs do not
+replace separately authorized installed saved-password acceptance.
+
+
+## Build readiness
+
+A `dashboard_build_incomplete` install/doctor failure requires rebuilding the frontend and recompiling the candidate. The maintained `pnpm build:development-candidate` command includes both steps.
+
+## Handoff search
+
+Handoffs supports instant search by task, profile, session, creator or link ID. Compact rows keep technical details under Inspect.

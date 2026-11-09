@@ -365,7 +365,8 @@
     "test:workspace-siteguides-agent": "node scripts/test-workspace-siteguides-agent.mjs",
     "test:workspace-siteguides-receipts": "node scripts/test-workspace-siteguides-receipts.mjs",
     "test:teaching-media": "node scripts/test-teaching-media.mjs",
-    "test:teaching-accepted-baseline": "node scripts/test-teaching-accepted-baseline.mjs"
+    "test:teaching-accepted-baseline": "node scripts/test-teaching-accepted-baseline.mjs",
+    "test:native-saved-login": "node scripts/test-native-saved-login.js && pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --module NodeNext --moduleResolution NodeNext --target ES2022 --types node ../packages/client/src/native-saved-login.js ../packages/client/src/native-saved-login.d.ts"
   },
   "keywords": [
     "browser",

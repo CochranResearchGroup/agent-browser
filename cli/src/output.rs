@@ -7427,6 +7427,9 @@ Commands:
   Native policy: verified CDP origin/provider required; CDP-free uses human assistance
   Native return: original opaque handoff, explicit takeover/return, separate access checks
   browser-mode TASK Inspect mode
+  Native saved login: capture loginControls english-chrome-v1; select opaque loginTarget
+  Native login episode: same task/episode;60 seconds/3 clicks; unknown input never replays
+  Native login proof: no password/OCR/image export; independent account verification required
   browser-native TASK ACTION JSON Input/capture <=1Mpx
   browser-build JSON Inspect/select/open profile build
   Workspace Open browser: compact toolbar; disposable CDP-free is the default.

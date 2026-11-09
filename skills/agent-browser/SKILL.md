@@ -10,9 +10,7 @@ Workspace access requires the shared Authelia guard; native dashboard password l
 
 Native credentials: [Remote View setup](references/cli-and-service.md).
 
-A `dashboard_build_incomplete` install/doctor failure requires rebuilding the frontend and recompiling the candidate. The maintained `pnpm build:development-candidate` command includes both steps.
-
-Handoffs supports instant search by task, profile, session, creator or link ID. Compact rows keep technical details under Inspect.
+Build failures: [readiness guidance](references/cli-and-service.md#build-readiness).
 
 ## Handoff creator context
 
@@ -34,6 +32,8 @@ Same-browser and desktop rail tab switches retain the viewer connection.
 A retained handoff may finish its original settled browser-close publication before recovery; keep the same task and handoff, and preserve unresolved effect or identity failures for readback. An interactive invitation survives physical replacement only through its recorded exact recovery mapping; missing legacy mapping or changed targets stay fenced, with the human hold preserved.
 
 After human input, use Give control back in the viewer, then `browser_continue` with the same `taskId` reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff.
+
+Saved login: use [native login controls](references/cli-and-service.md#native-login-controls) with the retained episode; no password export or input replay.
 
 ## Standalone authentication
 

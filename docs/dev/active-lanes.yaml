@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: NATIVE-SAVED-LOGIN-596
+    product_lane: PL-AUTH
+    objective: Complete native deterministic saved-credential login tooling and retained routine
+    plan: docs/dev/maintenance/native-saved-login596.md
+    branch: auth/native-saved-login596
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#596]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [CochranResearchGroup/agent-browser#586]
+    overlaps: [native-capture586]
+    reconciled_overlaps: ["596 owns new read-only perception and Native capture option;586 owns capture transport; parent serializes integration; no installed effects"]
+    validation_status: Native public missing-capability RED; productionperception8tracers andSDKworkflow pass; fullNative journal and quality gates pending
+    limitations: ["Installed real saved-login acceptance remains open", "No production replacement or live login"]
+    updated_at: 2026-11-09
   - id: HANDOFF-MODAL-603
     product_lane: PL-BUGFIX
     objective: Simplify handoff discovery and add instant search

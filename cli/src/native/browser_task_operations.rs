@@ -92,14 +92,25 @@ pub(crate) fn eligible_action(action: &str) -> bool {
 
 /// Opt-in only: generic Native input keeps its existing owner contract.
 pub(crate) fn eligible_native(action: &str, params: &Value) -> bool {
-    action == "native_capture" && params.get("registeredActionId").is_some()
+    action == "native_capture"
+        && (params.get("registeredActionId").is_some() || params.get("loginControls").is_some())
         || action == "native_input"
-            && (params.get("nativeAttempt").is_some() || params.get("imageAttempt").is_some())
+            && (params.get("nativeAttempt").is_some()
+                || params.get("imageAttempt").is_some()
+                || params.get("loginTarget").is_some())
 }
 
 pub(crate) fn begin_native(task_id: &str, command: &mut Value) -> Result<Admission, String> {
     if !eligible_native(command["action"].as_str().unwrap_or_default(), command) {
         return Err("browser_native_original_operation_invalid".into());
+    }
+    if command.get("loginControls").is_some() || command.get("loginTarget").is_some() {
+        if command.get("loginControls").is_some() {
+            super::native_login_perception::validate_request(&command["loginControls"])?;
+        } else {
+            login_target_request(command)?;
+        }
+        return begin_inner(task_id, command, true);
     }
     let action_id = if command["action"] == "native_capture" {
         if command["classifyChallenges"] != true {
@@ -311,7 +322,10 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
     // Resolve an original capture before transport or process recovery. Missing
     // evidence is never replaced by a caller timestamp or guessed coordinates.
     let observation = if native && action == "native_input" {
-        if command.get("imageAttempt").is_some() {
+        if command.get("loginTarget").is_some() {
+            original_login_observation(&state, task_id, command)?;
+            login_episode_step(&state, task_id, command, None)?;
+        } else if command.get("imageAttempt").is_some() {
             original_native_image_observation(&state, task_id, command)?;
         } else {
             original_native_observation(&state, task_id, command)?;
@@ -320,7 +334,7 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
     } else {
         None
     };
-    if observation.is_some() {
+    if observation.is_some() && command.get("loginTarget").is_none() {
         image_attempt_budget(&state, task_id, command)?;
     }
     let expected = context(&state, task_id)?;
@@ -345,7 +359,30 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
         state: BrowserTaskOperationState::Pending,
         created_at_ms: now_ms()?,
         completed_at_ms: None,
-        evidence_references: if observation.is_some() {
+        evidence_references: if command.get("loginTarget").is_some() {
+            let selected = super::native_login_perception::select_target(
+                &original_login_observation(&state, task_id, command)?,
+                command["loginTarget"]["targetRef"]
+                    .as_str()
+                    .ok_or("browser_native_login_target_invalid")?,
+                now_ms()?,
+            )?;
+            BTreeMap::from([
+                (
+                    "nativeLoginObservationRequestId".into(),
+                    command["loginTarget"]["observationRequestId"]
+                        .as_str()
+                        .unwrap()
+                        .into(),
+                ),
+                (
+                    "nativeLoginEpisode".into(),
+                    command["loginTarget"]["episodeId"].as_str().unwrap().into(),
+                ),
+                ("nativeLoginTargetRef".into(), selected.target_ref),
+                ("nativeLoginKind".into(), selected.kind),
+            ])
+        } else if observation.is_some() {
             BTreeMap::from([
                 (
                     "nativeObservationRequestId".into(),
@@ -396,13 +433,21 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
             );
         }
         if observation.is_some() {
-            if command.get("imageAttempt").is_some() {
+            if command.get("loginTarget").is_some() {
+                original_login_observation(state, task_id, command)?;
+                let step = login_episode_step(state, task_id, command, None)?;
+                admitted
+                    .evidence_references
+                    .insert("nativeLoginStep".into(), step.to_string());
+            } else if command.get("imageAttempt").is_some() {
                 original_native_image_observation(state, task_id, command)?;
             } else {
                 original_native_observation(state, task_id, command)?;
             }
             super::browser_host_policy::check_state(state, task_id, command)?;
-            image_attempt_budget(state, task_id, command)?;
+            if command.get("loginTarget").is_none() {
+                image_attempt_budget(state, task_id, command)?;
+            }
         }
         let rows = state.task_operations.entry(task_id.into()).or_default();
         if rows.len() >= MAXIMUM_TASK_OPERATIONS {
@@ -1059,6 +1104,18 @@ pub(crate) fn finish(
             references.insert("artifactKind".into(), "screenshot".into());
         }
         if original.action == "native_capture" {
+            if let Some(observation) = response
+                .data
+                .as_ref()
+                .and_then(|d| d.get("nativeLoginObservation"))
+            {
+                let encoded = serde_json::to_string(observation)
+                    .map_err(|_| "browser_native_login_observation_invalid")?;
+                if encoded.len() > 32768 {
+                    return Err("browser_native_login_observation_invalid".into());
+                }
+                references.insert("nativeLoginObservation".into(), encoded);
+            }
             if let Some(value) = response
                 .data
                 .as_ref()
@@ -1414,4 +1471,185 @@ fn image_attempt_budget<'a>(
         }
     }
     Err("browser_native_challenge_attempt_budget_exhausted:human assistance required".into())
+}
+
+fn login_target_request(command: &Value) -> Result<(), String> {
+    let target = command["loginTarget"]
+        .as_object()
+        .filter(|o| o.len() == 3)
+        .ok_or("browser_native_login_target_invalid")?;
+    if command["action"] != "native_input"
+        || ["actions", "nativeAttempt", "imageAttempt", "controlEpoch"]
+            .iter()
+            .any(|k| command.get(k).is_some())
+        || !["observationRequestId", "episodeId"].iter().all(|k| {
+            target
+                .get(*k)
+                .and_then(Value::as_str)
+                .is_some_and(valid_request_id)
+        })
+        || !target
+            .get("targetRef")
+            .and_then(Value::as_str)
+            .is_some_and(|s| {
+                s.len() == 70
+                    && s.starts_with("login:")
+                    && s[6..].bytes().all(|b| b.is_ascii_hexdigit())
+            })
+    {
+        return Err("browser_native_login_target_invalid".into());
+    }
+    Ok(())
+}
+fn original_login_observation(
+    state: &BrowserSessionState,
+    task: &str,
+    command: &Value,
+) -> Result<Value, String> {
+    login_target_request(command)?;
+    let capture = state
+        .task_operations
+        .get(task)
+        .and_then(|rows| {
+            rows.get(
+                command["loginTarget"]["observationRequestId"]
+                    .as_str()
+                    .unwrap(),
+            )
+        })
+        .ok_or("browser_native_login_observation_missing")?;
+    if capture.action != "native_capture"
+        || capture.state != BrowserTaskOperationState::OwnerAcknowledged
+        || RetainedContext::from_operation(capture) != context(state, task)?
+    {
+        return Err("browser_native_login_context_changed".into());
+    }
+    let encoded = capture
+        .evidence_references
+        .get("nativeLoginObservation")
+        .filter(|v| v.len() <= 32768)
+        .ok_or("browser_native_login_observation_unqualified")?;
+    let observation: Value =
+        serde_json::from_str(encoded).map_err(|_| "browser_native_login_observation_invalid")?;
+    super::native_login_perception::select_target(
+        &observation,
+        command["loginTarget"]["targetRef"].as_str().unwrap(),
+        now_ms()?,
+    )?;
+    Ok(observation)
+}
+/// The original per-task episode cannot be replaced to renew its budget. Only
+/// acknowledged previous steps allow progression; pending/unknown input stops.
+fn login_episode_step(
+    state: &BrowserSessionState,
+    task: &str,
+    command: &Value,
+    current: Option<&str>,
+) -> Result<usize, String> {
+    let episode = command["loginTarget"]["episodeId"]
+        .as_str()
+        .ok_or("browser_native_login_episode_invalid")?;
+    let rows = state.task_operations.get(task);
+    let mut prior = vec![];
+    if let Some(rows) = rows {
+        for row in rows.values() {
+            if let Some(id) = row.evidence_references.get("nativeLoginEpisode") {
+                if id != episode {
+                    return Err("browser_native_login_episode_changed".into());
+                }
+                if current == Some(row.request_id.as_str()) {
+                    continue;
+                }
+                prior.push(row);
+            }
+        }
+    }
+    prior.sort_by_key(|row| {
+        row.evidence_references
+            .get("nativeLoginStep")
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(usize::MAX)
+    });
+    let now = now_ms()?;
+    if prior.len() >= 3 {
+        return Err("browser_native_login_budget_exhausted".into());
+    }
+    for (step, row) in prior.iter().enumerate() {
+        if row.state != BrowserTaskOperationState::OwnerAcknowledged
+            || RetainedContext::from_operation(row) != context(state, task)?
+            || row.evidence_references.get("nativeLoginStep") != Some(&step.to_string())
+            || row
+                .evidence_references
+                .get("nativeLoginKind")
+                .map(String::as_str)
+                != Some(["username", "credential_entry", "submit"][step])
+        {
+            return Err("browser_native_login_previous_input_unsettled".into());
+        }
+    }
+    let start = prior
+        .first()
+        .map(|r| r.created_at_ms)
+        .or_else(|| {
+            current
+                .and_then(|id| rows.and_then(|rows| rows.get(id)))
+                .map(|r| r.created_at_ms)
+        })
+        .unwrap_or(now);
+    if now < start || now - start > 60_000 {
+        return Err("browser_native_login_budget_exhausted".into());
+    }
+    let selection = super::native_login_perception::select_target(
+        &original_login_observation(state, task, command)?,
+        command["loginTarget"]["targetRef"].as_str().unwrap(),
+        now,
+    )?;
+    if selection.kind != ["username", "credential_entry", "submit"][prior.len()] {
+        return Err("browser_native_login_step_invalid".into());
+    }
+    Ok(prior.len())
+}
+pub(crate) fn native_login_attempt_observation(command: &Value) -> Result<Value, String> {
+    let task = command["sessionId"]
+        .as_str()
+        .ok_or("browser_native_login_original_invalid")?;
+    let request = command["id"]
+        .as_str()
+        .ok_or("browser_native_login_original_invalid")?;
+    let state = BrowserSessionSqliteStore::open_read_only(
+        &BrowserSessionSqliteStore::default_sqlite_path()?,
+    )?
+    .load_session_state()?;
+    check_expected(&state, command)?;
+    let original = state
+        .task_operations
+        .get(task)
+        .and_then(|rows| rows.get(request))
+        .ok_or("browser_native_login_original_missing")?;
+    if original.action != "native_input"
+        || original.state != BrowserTaskOperationState::Pending
+        || RetainedContext::from_operation(original) != context(&state, task)?
+        || original
+            .evidence_references
+            .get("nativeLoginEpisode")
+            .map(String::as_str)
+            != command["loginTarget"]["episodeId"].as_str()
+        || original
+            .evidence_references
+            .get("nativeLoginTargetRef")
+            .map(String::as_str)
+            != command["loginTarget"]["targetRef"].as_str()
+        || original
+            .evidence_references
+            .get("nativeLoginObservationRequestId")
+            .map(String::as_str)
+            != command["loginTarget"]["observationRequestId"].as_str()
+    {
+        return Err("browser_native_login_original_context_changed".into());
+    }
+    let step = login_episode_step(&state, task, command, Some(request))?;
+    if original.evidence_references.get("nativeLoginStep") != Some(&step.to_string()) {
+        return Err("browser_native_login_step_invalid".into());
+    }
+    original_login_observation(&state, task, command)
 }

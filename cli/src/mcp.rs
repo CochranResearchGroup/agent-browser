@@ -12,6 +12,9 @@ mod host_reconnect;
 mod hosted;
 #[cfg(all(test, unix))]
 mod native_challenge_tests;
+#[cfg(all(test, target_os = "linux"))]
+#[path = "mcp/native_login_tests.rs"]
+mod native_login_tests;
 #[cfg(all(test, unix))]
 mod native_policy_tests;
 mod playbooks;
@@ -5623,7 +5626,9 @@ fn call_service_mcp_tool_inner(
             let name = workflow::address_task_command(&mut command, task_id)
                 .map_err(|error| JsonRpcError::invalid_params(&error))?;
             let mut data = workflow::execute(command, &name)?;
-            let image = if arguments["action"] == "native_capture" {
+            let image = if arguments["action"] == "native_capture"
+                && arguments["params"].get("loginControls").is_none()
+            {
                 use base64::Engine;
                 let image = data.pointer("/capture/image").cloned().ok_or_else(|| {
                     JsonRpcError::invalid_params("native_capture_image_unavailable")
