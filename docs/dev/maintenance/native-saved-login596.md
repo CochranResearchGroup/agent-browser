@@ -230,3 +230,37 @@ module lean harness passes10cases in0.29s, including plaintext-ring rejection.
 The source is qualified for one clean immutable production-shaped candidate build.
 Build/seal and exact-artifact checks are next; no installation, adoption, browser
 login or596/104 closure is claimed. SDK bytes remain the61fcde77c artifact pin.
+
+
+## Sealed candidate qualification
+
+Source8edb25b315bfe3540deb58fa6849dca8dafdaafa produced a clean production-shaped
+candidate through the maintained builder. Cargo Signal job
+job-20261109T125052Z-890fbb1b4b85 passed in1501.727seconds, with no reported
+errors or warnings. The source-bound closure contains638executable inputs and
+82dashboard assets. Candidate IDcandidate-dded5ff8a7d783a4-50fc3541e970b6ef;
+binary SHA25650fc3541e970b6eff173f69d23271c4241b76767c3da76d1df5327f65044f351;
+seal logical SHA2568289c7c0e173cfd96e44107edb0761ab9ed093b16c24d179593088479583eaab.
+
+The exact binary passed sealed candidate review, MCP stdio metadata/schema checks
+(17tools), and the isolated workstation installer fixture (two owned hosts,
+zero residue). A readonly portable copy passed review again. The private packet
+is retained by the coordinator; no production installation, runtime adoption,
+login input or live acceptance occurred in this worker.
+
+The reviewed candidate install command accepts binary, manifest, input-closure
+and sealed-artifact paths, then dry-run or apply. Its internal workstation apply
+uses preserve policy and current coordinated census. There is no caller-provided
+expected digest on this path. Workstation's expected-runtime-replacement-plan-digest
+flag is valid only for full-shutdown and must not be added to preserving adoption.
+Preserve rollback generations; inspect the original transaction before guarded
+resume/rollback with its exact revision, candidate generation and census digest.
+Current effect authority is policy0051, with product contract0054 and lane
+admission0052; the historical0025policy path is stale.
+
+The supported acceptance surface is public MCP stdio with the retained SDK.
+[Follow-up610](https://github.com/CochranResearchGroup/agent-browser/issues/610)
+records that the convenience Native CLI bypasses request-context admission and
+response curation. Do not use that convenience surface for live saved-login input;
+its repair or typed refusal is separate. No OS replay was attempted or proved.
+596and Overleaf104 remain open until actual configured-profile qualification.

@@ -1,6 +1,6 @@
 ## Native deterministic saved login596 | 2026-11-09
 
-[596 source packet](docs/dev/maintenance/native-saved-login596.md) implements the ordinary password-manager flow through existing Native capture/input and original task-operation journals. Public missing-capability RED and first failures are retained. Final Native/MCP16cases, exactmodule10cases, SDK/types, strict workspace Clippy/Rustfmt and docs gates pass; clean production-shaped artifact preparation is next. No runtime replacement or live credential input.
+[596 source packet](docs/dev/maintenance/native-saved-login596.md) implements the ordinary password-manager flow through existing Native capture/input and original task-operation journals. Public missing-capability RED and first failures are retained. Final Native/MCP16cases, exactmodule10cases, SDK/types, strict workspace Clippy/Rustfmt and docs gates pass; sealed production-shaped candidate8edb25b passes exact artifact review, MCP stdio metadata and isolated installer fixture. Preserving adoption belongs to the coordinator. Convenience CLI login remains blocked by follow-up610; use MCP stdio/SDK for acceptance. No runtime replacement or live credential input.
 
 ## Interactive invitation recovery | 2026-11-08
 
