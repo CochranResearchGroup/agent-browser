@@ -14,7 +14,7 @@ lanes:
     dependencies: [NATIVE-SAVED-LOGIN-596]
     overlaps: [NATIVE-SAVED-LOGIN-596]
     reconciled_overlaps: ["Primary611 owns control and shared docs; auxiliary610 owns mcp CLI branch and tests; original596 sealed source retained unchanged"]
-    validation_status: Separate exactrelease activity RED confirmed; stableidentity public6 and pinnedcontrol35 CLI1 metadata1 fmt strictClippy pass; one sealed successor next
+    validation_status: Sourcea5fcfd3b7 and sealeda6793b20 exactrelease activity+races and custody+nolaunch pass; all37 focused and strictRust pass; parent owns installed acceptance
     limitations: ["No runtime control or input", "Actual Overleaf104 acceptance remains separate"]
     updated_at: 2026-11-09
   - id: NATIVE-SAVED-LOGIN-596
