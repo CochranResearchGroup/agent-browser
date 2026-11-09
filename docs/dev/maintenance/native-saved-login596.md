@@ -238,7 +238,7 @@ Source8edb25b315bfe3540deb58fa6849dca8dafdaafa produced a clean production-shape
 candidate through the maintained builder. Cargo Signal job
 job-20261109T125052Z-890fbb1b4b85 passed in1501.727seconds, with no reported
 errors or warnings. The source-bound closure contains638executable inputs and
-82dashboard assets. Candidate IDcandidate-dded5ff8a7d783a4-50fc3541e970b6ef;
+its declared embedded asset closure. Candidate IDcandidate-dded5ff8a7d783a4-50fc3541e970b6ef;
 binary SHA25650fc3541e970b6eff173f69d23271c4241b76767c3da76d1df5327f65044f351;
 seal logical SHA2568289c7c0e173cfd96e44107edb0761ab9ed093b16c24d179593088479583eaab.
 

@@ -14,7 +14,7 @@ lanes:
     dependencies: [NATIVE-SAVED-LOGIN-596]
     overlaps: [NATIVE-SAVED-LOGIN-596]
     reconciled_overlaps: ["Primary611 owns control and shared docs; auxiliary610 owns mcp CLI branch and tests; original596 sealed source retained unchanged"]
-    validation_status: Public control33 CLI1 ordinarymetadata1 strictClippy Rustfmt docs parity policy links planning and five providerfreefixtures pass; sealed candidate build next
+    validation_status: Sourceb87177fb3 and sealedc2a87186 candidate qualified; publiccontrol33 CLI1 metadata1 strictRust docs and exactartifact review/publicCLI/installer/nolaunch pass; root owns adoption
     limitations: ["No runtime control or input", "Actual Overleaf104 acceptance remains separate"]
     updated_at: 2026-11-09
   - id: NATIVE-SAVED-LOGIN-596

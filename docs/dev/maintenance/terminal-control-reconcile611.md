@@ -75,3 +75,35 @@ The legacy fixture now refuses unknown ownership before positively identifying a
 reused dispatcher; no production guard was weakened. No live control or input
 occurred. Source is ready for one production-shaped candidate, with exact artifact
 qualification and actual installed Overleaf acceptance still separate.
+
+## Qualified sealed artifact
+
+One production-shaped build of sourceb87177fb344c9ff8e6443ed1c31e82bbe1f62a24
+passed in1442.8seconds with no compiler or text warnings/errors. Binary SHA256:
+`c2a871863b9c218a651c5442b4051f200b511fcc40ac46abbfccd96071efe535`.
+Candidate ID: `candidate-6d0262ccaf15eff6-c2a871863b9c218a`.
+Logical seal SHA256:
+`4086c8f8d3b297bc544d9ac6d9ef82b0fafc57ca7248cd47339f2db36c81f689`.
+The closure contains640executable inputs; the candidate manifest binds42embedded
+asset digests. The coordinator retains the readonly portable five-file artifact
+and its private qualification packet.
+
+Exact release checks pass: sealed review and17-tool MCP discovery, Native schemas,
+CLI610 typed predispatch refusals, public terminal reconciliation through an
+isolated owned URL port, source-free installer fixture (two owned hosts,
+zero residue), and service collection no-launch smoke. The terminal fixture
+preserves epoch2 and the original owner/uncertainty, dispatches one URL read and
+refuses a second reconciliation before transport. Owned fixture processes were
+positively reaped and freshly absent from OS inventory; no real browser input.
+The portable copy passes sealed review again. All640current executable inputs
+still match the immutable closure; this handoff documentation does not alter them.
+
+Root owns fresh preserving adoption through reviewed candidate install, followed
+by exact CLI/runtime-host convergence and peer preservation. This route records
+sealed artifact/source custody; direct workstation apply does not attach those
+bindings. No expected-plan digest flag belongs on the preserving path. Keep the
+rollback generation and original transaction receipts; no finalize or GC before
+consumer acceptance. Refresh the actual account task/browser/process/epoch before
+addressing its original request. Installed skill publication and actual Overleaf
+saved-password acceptance remain with the coordinator.611and610remain open for
+that installed acceptance; source and fixture qualification do not close them.
