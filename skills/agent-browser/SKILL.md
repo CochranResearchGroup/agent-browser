@@ -12,6 +12,8 @@ Native credentials: [Remote View setup](references/cli-and-service.md).
 
 A `dashboard_build_incomplete` install/doctor failure requires rebuilding the frontend and recompiling the candidate. The maintained `pnpm build:development-candidate` command includes both steps.
 
+Handoffs supports instant search by task, profile, session, creator or link ID. Compact rows keep technical details under Inspect.
+
 ## Handoff creator context
 
 Creation requires `serviceName`, `agentName`, concrete `taskName`. CLI: `--service-name`, `--agent-name`, `--task-name`; `remote-view open` requires `--origin-kind agent`. MCP sets agent origin; service requests set params.originKind. Labels are immutable attribution, not authenticated identity. Never infer `humanName` or replace labels with polling/job IDs.

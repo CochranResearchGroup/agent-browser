@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: HANDOFF-MODAL-603
+    product_lane: PL-BUGFIX
+    objective: Simplify handoff discovery and add instant search
+    plan: docs/dev/maintenance/handoff-modal-search.md
+    branch: fix/handoff-modal-search
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#603]
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    dependencies: []
+    overlaps: []
+    reconciled_overlaps: ["Reuse clean canonical checkout from current main; preserve prior sealed candidate and all other runtime lanes; primary writer for modal styling and fixture; no new worktree"]
+    validation_status: Three real-browser modal/workspace/refresh fixtures, responsive screenshot QA, dashboard and docs builds, strict Rust gates and local contracts pass; source integration selected
+    limitations: ["No production installation"]
+    updated_at: 2026-11-08
   - id: MANUAL-IDLE-HANDOFF-599
     product_lane: PL-BUGFIX
     objective: Recover a retained manual handoff after conclusive automatic closure
