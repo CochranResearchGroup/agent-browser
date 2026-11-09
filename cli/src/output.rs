@@ -7401,7 +7401,7 @@ Commands:
   resources/read    Diagnostics
   host-task TASK    Read app metadata
   task-briefing TASK Read retained task context without browser effects
-  host-control TASK status|view reads any retained managed task; control changes require hosted app binding.
+  host-control TASK status|view reads any retained managed task; reconcile checks exact owned task and terminal dispatcher; other control changes require hosted app binding.
   Task briefing processPid is retained metadata; authentication verifies current physical ownership separately.
   task-operation TASK REQUEST Read original addressed CDP operation without retry
   Teaching evidence: client teaching-evidence / teaching-evidence-http; recheck Saved provenance before Speech ranges
@@ -7462,7 +7462,8 @@ Commands:
     Conversion verifies mode/window without input; retained handoffs reconcile the original launch
     Fullscreen Native handoffs offer a top-row CDP on/off control with relaunch review
   watch-host-task TASK Changed NDJSON; fresh reconnect
-  host-control      Status/view/takeover/return/override/reconcile; inspect failed return.
+  host-control      Reconcile terminal uncertainty on the exact owned task; never replay.
+  Native saved login uses journaled MCP browser_command; convenience CLI refuses login controls/targets.
   host-reconnect TASK OP [options-json] Status/disconnect/reconnect/rebind/configure/reopen
   host-policy JSON  App/task rules and scoped override
 

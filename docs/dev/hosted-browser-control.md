@@ -30,8 +30,15 @@ An intervening takeover marks pending work uncertain. The effect may finish;
 its later outcome is retained. No website effect is automatically replayed.
 If a dispatcher exits with a pending request, return remains blocked until an
 explicit `reconcile` request identifies that `requestId`, epoch, actor and reason,
-and freshly observes the same retained target. Reconciliation refuses a still-live
-same-generation dispatcher. It records observed uncertainty without replay.
+and freshly observes the same retained target. Reconciliation refuses a still-live same-generation dispatcher or missing owner
+identity. A terminal uncertain request also reconciles after control has already
+returned, without manufacturing another human return. The exact owned standalone
+task may use this operation; other standalone control mutations remain unsupported.
+Before and after a fresh retained-target observation, original browser process
+custody must match the live process. Stale epoch, changed task/target/process and
+human ownership are refused. The original request and owner remain, with an
+attributed observed_uncertain_no_replay outcome and unchanged epoch. No replay
+or original-effect success is implied.
 
 The CLI adapter uses the identical contract:
 

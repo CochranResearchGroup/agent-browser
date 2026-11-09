@@ -13,6 +13,9 @@ mod hosted;
 #[cfg(all(test, unix))]
 mod native_challenge_tests;
 #[cfg(all(test, target_os = "linux"))]
+#[path = "mcp/native_cli_tests.rs"]
+mod native_cli_tests;
+#[cfg(all(test, target_os = "linux"))]
 #[path = "mcp/native_login_tests.rs"]
 mod native_login_tests;
 #[cfg(all(test, unix))]
@@ -290,6 +293,11 @@ fn mcp_command_response_with_config(
             }
             let params: Value =
                 serde_json::from_str(&args[4]).map_err(|_| "browser_native_params_invalid")?;
+            // Saved-login requests require the journaled MCP stdio context and
+            // its private evidence projection, absent from this convenience CLI.
+            if params.get("loginControls").is_some() || params.get("loginTarget").is_some() {
+                return Err("browser_native_login_requires_mcp_stdio".into());
+            }
             let mut arguments = json!({"taskId":args[2],"action":args[3],"params":params});
             // CLI JSON carries the same request context as top-level MCP arguments.
             for field in ["policyOverrideId", "requestId"] {
@@ -12336,7 +12344,7 @@ mod tests {
         assert_eq!(briefing["data"]["tabId"], "logical-tab");
         assert_eq!(briefing["data"]["targetId"], "physical-target");
         assert_eq!(briefing["data"]["contextEvidence"], "retained_not_live");
-        for operation in ["takeover", "return", "override", "reconcile"] {
+        for operation in ["takeover", "return", "override"] {
             assert_eq!(
                 mcp_command_response(&[
                     "mcp".into(),
