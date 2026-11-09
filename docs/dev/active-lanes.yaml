@@ -14,9 +14,9 @@ lanes:
     dependencies: []
     overlaps: []
     reconciled_overlaps: ["Reuse clean canonical checkout from current main; preserve prior sealed candidate and all other runtime lanes; primary writer for modal styling and fixture; no new worktree"]
-    validation_status: Three real-browser modal/workspace/refresh fixtures, responsive screenshot QA, dashboard and docs builds, strict Rust gates and local contracts pass; source integration selected
-    limitations: ["No production installation"]
-    updated_at: 2026-11-08
+    validation_status: PR604 source integrated; production-shaped source7ac7f95ca installed accepted; exact binary fixture and six service smokes pass; doctor and public authenticated modal hash/search/clear/no-results/anonymous guard verified
+    limitations: ["Six of seven original managed roots retained; disposable exit cause unconfirmed under605", "Original handoff owner-assisted recovery qualifies; automatic first-open remains open under599"]
+    updated_at: 2026-11-09
   - id: MANUAL-IDLE-HANDOFF-599
     product_lane: PL-BUGFIX
     objective: Recover a retained manual handoff after conclusive automatic closure
@@ -30,9 +30,9 @@ lanes:
     dependencies: [CDP-FREE-IDLE-585, P321-RETIREMENT-570, RETAINED-HANDOFF-579]
     overlaps: [CDP-FREE-IDLE-585]
     reconciled_overlaps: ["Canonical checkout reused; primary writer for manual runtime classification and tests;598 owns separate workspace auth; preserve both glossary/catalog intents; no new checkout or runtime replacement"]
-    validation_status: PR600 merged;455 Rust tests and strict local gates pass; production-shaped sealed candidate passes exact install fixture and six no-launch smokes with zero owned-host residue; MCP allowlist fixture corrected
-    limitations: ["Sealed candidate retained; production installation excluded from source repair", "Installed skill publication and original public viewer GREEN remain unproven"]
-    updated_at: 2026-11-08
+    validation_status: Source installed through603 deployment; owner-assisted resolve reports ready and same-link viewer canvas appears; automatic first-open still reproduces unavailable and599 is reopened
+    limitations: ["Automatic first-open recovery unaccepted", "Owner-assisted result is not unattended recovery or website-action acceptance"]
+    updated_at: 2026-11-09
   - id: AUTHELIA-AUTHORITY-597
     product_lane: PL-BUGFIX
     objective: Remove local dashboard role enrollment from Authelia-admitted workspace access

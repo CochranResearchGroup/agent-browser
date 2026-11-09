@@ -5,7 +5,7 @@ Work item: 599
 Owner: ecochran76
 Branch: fix/manual-idle-handoff-reopen
 Base: 812e436c9a808922d8cb610885536d9771d86bd0
-State: SOURCE_INTEGRATED_AWAITING_INSTALL
+State: INSTALLED_OWNER_RECOVERY_ACCEPTED_AUTOMATIC_OPEN_UNACCEPTED
 
 The exact authenticated browser loop renders the reported desktop-unavailable
 page. Direct Native navigation preserves RED in under one second; an absent
@@ -142,3 +142,17 @@ authorized preserving installation is followed by that same-link acceptance.
 Retain the canonical checkout and sealed candidate for that next operation.
 Memory disposition: queued for the source repair, with installed acceptance
 explicitly unproven; queue acceptance is not retrieval or persistence proof.
+
+## Installed consumer correction,2026-11-09
+
+The later explicit deployment request installed source7ac7f95ca, including this
+repair, with accepted preserving adoption and passing doctor. See the
+[modal deployment receipt](handoff-modal-search.md#production-deployment2026-11-09).
+The original authenticated public link first reproduced the exact unavailable
+page on the installed candidate. An explicit authenticated owner-side resolve
+then reported opened and operatorVisible.state=ready. A subsequent same-link
+browser check rendered a Remote View canvas. This proves current owner-assisted
+recovery and does not erase the earlier automatic-open RED.599 is reopened for
+that remaining entrypoint/continuation gap. No new handoff ID, profile reset or
+website-effect replay was used. Private target and authentication evidence stays
+outside Git.
