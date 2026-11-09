@@ -36,7 +36,16 @@ The complete service-model package passes (418 tests across 25 suites). Strict
 workspace Clippy, formatting, policy wiring, MCP/skill parity, handoff docs,
 documentation links and the docs build pass. A new sealed candidate is pending.
 
-Retain this canonical checkout and both sealed artifacts. No new checkout is
+A fresh installed-source check found peer source `b87177fb3` selected as
+`0.28.0-c2a871863b9c-91c8361a9c23`. The `443c9512d` candidate build was
+cancelled with its exact owned process group after 575s, before installation;
+no artifact or source qualification is claimed for that interrupted build.
+Integrated its qualified successor `a5fcfd3b7` (terminal reconciliation and
+saved-login predispatch refusal) to preserve installed behavior. Wake
+coordination was denied for missing issued actor capability; no message
+was delivered and no capability was fabricated.
+
+Retain this canonical checkout and prior sealed artifacts. No new checkout is
 created. Next: finish source qualification, build/qualify the corrected candidate,
 perform a preserving update and complete the retained empty live-browser cycle.
 The actual FigureLabs profile is separately usable for read-only research.
@@ -119,3 +128,11 @@ custody; review 2026-11-10. No auxiliary checkout was created. The temporary ope
 browser closed after an ambiguous close reply; subsequent exact task lookup and
 OS root absence confirm closure. No input retry was made. The signed-in original
 profile and private artifacts remain user-scoped.
+
+Combined611/607 local gates: 35 control tests, 2 process lifecycle tests and
+1 saved-login CLI test pass. Strict workspace Clippy has zero diagnostics;
+Rustfmt, docs build, parity, policy wiring, handoff docs and changed links pass.
+The four611 public MCP implementation/test files match a5fcfd3b7 exactly;
+the four607 owner/model files match443c9512d exactly. Model418 prior
+evidence is retained because these package inputs did not change. No hosted
+checks, installed successor claim, or extra broad review is included.

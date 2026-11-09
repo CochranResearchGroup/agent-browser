@@ -8,7 +8,7 @@ allowed-tools: Bash(agent-browser:*)
 
 Workspace access requires the shared Authelia guard; native dashboard password login and session cookies are disabled pending compatible Remote View authentication. Authelia admission grants operator access without local dashboard account enrollment or roles; attribution uses the exact verified owner principal.
 
-Native credentials: [Remote View setup](references/cli-and-service.md).
+Control and credentials: [setup and reconcile](references/cli-and-service.md).
 
 Build failures: [readiness guidance](references/cli-and-service.md#build-readiness).
 
@@ -61,7 +61,7 @@ Page actions require `taskId`. `browser_tab` manages this task's tabs; retry cre
 with the same `tabKey`. After restart, creation rejoins the verified browser
 and preserves tabs; peer tabs remain outside scope. Discover actions with `browser_discover`; use `browser_command` with `taskId`, `action`, `params`.
 Close rejects changed selection. A pre-commit return failure keeps human control
-and epoch; inspect status and use a fresh explicit intent, never replay uncertainty.
+and epoch; inspect status and use a explicit intent, never replay uncertainty.
 
 Read [retained workflow transport](references/cli-and-service.md#retained-workflow-transport)
 before downloads, stale transport recovery, retirement or advanced administration.

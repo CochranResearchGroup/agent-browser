@@ -14,8 +14,24 @@ lanes:
     dependencies: []
     overlaps: [HUMAN-HANDOFF-571, CDP-FREE-IDLE-585, MANUAL-IDLE-HANDOFF-599, NATIVE-SAVED-LOGIN-596]
     reconciled_overlaps: ["Reuse clean canonical checkout; no new checkout; own operation lookup and explicit close admission, preserve retirement/recovery and Native control ownership; integrate installed native-login source8edb25b3 without changing its implementation"]
-    validation_status: Installed6b17 guard repair and same-profile authenticated CDP reopen accepted; live manual window close remains RED; explicit original-process scope repair and focused checks running
+    validation_status: Installed6b17 guard repair and same-profile authenticated CDP reopen accepted; old live manual window close RED; process-close source GREEN2 model418; integrating installed611 before sealed qualification
     limitations: ["Production profile and live state remain outside Git; installed qualification separate"]
+    updated_at: 2026-11-09
+  - id: TERMINAL-CONTROL-611
+    product_lane: PL-BUGFIX
+    objective: Reconcile terminal unknown requests through exact public owner observation
+    plan: docs/dev/maintenance/terminal-control-reconcile611.md
+    branch: fix/terminal-control-reconcile611
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#611, CochranResearchGroup/agent-browser#610]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [NATIVE-SAVED-LOGIN-596]
+    overlaps: [NATIVE-SAVED-LOGIN-596]
+    reconciled_overlaps: ["Primary611 owns control and shared docs; auxiliary610 owns mcp CLI branch and tests; original596 sealed source retained unchanged"]
+    validation_status: Separate exactrelease activity RED confirmed; stableidentity public6 and pinnedcontrol35 CLI1 metadata1 fmt strictClippy pass; one sealed successor next
+    limitations: ["No runtime control or input", "Actual Overleaf104 acceptance remains separate"]
     updated_at: 2026-11-09
   - id: NATIVE-SAVED-LOGIN-596
     product_lane: PL-AUTH
@@ -30,7 +46,7 @@ lanes:
     dependencies: [CochranResearchGroup/agent-browser#586]
     overlaps: [native-capture586]
     reconciled_overlaps: ["596 owns new read-only perception and Native capture option;586 owns capture transport; parent serializes integration; no installed effects"]
-    validation_status: FinalNativeMCP16pass; exactmodule10pass; SDK types parity policy links docs and strictworkspaceClippy Rustfmt pass; production-shaped artifact build next
+    validation_status: Source8edb25b and sealed production-shaped candidate qualified; successor611 owns terminal reconciliation and CLI610; actual saved-login acceptance remains open
     limitations: ["Installed real saved-login acceptance remains open", "No production replacement or live login"]
     updated_at: 2026-11-09
   - id: HANDOFF-MODAL-603

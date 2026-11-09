@@ -195,7 +195,17 @@ must cooperate with the current state. See the [control contract](https://github
 agent-browser --json mcp host-control TASK status
 agent-browser --json mcp host-control TASK takeover 0 operator 'Assist with this task'
 agent-browser --json mcp host-control TASK return 1 operator 'Continue after assistance'
+agent-browser --json mcp host-control TASK reconcile 2 operator 'Observe terminal request' ORIGINAL
 ```
+
+A terminal uncertain request can be reconciled on its exact owned task without
+creating another human return. Supply its original request ID, current epoch,
+actor and reason. The server freshly observes the retained target and checks
+original browser/process custody plus positive dispatcher absence or PID reuse.
+Human control, active or unknown dispatchers and changed identities are refused.
+The original row becomes `observed_uncertain_no_replay`; its history remains and
+it never grants retry authority. Other standalone control changes remain unsupported.
+
 
 
 ## Implementation reference
@@ -1378,3 +1388,5 @@ recordings and actual account evidence outside the source repository.
 If the original browser close settled before its state publication was interrupted, reopening the same retained handoff can finish that original retirement. Recovery requires unchanged original browser/tab identity, fresh process and profile absence, and the original Native fence. It atomically records the settled physical close, preserves the logical task and its control authority, then uses ordinary browser recovery. It does not repeat the close or replay website input. Unknown effects, changed identity and unavailable Native readback remain blocked.
 
 After a newly recorded retained-browser recovery, the original interactive handoff can keep its invitation and human control epoch. This requires the exact per-tab replacement mapping recorded with that recovery, completed original retirement and current launch custody. Missing legacy mapping, changed targets or ambiguous history remain refused; reopening a link does not turn a passive view into control or release the human hold.
+
+Convenience `mcp browser-native` loginControls/loginTarget calls are refused before transport. Use journaled public MCP `browser_command` and the retained saved-login SDK.

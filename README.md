@@ -318,7 +318,17 @@ must cooperate with the current state. See the [control contract](https://github
 agent-browser --json mcp host-control TASK status
 agent-browser --json mcp host-control TASK takeover 0 operator 'Assist with this task'
 agent-browser --json mcp host-control TASK return 1 operator 'Continue after assistance'
+agent-browser --json mcp host-control TASK reconcile 2 operator 'Observe terminal request' ORIGINAL
 ```
+
+A terminal uncertain request can be reconciled on its exact owned task without
+creating another human return. Supply its original request ID, current epoch,
+actor and reason. The server freshly observes the retained target and checks
+original browser/process custody plus positive dispatcher absence or PID reuse.
+Human control, active or unknown dispatchers and changed identities are refused.
+The original row becomes `observed_uncertain_no_replay`; its history remains and
+it never grants retry authority. Other standalone control changes remain unsupported.
+
 
 
 ## Installation
@@ -7792,3 +7802,5 @@ available. The `AI_GATEWAY_URL`, `AI_GATEWAY_API_KEY` and `AI_GATEWAY_MODEL`
 settings are shared with existing chat configuration; teaching uses a separate
 inert request with no browser tools. Keep configuration, tokens, transcripts,
 recordings and actual account evidence outside the source repository.
+
+Convenience `mcp browser-native` loginControls/loginTarget calls are refused before transport. Use journaled public MCP `browser_command` and the retained saved-login SDK.

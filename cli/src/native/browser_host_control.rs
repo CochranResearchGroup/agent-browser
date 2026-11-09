@@ -545,8 +545,56 @@ pub(crate) fn observed(browser_id: &str, expected: u64) -> Result<(), String> {
     })
 }
 
-/// Explicit observation reconciliation records uncertainty without replaying the
-/// effect. The caller first freshly observes the same existing page.
+/// Read-first reconciliation admission. Terminal uncertainty is not a new
+/// human-return intent; the original dispatcher must be positively gone.
+fn reconcile_ready(control: &Control, expected: u64, request_id: &str) -> Result<(), String> {
+    if control.epoch != expected {
+        return Err("browser_control_epoch_changed".into());
+    }
+    if control.human {
+        return Err("browser_control_human".into());
+    }
+    let outcome = control
+        .flights
+        .get(request_id)
+        .ok_or("browser_control_request_missing")?;
+    if !matches!(
+        outcome.as_str(),
+        "dispatched" | "uncertain_in_flight" | "uncertain_no_replay"
+    ) {
+        return Err("browser_control_outcome_already_observed".into());
+    }
+    let (pid, start) = control
+        .owners
+        .get(request_id)
+        .filter(|(pid, start)| *pid > 0 && !start.is_empty())
+        .ok_or("browser_control_dispatch_owner_unknown")?;
+    match crate::process_identity::observe_process(*pid) {
+        crate::process_identity::ProcessObservation::Missing => Ok(()),
+        crate::process_identity::ProcessObservation::Observed(process)
+            if process
+                .start_token
+                .as_ref()
+                .is_some_and(|actual| actual != start) =>
+        {
+            Ok(())
+        }
+        _ => Err("browser_control_dispatch_still_in_flight".into()),
+    }
+}
+
+/// Check the retained original before a fresh existing-target observation.
+/// No history or control state is changed by this preflight.
+pub(crate) fn check_reconcile(
+    browser_id: &str,
+    expected: u64,
+    request_id: &str,
+) -> Result<(), String> {
+    reconcile_ready(&read(browser_id)?, expected, request_id)
+}
+
+/// The public caller first observes the same existing page and process. Commit
+/// an attributable observation of uncertainty without replay or epoch changes.
 pub(crate) fn reconcile(
     browser_id: &str,
     expected: u64,
@@ -554,47 +602,18 @@ pub(crate) fn reconcile(
     actor: &str,
     reason: &str,
 ) -> Result<(), String> {
-    if actor.trim().is_empty()
-        || reason.trim().is_empty()
-        || actor.len() > 160
-        || reason.len() > 320
-    {
-        return Err("browser_control_attribution_required".into());
-    }
+    validate_attribution(actor, reason)?;
     transaction(&path(browser_id)?, |control| {
-        if control.epoch != expected || control.human || !control.awaiting_observation {
-            return Err("browser_control_return_required".into());
+        reconcile_ready(control, expected, request_id)?;
+        if control.flights.iter().any(|(id, state)| {
+            id != request_id && matches!(state.as_str(), "dispatched" | "uncertain_in_flight")
+        }) {
+            return Err("browser_control_in_flight_requires_reconciliation".into());
         }
-        let retained = control
+        control
             .flights
-            .get(request_id)
-            .ok_or("browser_control_request_missing")?;
-        if matches!(retained.as_str(), "dispatched" | "uncertain_in_flight") {
-            let (pid, start) = control
-                .owners
-                .get(request_id)
-                .ok_or("browser_control_dispatch_owner_unknown")?;
-            match crate::process_identity::observe_process(*pid) {
-                crate::process_identity::ProcessObservation::Missing => {}
-                crate::process_identity::ProcessObservation::Observed(process)
-                    if process
-                        .start_token
-                        .as_ref()
-                        .is_some_and(|actual| actual != start) => {}
-                _ => return Err("browser_control_dispatch_still_in_flight".into()),
-            }
-        }
-        let outcome = control
-            .flights
-            .get_mut(request_id)
-            .ok_or("browser_control_request_missing")?;
-        if !matches!(
-            outcome.as_str(),
-            "dispatched" | "uncertain_in_flight" | "uncertain_no_replay"
-        ) {
-            return Err("browser_control_outcome_already_observed".into());
-        }
-        *outcome = "observed_uncertain_no_replay".into();
+            .insert(request_id.into(), "observed_uncertain_no_replay".into());
+        control.awaiting_observation = false;
         control.audit.push(json!({"epoch":control.epoch,"operation":"reconcile","requestId":request_id,"actor":actor,"reason":reason}));
         Ok(())
     })
