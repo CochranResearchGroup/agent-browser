@@ -13,5 +13,6 @@ const records = [
   record("missing-labels", { profileId: "qbo-example", sessionName: "qbo-operator", taskMetadata: { attribution: "supplied", jobId: "synthetic-job" } }),
   record("attributed", { profileId: "example-profile", sessionName: "example-session", taskMetadata: { taskName: "Open accounts", serviceName: "codex", agentName: "Codex", originKind: "agent", attribution: "supplied" } }),
   record("legacy", {}),
+  record("archived", { profileId: "archived-profile", linkState: "expired", targetState: "expired" }),
 ];
 createRoot(document.getElementById("root")!).render(<NativeHandoffDrawer open onOpenChange={() => {}} busy={false} error={null} sharedLink={null} onReturnFocus={() => {}} records={records} onRefresh={async () => {}} />);

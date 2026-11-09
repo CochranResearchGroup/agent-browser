@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Copy, Info, Clock3, ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { ExternalLink, Copy, Info, Clock3, ArrowDown, ArrowUp, ArrowUpDown, Search, X } from "lucide-react";
 import { NativeHandoffDelete } from "@/components/native-handoff-delete";
 import { NativeHandoffPolicies } from "@/components/native-handoff-policies";
 import { Fragment, useRef, useState, type CSSProperties } from "react";
@@ -15,10 +15,10 @@ function handoffTitle(record: ServiceManagedHandoff) {
 }
 const duration = (value: unknown) => value === null ? "Perpetual" : typeof value === "number" && Number.isSafeInteger(value) && value >= 0
   ? `${value % 1000 === 0 ? `${value / 1000} s` : `${value} ms`} inactivity` : "Not recorded";
-function timestamp(value: unknown) {
+function timestamp(value: unknown, compact = false) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "Not recorded";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Not recorded" : <time dateTime={date.toISOString()}>{date.toLocaleString()}</time>;
+  return Number.isNaN(date.getTime()) ? "Not recorded" : <time dateTime={date.toISOString()} title={date.toLocaleString()}>{compact ? date.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : date.toLocaleString()}</time>;
 }
 function durableUrl(record: ServiceManagedHandoff) {
   try {
@@ -30,7 +30,7 @@ function durableUrl(record: ServiceManagedHandoff) {
 }
 
 type SortColumn = "task" | "created" | "lifetime";
-const sortLabels: Record<SortColumn, string> = { task: "Task and origin", created: "Created and use", lifetime: "Lifetimes and target" };
+const sortLabels: Record<SortColumn, string> = { task: "Task", created: "Created", lifetime: "Link status" };
 function sortValue(record: ServiceManagedHandoff, column: SortColumn): string | number {
   if (column === "task") return handoffTitle(record).toLocaleLowerCase();
   if (column === "created") return record.createdAtMs ?? -1;
@@ -49,12 +49,21 @@ export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLin
   const [deleted, setDeleted] = useState<Set<string>>(new Set());
   const [deletionNotice, setDeletionNotice] = useState(false);
   const refreshButton = useRef<HTMLButtonElement>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
   const [showInactive, setShowInactive] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchTerms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   const [sort, setSort] = useState<{ column: SortColumn; descending: boolean }>({ column: "created", descending: true });
   // Link validity is independent of whether an expired task can be recreated.
   const retainedRecords = records?.filter(record => !deleted.has(record.handoffId));
   const inactiveCount = retainedRecords?.filter(record => record.linkState !== "active").length ?? 0;
-  const visibleRecords = retainedRecords?.filter(record => showInactive || record.linkState === "active").sort((left, right) => {
+  const visibleRecords = retainedRecords?.filter(record => showInactive || record.linkState === "active").filter(record => {
+    // Include collapsed context so people can find a link without opening every row.
+    const searchable = [handoffTitle(record), record.profileId, record.sessionName, record.handoffId,
+      record.handoffUrl, record.linkState, ...Object.values(record.taskMetadata ?? {})]
+      .filter(value => typeof value === "string").join(" ").toLocaleLowerCase();
+    return searchTerms.every(term => searchable.includes(term));
+  }).sort((left, right) => {
     const a = sortValue(left, sort.column), b = sortValue(right, sort.column);
     const compared = typeof a === "string" && typeof b === "string" ? a.localeCompare(b) : a < b ? -1 : a > b ? 1 : 0;
     return (sort.descending ? -compared : compared) || left.handoffId.localeCompare(right.handoffId);
@@ -87,9 +96,18 @@ export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLin
   };
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent style={{ "--native-handoff-rail-width": `${railWidth}px` } as CSSProperties} className="native-tab-properties native-handoff-drawer" onCloseAutoFocus={event => { event.preventDefault(); onReturnFocus(); }}>
-      <DialogHeader><DialogTitle>Handoffs</DialogTitle><DialogDescription>Native Remote View links. Link validity and target lifetime are independent.</DialogDescription></DialogHeader>
-      <button ref={refreshButton} type="button" className="native-handoff-refresh" disabled={refreshing || inventoryLoading} onClick={() => void refresh()}>Refresh handoffs</button>
-      <label className="native-handoff-filter"><input type="checkbox" checked={showInactive} onChange={event => setShowInactive(event.target.checked)} />Show inactive ({inactiveCount})</label>
+      <DialogHeader><DialogTitle>Handoffs</DialogTitle><DialogDescription>Find a browser task, then open or copy its link.</DialogDescription></DialogHeader>
+      <div className="native-handoff-toolbar">
+        <div className="native-handoff-search"><Search size={15} aria-hidden="true" />
+          <input ref={searchInput} type="search" aria-label="Search handoffs" placeholder="Search handoffs…" value={query} onChange={event => setQuery(event.target.value)} />
+          {query && <button type="button" aria-label="Clear search" onClick={() => { setQuery(""); searchInput.current?.focus(); }}><X size={14} aria-hidden="true" /></button>}
+        </div>
+        <button ref={refreshButton} type="button" className="native-handoff-refresh" aria-label="Refresh handoffs" disabled={refreshing || inventoryLoading} onClick={() => void refresh()}>Refresh</button>
+      </div>
+      <div className="native-handoff-list-options">
+        {visibleRecords && <span role="status">{visibleRecords.length} {visibleRecords.length === 1 ? "handoff" : "handoffs"}</span>}
+        <label className="native-handoff-filter"><input type="checkbox" checked={showInactive} onChange={event => setShowInactive(event.target.checked)} />Show inactive ({inactiveCount})</label>
+      </div>
       {(refreshing || inventoryLoading) && <p role="status">Refreshing handoffs…</p>}
       {(inventoryError || refreshError) && <p role="alert">Could not refresh handoffs. Showing the last reported records.</p>}
       {busy && <p role="status">Preparing link…</p>}
@@ -101,8 +119,8 @@ export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLin
       {deletionNotice && <p role="status">Link deleted.</p>}
       {copyFeedback && <p role={copyFeedback.failed ? "alert" : "status"}>{copyFeedback.failed ? "Could not copy this link. Inspect it to copy the URL manually." : "Link copied"}</p>}
       {records === undefined && !inventoryLoading && <p role="status">Handoff inventory is unavailable. Refresh to check the current owner.</p>}
-      {visibleRecords?.length === 0 && <p role="status">{retainedRecords?.length ? "No active handoffs. Show inactive to inspect retained links." : "No retained handoffs. Share a task to prepare a link."}</p>}
-      {visibleRecords && visibleRecords.length > 0 && <table aria-label="Retained handoffs" className="native-handoff-table">
+      {visibleRecords?.length === 0 && <p role="status">{searchTerms.length ? "No matching handoffs. Try another search or show inactive links." : retainedRecords?.length ? "No active handoffs. Show inactive to inspect retained links." : "No retained handoffs. Share a task to prepare a link."}</p>}
+      {visibleRecords && visibleRecords.length > 0 && <div className="native-handoff-results"><table aria-label="Retained handoffs" className="native-handoff-table">
         <thead><tr>{(Object.keys(sortLabels) as SortColumn[]).map(column => {
           const selected = sort.column === column;
           const Icon = selected ? sort.descending ? ArrowDown : ArrowUp : ArrowUpDown;
@@ -112,39 +130,46 @@ export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLin
         <tbody>{visibleRecords.map(record => {
           const metadata = record.taskMetadata;
           const inactive = record.linkState !== "active";
+          const subtitle = [recorded(record.profileId) === handoffTitle(record) ? null : recorded(record.profileId),
+            recorded(metadata?.humanName) ?? recorded(metadata?.agentName)].filter(Boolean).join(" · ");
           const url = durableUrl(record);
           const detailsOpen = inspected === record.handoffId;
           return <Fragment key={record.handoffId}><tr data-link-state={record.linkState}>
             <td><strong>{handoffTitle(record)}</strong>
-              {recorded(record.profileId) && <span><small>Profile: </small>{record.profileId}</span>}
-              {recorded(record.sessionName) && <span><small>Session: </small>{record.sessionName}</span>}
-              {recorded(metadata?.serviceName) && <span><small>Service: </small><span>{recorded(metadata?.serviceName)}</span></span>}
-              {recorded(metadata?.agentName) && <span><small>Agent: </small><span>{recorded(metadata?.agentName)}</span></span>}
-              {recorded(metadata?.humanName) && <span><small>Human: </small><span>{recorded(metadata?.humanName)}</span></span>}
-              {!recorded(metadata?.serviceName) && !recorded(metadata?.agentName) && !recorded(metadata?.humanName) && <small>Creator not recorded</small>}
-              {recorded(metadata?.originKind) && <small>Origin: {recorded(metadata?.originKind)}</small>}
+              {subtitle && <span className="native-handoff-context">{subtitle}</span>}
             </td>
-            <td><span>Created: {timestamp(record.createdAtMs)}</span><span>{record.pendingHuman ? "Awaiting confirmed use" : typeof metadata?.firstHumanUseAtMs === "number" ? "Use confirmed" : "No confirmed use"}</span></td>
-            <td><span>Link: {record.expiresAtMs === null ? "Perpetual" : timestamp(record.expiresAtMs)}</span><span className={inactive ? "native-handoff-inactive" : undefined}>Link status: {record.linkState}{inactive ? " (inactive)" : ""}</span><span>Tab retention: {record.tabLifetime ? duration(record.tabLifetime.inactivityMs) : "Default policy"}</span><span title={record.targetState === 'reported' ? 'The owner retains this task record. Availability is checked when the link is opened.' : undefined}>Task: {record.targetState === 'reported' ? 'Retained' : record.targetState === 'expired' ? 'Expired' : 'Ended'}</span><span>Pending use: {record.pendingHuman ? record.pendingHuman.expiresAtMs === null ? 'Kept open until confirmed use' : timestamp(record.pendingHuman.expiresAtMs) : 'None reported'}</span></td>
-            <td className="native-handoff-actions">
+            <td>{timestamp(record.createdAtMs, true)}</td>
+            <td><span className={`native-handoff-status${inactive ? " native-handoff-inactive" : ""}`}>{record.linkState === "active" ? "Active" : record.linkState === "expired" ? "Expired" : record.linkState}</span>
+              <small>{record.expiresAtMs === null ? "Never expires" : <>Expires {timestamp(record.expiresAtMs, true)}</>}</small>
+              {record.pendingHuman ? <small>Awaiting use</small> : typeof metadata?.firstHumanUseAtMs === "number" && <small>Opened</small>}
+              {record.targetState !== "reported" && <small>Task {record.targetState}</small>}
+            </td>
+            <td><div className="native-handoff-actions">
               {url && !inactive && <a href={url} target="_blank" rel="noopener noreferrer" aria-label="Open" title="Open"><ExternalLink size={14} aria-hidden="true" /></a>}
               <button type="button" aria-label="Copy" title="Copy" disabled={!url} onClick={() => url && void copy(record.handoffId, url)}><Copy size={14} aria-hidden="true" /></button>
               <button type="button" aria-label="Inspect" title="Inspect" aria-expanded={detailsOpen} onClick={() => setInspected(detailsOpen ? null : record.handoffId)}><Info size={14} aria-hidden="true" /></button>
               <button type="button" aria-label="Policies" title="Policies" disabled={!url} aria-expanded={policies === record.handoffId} onClick={() => setPolicies(policies === record.handoffId ? null : record.handoffId)}><Clock3 size={14} aria-hidden="true" /></button>
               <NativeHandoffDelete record={record} onDeleted={linkDeleted} />
               {!url && <span role="alert">Link unavailable</span>}
-            </td>
+            </div></td>
           </tr>
           {detailsOpen && <tr className="native-handoff-detail-row"><td colSpan={4}><dl className="native-handoff-details">
                 <div><dt>Link</dt><dd>{url ? new URL(url, window.location.origin).toString() : "Unavailable"}</dd></div><div><dt>Profile</dt><dd>{supplied(record.profileId)}</dd></div>
                 <div><dt>Session</dt><dd>{supplied(record.sessionName)}</dd></div><div><dt>Purpose</dt><dd>{supplied(metadata?.purpose)}</dd></div>
+                <div><dt>Service</dt><dd>{supplied(metadata?.serviceName)}</dd></div>
+                <div><dt>Agent</dt><dd>{supplied(metadata?.agentName)}</dd></div><div><dt>Human</dt><dd>{supplied(metadata?.humanName)}</dd></div>
+                <div><dt>Origin</dt><dd>{supplied(metadata?.originKind)}</dd></div><div><dt>Link ID</dt><dd>{record.handoffId}</dd></div>
+                <div><dt>Created</dt><dd>{timestamp(record.createdAtMs)}</dd></div><div><dt>Link expiry</dt><dd>{record.expiresAtMs === null ? "Perpetual" : timestamp(record.expiresAtMs)}</dd></div>
+                <div><dt>Tab retention</dt><dd>{record.tabLifetime ? duration(record.tabLifetime.inactivityMs) : "Default policy"}</dd></div>
+                <div><dt>Task</dt><dd>{record.targetState === "reported" ? "Retained" : record.targetState}</dd></div>
+                <div><dt>Pending use</dt><dd>{record.pendingHuman ? record.pendingHuman.expiresAtMs === null ? "Kept open until confirmed use" : timestamp(record.pendingHuman.expiresAtMs) : "None reported"}</dd></div>
                 <div><dt>Context source</dt><dd>{supplied(metadata?.attribution)}</dd></div>
                 <div><dt>First confirmed use</dt><dd>{timestamp(metadata?.firstHumanUseAtMs)}</dd></div>
               </dl></td></tr>}
           {policies === record.handoffId && <tr className="native-handoff-detail-row"><td colSpan={4}><NativeHandoffPolicies record={record} onUpdated={refresh} /></td></tr>}
           </Fragment>;
         })}</tbody>
-      </table>}
+      </table></div>}
     </DialogContent>
   </Dialog>;
 }

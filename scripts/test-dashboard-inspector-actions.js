@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 const servicePanel = readFileSync('packages/dashboard/src/components/service-panel.tsx', 'utf8');
 const dashboardPage = readFileSync('packages/dashboard/src/app/page.tsx', 'utf8');
 const compactWorkspace = readFileSync('packages/dashboard/src/components/compact-native-workspace.tsx', 'utf8');
+const workspaceLibrary = readFileSync('packages/dashboard/src/components/workspace-library-dialog.tsx', 'utf8');
 const serviceRoutePage = readFileSync('packages/dashboard/src/app/service/page.tsx', 'utf8');
 const activityRoutePage = readFileSync('packages/dashboard/src/app/activity/page.tsx', 'utf8');
 const browsersRoutePage = readFileSync('packages/dashboard/src/app/browsers/page.tsx', 'utf8');
@@ -302,8 +303,10 @@ assert.match(
 assert.match(dashboardPage, /readDashboardSection\(initialSection\)[\s\S]*window\.addEventListener\("popstate", update\)[\s\S]*DASHBOARD_WORKSPACE_SELECTION_EVENT, update/,
   'Workspace and diagnostics routes must restore current URL selection on history and selection events');
 
-assert.match(compactWorkspace, /href=\{diagnosticsHref\}[\s\S]*aria-label="Diagnostics"/,
-  'The workspace must expose an ordinary link to optional diagnostics');
+assert.match(compactWorkspace, /<WorkspaceLibraryDialog\b[\s\S]*?diagnosticsHref=\{diagnosticsHref\}/,
+  'The workspace must pass its diagnostics route to the library');
+assert.match(workspaceLibrary, /<a href=\{diagnosticsHref\}>Service diagnostics<\/a>/,
+  'The workspace library must expose an ordinary link to optional diagnostics');
 assert.match(dashboardPage, /<a href=\{dashboardSectionUrl\("overview"\)\}>Browsers<\/a>/,
   'Diagnostics must provide an ordinary return link to the sole workspace');
 assert.doesNotMatch(servicePanel, /<ViewStreamInspectDialog/,

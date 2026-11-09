@@ -214,13 +214,13 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     assert.equal(await taskSort.locator('svg').count(), 1);
     await taskSort.click();
     assert.deepEqual(await taskNames(), ['Alpha', 'Zeta']);
-    assert.equal(await retainedDrawer.locator('th[aria-sort="ascending"]').innerText(), 'Task and origin');
+    assert.equal(await retainedDrawer.locator('th[aria-sort="ascending"]').innerText(), 'Task');
     await retainedDrawer.getByRole('button', { name: 'Sort by task name, descending', exact: true }).click();
     assert.deepEqual(await taskNames(), ['Zeta', 'Alpha']);
     await retainedDrawer.getByRole('checkbox', { name: 'Show inactive (1)', exact: true }).check();
     assert.deepEqual(await taskNames(), ['Zeta', 'Inactive', 'Alpha']);
     const inactiveRow = retainedDrawer.getByRole('row').filter({ hasText: 'Inactive' });
-    await inactiveRow.getByText('Link status: expired (inactive)', { exact: true }).waitFor();
+    await inactiveRow.getByText('Expired', { exact: true }).waitFor();
     assert.equal(await inactiveRow.getByRole('link', { name: 'Open', exact: true }).count(), 0);
     assert.notEqual(await inactiveRow.locator('.native-handoff-inactive').evaluate(node => getComputedStyle(node).color), await retainedDrawer.evaluate(node => getComputedStyle(node).color));
     await page.screenshot({ path: path.join(artifacts, 'handoff-list-inactive.png') });
@@ -231,7 +231,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await retainedDrawer.getByRole('checkbox', { name: 'Show inactive (1)', exact: true }).uncheck();
     assert.deepEqual(await taskNames(), ['Alpha', 'Zeta'], 'expired targets with active links must remain visible');
     await page.setViewportSize({ width: 1920, height: 1080 });
-    assert.ok((await retainedDrawer.boundingBox()).width > 1000, 'wide screens should provide a wider drawer');
+    assert.ok((await retainedDrawer.boundingBox()).width <= 920, 'wide-screen handoffs should remain compact');
     await page.screenshot({ path: path.join(artifacts, 'handoff-list-wide.png') });
     await page.setViewportSize({ width: 1280, height: 720 });
     assert.equal(requests.length, beforeListControls, 'sort and filter must not issue or select handoffs');
@@ -245,11 +245,13 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
       assert.ok(await control.getAttribute('title'), 'handoff row controls need a tooltip');
     }
     assert.equal(await retainedRow.evaluate(node => getComputedStyle(node).color), await retainedDrawer.evaluate(node => getComputedStyle(node).color), 'retained rows must inherit readable dialog text color');
-    await retainedRow.getByText('Audit service', { exact: true }).waitFor();
-    await retainedRow.getByText('Casey operator', { exact: true }).waitFor();
-    await retainedRow.getByText('Task: Expired', { exact: true }).waitFor();
-    await retainedRow.getByText('Link: Perpetual', { exact: true }).waitFor();
-    await retainedRow.getByText('Tab retention: 30 s inactivity', { exact: true }).waitFor();
+    assert.match(await retainedRow.innerText(), /Casey operator/);
+    await retainedRow.getByText('Task expired', { exact: true }).waitFor();
+    await retainedRow.getByText('Never expires', { exact: true }).waitFor();
+    await retainedRow.getByRole('button', { name: 'Inspect', exact: true }).click();
+    await retainedDrawer.getByText('Audit service', { exact: true }).waitFor();
+    await retainedDrawer.getByText('30 s inactivity', { exact: true }).waitFor();
+    await retainedRow.getByRole('button', { name: 'Inspect', exact: true }).click();
     assert.match(await retainedRow.getByRole('link', { name: 'Open', exact: true }).getAttribute('href'), /^\/remote-view\/retained-old$/);
     await page.setViewportSize({ width: 390, height: 760 });
     assert.equal(await retainedDrawer.getByRole('button', { name: /Sort by link expiry/ }).isVisible(), true, 'sorting must remain visible on narrow screens');
@@ -265,13 +267,15 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
 
     assert.equal(requests.length, 0, 'opening retained records must not prepare or focus a task');
     await page.evaluate(() => window.dispatchEvent(new Event('fixture-handoffs-pending')));
-    await retainedRow.getByText('Awaiting confirmed use', { exact: true }).waitFor();
-    await retainedRow.getByText('Pending use: Kept open until confirmed use', { exact: true }).waitFor();
+    await retainedRow.getByText('Awaiting use', { exact: true }).waitFor();
+    await retainedRow.getByRole('button', { name: 'Inspect', exact: true }).click();
+    await retainedDrawer.getByText('Kept open until confirmed use', { exact: true }).waitFor();
+    await retainedRow.getByRole('button', { name: 'Inspect', exact: true }).click();
     await page.evaluate(() => window.dispatchEvent(new Event('fixture-handoffs-used')));
-    await retainedRow.getByText('Use confirmed', { exact: true }).waitFor();
-    assert.equal(await retainedRow.getByText('Awaiting confirmed use', { exact: true }).count(), 0);
+    await retainedRow.getByText('Opened', { exact: true }).waitFor();
+    assert.equal(await retainedRow.getByText('Awaiting use', { exact: true }).count(), 0);
     await retainedDrawer.getByRole('button', { name: 'Refresh handoffs', exact: true }).click();
-    await retainedRow.getByText('No confirmed use', { exact: true }).waitFor();
+    assert.equal(await retainedRow.getByText('Opened', { exact: true }).count(), 0);
 
     const beforePolicy = requests.length;
     await retainedRow.getByRole('button', { name: 'Policies', exact: true }).click();
@@ -372,8 +376,8 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await unusedForm.getByRole('status').filter({ hasText: 'Unused retention saved' }).waitFor();
     assert.deepEqual(requests.at(-1).params, { handoffId: 'retained-old', handoffOperation: 'prepare_human', pendingHumanRetentionMs: 0 });
     await page.evaluate(() => window.dispatchEvent(new Event('fixture-handoffs-rearmed')));
-    await retainedRow.getByText('Awaiting confirmed use', { exact: true }).waitFor({ timeout: 1500 });
-    assert.equal(await retainedRow.getByText('Use confirmed', { exact: true }).count(), 0, 'historical first use must not mask a newly requested unused-retention window');
+    await retainedRow.getByText('Awaiting use', { exact: true }).waitFor({ timeout: 1500 });
+    assert.equal(await retainedRow.getByText('Opened', { exact: true }).count(), 0, 'historical first use must not mask a newly requested unused-retention window');
 
 
     assert.equal(new URL(page.url()).searchParams.get('tab'), null);
