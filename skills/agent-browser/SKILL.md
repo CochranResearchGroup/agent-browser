@@ -96,6 +96,14 @@ Explicit handoff can supersede idle cleanup after its worker ends and the exact
 original is verified alive. Attempt history stays intact; this retention decision
 requires a schema-5-capable runtime.
 Deleted handoff links cannot be restored by concurrent lifetime edits.
+A valid closed-task link offers **Reopen task** on the same URL. Navigation is
+read-only. Reopen reaches the existing owner; a missing disposable profile needs
+a separate **Reopen with a new profile** choice that discloses lost sign-ins and
+unsaved state. Never silently replace a named profile or send a replacement link.
+Software uses `service_remote_view_handoff_resolve` with `handoffOperation=reopen`;
+use `reopen_with_new_profile` only after that explicit choice. The request and
+choice survive retries; renewed assistance pauses cooperative automation.
+
 
 
 A valid retained handoff can wake its conclusively idle-closed CDP-free browser

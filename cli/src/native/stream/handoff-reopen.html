@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Browser handoff</title>
+<style>
+  :root { color-scheme: light dark; font: 16px/1.5 system-ui, sans-serif; }
+  body { margin: 0; padding: 64px 24px; }
+  main { max-width: 480px; margin: auto; }
+  h1 { font-size: 24px; line-height: 1.25; margin: 0 0 16px; }
+  p { margin: 12px 0 20px; }
+  button { font: inherit; padding: 10px 16px; border: 1px solid #777; border-radius: 8px; cursor: pointer; }
+  button:disabled { cursor: wait; opacity: .6; }
+  button:focus-visible { outline: 3px solid #5688ef; outline-offset: 3px; }
+  [hidden] { display: none; }
+</style>
+<main>
+  <h1>Browser task closed</h1>
+  <p id="status" role="status" aria-live="polite">Your handoff link is still valid. Reopen the task to continue. Unsaved page state cannot be restored.</p>
+  <button id="reopen" type="button">Reopen task</button>
+  <button id="fresh" type="button" hidden>Reopen with a new profile</button>
+</main>
+<script>
+(() => {
+  const reopen = document.getElementById('reopen');
+  const fresh = document.getElementById('fresh');
+  const status = document.getElementById('status');
+  const match = location.pathname.match(/^\/remote-view\/([A-Za-z0-9_-]{1,128})$/);
+  let pending = false;
+  async function submit(operation) {
+    if (pending || !match) return;
+    pending = true;
+    reopen.disabled = fresh.disabled = true;
+    status.textContent = 'Reopening the browser task…';
+    try {
+      const response = await fetch('/api/service/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'service_remote_view_handoff_resolve',
+          params: { handoffId: match[1], handoffOperation: operation, nativeDesktop: true },
+          serviceName: 'agent-browser-handoff', agentName: 'operator',
+          taskName: 'Reopen retained browser task', jobTimeoutMs: 90000,
+        }),
+      });
+      if (response.status === 401 || response.status === 403) {
+        status.textContent = 'Sign in to the workspace, then return to this same handoff link to reopen the task.';
+        return;
+      }
+      const result = await response.json();
+      if (result.success === true && result.data?.operatorVisible?.state === 'ready') {
+        location.replace(location.pathname);
+        return;
+      }
+      const error = typeof result.error === 'string' ? result.error : '';
+      if (error === 'remote_view_handoff_reopen_profile_replacement_required') {
+        status.textContent = 'The saved profile is unavailable. A new profile will not restore previous sign-ins or unsaved page state. You can choose to reopen with a new profile using this same link.';
+        reopen.hidden = true;
+        fresh.hidden = false;
+        fresh.disabled = false;
+        fresh.focus();
+      } else if (error === 'remote_view_handoff_resume_profile_unavailable') {
+        status.textContent = 'The saved profile is unavailable. Ask the task owner to restore it, then use this same link again.';
+      } else if (error === 'remote_view_handoff_reopen_choice_conflict') {
+        status.textContent = 'A reopen request is already pending. Keep this link while the task owner checks its outcome.';
+      } else if (error === 'remote_view_handoff_expired' || error === 'remote_view_tab_handoff_missing') {
+        status.textContent = 'This link has expired or was deleted. It cannot reopen the task.';
+        reopen.hidden = fresh.hidden = true;
+      } else {
+        status.textContent = 'The task could not be reopened yet. Keep this link and ask the task owner to check browser readiness before trying again.';
+      }
+    } catch {
+      status.textContent = 'The reopen result is unavailable. Keep this link; retrying rejoins the same request.';
+    } finally {
+      pending = false;
+      reopen.disabled = fresh.disabled = false;
+    }
+  }
+  reopen.addEventListener('click', () => { void submit('reopen'); });
+  fresh.addEventListener('click', () => { void submit('reopen_with_new_profile'); });
+})();
+</script>
+</html>

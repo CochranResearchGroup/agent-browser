@@ -2357,6 +2357,7 @@ mod tests {
                 view: None,
                 resume: None,
                 recreation: None,
+                reopen: None,
                 target_expired: false,
                 native_observation: None,
             },

@@ -22,3 +22,16 @@ The integration is optional and fails closed when the endpoint or private capabi
 Recovery inside the public GET would allow unauthenticated reads to launch or focus a browser. Dashboard login would introduce another authentication flow. A second viewer or browser-supplied resume endpoint would blur ownership or permit untrusted destination selection. These alternatives are rejected.
 
 The continuation adds one native route and one scoped private callback. Tests must prove no callback before authentication or for prefetch, invalid-capability rejection, no arbitrary redirect, preserved link validity, exact-target recovery and both peer-preserving and last-browser workflows. The existing direct native route remains sufficient for a live qualified target. The opaque URL remains the operator bookmark.
+
+## Explicitly closed targets
+
+A valid link and a closed task are distinct. The public locator may render an
+inert same-link reopen page, with no private task data or effect on GET.
+Its explicit action uses the existing authenticated service request entry;
+workspace admission remains Authelia-backed, with no additional dashboard role
+or viewer grant. The owner checks current link validity, freezes reconstruction
+and profile choice, and prepares exact-target human assistance before the native
+viewer continues through its existing authentication. Missing saved disposable
+profile storage is disclosed before a separate fresh-profile choice. A named
+profile is never silently replaced. Ordinary native continuation does not reopen
+a deliberately closed task without a retained explicit decision.

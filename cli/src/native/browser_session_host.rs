@@ -1915,7 +1915,15 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     self.commit_state()?;
                     return Ok(response);
                 }
-                self.recreate_expired_handoff(handoff_id, now_ms)?;
+                let reopen = match command["handoffOperation"].as_str() {
+                    Some("reopen") => Some(false),
+                    Some("reopen_with_new_profile") => Some(true),
+                    _ => None,
+                };
+                self.recreate_expired_handoff(handoff_id, now_ms, reopen)?;
+                let reopening = self.state.remote_view_tab_handoffs[handoff_id]
+                    .reopen
+                    .is_some();
                 let retained = agent_browser_service_model::resolve_remote_view_tab_handoff(
                     &self.state,
                     handoff_id,
@@ -1923,7 +1931,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 self.effects.begin_operation(&self.persisted_state)?;
                 self.effects
                     .retain_live_browser_for_handoff(&self.persisted_state, &retained.browser)?;
-                if command["nativeDesktop"] == true {
+                if command["nativeDesktop"] == true || reopen.is_some() || reopening {
                     self.refresh_before_ordinary_command()?;
                     let retained = agent_browser_service_model::resolve_remote_view_tab_handoff(
                         &self.state,
@@ -1938,11 +1946,13 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     let digest = agent_browser_service_model::remote_view_native_target_digest(
                         handoff_id, &target,
                     )?;
-                    if super::browser_host_control::recovery_rebind_pending(
-                        &target.browser.id,
-                        handoff_id,
-                        &digest,
-                    )? {
+                    if !reopening
+                        && super::browser_host_control::recovery_rebind_pending(
+                            &target.browser.id,
+                            handoff_id,
+                            &digest,
+                        )?
+                    {
                         super::browser_host_control::reconcile_recovered_handoff(
                             &self.persistence.runtime_database_path()?,
                             &self.persisted_state,
@@ -1950,6 +1960,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                             now_ms,
                         )?;
                     }
+                    self.complete_handoff_reopen_interaction(handoff_id, now_ms)?;
                     return Ok(serde_json::json!({
                         "handoffId":handoff_id, "status":"opened",
                         "createdAtMs":self.state.remote_view_tab_handoffs[handoff_id].created_at_ms,
@@ -2747,33 +2758,111 @@ where
     P: BrowserSessionPersistence,
     E: BrowserSessionEffects + ManagedBrowserCommandEffects,
 {
-    /// Recreate only an automatically expired addressed task. Freeze the request
-    /// before effects and use the ordinary no-replay tab creation protocol.
-    fn recreate_expired_handoff(&mut self, handoff_id: &str, now_ms: u64) -> Result<(), String> {
+    /// Recreate automatic expiry or an explicitly reopened closed target through
+    /// the ordinary no-replay protocol. A profile replacement is a separate choice.
+    fn recreate_expired_handoff(
+        &mut self,
+        handoff_id: &str,
+        now_ms: u64,
+        choice: Option<bool>,
+    ) -> Result<(), String> {
         if agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, handoff_id)
             .is_ok()
         {
             return Ok(());
         }
-        let intent = agent_browser_service_model::remote_view_handoff_resume_intent(
-            &self.state,
-            handoff_id,
-            now_ms,
-        )?;
         let mut link = self
             .state
             .remote_view_tab_handoffs
             .get(handoff_id)
             .ok_or("remote_view_tab_handoff_missing")?
             .clone();
+        let pending_reopen = link
+            .reopen
+            .as_ref()
+            .zip(link.recreation.as_ref())
+            .is_some_and(|(saved, pending)| saved.request_id == pending.request_id);
+        let explicit = choice.is_some() || pending_reopen;
+        let intent = if explicit {
+            agent_browser_service_model::remote_view_handoff_reopen_intent(
+                &self.state,
+                handoff_id,
+                now_ms,
+            )?
+        } else {
+            agent_browser_service_model::remote_view_handoff_resume_intent(
+                &self.state,
+                handoff_id,
+                now_ms,
+            )?
+        };
+        if let Some(requested) = choice {
+            if let Some(pending) = &link.recreation {
+                if link.reopen.as_ref().is_none_or(|saved| {
+                    saved.request_id != pending.request_id || saved.fresh_profile != requested
+                }) {
+                    return Err("remote_view_handoff_reopen_choice_conflict".into());
+                }
+            }
+        }
+        let fresh = if pending_reopen {
+            link.reopen
+                .as_ref()
+                .is_some_and(|saved| saved.fresh_profile)
+        } else {
+            choice.unwrap_or(false)
+        };
+        if explicit {
+            let profile = self.catalog.profiles.get(&intent.profile_id).or_else(|| {
+                self.state
+                    .disposable_profiles
+                    .get(&intent.profile_id)
+                    .map(|allocation| &allocation.profile)
+            });
+            let available =
+                profile.is_some_and(|profile| Path::new(&profile.user_data_dir).is_dir());
+            let fresh_allowed = intent
+                .disposable_policy_id
+                .as_ref()
+                .is_some_and(|policy| self.catalog.disposable_policies.contains_key(policy));
+            if !available && (!fresh || !fresh_allowed) {
+                return Err(if !fresh && fresh_allowed && link.recreation.is_none() {
+                    "remote_view_handoff_reopen_profile_replacement_required"
+                } else {
+                    "remote_view_handoff_resume_profile_unavailable"
+                }
+                .into());
+            }
+            if fresh && available {
+                return Err("remote_view_handoff_reopen_profile_replacement_not_required".into());
+            }
+        }
+        if explicit && !fresh {
+            for browser in self
+                .state
+                .browsers
+                .values()
+                .filter(|browser| browser.profile_id == intent.profile_id)
+            {
+                super::browser_host_control::preflight_reopen(&browser.id, handoff_id)?;
+            }
+        }
         if link.recreation.is_none() {
+            let request_id = uuid::Uuid::new_v4().to_string();
             link.resume = Some(intent.clone());
             link.recreation = Some(
                 agent_browser_service_model::RemoteViewTabHandoffRecreation {
-                    request_id: uuid::Uuid::new_v4().to_string(),
+                    request_id: request_id.clone(),
                     requested_at_ms: now_ms,
                 },
             );
+            if choice.is_some() {
+                link.reopen = Some(agent_browser_service_model::RemoteViewTabHandoffReopen {
+                    request_id,
+                    fresh_profile: fresh,
+                    reopened_tab_id: None,
+                });
+            }
             self.state
                 .remote_view_tab_handoffs
                 .insert(handoff_id.to_owned(), link.clone());
@@ -2787,11 +2876,12 @@ where
             "action":"tab_new", "activityAtMs":pending.requested_at_ms,
             "resumeHandoffId":handoff_id,
         });
-        if self.catalog.profiles.contains_key(&intent.profile_id)
-            || self
-                .state
-                .disposable_profiles
-                .contains_key(&intent.profile_id)
+        if !fresh
+            && (self.catalog.profiles.contains_key(&intent.profile_id)
+                || self
+                    .state
+                    .disposable_profiles
+                    .contains_key(&intent.profile_id))
         {
             request["profileId"] = serde_json::json!(intent.profile_id);
         } else if let Some(policy) = intent.disposable_policy_id {
@@ -2806,6 +2896,40 @@ where
         if response["success"] != true {
             return Err("remote_view_handoff_recreation_navigation_failed".into());
         }
+        Ok(())
+    }
+
+    /// Finish only the published exact target's renewed human invitation.
+    /// Keeping the choice until this commit makes interruption safe to retry.
+    fn complete_handoff_reopen_interaction(&mut self, id: &str, now_ms: u64) -> Result<(), String> {
+        let Some(choice) = self
+            .state
+            .remote_view_tab_handoffs
+            .get(id)
+            .and_then(|link| link.reopen.clone())
+        else {
+            return Ok(());
+        };
+        let target = agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, id)?;
+        if choice.reopened_tab_id.as_deref() != Some(target.tab.id.as_str()) {
+            return Err("remote_view_handoff_reopen_target_unpublished".into());
+        }
+        let digest = agent_browser_service_model::remote_view_native_target_digest(id, &target)?;
+        super::browser_host_control::begin_reopened_handoff(
+            &target.browser.id,
+            id,
+            &digest,
+            &choice.request_id,
+        )?;
+        // The viewer needs a current private context in addition to cooperative
+        // ownership. Keep the choice until that binding is durably prepared.
+        self.prepare_native_handoff_observation(id, now_ms)?;
+        self.state
+            .remote_view_tab_handoffs
+            .get_mut(id)
+            .ok_or("remote_view_tab_handoff_missing")?
+            .reopen = None;
+        self.commit_state()?;
         Ok(())
     }
 
@@ -3524,6 +3648,24 @@ where
         } else {
             "get_url"
         });
+        if optional_string(command, "resumeHandoffId").is_some_and(|id| {
+            self.state
+                .remote_view_tab_handoffs
+                .get(id)
+                .is_some_and(|link| link.reopen.is_some())
+        }) {
+            let task = &self.state.sessions[&session_id];
+            let tab = &self.state.tabs[task
+                .current_tab_id
+                .as_ref()
+                .ok_or("browser_session_current_tab_missing")?];
+            addressed["sessionId"] = serde_json::json!(task.id);
+            addressed["sessionName"] = serde_json::json!(task.name);
+            addressed["browserId"] = serde_json::json!(task.browser_id);
+            addressed["profileId"] = serde_json::json!(task.profile_id);
+            addressed["targetId"] = serde_json::json!(tab.target_id);
+            super::browser_host_control::attest_reopen_command(&self.state, &mut addressed)?;
+        }
         let mut response = self
             .execute_managed_command(session_name, &addressed)?
             .ok_or("browser_session_managed_route_changed")?;
@@ -3589,6 +3731,13 @@ where
                     self.state
                         .tab_metadata
                         .insert(link.tab_id.clone(), metadata.clone());
+                }
+                if let Some(choice) = link.reopen.as_mut() {
+                    if choice.request_id != id {
+                        return Err("remote_view_handoff_reopen_choice_conflict".into());
+                    }
+                    choice.reopened_tab_id = Some(link.tab_id.clone());
+                    link.native_observation = None;
                 }
                 link.resume = Some(target);
                 link.recreation = None;

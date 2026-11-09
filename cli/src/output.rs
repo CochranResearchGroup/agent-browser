@@ -6592,6 +6592,11 @@ shows its opaque native link in Handoffs. It preserves the selected peer and
 does not navigate the task. Use the small Handoffs rail control to reopen the
 panel, then copy or open the same link through existing Remote View authentication.
 
+A valid closed-task handoff keeps its URL and offers Reopen task. A missing saved
+profile requires a separate disclosed Reopen with a new profile choice for a
+disposable task. Named profiles are never silently replaced; retries rejoin one
+retained request. Reopening prepares interactive human assistance.
+
 Handoffs shows compact task, profile and link-status rows. Search at the top
 filters instantly by task, profile, session, creator or link ID, ignoring case.
 Inspect expands full context, timestamps and independent link/tab lifetimes;
