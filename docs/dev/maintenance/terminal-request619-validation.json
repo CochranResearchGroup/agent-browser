@@ -54,6 +54,30 @@
         "observedOom": 0,
         "remainingOwnScopeMembers": []
       }
+    },
+    {
+      "command": "CLI-only test debug0/directrustc warm resume with4GiB cap/2GiB hostreserve",
+      "source": "89eaa86517715872a778151bcd18d68f8894b774; Rust unchanged63",
+      "result": "TIMED_OUT",
+      "seconds": 600.452,
+      "deadlineSecondsIncludingAdmissionWait": 600,
+      "diagnostics": 0,
+      "tests": 0,
+      "admission": "Normal guarded wait then actual capacity admission; no lowered reserve",
+      "phase": "CLI main.rs --test directrustc code generation; no qualified harness",
+      "resources": {
+        "HighAndMaxGiB": 4,
+        "swapMax": 0,
+        "lastObservedPeakBytes": 3756843008,
+        "sampleEvents": {
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0
+        },
+        "finalPeak": "not retained after inactive scope; sample is partial only",
+        "remainingOwnScopeMembers": []
+      }
     }
   ],
   "resources": {
@@ -95,5 +119,5 @@
     "Actual candidate-backed metadata reconciliation",
     "No install, default switch, sharedhost restart or native input authorized by this source packet"
   ],
-  "cumulativeSeconds": 2956.77
+  "cumulativeSeconds": 3557.222
 }

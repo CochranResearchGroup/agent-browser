@@ -66,3 +66,12 @@ there was no observed OOM. This establishes a concrete constrained working-set
 gate, not a source pass or unexplained cache wait. All further compile stages
 stopped; an exact owned-scope census found no remaining members. No runtime
 metadata reconciliation was attempted from unqualified source.
+
+A separately approved capacity reframe retained2GiB host reserve and raised only
+its compiler claim/cap to4GiB after owned browser cleanup. Guarded admission
+waited for actual capacity, then reused warm dependencies with unchanged source,
+CLI debug0 and directrustc. The stage timed out at600.452seconds with zero
+source diagnostics/tests and no executable. A partial sample observed3.756GB
+peak with no memory-max/OOM events; final peak was not retained after scope exit.
+Fresh exact-scope census found no members. Further compilation is on hold; no
+candidate-backed metadata reconciliation or live credential attempt followed.
