@@ -1,6 +1,6 @@
 {
   "source": "63eaaebd988ef200c7538a25e5eb9af38cbf3837",
-  "scope": "source custody only; not qualified/installable",
+  "scope": "Focused source/public guard qualification passed; candidate build and actual consumer acceptance pending",
   "red": "Actual public retained click reconcile returned browser_control_dispatch_still_in_flight; primary private receipt retained outsideGit",
   "stages": [
     {
@@ -143,5 +143,37 @@
     "Actual candidate-backed metadata reconciliation",
     "No install, default switch, sharedhost restart or native input authorized by this source packet"
   ],
-  "cumulativeSeconds": 5486.532
+  "cumulativeSeconds": 5486.532,
+  "successfulQualification": {
+    "compiledSource": "40a58ff97cc4344bc151a96721ba540e653e5df3",
+    "behaviourSource": "63eaaebd988ef200c7538a25e5eb9af38cbf3837",
+    "setupCommand": "cargo test -p agent-browser --bin agent-browser terminal_request619 --no-run --config profile.test.package.agent-browser.debug=0",
+    "setupSeconds": 195.119,
+    "setupResult": "PASS exit0/no diagnostics",
+    "profile": "CLI test debug0 only; dependency debug/profile/features/toolchain unchanged; directrustc/CACHEoff/sharedwarmtarget",
+    "resources": "10GiB High=Max/noSwap,2GiBreserve,2buildjobs/1invocation,actualbefore-admission MemAvailable16470MiB; partial observedpeak6787796992B/eventsall0",
+    "testExecutableSha256": "5d4aad4d491d39e1168ecaec8779423f83cf58ad44546937c02af7818d73e1ca",
+    "testEnvironment": {
+      "RUST_MIN_STACK": 16777216,
+      "testThreads": 1
+    },
+    "listedFocused": 2,
+    "focusedPassed": 2,
+    "focusedSeconds": 1.069,
+    "listedHostControl": 37,
+    "hostControlPassed": 37,
+    "hostControlSeconds": 9.301,
+    "overlap": "37group includes the2new619 fixtures; not39unique",
+    "negativeGuards": [
+      "pending",
+      "native_input",
+      "missing completion",
+      "wrong epoch",
+      "changed target",
+      "active flight"
+    ],
+    "remaining": "exact regular client candidate and original-consumer metadata reconciliation; no install/runtime claim",
+    "postTestChanges": "Mandatory user-facing README/skill/MDX/CLIhelp plus inline docs only; no control/test behavior changed"
+  },
+  "cumulativeSecondsIncludingSuccess": 5692.021
 }

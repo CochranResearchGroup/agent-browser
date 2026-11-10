@@ -325,7 +325,11 @@ A terminal uncertain request can be reconciled on its exact owned task without
 creating another human return. Supply its original request ID, current epoch,
 actor and reason. The server freshly observes the retained target and checks
 original browser/process custody plus positive dispatcher absence or PID reuse.
-Human control, active or unknown dispatchers and changed identities are refused.
+For a completed DOM click, an owner-terminal flight and matching existing producer
+completion record can instead establish dispatch completion while a shared
+supervisor stays alive. Pending requests, missing provenance and native/private
+input do not receive that exception. Human control and changed identities remain
+refused; fresh target/process/epoch checks still apply.
 The original row becomes `observed_uncertain_no_replay`; its history remains and
 it never grants retry authority. Other standalone control changes remain unsupported.
 

@@ -545,8 +545,6 @@ pub(crate) fn observed(browser_id: &str, expected: u64) -> Result<(), String> {
     })
 }
 
-/// Read-first reconciliation admission. Terminal uncertainty is not a new
-/// human-return intent; the original dispatcher must be positively gone.
 /// Read existing producer provenance; never create a completion or accept caller
 /// supplied evidence. Restrict the live-supervisor exception to a terminal DOM
 /// click. Native/private input uncertainty retains positive-dispatcher-exit rules.
@@ -596,6 +594,8 @@ fn completed_dom_request(browser_id: &str, expected: u64, request_id: &str) -> b
         && store.original_browser_identity(&state, browser) == original.process_identity
 }
 
+/// Read-first admission: terminal DOM clicks may use existing completion proof;
+/// all other uncertainty requires positive dispatcher absence or PID reuse.
 fn reconcile_ready(
     browser_id: &str,
     control: &Control,

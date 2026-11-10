@@ -56,6 +56,12 @@ attempts on their original requests; never replay private use.
 
 Reuse Bots' browser/task. Before attachment, sharing or takeover, read [host integration v1](references/host-integration.md). Discover schemas; visibility proves neither account nor control. Shared skill publication needs explicit approval.
 
+Terminal DOM click reconciliation may use the owner's terminal flight plus an
+existing exact producer completion record while a shared supervisor stays alive.
+Use the original request and current task/epoch with `browser_control reconcile`;
+fresh process/target checks still apply. Missing provenance, pending requests and
+unknown native/private input keep the existing dispatcher-exit guard. Never replay.
+
 Tools: `browser_open`, `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`, `browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_reconnect`, `browser_retention`, `browser_policy`, `browser_artifact`, `browser_command`, `browser_discover`.
 Page actions require `taskId`. `browser_tab` manages this task's tabs; retry creation
 with the same `tabKey`. After restart, creation rejoins the verified browser

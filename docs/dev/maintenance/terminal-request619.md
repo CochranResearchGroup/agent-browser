@@ -5,6 +5,10 @@ Work item: 619
 Branch: fix/terminal-request619
 Base: 4410f56484fbe6fba85157b59d85e6c0c7d9b7c7
 State: OPEN
+
+Current qualification: focused source/public guard PASS; exact regular client
+candidate and actual original-consumer reconciliation remain pending. Historical
+failed/incomplete stages below remain truthful and are not erased.
 Owner: ecochran76
 Consolidation: required
 
@@ -92,3 +96,26 @@ inactive and a fresh process census is empty. No diagnostics/tests/executable
 were produced. All5486.532seconds of attempted qualification remain recorded.
 Source619 and actual104 remain unqualified; further stages require a material
 capacity or test-harness reframe. No live browser recovery budget was changed.
+
+## Actual source/public qualification after capacity changed
+
+With freshly observed16.47GiB available, normal admission accepted one10GiB
+hard/soft, no-swap compiler claim plus2GiB host reserve. The same unchanged
+control/test behavior compiled successfully in195.119s with zero diagnostics.
+Actual compiler argv confirmed CLI-only test debug0/directrustc and warm dependency
+reuse. Partial observed peak was6.788GB, with all memory events zero at that sample.
+The final peak was not retained after scope exit; no exact maximum claim is made.
+
+The exact built harness SHA256
+`5d4aad4d491d39e1168ecaec8779423f83cf58ad44546937c02af7818d73e1ca`
+listed2 focused619 and37 host_control tests. Direct execution with the repository's
+RUST_MIN_STACK16777216 and test-threads1 passed2/2 in1.069s and37/37 in9.301s,
+zero failed/ignored. The37 group includes those2 new tests. Positive same-target
+live-supervisor reconciliation and all6 refusal variants are exercised. Production
+RED remains retained; no browser input was replayed to obtain a test outcome.
+
+Mandatory public documentation now explains the narrow producer-proof exception;
+post-test Rust differences are an inline comment and help string only. Control
+and test behavior remain the qualified63eaaebd9 implementation. Candidate-backed
+actual reconciliation and broader integration gates remain separate. No default
+binary/shared supervisor or original recovery/input history was changed.
