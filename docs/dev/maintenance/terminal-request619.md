@@ -47,3 +47,12 @@ hard cap after measured soft-reclaim; second used equal soft/hard2GiB throughout
 The own timed-out scope is inactive and a fresh process census found no members.
 No runtime adoption, native input or sharedhost change occurred. Do not close619
 or104 from this checkpoint. Resume only the required missing qualification.
+
+One explicitly authorized warm resume used the same source/cache with2.5GiB
+hard/soft cap and2GiB host reserve. Initial no-wait admission refused without
+compilation when capacity was28MiB below threshold. The later single guarded
+admission-wait stage reused completed dependencies and reached actual CLI test
+code generation, but timed out at608.218seconds including termination after its
+600-second deadline. It emitted no diagnostics and ran zero tests. No candidate
+was qualified. Prior failures, refusal and cumulative cost remain in the receipt.
+No further compile attempts or runtime changes were made.

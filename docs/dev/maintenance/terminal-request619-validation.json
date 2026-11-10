@@ -17,6 +17,23 @@
       "diagnostics": 0,
       "tests": 0,
       "exclusion": "baseline broken integration harness excluded; selected CLI unit harness only"
+    },
+    {
+      "command": "correct CLI unit selection; 2560MiB High=Max/no swap/no-wait",
+      "result": "ADMISSION_REFUSED exit75 memory_pressure",
+      "seconds": 0.116,
+      "tests": 0,
+      "readback": "MemAvailable4580MiB below4608MiB claim+reserve; zero compiler effects"
+    },
+    {
+      "command": "cargo test -p agent-browser --bin agent-browser terminal_request619 --no-run; 2560MiB guarded admission wait",
+      "result": "TIMED_OUT",
+      "seconds": 608.218,
+      "deadlineSecondsIncludingAdmissionWait": 600,
+      "diagnostics": 0,
+      "tests": 0,
+      "phase": "CLI main.rs --test rustc codegen, initial cache startup delay resolved; no observed mold phase",
+      "source": "a4bbcd92ce0f80c7d3f38226c3185a9e03f2e3ac; Rust same63"
     }
   ],
   "resources": {
@@ -38,7 +55,18 @@
       "oom_kill": 0
     },
     "finalPeak": "not retained after inactive scope; observed partial peak only",
-    "cleanup": "fresh /proc cgroup census empty; exact second unit inactive"
+    "cleanup": "fresh /proc cgroup census empty; exact second unit inactive",
+    "warmResume": {
+      "jobs": 1,
+      "concurrent": 1,
+      "memoryClaimKiB": 2621440,
+      "reserveKiB": 2097152,
+      "HighAndMaxMiB": 2560,
+      "swapMax": 0,
+      "lastObservedPeakBytes": 2068791296,
+      "finalPeak": "not retained after inactive scope",
+      "remainingOwnScopeMembers": []
+    }
   },
   "remaining": [
     "Compile exact CLI harness",
@@ -46,5 +74,6 @@
     "Build immutable exact-source client candidate",
     "Actual candidate-backed metadata reconciliation",
     "No install, default switch, sharedhost restart or native input authorized by this source packet"
-  ]
+  ],
+  "cumulativeSeconds": 2356.612
 }
