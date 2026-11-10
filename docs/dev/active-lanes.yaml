@@ -1850,9 +1850,25 @@ lanes:
     target: fix/native-login596-coverage
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#619]
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    plan_state: CLOSED
+    custody_state: RETAINED_REF
     dependencies: [NATIVE-LOGIN-596-COVERAGE]
     overlaps: [NATIVE-LOGIN-596-COVERAGE]
     reconciled_overlaps: ["619 owns control reconciliation only;615 source remains unchanged; no runtime install"]
-    updated_at: 2026-11-09
+    updated_at: 2026-11-10
+  - id: NATIVE-LOGIN-OUTLINES-621
+    product_lane: PL-BUGFIX
+    objective: Canonicalize proven same-widget native login outlines without merging distinct controls
+    plan: docs/dev/maintenance/native-login-outlines621.md
+    branch: fix/native-login-outlines621
+    target: fix/terminal-request619
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#621]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [TERMINAL-REQUEST-619]
+    overlaps: [NATIVE-SAVED-LOGIN-596, TERMINAL-REQUEST-619]
+    reconciled_overlaps: ["Reuse former619 clean primary after installed acceptance;621 owns perception/corpus and shared behavior docs; retain619sealed0e95f60c47300425c2ddafb1d3e1646c unchanged; review2026-11-17; other checkouts and SDK pins untouched"]
+    validation_status: Image-fixture regression pending
+    limitations: ["Source qualification only; no runtime capture/input or budget changes"]
+    updated_at: 2026-11-10

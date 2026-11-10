@@ -1,0 +1,43 @@
+{
+  "base": "5b228641b5123103a0a9879b53cc5c0c2ef5503d",
+  "branch": "fix/native-login-outlines621",
+  "sourceHashes": {
+    "cli/src/native/native_login_perception.rs": "7b7ab453a26992f0519c3f6699c3d21e5722f7c12c6d9322502ccd6502b493ec",
+    "cli/src/native/native_login_perception_corpus.rs": "7c38b2d3ba9c25f3952b694b0d19930e8a81dfdb62562a1cfc4c7db014303f6c"
+  },
+  "unitSha256": "4b57ab2c9db050830c142ec7c1ce3aa7e614c745815f813bf7f5a74f4d535f40",
+  "red": {
+    "compileJob": "job-20261110T083956Z-e2fd24b8a13b",
+    "compileSeconds": 76.17,
+    "testJob": "job-20261110T084122Z-dd5ffac56c27",
+    "failed": 1,
+    "seconds": 0.266,
+    "oracle": "five contiguous widget contours projected ambiguous; expected observed"
+  },
+  "green": {
+    "compileJob": "job-20261110T084316Z-60b2f2da2f44",
+    "compileSeconds": 91.016,
+    "testJob": "job-20261110T084456Z-e5d57c84cd8e",
+    "listed": 19,
+    "passed": 19,
+    "seconds": 4.406
+  },
+  "clippy": {
+    "job": "job-20261110T084549Z-4f8d1ef293a8",
+    "passed": true,
+    "seconds": 153.569,
+    "classification": "broader_source_qualification_exceeds_presubmit_wall_target"
+  },
+  "fmt": {
+    "job": "job-20261110T084841Z-6328c7160f5e",
+    "passed": true,
+    "seconds": 8.545
+  },
+  "localOther": [
+    "documentation-links PASS",
+    "policy-wiring11 PASS",
+    "exact621lane-planning PASS",
+    "diff-hygiene PASS"
+  ],
+  "qualificationBoundary": "source/public fixtures only; actual private pixels and installed behavior pending; no runtime effects"
+}

@@ -142,6 +142,143 @@ fn rectangles(image: &RgbaImage) -> Result<Vec<Bounds>, String> {
     }
     Ok(found)
 }
+/// Two contours describe one supported field only when all four narrow boundary
+/// bands are uninterrupted ink over their shared middle halves. Overlap alone,
+/// disconnected nested outlines and transitive chains are insufficient proof.
+fn same_field_outline(image: &RgbaImage, a: Bounds, b: Bounds) -> bool {
+    let (ar, ab, br, bb) = (
+        a.x + a.width - 1,
+        a.y + a.height - 1,
+        b.x + b.width - 1,
+        b.y + b.height - 1,
+    );
+    if [
+        a.x.abs_diff(b.x),
+        a.y.abs_diff(b.y),
+        ar.abs_diff(br),
+        ab.abs_diff(bb),
+    ]
+    .into_iter()
+    .any(|d| d > 8)
+    {
+        return false;
+    }
+    let (left, top, right, bottom) = (a.x.max(b.x), a.y.max(b.y), ar.min(br), ab.min(bb));
+    if right <= left
+        || bottom <= top
+        || (right - left + 1) * 100 < a.width.max(b.width) * 90
+        || (bottom - top + 1) * 100 < a.height.max(b.height) * 60
+    {
+        return false;
+    }
+    let background = *image.get_pixel(0, 0);
+    // A different flat panel fill is unsupported rather than proof that every
+    // pixel between two independent outlines belongs to the same border.
+    if !close(
+        *image.get_pixel((left + right) / 2, (top + bottom) / 2),
+        background,
+    ) {
+        return false;
+    }
+    let ink = |x, y| {
+        let p = *image.get_pixel(x, y);
+        p[3] == 255 && !close(p, background)
+    };
+    let xs = left + (right - left) / 4..=right - (right - left) / 4;
+    let ys = top + (bottom - top) / 4..=bottom - (bottom - top) / 4;
+    xs.clone().all(|x| {
+        (a.y.min(b.y)..=top).all(|y| ink(x, y)) && (bottom..=ab.max(bb)).all(|y| ink(x, y))
+    }) && ys.clone().all(|y| {
+        (a.x.min(b.x)..=left).all(|x| ink(x, y)) && (right..=ar.max(br)).all(|x| ink(x, y))
+    })
+}
+
+/// Retain an existing frame-bound opaque target, never fabricate an enlarged
+/// clickable region. Conflicting value/mask evidence becomes unverified.
+fn canonicalize_field_outlines(image: &RgbaImage, crop: Bounds, controls: &mut Vec<Value>) {
+    let local = |c: &Value| {
+        bounds(&c["bounds"]).ok().map(|b| Bounds {
+            x: b.x - crop.x,
+            y: b.y - crop.y,
+            ..b
+        })
+    };
+    let related = |a: usize, b: usize| {
+        matches!(controls[a]["kind"].as_str(), Some("username" | "password"))
+            && controls[a]["kind"] == controls[b]["kind"]
+            && controls[a]["configuredAccountMatch"] == controls[b]["configuredAccountMatch"]
+            && local(&controls[a])
+                .zip(local(&controls[b]))
+                .is_some_and(|(a, b)| same_field_outline(image, a, b))
+    };
+    let mut groups = vec![];
+    let mut visited = vec![false; controls.len()];
+    for start in 0..controls.len() {
+        if visited[start] {
+            continue;
+        }
+        let mut group = vec![start];
+        visited[start] = true;
+        let mut cursor = 0;
+        while cursor < group.len() {
+            for (other, seen) in visited.iter_mut().enumerate() {
+                if !*seen && related(group[cursor], other) {
+                    *seen = true;
+                    group.push(other);
+                }
+            }
+            cursor += 1;
+        }
+        if group.len() > 1
+            && group
+                .iter()
+                .all(|a| group.iter().all(|b| a == b || related(*a, *b)))
+        {
+            // A competing kind or account at the same physical region prevents
+            // normalization even if some pair of contours is individually sound.
+            let conflict = controls.iter().enumerate().any(|(i, c)| {
+                !group.contains(&i)
+                    && group.iter().any(|j| {
+                        local(c).zip(local(&controls[*j])).is_some_and(|(a, b)| {
+                            a.x < b.x + b.width
+                                && b.x < a.x + a.width
+                                && a.y < b.y + b.height
+                                && b.y < a.y + a.height
+                        })
+                    })
+            });
+            if !conflict {
+                groups.push(group);
+            }
+        }
+    }
+    let mut remove = vec![false; controls.len()];
+    for group in groups {
+        let keep = *group
+            .iter()
+            .min_by_key(|i| {
+                let b = local(&controls[**i]).expect("validated control bounds");
+                (u64::from(b.width) * u64::from(b.height), b.y, b.x)
+            })
+            .unwrap();
+        if group
+            .iter()
+            .any(|i| controls[*i]["fieldValueState"] != controls[keep]["fieldValueState"])
+        {
+            controls[keep]["fieldValueState"] = json!("unverified");
+        }
+        for i in group {
+            remove[i] = i != keep;
+        }
+    }
+    let mut i = 0;
+    controls.retain(|_| {
+        let keep = !remove[i];
+        i += 1;
+        keep
+    });
+}
+
 /// Called only with the current owner-fenced capture. Pixel decoding is bounded
 /// before allocation; arbitrary OCR and field values are never projected.
 pub(crate) fn observe(capture: &Value, region: &Value, request: &Value) -> Result<Value, String> {
@@ -332,6 +469,7 @@ pub(crate) fn observe(capture: &Value, region: &Value, request: &Value) -> Resul
         }
         controls.push(json!({"targetRef":id,"kind":"credential_entry","label":"Saved account","bounds":label,"configuredAccountMatch":request["expectedAccount"].as_str().is_some_and(|a|a.eq_ignore_ascii_case(text)),"confidence":line["confidence"].as_f64().unwrap().min(90.0),"confidenceKind":"rule_score_not_probability","fieldValueState":"unverified"}));
     }
+    canonicalize_field_outlines(&image, crop, &mut controls);
     controls.sort_by_key(|c| {
         (
             c["bounds"]["y"].as_u64(),

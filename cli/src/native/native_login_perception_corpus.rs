@@ -259,3 +259,106 @@ fn native_login_perception_receiver_refuses_legacy_raw_capture_and_curates_owned
     assert!(!clean.to_string().contains("private-field-canary"));
     assert_eq!(clean["loginControls"]["controls"][0]["kind"], "username");
 }
+
+fn outlined_capture621(lines: Value) -> Value {
+    let mut capture = corpus_capture(&[], lines);
+    let mut image = RgbaImage::from_pixel(800, 600, Rgba([255, 255, 255, 255]));
+    for inset in 0..5u32 {
+        let shade = 70 + inset as u8 * 30;
+        let (x, y, w, h) = (100 + inset, 150 + inset, 300 - 2 * inset, 49 - 2 * inset);
+        for xx in x..x + w {
+            image.put_pixel(xx, y, Rgba([shade, shade, shade, 255]));
+            image.put_pixel(xx, y + h - 1, Rgba([shade, shade, shade, 255]));
+        }
+        for yy in y..y + h {
+            image.put_pixel(x, yy, Rgba([shade, shade, shade, 255]));
+            image.put_pixel(x + w - 1, yy, Rgba([shade, shade, shade, 255]));
+        }
+    }
+    let mut png = Cursor::new(vec![]);
+    image.write_to(&mut png, image::ImageFormat::Png).unwrap();
+    capture["capture"]["sha256"] = json!(hex(png.get_ref()));
+    capture["image"]["data"] =
+        json!(base64::engine::general_purpose::STANDARD.encode(png.get_ref()));
+    capture
+}
+
+#[test]
+fn native_login_perception_nested_outlines621_one_contiguous_widget() {
+    let capture = outlined_capture621(json!([line("Email", 100, 120, 100)]));
+    let result = detect(&capture, None);
+    assert_eq!(result["status"], "observed", "{result}");
+    assert_eq!(result["controls"].as_array().unwrap().len(), 1);
+    assert_eq!(result["controls"][0]["kind"], "username");
+    assert_eq!(result["controls"][0]["fieldValueState"], "unverified");
+}
+
+#[test]
+fn native_login_perception_nested_outlines621_preserves_distinct_controls() {
+    for rects in [
+        vec![
+            (100, 150, 300, 49),
+            (102, 152, 296, 45),
+            (104, 154, 292, 41),
+        ],
+        vec![(100, 150, 300, 49), (104, 154, 300, 49)],
+        vec![(100, 150, 300, 41), (100, 193, 300, 41)],
+    ] {
+        let capture = corpus_capture(
+            &rects,
+            json!([
+                line("Email", 100, 120, 100),
+                line("Username", 100, 165, 100)
+            ]),
+        );
+        let result = detect(&capture, None);
+        assert_eq!(result["status"], "ambiguous", "{rects:?}: {result}");
+        assert!(result["controls"].as_array().unwrap().len() >= 2);
+    }
+    let capture = outlined_capture621(json!([
+        line("Email", 100, 120, 100),
+        line("Password", 100, 120, 100)
+    ]));
+    assert_eq!(detect(&capture, None)["status"], "ambiguous");
+    let capture = outlined_capture621(json!([
+        line("Email", 100, 120, 100),
+        line("test@example.invalid", 101, 160, 1)
+    ]));
+    let result = detect(&capture, Some("test@example.invalid"));
+    assert_eq!(result["status"], "ambiguous", "{result}");
+    assert!(result["controls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| c["configuredAccountMatch"] == true));
+    assert!(result["controls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| c["configuredAccountMatch"] == false));
+}
+
+#[test]
+fn native_login_perception_nested_outlines621_never_promotes_conflicting_mask_evidence() {
+    let mut capture = outlined_capture621(json!([line("Password", 100, 120, 100)]));
+    let png = base64::engine::general_purpose::STANDARD
+        .decode(capture["image"]["data"].as_str().unwrap())
+        .unwrap();
+    let mut image = image::load_from_memory(&png).unwrap().to_rgba8();
+    for x in [140, 152, 164] {
+        for dx in 0..4 {
+            for dy in 0..4 {
+                image.put_pixel(x + dx, 170 + dy, Rgba([0, 0, 0, 255]));
+            }
+        }
+    }
+    let mut png = Cursor::new(vec![]);
+    image.write_to(&mut png, image::ImageFormat::Png).unwrap();
+    capture["capture"]["sha256"] = json!(hex(png.get_ref()));
+    capture["image"]["data"] =
+        json!(base64::engine::general_purpose::STANDARD.encode(png.get_ref()));
+    let result = detect(&capture, None);
+    assert_eq!(result["status"], "observed", "{result}");
+    assert_eq!(result["controls"].as_array().unwrap().len(), 1);
+    assert_eq!(result["controls"][0]["fieldValueState"], "unverified");
+}

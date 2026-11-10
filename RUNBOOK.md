@@ -482,3 +482,5 @@ reproduced a chooser below the default 694-row capture at the public client seam
 Bounded overlapping tiles and fresh selected-tile recapture pass focused guards;
 source qualification is in progress. Earlier uncertain live input has not been
 attributed, replayed or reset. No runtime adoption or live effects in this slice.
+
+- [Native login outline repair621](docs/dev/maintenance/native-login-outlines621.md) — source-only same-widget perception qualification; runtime acceptance remains separate.
