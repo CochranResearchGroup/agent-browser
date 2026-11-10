@@ -156,3 +156,17 @@ principal/lease authority, rerun migration/quality gates, build the necessary
 successor candidate, inspect and recover the exact stopped transaction through
 the supported installer, then verify the original same-link page and an owned
 disposable reopen workflow. Do not hand-edit runtime state or bypass migration.
+
+## Operator correction: historical records have no deployment veto
+
+The operator explicitly corrected the stop: stale history has no veto power.
+The prior source receipt's blocked result describes an installer defect, not
+absence of deployment authority. Continue the approved repair and deployment;
+do not seek renewed permission. Preserve closed tab bytes and existing safety
+checks. The repair admits tab_closed only when lifecycle is Closed and its handle
+is invalid, under the same inert process, principal, lease and owner checks as
+browser_missing. It materializes inert identities without reopening the task.
+The focused migration suite is queued with one job and an8GiB hard memory cap;
+its host-reserve admission currently waits for actual memory pressure. This is
+separate from the historical-record admission defect. No second candidate has
+been built or installed yet.

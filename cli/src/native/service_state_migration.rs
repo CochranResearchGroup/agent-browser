@@ -928,7 +928,8 @@ fn materialize_inert_legacy_profile_placeholders(state: &mut ServiceState) {
 
 /// Preserve a stale tab record whose historical browser row was never kept.
 ///
-/// The invalid `browser_missing` handle is the migration proof that the tab
+/// An invalid missing-browser handle, or closed tab with a tab-closed handle,
+/// is migration proof that the retained tab
 /// cannot authorize work. Any principal, work lease, live or indeterminate
 /// process identity or retained session reference keeps the missing browser as
 /// a hard blocker. A single owner may be preserved only when its exact profile
@@ -976,7 +977,10 @@ fn materialize_inert_legacy_browser_placeholders(state: &mut ServiceState) {
                         && tab.work_lease_id.is_none()
                         && tab.service_tab_handle.as_ref().is_some_and(|handle| {
                             !handle.valid
-                                && handle.stale_reason.as_deref() == Some("browser_missing")
+                                && (handle.stale_reason.as_deref() == Some("browser_missing")
+                                    || (tab.lifecycle
+                                        == super::service_model::TabLifecycle::Closed
+                                        && handle.stale_reason.as_deref() == Some("tab_closed")))
                         })
                 })
         })
@@ -1024,7 +1028,10 @@ fn materialize_inert_legacy_session_placeholders(state: &mut ServiceState) {
                         )
             })
             && tab.service_tab_handle.as_ref().is_some_and(|handle| {
-                !handle.valid && handle.stale_reason.as_deref() == Some("browser_missing")
+                !handle.valid
+                    && (handle.stale_reason.as_deref() == Some("browser_missing")
+                        || (tab.lifecycle == super::service_model::TabLifecycle::Closed
+                            && handle.stale_reason.as_deref() == Some("tab_closed")))
             });
         if !inert_missing_browser {
             continue;
