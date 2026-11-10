@@ -6,17 +6,17 @@ lanes:
     product_lane: PL-BUGFIX
     objective: Keep a valid handoff actionable after explicit task closure
     plan: docs/dev/maintenance/retained-handoff-613.md
-    branch: fix/closed-tab-migration-613
+    branch: fix/handoff613-deployment-receipt
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#613]
-    plan_state: OPEN
+    plan_state: COMPLETED
     custody_state: INTEGRATED
     dependencies: [MANUAL-IDLE-HANDOFF-599]
     overlaps: [OPERATOR-MODE-RELAUNCH-607, TERMINAL-CONTROL-611, NATIVE-SAVED-LOGIN-596]
     reconciled_overlaps: ["613 owns closed-link presentation and explicit reconstruction;607 mode relaunch and611 terminal requests retain their physical checkouts; shared host integration is serial"]
-    validation_status: PR618 combined source qualified;a7e8eb56a sealed fbe7764ab87b;29 migration,40 control,22 perception,3 handoff cases plus strict Rust, clients, docs, exact installer and six no-launch smokes pass; preserving install next
-    limitations: ["Runtime adoption must preserve installed unmerged source d26086895fe18871e946fcf6fdfffac3a020e847; no production install or original task recreation", "Human-control warning remains a separate report"]
+    validation_status: PR618 and623 integrated; preserving successor installed accepted; original same-link action and guarded anonymous access, owned blank-task reopen with preserved profile and interactive Native viewer, doctor and exact QA process exit pass
+    limitations: ["Original website task not recreated; no website authentication claim", "Separate historical active-view warning report and cross-platform acceptance remain outside this outcome", "Two older OS-root samples ended without causal attribution; no full global preservation claim"]
     updated_at: 2026-11-10
   - id: NATIVE-LOGIN-596-COVERAGE
     product_lane: PL-AUTH
