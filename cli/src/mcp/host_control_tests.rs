@@ -354,3 +354,95 @@ fn terminal_control611_public_target_process_epoch_races_preserve_original() {
         assert_eq!(commands[0]["action"], "url");
     }
 }
+
+#[test]
+fn terminal_request619_public_completed_dom_request_with_live_supervisor_reconciles() {
+    let f = fixture();
+    let crate::process_identity::ProcessObservation::Observed(owner) =
+        crate::process_identity::observe_process(std::process::id())
+    else {
+        panic!("owner")
+    };
+    let mut original = read_control();
+    original["owners"]["original"] = json!([owner.pid, owner.start_token]);
+    std::fs::write(control::path("browser").unwrap(), original.to_string()).unwrap();
+    BrowserSessionSqliteStore::default_sqlite().unwrap().mutate_session_state(|state| {
+        let identity = state.adopted_browser_process_identities["browser"].process.clone();
+        let value = json!({"requestId":"original","taskId":"task","profileId":"profile","browserId":"browser","tabId":"tab","targetId":"target","processPid":identity.pid,"processIdentity":identity,"controlEpoch":2,"action":"click","fingerprint":"a".repeat(64),"state":"uncertain","createdAtMs":1,"completedAtMs":2,"evidenceReferences":{}});
+        state.task_operations.entry("task".into()).or_default().insert("original".into(), serde_json::from_value(value).unwrap());
+        Ok(())
+    }).unwrap();
+    let result = call(request());
+    assert!(result.get("error").is_none(), "{result}");
+    assert_eq!(
+        read_control()["flights"]["original"],
+        "observed_uncertain_no_replay"
+    );
+    assert_eq!(f.commands.lock().unwrap().len(), 1);
+}
+#[test]
+fn terminal_request619_public_incomplete_or_private_request_keeps_live_dispatch_guard() {
+    for case in [
+        "pending",
+        "native",
+        "missing_completion",
+        "epoch",
+        "target",
+        "active_flight",
+    ] {
+        let f = fixture();
+        let crate::process_identity::ProcessObservation::Observed(owner) =
+            crate::process_identity::observe_process(std::process::id())
+        else {
+            panic!("owner")
+        };
+        let mut original = read_control();
+        original["owners"]["original"] = json!([owner.pid, owner.start_token]);
+        std::fs::write(control::path("browser").unwrap(), original.to_string()).unwrap();
+        BrowserSessionSqliteStore::default_sqlite().unwrap().mutate_session_state(|state| {
+        let identity = state.adopted_browser_process_identities["browser"].process.clone();
+        let value = json!({"requestId":"original","taskId":"task","profileId":"profile","browserId":"browser","tabId":"tab","targetId":"target","processPid":identity.pid,"processIdentity":identity,"controlEpoch":2,"action":"click","fingerprint":"a".repeat(64),"state":"uncertain","createdAtMs":1,"completedAtMs":2,"evidenceReferences":{}});
+        state.task_operations.entry("task".into()).or_default().insert("original".into(), serde_json::from_value(value).unwrap());
+        Ok(())
+    }).unwrap();
+        if case == "active_flight" {
+            let mut control_state = read_control();
+            control_state["flights"]["original"] = json!("dispatched");
+            std::fs::write(control::path("browser").unwrap(), control_state.to_string()).unwrap();
+        } else {
+            BrowserSessionSqliteStore::default_sqlite()
+                .unwrap()
+                .mutate_session_state(|state| {
+                    let row = state
+                        .task_operations
+                        .get_mut("task")
+                        .unwrap()
+                        .get_mut("original")
+                        .unwrap();
+                    match case {
+                        "pending" => {
+                            row.state =
+                                agent_browser_service_model::BrowserTaskOperationState::Pending
+                        }
+                        "native" => row.action = "native_input".into(),
+                        "missing_completion" => row.completed_at_ms = None,
+                        "epoch" => row.control_epoch = 1,
+                        "target" => row.target_id = "other".into(),
+                        _ => unreachable!(),
+                    }
+                    Ok(())
+                })
+                .unwrap();
+        }
+        let before = read_control();
+        let result = call(request());
+        assert!(
+            result
+                .to_string()
+                .contains("browser_control_dispatch_still_in_flight"),
+            "{case}: {result}"
+        );
+        assert_eq!(read_control(), before);
+        assert!(f.commands.lock().unwrap().is_empty());
+    }
+}

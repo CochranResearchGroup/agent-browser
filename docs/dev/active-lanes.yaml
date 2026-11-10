@@ -1826,3 +1826,17 @@ lanes:
     validation_status: Composed main588 passes fmt strict Clippy and267 stream cases plus5 children; auth CLI and source-free installer fixture pass; production-shaped artifact and installed auth acceptance pass
     limitations: ["Private runtime receipt retains instance details; no full-project or producer-pixel acceptance claim", "Retain sealed candidate custody; review2026-11-09"]
     updated_at: 2026-11-08
+  - id: TERMINAL-REQUEST-619
+    product_lane: PL-BUGFIX
+    objective: Reconcile completed DOM requests owned by a live shared dispatcher without replay
+    plan: docs/dev/maintenance/terminal-request619.md
+    branch: fix/terminal-request619
+    target: fix/native-login596-coverage
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#619]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [NATIVE-LOGIN-596-COVERAGE]
+    overlaps: [NATIVE-LOGIN-596-COVERAGE]
+    reconciled_overlaps: ["619 owns control reconciliation only;615 source remains unchanged; no runtime install"]
+    updated_at: 2026-11-09
