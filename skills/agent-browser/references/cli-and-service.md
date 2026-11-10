@@ -4680,7 +4680,7 @@ Creation requires `serviceName`, `agentName`, concrete `taskName`. CLI: `--servi
 
 ## Hosted workflow catalog and recovery
 
-Reuse Bots' browser/task. Before attachment, sharing or takeover, read [host integration v1](references/host-integration.md). Discover schemas; visibility proves neither account nor control. Shared skill publication needs explicit approval.
+Reuse Bots' browser/task. Before attachment, sharing or takeover, read [host integration v1](host-integration.md). Discover schemas; visibility proves neither account nor control. Shared skill publication needs explicit approval.
 
 Terminal DOM click reconciliation may use the owner's terminal flight plus an
 existing exact producer completion record while a shared supervisor stays alive.
@@ -4695,7 +4695,7 @@ and preserves tabs; peer tabs remain outside scope. Discover actions with `brows
 Close rejects changed selection. A pre-commit return failure keeps human control
 and epoch; inspect status and use a explicit intent, never replay uncertainty.
 
-Read [retained workflow transport](references/cli-and-service.md#retained-workflow-transport)
+Read [retained workflow transport](#retained-workflow-transport)
 before downloads, stale transport recovery, retirement or advanced administration.
 
 Return, store, and reopen only `handoffUrl` (standalone: `/remote-view/<handoff-id>`).
