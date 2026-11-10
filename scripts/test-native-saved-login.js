@@ -13,7 +13,7 @@ function fixture(){
   if(args.action==='native_capture'){
    if(captures.has(args.requestId))return structuredClone(captures.get(args.requestId));
    const controls=step===0?[field('username','username')]:step===1?[field('credential_entry','credential',{configuredAccountMatch:true})]:[field('username','filled-user',{configuredAccountMatch:true,fieldValueState:'text_present'}),field('password','filled-password',{fieldValueState:'masked'}),field('submit','submit')];
-   const captured=envelope({source:'remote_view_native',loginControls:{schemaVersion:'agent-browser.native-login-controls.v1',status:'observed',controls,frameSha256:'a'.repeat(64)},binding:{desktopId:'desktop',generation:1,windowId:42,nativeControlEpoch:0,observedAtMs:clock}});captures.set(args.requestId,structuredClone(captured));return captured;
+   const captured=envelope({source:'remote_view_native',loginControls:{schemaVersion:'agent-browser.native-login-controls.v1',status:'observed',controls,frameSha256:'a'.repeat(64)},binding:{desktopId:'desktop',generation:1,windowId:42,nativeControlEpoch:0,observedAtMs:clock,displayWidth:1000,displayHeight:800,window:{x:0,y:0,width:1000,height:800},region:{x:0,y:0,width:1000,height:800}}});captures.set(args.requestId,structuredClone(captured));return captured;
   }
   if(args.action==='native_input'){
    inputs.push(structuredClone(args));const kind=['username','credential_entry','submit'][step];
@@ -78,3 +78,66 @@ const returned=fixture(),returnedBase=returned.callTool;
 returned.callTool=async(name,args)=>args.action==='task_briefing'?envelope({...returned.binding,control:{owner:'agent',epoch:returned.step>0?2:0}}):returnedBase(name,args);
 assert.equal((await createNativeSavedLoginClient({...returned,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode'})).reason,'native_saved_login_task_control_changed');
 assert.equal(returned.inputs.length,1);
+
+// A 1440x900 Chrome chooser below y694 remains discoverable through bounded
+// owner captures. The input uses a fresh target from the selected complete tile.
+const lower=fixture(),lowerBase=lower.callTool,lowerRegions=[];
+lower.callTool=async(name,args)=>{
+ const reply=await lowerBase(name,args);
+ if(args.action!=='native_capture')return reply;
+ const data=JSON.parse(reply.content[0].text).data;
+ const region=args.params.region??{x:0,y:0,width:1440,height:694};
+ lowerRegions.push(region);
+ data.binding={...data.binding,displayWidth:1440,displayHeight:900,window:{x:0,y:0,width:1440,height:900},region};
+ if(lower.step===1){
+  data.loginControls.controls=region.y<=704&&region.y+region.height>=820?[{kind:'credential_entry',targetRef:'credential',configuredAccountMatch:true,bounds:{x:600,y:704,width:300,height:116}}]:[];
+  data.loginControls.status=data.loginControls.controls.length?'observed':'not_found';
+ }
+ return envelope(data);
+};
+const lowerResult=await createNativeSavedLoginClient({...lower,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode'});
+assert.equal(lowerResult.status,'verified_access_after_native_saved_login');
+assert.equal(lower.inputs.length,3);
+assert(lowerRegions.every(r=>r.width*r.height<=1000000));
+assert(lowerRegions.some(r=>r.y<=704&&r.y+r.height>=820));
+console.log('native saved login: lower-window chooser covered without larger owner captures');
+
+function tiledFixture(change=()=>{}){
+ const f=fixture(),base=f.callTool,frames=new Map();let sequence=0;
+ f.callTool=async(name,args)=>{
+  const reply=await base(name,args);
+  if(args.action==='native_capture'){
+   sequence++;const data=JSON.parse(reply.content[0].text).data;
+   const region=args.params.region??{x:100,y:50,width:1440,height:694};
+   data.binding={...data.binding,displayWidth:1600,displayHeight:1000,window:{x:100,y:50,width:1440,height:900},region};
+   for(const control of data.loginControls.controls)control.bounds={x:650,y:770,width:300,height:40};
+   if(!args.params.region){data.loginControls.controls=[];data.loginControls.status='not_found';}
+   change({data,args,sequence,step:f.step});
+   for(const control of data.loginControls.controls)control.targetRef+=':'+sequence;
+   frames.set(args.requestId,structuredClone(data));return envelope(data);
+  }
+  if(args.action==='native_input'){
+   const selected=frames.get(args.params.loginTarget.observationRequestId);
+   assert(selected.loginControls.controls.some(c=>c.targetRef===args.params.loginTarget.targetRef));
+   assert.equal(selected.binding.region.y,50);
+   assert.equal(selected.binding.region.height,900);
+  }
+  return reply;
+ };return f;
+}
+const shifted=tiledFixture();
+assert.equal((await createNativeSavedLoginClient({...shifted,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode'})).status,'verified_access_after_native_saved_login');
+assert.equal(shifted.inputs.length,3);
+const competing=tiledFixture(({data,args})=>{if(args.params.region?.x===429)data.loginControls.controls.push({...data.loginControls.controls[0],bounds:{x:1000,y:770,width:200,height:40},targetRef:'competing'});});
+assert.equal((await createNativeSavedLoginClient({...competing,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode'})).reason,'native_saved_login_target_ambiguous');
+assert.equal(competing.inputs.length,0);
+const moved=tiledFixture(({data,sequence})=>{if(sequence===3)data.binding.window.y++;});
+assert.equal((await createNativeSavedLoginClient({...moved,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode'})).reason,'native_saved_login_native_binding_changed');
+assert.equal(moved.inputs.length,0);
+const vanished=tiledFixture(({data,sequence})=>{if(sequence===4){data.loginControls.controls=[];data.loginControls.status='not_found';}});
+assert.equal((await createNativeSavedLoginClient({...vanished,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode'})).reason,'native_saved_login_target_ambiguous');
+assert.equal(vanished.inputs.length,0);
+console.log('native saved login: shifted origins, overlapping duplicates, distinct ambiguity, moved geometry and vanished targets pass');
+const freshAmbiguous=tiledFixture(({data,sequence})=>{if(sequence===4)data.loginControls.controls.push({...data.loginControls.controls[0],targetRef:'new-target',bounds:{x:980,y:770,width:100,height:40}});});
+assert.equal((await createNativeSavedLoginClient({...freshAmbiguous,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode'})).reason,'native_saved_login_target_ambiguous');
+assert.equal(freshAmbiguous.inputs.length,0);

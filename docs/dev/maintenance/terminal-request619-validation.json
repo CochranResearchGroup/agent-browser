@@ -1,0 +1,202 @@
+{
+  "source": "63eaaebd988ef200c7538a25e5eb9af38cbf3837",
+  "scope": "Focused source/public guard qualification passed; candidate build and actual consumer acceptance pending",
+  "red": "Actual public retained click reconcile returned browser_control_dispatch_still_in_flight; primary private receipt retained outsideGit",
+  "stages": [
+    {
+      "command": "cargo check -p agent-browser --tests",
+      "result": "FAILED exit101",
+      "seconds": 847.683,
+      "reason": "Unrelated remote_view_native_control integration harness missing native_login_perception module;4E0433",
+      "tests": 0
+    },
+    {
+      "command": "cargo test -p agent-browser --bin agent-browser terminal_request619 --no-run",
+      "result": "TIMED_OUT",
+      "seconds": 900.595,
+      "diagnostics": 0,
+      "tests": 0,
+      "exclusion": "baseline broken integration harness excluded; selected CLI unit harness only"
+    },
+    {
+      "command": "correct CLI unit selection; 2560MiB High=Max/no swap/no-wait",
+      "result": "ADMISSION_REFUSED exit75 memory_pressure",
+      "seconds": 0.116,
+      "tests": 0,
+      "readback": "MemAvailable4580MiB below4608MiB claim+reserve; zero compiler effects"
+    },
+    {
+      "command": "cargo test -p agent-browser --bin agent-browser terminal_request619 --no-run; 2560MiB guarded admission wait",
+      "result": "TIMED_OUT",
+      "seconds": 608.218,
+      "deadlineSecondsIncludingAdmissionWait": 600,
+      "diagnostics": 0,
+      "tests": 0,
+      "phase": "CLI main.rs --test rustc codegen, initial cache startup delay resolved; no observed mold phase",
+      "source": "a4bbcd92ce0f80c7d3f38226c3185a9e03f2e3ac; Rust same63"
+    },
+    {
+      "command": "cargo test -p agent-browser --bin agent-browser terminal_request619 --no-run --config profile.test.package.agent-browser.debug=0",
+      "result": "TIMED_OUT",
+      "seconds": 600.158,
+      "deadlineSecondsIncludingAdmissionWait": 600,
+      "diagnostics": 0,
+      "tests": 0,
+      "source": "2ab1c36b40e600d0453f4fb5002dfbf1c4c50bb2; Rust unchanged63",
+      "profileDifference": "Only CLI package debug symbols disabled; dependencies retain normal profile and reused",
+      "cacheDifference": "sccacheoff, RUSTC_WRAPPERunset; directrustc inside hardcapped scope; Cargo objectcache preserved",
+      "phase": "CLI test rustc; no completed executable",
+      "resourceEvidence": {
+        "HighAndMaxMiB": 2560,
+        "swapMax": 0,
+        "observedPeakBytes": 2684354560,
+        "maxEvents": 436812,
+        "observedOom": 0,
+        "remainingOwnScopeMembers": []
+      }
+    },
+    {
+      "command": "CLI-only test debug0/directrustc warm resume with4GiB cap/2GiB hostreserve",
+      "source": "89eaa86517715872a778151bcd18d68f8894b774; Rust unchanged63",
+      "result": "TIMED_OUT",
+      "seconds": 600.452,
+      "deadlineSecondsIncludingAdmissionWait": 600,
+      "diagnostics": 0,
+      "tests": 0,
+      "admission": "Normal guarded wait then actual capacity admission; no lowered reserve",
+      "phase": "CLI main.rs --test directrustc code generation; no qualified harness",
+      "resources": {
+        "HighAndMaxGiB": 4,
+        "swapMax": 0,
+        "lastObservedPeakBytes": 3756843008,
+        "sampleEvents": {
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0
+        },
+        "finalPeak": "not retained after inactive scope; sample is partial only",
+        "remainingOwnScopeMembers": []
+      }
+    },
+    {
+      "command": "CLI-only package test debug0/directrustc warm setup;5GiBcap,2GiBreserve,2buildjobs,1invocation",
+      "source": "6f6d4447b0dc9df06a1c4a794aa01b3f2deb4044; Rust unchanged63",
+      "result": "STOPPED_RESOURCE_GATE exit143",
+      "seconds": 1929.31,
+      "setupDeadlineSeconds": 3600,
+      "diagnostics": 0,
+      "tests": 0,
+      "budgetRevision": "Coordinator corrected arbitrary600s compiler cutoff; test/runtime recovery budgets unchanged",
+      "admission": "Normal guarded wait, actual7GiB claim+reserve threshold met beforecompile",
+      "phase": "CLI main.rs --test directrustc code generation",
+      "resourceStopProof": {
+        "HighAndMaxGiB": 5,
+        "swapMax": 0,
+        "observedPeakBytes": 5368709120,
+        "maxEvents": 443208,
+        "observedOom": 0,
+        "userCpuIntervalSeconds": 3.5,
+        "systemCpuIntervalSeconds": 58.34,
+        "majorFaultInterval": 15396,
+        "reason": "Hardcap reclaim with declining useful codegen progress; explicit coordinator stop predicate",
+        "cleanup": "Stopped only exact owned compile scope; inactive and fresh /proc census empty"
+      }
+    }
+  ],
+  "resources": {
+    "jobs": 1,
+    "concurrent": 1,
+    "memoryClaimGiB": 2,
+    "hostReserveGiB": 2,
+    "hardMemoryMaxGiB": 2,
+    "swapMax": 0,
+    "firstSoftHighMiB": 1536,
+    "adjustedSoftHighGiB": 2,
+    "adjustment": "Exact own first stage unit only, existing hardcap unchanged; coordinator directed after151351softHighevents",
+    "secondSoftHighGiB": 2,
+    "lastObservedSecondPeakBytes": 2109829120,
+    "lastObservedSecondEvents": {
+      "high": 0,
+      "max": 0,
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "finalPeak": "not retained after inactive scope; observed partial peak only",
+    "cleanup": "fresh /proc cgroup census empty; exact second unit inactive",
+    "warmResume": {
+      "jobs": 1,
+      "concurrent": 1,
+      "memoryClaimKiB": 2621440,
+      "reserveKiB": 2097152,
+      "HighAndMaxMiB": 2560,
+      "swapMax": 0,
+      "lastObservedPeakBytes": 2068791296,
+      "finalPeak": "not retained after inactive scope",
+      "remainingOwnScopeMembers": []
+    }
+  },
+  "remaining": [
+    "Compile exact CLI harness",
+    "Run positive+negative619 public fixtures and host_control regressions",
+    "Build immutable exact-source client candidate",
+    "Actual candidate-backed metadata reconciliation",
+    "No install, default switch, sharedhost restart or native input authorized by this source packet"
+  ],
+  "cumulativeSeconds": 5486.532,
+  "successfulQualification": {
+    "compiledSource": "40a58ff97cc4344bc151a96721ba540e653e5df3",
+    "behaviourSource": "63eaaebd988ef200c7538a25e5eb9af38cbf3837",
+    "setupCommand": "cargo test -p agent-browser --bin agent-browser terminal_request619 --no-run --config profile.test.package.agent-browser.debug=0",
+    "setupSeconds": 195.119,
+    "setupResult": "PASS exit0/no diagnostics",
+    "profile": "CLI test debug0 only; dependency debug/profile/features/toolchain unchanged; directrustc/CACHEoff/sharedwarmtarget",
+    "resources": "10GiB High=Max/noSwap,2GiBreserve,2buildjobs/1invocation,actualbefore-admission MemAvailable16470MiB; partial observedpeak6787796992B/eventsall0",
+    "testExecutableSha256": "5d4aad4d491d39e1168ecaec8779423f83cf58ad44546937c02af7818d73e1ca",
+    "testEnvironment": {
+      "RUST_MIN_STACK": 16777216,
+      "testThreads": 1
+    },
+    "listedFocused": 2,
+    "focusedPassed": 2,
+    "focusedSeconds": 1.069,
+    "listedHostControl": 37,
+    "hostControlPassed": 37,
+    "hostControlSeconds": 9.301,
+    "overlap": "37group includes the2new619 fixtures; not39unique",
+    "negativeGuards": [
+      "pending",
+      "native_input",
+      "missing completion",
+      "wrong epoch",
+      "changed target",
+      "active flight"
+    ],
+    "remaining": "exact regular client candidate and original-consumer metadata reconciliation; no install/runtime claim",
+    "postTestChanges": "Mandatory user-facing README/skill/MDX/CLIhelp plus inline docs only; no control/test behavior changed"
+  },
+  "cumulativeSecondsIncludingSuccess": 5692.021,
+  "callerTaskBindingRepair": {
+    "base": "6851a75a43e79323945150f47a96e689c2a52ed2",
+    "finding": "Root adjudicated blocking: a peer task on samebrowser could borrow originaltask producerproof and freshlyobserve wrongtarget",
+    "publicRegression": "terminal_request619_public_peer_task_cannot_clear_original_completed_click",
+    "redCompileSeconds": 72.302,
+    "redTestSeconds": 0.366,
+    "redResult": "FAILED as expected; publicsuccess onpeer incorrectlyclearedoriginalpending outcome",
+    "retainedCompileFailure": {
+      "seconds": 26.152,
+      "reason": "Two existing native legacy fixtures needed the new internal caller-task argument; assertions unchanged"
+    },
+    "fix": "Thread caller taskId through MCP preflight and atomiccommit; original.task_id must equalcaller for live-supervisor exception; legacy dispatcherexit/PIDreuse path unchanged",
+    "greenCompileSeconds": 67.582,
+    "greenFocusedPassed": 3,
+    "greenFocusedSeconds": 1.268,
+    "greenHostControlPassed": 38,
+    "greenHostControlSeconds": 15.186,
+    "overlap": "38 includes3; not41unique",
+    "unitExecutableSha256": "e6f3e6694f4e04a41a7008aed2798a91d96da2935fcd17c8181dcd539e54a4b4",
+    "environment": "RUST_MIN_STACK16777216; testthreads1; exactlistednonzerofilters",
+    "postTestChanges": "Existing nativelegacyfixture file unrelated formatter churn reverted; only two caller arguments differ frombase, assertions/behaviorunchanged",
+    "remaining": "New regularclient candidate/fullworkflowtransport closure and actualoriginalconsumer metadataacceptance"
+  }
+}

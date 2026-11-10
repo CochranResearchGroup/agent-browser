@@ -1,12 +1,20 @@
+## Terminal request619 source qualification | 2026-11-10
+
+[619 packet](docs/dev/maintenance/terminal-request619.md) retains all failed
+qualification attempts. After materially adequate memory became available, the
+same source compiled in195.119s. Exact built public fixtures pass2/2; the existing
+host_control group passes37/37 including those2. Runtime reconciliation remains
+separate and unexecuted; no installed default or shared supervisor changed.
+
 ## Terminal control reconciliation611 | 2026-11-09
 
-[611 packet](docs/dev/maintenance/terminal-control-reconcile611.md): c2a87186
-candidate source/artifact gates passed and the coordinator adopted it. One actual
-reconciliation returned only a generic wrapper refusal; its typed reason is lost.
-A separate exact-release fixture proves routine activity publication falsely
-changes full-record equality. Stable identity repair with target/process/epoch
-race checks is now in focused qualification. No worker live replay/control/input;
-source qualification and a sealed successor precede parent-owned acceptance.
+[611 packet](docs/dev/maintenance/terminal-control-reconcile611.md) and its
+[validation receipt](docs/dev/maintenance/terminal-control-reconcile611-validation.json):
+stable identity source a5fcfd3b7 and sealed binary a6793b20 pass focused source,
+actual release activity/race, custody, isolated installer and no-launch gates.
+Parent owns preserving adoption and actual acceptance. The previous actual typed
+refusal was not recovered; its separately reproduced activity defect is repaired.
+No worker live reconciliation/control/input or extra broad review occurred.
 
 ## Native deterministic saved login596 | 2026-11-09
 
@@ -468,3 +476,13 @@ the real endpoint-unavailable error before fallback and passed afterward.
 Final lookup counterexamples and existing wrong-PID attachment regression remain
 pending at this checkpoint. Verified attachment is unchanged; only explicit
 metadata discovery input changes after exact profile/process qualification.
+
+## Native login #596 coverage regression — 2026-11-09
+
+The [SDK coverage successor](docs/dev/maintenance/native-login596-coverage.md)
+reproduced a chooser below the default 694-row capture at the public client seam.
+Bounded overlapping tiles and fresh selected-tile recapture pass focused guards;
+source qualification is in progress. Earlier uncertain live input has not been
+attributed, replayed or reset. No runtime adoption or live effects in this slice.
+
+- [Native login outline repair621](docs/dev/maintenance/native-login-outlines621.md) — source-only same-widget perception qualification; runtime acceptance remains separate.

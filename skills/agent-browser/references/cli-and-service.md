@@ -4632,6 +4632,8 @@ Use native_input loginTarget with observationRequestId, opaque targetRef and the
 original episodeId. The owner derives the OS click and fences current Native
 window, geometry, control and pixels. Never supply coordinates or mix raw actions.
 
+Nested field outlines normalize only with bounded edge drift and either uninterrupted shared boundary ink or a compact connected flat interior corroborated by shared fill bands. Disconnected or distinct overlapping controls and conflicting kinds/accounts retain ambiguity. The detector retains an existing opaque target; conflicting value or mask evidence becomes unverified, never a masked-password assertion.
+
 The native-saved-login client exports createNativeSavedLoginClient with callTool,
 a serialized durable store, verifyAccess and expectedAccount. resolve takes taskId
 and original episodeId. It retains60seconds/three clicks across interruptions;
@@ -4671,3 +4673,30 @@ unsaved state. Never silently replace a named profile or send a replacement link
 Software uses `service_remote_view_handoff_resolve` with `handoffOperation=reopen`;
 use `reopen_with_new_profile` only after that explicit choice. The request and
 choice survive retries; renewed assistance pauses cooperative automation.
+
+## Handoff creator context
+
+Creation requires `serviceName`, `agentName`, concrete `taskName`. CLI: `--service-name`, `--agent-name`, `--task-name`; `remote-view open` requires `--origin-kind agent`. MCP sets agent origin; service requests set params.originKind. Labels are immutable attribution, not authenticated identity. Never infer `humanName` or replace labels with polling/job IDs.
+
+## Hosted workflow catalog and recovery
+
+Reuse Bots' browser/task. Before attachment, sharing or takeover, read [host integration v1](references/host-integration.md). Discover schemas; visibility proves neither account nor control. Shared skill publication needs explicit approval.
+
+Terminal DOM click reconciliation may use the owner's terminal flight plus an
+existing exact producer completion record while a shared supervisor stays alive.
+Use the original request and current task/epoch with `browser_control reconcile`;
+fresh process/target checks still apply. Missing provenance, pending requests and
+unknown native/private input keep the existing dispatcher-exit guard. Never replay.
+
+Tools: `browser_open`, `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`, `browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_reconnect`, `browser_retention`, `browser_policy`, `browser_artifact`, `browser_command`, `browser_discover`.
+Page actions require `taskId`. `browser_tab` manages this task's tabs; retry creation
+with the same `tabKey`. After restart, creation rejoins the verified browser
+and preserves tabs; peer tabs remain outside scope. Discover actions with `browser_discover`; use `browser_command` with `taskId`, `action`, `params`.
+Close rejects changed selection. A pre-commit return failure keeps human control
+and epoch; inspect status and use a explicit intent, never replay uncertainty.
+
+Read [retained workflow transport](references/cli-and-service.md#retained-workflow-transport)
+before downloads, stale transport recovery, retirement or advanced administration.
+
+Return, store, and reopen only `handoffUrl` (standalone: `/remote-view/<handoff-id>`).
+Never send providerExternalUrl or raw Guacamole URLs.

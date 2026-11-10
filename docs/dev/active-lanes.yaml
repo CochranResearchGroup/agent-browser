@@ -17,6 +17,22 @@ lanes:
     reconciled_overlaps: ["613 owns closed-link presentation and explicit reconstruction;607 mode relaunch and611 terminal requests retain their physical checkouts; shared host integration is serial"]
     validation_status: PR616 source qualified at20b8a39cf;207 handoff,27 control,7 presentation cases plus419 model tests, strict Rust gates, UI/client/docs/tooling and six exact-binary no-launch smokes pass; original installed acceptance pending
     limitations: ["Runtime adoption must preserve installed unmerged source d26086895fe18871e946fcf6fdfffac3a020e847; no production install or original task recreation", "Human-control warning remains a separate report"]
+    updated_at: 2026-11-10
+  - id: NATIVE-LOGIN-596-COVERAGE
+    product_lane: PL-AUTH
+    objective: Cover complete login windows through bounded fresh SDK tile observations
+    plan: docs/dev/maintenance/native-login596-coverage.md
+    branch: fix/native-login596-coverage
+    target: fix/terminal-control-reconcile611
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#596]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [TERMINAL-CONTROL-611]
+    overlaps: [NATIVE-SAVED-LOGIN-596, TERMINAL-CONTROL-611]
+    reconciled_overlaps: ["Explicit successor SDK coverage repair; predecessor sealed artifacts and live episodes unchanged"]
+    validation_status: SDK lower-window and adverse guards, CheckJS, service-client, docs and exact-lane planning gates pass; installed acceptance pending
+    limitations: ["Source only; no install or live input", "Actual saved-login acceptance remains open"]
     updated_at: 2026-11-09
   - id: OPERATOR-MODE-RELAUNCH-607
     product_lane: PL-BUGFIX
@@ -47,7 +63,7 @@ lanes:
     dependencies: [NATIVE-SAVED-LOGIN-596]
     overlaps: [NATIVE-SAVED-LOGIN-596]
     reconciled_overlaps: ["Primary611 owns control and shared docs; auxiliary610 owns mcp CLI branch and tests; original596 sealed source retained unchanged"]
-    validation_status: Separate exactrelease activity RED confirmed; stableidentity public6 and pinnedcontrol35 CLI1 metadata1 fmt strictClippy pass; one sealed successor next
+    validation_status: Sourcea5fcfd3b7 and sealeda6793b20 exactrelease activity+races and custody+nolaunch pass; all37 focused and strictRust pass; parent owns installed acceptance
     limitations: ["No runtime control or input", "Actual Overleaf104 acceptance remains separate"]
     updated_at: 2026-11-09
   - id: NATIVE-SAVED-LOGIN-596
@@ -1843,3 +1859,33 @@ lanes:
     validation_status: Composed main588 passes fmt strict Clippy and267 stream cases plus5 children; auth CLI and source-free installer fixture pass; production-shaped artifact and installed auth acceptance pass
     limitations: ["Private runtime receipt retains instance details; no full-project or producer-pixel acceptance claim", "Retain sealed candidate custody; review2026-11-09"]
     updated_at: 2026-11-08
+  - id: TERMINAL-REQUEST-619
+    product_lane: PL-BUGFIX
+    objective: Reconcile completed DOM requests owned by a live shared dispatcher without replay
+    plan: docs/dev/maintenance/terminal-request619.md
+    branch: fix/terminal-request619
+    target: fix/native-login596-coverage
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#619]
+    plan_state: CLOSED
+    custody_state: RETAINED_REF
+    dependencies: [NATIVE-LOGIN-596-COVERAGE]
+    overlaps: [NATIVE-LOGIN-596-COVERAGE]
+    reconciled_overlaps: ["619 owns control reconciliation only;615 source remains unchanged; no runtime install"]
+    updated_at: 2026-11-10
+  - id: NATIVE-LOGIN-OUTLINES-621
+    product_lane: PL-BUGFIX
+    objective: Canonicalize proven same-widget native login outlines without merging distinct controls
+    plan: docs/dev/maintenance/native-login-outlines621.md
+    branch: fix/native-login-outlines621
+    target: fix/terminal-request619
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#621]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [TERMINAL-REQUEST-619]
+    overlaps: [NATIVE-SAVED-LOGIN-596, TERMINAL-REQUEST-619]
+    reconciled_overlaps: ["Reuse former619 clean primary after installed acceptance;621 owns perception/corpus and shared behavior docs; retain619sealed0e95f60c47300425c2ddafb1d3e1646c unchanged; review2026-11-17; other checkouts and SDK pins untouched"]
+    validation_status: Public22 perception guards, offline private field disambiguation and final strict clippy/format/docs/planning pass; installed qualification pending
+    limitations: ["Source qualification only; no runtime capture/input or budget changes"]
+    updated_at: 2026-11-10

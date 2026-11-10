@@ -14,7 +14,8 @@ Build failures: [readiness guidance](references/cli-and-service.md#build-readine
 
 ## Handoff creator context
 
-Creation requires `serviceName`, `agentName`, concrete `taskName`. CLI: `--service-name`, `--agent-name`, `--task-name`; `remote-view open` requires `--origin-kind agent`. MCP sets agent origin; service requests set params.originKind. Labels are immutable attribution, not authenticated identity. Never infer `humanName` or replace labels with polling/job IDs.
+Creation requires immutable `serviceName`, `agentName` and concrete `taskName`.
+They are attribution, not authenticated identity. Read [creator context](references/cli-and-service.md#handoff-creator-context).
 
 ## MCP task workflow
 
@@ -33,7 +34,9 @@ A retained handoff may finish its original settled browser-close publication bef
 
 After human input, use Give control back in the viewer, then `browser_continue` with the same `taskId` reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff.
 
-Saved login: use [native login controls](references/cli-and-service.md#native-login-controls) with the retained episode; no password export or input replay.
+Nested login outlines require same-frame boundary or bounded connected-field proof; conflicting mask/value evidence stays unverified. Distinct controls retain ambiguity.
+
+Saved login: use [native login controls](references/cli-and-service.md#native-login-controls) with the retained episode; no password export or input replay. The SDK tiles oversized windows under the owner pixel limit and freshly recaptures its chosen region; it never stitches input evidence or extends the episode.
 
 ## Standalone authentication
 
@@ -54,20 +57,13 @@ attempts on their original requests; never replay private use.
 
 ## Hosted workflow guidance v1
 
-Reuse Bots' browser/task. Before attachment, sharing or takeover, read [host integration v1](references/host-integration.md). Discover schemas; visibility proves neither account nor control. Shared skill publication needs explicit approval.
-
-Tools: `browser_open`, `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`, `browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_reconnect`, `browser_retention`, `browser_policy`, `browser_artifact`, `browser_command`, `browser_discover`.
-Page actions require `taskId`. `browser_tab` manages this task's tabs; retry creation
-with the same `tabKey`. After restart, creation rejoins the verified browser
-and preserves tabs; peer tabs remain outside scope. Discover actions with `browser_discover`; use `browser_command` with `taskId`, `action`, `params`.
-Close rejects changed selection. A pre-commit return failure keeps human control
-and epoch; inspect status and use a explicit intent, never replay uncertainty.
-
-Read [retained workflow transport](references/cli-and-service.md#retained-workflow-transport)
-before downloads, stale transport recovery, retirement or advanced administration.
-
-Return, store, and reopen only `handoffUrl` (standalone: `/remote-view/<handoff-id>`).
+Read [host integration](references/host-integration.md) before placement,
+attachment, sharing or takeover. Preserve existing task ownership. Discover
+runtime schemas; visible pixels do not prove account or input ownership.
+For advanced operations and recovery, read [workflow transport](references/cli-and-service.md#retained-workflow-transport).
+Return, store, and reopen only `handoffUrl`, the opaque `/remote-view/<handoff-id>` URL.
 Never send providerExternalUrl or raw Guacamole URLs.
+Page actions require `taskId`; retries keep the same task and request identity.
 
 ## Operator workspace
 
@@ -115,12 +111,10 @@ Discover `category:"playbooks"` and use `browser_command` in the existing task. 
 
 ## References
 
-Preserve peers and original task IDs during recovery.
-[Commands](references/commands.md), [snapshots](references/snapshot-refs.md),
-[authentication](references/authentication.md), [sessions](references/session-management.md).
-Discover advanced operations with `browser_discover`.
-
-Sign-in and teaching: [workspace tools](references/workspace-sign-in.md); viewer failures: [diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics).
+Preserve peers and original task IDs during recovery. Discover advanced
+operations with `browser_discover`. Read [commands](references/commands.md),
+[authentication](references/authentication.md), [sessions](references/session-management.md)
+and [diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics).
 
 ## Additional operations
 
@@ -128,3 +122,7 @@ For an operator-requested fresh start, [runtime reset](references/cli-and-servic
 ends production tasks and unsaved pages. Read its preview and recovery procedure before applying it.
 Read [builds, modes, teaching and owner waits](references/cli-and-service.md#browser-mode-and-builds)
 before those operations. Copies do not prove login; never replay pending or uncertain input.
+
+Public task tools: `browser_snapshot`, `browser_screenshot`, `browser_click`,
+`browser_fill`, `browser_navigate`, `browser_tab`, `browser_retention`,
+`browser_reconnect`, `browser_policy`, `browser_artifact`.

@@ -7432,6 +7432,8 @@ Commands:
   Native policy: verified CDP origin/provider required; CDP-free uses human assistance
   Native return: original opaque handoff, explicit takeover/return, separate access checks
   browser-mode TASK Inspect mode
+  Saved-login SDK: bounded overlapping window tiles, fresh selected region; same original budget.
+  Native field outlines: pixel-proven duplicates only; conflicting mask/value stays unverified.
   Native saved login: capture loginControls english-chrome-v1; select opaque loginTarget
   Native login episode: same task/episode;60 seconds/3 clicks; unknown input never replays
   Native login proof: no password/OCR/image export; independent account verification required
@@ -7469,6 +7471,7 @@ Commands:
     Fullscreen Native handoffs offer a top-row CDP on/off control with relaunch review
   watch-host-task TASK Changed NDJSON; fresh reconnect
   host-control      Reconcile terminal uncertainty on the exact owned task; never replay.
+  Completed DOM clicks may use exact owner-terminal producer provenance with a live shared supervisor; native/private input keeps its dispatcher-exit guard.
   Native saved login uses journaled MCP browser_command; convenience CLI refuses login controls/targets.
   host-reconnect TASK OP [options-json] Status/disconnect/reconnect/rebind/configure/reopen
   host-policy JSON  App/task rules and scoped override
