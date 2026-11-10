@@ -33,3 +33,17 @@ Validation: rustfmt and diff hygiene pass. Rust compile/public fixture execution
 and strict integration checks are PENDING: workstation memory pressure with full
 swap prevents the governed Cargo resource admission. No GREEN, installable or
 live-qualified claim is made. Parent owns runtime adoption and final validation.
+
+## Bounded validation outcome
+
+The resource-constrained attempt is retained in
+[validation receipt](terminal-request619-validation.json). First metadata stage
+failed on an unrelated baseline integration-harness module omission. Corrected
+CLI-only test compilation reached the original900-second deadline with zero
+source diagnostics, zero executed tests and no qualified executable. This is
+incomplete validation, not a pass. Both stages used one job, existing shared warm
+target and hard2GiB/no-swap scope. First stage soft limit was raised to its unchanged
+hard cap after measured soft-reclaim; second used equal soft/hard2GiB throughout.
+The own timed-out scope is inactive and a fresh process census found no members.
+No runtime adoption, native input or sharedhost change occurred. Do not close619
+or104 from this checkpoint. Resume only the required missing qualification.

@@ -1,0 +1,50 @@
+{
+  "source": "63eaaebd988ef200c7538a25e5eb9af38cbf3837",
+  "scope": "source custody only; not qualified/installable",
+  "red": "Actual public retained click reconcile returned browser_control_dispatch_still_in_flight; primary private receipt retained outsideGit",
+  "stages": [
+    {
+      "command": "cargo check -p agent-browser --tests",
+      "result": "FAILED exit101",
+      "seconds": 847.683,
+      "reason": "Unrelated remote_view_native_control integration harness missing native_login_perception module;4E0433",
+      "tests": 0
+    },
+    {
+      "command": "cargo test -p agent-browser --bin agent-browser terminal_request619 --no-run",
+      "result": "TIMED_OUT",
+      "seconds": 900.595,
+      "diagnostics": 0,
+      "tests": 0,
+      "exclusion": "baseline broken integration harness excluded; selected CLI unit harness only"
+    }
+  ],
+  "resources": {
+    "jobs": 1,
+    "concurrent": 1,
+    "memoryClaimGiB": 2,
+    "hostReserveGiB": 2,
+    "hardMemoryMaxGiB": 2,
+    "swapMax": 0,
+    "firstSoftHighMiB": 1536,
+    "adjustedSoftHighGiB": 2,
+    "adjustment": "Exact own first stage unit only, existing hardcap unchanged; coordinator directed after151351softHighevents",
+    "secondSoftHighGiB": 2,
+    "lastObservedSecondPeakBytes": 2109829120,
+    "lastObservedSecondEvents": {
+      "high": 0,
+      "max": 0,
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "finalPeak": "not retained after inactive scope; observed partial peak only",
+    "cleanup": "fresh /proc cgroup census empty; exact second unit inactive"
+  },
+  "remaining": [
+    "Compile exact CLI harness",
+    "Run positive+negative619 public fixtures and host_control regressions",
+    "Build immutable exact-source client candidate",
+    "Actual candidate-backed metadata reconciliation",
+    "No install, default switch, sharedhost restart or native input authorized by this source packet"
+  ]
+}
