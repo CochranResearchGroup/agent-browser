@@ -865,6 +865,11 @@ impl ManagedBrowserCommandEffects for Process {
         session_name: &str,
         command: &Value,
     ) -> Result<Value, String> {
+        // Match the installed dispatcher failure observed on the reopen path;
+        // legacy direct-host fixtures below do not model runtime dispatch.
+        if command["action"] == "get_url" && command.get("resumeHandoffId").is_some() {
+            return Ok(serde_json::json!({"success":false,"error":"Not yet implemented: get_url"}));
+        }
         if command.get("hostControlReopen").is_some() {
             let state = open_store(&self.root, false).load_session_state().unwrap();
             super::browser_host_control::check_state(&state, session_name, command)?;

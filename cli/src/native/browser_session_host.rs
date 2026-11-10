@@ -3656,7 +3656,7 @@ where
         addressed["action"] = serde_json::json!(if command.get("url").is_some() {
             "navigate"
         } else {
-            "get_url"
+            "url"
         });
         if optional_string(command, "resumeHandoffId").is_some_and(|id| {
             self.state

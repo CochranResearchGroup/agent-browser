@@ -47,7 +47,7 @@ fn validate<'a>(state: &'a BrowserSessionState, command: &Value) -> Result<&'a s
         || tab.id == link.tab_id
         || browser.profile_id != task.profile_id
         || browser.desktop.is_none()
-        || (command["action"] != "navigate" && command["action"] != "get_url")
+        || (command["action"] != "navigate" && command["action"] != "url")
         || command["url"] != json!(intent.url)
         || (command["action"] == "navigate") != intent.url.is_some()
     {

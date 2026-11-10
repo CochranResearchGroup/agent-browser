@@ -11581,6 +11581,16 @@ fn closed_handoff_reopens_in_shared_browser_preserving_peer_and_its_own_human_ho
             .unwrap();
         let launches = calls.get();
         drop(consumer);
+        let mut retained = fixture.store(false).load_session_state().unwrap();
+        retained
+            .remote_view_tab_handoffs
+            .get_mut(&id)
+            .unwrap()
+            .resume
+            .as_mut()
+            .unwrap()
+            .url = None;
+        fixture.store(false).save_session_state(&retained).unwrap();
         let mut consumer = host(&fixture, provider, calls.clone());
         let before_reopen = consumer.state().clone();
         let reopened = consumer.handle_command(&serde_json::json!({
