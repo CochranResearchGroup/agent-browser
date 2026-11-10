@@ -175,5 +175,28 @@
     "remaining": "exact regular client candidate and original-consumer metadata reconciliation; no install/runtime claim",
     "postTestChanges": "Mandatory user-facing README/skill/MDX/CLIhelp plus inline docs only; no control/test behavior changed"
   },
-  "cumulativeSecondsIncludingSuccess": 5692.021
+  "cumulativeSecondsIncludingSuccess": 5692.021,
+  "callerTaskBindingRepair": {
+    "base": "6851a75a43e79323945150f47a96e689c2a52ed2",
+    "finding": "Root adjudicated blocking: a peer task on samebrowser could borrow originaltask producerproof and freshlyobserve wrongtarget",
+    "publicRegression": "terminal_request619_public_peer_task_cannot_clear_original_completed_click",
+    "redCompileSeconds": 72.302,
+    "redTestSeconds": 0.366,
+    "redResult": "FAILED as expected; publicsuccess onpeer incorrectlyclearedoriginalpending outcome",
+    "retainedCompileFailure": {
+      "seconds": 26.152,
+      "reason": "Two existing native legacy fixtures needed the new internal caller-task argument; assertions unchanged"
+    },
+    "fix": "Thread caller taskId through MCP preflight and atomiccommit; original.task_id must equalcaller for live-supervisor exception; legacy dispatcherexit/PIDreuse path unchanged",
+    "greenCompileSeconds": 67.582,
+    "greenFocusedPassed": 3,
+    "greenFocusedSeconds": 1.268,
+    "greenHostControlPassed": 38,
+    "greenHostControlSeconds": 15.186,
+    "overlap": "38 includes3; not41unique",
+    "unitExecutableSha256": "e6f3e6694f4e04a41a7008aed2798a91d96da2935fcd17c8181dcd539e54a4b4",
+    "environment": "RUST_MIN_STACK16777216; testthreads1; exactlistednonzerofilters",
+    "postTestChanges": "Existing nativelegacyfixture file unrelated formatter churn reverted; only two caller arguments differ frombase, assertions/behaviorunchanged",
+    "remaining": "New regularclient candidate/fullworkflowtransport closure and actualoriginalconsumer metadataacceptance"
+  }
 }

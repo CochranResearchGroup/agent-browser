@@ -119,3 +119,23 @@ post-test Rust differences are an inline comment and help string only. Control
 and test behavior remain the qualified63eaaebd9 implementation. Candidate-backed
 actual reconciliation and broader integration gates remain separate. No default
 binary/shared supervisor or original recovery/input history was changed.
+
+## Caller-task binding correction
+
+Primary adjudicated one bounded delivery finding: another task in the same
+browser could borrow the original task's completion proof and freshly observe
+its own peer target. One public refusal regression failed before repair: the
+wrong peer task cleared the original pending outcome. The fix threads the
+addressed caller task through both admission and atomic commit and requires
+that the existing producer record belongs to that caller for the live-supervisor
+exception. Legacy dispatcher-exit/PID-reuse semantics are unchanged.
+
+The regression is GREEN after repair. Exact listed619 fixtures pass3/3 in1.268s;
+the host_control group passes38/38 in15.186s including those3. Green compile67.582s,
+public RED0.366s and the first compile's two missing internal fixture arguments
+are retained in the validation receipt. The exact unit harness digest is
+`e6f3e6694f4e04a41a7008aed2798a91d96da2935fcd17c8181dcd539e54a4b4`.
+No required assertion was weakened. Old6851 bareELF only had launch-free/ELF
+checks; it is not full workflow-transport qualification. New regular candidate,
+complete workflow assets/transport closure and actual acceptance remain pending.
+No runtime/default/daemon changes or final Overleaf106 review pass occurred.

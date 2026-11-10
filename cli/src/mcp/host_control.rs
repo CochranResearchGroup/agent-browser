@@ -50,7 +50,7 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
             .map(|tab| tab.target_id.clone());
         let reconcile_process = if operation == "reconcile" {
             let request_id = required_string_argument(arguments, "requestId")?;
-            control::check_reconcile(&browser_id, expected, request_id).map_err(issue)?;
+            control::check_reconcile(&browser_id, task_id, expected, request_id).map_err(issue)?;
             Some(current_process(&store, &state, task)?)
         } else {
             None
@@ -151,6 +151,7 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
                 }
                 control::reconcile(
                     &browser_id,
+                    task_id,
                     epoch,
                     required_string_argument(arguments, "requestId")?,
                     actor,
