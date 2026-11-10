@@ -56,3 +56,13 @@ code generation, but timed out at608.218seconds including termination after its
 600-second deadline. It emitted no diagnostics and ran zero tests. No candidate
 was qualified. Prior failures, refusal and cumulative cost remain in the receipt.
 No further compile attempts or runtime changes were made.
+
+The final cheaper strategy disabled only CLI package test debug symbols and
+sccache, preserving Cargo objects and dependency profiles. Actual compiler argv
+confirmed direct CLI rustc without debuginfo2 and all dependencies reused.
+It timed out at600.158seconds, with zero diagnostics/tests and no executable.
+The hard2.5GiB cap was reached with436812 observed memory-max reclaim events;
+there was no observed OOM. This establishes a concrete constrained working-set
+gate, not a source pass or unexplained cache wait. All further compile stages
+stopped; an exact owned-scope census found no remaining members. No runtime
+metadata reconciliation was attempted from unqualified source.

@@ -34,6 +34,26 @@
       "tests": 0,
       "phase": "CLI main.rs --test rustc codegen, initial cache startup delay resolved; no observed mold phase",
       "source": "a4bbcd92ce0f80c7d3f38226c3185a9e03f2e3ac; Rust same63"
+    },
+    {
+      "command": "cargo test -p agent-browser --bin agent-browser terminal_request619 --no-run --config profile.test.package.agent-browser.debug=0",
+      "result": "TIMED_OUT",
+      "seconds": 600.158,
+      "deadlineSecondsIncludingAdmissionWait": 600,
+      "diagnostics": 0,
+      "tests": 0,
+      "source": "2ab1c36b40e600d0453f4fb5002dfbf1c4c50bb2; Rust unchanged63",
+      "profileDifference": "Only CLI package debug symbols disabled; dependencies retain normal profile and reused",
+      "cacheDifference": "sccacheoff, RUSTC_WRAPPERunset; directrustc inside hardcapped scope; Cargo objectcache preserved",
+      "phase": "CLI test rustc; no completed executable",
+      "resourceEvidence": {
+        "HighAndMaxMiB": 2560,
+        "swapMax": 0,
+        "observedPeakBytes": 2684354560,
+        "maxEvents": 436812,
+        "observedOom": 0,
+        "remainingOwnScopeMembers": []
+      }
     }
   ],
   "resources": {
@@ -75,5 +95,5 @@
     "Actual candidate-backed metadata reconciliation",
     "No install, default switch, sharedhost restart or native input authorized by this source packet"
   ],
-  "cumulativeSeconds": 2356.612
+  "cumulativeSeconds": 2956.77
 }
