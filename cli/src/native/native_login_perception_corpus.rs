@@ -362,3 +362,157 @@ fn native_login_perception_nested_outlines621_never_promotes_conflicting_mask_ev
     assert_eq!(result["controls"].as_array().unwrap().len(), 1);
     assert_eq!(result["controls"][0]["fieldValueState"], "unverified");
 }
+
+fn rounded_layout621(fields: &[(u32, u32)], lines: Value) -> Value {
+    let mut image = RgbaImage::from_pixel(800, 600, Rgba([255, 255, 255, 255]));
+    image.put_pixel(0, 0, Rgba([211, 227, 253, 255]));
+    let inside = |x: u32, y: u32, left: u32, top: u32, w: u32, h: u32, r: u32| {
+        if x < left || y < top || x >= left + w || y >= top + h {
+            return false;
+        }
+        let dx = (left + r)
+            .saturating_sub(x)
+            .max(x.saturating_sub(left + w - 1 - r));
+        let dy = (top + r)
+            .saturating_sub(y)
+            .max(y.saturating_sub(top + h - 1 - r));
+        dx * dx + dy * dy <= r * r
+    };
+    // Paint all interiors before all strokes so an overlap fixture retains both
+    // distinct physical outlines instead of erasing the first widget's evidence.
+    for stroke in [false, true] {
+        for &(left, top) in fields {
+            for y in top..top + 52 {
+                for x in left..left + 360 {
+                    let outer = inside(x, y, left, top, 360, 52, 9);
+                    let inner = inside(x, y, left + 1, top + 1, 358, 50, 8);
+                    if (!stroke && inner) || (stroke && outer && !inner) {
+                        image.put_pixel(
+                            x,
+                            y,
+                            if stroke {
+                                Rgba([38, 38, 38, 255])
+                            } else {
+                                Rgba([232, 240, 254, 255])
+                            },
+                        );
+                    }
+                }
+            }
+        }
+    }
+    let mut png = Cursor::new(vec![]);
+    image.write_to(&mut png, image::ImageFormat::Png).unwrap();
+    let mut capture = corpus_capture(&[], lines);
+    capture["capture"]["sha256"] = json!(hex(png.get_ref()));
+    capture["image"]["data"] =
+        json!(base64::engine::general_purpose::STANDARD.encode(png.get_ref()));
+    capture
+}
+fn rounded_capture621() -> Value {
+    rounded_layout621(
+        &[(100, 150), (100, 250)],
+        json!([
+            line("Email", 100, 120, 100),
+            line("Password", 100, 220, 100)
+        ]),
+    )
+}
+
+#[test]
+fn native_login_perception_nested_outlines621_rounded_filled_fields() {
+    let result = detect(&rounded_capture621(), None);
+    assert_eq!(result["status"], "observed", "{result}");
+    assert_eq!(result["controls"].as_array().unwrap().len(), 2);
+    assert_eq!(result["controls"][0]["kind"], "username");
+    assert_eq!(result["controls"][1]["kind"], "password");
+}
+
+#[test]
+fn native_login_perception_nested_outlines621_filled_distinct_and_shared_boundaries() {
+    for (fields, labels) in [
+        (
+            vec![(100, 150), (104, 154)],
+            json!([line("Email", 100, 120, 100)]),
+        ),
+        (
+            vec![(100, 150), (100, 201)],
+            json!([
+                line("Email", 100, 120, 100),
+                line("Username", 100, 171, 100)
+            ]),
+        ),
+        (
+            vec![(100, 150), (100, 204)],
+            json!([
+                line("Email", 100, 120, 100),
+                line("Username", 100, 174, 100)
+            ]),
+        ),
+    ] {
+        let result = detect(&rounded_layout621(&fields, labels), None);
+        assert_eq!(result["status"], "ambiguous", "{fields:?}: {result}");
+        assert!(result["controls"].as_array().unwrap().len() >= 2);
+    }
+    // A touching same-fill bridge is unsupported, even though the nearby
+    // rectangle edges and their shared fill colors otherwise look compatible.
+    let mut capture = rounded_capture621();
+    let png = base64::engine::general_purpose::STANDARD
+        .decode(capture["image"]["data"].as_str().unwrap())
+        .unwrap();
+    let mut image = image::load_from_memory(&png).unwrap().to_rgba8();
+    for y in 195..260 {
+        for x in 248..252 {
+            image.put_pixel(x, y, Rgba([232, 240, 254, 255]));
+        }
+    }
+    let mut png = Cursor::new(vec![]);
+    image.write_to(&mut png, image::ImageFormat::Png).unwrap();
+    capture["capture"]["sha256"] = json!(hex(png.get_ref()));
+    capture["image"]["data"] =
+        json!(base64::engine::general_purpose::STANDARD.encode(png.get_ref()));
+    assert_eq!(detect(&capture, None)["status"], "ambiguous");
+}
+
+#[test]
+fn native_login_perception_nested_outlines621_center_ink_preserves_filled_form() {
+    let mut capture = rounded_capture621();
+    let png = base64::engine::general_purpose::STANDARD
+        .decode(capture["image"]["data"].as_str().unwrap())
+        .unwrap();
+    let mut image = image::load_from_memory(&png).unwrap().to_rgba8();
+    for y in 169..184 {
+        for x in 279..282 {
+            image.put_pixel(x, y, Rgba([0, 0, 0, 255]));
+        }
+    }
+    for x in 279..290 {
+        for y in 181..184 {
+            image.put_pixel(x, y, Rgba([0, 0, 0, 255]));
+        }
+    }
+    for x in [274, 280, 286] {
+        for dx in 0..4 {
+            for dy in 0..4 {
+                image.put_pixel(x + dx, 274 + dy, Rgba([0, 0, 0, 255]));
+            }
+        }
+    }
+    let mut png = Cursor::new(vec![]);
+    image.write_to(&mut png, image::ImageFormat::Png).unwrap();
+    capture["capture"]["sha256"] = json!(hex(png.get_ref()));
+    capture["image"]["data"] =
+        json!(base64::engine::general_purpose::STANDARD.encode(png.get_ref()));
+    capture["ocr"]["lines"].as_array_mut().unwrap().push(line(
+        "test@example.invalid",
+        150,
+        168,
+        150,
+    ));
+    let result = detect(&capture, Some("test@example.invalid"));
+    assert_eq!(result["status"], "observed", "{result}");
+    assert_eq!(result["controls"].as_array().unwrap().len(), 2);
+    assert_eq!(result["controls"][0]["configuredAccountMatch"], true);
+    assert_eq!(result["controls"][0]["fieldValueState"], "text_present");
+    assert_eq!(result["controls"][1]["fieldValueState"], "masked");
+}

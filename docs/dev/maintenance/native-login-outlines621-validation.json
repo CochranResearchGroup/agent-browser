@@ -1,43 +1,140 @@
 {
-  "base": "5b228641b5123103a0a9879b53cc5c0c2ef5503d",
-  "branch": "fix/native-login-outlines621",
-  "sourceHashes": {
-    "cli/src/native/native_login_perception.rs": "7b7ab453a26992f0519c3f6699c3d21e5722f7c12c6d9322502ccd6502b493ec",
-    "cli/src/native/native_login_perception_corpus.rs": "7c38b2d3ba9c25f3952b694b0d19930e8a81dfdb62562a1cfc4c7db014303f6c"
+  "initialCheckpoint": {
+    "base": "5b228641b5123103a0a9879b53cc5c0c2ef5503d",
+    "branch": "fix/native-login-outlines621",
+    "sourceHashes": {
+      "cli/src/native/native_login_perception.rs": "7b7ab453a26992f0519c3f6699c3d21e5722f7c12c6d9322502ccd6502b493ec",
+      "cli/src/native/native_login_perception_corpus.rs": "7c38b2d3ba9c25f3952b694b0d19930e8a81dfdb62562a1cfc4c7db014303f6c"
+    },
+    "unitSha256": "4b57ab2c9db050830c142ec7c1ce3aa7e614c745815f813bf7f5a74f4d535f40",
+    "red": {
+      "compileJob": "job-20261110T083956Z-e2fd24b8a13b",
+      "compileSeconds": 76.17,
+      "testJob": "job-20261110T084122Z-dd5ffac56c27",
+      "failed": 1,
+      "seconds": 0.266,
+      "oracle": "five contiguous widget contours projected ambiguous; expected observed"
+    },
+    "green": {
+      "compileJob": "job-20261110T084316Z-60b2f2da2f44",
+      "compileSeconds": 91.016,
+      "testJob": "job-20261110T084456Z-e5d57c84cd8e",
+      "listed": 19,
+      "passed": 19,
+      "seconds": 4.406
+    },
+    "clippy": {
+      "job": "job-20261110T084549Z-4f8d1ef293a8",
+      "passed": true,
+      "seconds": 153.569,
+      "classification": "broader_source_qualification_exceeds_presubmit_wall_target"
+    },
+    "fmt": {
+      "job": "job-20261110T084841Z-6328c7160f5e",
+      "passed": true,
+      "seconds": 8.545
+    },
+    "localOther": [
+      "documentation-links PASS",
+      "policy-wiring11 PASS",
+      "exact621lane-planning PASS",
+      "diff-hygiene PASS"
+    ],
+    "qualificationBoundary": "source/public fixtures only; actual private pixels and installed behavior pending; no runtime effects"
   },
-  "unitSha256": "4b57ab2c9db050830c142ec7c1ce3aa7e614c745815f813bf7f5a74f4d535f40",
-  "red": {
-    "compileJob": "job-20261110T083956Z-e2fd24b8a13b",
-    "compileSeconds": 76.17,
-    "testJob": "job-20261110T084122Z-dd5ffac56c27",
-    "failed": 1,
-    "seconds": 0.266,
-    "oracle": "five contiguous widget contours projected ambiguous; expected observed"
-  },
-  "green": {
-    "compileJob": "job-20261110T084316Z-60b2f2da2f44",
-    "compileSeconds": 91.016,
-    "testJob": "job-20261110T084456Z-e5d57c84cd8e",
-    "listed": 19,
-    "passed": 19,
-    "seconds": 4.406
-  },
-  "clippy": {
-    "job": "job-20261110T084549Z-4f8d1ef293a8",
-    "passed": true,
-    "seconds": 153.569,
-    "classification": "broader_source_qualification_exceeds_presubmit_wall_target"
-  },
-  "fmt": {
-    "job": "job-20261110T084841Z-6328c7160f5e",
-    "passed": true,
-    "seconds": 8.545
-  },
-  "localOther": [
-    "documentation-links PASS",
-    "policy-wiring11 PASS",
-    "exact621lane-planning PASS",
-    "diff-hygiene PASS"
-  ],
-  "qualificationBoundary": "source/public fixtures only; actual private pixels and installed behavior pending; no runtime effects"
+  "roundedFilledContinuation": {
+    "sourceBaseCheckpoint": "ea2e6bc4f47144b4037dda5d9321e08720307d0b",
+    "roundedRed": {
+      "compileSeconds": 107.432,
+      "testSeconds": 0.268,
+      "job": "job-20261110T085956Z-278dcafee35f",
+      "controlCount": 12
+    },
+    "privateImageSha256": "927f3d622c0b38165ad328341d107784bff4d26908d1d73f8f0874ea55e490f0",
+    "privateOfflineOcr": {
+      "origin": "recomputed_not_original_producer_lines",
+      "engine": "Tesseract5.3.4",
+      "psm": 11,
+      "lineConfidence": "minimum_word_confidence",
+      "lineCount": 21
+    },
+    "retainedPrivateOutcomes": [
+      {
+        "stage": "initial19_source",
+        "status": "ambiguous",
+        "count": 8
+      },
+      {
+        "stage": "exact_stroke",
+        "status": "ambiguous",
+        "count": 8
+      },
+      {
+        "stage": "antialias_stroke",
+        "status": "ambiguous",
+        "count": 4
+      },
+      {
+        "stage": "bounded_filled_component",
+        "status": "observed",
+        "count": 2,
+        "seconds": 0.768
+      }
+    ],
+    "centerInkRed": {
+      "compileJob": "job-20261110T091522Z-e4b61a892144",
+      "compileSeconds": 85.363,
+      "testJob": "job-20261110T091654Z-1a92cf041d68",
+      "failed": 1,
+      "seconds": 0.718
+    },
+    "finalPublicGreen": {
+      "compileJob": "job-20261110T091749Z-7c3ada85e76e",
+      "compileSeconds": 70.809,
+      "testJob": "job-20261110T091908Z-df453c44c701",
+      "listed": 22,
+      "passed": 22,
+      "seconds": 7.786,
+      "unitSha256": "ad8dee036dfba7927a0cf8a1e83d317b32c0b24a4f7e180fd8027cfd30eff0d7"
+    },
+    "finalPrivateObserved": {
+      "job": "job-20261110T091736Z-59ee79e23f53",
+      "seconds": 0.819,
+      "status": "observed",
+      "count": 2,
+      "states": [
+        "text_present",
+        "text_present"
+      ],
+      "qualification": "offline_pixels_only_not_input_or_authentication"
+    },
+    "finalStrict": {
+      "clippy": {
+        "job": "job-20261110T092006Z-7cee04204d13",
+        "passed": true,
+        "seconds": 31.445,
+        "argv": "scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings"
+      },
+      "fmt": {
+        "job": "job-20261110T092113Z-e7413c8ae64a",
+        "passed": true,
+        "seconds": 9.154,
+        "argv": "scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check"
+      },
+      "documentationLinks": "PASS",
+      "exact621LanePlanning": "PASS",
+      "policyWiring": "11/11 PASS (unchanged policy inputs)",
+      "diffHygiene": "PASS"
+    },
+    "reuse": "only explanatory source comments and docs changed after final public compile; executable perception and assertions unchanged",
+    "finalSourceHashes": {
+      "cli/src/native/native_login_perception.rs": "0b7c21fb05ef7b03be503f79859e311cfdc68053373cb9d7657fa29b87ebe7a0",
+      "cli/src/native/native_login_perception_corpus.rs": "36d3a11595e417ccc5f8dc511a88bdec38f6c4c61a4856147e8f805b127d172e"
+    },
+    "pinsPreserved": {
+      "source619": "5b228641b5123103a0a9879b53cc5c0c2ef5503d",
+      "sealedBinarySha256": "73f04a575abcc1e1553ef6b22db0dd8acf7ec37932b887f3279bc3d37395bdd8",
+      "sealSha256": "7646affac6db048d5e661e039fd59bd246a7847e1170c5c59c3ed90024b8840a"
+    }
+  }
 }

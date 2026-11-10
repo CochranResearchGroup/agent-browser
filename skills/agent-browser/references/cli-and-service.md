@@ -4632,7 +4632,7 @@ Use native_input loginTarget with observationRequestId, opaque targetRef and the
 original episodeId. The owner derives the OS click and fences current Native
 window, geometry, control and pixels. Never supply coordinates or mix raw actions.
 
-Nested field outlines normalize only with bounded edge drift and uninterrupted same-frame boundary pixels. Disconnected or distinct overlapping controls and conflicting kinds/accounts retain ambiguity. The detector retains an existing opaque target; conflicting value or mask evidence becomes unverified, never a masked-password assertion.
+Nested field outlines normalize only with bounded edge drift and either uninterrupted shared boundary ink or a compact connected flat interior corroborated by shared fill bands. Disconnected or distinct overlapping controls and conflicting kinds/accounts retain ambiguity. The detector retains an existing opaque target; conflicting value or mask evidence becomes unverified, never a masked-password assertion.
 
 The native-saved-login client exports createNativeSavedLoginClient with callTool,
 a serialized durable store, verifyAccess and expectedAccount. resolve takes taskId

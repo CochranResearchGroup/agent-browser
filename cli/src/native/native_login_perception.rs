@@ -142,9 +142,73 @@ fn rectangles(image: &RgbaImage) -> Result<Vec<Bounds>, String> {
     }
     Ok(found)
 }
-/// Two contours describe one supported field only when all four narrow boundary
-/// bands are uninterrupted ink over their shared middle halves. Overlap alone,
-/// disconnected nested outlines and transitive chains are insufficient proof.
+/// Identify the bounded connected flat interior of one rounded field. Border
+/// antialias pixels need not share one stroke color, but the interior must not
+/// escape into a panel or a touching/shared widget. Interior glyph holes are not
+/// interpreted here and cannot establish a masked-password assertion.
+fn filled_field_component(image: &RgbaImage, b: Bounds, fill: Rgba<u8>) -> Option<(u32, u32)> {
+    if fill[3] != 255 {
+        return None;
+    }
+    // The shared boundary bands prove this top-middle sample is flat fill.
+    // Center pixels may instead be username glyphs or password bullets.
+    let (cx, cy) = (b.x + b.width / 2, b.y);
+    let seed = *image.get_pixel(cx, cy);
+    if seed[3] != 255 || !close(seed, fill) {
+        return None;
+    }
+    let left = b.x.saturating_sub(9);
+    let top = b.y.saturating_sub(9);
+    let right = (b.x + b.width + 8).min(image.width() - 1);
+    let bottom = (b.y + b.height + 8).min(image.height() - 1);
+    let width = right - left + 1;
+    let index = |x: u32, y: u32| ((y - top) * width + x - left) as usize;
+    let mut marked = vec![false; (width * (bottom - top + 1)) as usize];
+    let mut pending = vec![(cx, cy)];
+    marked[index(cx, cy)] = true;
+    let mut minimum = (cy, cx);
+    let (mut min_x, mut min_y, mut max_x, mut max_y) = (cx, cy, cx, cy);
+    let mut count = 0u32;
+    while let Some((x, y)) = pending.pop() {
+        // Reaching the local envelope cannot prove an independently bounded field.
+        if x == left || x == right || y == top || y == bottom {
+            return None;
+        }
+        count += 1;
+        minimum = minimum.min((y, x));
+        min_x = min_x.min(x);
+        min_y = min_y.min(y);
+        max_x = max_x.max(x);
+        max_y = max_y.max(y);
+        for (nx, ny) in [
+            (x.saturating_sub(1), y),
+            (x + 1, y),
+            (x, y.saturating_sub(1)),
+            (x, y + 1),
+        ] {
+            if nx >= left && nx <= right && ny >= top && ny <= bottom && !marked[index(nx, ny)] {
+                let p = *image.get_pixel(nx, ny);
+                if p[3] == 255 && close(p, fill) {
+                    marked[index(nx, ny)] = true;
+                    pending.push((nx, ny));
+                }
+            }
+        }
+    }
+    let component_width = max_x - min_x + 1;
+    let component_height = max_y - min_y + 1;
+    if component_width < b.width
+        || component_height < b.height
+        || count * 100 < component_width * component_height * 80
+    {
+        return None;
+    }
+    Some(minimum)
+}
+
+/// Shared bands must prove continuous border ink or the same bounded connected
+/// field interior. Overlap alone, disconnected outlines and transitive chains
+/// are insufficient same-widget proof.
 fn same_field_outline(image: &RgbaImage, a: Bounds, b: Bounds) -> bool {
     let (ar, ab, br, bb) = (
         a.x + a.width - 1,
@@ -172,12 +236,27 @@ fn same_field_outline(image: &RgbaImage, a: Bounds, b: Bounds) -> bool {
         return false;
     }
     let background = *image.get_pixel(0, 0);
-    // A different flat panel fill is unsupported rather than proof that every
-    // pixel between two independent outlines belongs to the same border.
-    if !close(
-        *image.get_pixel((left + right) / 2, (top + bottom) / 2),
-        background,
-    ) {
+    let center = *image.get_pixel((left + right) / 2, (top + bottom) / 2);
+    let fill = *image.get_pixel((left + right) / 2, top);
+    let flat = |x, y| {
+        let p = *image.get_pixel(x, y);
+        p[3] == 255 && close(p, fill)
+    };
+    let xs = left + (right - left) / 4..=right - (right - left) / 4;
+    let ys = top + (bottom - top) / 4..=bottom - (bottom - top) / 4;
+    let filled_bands = xs.clone().all(|x| {
+        (a.y.min(b.y)..=top).all(|y| flat(x, y)) && (bottom..=ab.max(bb)).all(|y| flat(x, y))
+    }) && ys.clone().all(|y| {
+        (a.x.min(b.x)..=left).all(|x| flat(x, y)) && (right..=ar.max(br)).all(|x| flat(x, y))
+    });
+    if filled_bands {
+        if let Some(border) = filled_field_component(image, a, fill) {
+            if filled_field_component(image, b, fill) == Some(border) {
+                return true;
+            }
+        }
+    }
+    if !close(center, background) {
         return false;
     }
     let ink = |x, y| {

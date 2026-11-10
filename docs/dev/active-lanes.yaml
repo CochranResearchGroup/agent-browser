@@ -1869,6 +1869,6 @@ lanes:
     dependencies: [TERMINAL-REQUEST-619]
     overlaps: [NATIVE-SAVED-LOGIN-596, TERMINAL-REQUEST-619]
     reconciled_overlaps: ["Reuse former619 clean primary after installed acceptance;621 owns perception/corpus and shared behavior docs; retain619sealed0e95f60c47300425c2ddafb1d3e1646c unchanged; review2026-11-17; other checkouts and SDK pins untouched"]
-    validation_status: Image-fixture regression pending
+    validation_status: Public22 perception guards, offline private field disambiguation and final strict clippy/format/docs/planning pass; installed qualification pending
     limitations: ["Source qualification only; no runtime capture/input or budget changes"]
     updated_at: 2026-11-10

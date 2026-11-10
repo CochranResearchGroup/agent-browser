@@ -33,7 +33,7 @@ A retained handoff may finish its original settled browser-close publication bef
 
 After human input, use Give control back in the viewer, then `browser_continue` with the same `taskId` reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff.
 
-Nested login outlines require same-frame boundary proof; conflicting mask/value evidence stays unverified. Distinct controls retain ambiguity.
+Nested login outlines require same-frame boundary or bounded connected-field proof; conflicting mask/value evidence stays unverified. Distinct controls retain ambiguity.
 
 Saved login: use [native login controls](references/cli-and-service.md#native-login-controls) with the retained episode; no password export or input replay. The SDK tiles oversized windows under the owner pixel limit and freshly recaptures its chosen region; it never stitches input evidence or extends the episode.
 
