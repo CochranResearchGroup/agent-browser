@@ -17,6 +17,22 @@ lanes:
     validation_status: SDK lower-window and adverse guards, CheckJS, service-client, docs and exact-lane planning gates pass; installed acceptance pending
     limitations: ["Source only; no install or live input", "Actual saved-login acceptance remains open"]
     updated_at: 2026-11-09
+  - id: OPERATOR-MODE-RELAUNCH-607
+    product_lane: PL-BUGFIX
+    objective: Let operator-confirmed mode relaunch reach its existing owner during human handoff
+    plan: docs/dev/maintenance/operator-mode-relaunch-607.md
+    branch: fix/607-operator-mode-relaunch
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#607]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [HUMAN-HANDOFF-571, CDP-FREE-IDLE-585, MANUAL-IDLE-HANDOFF-599, NATIVE-SAVED-LOGIN-596]
+    reconciled_overlaps: ["Reuse clean canonical checkout; no new checkout; own operation lookup and explicit close admission, preserve retirement/recovery and Native control ownership; integrate installed native-login source8edb25b3 without changing its implementation"]
+    validation_status: Installed6b17 guard repair and same-profile authenticated CDP reopen accepted; old live manual window close RED; process-close source GREEN2 model418; integrating installed611 before sealed qualification
+    limitations: ["Production profile and live state remain outside Git; installed qualification separate"]
+    updated_at: 2026-11-09
   - id: TERMINAL-CONTROL-611
     product_lane: PL-BUGFIX
     objective: Reconcile terminal unknown requests through exact public owner observation
@@ -728,7 +744,7 @@ lanes:
     custody_state: INTEGRATED
     overlaps: [P283, P284]
     reconciled_overlaps: ["Own dashboard/http routing, bounded startup catch-up in selected-context/read-coordinator and rail freshness prose; P283/P284 retain profile/store/observation and installer source; reuse primary and retain pinned artifacts"]
-    validation_status: PR410 and PR416 installed on final e0d5525e92cc; cold visit1955.6ms versus3999.8ms, median776.8ms across five contexts;11 browser roots preserved and16 probe generations absent
+    validation_status: PR410 and PR416 installed on final e0d5525e92cc; cold visit1955.6ms versus3999.8ms, median776.8ms across five contexts;11 browser roots preserved and 16 probe generations absent
     limitations: ["Finite samples; no universal latency guarantee", "Native pixels and acquisition acceptance owned by P289", "Retain primary checkout and pinned candidates"]
     updated_at: 2026-10-24
   - id: P284

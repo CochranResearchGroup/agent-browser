@@ -728,6 +728,33 @@ pub(crate) fn admit(browser_id: &str, action: &str, id: &str) -> Result<Option<A
         check(browser_id, action)?;
         return Ok(None);
     }
+    admit_mutation(browser_id, action, id, None)
+}
+
+/// Only the owned whole-browser lifecycle path may call this, after validating
+/// process custody, peer isolation, attribution and close policy. Closing is not
+/// a page observation or a return of an interactive invitation.
+pub(crate) fn admit_owned_browser_close(
+    browser_id: &str,
+    id: &str,
+    actor: &str,
+    reason: &str,
+) -> Result<Option<Admission>, String> {
+    validate_attribution(actor, reason)?;
+    admit_mutation(
+        browser_id,
+        "browser_session_close",
+        id,
+        Some((actor, reason)),
+    )
+}
+
+fn admit_mutation(
+    browser_id: &str,
+    action: &str,
+    id: &str,
+    owned_close: Option<(&str, &str)>,
+) -> Result<Option<Admission>, String> {
     let path = path(browser_id)?;
     let id = if id.is_empty() {
         uuid::Uuid::new_v4().to_string()
@@ -741,9 +768,16 @@ pub(crate) fn admit(browser_id: &str, action: &str, id: &str) -> Result<Option<A
         _ => return Err("browser_control_dispatch_owner_unknown".into()),
     };
     transaction(&path, |control| {
-        permits(control, action)?;
+        if owned_close.is_none() {
+            permits(control, action)?;
+        }
         if control.flights.contains_key(&id) {
             return Err("browser_control_request_already_dispatched: inspect retained outcome; do not replay".into());
+        }
+        if let Some((actor, reason)) = owned_close {
+            control.audit.push(json!({"epoch":control.epoch,
+                "operation":"owned_browser_close", "actor":actor,
+                "reason":reason, "requestId":id}));
         }
         control.flights.insert(id.clone(), "dispatched".into());
         control

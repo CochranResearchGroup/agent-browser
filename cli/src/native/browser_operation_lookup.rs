@@ -255,12 +255,17 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             return Err("browser_operation_profile_missing".into());
         }
         let browser_id = task.map(|task| task.browser_id.as_str());
-        for browser in state
-            .browsers
-            .values()
-            .filter(|browser| browser.profile_id == profile)
-        {
-            super::super::browser_host_control::check(&browser.id, "url")?;
+        // Mode metadata is not a page observation. The mode owner checks
+        // explicit confirmation before lifecycle effects; a paused URL read
+        // must not prevent an operator from reaching that owner.
+        if kind != "mode_convert" {
+            for browser in state
+                .browsers
+                .values()
+                .filter(|browser| browser.profile_id == profile)
+            {
+                super::super::browser_host_control::check(&browser.id, "url")?;
+            }
         }
         let database = self.persistence.runtime_database_path()?;
         let id = optional_string(command, "operationId");

@@ -7460,6 +7460,7 @@ Commands:
   Copy/publication do not prove account identity, usable login or storage divergence.
   Reload/inspect reads the original operation; reconcile lost replies without replay.
   mode-convert JSON Inspect/relaunch/pause/cancel/restore_previous/select_build
+    Metadata remains available during human handoff; lifecycle choices keep confirmation checks.
     Conversion verifies mode/window without input; retained handoffs reconcile the original launch
     Fullscreen Native handoffs offer a top-row CDP on/off control with relaunch review
   watch-host-task TASK Changed NDJSON; fresh reconnect
@@ -7512,6 +7513,7 @@ Rules:
   No grant for unrestricted tasks. Artifacts: handle/relative name; download selector.
   Refuse existing files/symlinks/traversal; publication remains explicit.
   Close scope=browser needs actor/reason, no peers/borrowed custody; verify OS residue.
+  Explicit owned close ends the verified original process; reopen the same profile for CDP.
   Watch DB/WAL every 250 ms, not provider polling; events have watchId/sequence.
   SiteGuide: prepare_login/validate_plan, verify_login, collect_posts.
   Keep secrets private; inspect unknown delivery.

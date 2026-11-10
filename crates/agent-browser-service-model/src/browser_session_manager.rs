@@ -356,6 +356,14 @@ pub trait BrowserSessionEffects {
     }
 
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String>;
+    /// Explicit whole-browser closure after attribution/custody admission. The
+    /// ordinary task close path keeps its normal graceful-window semantics.
+    fn close_browser_for_operator(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        self.close_browser(browser)
+    }
     /// Dispatch a normal close for an exactly verified owned manual browser.
     /// Ok means positive dispatch acknowledgement, not process exit. Errors may
     /// have uncertain effects and must never be automatically replayed.
@@ -2367,6 +2375,57 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         reason: SessionEndReason,
         ended_at_ms: u64,
     ) -> Result<CloseBrowserSessionResult, String> {
+        self.close_session_with(session_id, reason, ended_at_ms, |effects, browser| {
+            effects.close_browser(browser)
+        })
+    }
+
+    /// The owner has validated actor/reason and process custody. Revalidate the
+    /// exact refreshed browser and exclusive task scope before the process effect.
+    pub fn close_browser_scope(
+        &mut self,
+        session_id: &str,
+        expected: &ManagedBrowserInstance,
+        ended_at_ms: u64,
+    ) -> Result<CloseBrowserSessionResult, String> {
+        if self.state.browsers.get(&expected.id) != Some(expected)
+            || self
+                .state
+                .sessions
+                .get(session_id)
+                .is_none_or(|session| session.browser_id != expected.id)
+        {
+            return Err("browser_lifecycle_target_changed".into());
+        }
+        if self.state.shared_browser_ids.contains(&expected.id)
+            || self
+                .state
+                .app_browser_attachments
+                .contains_key(&expected.id)
+            || expected.active_session_ids.as_slice() != [session_id]
+            || self
+                .state
+                .sessions
+                .values()
+                .any(|session| session.browser_id == expected.id && session.id != session_id)
+        {
+            return Err("browser_lifecycle_peer_scope_conflict".into());
+        }
+        self.close_session_with(
+            session_id,
+            SessionEndReason::ExplicitClose,
+            ended_at_ms,
+            |effects, browser| effects.close_browser_for_operator(browser),
+        )
+    }
+
+    fn close_session_with(
+        &mut self,
+        session_id: &str,
+        reason: SessionEndReason,
+        ended_at_ms: u64,
+        close_browser: impl FnOnce(&mut E, &ManagedBrowserInstance) -> Result<(), String>,
+    ) -> Result<CloseBrowserSessionResult, String> {
         let session = self
             .state
             .sessions
@@ -2451,7 +2510,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             }
         }
         if !idle_closed && final_session && !self.state.shared_browser_ids.contains(&browser.id) {
-            self.effects.close_browser(&browser)?;
+            close_browser(self.effects, &browser)?;
         } else if !idle_closed {
             for tab in &tabs {
                 if !self

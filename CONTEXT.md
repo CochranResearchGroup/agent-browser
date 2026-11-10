@@ -64,6 +64,17 @@ current logical identity, historical verified progress, local artifact reference
 pending assistance/control and original uncertain operations. Its process ID is retained metadata for later physical verification, never live ownership evidence. It never launches,
 observes a live page, acknowledges human use or turns missing evidence into success.
 
+**Mode-operation lookup**: Inert lifecycle metadata for the existing task and
+profile. Human page-read pauses do not prevent inspection or preparation;
+explicit confirmation and exact original-process checks remain with the mode owner.
+
+**Owned browser lifecycle close**: An attributable whole-browser close admitted
+only after process custody, peer isolation and lifecycle policy validation. A human
+handoff does not veto this operator request. The close retains profile storage,
+control epoch and prior uncertainty; it does not assert page observation.
+CDP-free browser scope uses original-kernel process termination and positive exit
+readback. Ordinary task closure keeps its graceful window-close path.
+
 **Mode conversion readiness**: Exact replacement process, requested debugging
 posture and Native window observation. Selective-input permission is independent;
 conversion does not inject input to qualify publication. An already-dispatched
