@@ -325,7 +325,11 @@ A terminal uncertain request can be reconciled on its exact owned task without
 creating another human return. Supply its original request ID, current epoch,
 actor and reason. The server freshly observes the retained target and checks
 original browser/process custody plus positive dispatcher absence or PID reuse.
-Human control, active or unknown dispatchers and changed identities are refused.
+For a completed DOM click, an owner-terminal flight and matching existing producer
+completion record can instead establish dispatch completion while a shared
+supervisor stays alive. Pending requests, missing provenance and native/private
+input do not receive that exception. Human control and changed identities remain
+refused; fresh target/process/epoch checks still apply.
 The original row becomes `observed_uncertain_no_replay`; its history remains and
 it never grants retry authority. Other standalone control changes remain unsupported.
 
@@ -7410,7 +7414,9 @@ Configure the native Remote View origin, pool, application and public origin in 
 Native task observation and input use the existing Remote View owner. MCP
 The opt-in `native_capture` parameter `loginControls: {profile: "english-chrome-v1", expectedAccount: "configured@example.invalid"}` enumerates supported login fields and saved-account entry candidates from current Native pixels and pinned English Tesseract evidence. It returns opaque frame-bound references and safe labels, with no raw OCR, image, password or field values. `native_input` parameter `loginTarget: {observationRequestId, targetRef, episodeId}` derives one OS click from the owner-retained observation. An immutable per-task episode permits username focus, the matching saved entry and independently observed filled-form submission, with at most three clicks in60seconds; unknown input never permits replay. Native window, generation, controller and visual fences remain required. Pixel candidates alone do not prove browser-native origin or authenticated access.
 
-`@agent-browser/client/native-saved-login` exports `createNativeSavedLoginClient({callTool, store, verifyAccess, expectedAccount})`. The host supplies a cross-process serialized durable episode store and independent intended-account access verification. Call `resolve({taskId, episodeId})` with the original IDs across interruptions. Unsupported geometry, stale evidence, missing credentials or challenges return a typed human/uncertain outcome. Source fixtures do not qualify installed real saved-login acceptance; this routine never invokes a semantic worker.
+Nested field outlines normalize only with bounded edge drift and either uninterrupted shared boundary ink or a compact connected flat interior corroborated by shared fill bands. Disconnected or distinct overlapping controls and conflicting kinds/accounts retain ambiguity. The detector retains an existing opaque target; conflicting value or mask evidence becomes unverified, never a masked-password assertion.
+
+`@agent-browser/client/native-saved-login` exports `createNativeSavedLoginClient({callTool, store, verifyAccess, expectedAccount})`. The host supplies a cross-process serialized durable episode store and independent intended-account access verification. Call `resolve({taskId, episodeId})` with the original IDs across interruptions. Unsupported geometry, stale evidence, missing credentials or challenges return a typed human/uncertain outcome. Source fixtures do not qualify installed real saved-login acceptance; this routine never invokes a semantic worker. The SDK covers oversized windows with overlapping captures of at most one million pixels, deduplicates physical targets, and recaptures the selected tile before input. Coordinates remain absolute desktop pixels. Submit still requires the intended username and masked password in the same fresh frame; unsupported surfaces require assistance. The original 60-second deadline and three-input limit do not change.
 
 `browser_command` supports `native_capture` and `native_input`; discover their
 arguments with `browser_discover`. CLI equivalent:

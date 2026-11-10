@@ -1,3 +1,5 @@
+[Terminal request619](docs/dev/maintenance/terminal-request619.md) qualifies completed DOM-click reconciliation from producer provenance; candidate-backed original-consumer acceptance remains separate.
+
 [Terminal reconciliation611](docs/dev/maintenance/terminal-control-reconcile611.md) restores owned-task continuation after terminal uncertainty; source and live acceptance remain distinct.
 
 [Native deterministic saved login596](docs/dev/maintenance/native-saved-login596.md), PL-AUTH: build pinned pixel/OCR perception, guarded opaque selection and one retained three-click episode. Source and sealed-candidate qualification pass; preserving installation and actual configured-profile Overleaf104 acceptance remain separate.
@@ -122,3 +124,7 @@ The four-profile governance MCP policy pilot landed through PR #206. Use its com
 ## Historical material
 
 [Legacy planning archive](docs/history/2026-10-05-legacy-planning/README.md) preserves earlier roadmaps, runbooks, plans, identifiers, and evidence. It is reference-only and does not define current direction. Archival does not close unrelated issues or PRs. Do not reinstate old requirements from an archived OPEN state.
+
+Native login #596 successor: [bounded full-window SDK coverage](docs/dev/maintenance/native-login596-coverage.md) repairs lower chooser discovery; installed saved-login acceptance remains open.
+
+- [Native login outline repair621](docs/dev/maintenance/native-login-outlines621.md) — source-only same-widget perception qualification; runtime acceptance remains separate.

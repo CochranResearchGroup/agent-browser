@@ -10,13 +10,15 @@ Consolidation: required
 
 ## Current state
 
-The c2a87186 candidate was adopted by the coordinator. One actual reconciliation
-returned the wrapper's generic refusal; its underlying typed reason was not
-retained or recovered, and the original uncertainty remains. A separate exact
-release fixture proves a stable-identity defect: routine activity publication
-alone causes browser_control_observation_target_changed. The narrow predicate
-repair and target/process/epoch race regressions are in focused qualification.
-No live request is replayed; a sealed successor waits for source gates.
+The stable-identity repair is source and exact-release qualified at source
+`a5fcfd3b7f0fbb65478ebb844ec19b264880b608`, binary
+`a6793b20dbb4d3d1e2cb568ca6ac73ef4a724cdc69014d26e505fddbfb454351`.
+The coordinator owns fresh reviewed preserving adoption and actual acceptance.
+The prior installed refusal remains generic; its typed reason was not recovered.
+A separate release fixture proved the routine-activity defect and the successor
+now accepts that publication while refusing identity races. No worker live
+reconciliation, input or control transition occurred.611 remains open until
+parent-owned installed acceptance; original uncertainty is never replay authority.
 
 ## Scope
 
@@ -138,3 +140,51 @@ was stopped; foreign607 work was preserved. Strict workspace Clippy and Rustfmt
 check pass. Existing unchanged interface/docs/SDK/helper gates are retained.
 The actual installed refusal's typed cause remains unknown. One sealed successor
 will qualify the separately confirmed defect; no real request was replayed.
+
+## Qualified activity successor artifact
+
+One production-shaped source a5fcfd3b7 build passed in 1606.1 seconds with zero
+compiler/text diagnostics. Candidate ID:
+`candidate-d02bb6ea97be7d4f-a6793b20dbb4d3d1`; logical seal SHA256:
+`355d81484dd41c3e9695ecc78617fab85b12cb98f2dc560fb9255ab9875fb55a`.
+The exact release binary passes benign activity publication and independent
+physical-target/process/control-epoch race refusals, retaining original uncertainty
+without input. Owned fixture processes were reaped and freshly absent. Sealed
+review, MCP/native schema discovery, CLI610 refusal, isolated installer (two owned
+hosts and zero residue), service collection no-launch and readonly portable review
+also pass. The 640 executable inputs remain hash-matched; handoff docs are outside
+that closure. SDK bytes/pin remain unchanged. The coordinator retains all first
+failed receipts and both immutable predecessor and successor artifacts.
+
+This qualification does not recover the lost actual refusal code or prove a real
+saved-password login. Parent adoption, exact runtime convergence, current task
+assessment and raw typed MCP acceptance remain separate. No broad review or final
+findings-TDD allowance was consumed by these accepted-defect regressions.
+
+## Installed acceptance closeout — 2026-11-09
+
+Issues #611 and #610 are closed after coordinator-owned preserving installation
+and independent receipt verification. Installed binary and current runtime host
+match executable source `a5fcfd3b7f0fbb65478ebb844ec19b264880b608` and SHA256
+`a6793b20dbb4d3d1e2cb568ca6ac73ef4a724cdc69014d26e505fddbfb454351`;
+runtime convergence reports one current host and one generation.
+
+One bounded public metadata reconciliation succeeded for the retained original
+uncertain request. Independent status changed pending count from one to zero,
+with agent ownership and epoch unchanged. Original briefing history remains
+`observed_uncertain_no_replay` with `retryAllowed=false`. No original action was
+replayed and no Native input or ownership change occurred. The earlier failed
+live attempt's underlying typed cause remains unknown. Exact installed artifact
+qualification also verifies #610's convenience CLI typed predispatch refusal;
+full convenience CLI saved-login parity is not claimed.
+
+Issue #596 remains open: actual saved-password login has not run. Native owner
+route custody remains unresolved; this is a runtime ownership requirement, not a
+new approval gate. This documentation-only closeout changes neither executable
+source nor sealed artifact and requires no rebuild or additional broad review.
+Private raw receipts remain outside Git. The published lane worktree and ref
+remain retained for dependent integration and ongoing #104 acceptance.
+
+Memory consolidation for these new actual-acceptance facts is deferred to the
+coordinator's Overleaf closeout. The prior source-qualification queued job is not
+retried or treated as proof of these later facts.

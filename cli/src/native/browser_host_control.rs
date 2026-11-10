@@ -553,9 +553,70 @@ pub(crate) fn observed(browser_id: &str, expected: u64) -> Result<(), String> {
     })
 }
 
-/// Read-first reconciliation admission. Terminal uncertainty is not a new
-/// human-return intent; the original dispatcher must be positively gone.
-fn reconcile_ready(control: &Control, expected: u64, request_id: &str) -> Result<(), String> {
+/// Read existing producer provenance; never create a completion or accept caller
+/// supplied evidence. Restrict the live-supervisor exception to a terminal DOM
+/// click. Native/private input uncertainty retains positive-dispatcher-exit rules.
+fn completed_dom_request(
+    browser_id: &str,
+    caller_task_id: &str,
+    expected: u64,
+    request_id: &str,
+) -> bool {
+    let Ok(path) = BrowserSessionSqliteStore::default_sqlite_path() else {
+        return false;
+    };
+    let Ok(store) = BrowserSessionSqliteStore::open_read_only(&path) else {
+        return false;
+    };
+    let Ok(state) = store.load_session_state() else {
+        return false;
+    };
+    let originals: Vec<_> = state
+        .task_operations
+        .values()
+        .filter_map(|rows| rows.get(request_id))
+        .collect();
+    let [original] = originals.as_slice() else {
+        return false;
+    };
+    let Some(task) = state.sessions.get(&original.task_id) else {
+        return false;
+    };
+    let Some(browser) = state.browsers.get(browser_id) else {
+        return false;
+    };
+    let Some(tab) = state.tabs.get(&original.tab_id) else {
+        return false;
+    };
+    original.task_id == caller_task_id
+        && original.action == "click"
+        && original.state == agent_browser_service_model::BrowserTaskOperationState::Uncertain
+        && original
+            .completed_at_ms
+            .is_some_and(|at| at >= original.created_at_ms)
+        && original.control_epoch == expected
+        && original.browser_id == browser_id
+        && original.request_id == request_id
+        && original.profile_id == task.profile_id
+        && task.browser_id == browser_id
+        && task.current_tab_id.as_ref() == Some(&original.tab_id)
+        && tab.browser_id == browser_id
+        && tab.session_id == task.id
+        && tab.target_id == original.target_id
+        && original.process_pid == browser.pid
+        && original.process_identity.is_some()
+        && store.original_browser_identity(&state, browser) == original.process_identity
+}
+
+/// Read-first admission: terminal DOM clicks may use existing completion proof;
+/// all other uncertainty requires positive dispatcher absence or PID reuse.
+fn reconcile_ready(
+    browser_id: &str,
+    caller_task_id: &str,
+    control: &Control,
+    expected: u64,
+    request_id: &str,
+) -> Result<(), String> {
     if control.epoch != expected {
         return Err("browser_control_epoch_changed".into());
     }
@@ -577,6 +638,13 @@ fn reconcile_ready(control: &Control, expected: u64, request_id: &str) -> Result
         .get(request_id)
         .filter(|(pid, start)| *pid > 0 && !start.is_empty())
         .ok_or("browser_control_dispatch_owner_unknown")?;
+    // Only the dispatch owner writes this terminal flight state after its run
+    // returns. A task completion timestamp alone can also follow a lost reply.
+    if outcome == "uncertain_no_replay"
+        && completed_dom_request(browser_id, caller_task_id, expected, request_id)
+    {
+        return Ok(());
+    }
     match crate::process_identity::observe_process(*pid) {
         crate::process_identity::ProcessObservation::Missing => Ok(()),
         crate::process_identity::ProcessObservation::Observed(process)
@@ -595,16 +663,24 @@ fn reconcile_ready(control: &Control, expected: u64, request_id: &str) -> Result
 /// No history or control state is changed by this preflight.
 pub(crate) fn check_reconcile(
     browser_id: &str,
+    caller_task_id: &str,
     expected: u64,
     request_id: &str,
 ) -> Result<(), String> {
-    reconcile_ready(&read(browser_id)?, expected, request_id)
+    reconcile_ready(
+        browser_id,
+        caller_task_id,
+        &read(browser_id)?,
+        expected,
+        request_id,
+    )
 }
 
 /// The public caller first observes the same existing page and process. Commit
 /// an attributable observation of uncertainty without replay or epoch changes.
 pub(crate) fn reconcile(
     browser_id: &str,
+    caller_task_id: &str,
     expected: u64,
     request_id: &str,
     actor: &str,
@@ -612,7 +688,7 @@ pub(crate) fn reconcile(
 ) -> Result<(), String> {
     validate_attribution(actor, reason)?;
     transaction(&path(browser_id)?, |control| {
-        reconcile_ready(control, expected, request_id)?;
+        reconcile_ready(browser_id, caller_task_id, control, expected, request_id)?;
         if control.flights.iter().any(|(id, state)| {
             id != request_id && matches!(state.as_str(), "dispatched" | "uncertain_in_flight")
         }) {
@@ -939,6 +1015,7 @@ mod integration_tests {
             assert!(
                 reconcile(
                     "browser",
+                    "task",
                     epoch,
                     "effect",
                     "operator",

@@ -117,3 +117,87 @@ candidate executor, qualify its exact installer/no-launch fixtures, then use the
 canonical preserve installer with fresh transaction/census readbacks. Never
 replace missing original profile storage implicitly. Validate the original URL
 read-only and use a separately owned disposable target for any reopen exercise.
+
+## Deployment blocked before payload mutation
+
+PR617 merged at98b4f027861131099bafb034df748eee28022b83. Combined executable
+source158d464e327028bf7a2cb9eec8986fea51c0a36a passed209 handoff tests(one
+pre-existing ignored),27 control,2 lifecycle,1 saved-login CLI,7 presentation,
+419 model tests, Rust format, strict Clippy, UI, client/native-login client,
+parity, policy, links and docs build. Clippy passed with one job, a2GiB admission
+claim,3GiB MemoryHigh,4GiB MemoryMax and1GiB swap cap; host reserve and swap
+checks remained enabled. Source composition needed a same-link navigation wait
+in the UI fixture and a compact workflow skill with details in its existing
+reference. No product Rust repair was introduced by those two corrections.
+
+One production-shaped build completed in22m24s and sealed binary
+fbd108fc22defc0fe4ae870ee675f56c4ab6002d2501c46bcf0f3ee9e5bad6a4,
+candidate candidate-231682da55ee3443-fbd108fc22defc0f. Its exact installer fixture
+passed with2 owned hosts and zero residue. Six exact-binary no-launch service
+smokes passed; six remaining disposable-home daemons were verified, signalled
+through PID descriptors and kernel-exit confirmed, with zero fresh residue.
+
+Installation transaction upgrade-e4169ea5-fa13-44e9-a774-1cff6a47d32b stopped at
+revision4, blocked_migration, before payload mutation. A retained closed tab has
+an invalid tab_closed handle and absent browser/session records. No process
+identity or runtime-owner reference exists for that browser. The existing inert
+placeholder migration accepts browser_missing but not this closed-history case.
+The record and all history were preserved. Production still selects
+0.28.0-8fe86355e69f-5a7aae0e227f. This is not a successful deployment.
+
+A focused regression was added on fix/closed-tab-migration-613, but did not run:
+host available memory was about11GiB, below the16GiB reserve. Its unadmitted
+Cargo wait was terminated with kernel exit confirmation; no compiler started.
+No migration behavior has been changed. The checkout and sealed candidate are
+retained for this open obligation; do not remove or rebuild them casually.
+Private receipts reside under the user diagnostics directory. Next: qualify the
+regression, narrowly extend inert closed-history handling without granting
+principal/lease authority, rerun migration/quality gates, build the necessary
+successor candidate, inspect and recover the exact stopped transaction through
+the supported installer, then verify the original same-link page and an owned
+disposable reopen workflow. Do not hand-edit runtime state or bypass migration.
+
+## Operator correction: historical records have no deployment veto
+
+The operator explicitly corrected the stop: stale history has no veto power.
+The prior source receipt's blocked result describes an installer defect, not
+absence of deployment authority. Continue the approved repair and deployment;
+do not seek renewed permission. Preserve closed tab bytes and existing safety
+checks. The repair admits tab_closed only when lifecycle is Closed and its handle
+is invalid, under the same inert process, principal, lease and owner checks as
+browser_missing. It materializes inert identities without reopening the task.
+The focused migration suite is queued with one job and an8GiB hard memory cap;
+its host-reserve admission currently waits for actual memory pressure. This is
+separate from the historical-record admission defect. No second candidate has
+been built or installed yet.
+
+## Resumed migration source qualification, 2026-11-10
+
+The source at a7e8eb56a composes the current installed d99bd5150 terminal/login
+repairs before deployment. The old shared-target compilation failed against an
+incompatible model artifact despite current source containing its fields; it is
+retained as failed evidence. An isolated target removes that ambiguity.
+
+The exact isolated harness9d65de5e4a806a522d55bc3426b9682b9ff7b6fd0fbbf669e7756074d99050af
+passes29 migration tests and40 host-control tests through the maintained runner.
+Direct reuse with disposable HOME/XDG trees and the same16MiB Rust stack passes
+22 perception cases and3 closed-handoff cases. The waiting duplicate Cargo test
+was stopped before compilation, not counted as a pass. Required cargo-safe
+workspace format and strict Clippy pass. Service-client, Native saved-login
+client, parity, policy, handoff docs, changed links and docs build pass.
+
+One successor production-shaped build completed in48m28s. Its sealed binary is
+fbe7764ab87b8ac4a3411b296e54e758c3cf449987854d55d58a4626ec478e14,
+candidate candidate-85ec4866c4cf83da-fbe7764ab87b8ac4. Compilation used one job,
+an isolated output and8GiB hard cap. Measured soft-threshold reclaim dominated
+early CPU time; the threshold was raised from6 to7 then8GiB without increasing
+the hard cap, changing host reserve, or recording any OOM/hard-cap event.
+Clippy used its separate4GiB hard cap. No hosted CI or formal release.
+
+The exact sealed installer fixture passes with2 owned hosts and zero residue.
+Six pinned-binary no-launch smokes pass. Six disposable smoke daemons were
+individually verified and PID-descriptor SIGTERM/kernel-exit confirmed; fresh
+owned-binary residue is zero. Workstation preserve dry-run succeeds without
+mutation and reaches migration planning; the formerly blocking closed-history
+error does not recur. Actual preserving installation and original-link acceptance
+are the next effect under the existing explicit operator authorization.

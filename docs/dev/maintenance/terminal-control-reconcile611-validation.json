@@ -13,10 +13,10 @@
   },
   "gates": [
     {
-      "command": "scripts/ci/rust-tests.sh --focused host_control",
-      "result": "33 passed; 0 failed; 0 ignored",
-      "executionSeconds": 6.74,
-      "compile": "1m46s"
+      "command": "hash-pinned current test executable host_control --test-threads=1",
+      "result": "35 passed; 0 failed; 0 ignored",
+      "executionSeconds": 9.2,
+      "testExecutableSha256": "8de15e09249fefa078547c62a0c60ebc7e2beff3866b265e3439a7dd6b19aee7"
     },
     {
       "command": "scripts/ci/rust-tests.sh --focused native_cli_saved_login",
@@ -32,8 +32,9 @@
     },
     {
       "command": "scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings",
-      "result": "passed",
-      "elapsed": "1m37s"
+      "result": "passed; CargoSignal exit0 zero diagnostics",
+      "job": "job-20261109T152110Z-971bd1255eea",
+      "elapsedSeconds": 0.967
     },
     {
       "command": "pnpm --dir docs build",
@@ -104,6 +105,82 @@
     "rustQuality": "Rustfmt check and strict workspace Clippy passed; Clippy CargoSignal job20261109T152110Z-971bd1255eea exit0 zero diagnostics",
     "retainedInfrastructure": "Foreign shared-target lock waits; stopped only own redundant Cargo waiter after qualified artifact reuse; first socket path-length setup error retained, no actual binary call at that failed setup",
     "reusedGates": "MCP schemas, CLI610 implementation, SDK, docs site, parity and five helper fixtures unchanged; prior passing gates retained",
-    "effects": "No worker live reconciliation, control or input; original real request not replayed"
-  }
+    "effects": "No worker live reconciliation, control or input; original real request not replayed",
+    "artifactQualification": {
+      "source": "a5fcfd3b7f0fbb65478ebb844ec19b264880b608",
+      "binarySha256": "a6793b20dbb4d3d1e2cb568ca6ac73ef4a724cdc69014d26e505fddbfb454351",
+      "logicalSealSha256": "355d81484dd41c3e9695ecc78617fab85b12cb98f2dc560fb9255ab9875fb55a",
+      "buildJob": "job-20261109T152512Z-1918ffd5ffe5",
+      "buildSeconds": 1606.1,
+      "buildDiagnostics": 0,
+      "exactReleaseCases": [
+        "routine activity succeeds and repeat refused before transport",
+        "target race refused with original uncertainty retained",
+        "process identity race refused with original uncertainty retained",
+        "epoch race refused with original uncertainty retained"
+      ],
+      "otherGates": [
+        "sealed review",
+        "17-tool/native schema discovery",
+        "CLI610 predispatch refusal",
+        "source-free installer twoownedhosts zeroresidue",
+        "servicecollections no-launch",
+        "readonly portable copy reviewed again"
+      ],
+      "limits": "No worker installed/live control or input; actual original refusal typed cause still unknown; parent owns installed acceptance"
+    }
+  },
+  "priorQualifiedGates": [
+    {
+      "command": "scripts/ci/rust-tests.sh --focused host_control",
+      "result": "33 passed; 0 failed; 0 ignored",
+      "executionSeconds": 6.74,
+      "compile": "1m46s"
+    },
+    {
+      "command": "scripts/ci/rust-tests.sh --focused native_cli_saved_login",
+      "result": "1 passed; 0 failed"
+    },
+    {
+      "command": "scripts/ci/rust-tests.sh --focused managed_task_control_status",
+      "result": "1 passed; 0 failed"
+    },
+    {
+      "command": "scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check",
+      "result": "passed"
+    },
+    {
+      "command": "scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings",
+      "result": "passed",
+      "elapsed": "1m37s"
+    },
+    {
+      "command": "pnpm --dir docs build",
+      "result": "passed"
+    },
+    {
+      "command": "pnpm test:service-api-mcp-parity",
+      "result": "passed"
+    },
+    {
+      "command": "pnpm test:remote-view-handoff-docs",
+      "result": "passed"
+    },
+    {
+      "command": "pnpm test:policy-wiring",
+      "result": "passed"
+    },
+    {
+      "command": "pnpm test:documentation-links -- --base 66bf62d326c56cd69d9723494caf7c8086da768d",
+      "result": "passed"
+    },
+    {
+      "command": "python .codex/skills/repo-policy-selector/scripts/audit_planning_contract.py --repo-root . --lane TERMINAL-CONTROL-611 --json",
+      "result": "passed"
+    },
+    {
+      "command": "workstation host, VM harness, Guacamole assets, Postgres durability, route user-sync provider-free fixture scripts",
+      "result": "all five passed"
+    }
+  ]
 }

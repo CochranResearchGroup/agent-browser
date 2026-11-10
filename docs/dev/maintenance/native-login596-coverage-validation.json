@@ -1,0 +1,64 @@
+{
+  "workItem": 596,
+  "scope": "SDK coverage successor only; installed real saved-login acceptance pending",
+  "base": "87035a504c6d2b80622f1c6045b31ccfa61b8b1f",
+  "sdkSha256": "f3e65c50d272be820eec2c9834e9747bbd02c19336b9cb6b989a9c94521219d6",
+  "red": [
+    {
+      "command": "node scripts/test-native-saved-login.js",
+      "reason": "1440x900 lower chooser at rows704..820 outside default694-row capture: human_required instead of verified"
+    },
+    {
+      "command": "node scripts/test-native-saved-login.js",
+      "reason": "new competing target on selected-tile recapture was accepted before final ambiguity guard"
+    }
+  ],
+  "green": [
+    {
+      "command": "pnpm test:native-saved-login",
+      "result": "PASS: public SDK protocol fixtures plus CheckJS and declarations"
+    },
+    {
+      "command": "pnpm test:service-client",
+      "result": "PASS: generated contracts, exports, types, helpers and no-launch examples"
+    },
+    {
+      "command": "pnpm --dir docs build",
+      "result": "PASS"
+    },
+    {
+      "command": "node scripts/test-documentation-links.js",
+      "result": "PASS"
+    },
+    {
+      "command": "node scripts/test-policy-wiring.js",
+      "result": "PASS"
+    },
+    {
+      "command": "python .codex/skills/repo-policy-selector/scripts/audit_planning_contract.py --repo-root . --lane NATIVE-LOGIN-596-COVERAGE --json",
+      "result": "PASS exact lane"
+    },
+    {
+      "command": "git diff --check",
+      "result": "PASS"
+    },
+    {
+      "command": "rustfmt --check --edition 2021 cli/src/output.rs",
+      "result": "PASS help string only"
+    }
+  ],
+  "retainedNonPassingAttempts": [
+    "Unscoped planning audit reports pre-existing historical plan findings; exact new lane passes after adding required metadata and links. No repository-wide planning-clean claim.",
+    "Attempted prettier check unavailable (no prettier command); isolated worktree workspace dependencies/postinstall completed, no production install. Not an applicable configured gate.",
+    "Two guessed service-client script filenames absent; actual package-script service-client gate passed."
+  ],
+  "guards": [
+    "Owner one-million-pixel limit unchanged",
+    "Original60-second/three-input episode unchanged",
+    "No input on ambiguity, geometry change, missing fresh target",
+    "Same-frame username/masked-password submit proof",
+    "No replay or reset of old uncertain/terminal episodes"
+  ],
+  "adoption": "Pin immutable successor SDK module path and SHA256 in reviewed consumer config after terminal prior episode; do not replace runtime binary or old SDK; fresh authorized live saved-login acceptance remains separate",
+  "review": "No extra broad review or reserved findings-TDD allowance consumed"
+}
