@@ -78,6 +78,30 @@
         "finalPeak": "not retained after inactive scope; sample is partial only",
         "remainingOwnScopeMembers": []
       }
+    },
+    {
+      "command": "CLI-only package test debug0/directrustc warm setup;5GiBcap,2GiBreserve,2buildjobs,1invocation",
+      "source": "6f6d4447b0dc9df06a1c4a794aa01b3f2deb4044; Rust unchanged63",
+      "result": "STOPPED_RESOURCE_GATE exit143",
+      "seconds": 1929.31,
+      "setupDeadlineSeconds": 3600,
+      "diagnostics": 0,
+      "tests": 0,
+      "budgetRevision": "Coordinator corrected arbitrary600s compiler cutoff; test/runtime recovery budgets unchanged",
+      "admission": "Normal guarded wait, actual7GiB claim+reserve threshold met beforecompile",
+      "phase": "CLI main.rs --test directrustc code generation",
+      "resourceStopProof": {
+        "HighAndMaxGiB": 5,
+        "swapMax": 0,
+        "observedPeakBytes": 5368709120,
+        "maxEvents": 443208,
+        "observedOom": 0,
+        "userCpuIntervalSeconds": 3.5,
+        "systemCpuIntervalSeconds": 58.34,
+        "majorFaultInterval": 15396,
+        "reason": "Hardcap reclaim with declining useful codegen progress; explicit coordinator stop predicate",
+        "cleanup": "Stopped only exact owned compile scope; inactive and fresh /proc census empty"
+      }
     }
   ],
   "resources": {
@@ -119,5 +143,5 @@
     "Actual candidate-backed metadata reconciliation",
     "No install, default switch, sharedhost restart or native input authorized by this source packet"
   ],
-  "cumulativeSeconds": 3557.222
+  "cumulativeSeconds": 5486.532
 }

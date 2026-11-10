@@ -75,3 +75,20 @@ source diagnostics/tests and no executable. A partial sample observed3.756GB
 peak with no memory-max/OOM events; final peak was not retained after scope exit.
 Fresh exact-scope census found no members. Further compilation is on hold; no
 candidate-backed metadata reconciliation or live credential attempt followed.
+
+## Proper setup budget and measured capacity stop
+
+The coordinator corrected the arbitrary600-second setup cutoff: the runner has
+no such compile limit. One3600-second setup stage used5GiB hard/soft cap,
+2GiB host reserve and2 build jobs, with the same CLI debug0/directrustc warm
+inputs and no source changes. Guarded admission met the7GiB threshold before
+compilation. It made real user-CPU progress, then reached the5GiB cap with443208
+memory-max events. In the decisive interval user CPU advanced3.5s while system
+CPU advanced58.34s and major faults increased15396, establishing sustained
+hard reclaim and insufficient working-set capacity rather than a source error.
+Per the explicit resource stop predicate, only that owned compile scope was
+stopped at1929.31seconds (exit143); no setup deadline was reset. The scope is
+inactive and a fresh process census is empty. No diagnostics/tests/executable
+were produced. All5486.532seconds of attempted qualification remain recorded.
+Source619 and actual104 remain unqualified; further stages require a material
+capacity or test-harness reframe. No live browser recovery budget was changed.
