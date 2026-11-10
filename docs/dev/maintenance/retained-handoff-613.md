@@ -201,3 +201,30 @@ owned-binary residue is zero. Workstation preserve dry-run succeeds without
 mutation and reaches migration planning; the formerly blocking closed-history
 error does not recur. Actual preserving installation and original-link acceptance
 are the next effect under the existing explicit operator authorization.
+
+## Installed no-saved-URL acceptance repair
+
+The preserving upgrade04100b77-385c-4718-a153-2553a7f49f56 is accepted and
+selects0.28.0-fbe7764ab87b-7b9633d3c6b1. Doctor passes. The original authenticated
+link is active/perpetual, shows Reopen task on that same URL, has no warning
+modal and retains the anonymous guard. The original task was not recreated.
+217 of219 sampled OS browser roots retained exact process identity; the two
+ended samples are not causally attributed to installation, so full OS-root
+preservation is not claimed.
+
+A fresh production MCP QA task on an owned disposable blank profile exposed a
+real remaining fallback defect: the retained intent had no URL and reconstruction
+dispatched get_url, which the actual runtime reports unimplemented. The frozen
+request and its failed response were read without replay. Its newly admitted
+owned QA browser was explicitly closed with attributable browser scope; the
+original user task was untouched. This is not accepted reopen-workflow evidence.
+
+The bounded repair uses the existing url observation when no URL was retained,
+including its private scoped control admission. The provider-free reopen fixture
+now models that exact dispatcher refusal and clears the saved URL in its
+shared-browser cases. Existing direct-host fixtures remain outside runtime
+protocol claims. Qualification and a necessary successor candidate are required;
+the already accepted installation and its qualified original-link page remain
+separate from this new repair. Reuse matching compiled dependencies when safe,
+retain the failed live sample, and run the owned live reopen check again only
+on a fresh, separately addressed QA task.
