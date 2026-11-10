@@ -170,3 +170,34 @@ The focused migration suite is queued with one job and an8GiB hard memory cap;
 its host-reserve admission currently waits for actual memory pressure. This is
 separate from the historical-record admission defect. No second candidate has
 been built or installed yet.
+
+## Resumed migration source qualification, 2026-11-10
+
+The source at a7e8eb56a composes the current installed d99bd5150 terminal/login
+repairs before deployment. The old shared-target compilation failed against an
+incompatible model artifact despite current source containing its fields; it is
+retained as failed evidence. An isolated target removes that ambiguity.
+
+The exact isolated harness9d65de5e4a806a522d55bc3426b9682b9ff7b6fd0fbbf669e7756074d99050af
+passes29 migration tests and40 host-control tests through the maintained runner.
+Direct reuse with disposable HOME/XDG trees and the same16MiB Rust stack passes
+22 perception cases and3 closed-handoff cases. The waiting duplicate Cargo test
+was stopped before compilation, not counted as a pass. Required cargo-safe
+workspace format and strict Clippy pass. Service-client, Native saved-login
+client, parity, policy, handoff docs, changed links and docs build pass.
+
+One successor production-shaped build completed in48m28s. Its sealed binary is
+fbe7764ab87b8ac4a3411b296e54e758c3cf449987854d55d58a4626ec478e14,
+candidate candidate-85ec4866c4cf83da-fbe7764ab87b8ac4. Compilation used one job,
+an isolated output and8GiB hard cap. Measured soft-threshold reclaim dominated
+early CPU time; the threshold was raised from6 to7 then8GiB without increasing
+the hard cap, changing host reserve, or recording any OOM/hard-cap event.
+Clippy used its separate4GiB hard cap. No hosted CI or formal release.
+
+The exact sealed installer fixture passes with2 owned hosts and zero residue.
+Six pinned-binary no-launch smokes pass. Six disposable smoke daemons were
+individually verified and PID-descriptor SIGTERM/kernel-exit confirmed; fresh
+owned-binary residue is zero. Workstation preserve dry-run succeeds without
+mutation and reaches migration planning; the formerly blocking closed-history
+error does not recur. Actual preserving installation and original-link acceptance
+are the next effect under the existing explicit operator authorization.
