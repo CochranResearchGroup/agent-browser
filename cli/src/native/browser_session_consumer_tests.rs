@@ -579,6 +579,21 @@ impl BrowserSessionEffects for Process {
         scope: &BrowserIdleRetirementScope,
         tab: Option<&ManagedBrowserTab>,
     ) -> Result<(), String> {
+        if self.root.join("manual-window-close-stays-live").exists() {
+            use super::browser_session_runtime::{BrowserManagerRuntime, BrowserRuntimeDriver};
+            let mut runtime = BrowserManagerRuntime::start(Default::default())?;
+            runtime.apply_idle_retirement_effect(scope, tab)?;
+            #[cfg(target_os = "linux")]
+            COPY_PROCESS_CHILDREN.with(|children| {
+                if let Some(child) = children
+                    .borrow_mut()
+                    .get_mut(&(self.root.clone(), scope.browser.pid))
+                {
+                    assert!(child.try_wait().unwrap().is_some());
+                }
+            });
+            return Ok(());
+        }
         if self.root.join("replacement-kernel-observed").exists() {
             assert!(scope.process_identity.is_some());
             return Ok(()); // Scripted positive proof that the original ended.
@@ -593,6 +608,11 @@ impl BrowserSessionEffects for Process {
         scope: &BrowserIdleRetirementScope,
         tab: Option<&ManagedBrowserTab>,
     ) -> Result<bool, String> {
+        if self.root.join("operator-os-close-readback").exists() {
+            use super::browser_session_runtime::{BrowserManagerRuntime, BrowserRuntimeDriver};
+            let mut runtime = BrowserManagerRuntime::start(Default::default())?;
+            return runtime.observe_idle_retirement_effect(scope, tab);
+        }
         let count_path = self.root.join("activity-observation-count");
         if count_path.exists() {
             let count = std::fs::read_to_string(&count_path)
@@ -642,6 +662,9 @@ impl BrowserSessionEffects for Process {
         Ok(())
     }
     fn close_browser(&mut self, _browser: &ManagedBrowserInstance) -> Result<(), String> {
+        if self.root.join("manual-window-close-stays-live").exists() {
+            return Err("manual_login_close_readback_required: finish any browser close prompt, then close this task again".into());
+        }
         #[cfg(target_os = "linux")]
         if self.root.join("copy-process-fixture").exists() {
             return copy_process_close(&self.root, _browser.pid);
@@ -1519,3 +1542,7 @@ fn consumer_retention_claim_uses_owner_time_and_survives_sqlite_reopen() {
     assert_eq!(response["success"], true, "{response}");
     assert_eq!(response["data"]["released"], true);
 }
+
+#[cfg(target_os = "linux")]
+#[path = "operator_lifecycle_tests.rs"]
+mod operator_lifecycle_tests;

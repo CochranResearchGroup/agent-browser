@@ -1,3 +1,5 @@
+[Terminal request619](docs/dev/maintenance/terminal-request619.md) qualifies completed DOM-click reconciliation from producer provenance; candidate-backed original-consumer acceptance remains separate.
+
 [Terminal reconciliation611](docs/dev/maintenance/terminal-control-reconcile611.md) restores owned-task continuation after terminal uncertainty; source and live acceptance remain distinct.
 
 [Native deterministic saved login596](docs/dev/maintenance/native-saved-login596.md), PL-AUTH: build pinned pixel/OCR perception, guarded opaque selection and one retained three-click episode. Source and sealed-candidate qualification pass; preserving installation and actual configured-profile Overleaf104 acceptance remain separate.

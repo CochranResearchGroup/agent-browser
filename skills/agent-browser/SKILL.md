@@ -18,7 +18,7 @@ Creation requires `serviceName`, `agentName`, concrete `taskName`. CLI: `--servi
 
 ## MCP task workflow
 
-Warnings advise; writer custody survives executable unlink.
+Writer custody survives executable unlink.
 
 Use `browser_open` with `{"serviceName":"my-app","agentName":"editor","taskName":"Edit draft","profile":"editorial","profileMode":"persistent","taskKey":"editing","url":"https://example.com"}`. Read `data.taskId`, `profileId`, `browserId`, `tabId`, `url`. Address actions with `taskId`. Reuse `taskKey` to preserve the page/edits without navigation; distinct keys separate tasks. `browser_close` ends only the addressed task.
 
@@ -56,12 +56,18 @@ attempts on their original requests; never replay private use.
 
 Reuse Bots' browser/task. Before attachment, sharing or takeover, read [host integration v1](references/host-integration.md). Discover schemas; visibility proves neither account nor control. Shared skill publication needs explicit approval.
 
+Terminal DOM click reconciliation may use the owner's terminal flight plus an
+existing exact producer completion record while a shared supervisor stays alive.
+Use the original request and current task/epoch with `browser_control reconcile`;
+fresh process/target checks still apply. Missing provenance, pending requests and
+unknown native/private input keep the existing dispatcher-exit guard. Never replay.
+
 Tools: `browser_open`, `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`, `browser_handoff`, `browser_continue`, `browser_close`, `browser_control`, `browser_reconnect`, `browser_retention`, `browser_policy`, `browser_artifact`, `browser_command`, `browser_discover`.
 Page actions require `taskId`. `browser_tab` manages this task's tabs; retry creation
 with the same `tabKey`. After restart, creation rejoins the verified browser
 and preserves tabs; peer tabs remain outside scope. Discover actions with `browser_discover`; use `browser_command` with `taskId`, `action`, `params`.
 Close rejects changed selection. A pre-commit return failure keeps human control
-and epoch; inspect status and use a fresh explicit intent, never replay uncertainty.
+and epoch; inspect status and use a explicit intent, never replay uncertainty.
 
 Read [retained workflow transport](references/cli-and-service.md#retained-workflow-transport)
 before downloads, stale transport recovery, retirement or advanced administration.
@@ -73,7 +79,7 @@ Never send providerExternalUrl or raw Guacamole URLs.
 
 Read [Workspace](references/cli-and-service.md#operator-workspace) for tabs, sharing and handoffs. Focus needs an owned tab; reviews are opt-in. Rail catches up once. Remote View owns view/auth. Terminal pool replay retains history.
 
-[Manual login](references/cli-and-service.md#manual-login) is CDP-free. Native control and human takeover are separate.
+[Manual login](references/cli-and-service.md#manual-login) is CDP-free. For CDP, end the process with browser scope and actor/reason, then reopen that profile.
 
 ## Sharing a profile between tasks
 
