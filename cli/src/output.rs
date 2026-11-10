@@ -7428,6 +7428,7 @@ Commands:
   Native return: original opaque handoff, explicit takeover/return, separate access checks
   browser-mode TASK Inspect mode
   Saved-login SDK: bounded overlapping window tiles, fresh selected region; same original budget.
+  Native field outlines: pixel-proven duplicates only; conflicting mask/value stays unverified.
   Native saved login: capture loginControls english-chrome-v1; select opaque loginTarget
   Native login episode: same task/episode;60 seconds/3 clicks; unknown input never replays
   Native login proof: no password/OCR/image export; independent account verification required

@@ -20,3 +20,5 @@ This bounded index does not reclassify unrelated retained maintenance records.
 - [Native login #596 coverage](native-login596-coverage.md): SDK successor for bounded full-window discovery and fresh selected-tile input evidence; actual saved-login acceptance separate.
 
 - [Terminal request619](terminal-request619.md): reconcile completed DOM clicks from existing producer provenance without replay.
+
+- [Native login outline repair621](native-login-outlines621.md) — source-only same-widget perception qualification; runtime acceptance remains separate.

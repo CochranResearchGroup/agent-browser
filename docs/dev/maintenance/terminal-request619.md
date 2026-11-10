@@ -4,11 +4,13 @@ Product lane: PL-BUGFIX
 Work item: 619
 Branch: fix/terminal-request619
 Base: 4410f56484fbe6fba85157b59d85e6c0c7d9b7c7
-State: OPEN
+State: CLOSED
 
-Current qualification: focused source/public guard PASS; exact regular client
-candidate and actual original-consumer reconciliation remain pending. Historical
-failed/incomplete stages below remain truthful and are not erased.
+Current qualification: source/public guards and sealed production candidate accepted.
+Supported installation and a fresh failed DOM request reconciled while the exact
+shared supervisor remained alive; issue619closed. Original failed request was
+separately reconciled after adoption ended its old owner. Historical failed and
+incomplete stages below remain preserved.
 Owner: ecochran76
 Consolidation: required
 
