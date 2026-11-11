@@ -127,6 +127,6 @@ Public task tools: `browser_snapshot`, `browser_screenshot`, `browser_click`,
 `browser_fill`, `browser_navigate`, `browser_tab`, `browser_retention`,
 `browser_reconnect`, `browser_policy`, `browser_artifact`.
 
-Compact saved-entry and dark submit-button refinement keep exact-account, mask and ambiguity checks. Refused evidence grants no input retry; see the Native workflow reference.
+Compact saved-entry and dark submit-button refinement keep exact-account, mask and ambiguity checks. Native owner RPC options `ownerTimeoutMs` (100..300000) and optional `ownerDeadlineAtMs` bound one admitted command; supply the remaining invocation deadline. They never renew frame freshness or allow uncertain-input replay. Refused evidence grants no input retry; see the Native workflow reference.
 
 Saved-login SDK invocation timeout defaults to300s. Explicit acknowledged-prefix resume keeps original clocks and never replays input; unknown input still stops.

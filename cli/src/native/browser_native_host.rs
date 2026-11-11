@@ -73,10 +73,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         super::super::browser_host_control::check_state(&self.state, &target.session.name, &focus)?;
         let native_origin = std::env::var("AGENT_BROWSER_REMOTE_VIEW_ORIGIN")
             .map_err(|_| "browser_native_owner_unconfigured")?;
-        let mut http = super::super::remote_view_application_http::RemoteViewApplicationHttp::new(
-            &native_origin,
-            std::time::Duration::from_secs(10),
-        )
+        let mut http = super::super::remote_view_application_http::RemoteViewApplicationHttp::for_native_command(&native_origin, command)
         .map_err(|_| "browser_native_owner_configuration_invalid")?;
         let control=http.native_control_status(&json!({"desktopId":assignment.viewing_desktop_id,"expectedGeneration":assignment.viewing_generation,"operation":"status"}))
             ?;
@@ -339,11 +336,11 @@ fn run_native_owner<'a, P: BrowserSessionPersistence>(
 ) -> Result<Value, String> {
     let origin = std::env::var("AGENT_BROWSER_REMOTE_VIEW_ORIGIN")
         .map_err(|_| "browser_native_owner_unconfigured")?;
-    let mut http = super::super::remote_view_application_http::RemoteViewApplicationHttp::new(
-        &origin,
-        std::time::Duration::from_secs(10),
-    )
-    .map_err(|_| "browser_native_owner_configuration_invalid")?;
+    let mut http =
+        super::super::remote_view_application_http::RemoteViewApplicationHttp::for_native_command(
+            &origin, command,
+        )
+        .map_err(|_| "browser_native_owner_configuration_invalid")?;
     let input_readiness = if command["action"] == "native_ready" {
         Some(super::super::browser_native_readiness::qualify_readiness(
             &mut http, assignment,
