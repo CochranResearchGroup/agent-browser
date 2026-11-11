@@ -41,8 +41,10 @@ website account identity and Native viewer access remain separate.
 
 **Task operation receipt**: Existing-owner evidence for one original addressed
 CDP request, retained before transport. Attempt, owner acknowledgement and site
-completion are separate. Readback never dispatches; Native/Auth journals retain
-their own authority.
+completion are separate. Concurrent first writes share a completely published
+private fingerprint key; missing or damaged keys with original history are never
+regenerated. Readback never dispatches; Native/Auth journals retain their own
+authority.
 
 **Candidate revision**: An immutable SiteGuide child in the existing directory,
 preserving parent, source and operation lineage while accepted versions remain.

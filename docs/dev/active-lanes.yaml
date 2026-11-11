@@ -2,6 +2,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: TASK-OPERATION-KEY-627
+    product_lane: PL-BUGFIX
+    objective: Publish the task-operation MAC key safely across concurrent first writes
+    plan: docs/dev/maintenance/task-operation-key-627.md
+    branch: fix/task-operation-key-publication
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#627]
+    plan_state: OPEN
+    custody_state: INTEGRATION_READY
+    dependencies: []
+    overlaps: [NATIVE-SAVED-LOGIN-596, OPERATOR-MODE-RELAUNCH-607]
+    reconciled_overlaps: ["Reuse the clean canonical checkout after merged608; preserve the607 branch, pinned artifacts and all other registrations; no new checkout or pruning", "627 owns key publication and its tests in browser_task_operations.rs; PR626 owns Native invocation hunks; preserve the Auth lane and coordinate only this new catalog entry"]
+    validation_status: Exact public and native RED then GREEN;20 focused task-operation cases and34 cold MCP task lifecycles pass without serial warmup; Rustfmt strict workspace Clippy policy wiring and changed links pass
+    limitations: ["PR integration pending; source and disposable CLI acceptance only", "No production deployment or allocator-setting change"]
+    updated_at: 2026-11-11
   - id: RETAINED-HANDOFF-613
     product_lane: PL-BUGFIX
     objective: Keep a valid handoff actionable after explicit task closure
