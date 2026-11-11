@@ -2290,6 +2290,23 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     where
         E: ManagedBrowserCommandEffects,
     {
+        if command.get("hostControlReturnObservation").is_some()
+            && command["retainedTaskOnly"] == true
+        {
+            super::browser_host_control::check_state(&self.state, "", command)?;
+            let browser = self
+                .state
+                .browsers
+                .get(browser_id)
+                .ok_or("browser_session_browser_missing")?;
+            // Returning control may observe the original live browser without
+            // advancing a pending conversion, closing it or launching a replacement.
+            return if self.effects.browser_is_live(browser)? {
+                Ok(())
+            } else {
+                Err("browser_control_fresh_observation_cannot_recover_browser".into())
+            };
+        }
         self.reconcile_pending_mode(browser_id)?;
         // Use the same publication and operation fence as manager recovery.
         let _ = self.manager()?;
@@ -3115,18 +3132,25 @@ where
         let command = &prepared;
         let exact_task_id = self.exact_task_selector(session_name, command)?;
         super::browser_task_operations::check_expected(&self.state, command)?;
-        for task in self
-            .state
-            .sessions
-            .values()
-            .filter(|task| exact_task_id.map_or(task.name == session_name, |id| task.id == id))
-        {
-            if let Some(operation) = self.state.profile_operation_ids.get(&task.profile_id) {
-                return Err(format!("browser_profile_operation_pending:{operation}:inspect or cancel the owner operation before page actions"));
+        let return_observation = command.get("hostControlReturnObservation").is_some()
+            && command["retainedTaskOnly"] == true;
+        if return_observation {
+            // Validate the signature and exact retained target before allowing
+            // this read past a pending lifecycle operation. Ordinary work stays fenced.
+            super::browser_host_control::check_state(&self.state, session_name, command)?;
+        } else {
+            for task in
+                self.state.sessions.values().filter(|task| {
+                    exact_task_id.map_or(task.name == session_name, |id| task.id == id)
+                })
+            {
+                if let Some(operation) = self.state.profile_operation_ids.get(&task.profile_id) {
+                    return Err(format!("browser_profile_operation_pending:{operation}:inspect or cancel the owner operation before page actions"));
+                }
             }
-        }
 
-        super::browser_host_control::check_state(&self.state, session_name, command)?;
+            super::browser_host_control::check_state(&self.state, session_name, command)?;
+        }
         super::browser_host_reconnect::check_state(&self.state, session_name, command)?;
         super::browser_host_policy::check_state(&self.state, session_name, command)?;
         if matches!(
@@ -3973,6 +3997,100 @@ fn current_unix_ms() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn host_control_return_observation_during_mode_conversion_preserves_pending_operation() {
+        for live in [true, false] {
+            use crate::test_utils::EnvGuard;
+            let directory = TempDirectory::new();
+            let guard = EnvGuard::new(&[
+                "HOME",
+                "AGENT_BROWSER_HOME",
+                "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+            ]);
+            guard.set("HOME", directory.0.to_str().unwrap());
+            guard.set(
+                "AGENT_BROWSER_HOME",
+                directory.0.join(".agent-browser").to_str().unwrap(),
+            );
+            guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+            fs::create_dir_all(directory.0.join(".agent-browser/service")).unwrap();
+            let legacy = directory.0.join("state.json");
+            fs::write(&legacy, serde_json::json!({"profiles":{"work":{"id":"work","name":"Work","userDataDir":directory.0.join("work"),"profileClass":"durable_named"}}}).to_string()).unwrap();
+            let launches = std::rc::Rc::new(std::cell::Cell::new(0));
+            let mut host = BrowserSessionHost::load(
+                BrowserSessionJsonStore::new(&directory.0),
+                BrowserSessionEffectAdapter::new(FixtureRuntime {
+                    live,
+                    initial_tabs: true,
+                    launch_attempts: launches.clone(),
+                    ..FixtureRuntime::default()
+                }),
+                &legacy,
+                BrowserSessionHostConfig {
+                    session_idle_timeout_ms: 300_000,
+                    remote_view_desktops: Vec::new(),
+                    default_disposable_policy: None,
+                    exact_url_history_maximum_bytes: 64 * 1024 * 1024,
+                },
+            )
+            .unwrap();
+            let opened = host
+                .open(OpenBrowserSession::exact_profile(
+                    "return-pending",
+                    "work",
+                    1_000,
+                ))
+                .unwrap();
+            host.tab_for_navigation(&opened.session_id, 1_000).unwrap();
+            let browser = host.state.sessions[&opened.session_id].browser_id.clone();
+            let tab = host.state.tabs[host.state.sessions[&opened.session_id]
+                .current_tab_id
+                .as_ref()
+                .unwrap()]
+            .clone();
+            // Hosted proof exercises the same signed observation admission. Public
+            // standalone tests additionally verify the actual managed OS process.
+            host.state.host_bindings.insert(opened.session_id.clone(), serde_json::from_value(serde_json::json!({"request":{"version":1,"hostId":"app","participantId":"participant","sessionId":"app-session","placement":{"mode":"required","desktop":{"desktopId":"desktop","generation":1}}},"desktop":{"desktop_id":"desktop","friendly_route_label":"Desktop 1","generation":1}})).unwrap());
+            host.state
+                .profile_operation_ids
+                .insert("work".into(), "pending-mode".into());
+            host.commit_state().unwrap();
+            super::super::browser_host_control::change(
+                &browser, "takeover", 0, "operator", "Assist", true,
+            )
+            .unwrap();
+            let proof = super::super::browser_host_control::attest_return_observation(serde_json::json!({"browserId":browser,"taskId":opened.session_id,"profileId":"work","targetId":tab.target_id,"expectedEpoch":1,"actor":"operator","reason":"Return after assistance"})).unwrap();
+            let command = serde_json::json!({"action":"url","sessionName":"return-pending","sessionId":opened.session_id,"targetId":tab.target_id,"hostControlFreshObservation":true,"retainedTaskOnly":true,"hostControlReturnObservation":proof});
+            let before = launches.get();
+            let result = host.execute_managed_command("return-pending", &command);
+            if live {
+                let response = result.unwrap().unwrap();
+                assert_eq!(response["data"]["action"], "url");
+                assert_eq!(response["data"]["targetId"], tab.target_id);
+            } else {
+                assert_eq!(
+                    result.unwrap_err(),
+                    "browser_control_fresh_observation_cannot_recover_browser"
+                );
+            }
+            assert_eq!(launches.get(), before);
+            assert_eq!(host.state().profile_operation_ids["work"], "pending-mode");
+            assert_eq!(
+                super::super::browser_host_control::metadata(&browser).unwrap()["owner"],
+                "human"
+            );
+            let mut ordinary = command;
+            ordinary
+                .as_object_mut()
+                .unwrap()
+                .remove("hostControlReturnObservation");
+            assert!(host
+                .execute_managed_command("return-pending", &ordinary)
+                .unwrap_err()
+                .contains("browser_profile_operation_pending"));
+        }
+    }
+
     #[test]
     fn host_control_return_observation_cannot_recover_while_human_is_still_held() {
         use crate::test_utils::EnvGuard;
