@@ -12,6 +12,13 @@ Control and credentials: [setup and reconcile](references/cli-and-service.md).
 
 Build failures: [readiness guidance](references/cli-and-service.md#build-readiness).
 
+For sealed candidate maintenance, use `candidate status --json` to inspect
+`coordinationLedger` and the exact active operation. `candidate inspect` takes
+`--manifest` and `--input-closure`; `candidate install` additionally requires
+`--binary`, `--sealed-artifact` and an explicit `--dry-run` or `--apply`.
+Build and test qualification do not themselves install a candidate. Preserve
+current custody and use the documented exact-transaction recovery choices.
+
 For an explicitly selected committed upgrade with a healthy staged dashboard,
 `install workstation recover --transaction-id <id>` can finish that exact
 backend promotion under original installation custody and then prove the sealed
