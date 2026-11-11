@@ -34,11 +34,11 @@ Use `browser_handoff({ "taskId": "<task-id>" })` for human assistance. It defaul
 Same-browser and desktop rail tab switches retain the viewer connection.
 Retained handoff recovery: [guide](references/cli-and-service.md#retained-handoff-recovery).
 
-After human input, use Give control back in the viewer, then `browser_continue` with the same `taskId` reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff. A pending browser mode change does not block the same durable handoff while the exact original browser remains live. Reconnecting preserves the mode operation and does not close or replace that browser.
+After human input, use Give control back or `browser_control`, then `browser_continue` with the same `taskId`. Preserve edits and the [pending-mode boundary](references/cli-and-service.md#retained-handoff-recovery).
 
 Nested login outlines require same-frame boundary or bounded connected-field proof; conflicting mask/value evidence stays unverified. Distinct controls retain ambiguity.
 
-Saved login: use [native login controls](references/cli-and-service.md#native-login-controls) with the retained episode; no password export or input replay. The SDK tiles oversized windows under the owner pixel limit and freshly recaptures its chosen region; it never stitches input evidence or extends the episode.
+Saved login: use [native login controls](references/cli-and-service.md#native-login-controls) with the retained episode; no password export or input replay.
 
 ## Standalone authentication
 
