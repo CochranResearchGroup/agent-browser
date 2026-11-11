@@ -4624,6 +4624,8 @@ retain their original reconciliation requirement.
 
 ## Native login controls
 
+The SDK tiles oversized windows under the owner pixel limit and freshly recaptures its chosen region; it never stitches input evidence or extends the episode.
+
 Use browser_command native_capture with loginControls profile english-chrome-v1
 and expectedAccount to obtain deterministic current Native control candidates.
 The profile pins English Tesseract5.3.4/model metadata and flat rectangular
@@ -4722,5 +4724,7 @@ selected generation and physical runtime. It preserves absent authenticated
 presentation evidence; do not replace receipts or start unrelated cleanup.
 
 ## Retained handoff recovery
+
+After human input, use Give control back in the viewer, then `browser_continue` with the same `taskId` reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff. A pending browser mode change does not block the same durable handoff while the exact original browser remains live. Reconnecting preserves the mode operation and does not close or replace that browser.
 
 A retained handoff may finish its original settled browser-close publication before recovery; keep the same task and handoff, and preserve unresolved effect or identity failures for readback. An interactive invitation survives physical replacement only through its recorded exact recovery mapping; missing legacy mapping or changed targets stay fenced, with the human hold preserved.
