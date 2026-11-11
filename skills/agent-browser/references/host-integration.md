@@ -185,3 +185,5 @@ replacement on that approved target before publishing the new binding and
 clearing recoveryDesktop. Live managed generation-changing rebind remains refused;
 PID-reuse absence stays conservatively blocked. This is recovery, not relocation,
 and new native custody qualification is pending.
+
+Signed retained return uses an exact observation scope. It preserves pending mode changes and peer bindings; ordinary effectful operations remain guarded.

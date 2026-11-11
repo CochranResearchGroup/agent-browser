@@ -7518,6 +7518,7 @@ Rules:
   Standalone handoff: AGENT_BROWSER_PUBLIC_ORIGIN in env or ~/.agent-browser/.env.
   Reconnect clients after startup config changes.
   Control: expectedEpoch, actor/reason; fresh observation on return; no auto-resume.
+  Signed retained return observes only its exact target; pending mode changes stay pending.
   Reconnect: requestId/expectedRevision, lossPolicy=report_only|reopen.
   Proven loss: rebind saves recoveryDesktop; verified reopen uses it.
   Reopen: borrowed needs fresh attachment; managed needs agent/no pending.

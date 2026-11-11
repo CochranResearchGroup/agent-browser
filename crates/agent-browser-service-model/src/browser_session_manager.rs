@@ -216,6 +216,16 @@ pub trait BrowserSessionEffects {
         Ok(())
     }
 
+    /// Initialize only an exact retained browser observation. Implementations
+    /// must not reconcile, settle activity, launch, close or contact a provider.
+    fn begin_retained_observation(
+        &mut self,
+        _expected: &BrowserSessionState,
+        _browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        Err("browser_session_retained_observation_unavailable".into())
+    }
+
     /// Finish only an already-settled original close before retained recovery.
     /// Returning a state means it was atomically published against `expected`;
     /// the host must adopt that exact baseline before attempting a new launch.

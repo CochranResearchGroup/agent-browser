@@ -22,6 +22,7 @@ pub struct RemoteViewSessionEffects<E, T, S> {
     pool: Option<RemoteViewSessionPool>,
     next_intent_id: fn() -> String,
     expected: Option<BrowserSessionState>,
+    retained_observation: Option<ManagedBrowserInstance>,
     pending: Option<(BrowserLaunchIntent, bool)>,
     view_clock: Option<fn() -> u64>,
     retirements: BTreeMap<String, BrowserIdleRetirementRecord>,
@@ -68,6 +69,7 @@ impl<
             pool: None,
             next_intent_id,
             expected: None,
+            retained_observation: None,
             pending: None,
             view_clock: None,
             retirements: BTreeMap::new(),
@@ -676,6 +678,7 @@ impl<
             self.effects.begin_borrowed_retirement_operation(expected)?;
         }
         self.expected = Some(expected.clone());
+        self.retained_observation = None;
         Ok(())
     }
 
@@ -721,6 +724,22 @@ impl<
     fn require_operation(&self) -> Result<(), String> {
         if self.expected.is_none() {
             return Err("remote_view_session_operation_baseline_missing".into());
+        }
+        if self.retained_observation.is_some() {
+            return Err("remote_view_session_observation_scope_only".into());
+        }
+        Ok(())
+    }
+
+    fn require_retained_browser(&self, browser: &ManagedBrowserInstance) -> Result<(), String> {
+        if self.retained_observation.as_ref() != Some(browser)
+            || self
+                .expected
+                .as_ref()
+                .and_then(|state| state.browsers.get(&browser.id))
+                != Some(browser)
+        {
+            return Err("remote_view_session_observation_target_changed".into());
         }
         Ok(())
     }
@@ -1202,6 +1221,23 @@ impl<
     fn begin_operation(&mut self, expected: &BrowserSessionState) -> Result<(), String> {
         self.begin_operation_scope(expected, true)
     }
+
+    fn begin_retained_observation(
+        &mut self,
+        expected: &BrowserSessionState,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        self.expected = None;
+        self.retained_observation = None;
+        if expected.browsers.get(&browser.id) != Some(browser) || self.pending.is_some() {
+            return Err("remote_view_session_observation_target_changed".into());
+        }
+        // Deliberately omit operation settlement, retirement and provider work.
+        self.effects.begin_retained_observation(expected, browser)?;
+        self.expected = Some(expected.clone());
+        self.retained_observation = Some(browser.clone());
+        Ok(())
+    }
     fn reconcile_retained_browser_close(
         &mut self,
         expected: &BrowserSessionState,
@@ -1433,7 +1469,11 @@ impl<
         Ok(launch)
     }
     fn browser_is_live(&mut self, browser: &ManagedBrowserInstance) -> Result<bool, String> {
-        self.require_operation()?;
+        if self.retained_observation.is_some() {
+            self.require_retained_browser(browser)?;
+        } else {
+            self.require_operation()?;
+        }
         self.effects.browser_is_live(browser)
     }
     fn permits_idle_browser_close(
@@ -1724,6 +1764,32 @@ impl<
         session_name: &str,
         command: &serde_json::Value,
     ) -> Result<serde_json::Value, String> {
+        if self.retained_observation.is_some() {
+            self.require_retained_browser(browser)?;
+            let expected = self.expected.as_ref().expect("qualified observation");
+            let task = expected
+                .sessions
+                .get(session_id)
+                .ok_or("remote_view_session_observation_target_changed")?;
+            if command["action"] != "url"
+                || command["hostControlFreshObservation"] != true
+                || command["retainedTaskOnly"] != true
+                || !command["hostControlReturnObservation"].is_object()
+                || task.browser_id != browser.id
+                || task.name != session_name
+                || task.current_tab_id.as_deref() != Some(tab.id.as_str())
+                || expected.tabs.get(&tab.id) != Some(tab)
+                || tab.browser_id != browser.id
+                || command["targetId"] != tab.target_id
+            {
+                return Err("remote_view_session_observation_scope_only".into());
+            }
+            // Host and runtime owner independently verify the signed proof.
+            // This exact read creates no launch, activity or retirement record.
+            return self
+                .effects
+                .execute_command(browser, tab, session_id, session_name, command);
+        }
         self.require_operation()?;
         self.require_clear_profile_custody(&browser.profile_id)?;
         self.with_browser_activity(browser, |effects| {
