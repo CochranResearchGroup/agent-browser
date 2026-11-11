@@ -232,8 +232,53 @@ fn read_key(path: &std::path::Path) -> Result<[u8; 32], String> {
     Ok(key)
 }
 
+/// Serialize readers with the complete create, write and durable publication.
+/// The stable private sidecar is never removed while another process may use it.
+fn key_publication_guard(path: &std::path::Path) -> Result<File, String> {
+    let mut options = OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let file = options
+        .open(path.with_extension("key.lock"))
+        .map_err(|_| "browser_task_operation_key_publication_failed")?;
+    let metadata = file
+        .metadata()
+        .map_err(|_| "browser_task_operation_key_publication_failed")?;
+    if !metadata.is_file() {
+        return Err("browser_task_operation_key_publication_failed".into());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        // SAFETY: geteuid has no arguments or failure path.
+        if metadata.uid() != unsafe { libc::geteuid() }
+            || metadata.mode() & 0o077 != 0
+            || metadata.nlink() != 1
+        {
+            return Err("browser_task_operation_key_publication_failed".into());
+        }
+    }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        match file.try_lock() {
+            Ok(()) => return Ok(file),
+            Err(std::fs::TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            Err(_) => return Err("browser_task_operation_key_publication_failed".into()),
+        }
+    }
+}
+
 fn key(has_history: bool) -> Result<[u8; 32], String> {
     let path = key_path()?;
+    let _publication_guard = key_publication_guard(&path)?;
     match std::fs::symlink_metadata(&path) {
         Ok(_) => return read_key(&path),
         Err(error) if error.kind()==std::io::ErrorKind::NotFound && !has_history => {},
@@ -250,6 +295,8 @@ fn key(has_history: bool) -> Result<[u8; 32], String> {
     }
     match options.open(&path) {
         Ok(mut file) => {
+            #[cfg(all(test, target_os = "linux"))]
+            key_tests::after_create(&path)?;
             file.write_all(&key)
                 .and_then(|_| file.sync_all())
                 .map_err(|_| "browser_task_operation_key_publication_failed")?;
@@ -266,6 +313,9 @@ fn key(has_history: bool) -> Result<[u8; 32], String> {
         Err(_) => Err("browser_task_operation_key_publication_failed".into()),
     }
 }
+
+#[cfg(all(test, target_os = "linux"))]
+mod key_tests;
 
 fn mac(key: &[u8; 32], command: &Value) -> Result<Hmac<Sha256>, String> {
     let mut mac =

@@ -4,7 +4,7 @@ Product lane: PL-BUGFIX
 Work item: 613
 Owner: ecochran76
 Branch: fix/retained-handoff-613
-State: SOURCE_QUALIFIED_AWAITING_RUNTIME_ADOPTION
+State: INSTALLED_ACCEPTED
 
 The original authenticated URL reports a closed task and requests a replacement
 link while owner inspect reports active, unexpired and perpetual. Repeated
@@ -228,3 +228,54 @@ the already accepted installation and its qualified original-link page remain
 separate from this new repair. Reuse matching compiled dependencies when safe,
 retain the failed live sample, and run the owned live reopen check again only
 on a fresh, separately addressed QA task.
+
+## Final installed acceptance, 2026-11-10
+
+PR618 integrates the closed-history repair and current installed-source
+composition. PR623 integrates the no-saved-URL observation correction. The
+successor source51041d9e2 passes the focused closed-handoff selection, required
+workspace format and strict Clippy. The final fixture narrows the unsupported
+alias refusal to the observed reopen seam; that test-only scope refinement does
+not alter the selected positive paths or their RED oracle. Earlier qualified
+migration, control, perception, client, docs and UI evidence remains scoped to
+its unchanged inputs. No comprehensive or target-platform CI claim is made.
+
+The successor production-shaped artifact is
+53dd25a86be1161f11ff895418931ff68463a7bcf469325b1e4bf98ab520ff3f.
+One isolated build reused matching compiled dependency cache, without copying
+or modifying an old seal. Release compilation completed in25m03s. The exact
+installer fixture and all six no-launch service/MCP checks pass. Two fixture
+hosts and six smoke daemons have fresh exact-owner exit readbacks with zero
+owned residue. The preserving installation is accepted and installed doctor
+passes. Private generation, transaction and process receipts stay in the runtime
+home rather than this product source artifact.
+
+Installed acceptance separates these observations:
+
+- The original authenticated URL stays active/perpetual and offers Reopen task
+  at the same opaque URL. No warning modal appears, and an independent anonymous
+  context is sent to sign-in. The original task was not recreated or used.
+- A separately owned disposable blank task is closed and reopened through its
+  same retained URL with the same profile. Owner readback confirms successful
+  reconstruction, absent pending markers, the prepared Native observation and
+  renewed cooperative human control. The no-saved-URL case is actually exercised.
+- Read-only same-link reconnect shows a visible Native canvas and the actual
+  Give control back button, with no visible warning dialog. This proves the
+  viewer's interactive mode, not a website sign-in or typed-input workflow.
+- The owned QA browser is explicitly closed through attributed browser scope;
+  a fresh OS readback confirms its original process identity is absent.
+
+Two observer defects are retained, not counted as product failures: the page
+navigated before Playwright could read the already-completed HTTP response body,
+and a strict locator rejected two canvases while counting hidden settings
+portals as dialogs. No reopen effect was replayed to fix either observer.
+Canonical request readback and a fresh read-only same-link viewer observation
+establish the successful result using visible elements. The earlier real
+unsupported-alias failure remains preserved separately. An older broad OS-root
+snapshot had two ended, unattributed samples, so full global process-preservation
+is not claimed. No unrelated process tree was cleaned up.
+
+This completes the bounded installed handoff-resilience outcome. Original
+website login and the separate historical active-view warning report are not
+reclassified by these tests. Archive all sealed candidates through governed
+closeout, retain their source refs, and remove only this finished checkout.

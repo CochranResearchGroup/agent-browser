@@ -4,35 +4,51 @@ work_item_tracking: required
 lanes:
   - id: NATIVE-COMPACT-CHOOSER-596
     product_lane: PL-BUGFIX
-    objective: Permit configurable bounded SDK invocations and verified acknowledged-prefix continuation without replay
-    plan: docs/dev/maintenance/native-saved-login596.md
+    objective: Preserve selected MAC-key publication while bounding Native owner RPCs without replay
+    plan: docs/dev/maintenance/native-owner596-selected-lineage.md
     branch: fix/native-login-allowance596
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#596]
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    dependencies: [NATIVE-SAVED-LOGIN-596]
-    overlaps: [NATIVE-SAVED-LOGIN-596]
-    reconciled_overlaps: ["One primary from installed source51041; preserve canonical607 and worker-status live trees; five absent registered historical checkouts retain refs and archived candidates without prune or GC"]
-    validation_status: Native elapsed-age and SDK allowance RED retained; Native32, SDK6 plus legacy/types, strict Clippy/fmt, parity/docs/policy and Next docs build pass; source qualified for coordinator binding
-    limitations: ["No SDK continuation or browser input; private pixels and OCR remain outside Git", "Historical absent596/coverage/611/579/619 entries reviewed as retained custody, not live primaries; review2026-11-12"]
+    dependencies: [NATIVE-SAVED-LOGIN-596, TASK-OPERATION-KEY-627]
+    overlaps: [NATIVE-SAVED-LOGIN-596, TASK-OPERATION-KEY-627]
+    reconciled_overlaps: ["Reuse the existing596 primary; ordinary merge of selected main9e1d805 into qualified205f95f preserves both published histories; no canonical checkout writes, new checkout, prune or GC", "Keep source231 sealed artifact and stopped205 candidate inputs unchanged; no runtime installation or historical input replay"]
+    validation_status: Combined selected9e1 plus205 key4, owner4, HTTP14 and Native34 pass; strict Clippy/fmt/docs/parity pass; Native34 focused-target breach retained; artifact and runtime qualification pending
+    limitations: ["No production install or website input", "Private pixels, OCR, original unknown inputs and canceled-build receipts remain outside Git; review2026-11-12"]
+    updated_at: 2026-11-11
+  - id: TASK-OPERATION-KEY-627
+    product_lane: PL-BUGFIX
+    objective: Publish the task-operation MAC key safely across concurrent first writes
+    plan: docs/dev/maintenance/task-operation-key-627.md
+    branch: fix/task-operation-key-publication
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#627]
+    plan_state: OPEN
+    custody_state: INTEGRATION_READY
+    dependencies: []
+    overlaps: [NATIVE-SAVED-LOGIN-596, OPERATOR-MODE-RELAUNCH-607]
+    reconciled_overlaps: ["Reuse the clean canonical checkout after merged608; preserve the607 branch, pinned artifacts and all other registrations; no new checkout or pruning", "627 owns key publication and its tests in browser_task_operations.rs; PR626 owns Native invocation hunks; preserve the Auth lane and coordinate only this new catalog entry"]
+    validation_status: Exact public and native RED then GREEN;20 focused task-operation cases and34 cold MCP task lifecycles pass without serial warmup; Rustfmt strict workspace Clippy policy wiring and changed links pass
+    limitations: ["PR integration pending; source and disposable CLI acceptance only", "No production deployment or allocator-setting change"]
     updated_at: 2026-11-11
   - id: RETAINED-HANDOFF-613
     product_lane: PL-BUGFIX
     objective: Keep a valid handoff actionable after explicit task closure
     plan: docs/dev/maintenance/retained-handoff-613.md
-    branch: fix/closed-tab-migration-613
+    branch: fix/handoff613-deployment-receipt
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#613]
-    plan_state: OPEN
+    plan_state: COMPLETED
     custody_state: INTEGRATED
     dependencies: [MANUAL-IDLE-HANDOFF-599]
     overlaps: [OPERATOR-MODE-RELAUNCH-607, TERMINAL-CONTROL-611, NATIVE-SAVED-LOGIN-596]
     reconciled_overlaps: ["613 owns closed-link presentation and explicit reconstruction;607 mode relaunch and611 terminal requests retain their physical checkouts; shared host integration is serial"]
-    validation_status: PR618 combined source qualified;a7e8eb56a sealed fbe7764ab87b;29 migration,40 control,22 perception,3 handoff cases plus strict Rust, clients, docs, exact installer and six no-launch smokes pass; preserving install next
-    limitations: ["Runtime adoption must preserve installed unmerged source d26086895fe18871e946fcf6fdfffac3a020e847; no production install or original task recreation", "Human-control warning remains a separate report"]
+    validation_status: PR618 and623 integrated; preserving successor installed accepted; original same-link action and guarded anonymous access, owned blank-task reopen with preserved profile and interactive Native viewer, doctor and exact QA process exit pass
+    limitations: ["Original website task not recreated; no website authentication claim", "Separate historical active-view warning report and cross-platform acceptance remain outside this outcome", "Two older OS-root samples ended without causal attribution; no full global preservation claim"]
     updated_at: 2026-11-10
   - id: NATIVE-LOGIN-596-COVERAGE
     product_lane: PL-AUTH
