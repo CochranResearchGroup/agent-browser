@@ -845,6 +845,73 @@ impl ManagedBrowserCommandEffects for RuntimeSessionEffects {
 mod tests {
     use super::*;
     #[test]
+    fn retained_mode_assignment_accepts_metadata_without_relaxing_remote_guard() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let adapter = RemoteViewApplicationAdapter::new(
+            "agent-browser".into(),
+            RemoteViewApplicationHttp::new(
+                &format!("http://{}", listener.local_addr().unwrap()),
+                Duration::from_secs(1),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let store = BrowserSessionSqliteStore::launch_custody_fixture(
+            rusqlite::Connection::open_in_memory().unwrap(),
+            true,
+        )
+        .unwrap();
+        let local = BrowserSessionEffectAdapter::new(
+            BrowserManagerRuntime::start(Default::default()).unwrap(),
+        );
+        let mut effects = RuntimeSessionEffects::Remote(Box::new(
+            RemoteViewSessionEffects::new(local, adapter, store, vec![], || {
+                uuid::Uuid::new_v4().to_string()
+            })
+            .unwrap(),
+        ));
+        let retained = agent_browser_service_model::RemoteViewTabHandoffTarget {
+            browser:serde_json::from_value(serde_json::json!({"id":"browser","profileId":"profile","pid":0,"cdpEndpoint":"","activeSessionIds":["task"]})).unwrap(),
+            session:serde_json::from_value(serde_json::json!({"id":"task","name":"task","profileId":"profile","browserId":"browser","createdAtMs":1,"lastActivityAtMs":1,"expiresAtMs":100,"currentTabId":"tab"})).unwrap(),
+            tab:serde_json::from_value(serde_json::json!({"id":"tab","targetId":"target","browserId":"browser","sessionId":"task","createdAtMs":1,"lastActivityAtMs":1})).unwrap(),
+        };
+        let mut current = agent_browser_service_model::BrowserSessionState::default();
+        current
+            .browsers
+            .insert(retained.browser.id.clone(), retained.browser.clone());
+        let mut session = retained.session.clone();
+        session.last_activity_at_ms = 2;
+        session.expires_at_ms = 101;
+        current.sessions.insert(session.id.clone(), session);
+        let mut tab = retained.tab.clone();
+        tab.last_activity_at_ms = 2;
+        current.tabs.insert(tab.id.clone(), tab);
+        effects.begin_operation(&current).unwrap();
+        assert_eq!(
+            effects
+                .native_handoff_assignment_target(&retained)
+                .unwrap_err(),
+            "remote_view_native_target_changed"
+        );
+        let target =
+            super::super::browser_session_host::browser_mode_host::retained_mode_native_target(
+                &retained, &current,
+            )
+            .unwrap();
+        assert_eq!(
+            effects
+                .native_handoff_assignment_target(&target)
+                .unwrap_err(),
+            "remote_view_tab_view_desktop_missing",
+            "exact refreshed target passes assignment baseline before provider I/O"
+        );
+        assert!(
+            matches!(listener.accept(), Err(error) if error.kind()==std::io::ErrorKind::WouldBlock)
+        );
+    }
+
+    #[test]
     fn configured_remote_retained_process_liveness_needs_no_operation() {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();

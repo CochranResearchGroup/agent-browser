@@ -7519,6 +7519,7 @@ Rules:
   Reconnect clients after startup config changes.
   Control: expectedEpoch, actor/reason; fresh observation on return; no auto-resume.
   Signed retained return observes only its exact target; pending mode changes stay pending.
+  Retained mode targeting tolerates activity timestamps, preserving physical identity.
   Reconnect: requestId/expectedRevision, lossPolicy=report_only|reopen.
   Proven loss: rebind saves recoveryDesktop; verified reopen uses it.
   Reopen: borrowed needs fresh attachment; managed needs agent/no pending.

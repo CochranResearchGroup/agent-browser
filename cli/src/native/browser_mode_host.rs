@@ -30,13 +30,50 @@ struct Binding {
     #[serde(default)]
     profile_data_version: Option<String>,
 }
+/// Refresh only observation timestamps for an already-bound mode operation.
+/// Native admission still compares these current objects and persisted state.
+pub(in crate::native) fn retained_mode_native_target(
+    retained: &RemoteViewTabHandoffTarget,
+    current: &BrowserSessionState,
+) -> Result<RemoteViewTabHandoffTarget, String> {
+    let changed = || "browser_native_target_changed:refresh task".to_string();
+    let browser = current
+        .browsers
+        .get(&retained.browser.id)
+        .ok_or_else(changed)?;
+    let session = current
+        .sessions
+        .get(&retained.session.id)
+        .ok_or_else(changed)?;
+    let tab = current.tabs.get(&retained.tab.id).ok_or_else(changed)?;
+    let mut bound_session = session.clone();
+    bound_session.last_activity_at_ms = retained.session.last_activity_at_ms;
+    bound_session.expires_at_ms = retained.session.expires_at_ms;
+    let mut bound_tab = tab.clone();
+    bound_tab.last_activity_at_ms = retained.tab.last_activity_at_ms;
+    if browser != &retained.browser
+        || bound_session != retained.session
+        || bound_tab != retained.tab
+    {
+        return Err(changed());
+    }
+    Ok(RemoteViewTabHandoffTarget {
+        browser: browser.clone(),
+        session: session.clone(),
+        tab: tab.clone(),
+    })
+}
+
 impl Binding {
-    fn target(&self) -> RemoteViewTabHandoffTarget {
-        RemoteViewTabHandoffTarget {
-            browser: self.browser.clone(),
-            session: self.session.clone(),
-            tab: self.tab.clone(),
-        }
+    fn target(&self, current: &BrowserSessionState) -> Result<RemoteViewTabHandoffTarget, String> {
+        retained_mode_native_target(
+            &RemoteViewTabHandoffTarget {
+                browser: self.browser.clone(),
+                session: self.session.clone(),
+                tab: self.tab.clone(),
+            },
+            current,
+        )
     }
 }
 
@@ -572,10 +609,11 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             return Err("mode_operation_replacement_posture_unverified".into());
         }
         // Keep the observed launch intent until atomic replacement publication.
+        let retained_target = self.binding.target(&self.host.state)?;
         let target = self
             .host
             .effects
-            .native_handoff_assignment_target(&self.binding.target())?;
+            .native_handoff_assignment_target(&retained_target)?;
         let mut ready = None;
         for _ in 0..30 {
             match self.host.native_process_command(
@@ -622,9 +660,10 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         })
     }
     fn graceful_close(&mut self, request: &Request) -> Result<CloseOutcome, String> {
+        let target = self.binding.target(&self.host.state)?;
         let reply = self
             .host
-            .native_browser_command(&self.binding.target(), &json!({"action":"native_close"}))?;
+            .native_browser_command(&target, &json!({"action":"native_close"}))?;
         if reply["delivery"] != "dispatched" {
             return Ok(CloseOutcome::Uncertain);
         }
@@ -640,8 +679,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         if !matches!(self.original_status(request)?, OriginalStatus::Live) {
             return Ok(false);
         }
+        let target = self.binding.target(&self.host.state)?;
         let reply = self.host.native_browser_command(
-            &self.binding.target(),
+            &target,
             &json!({"action":"native_input","actions":[{"kind":"key","chord":"Escape"}]}),
         )?;
         if reply["delivery"] != "dispatched" {
@@ -649,8 +689,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         }
         // Read current exact-process Native window evidence after Escape. A lost
         // input response or exited original never releases the profile fence.
+        let target = self.binding.target(&self.host.state)?;
         self.host
-            .native_browser_command(&self.binding.target(), &json!({"action":"native_ready"}))?;
+            .native_browser_command(&target, &json!({"action":"native_ready"}))?;
         Ok(matches!(
             self.original_status(request)?,
             OriginalStatus::Live
@@ -703,8 +744,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         }
     }
     fn focus(&mut self, _: &Request) -> Result<(), String> {
+        let target = self.binding.target(&self.host.state)?;
         self.host
-            .native_browser_command(&self.binding.target(), &json!({"action":"native_focus"}))
+            .native_browser_command(&target, &json!({"action":"native_focus"}))
             .map(|_| ())
     }
     fn launch(&mut self, request: &Request) -> Result<Replacement, String> {

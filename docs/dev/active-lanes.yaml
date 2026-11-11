@@ -2,6 +2,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: RETAINED-MODE-TARGET-647
+    product_lane: PL-BUGFIX
+    objective: Preserve exact mode targeting across observation metadata drift
+    plan: docs/dev/maintenance/retained-mode-target647.md
+    branch: fix/retained-mode-target647
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#647]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [RETAINED-PROCESS-LIVENESS-644]
+    overlaps: [RETAINED-PROCESS-LIVENESS-644]
+    reconciled_overlaps: ["Borrow existing630 checkout at canonicalbcf97e15; no runtime effects or new worktree"]
+    validation_status: Concrete RED; 41 distinct focused passes; strict workspace Clippy, fmt and docs green; installed verification remains parent-owned
+    limitations: ["No runtime effects or commit/push before root review", "Installed acceptance belongs to parent lane"]
+    updated_at: 2026-11-11
   - id: RETAINED-PROCESS-LIVENESS-644
     product_lane: PL-BUGFIX
     objective: Qualify exact signed retained return in an observation-only Remote View scope
