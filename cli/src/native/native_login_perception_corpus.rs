@@ -745,3 +745,148 @@ fn native_login_perception_compact_refinement_refuses_a_second_low_confidence_ac
     let r=observe_refined(&c,&region,&request,|_|Ok(vec![refined_compact_account(false),json!({"text":"other@example.invalid","confidence":69,"bounds":{"x":80,"y":68,"width":300,"height":28}})])).unwrap();
     assert_eq!(r, original);
 }
+
+#[test]
+fn native_login_perception_rounded_dark_submit_is_one_connected_widget596() {
+    let mut capture = rounded_layout621(&[(100, 350)], json!([line("Log in", 240, 367, 70)]));
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(capture["image"]["data"].as_str().unwrap())
+        .unwrap();
+    let mut image = image::load_from_memory(&bytes).unwrap().to_rgba8();
+    for p in image.pixels_mut() {
+        if *p == Rgba([232, 240, 254, 255]) {
+            *p = Rgba([0, 0, 0, 255]);
+        }
+    }
+    let mut png = Cursor::new(vec![]);
+    image.write_to(&mut png, image::ImageFormat::Png).unwrap();
+    capture["capture"]["sha256"] = json!(hex(png.get_ref()));
+    capture["image"]["data"] =
+        json!(base64::engine::general_purpose::STANDARD.encode(png.get_ref()));
+    let r = detect(&capture, None);
+    assert_eq!(r["status"], "observed");
+    assert_eq!(r["controls"].as_array().unwrap().len(), 1);
+    assert_eq!(r["controls"][0]["kind"], "submit");
+}
+
+fn dark_submit_tile596(origin: u32, second: bool) -> Value {
+    let mut c = rounded_layout621(&[(100, 150), (100, 250), (100, 350)], json!([]));
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(c["image"]["data"].as_str().unwrap())
+        .unwrap();
+    let mut im = image::load_from_memory(&bytes).unwrap().to_rgba8();
+    for y in 350..402 {
+        for x in 100..460 {
+            if *im.get_pixel(x, y) == Rgba([232, 240, 254, 255]) {
+                im.put_pixel(x, y, Rgba([0, 0, 0, 255]));
+            }
+        }
+    }
+    for x in [115, 130, 145, 160] {
+        for dx in 0..5 {
+            for dy in 0..5 {
+                im.put_pixel(x + dx, 270 + dy, Rgba([20, 20, 20, 255]));
+            }
+        }
+    }
+    let mut window = RgbaImage::from_pixel(1440, 900, Rgba([255, 255, 255, 255]));
+    image::imageops::overlay(&mut window, &im, 432, 0);
+    if second {
+        for y in 310..340 {
+            for x in 532..892 {
+                window.put_pixel(x, y, Rgba([0, 0, 0, 255]));
+            }
+        }
+    }
+    let tile = image::imageops::crop_imm(&window, origin, 0, 1111, 900).to_image();
+    let mut png = Cursor::new(vec![]);
+    tile.write_to(&mut png, image::ImageFormat::Png).unwrap();
+    c["image"]["data"] = json!(base64::engine::general_purpose::STANDARD.encode(png.get_ref()));
+    c["capture"]["sha256"] = json!(hex(png.get_ref()));
+    c["ocr"]["lines"] = json!([
+        line("Email", 532, 120, 100),
+        line("saved@example.invalid", 542, 170, 180),
+        line("Password", 532, 220, 100)
+    ]);
+    c
+}
+#[test]
+fn native_login_perception_dark_submit_refinement596_preserves_tiles_and_refusals() {
+    let request = json!({"profile":"english-chrome-v1","expectedAccount":"saved@example.invalid"});
+    let mut outputs = vec![];
+    for origin in [0, 329] {
+        let c = dark_submit_tile596(origin, false);
+        let region = json!({"x":origin,"y":0,"width":1111,"height":900});
+        let mut calls = 0;
+        let r = observe_refined(&c, &region, &request, |image| {
+            calls += 1;
+            assert!(image.width() <= 960 && image.height() <= 160);
+            Ok(vec![line("Log in", 260, 14, 90)])
+        })
+        .unwrap();
+        assert_eq!(calls, 1);
+        assert_eq!(r["status"], "observed");
+        assert_eq!(r["controls"].as_array().unwrap().len(), 3, "{r}");
+        let s = r["controls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["kind"] == "submit")
+            .unwrap();
+        outputs.push(json!([
+            s["kind"],
+            s["bounds"],
+            s["fieldValueState"],
+            s["configuredAccountMatch"]
+        ]));
+        for variant in 0..7 {
+            let mut c = c.clone();
+            let mut req = request.clone();
+            if variant == 0 {
+                req["expectedAccount"] = json!("other@example.invalid");
+            }
+            if variant == 1 {
+                c = dark_submit_tile596(origin, true);
+            }
+            if variant == 5 {
+                c["ocr"]["lines"]
+                    .as_array_mut()
+                    .unwrap()
+                    .retain(|l| l["text"] != "Password");
+            }
+            if variant == 6 {
+                c["ocr"]["lines"].as_array_mut().unwrap().push(line(
+                    "other@example.invalid",
+                    542,
+                    170,
+                    180,
+                ));
+            }
+            let mut calls = 0;
+            let r = observe_refined(&c, &region, &req, |_| {
+                calls += 1;
+                let mut l = line("Log in", 260, 14, 90);
+                if variant == 2 {
+                    l["confidence"] = json!(79);
+                }
+                if variant == 3 {
+                    l["text"] = json!("Continue");
+                }
+                if variant == 4 {
+                    l["bounds"]["x"] = json!(10000);
+                }
+                Ok(vec![l])
+            })
+            .unwrap();
+            assert!(!r["controls"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|c| c["kind"] == "submit"));
+            if variant <= 1 || variant >= 5 {
+                assert_eq!(calls, 0);
+            }
+        }
+    }
+    assert_eq!(outputs[0], outputs[1]);
+}

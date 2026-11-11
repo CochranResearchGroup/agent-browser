@@ -475,8 +475,10 @@ fn canonicalize_field_outlines(image: &RgbaImage, crop: Bounds, controls: &mut V
         })
     };
     let related = |a: usize, b: usize| {
-        matches!(controls[a]["kind"].as_str(), Some("username" | "password"))
-            && controls[a]["kind"] == controls[b]["kind"]
+        matches!(
+            controls[a]["kind"].as_str(),
+            Some("username" | "password" | "submit")
+        ) && controls[a]["kind"] == controls[b]["kind"]
             && controls[a]["configuredAccountMatch"] == controls[b]["configuredAccountMatch"]
             && local(&controls[a])
                 .zip(local(&controls[b]))
@@ -771,9 +773,88 @@ pub(crate) fn observe(capture: &Value, region: &Value, request: &Value) -> Resul
         json!({"schemaVersion":"agent-browser.native-login-controls.v1","profile":PROFILE,"status":if ambiguous{"ambiguous"}else if controls.is_empty(){"not_found"}else{"observed"},"controls":controls,"coordinateSpace":"desktop_physical_pixels","frameSha256":digest,"detector":{"id":"native-login-pixel-ocr","version":"1","minimumOcrConfidence":80,"rgbTolerance":12,"maximumPixels":1000000,"ocrEngine":"tesseract","ocrEngineVersion":"5.3.4","ocrLanguage":"eng","ocrModelSha256":"7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2"},"inputAuthorized":false,"authenticated":false,"limitation":"Read-only English flat rectangular control perception; OCR execution and live layouts require separate qualification; field values and browser-native origin are unverified; masked state requires same-frame repeated dot components."}),
     )
 }
-/// Refine at most one compact popup from this already validated owner frame.
-/// OCR remains observe-only; any unavailable, conflicting or malformed refinement
-/// leaves the original conservative observation intact.
+/// Refine only one independently bounded dark submit widget below an already
+/// configured username and pixel-masked password. A second physical candidate
+/// or disconnected contour is ambiguity, never a reason to choose by proximity.
+fn submit_panel(
+    image: &RgbaImage,
+    crop: Bounds,
+    original: &Value,
+    rects: &[Bounds],
+    lines: &[Value],
+    request: &Value,
+) -> Option<Bounds> {
+    let controls = original["controls"].as_array()?;
+    let users = controls
+        .iter()
+        .filter(|c| c["kind"] == "username")
+        .collect::<Vec<_>>();
+    let passwords = controls
+        .iter()
+        .filter(|c| c["kind"] == "password")
+        .collect::<Vec<_>>();
+    if users.len() != 1
+        || passwords.len() != 1
+        || users[0]["configuredAccountMatch"] != true
+        || passwords[0]["fieldValueState"] != "masked"
+        || controls.iter().any(|c| c["kind"] == "submit")
+    {
+        return None;
+    }
+    let user = bounds(&users[0]["bounds"]).ok()?;
+    let expected = request["expectedAccount"].as_str()?;
+    if lines.iter().any(|l| {
+        l["confidence"].as_f64().is_some_and(|c| c >= 80.0)
+            && l["text"]
+                .as_str()
+                .is_some_and(|t| t.contains('@') && !t.trim().eq_ignore_ascii_case(expected))
+            && bounds(&l["bounds"]).ok().is_some_and(|b| user.contains(b))
+    }) {
+        return None;
+    }
+    let p = bounds(&passwords[0]["bounds"]).ok()?;
+    let p = Bounds {
+        x: p.x.checked_sub(crop.x)?,
+        y: p.y.checked_sub(crop.y)?,
+        ..p
+    };
+    let candidates = rects
+        .iter()
+        .copied()
+        .filter(|r| {
+            if r.width < 100
+                || r.width > 480
+                || r.height < 22
+                || r.height > 80
+                || r.y < p.y + p.height
+                || r.y - (p.y + p.height) > 100
+                || r.x.abs_diff(p.x) > 32
+                || r.width.abs_diff(p.width) > 64
+            {
+                return false;
+            }
+            let fill = *image.get_pixel(r.x + r.width / 2, r.y);
+            fill[3] == 255
+                && (0..3).all(|i| fill[i] <= 64)
+                && filled_field_component(image, *r, fill).is_some()
+        })
+        .collect::<Vec<_>>();
+    if candidates.is_empty()
+        || !candidates.iter().all(|a| {
+            candidates
+                .iter()
+                .all(|b| a == b || same_field_outline(image, *a, *b))
+        })
+    {
+        return None;
+    }
+    candidates
+        .into_iter()
+        .min_by_key(|r| (r.width * r.height, r.y, r.x))
+}
+
+/// Refine at most one compact popup or qualified dark submit widget from this
+/// validated owner frame. Unavailable or conflicting OCR remains conservative.
 pub(crate) fn observe_refined(
     capture: &Value,
     region: &Value,
@@ -797,6 +878,54 @@ pub(crate) fn observe_refined(
     let crop = bounds(region)?;
     let rects = rectangles(&image)?;
     let lines = capture["ocr"]["lines"].as_array().ok_or(INVALID)?;
+    if let Some(panel) = submit_panel(&image, crop, &original, &rects, lines, request) {
+        let roi = image::imageops::crop_imm(&image, panel.x, panel.y, panel.width, panel.height)
+            .to_image();
+        let doubled = image::imageops::resize(
+            &roi,
+            panel.width * 2,
+            panel.height * 2,
+            image::imageops::FilterType::Nearest,
+        );
+        let Ok(refined) = refine(&doubled) else {
+            return Ok(original);
+        };
+        if refined.len() > 512 {
+            return Ok(original);
+        }
+        let captions = refined
+            .iter()
+            .filter(|l| {
+                l["confidence"].as_f64().is_some_and(|c| c >= 80.0)
+                    && l["text"].as_str().is_some_and(|t| {
+                        matches!(
+                            t.trim().to_ascii_lowercase().as_str(),
+                            "log in" | "sign in" | "login"
+                        )
+                    })
+            })
+            .collect::<Vec<_>>();
+        if captions.len() != 1 {
+            return Ok(original);
+        }
+        let mut caption = captions[0].clone();
+        let Ok(b) = bounds(&caption["bounds"]) else {
+            return Ok(original);
+        };
+        if b.x + b.width > doubled.width() || b.y + b.height > doubled.height() {
+            return Ok(original);
+        }
+        let (x, y) = (b.x / 2, b.y / 2);
+        caption["bounds"] = json!({"x":crop.x+panel.x+x,"y":crop.y+panel.y+y,"width":(b.x+b.width).div_ceil(2)-x,"height":(b.y+b.height).div_ceil(2)-y});
+        let mut updated = capture.clone();
+        let mut combined = lines.clone();
+        combined.push(caption);
+        if combined.len() > 512 {
+            return Ok(original);
+        }
+        updated["ocr"]["lines"] = json!(combined);
+        return observe(&updated, region, request).or(Ok(original));
+    }
     let panels = lines
         .iter()
         .filter_map(|f| compact_panel(&image, &rects, crop, f))

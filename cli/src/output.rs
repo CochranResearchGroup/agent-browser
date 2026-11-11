@@ -7435,7 +7435,7 @@ Commands:
   Saved-login SDK: bounded overlapping window tiles, fresh selected region; same original budget.
   Native field outlines: pixel-proven duplicates only; conflicting mask/value stays unverified.
   Native saved login: capture loginControls english-chrome-v1; select opaque loginTarget
-  Compact saved entries: pinned bounded OCR refinement; exact account/mask/ambiguity required
+  Compact saved entries/dark submit: pinned bounded OCR; exact account/mask/ambiguity required
   Native login episode: same task/episode; at most3 ordered inputs; unknown input never replays
   Saved-login allowance: configurable invocation timeout(default300s); explicit verified ACK-prefix resume
   Native login proof: no password/OCR/image export; independent account verification required
