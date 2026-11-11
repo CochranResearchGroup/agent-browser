@@ -83,6 +83,13 @@ pub(crate) trait BrowserRuntimeDriver {
     ) -> Result<(), String> {
         Ok(())
     }
+    fn begin_retained_observation(
+        &mut self,
+        _expected: &agent_browser_service_model::BrowserSessionState,
+        _browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        Err("browser_session_retained_observation_unavailable".into())
+    }
     fn begin_borrowed_retirement_operation(
         &mut self,
         expected: &agent_browser_service_model::BrowserSessionState,
@@ -332,6 +339,13 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
     ) -> Result<(), String> {
         self.runtime.begin_operation(expected)
     }
+    fn begin_retained_observation(
+        &mut self,
+        expected: &agent_browser_service_model::BrowserSessionState,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        self.runtime.begin_retained_observation(expected, browser)
+    }
     fn begin_borrowed_retirement_operation(
         &mut self,
         expected: &agent_browser_service_model::BrowserSessionState,
@@ -567,12 +581,28 @@ fn create_private_directory(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 struct BorrowedAppBrowser {
     profile_id: String,
     process: agent_browser_service_model::RecordedProcessIdentity,
     endpoint: String,
     targets: BTreeSet<String>,
+}
+
+fn merge_observation_binding(
+    bindings: &mut HashMap<String, BorrowedAppBrowser>,
+    browser_id: &str,
+    incoming: Option<BorrowedAppBrowser>,
+) -> Result<(), String> {
+    if let Some(current) = bindings.get(browser_id) {
+        if incoming.as_ref() != Some(current) {
+            return Err("browser_session_observation_binding_changed".into());
+        }
+    }
+    if let Some(binding) = incoming {
+        bindings.insert(browser_id.to_string(), binding);
+    }
+    Ok(())
 }
 
 /// Forget a stale CDP connection only after proving it owns no launched process.
@@ -620,6 +650,11 @@ enum BrowserRuntimeCommand {
         tabs: Vec<ManagedBrowserTab>,
         navigation: Vec<agent_browser_service_model::BrowserNavigationRecord>,
         reply: mpsc::Sender<Result<Option<agent_browser_service_model::BrowserRecovery>, String>>,
+    },
+    ObservationBaseline {
+        browser_id: String,
+        borrowed: Option<BorrowedAppBrowser>,
+        reply: mpsc::Sender<Result<(), String>>,
     },
     OperationBaseline {
         shared_browser_ids: BTreeSet<String>,
@@ -1067,6 +1102,34 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
             },
         )
     }
+    fn begin_retained_observation(
+        &mut self,
+        expected: &agent_browser_service_model::BrowserSessionState,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        if expected.browsers.get(&browser.id) != Some(browser) {
+            return Err("browser_session_observation_binding_changed".into());
+        }
+        let borrowed = expected
+            .app_browser_attachments
+            .get(&browser.id)
+            .map(|attachment| BorrowedAppBrowser {
+                profile_id: attachment.profile_id.clone(),
+                process: attachment.request.process.clone(),
+                endpoint: browser.cdp_endpoint.clone(),
+                targets: attachment.borrowed_tab_ids.clone(),
+            });
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::ObservationBaseline {
+                browser_id: browser.id.clone(),
+                borrowed,
+                reply,
+            },
+        )
+    }
+
     fn select_profile_browser_executable(
         &mut self,
         profile_id: String,
@@ -1499,6 +1562,17 @@ fn run_browser_worker(
                 ..
             } if manual::is_manual(&browser) => {
                 let _ = reply.send(manual.execute(&browser, &command));
+            }
+            BrowserRuntimeCommand::ObservationBaseline {
+                browser_id,
+                borrowed,
+                reply,
+            } => {
+                // Only this exact binding may be initialized; never invalidate
+                // or remove a peer connection as ordinary baseline setup can.
+                let result =
+                    merge_observation_binding(&mut borrowed_app_browsers, &browser_id, borrowed);
+                let _ = reply.send(result);
             }
             BrowserRuntimeCommand::OperationBaseline {
                 shared_browser_ids,
@@ -2094,6 +2168,8 @@ fn run_browser_worker(
                             .browser
                             .as_mut()
                             .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
+                        if !(command["action"] == "url" && command["hostControlFreshObservation"] == true
+                            && command["retainedTaskOnly"] == true && command["hostControlReturnObservation"].is_object()) {
                         if let Some(marker) = manager
                             .pages_list()
                             .into_iter()
@@ -2106,6 +2182,7 @@ fn run_browser_worker(
                             let _ = manager
                                 .clear_initial_task_marker(&tab.target_id, &marker)
                                 .await;
+                        }
                         }
                         attach_owned_target_if_missing(manager, &tab.target_id).await?;
                         // Read the addressed task or popup inventory without
@@ -3150,6 +3227,52 @@ fn tab_acquisition(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn retained_observation_binding_preserves_peers_and_rejects_all_identity_changes() {
+        let original = BorrowedAppBrowser {
+            profile_id: "profile".into(),
+            process: agent_browser_service_model::RecordedProcessIdentity {
+                pid: 12,
+                start_token: "original".into(),
+                executable_path: Some("/synthetic/chrome".into()),
+                browser_family: None,
+            },
+            endpoint: "ws://synthetic".into(),
+            targets: BTreeSet::from(["target".into()]),
+        };
+        let mut bindings = HashMap::from([
+            ("peer".into(), original.clone()),
+            ("current".into(), original.clone()),
+        ]);
+        let before = bindings.clone();
+        merge_observation_binding(&mut bindings, "current", Some(original.clone())).unwrap();
+        assert!(bindings == before);
+        for field in [
+            "profile",
+            "pid",
+            "start",
+            "executable",
+            "endpoint",
+            "targets",
+        ] {
+            let mut changed = original.clone();
+            match field {
+                "profile" => changed.profile_id = "other".into(),
+                "pid" => changed.process.pid += 1,
+                "start" => changed.process.start_token = "other".into(),
+                "executable" => changed.process.executable_path = Some("/other".into()),
+                "endpoint" => changed.endpoint = "ws://other".into(),
+                _ => {
+                    changed.targets.insert("other".into());
+                }
+            }
+            assert!(merge_observation_binding(&mut bindings, "current", Some(changed)).is_err());
+            assert!(bindings == before);
+        }
+        assert!(merge_observation_binding(&mut bindings, "current", None).is_err());
+        assert!(bindings == before);
+    }
+
     use super::*;
     use std::path::PathBuf;
 

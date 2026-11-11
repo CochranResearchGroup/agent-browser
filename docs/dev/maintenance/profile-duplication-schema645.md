@@ -1,0 +1,7 @@
+# Profile duplication integration schema ceiling
+
+Issue645 repairs a pre-existing integration-crate compilation failure exposed while qualifying issue644. The included custody adapter references the binary-private runtime schema ceiling, but that module was absent from the test crate. Both failing references exist unchanged in baseline2830a7f627608e974443ef61e68f01ed61a4c200.
+
+The unchanged scalar ceiling and its documentation now live in a dependency-free source fragment included by the production store and a small integration-test namespace shim. There is one authoritative value. Accepted schemas, migrations and runtime behavior do not change; the entire runtime is not loaded into the test crate.
+
+Local validation on top of644 source64a60758f46c08b83751e5813f460675ea013786 plus this three-file patch: `AGENT_BROWSER_CARGO_CACHE=off scripts/ci/cargo-safe.sh test --manifest-path Cargo.toml -p agent-browser --test profile_duplicate_operation` passes13tests in0.85s. One existing test remains deliberately ignored because it requires an explicitly admitted private mount namespace and tmpfs quota. Compile/admission plus execution took396.254s; existing dead-code warnings remain. No live browser or provider effects were run. Applicable normal strict workspace Clippy and formatting were qualified against these final source files in the accompanying644 packet. Exploratory all-target Clippy still reports unrelated pre-existing test lints; no broad lint cleanup is part of this repair.

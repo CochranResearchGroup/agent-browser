@@ -2,6 +2,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: RETAINED-PROCESS-LIVENESS-644
+    product_lane: PL-BUGFIX
+    objective: Qualify exact signed retained return in an observation-only Remote View scope
+    plan: docs/dev/maintenance/retained-process-liveness644.md
+    branch: fix/retained-liveness644
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#644]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [STANDALONE-HANDOFF-RETURN-631]
+    overlaps: [STANDALONE-HANDOFF-RETURN-631, NATIVE-RETURN-COMPATIBILITY-638]
+    reconciled_overlaps: ["Exclusively borrow existing clean630 checkout and reanchor canonical2830; no new checkout; preserve all existing return and Native features and operation guards"]
+    validation_status: RED reproduced; 36 distinct focused passes and 7 final-source repeats; strict workspace Clippy, fmt and docs green; installed verification remains open
+    limitations: ["No runtime, control, auth, close or mode effects; root authorized qualified source commit and PR", "Root must verify actual installed public return; source tests alone cannot close that boundary"]
+    updated_at: 2026-11-11
   - id: HANDOFF-PENDING-MODE-640
     product_lane: PL-BUGFIX
     objective: Keep an exact live browser handoff available during pending mode conversion

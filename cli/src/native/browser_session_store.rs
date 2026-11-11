@@ -41,10 +41,7 @@ pub(crate) use runtime_reset::{
 const BROWSER_SESSION_STATE_FILENAME: &str = "browser-session-state.json";
 const BROWSER_PROFILE_CATALOG_FILENAME: &str = "browser-profile-catalog.json";
 const BROWSER_RUNTIME_DATABASE_FILENAME: &str = "runtime.sqlite3";
-// Schema 2 marks durable idle-retirement obligations. A schema-1-only reader
-// must not silently ignore those obligations. Existing schema 1 is read without
-// migration; the first custody claim promotes it atomically with its record.
-pub(crate) const BROWSER_RUNTIME_DATABASE_MAX_SCHEMA: i64 = 5;
+include!("browser_runtime_schema.rs");
 const BROWSER_RUNTIME_BACKUP_DIRECTORY: &str = "browser-runtime-backups";
 const BROWSER_RUNTIME_BACKUP_CURRENT: &str = "runtime.current.sqlite3";
 const BROWSER_RUNTIME_BACKUP_PREVIOUS: &str = "runtime.previous.sqlite3";

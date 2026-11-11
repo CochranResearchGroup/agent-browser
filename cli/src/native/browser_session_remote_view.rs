@@ -553,6 +553,16 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
             Self::Remote(effects) => effects.begin_operation(expected),
         }
     }
+    fn begin_retained_observation(
+        &mut self,
+        expected: &BrowserSessionState,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        match self {
+            Self::Local(effects) => effects.begin_retained_observation(expected, browser),
+            Self::Remote(effects) => effects.begin_retained_observation(expected, browser),
+        }
+    }
     fn reconcile_retained_browser_close(
         &mut self,
         expected: &BrowserSessionState,
@@ -834,6 +844,65 @@ impl ManagedBrowserCommandEffects for RuntimeSessionEffects {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn configured_remote_retained_process_liveness_needs_no_operation() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        let local = BrowserSessionEffectAdapter::new(
+            BrowserManagerRuntime::start(Default::default()).unwrap(),
+        );
+        let adapter = RemoteViewApplicationAdapter::new(
+            "agent-browser".into(),
+            RemoteViewApplicationHttp::new(&endpoint, Duration::from_secs(1)).unwrap(),
+        )
+        .unwrap();
+        let store = BrowserSessionSqliteStore::launch_custody_fixture(
+            rusqlite::Connection::open_in_memory().unwrap(),
+            true,
+        )
+        .unwrap();
+        let mut effects = RuntimeSessionEffects::Remote(Box::new(
+            RemoteViewSessionEffects::new(local, adapter, store, vec![], || {
+                uuid::Uuid::new_v4().to_string()
+            })
+            .unwrap(),
+        ));
+        let browser = ManagedBrowserInstance {
+            id: "retained".into(),
+            profile_id: "profile".into(),
+            pid: 0,
+            cdp_endpoint: format!("ws://{}/not-a-cdp-endpoint", listener.local_addr().unwrap()),
+            desktop: None,
+            active_session_ids: vec!["held-task".into()],
+        };
+        // Retain the actual original configured-wrapper failure, not just a
+        // new trait-hook contract. Ordinary reconciling liveness stays gated.
+        assert_eq!(
+            effects.browser_is_live(&browser).unwrap_err(),
+            "remote_view_session_operation_baseline_missing"
+        );
+        let mut state = BrowserSessionState::default();
+        state.browsers.insert(browser.id.clone(), browser.clone());
+        effects
+            .begin_retained_observation(&state, &browser)
+            .unwrap();
+        assert_eq!(effects.browser_is_live(&browser), Ok(false));
+        let mut changed = browser.clone();
+        changed.pid = std::process::id();
+        assert_eq!(
+            effects.browser_is_live(&changed).unwrap_err(),
+            "remote_view_session_observation_target_changed"
+        );
+        assert_eq!(
+            effects.close_browser(&browser).unwrap_err(),
+            "remote_view_session_observation_scope_only"
+        );
+        assert!(
+            matches!(listener.accept(), Err(error) if error.kind() == std::io::ErrorKind::WouldBlock)
+        );
+    }
+
     #[test]
     fn configured_runtime_wrapper_dispatches_app_attachment_without_provider_io() {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();

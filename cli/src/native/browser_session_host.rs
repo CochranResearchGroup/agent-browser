@@ -2305,8 +2305,10 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 .browsers
                 .get(browser_id)
                 .ok_or("browser_session_browser_missing")?;
-            // Returning control may observe the original live browser without
-            // advancing a pending conversion, closing it or launching a replacement.
+            // Initialize only exact observation context, never ordinary
+            // operation settlement or mode reconciliation, before reattachment.
+            self.effects
+                .begin_retained_observation(&self.persisted_state, browser)?;
             return if self.effects.browser_is_live(browser)? {
                 Ok(())
             } else {
@@ -3393,7 +3395,12 @@ where
         } else {
             None
         };
-        self.effects.begin_operation(&self.persisted_state)?;
+        if return_observation {
+            self.effects
+                .begin_retained_observation(&self.persisted_state, &browser)?;
+        } else {
+            self.effects.begin_operation(&self.persisted_state)?;
+        }
         let mut response =
             self.effects
                 .execute_command(&browser, &tab, &session.id, &session.name, command)?;
@@ -4003,6 +4010,7 @@ fn current_unix_ms() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use agent_browser_service_model::{RemoteViewApplicationAdapter, RemoteViewSessionEffects};
     #[test]
     fn native_handoff_preserves_live_browser_and_pending_mode_operation() {
         for live in [true, false] {
@@ -4113,6 +4121,59 @@ mod tests {
 
     #[test]
     fn host_control_return_observation_during_mode_conversion_preserves_pending_operation() {
+        retained_return_observation_fixture(|host| (host, None));
+    }
+
+    #[test]
+    fn configured_remote_host_control_return_preserves_pending_operation() {
+        retained_return_observation_fixture(|host| {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let adapter = RemoteViewApplicationAdapter::new(
+                "agent-browser".into(),
+                super::super::remote_view_application_http::RemoteViewApplicationHttp::new(
+                    &format!("http://{}", listener.local_addr().unwrap()),
+                    std::time::Duration::from_secs(1),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let store = BrowserSessionSqliteStore::launch_custody_fixture(
+                rusqlite::Connection::open_in_memory().unwrap(),
+                true,
+            )
+            .unwrap();
+            let effects =
+                RemoteViewSessionEffects::new(host.effects, adapter, store, vec![], || {
+                    uuid::Uuid::new_v4().to_string()
+                })
+                .unwrap();
+            (
+                BrowserSessionHost {
+                    persistence: host.persistence,
+                    effects,
+                    catalog: host.catalog,
+                    state: host.state,
+                    persisted_state: host.persisted_state,
+                    manager_config: host.manager_config,
+                    exact_url_history_maximum_bytes: host.exact_url_history_maximum_bytes,
+                    native_use_cursor: host.native_use_cursor,
+                },
+                Some(listener),
+            )
+        });
+    }
+
+    fn retained_return_observation_fixture<
+        E: BrowserSessionEffects + ManagedBrowserCommandEffects,
+    >(
+        wrap: impl Fn(
+            BrowserSessionHost<BrowserSessionJsonStore, BrowserSessionEffectAdapter<FixtureRuntime>>,
+        ) -> (
+            BrowserSessionHost<BrowserSessionJsonStore, E>,
+            Option<std::net::TcpListener>,
+        ),
+    ) {
         for live in [true, false] {
             use crate::test_utils::EnvGuard;
             let directory = TempDirectory::new();
@@ -4176,6 +4237,7 @@ mod tests {
             let proof = super::super::browser_host_control::attest_return_observation(serde_json::json!({"browserId":browser,"taskId":opened.session_id,"profileId":"work","targetId":tab.target_id,"expectedEpoch":1,"actor":"operator","reason":"Return after assistance"})).unwrap();
             let command = serde_json::json!({"action":"url","sessionName":"return-pending","sessionId":opened.session_id,"targetId":tab.target_id,"hostControlFreshObservation":true,"retainedTaskOnly":true,"hostControlReturnObservation":proof});
             let before = launches.get();
+            let (mut host, provider) = wrap(host);
             let result = host.execute_managed_command("return-pending", &command);
             if live {
                 let response = result.unwrap().unwrap();
@@ -4185,6 +4247,11 @@ mod tests {
                 assert_eq!(
                     result.unwrap_err(),
                     "browser_control_fresh_observation_cannot_recover_browser"
+                );
+            }
+            if let Some(provider) = provider {
+                assert!(
+                    matches!(provider.accept(),Err(error) if error.kind()==std::io::ErrorKind::WouldBlock)
                 );
             }
             assert_eq!(launches.get(), before);
@@ -4308,7 +4375,30 @@ mod tests {
         acknowledgements: std::rc::Rc<std::cell::Cell<u32>>,
     }
 
+    impl agent_browser_service_model::RemoteViewBrowserProcessEffects for FixtureRuntime {
+        fn launch(
+            &mut self,
+            _profile: &BrowserProfileCatalogEntry,
+            _intent: &BrowserLaunchIntent,
+            _environment: agent_browser_service_model::RemoteViewPrivateLaunchEnvironment,
+            _observation: &agent_browser_service_model::RemoteViewAssignmentObservation,
+        ) -> Result<BrowserLaunch, agent_browser_service_model::RemoteViewBrowserProcessError>
+        {
+            panic!("retained observation must not launch a Remote View process")
+        }
+    }
+
     impl BrowserRuntimeDriver for FixtureRuntime {
+        fn begin_retained_observation(
+            &mut self,
+            expected: &BrowserSessionState,
+            browser: &ManagedBrowserInstance,
+        ) -> Result<(), String> {
+            if expected.browsers.get(&browser.id) != Some(browser) {
+                return Err("fixture_observation_changed".into());
+            }
+            Ok(())
+        }
         fn pending_launch_intent(&self) -> Option<BrowserLaunchIntent> {
             self.pending_intent.clone()
         }
