@@ -10,13 +10,13 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#640]
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
     dependencies: [NATIVE-RETURN-COMPATIBILITY-638]
     overlaps: []
     reconciled_overlaps: ["Reuse clean canonical checkout; no new worktree; preserve foreign compact596 edits and missing registrations"]
-    validation_status: Original authenticated503 and owner profile-operation refusal reproduced; host regression pending
-    limitations: ["Preserve live browser and original pending mode journal; no website input or conversion replay"]
+    validation_status: PR641 merged and preserving-installed; original authenticated handoff200/connected/view-only; source checks and PR642 guidance parity pass
+    limitations: ["Original mode conversion remains pending and is preserved; unrelated human-control return is separate", "Private browser and install receipts remain outside Git; canonical checkout retained by shared upgrade"]
     updated_at: 2026-11-11
   - id: NATIVE-RETURN-COMPATIBILITY-638
     product_lane: PL-BUGFIX

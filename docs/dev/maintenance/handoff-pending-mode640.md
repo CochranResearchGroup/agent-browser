@@ -5,7 +5,7 @@ Work item: 640
 Owner: ecochran76
 Branch: fix/handoff-pending-mode
 Base: 61fdd9432582606d304f193f8f3ba4b2efefb42d
-State: ACTIVE
+State: COMPLETED
 
 A valid durable handoff must present the exact original live browser even when a
 mode conversion remains pending. Reconnection must not resume or cancel conversion,
@@ -43,3 +43,32 @@ Focused regression, Rust format, policy wiring11cases, documentation links,
 handoff guidance, actual dashboard policy-refresh fixture and docs build pass.
 Strict workspace Clippy and related host regressions remain pending. This is an
 intermediate source checkpoint, not merge or installed acceptance evidence.
+
+## Accepted installed outcome
+
+PR641 merged the source repair; PR642 compacts linked guidance below10KB with
+API/MCP parity passing. Source58d4e5fba is canonical ancestry. Its immutable
+production-shaped release artifact SHA256
+67c13f8eda86b4acbd44159492bc281e393c3ff90dceefbf607b9cae5c1c9e46
+was reused through one shared preserving installation. The coordinator verified
+complete executable-input equivalence across the subsequent docs-only delta;
+no duplicate install or browserless shutdown occurred.
+
+The authenticated original handoff changed from503 before installation to200
+and a connected view-only Native viewer afterward. Anonymous access still
+requires authentication. The original browser and pending Closing mode operation
+remain, with zero replacement launches. Acceptance sent no website input, mode
+replay/cancel, browser close or control return. Root control-return work remains
+separate. Private browser, operation and deployment receipts stay outside Git.
+
+Final source gates pass: actual SQLite Closing RED/GREEN, host13 and Native4
+(one overlap), strict workspace Clippy, Rust format, policy wiring11, docs/link/
+guidance, browser policy-refresh fixture and docs build. The coordinator reused
+the qualified test executable for31 additional passing control/return tests.
+Hosted CI was skipped. Initial fixture/setup and source-overlap failures remain
+in private receipts; the overlapped prior build was rejected by its source guard.
+
+The canonical checkout was reused without creating or closing another worktree.
+Source branch custody is retained remotely; candidate artifacts remain retained
+for the shared installed generation. Issue640 is closed with the public
+[qualification receipt](https://github.com/CochranResearchGroup/agent-browser/issues/640#issuecomment-6807100681).
