@@ -12344,7 +12344,7 @@ mod tests {
         assert_eq!(briefing["data"]["tabId"], "logical-tab");
         assert_eq!(briefing["data"]["targetId"], "physical-target");
         assert_eq!(briefing["data"]["contextEvidence"], "retained_not_live");
-        for operation in ["takeover", "return", "override"] {
+        for operation in ["takeover", "override"] {
             assert_eq!(
                 mcp_command_response(&[
                     "mcp".into(),
@@ -12356,6 +12356,16 @@ mod tests {
                 "browser_control_hosted_task_required"
             );
         }
+        assert_eq!(
+            mcp_command_response(&[
+                "mcp".into(),
+                "host-control".into(),
+                "task".into(),
+                "return".into()
+            ])
+            .unwrap_err(),
+            "browser_control_expected_epoch_required"
+        );
         assert_eq!(
             mcp_command_response(&[
                 "mcp".into(),

@@ -175,7 +175,7 @@ not transfer termination or relocation authority. Metadata reports
 ### Human takeover and return
 
 Viewing alone does not pause automation. Use `browser_control` with `taskId` and
-`operation: "status"` (or `view`) to read the current browser-scoped epoch. Ordinary managed tasks support these read-only operations without an app-host attachment. Control-changing operations retain their hosted-app requirements. Status is cooperative-control metadata; it does not grant authentication or prove physical browser ownership.
+`operation: "status"` (or `view`) to read the current browser-scoped epoch. Ordinary managed tasks also support explicit `return` without an app-host attachment. Standalone return requires the current epoch, actor and reason, a verified original process and the same retained task/tab before and after fresh observation. Failed verification keeps human control and paused reads. `takeover` and `override` retain their hosted-app requirements. Passive `view` does not return an existing human handoff. Status is cooperative-control metadata; it does not grant authentication or prove physical browser ownership.
 Explicit `takeover` requires `expectedEpoch`, an attributable `actor` and a
 concrete `reason`. It blocks new mutations across supported MCP, CLI and Service
 routes; optional `pauseReads: true` also pauses page observation/capture. Status

@@ -7406,7 +7406,7 @@ Commands:
   resources/read    Diagnostics
   host-task TASK    Read app metadata
   task-briefing TASK Read retained task context without browser effects
-  host-control TASK status|view reads any retained managed task; reconcile checks exact owned task and terminal dispatcher; other control changes require hosted app binding.
+  host-control TASK status|view reads any retained managed task; standalone return verifies the original process and freshly observes the same target before release; reconcile checks exact owned task and terminal dispatcher; takeover/override require hosted app binding.
   Task briefing processPid is retained metadata; authentication verifies current physical ownership separately.
   task-operation TASK REQUEST Read original addressed CDP operation without retry
   Teaching evidence: client teaching-evidence / teaching-evidence-http; recheck Saved provenance before Speech ranges

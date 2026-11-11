@@ -1,6 +1,7 @@
 //! Public cooperative control adapter. Status/view also support ordinary managed
 //! tasks without an app-host attachment. Reconciliation additionally proves exact
-//! original process custody; other control changes require that attachment. Return
+//! original process custody. Standalone return additionally verifies that process
+//! before and after observation; takeover/override require an attachment. Return
 //! observes the same retained target through ordinary dispatch before resuming.
 use super::{required_string_argument, JsonRpcError};
 use crate::native::{
@@ -9,7 +10,7 @@ use crate::native::{
 use serde_json::{json, Value};
 
 pub(super) fn tool() -> Value {
-    json!({"name":"browser_control","title":"View, take over or return hosted browser control","description":"Viewing does not pause. Explicit takeover persists across restart and gates supported automation routes. Return observes the same retained browser before resuming; pending effects are never replayed. Direct CDP/OS controllers must cooperate. Override requires an attributable actor/reason and current epoch using existing caller authority.","inputSchema":{"type":"object","additionalProperties":false,"properties":{"taskId":{"type":"string"},"operation":{"type":"string","enum":["status","view","takeover","return","override","reconcile"]},"expectedEpoch":{"type":"integer","minimum":0},"actor":{"type":"string"},"reason":{"type":"string"},"pauseReads":{"type":"boolean"},"requestId":{"type":"string"}},"required":["taskId","operation"]}})
+    json!({"name":"browser_control","title":"View or return browser control; hosted takeover","description":"Viewing does not pause. Explicit takeover persists across restart and gates supported automation routes. Standalone return verifies the original process and observes the same retained target before resuming; takeover and override require a hosted binding; pending effects are never replayed. Direct CDP/OS controllers must cooperate. Override requires an attributable actor/reason and current epoch using existing caller authority.","inputSchema":{"type":"object","additionalProperties":false,"properties":{"taskId":{"type":"string"},"operation":{"type":"string","enum":["status","view","takeover","return","override","reconcile"]},"expectedEpoch":{"type":"integer","minimum":0},"actor":{"type":"string"},"reason":{"type":"string"},"pauseReads":{"type":"boolean"},"requestId":{"type":"string"}},"required":["taskId","operation"]}})
 }
 fn issue(error: impl Into<String>) -> JsonRpcError {
     JsonRpcError::invalid_params(&error.into())
@@ -25,8 +26,9 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
         .sessions
         .get(task_id)
         .ok_or_else(|| issue("browser_control_task_missing"))?;
+    let standalone_return = operation == "return" && !state.host_bindings.contains_key(task_id);
     if !state.host_bindings.contains_key(task_id)
-        && !matches!(operation, "status" | "view" | "reconcile")
+        && !matches!(operation, "status" | "view" | "reconcile" | "return")
     {
         return Err(issue("browser_control_hosted_task_required"));
     }
@@ -48,17 +50,27 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
             .as_ref()
             .and_then(|id| state.tabs.get(id))
             .map(|tab| tab.target_id.clone());
-        let reconcile_process = if operation == "reconcile" {
-            let request_id = required_string_argument(arguments, "requestId")?;
-            control::check_reconcile(&browser_id, task_id, expected, request_id).map_err(issue)?;
+        let checked_process = if operation == "reconcile" || standalone_return {
+            if operation == "reconcile" {
+                let request_id = required_string_argument(arguments, "requestId")?;
+                control::check_reconcile(&browser_id, task_id, expected, request_id)
+                    .map_err(issue)?;
+            }
             Some(current_process(&store, &state, task)?)
         } else {
             None
         };
+        if standalone_return {
+            control::prepare_standalone_return(&browser_id, expected, actor, reason)
+                .map_err(issue)?;
+        }
         let atomic_return = operation == "return"
             && retained_target.is_some()
             && control::eligible_return_observation(&browser_id, expected, actor, reason)
                 .map_err(issue)?;
+        if standalone_return && !atomic_return {
+            return Err(issue("browser_control_return_observation_unavailable"));
+        }
         let epoch = if operation == "reconcile" || atomic_return {
             expected
         } else {
@@ -69,7 +81,7 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
             // Awaiting-observation forbids physical recovery in the host. A lost target
             // remains blocked, preserving the original browser/task rather than reopening.
             let mut observation = json!({"id":uuid::Uuid::new_v4().to_string(),"action":"url","hostControlFreshObservation":true,"sessionName":task.name,"sessionId":task_id,"targetId":retained_target});
-            if operation == "reconcile" {
+            if operation == "reconcile" || standalone_return {
                 observation["retainedTaskOnly"] = json!(true);
                 observation["retainedTaskContext"] =
                     crate::native::browser_task_operations::retained_context(task_id)
@@ -79,7 +91,7 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
                 observation["hostControlReturnObservation"] = control::attest_return_observation(json!({"browserId":browser_id,"taskId":task_id,"profileId":task.profile_id,"targetId":retained_target,"expectedEpoch":expected,"actor":actor,"reason":reason})).map_err(issue)?;
             }
             let observed = super::workflow::execute(observation, transport)?;
-            if operation == "reconcile"
+            if (operation == "reconcile" || standalone_return)
                 && (observed["urlObserved"] == false
                     || observed["url"].as_str().is_none_or(|url| url.is_empty())
                     || observed.get("targetId").is_some_and(|id| {
@@ -98,11 +110,12 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
                     && current.browser_id == task.browser_id
                     && current.profile_id == task.profile_id
                     && current.current_tab_id == task.current_tab_id
-                    && (operation != "reconcile" || current.name == task.name)
+                    && (!(operation == "reconcile" || standalone_return)
+                        || current.name == task.name)
             });
             // Observation updates activity and peer indexes. Compare identity,
             // including desktop generation, rather than mutable publication data.
-            let same_browser = if operation == "reconcile" {
+            let same_browser = if operation == "reconcile" || standalone_return {
                 state
                     .browsers
                     .get(&browser_id)
@@ -124,7 +137,7 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
             } else {
                 fresh.browsers.get(&browser_id) == state.browsers.get(&browser_id)
             };
-            let same_tab = operation != "reconcile"
+            let same_tab = !(operation == "reconcile" || standalone_return)
                 || task
                     .current_tab_id
                     .as_ref()
@@ -139,25 +152,27 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
             if !same_task || !same_browser || !same_tab {
                 return Err(issue("browser_control_observation_target_changed"));
             }
-            if operation == "reconcile" {
+            if operation == "reconcile" || standalone_return {
                 let fresh_store =
                     BrowserSessionSqliteStore::open_read_only(&path).map_err(issue)?;
                 let fresh_task = fresh
                     .sessions
                     .get(task_id)
                     .ok_or_else(|| issue("browser_control_task_missing"))?;
-                if Some(current_process(&fresh_store, &fresh, fresh_task)?) != reconcile_process {
+                if Some(current_process(&fresh_store, &fresh, fresh_task)?) != checked_process {
                     return Err(issue("browser_control_observation_process_changed"));
                 }
-                control::reconcile(
-                    &browser_id,
-                    task_id,
-                    epoch,
-                    required_string_argument(arguments, "requestId")?,
-                    actor,
-                    reason,
-                )
-                .map_err(issue)?;
+                if operation == "reconcile" {
+                    control::reconcile(
+                        &browser_id,
+                        task_id,
+                        epoch,
+                        required_string_argument(arguments, "requestId")?,
+                        actor,
+                        reason,
+                    )
+                    .map_err(issue)?;
+                }
             }
             if atomic_return {
                 control::commit_observed_return(&browser_id, expected, actor, reason)
