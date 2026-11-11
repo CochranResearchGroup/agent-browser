@@ -2,6 +2,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: FOREIGN-DISPLAY-630
+    product_lane: PL-BUGFIX
+    objective: Protect foreign or unowned displays from Agent Browser cleanup classification
+    plan: docs/dev/maintenance/foreign-display-630.md
+    branch: fix/foreign-display-630
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#630]
+    plan_state: OPEN
+    custody_state: INTEGRATION_READY
+    dependencies: []
+    overlaps: [STANDALONE-HANDOFF-RETURN]
+    reconciled_overlaps: ["630 owns service_resources and focused resource guidance; standalone handoff owns its source and shared handoff docs; catalog changes are separate entry hunks; no production effects"]
+    validation_status: Exact production-inventory RED then34 module tests GREEN; strict Clippy, Rustfmt and documentation gates pass; frozen public inventory and GC dry-run pass with unchanged foreign process and zero fixture residue
+    limitations: ["Source packet only; foreign service remains active; no cleanup or deployment", "Retain scoped primary for review and governed closeout; known missing registrations untouched"]
+    updated_at: 2026-11-11
   - id: TASK-OPERATION-KEY-627
     product_lane: PL-BUGFIX
     objective: Publish the task-operation MAC key safely across concurrent first writes

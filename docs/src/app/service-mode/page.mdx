@@ -1260,6 +1260,10 @@ legacy daemon, and one selected generation. Automatic GC applies only to exact
 package-owned unattended classes; persistent profiles, review-gated candidates,
 and ambiguous resources remain protected.
 
+Uncorrelated display processes remain protected. Missing Service State records
+do not prove package ownership, so foreign displays are neither cleanup
+candidates nor readiness-impacting stale resources.
+
 Use <code>agent-browser service gc --dry-run</code>
 to group only conservative cleanup candidates and receive a short-lived review
 token. Use <code>agent-browser service gc --apply --review-token &lt;token&gt;</code>

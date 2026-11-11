@@ -73,7 +73,7 @@
     "test:development-runtime": "node scripts/test-development-runtime.js",
     "test:development-presentation-provider": "node scripts/test-development-presentation-provider.js",
     "test:presentation-capacity-architecture": "node scripts/test-presentation-capacity-architecture.js",
-    "test:service-resource-environment-safety": "scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml development_resources_ -- --test-threads=1 && scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml production_resources_preserve_orphan_remote_display_candidate_behavior -- --test-threads=1",
+    "test:service-resource-environment-safety": "scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml development_resources_ -- --test-threads=1 && scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml production_resources_do_not_claim_uncorrelated_remote_display -- --test-threads=1",
     "smoke:development-dashboard-auth": "node scripts/smoke-development-dashboard-auth.js",
     "smoke:custom-profile-continuity": "python3 scripts/smoke-custom-profile-continuity.py",
     "smoke:development-browser-launch": "node scripts/smoke-development-browser-launch.js",
