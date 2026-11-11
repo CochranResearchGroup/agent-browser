@@ -1038,7 +1038,9 @@ fn rehydrate_prepared_payload_transaction(
         crate::runtime_adoption::UpgradeTransactionState::GenerationCommitted
             | crate::runtime_adoption::UpgradeTransactionState::PostCommitValidating
             | crate::runtime_adoption::UpgradeTransactionState::Accepted
-    );
+    ) || (transaction.state
+        == crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired
+        && install_transaction_requires_forward_completion(&transaction)?);
     let expected_selected = if expects_candidate {
         Some(transaction.candidate_generation_id.as_str())
     } else {
@@ -1704,6 +1706,22 @@ fn recover_operator_required_upgrade_for_root(
     expected_transaction_id: &str,
     isolated_root: bool,
 ) -> Result<Value, String> {
+    recover_operator_required_upgrade_with_runtime(
+        root,
+        expected_transaction_id,
+        isolated_root,
+        complete_accepted_upgrade_supervisor_transition,
+        current_selection::validate_forward_recovery,
+    )
+}
+
+fn recover_operator_required_upgrade_with_runtime(
+    root: &Path,
+    expected_transaction_id: &str,
+    isolated_root: bool,
+    complete_supervisor: impl FnOnce(&Path, &str) -> Result<Value, String>,
+    validate_selection: impl FnOnce(&InstallPaths, &str, &Value) -> Result<(), String>,
+) -> Result<Value, String> {
     use crate::runtime_adoption::UpgradeTransactionState;
 
     if !valid_upgrade_transaction_id(expected_transaction_id) {
@@ -1779,22 +1797,46 @@ fn recover_operator_required_upgrade_for_root(
         let supervisor = if isolated_root {
             serde_json::json!({"state": "isolated_not_configured"})
         } else {
-            complete_accepted_upgrade_supervisor_transition(
-                &selected_executable,
-                &transaction.transaction_id,
-            )?
+            complete_supervisor(&selected_executable, &transaction.transaction_id)?
         };
         let dashboard_ingress_path = env::var_os("AGENT_BROWSER_DASHBOARD_INGRESS_STATE")
             .map(PathBuf::from)
             .unwrap_or_else(|| root.join(".agent-browser/dashboard-ingress.json"));
-        let dashboard =
+        let mut dashboard =
             crate::dashboard_ingress::dashboard_ingress_status_for_path(&dashboard_ingress_path);
         if !isolated_root {
-            current_selection::validate_forward_recovery(
-                &paths,
-                &transaction.candidate_generation_id,
-                &dashboard,
-            )?;
+            // A committed candidate can be healthy while its dashboard remains
+            // staged after a failed post-commit doctor. Continue that exact
+            // transaction's existing promotion, then retain physical proof.
+            if dashboard
+                .pointer("/selectedBackend/generationId")
+                .and_then(Value::as_str)
+                != Some(transaction.candidate_generation_id.as_str())
+            {
+                if dashboard
+                    .pointer("/candidateBackend/generationId")
+                    .and_then(Value::as_str)
+                    != Some(transaction.candidate_generation_id.as_str())
+                {
+                    return Err("workstation_forward_recovery_staged_dashboard_mismatch".into());
+                }
+                validate_install_transaction_candidate(root, &transaction)?;
+                if candidate_install_custody_from_transaction(&transaction)?.is_none() {
+                    return Err("workstation_forward_recovery_dashboard_custody_missing".into());
+                }
+                let (args, mut prepared) = rehydrate_prepared_payload_transaction(
+                    root,
+                    transaction_path.clone(),
+                    transaction.clone(),
+                    false,
+                )?;
+                promote_dashboard_candidate_to_managed_backend(&paths, &args, &mut prepared)?;
+                transaction = prepared.transaction;
+                dashboard = crate::dashboard_ingress::dashboard_ingress_status_for_path(
+                    &dashboard_ingress_path,
+                );
+            }
+            validate_selection(&paths, &transaction.candidate_generation_id, &dashboard)?;
         }
         let presentation_absent = dashboard
             .get("presentationReceipt")
@@ -1814,12 +1856,17 @@ fn recover_operator_required_upgrade_for_root(
         transaction.terminal_result = Some("accepted".to_string());
         transaction.stop_reason = None;
         if transaction.state != UpgradeTransactionState::Accepted {
-            persist_upgrade_transition(
-                &transaction_path,
-                &mut transaction,
-                UpgradeTransactionState::Accepted,
-                "accepted_after_supervisor_transition_recovery",
-            )?;
+            // External physical proof may overlap a coordinator transition.
+            // Recheck the original fence around the bounded acceptance write;
+            // completion obtains its own lock after this mutation returns.
+            with_transaction_candidate_install_custody(&paths, &mut transaction, |transaction| {
+                persist_upgrade_transition(
+                    &transaction_path,
+                    transaction,
+                    UpgradeTransactionState::Accepted,
+                    "accepted_after_supervisor_transition_recovery",
+                )
+            })?;
         }
         ensure_transaction_candidate_install_completed(&paths, &transaction)?;
         return Ok(serde_json::json!({
@@ -18192,6 +18239,262 @@ mod tests {
         assert_eq!(selected.selected_backend().generation_id, generation_id);
         fs::remove_file(ingress_path.with_extension("json.lock")).unwrap();
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum ForwardDashboardRecoveryCase {
+        Healthy,
+        ForeignStagedGeneration,
+        LostCustody,
+        ChangedSeal,
+        FailedPhysicalProof,
+        CustodyLostDuringProof,
+    }
+
+    #[test]
+    fn forward_recovery_lost_custody_during_physical_proof_cannot_accept() {
+        forward_recovery_dashboard_fixture(ForwardDashboardRecoveryCase::CustodyLostDuringProof);
+    }
+
+    #[test]
+    fn forward_recovery_promotes_healthy_staged_dashboard_before_physical_proof() {
+        forward_recovery_dashboard_fixture(ForwardDashboardRecoveryCase::Healthy);
+    }
+
+    #[test]
+    fn forward_recovery_rejects_foreign_staged_dashboard_without_promotion() {
+        forward_recovery_dashboard_fixture(ForwardDashboardRecoveryCase::ForeignStagedGeneration);
+    }
+
+    #[test]
+    fn forward_recovery_rejects_lost_install_custody_without_promotion() {
+        forward_recovery_dashboard_fixture(ForwardDashboardRecoveryCase::LostCustody);
+    }
+
+    #[test]
+    fn forward_recovery_rejects_changed_candidate_seal_without_promotion() {
+        forward_recovery_dashboard_fixture(ForwardDashboardRecoveryCase::ChangedSeal);
+    }
+
+    #[test]
+    fn forward_recovery_does_not_accept_after_failed_physical_proof() {
+        forward_recovery_dashboard_fixture(ForwardDashboardRecoveryCase::FailedPhysicalProof);
+    }
+
+    fn forward_recovery_dashboard_fixture(case: ForwardDashboardRecoveryCase) {
+        use std::net::TcpListener;
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        };
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-forward-dashboard-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let managed_port = listener.local_addr().unwrap().port();
+        let manifest = serde_json::json!({
+            "schemaVersion": "agent-browser.runtime-manifest.v1",
+            "dashboard": {"assetCount": 82, "totalBytes": 3252390},
+        })
+        .to_string();
+        let manifest_sha = workstation_bytes_sha256(manifest.as_bytes());
+        let done = Arc::new(AtomicBool::new(false));
+        let stop = done.clone();
+        let server = std::thread::spawn(move || {
+            while !stop.load(Ordering::Acquire) {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        stream
+                            .set_read_timeout(Some(std::time::Duration::from_secs(1)))
+                            .unwrap();
+                        let mut request = [0; 1024];
+                        let _ = stream.read(&mut request);
+                        let response = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                            manifest.len(),
+                            manifest
+                        );
+                        let _ = stream.write_all(response.as_bytes());
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(std::time::Duration::from_millis(1))
+                    }
+                    Err(error) => panic!("fixture listener failed: {error}"),
+                }
+            }
+        });
+        let env_guard = EnvGuard::new(&["AGENT_BROWSER_WORKSTATION_ROOT"]);
+        env_guard.set("AGENT_BROWSER_WORKSTATION_ROOT", root.to_str().unwrap());
+        let args = WorkstationInstallArgs {
+            mode: InstallMode::Apply,
+            json: true,
+            force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
+            dashboard_port: managed_port - 1,
+            guacamole_port: 8092,
+        };
+        let mut prepared = prepare_payload_transaction(&root, &paths, &args, true).unwrap();
+        activate_prepared_payload_transaction(&mut prepared, &paths, true).unwrap();
+        commit_prepared_payload_transaction(&paths, &args, &mut prepared).unwrap();
+        let coordination =
+            crate::candidate_coordination::CandidateCoordinationStore::production(&root);
+        let custody = coordination
+            .start_or_join_install("forward-dashboard", "candidate", "artifact")
+            .unwrap();
+        prepared.transaction.successor_fields.insert(
+            "candidateInstallCustody".into(),
+            serde_json::to_value(&custody).unwrap(),
+        );
+        prepared.transaction.state =
+            crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired;
+        prepared.transaction.stop_reason = Some("post_commit_doctor_failed".into());
+        if case == ForwardDashboardRecoveryCase::ChangedSeal {
+            prepared.transaction.candidate_binary_sha256 = "f".repeat(64);
+        }
+        if case == ForwardDashboardRecoveryCase::LostCustody {
+            let current = coordination.read().unwrap();
+            coordination
+                .apply(agent_browser_candidate::CoordinationRequest {
+                    request_id: "cancel-fixture-writer".into(),
+                    candidate_id: custody.candidate_id.clone(),
+                    artifact_id: custody.artifact_id.clone(),
+                    expected_revision: current.revision,
+                    expected_fencing_generation: current.fencing_generation,
+                    action: agent_browser_candidate::CoordinationAction::CancelActive {
+                        operation_id: custody.operation_id.clone(),
+                    },
+                })
+                .unwrap();
+        }
+        write_private_json_atomic(&prepared.transaction_path, &prepared.transaction).unwrap();
+        assert!(
+            crate::runtime_adoption::upgrade_runtime_preservation_proven(&prepared.transaction)
+        );
+        let original_transaction = fs::read(&prepared.transaction_path).unwrap();
+        let generation = prepared.transaction.candidate_generation_id.clone();
+        let ingress_path = root.join(".agent-browser/dashboard-ingress.json");
+        let repository = crate::dashboard_ingress::DashboardIngressRepository::new(&ingress_path);
+        let old = repository
+            .initialize(crate::dashboard_ingress::DashboardBackend::new(
+                "generation-old",
+                managed_port + 2,
+                "old-manifest",
+            ))
+            .unwrap();
+        let staged_generation = if case == ForwardDashboardRecoveryCase::ForeignStagedGeneration {
+            "foreign-generation"
+        } else {
+            &generation
+        };
+        repository
+            .stage_candidate(
+                old.revision,
+                crate::dashboard_ingress::DashboardBackend::new(
+                    staged_generation,
+                    managed_port + 1,
+                    manifest_sha,
+                ),
+            )
+            .unwrap();
+        env_guard.remove("AGENT_BROWSER_WORKSTATION_ROOT");
+        let recovered = recover_operator_required_upgrade_with_runtime(
+            &root,
+            &prepared.transaction.transaction_id,
+            false,
+            |_, _| Ok(serde_json::json!({"state":"ready"})),
+            |_, expected, ingress| {
+                if ingress["selectedBackend"]["generationId"] != expected {
+                    return Err("current_selection_dashboard_identity_unproven".into());
+                }
+                assert!(ingress["presentationReceipt"].is_null());
+                if case == ForwardDashboardRecoveryCase::FailedPhysicalProof {
+                    return Err("fixture_physical_proof_rejected".into());
+                }
+                if case == ForwardDashboardRecoveryCase::CustodyLostDuringProof {
+                    let current = coordination.read().unwrap();
+                    coordination
+                        .apply(agent_browser_candidate::CoordinationRequest {
+                            request_id: "cancel-during-physical-proof".into(),
+                            candidate_id: custody.candidate_id.clone(),
+                            artifact_id: custody.artifact_id.clone(),
+                            expected_revision: current.revision,
+                            expected_fencing_generation: current.fencing_generation,
+                            action: agent_browser_candidate::CoordinationAction::CancelActive {
+                                operation_id: custody.operation_id.clone(),
+                            },
+                        })
+                        .unwrap();
+                }
+                Ok(())
+            },
+        );
+        done.store(true, Ordering::Release);
+        server.join().unwrap();
+        if case == ForwardDashboardRecoveryCase::Healthy {
+            let result = recovered.expect(
+                "healthy staged candidate must be promoted before selected-generation proof",
+            );
+            assert_eq!(result["state"], "accepted");
+            assert_eq!(
+                repository.load().unwrap().selected_backend().generation_id,
+                generation
+            );
+            assert_ne!(
+                fs::read(&prepared.transaction_path).unwrap(),
+                original_transaction
+            );
+        } else {
+            let expected = match case {
+                ForwardDashboardRecoveryCase::ForeignStagedGeneration => {
+                    "workstation_forward_recovery_staged_dashboard_mismatch"
+                }
+                ForwardDashboardRecoveryCase::LostCustody => "candidate_install_custody_lost",
+                ForwardDashboardRecoveryCase::ChangedSeal => {
+                    "install_transaction_candidate_generation_changed"
+                }
+                ForwardDashboardRecoveryCase::FailedPhysicalProof => {
+                    "fixture_physical_proof_rejected"
+                }
+                ForwardDashboardRecoveryCase::CustodyLostDuringProof => {
+                    "candidate_install_custody_lost"
+                }
+                ForwardDashboardRecoveryCase::Healthy => unreachable!(),
+            };
+            assert!(recovered.unwrap_err().contains(expected));
+            assert!(
+                fs::read(&prepared.transaction_path).unwrap() == original_transaction,
+                "failed or fenced recovery must not persist Accepted"
+            );
+            let selected = repository
+                .load()
+                .unwrap()
+                .selected_backend()
+                .generation_id
+                .clone();
+            assert_eq!(
+                selected,
+                if matches!(
+                    case,
+                    ForwardDashboardRecoveryCase::FailedPhysicalProof
+                        | ForwardDashboardRecoveryCase::CustodyLostDuringProof
+                ) {
+                    generation
+                } else {
+                    "generation-old".into()
+                }
+            );
+        }
+        assert!(repository
+            .load()
+            .unwrap()
+            .last_presentation_receipt()
+            .is_none());
+        remove_generation_tree(&root).unwrap();
     }
 
     #[test]

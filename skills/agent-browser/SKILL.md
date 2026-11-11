@@ -12,6 +12,12 @@ Control and credentials: [setup and reconcile](references/cli-and-service.md).
 
 Build failures: [readiness guidance](references/cli-and-service.md#build-readiness).
 
+For an explicitly selected committed upgrade with a healthy staged dashboard,
+`install workstation recover --transaction-id <id>` can finish that exact
+backend promotion under original installation custody and then prove the sealed
+selected generation and physical runtime. It preserves absent authenticated
+presentation evidence; do not replace receipts or start unrelated cleanup.
+
 ## Handoff creator context
 
 Creation requires immutable `serviceName`, `agentName` and concrete `taskName`.
