@@ -81,14 +81,14 @@ The existing task-operation store commits pending input before transport. Native
 capture retains curated control/frame/binding evidence; loginTarget accepts only
 observationRequestId, opaque targetRef and original episodeId. One per-task episode
 allows username focus, configured saved-entry selection and filled-form submission,
-at most three clicks within60seconds from the first input. Prior pending/unknown
-input blocks advancement. Fresh captures cannot replace the original deadline or
-start another episode. Current Native window/generation/geometry/controller and
+at most three ordered inputs. Prior pending/unknown input blocks advancement.
+Fresh captures cannot replace input history or start another episode. Current Native window/generation/geometry/controller and
 expected pixels remain independent owner fences before derived OS input.
 
-The client retains its original60-second deadline from episode creation, stable
-input IDs and durable checkpoints across interruption, reopens original operation
-receipts and never replays uncertain input. The receiving host supplies a serialized
+The client retains recorded episode clocks, stable input IDs and durable
+checkpoints across interruption, reopens original operation receipts and never
+replays uncertain input. Invocation allowance and explicit acknowledged-prefix
+continuation are described below; historical60-second records remain unchanged. The receiving host supplies a serialized
 durable store and independent intended-account access proof. No semantic worker,
 password export, credential-store read or fixture-as-live claim is introduced.
 
@@ -264,3 +264,65 @@ records that the convenience Native CLI bypasses request-context admission and
 response curation. Do not use that convenience surface for live saved-login input;
 its repair or typed refusal is separate. No OS replay was attempted or proved.
 596and Overleaf104 remain open until actual configured-profile qualification.
+
+
+## Compact chooser repair qualification (sourcef3fddb6a)
+
+A retained supported-browser observation exposed a compact chooser whose account
+row and Manage passwords footer occupy adjacent popup interiors. The previous
+expanded-heading rule returned no saved entry. The compact profile now proves
+aligned same-frame contours and repeated masked-dot pixels. Small antialiased
+bullet cores require a compact-only periodic template; general password-mask
+and plaintext-ring rules remain unchanged.
+
+When the base OCR cannot qualify a compact account row, one bounded nearest-
+neighbor2x pass uses the same owner frame and pinned local English Tesseract.
+Original desktop coordinates and frame identity are retained. Multiple account
+rows, a conflicting high-confidence identity, low confidence, changed frames,
+malformed coordinates and unavailable refinement remain conservative refusals.
+The SDK and its original deadline, durable episode and input limits do not change.
+
+Source qualification and the exact installed configured-profile workflow remain
+separate. Private pixels and OCR are kept outside Git. Local public regressions,
+actual offline-frame qualification and final artifact checks are recorded in the
+issue closeout; no live input or acceptance is inferred from source tests.
+
+Local source checks: the public compact-popup fixture failed before the repair.
+The final public production-module and OCR-parser selection passes23cases; the
+real CLI Native-login selection passes31cases in11.828seconds. Strict affected
+CLI Clippy and workspace Rustfmt pass, along with SDK saved-login, API/MCP parity
+and handoff-documentation checks. Test builds disable debug symbols only for the
+CLI package; assertions and existing dependencies remain unchanged. Hosted CI was
+not used.
+
+The final production module/helper observes the matching compact entry from the
+same privately retained frame in three measured offline executions. Their OCR
+callbacks pass in356,250and251milliseconds with unchanged confidence limits.
+One earlier conservative miss lacks a classified cause and remains retained;
+these results do not establish historical failure causation or installed login
+acceptance. No browser input, SDK continuation or shared-runtime replacement was
+performed by this source repair.
+
+
+## Configurable invocation allowance and acknowledged continuation
+
+The operator removed the artificial elapsed60-second Native episode cutoff.
+Native admission retains rollback rejection, three ordered inputs, stable request
+identity, positive original acknowledgements, current owner/context and fresh
+observation/control/visual fences. Original input timestamps remain unchanged.
+
+The SDK accepts timeoutMs with a default of300000milliseconds for each invocation.
+New episodes record their chosen original allowance; legacy episodes without that
+field retain their original60-second deadline under ordinary resolve. An explicit
+allowAcknowledgedResume invocation can continue only a retained prefix of one or
+two already acknowledged inputs after public acknowledgement readback, unchanged
+current task ownership and positive absence of the next input. It uses one bounded
+invocation clock, including read-only proof, without rewriting the original clocks.
+Unknown/intent input never gains continuation authority, and spent three-input
+histories remain spent. Host-owned stores may retain the original file and save
+qualified continuation state in a separate sidecar. Independent access verification
+remains after submit; pre-submit application verification must preserve the form.
+
+Public regressions retain the old elapsed-age refusal and missing SDK allowance
+as RED. Source qualification and installed same-episode continuation remain
+separate; this source work performs no live input or checkpoint rewrite.

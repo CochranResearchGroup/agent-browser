@@ -2,6 +2,38 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: NATIVE-RETURN-COMPATIBILITY-638
+    product_lane: PL-BUGFIX
+    objective: Preserve deployed Native allowance and perception alongside standalone return and committed recovery
+    plan: docs/dev/maintenance/native-return-compatibility638.md
+    branch: fix/native-return-compatibility638
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#638]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [NATIVE-COMPACT-CHOOSER-596, STANDALONE-HANDOFF-RETURN-631, COMMITTED-DASHBOARD-RECOVERY-635]
+    overlaps: [NATIVE-COMPACT-CHOOSER-596, STANDALONE-HANDOFF-RETURN-631, COMMITTED-DASHBOARD-RECOVERY-635]
+    reconciled_overlaps: ["Root delegates the clean existing primary exclusively for638; merge mainae34e9dc and Native2cc01dac in place; preserve both source intents and shared guidance; no additional checkout"]
+    validation_status: Combined144disjoint Rust tests pass with one helper ignored; Native SDK named6 and legacy scenarios/types pass; strict workspace Clippy/fmt, docs, candidate contracts and parity pass; root review pending
+    limitations: ["No runtime or credential input effects; no commit or push before root review", "Existing sealed main candidate has different executable inputs and cannot qualify this composition"]
+    updated_at: 2026-11-11
+  - id: NATIVE-COMPACT-CHOOSER-596
+    product_lane: PL-BUGFIX
+    objective: Preserve selected MAC-key publication while bounding Native owner RPCs without replay
+    plan: docs/dev/maintenance/native-owner596-selected-lineage.md
+    branch: fix/native-login-allowance596
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#596]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [NATIVE-SAVED-LOGIN-596, TASK-OPERATION-KEY-627, FOREIGN-DISPLAY-630]
+    overlaps: [NATIVE-SAVED-LOGIN-596, TASK-OPERATION-KEY-627, FOREIGN-DISPLAY-630]
+    reconciled_overlaps: ["Reuse the existing596 primary; ordinary merge of selected main9e1d805 into qualified205f95f preserves both published histories; no canonical checkout writes, new checkout, prune or GC", "Keep source231 sealed artifact and stopped205 candidate inputs unchanged; no runtime installation or historical input replay"]
+    validation_status: Combined published630+7c resource34/key4/owner4/HTTP14/Native34 pass90; strict Clippy passes; initial skill-size failure retained and guidance compacted; artifact/installer qualification pending
+    limitations: ["No production install or website input", "Private pixels, OCR, original unknown inputs and canceled-build receipts remain outside Git; review2026-11-12"]
+    updated_at: 2026-11-11
   - id: COMMITTED-DASHBOARD-RECOVERY-635
     product_lane: PL-BUGFIX
     objective: Recover a committed upgrade whose healthy dashboard remains staged

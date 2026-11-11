@@ -516,3 +516,377 @@ fn native_login_perception_nested_outlines621_center_ink_preserves_filled_form()
     assert_eq!(result["controls"][0]["fieldValueState"], "text_present");
     assert_eq!(result["controls"][1]["fieldValueState"], "masked");
 }
+
+#[test]
+fn native_login_perception_compact_footer_requires_same_popup_mask_and_exact_account() {
+    let mut c = corpus_capture(
+        &[(100, 100, 240, 65), (100, 166, 240, 38)],
+        json!([
+            line("saved@example.invalid", 140, 115, 150),
+            line("© Manage passwords.", 145, 180, 150)
+        ]),
+    );
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(c["image"]["data"].as_str().unwrap())
+        .unwrap();
+    let mut image = image::load_from_memory(&bytes).unwrap().to_rgba8();
+    for x in [145, 155, 165, 175] {
+        for dx in 0..4 {
+            for dy in 0..4 {
+                image.put_pixel(x + dx, 150 + dy, Rgba([20, 20, 20, 255]));
+            }
+        }
+    }
+    let mut png = Cursor::new(vec![]);
+    image.write_to(&mut png, image::ImageFormat::Png).unwrap();
+    let png = png.into_inner();
+    c["capture"]["sha256"] = json!(hex(&png));
+    c["image"]["data"] = json!(base64::engine::general_purpose::STANDARD.encode(png));
+    let result = detect(&c, Some("saved@example.invalid"));
+    assert_eq!(
+        result["controls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|c| c["kind"] == "credential_entry" && c["configuredAccountMatch"] == true)
+            .count(),
+        1
+    );
+    assert_eq!(result["inputAuthorized"], false);
+    for (name, mut negative) in [
+        ("wrong footer", c.clone()),
+        ("missing mask", c.clone()),
+        ("low account confidence", c.clone()),
+        ("different account", c.clone()),
+    ] {
+        match name {
+            "wrong footer" => negative["ocr"]["lines"][1]["text"] = json!("Account settings"),
+            "missing mask" => {
+                let empty =
+                    corpus_capture(&[(100, 100, 240, 110)], negative["ocr"]["lines"].clone());
+                negative = empty;
+            }
+            "low account confidence" => negative["ocr"]["lines"][0]["confidence"] = json!(79),
+            _ => negative["ocr"]["lines"][0]["text"] = json!("other@example.invalid"),
+        }
+        let r = detect(&negative, Some("saved@example.invalid"));
+        assert!(
+            !r["controls"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|c| c["kind"] == "credential_entry" && c["configuredAccountMatch"] == true),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn native_login_perception_compact_mask_core_rejects_text_rings_and_irregular_spacing() {
+    for pattern in ["bullets", "rings", "text", "irregular"] {
+        let mut c = corpus_capture(
+            &[(100, 100, 240, 65), (100, 166, 240, 38)],
+            json!([
+                line("saved@example.invalid", 140, 115, 150),
+                line("© Manage passwords.", 145, 180, 150)
+            ]),
+        );
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(c["image"]["data"].as_str().unwrap())
+            .unwrap();
+        let mut im = image::load_from_memory(&bytes).unwrap().to_rgba8();
+        for i in 0..11 {
+            let x = 145
+                + i * 5
+                + if pattern == "irregular" && i > 5 {
+                    3
+                } else {
+                    0
+                };
+            let (w, h) = match pattern {
+                "rings" => (7, 7),
+                "text" => (2, 10),
+                _ => (2, 3),
+            };
+            for dx in 0..w {
+                for dy in 0..h {
+                    if pattern != "rings" || dx == 0 || dy == 0 || dx == w - 1 || dy == h - 1 {
+                        im.put_pixel(x + dx, 145 + dy, Rgba([20, 20, 20, 255]));
+                    }
+                }
+            }
+            if pattern == "bullets" || pattern == "irregular" {
+                for dx in 2..5 {
+                    im.put_pixel(x + dx, 146, Rgba([240, 240, 240, 255]));
+                }
+            }
+        }
+        let mut png = Cursor::new(vec![]);
+        im.write_to(&mut png, image::ImageFormat::Png).unwrap();
+        let png = png.into_inner();
+        c["capture"]["sha256"] = json!(hex(&png));
+        c["image"]["data"] = json!(base64::engine::general_purpose::STANDARD.encode(png));
+        let r = detect(&c, Some("saved@example.invalid"));
+        let n = r["controls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|c| c["kind"] == "credential_entry" && c["configuredAccountMatch"] == true)
+            .count();
+        assert_eq!(n, usize::from(pattern == "bullets"), "{pattern}");
+    }
+}
+
+#[test]
+fn native_login_perception_compact_refinement_rejects_bad_frame_and_oversized_lines() {
+    let mut c = corpus_capture(
+        &[(100, 100, 240, 65), (100, 166, 240, 38)],
+        json!([line("© Manage passwords.", 145, 180, 150)]),
+    );
+    let request = json!({"profile":"english-chrome-v1","expectedAccount":"saved@example.invalid"});
+    let region = json!({"x":0,"y":0,"width":800,"height":600});
+    let mut calls = 0;
+    let original = observe(&c, &region, &request).unwrap();
+    let r = observe_refined(&c, &region, &request, |im| {
+        calls += 1;
+        assert_eq!((im.width(), im.height()), (480, 208));
+        Ok(vec![line("saved@example.invalid", 9999, 0, 100)])
+    })
+    .unwrap();
+    assert_eq!(calls, 1);
+    assert_eq!(r, original);
+    c["capture"]["sha256"] = json!("0".repeat(64));
+    assert!(observe_refined(&c, &region, &request, |_| {
+        panic!("invalid frame must never invoke OCR")
+    })
+    .is_err());
+}
+
+fn compact_window_tile(origin: u32) -> Value {
+    let mut image = RgbaImage::from_pixel(1440, 900, Rgba([255, 255, 255, 255]));
+    for (x, y, w, h) in [(631, 710, 230, 60), (631, 771, 230, 37)] {
+        for xx in x..x + w {
+            image.put_pixel(xx, y, Rgba([100, 100, 100, 255]));
+            image.put_pixel(xx, y + h - 1, Rgba([100, 100, 100, 255]));
+        }
+        for yy in y..y + h {
+            image.put_pixel(x, yy, Rgba([100, 100, 100, 255]));
+            image.put_pixel(x + w - 1, yy, Rgba([100, 100, 100, 255]));
+        }
+    }
+    for i in 0..11 {
+        for dx in 0..2 {
+            for dy in 0..3 {
+                image.put_pixel(671 + i * 5 + dx, 747 + dy, Rgba([20, 20, 20, 255]));
+            }
+        }
+        for dx in 2..5 {
+            image.put_pixel(671 + i * 5 + dx, 748, Rgba([240, 240, 240, 255]));
+        }
+    }
+    let tile = image::imageops::crop_imm(&image, origin, 0, 1111, 900).to_image();
+    let mut png = Cursor::new(vec![]);
+    tile.write_to(&mut png, image::ImageFormat::Png).unwrap();
+    let png = png.into_inner();
+    let mut c = corpus_capture(&[], json!([]));
+    c["image"]["data"] = json!(base64::engine::general_purpose::STANDARD.encode(&png));
+    c["capture"]["sha256"] = json!(hex(&png));
+    c["ocr"]["lines"] = json!([{"text":"saved@example.invalid","confidence":69,"bounds":{"x":671,"y":721,"width":163,"height":14}}, {"text":"© Manage passwords.","confidence":95,"bounds":{"x":646,"y":787,"width":159,"height":15}}]);
+    c
+}
+fn refined_compact_account(odd: bool) -> Value {
+    json!({"text":"saved@example.invalid","confidence":95,"bounds":{"x":80+u32::from(odd),"y":22+u32::from(odd),"width":326-u32::from(odd),"height":28-u32::from(odd)}})
+}
+#[test]
+fn native_login_perception_compact_refinement_is_identical_across_overlapping_tiles() {
+    let request = json!({"profile":"english-chrome-v1","expectedAccount":"saved@example.invalid"});
+    let mut outputs = vec![];
+    for (origin, odd) in [(0, false), (329, true)] {
+        let c = compact_window_tile(origin);
+        let region = json!({"x":origin,"y":0,"width":1111,"height":900});
+        let mut calls = 0;
+        let r = observe_refined(&c, &region, &request, |image| {
+            calls += 1;
+            assert_eq!((image.width(), image.height()), (460, 196));
+            Ok(vec![refined_compact_account(odd)])
+        })
+        .unwrap();
+        assert_eq!(calls, 1);
+        assert_eq!(r["controls"].as_array().unwrap().len(), 1);
+        let entry = &r["controls"][0];
+        assert_eq!(entry["kind"], "credential_entry");
+        assert_eq!(entry["configuredAccountMatch"], true);
+        assert_eq!(
+            entry["bounds"],
+            json!({"x":671,"y":721,"width":163,"height":14})
+        );
+        outputs.push((
+            json!([
+                entry["kind"],
+                entry["bounds"],
+                entry["configuredAccountMatch"],
+                entry["fieldValueState"]
+            ]),
+            entry["targetRef"].clone(),
+        ));
+    }
+    assert_eq!(outputs[0].0, outputs[1].0);
+    assert_ne!(
+        outputs[0].1, outputs[1].1,
+        "opaque references remain frame-bound"
+    );
+}
+#[test]
+fn native_login_perception_compact_refinement_refuses_a_second_low_confidence_account_row() {
+    let c = compact_window_tile(0);
+    let region = json!({"x":0,"y":0,"width":1111,"height":900});
+    let request = json!({"profile":"english-chrome-v1","expectedAccount":"saved@example.invalid"});
+    let original = observe(&c, &region, &request).unwrap();
+    let r=observe_refined(&c,&region,&request,|_|Ok(vec![refined_compact_account(false),json!({"text":"other@example.invalid","confidence":69,"bounds":{"x":80,"y":68,"width":300,"height":28}})])).unwrap();
+    assert_eq!(r, original);
+}
+
+#[test]
+fn native_login_perception_rounded_dark_submit_is_one_connected_widget596() {
+    let mut capture = rounded_layout621(&[(100, 350)], json!([line("Log in", 240, 367, 70)]));
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(capture["image"]["data"].as_str().unwrap())
+        .unwrap();
+    let mut image = image::load_from_memory(&bytes).unwrap().to_rgba8();
+    for p in image.pixels_mut() {
+        if *p == Rgba([232, 240, 254, 255]) {
+            *p = Rgba([0, 0, 0, 255]);
+        }
+    }
+    let mut png = Cursor::new(vec![]);
+    image.write_to(&mut png, image::ImageFormat::Png).unwrap();
+    capture["capture"]["sha256"] = json!(hex(png.get_ref()));
+    capture["image"]["data"] =
+        json!(base64::engine::general_purpose::STANDARD.encode(png.get_ref()));
+    let r = detect(&capture, None);
+    assert_eq!(r["status"], "observed");
+    assert_eq!(r["controls"].as_array().unwrap().len(), 1);
+    assert_eq!(r["controls"][0]["kind"], "submit");
+}
+
+fn dark_submit_tile596(origin: u32, second: bool) -> Value {
+    let mut c = rounded_layout621(&[(100, 150), (100, 250), (100, 350)], json!([]));
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(c["image"]["data"].as_str().unwrap())
+        .unwrap();
+    let mut im = image::load_from_memory(&bytes).unwrap().to_rgba8();
+    for y in 350..402 {
+        for x in 100..460 {
+            if *im.get_pixel(x, y) == Rgba([232, 240, 254, 255]) {
+                im.put_pixel(x, y, Rgba([0, 0, 0, 255]));
+            }
+        }
+    }
+    for x in [115, 130, 145, 160] {
+        for dx in 0..5 {
+            for dy in 0..5 {
+                im.put_pixel(x + dx, 270 + dy, Rgba([20, 20, 20, 255]));
+            }
+        }
+    }
+    let mut window = RgbaImage::from_pixel(1440, 900, Rgba([255, 255, 255, 255]));
+    image::imageops::overlay(&mut window, &im, 432, 0);
+    if second {
+        for y in 310..340 {
+            for x in 532..892 {
+                window.put_pixel(x, y, Rgba([0, 0, 0, 255]));
+            }
+        }
+    }
+    let tile = image::imageops::crop_imm(&window, origin, 0, 1111, 900).to_image();
+    let mut png = Cursor::new(vec![]);
+    tile.write_to(&mut png, image::ImageFormat::Png).unwrap();
+    c["image"]["data"] = json!(base64::engine::general_purpose::STANDARD.encode(png.get_ref()));
+    c["capture"]["sha256"] = json!(hex(png.get_ref()));
+    c["ocr"]["lines"] = json!([
+        line("Email", 532, 120, 100),
+        line("saved@example.invalid", 542, 170, 180),
+        line("Password", 532, 220, 100)
+    ]);
+    c
+}
+#[test]
+fn native_login_perception_dark_submit_refinement596_preserves_tiles_and_refusals() {
+    let request = json!({"profile":"english-chrome-v1","expectedAccount":"saved@example.invalid"});
+    let mut outputs = vec![];
+    for origin in [0, 329] {
+        let c = dark_submit_tile596(origin, false);
+        let region = json!({"x":origin,"y":0,"width":1111,"height":900});
+        let mut calls = 0;
+        let r = observe_refined(&c, &region, &request, |image| {
+            calls += 1;
+            assert!(image.width() <= 960 && image.height() <= 160);
+            Ok(vec![line("Log in", 260, 14, 90)])
+        })
+        .unwrap();
+        assert_eq!(calls, 1);
+        assert_eq!(r["status"], "observed");
+        assert_eq!(r["controls"].as_array().unwrap().len(), 3, "{r}");
+        let s = r["controls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["kind"] == "submit")
+            .unwrap();
+        outputs.push(json!([
+            s["kind"],
+            s["bounds"],
+            s["fieldValueState"],
+            s["configuredAccountMatch"]
+        ]));
+        for variant in 0..7 {
+            let mut c = c.clone();
+            let mut req = request.clone();
+            if variant == 0 {
+                req["expectedAccount"] = json!("other@example.invalid");
+            }
+            if variant == 1 {
+                c = dark_submit_tile596(origin, true);
+            }
+            if variant == 5 {
+                c["ocr"]["lines"]
+                    .as_array_mut()
+                    .unwrap()
+                    .retain(|l| l["text"] != "Password");
+            }
+            if variant == 6 {
+                c["ocr"]["lines"].as_array_mut().unwrap().push(line(
+                    "other@example.invalid",
+                    542,
+                    170,
+                    180,
+                ));
+            }
+            let mut calls = 0;
+            let r = observe_refined(&c, &region, &req, |_| {
+                calls += 1;
+                let mut l = line("Log in", 260, 14, 90);
+                if variant == 2 {
+                    l["confidence"] = json!(79);
+                }
+                if variant == 3 {
+                    l["text"] = json!("Continue");
+                }
+                if variant == 4 {
+                    l["bounds"]["x"] = json!(10000);
+                }
+                Ok(vec![l])
+            })
+            .unwrap();
+            assert!(!r["controls"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|c| c["kind"] == "submit"));
+            if variant <= 1 || variant >= 5 {
+                assert_eq!(calls, 0);
+            }
+        }
+    }
+    assert_eq!(outputs[0], outputs[1]);
+}

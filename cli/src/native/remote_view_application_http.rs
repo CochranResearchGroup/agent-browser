@@ -16,8 +16,30 @@ const RESPONSE_LIMIT: usize = 4 * 1024 * 1024;
 pub(crate) struct RemoteViewApplicationHttp {
     endpoint: reqwest::Url,
     timeout: Duration,
+    deadline: Option<std::time::Instant>,
     authorization: Option<reqwest::header::HeaderValue>,
 }
+/// Public Native owner allowance, independent of image freshness or input count.
+pub(crate) fn native_owner_timeout_ms(command: &Value) -> Result<u64, Error> {
+    let timeout = match command.get("ownerTimeoutMs") {
+        None => 10_000,
+        Some(value) => value
+            .as_u64()
+            .filter(|ms| (100..=300_000).contains(ms))
+            .ok_or(Error::Rejected)?,
+    };
+    if let Some(value) = command.get("ownerDeadlineAtMs") {
+        if command.get("ownerTimeoutMs").is_none()
+            || !value
+                .as_u64()
+                .is_some_and(|v| (1..=9_007_199_254_740_991).contains(&v))
+        {
+            return Err(Error::Rejected);
+        }
+    }
+    Ok(timeout)
+}
+
 impl RemoteViewApplicationHttp {
     pub(crate) fn new(origin: &str, timeout: Duration) -> Result<Self, Error> {
         let mut endpoint = reqwest::Url::parse(origin).map_err(|_| Error::Rejected)?;
@@ -43,11 +65,40 @@ impl RemoteViewApplicationHttp {
         Ok(Self {
             endpoint,
             timeout,
+            deadline: None,
             authorization: control_authorization()?,
         })
     }
 }
 impl RemoteViewApplicationHttp {
+    /// Explicit Native allowance is shared by all owner subrequests. The MCP
+    /// admission timestamp includes time waiting for the existing host.
+    pub(crate) fn for_native_command(origin: &str, command: &Value) -> Result<Self, Error> {
+        let milliseconds = native_owner_timeout_ms(command)?;
+        let mut http = Self::new(origin, Duration::from_millis(milliseconds))?;
+        if command.get("ownerTimeoutMs").is_some() {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| Error::Rejected)?
+                .as_millis() as u64;
+            let admitted = command
+                .get("_nativeOwnerAdmittedAtMs")
+                .map(|v| v.as_u64().ok_or(Error::Rejected))
+                .transpose()?
+                .unwrap_or(now);
+            let allowance_end = admitted.checked_add(milliseconds).ok_or(Error::Rejected)?;
+            let deadline = command
+                .get("ownerDeadlineAtMs")
+                .and_then(Value::as_u64)
+                .map_or(allowance_end, |end| end.min(allowance_end));
+            if now < admitted || now >= deadline {
+                return Err(Error::Rejected);
+            }
+            http.deadline = Some(std::time::Instant::now() + Duration::from_millis(deadline - now));
+        }
+        Ok(http)
+    }
+
     /// Whether the private token file supplied an owner bearer. Presence alone
     /// is configuration evidence; only a successful owner request authenticates it.
     pub(crate) fn has_control_authorization(&self) -> bool {
@@ -148,6 +199,10 @@ impl RemoteViewApplicationHttp {
     ) -> Result<Value, Error> {
         let authorization = self.authorization.clone();
         let timeout = self.timeout;
+        let deadline = self.deadline;
+        if deadline.is_some_and(|end| std::time::Instant::now() >= end) {
+            return Err(Error::Rejected);
+        }
         std::thread::Builder::new()
             .name("remote-view-native-http".into())
             .spawn(move || {
@@ -175,6 +230,13 @@ impl RemoteViewApplicationHttp {
                     }
                     if let Some(authorization) = authorization {
                         request = request.header(reqwest::header::AUTHORIZATION, authorization);
+                    }
+                    if let Some(end) = deadline {
+                        let remaining = end
+                            .checked_duration_since(std::time::Instant::now())
+                            .filter(|d| !d.is_zero())
+                            .ok_or(Error::Rejected)?;
+                        request = request.timeout(remaining);
                     }
                     let mut response = request.send().await.map_err(|_| Error::OutcomeUnknown)?;
                     if response.status() != reqwest::StatusCode::OK {
@@ -458,6 +520,128 @@ mod tests {
         io::{Read, Write},
         net::{TcpListener, TcpStream},
     };
+
+    #[test]
+    fn native_owner_allowance596_delayed_ack_keeps_one_original_request() {
+        let guard =
+            crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE"]);
+        guard.remove("AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE");
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let origin = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let request = read_request(&mut socket);
+            assert!(request.starts_with("POST /v1/agent-desktop/input "));
+            let body: Value =
+                serde_json::from_str(request.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+            assert!(body.get("ownerTimeoutMs").is_none());
+            // Fault injection: the owner has received exactly one synthetic input;
+            // its positive response is delayed beyond the legacy ten-second cap.
+            std::thread::sleep(Duration::from_secs(11));
+            let reply = r#"{"delivery":"dispatched"}"#;
+            let _ = write!(
+                socket,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
+                reply.len()
+            );
+            listener.set_nonblocking(true).unwrap();
+            assert!(
+                listener.accept().is_err(),
+                "original input must not be retried"
+            );
+        });
+        let mut client = RemoteViewApplicationHttp::for_native_command(
+            &origin,
+            &serde_json::json!({"ownerTimeoutMs":30000}),
+        )
+        .unwrap();
+        let result = client.native_operation(
+            "input",
+            &serde_json::json!({"desktopId":"synthetic","expectedGeneration":7}),
+        );
+        server.join().unwrap();
+        assert_eq!(
+            result.expect("configured allowance must retain delayed original ACK")["delivery"],
+            "dispatched"
+        );
+    }
+
+    #[test]
+    fn native_owner_allowance596_validates_bounds_and_expiry_without_dispatch() {
+        let guard =
+            crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE"]);
+        guard.remove("AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE");
+        let origin = "http://127.0.0.1:1";
+        let compatible =
+            RemoteViewApplicationHttp::for_native_command(origin, &serde_json::json!({})).unwrap();
+        assert_eq!(compatible.timeout, Duration::from_secs(10));
+        assert!(compatible.deadline.is_none());
+        for value in [
+            serde_json::json!(99),
+            serde_json::json!(300001),
+            serde_json::json!(1.5),
+            serde_json::json!("30000"),
+            Value::Null,
+        ] {
+            assert!(RemoteViewApplicationHttp::for_native_command(
+                origin,
+                &serde_json::json!({"ownerTimeoutMs":value})
+            )
+            .is_err());
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        for command in [
+            serde_json::json!({"ownerDeadlineAtMs":now+1000}),
+            serde_json::json!({"ownerTimeoutMs":30000,"ownerDeadlineAtMs":now-1}),
+            serde_json::json!({"ownerTimeoutMs":100,"_nativeOwnerAdmittedAtMs":now-101}),
+            serde_json::json!({"ownerTimeoutMs":30000,"_nativeOwnerAdmittedAtMs":now+10000}),
+        ] {
+            assert!(RemoteViewApplicationHttp::for_native_command(origin, &command).is_err());
+        }
+    }
+
+    #[test]
+    fn native_owner_allowance596_does_not_renew_between_owner_requests() {
+        let guard =
+            crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE"]);
+        guard.remove("AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE");
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let origin = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            for operation in ["observe", "input"] {
+                let (mut socket, _) = listener.accept().unwrap();
+                assert!(read_request(&mut socket)
+                    .starts_with(&format!("POST /v1/agent-desktop/{operation} ")));
+                std::thread::sleep(Duration::from_millis(600));
+                let _ = write!(
+                    socket,
+                    "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}"
+                );
+            }
+            listener.set_nonblocking(true).unwrap();
+            assert!(listener.accept().is_err());
+        });
+        let mut client = RemoteViewApplicationHttp::for_native_command(
+            &origin,
+            &serde_json::json!({"ownerTimeoutMs":1000}),
+        )
+        .unwrap();
+        assert!(client
+            .native_operation("observe", &serde_json::json!({}))
+            .is_ok());
+        let error = client
+            .native_operation("input", &serde_json::json!({}))
+            .unwrap_err();
+        assert!(error.contains("input:OutcomeUnknown"));
+        let refused = client
+            .native_operation("input", &serde_json::json!({}))
+            .unwrap_err();
+        assert!(refused.contains("input:Rejected"));
+        server.join().unwrap();
+    }
 
     #[test]
     fn native_owner_rejection_preserves_safe_http_cause() {

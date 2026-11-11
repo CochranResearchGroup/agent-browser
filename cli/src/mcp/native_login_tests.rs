@@ -195,36 +195,94 @@ fn native_login_perception_public_journal_unknown_input_survives_reopen_and_bloc
     .contains("unsettled"));
     assert_eq!(calls, 2);
 }
-#[test]
-fn native_login_perception_public_journal_fresh_capture_cannot_reset_first_input_deadline() {
-    let _fixture = fixture();
-    let mut calls = 0;
-    capture("cap-0", "username");
-    input("input-0", "cap-0", "episode", false, &mut calls).unwrap();
-    // Seed an independently elapsed original clock before reopening the journal;
-    // this avoids a real60-second sleep and never changes request authority.
+fn age_acknowledged_prefix() -> (u64, u64) {
     let store = BrowserSessionSqliteStore::default_sqlite().unwrap();
     let mut state = store.load_session_state().unwrap();
-    state
-        .task_operations
-        .get_mut("task")
-        .unwrap()
-        .get_mut("input-0")
-        .unwrap()
-        .created_at_ms = clock() - 60_001;
+    let start = clock() - 7_200_000;
+    let rows = state.task_operations.get_mut("task").unwrap();
+    rows.get_mut("input-0").unwrap().created_at_ms = start;
+    rows.get_mut("input-1").unwrap().created_at_ms = start + 1000;
     store.save_session_state(&state).unwrap();
-    drop(store);
-    capture("fresh-after-deadline", "credential_entry");
-    assert!(input(
-        "input-1",
-        "fresh-after-deadline",
-        "episode",
-        false,
-        &mut calls
-    )
-    .unwrap_err()
-    .contains("budget_exhausted"));
-    assert_eq!(calls, 1);
+    (start, start + 1000)
+}
+#[test]
+fn native_login_perception_public_journal_old_ack_prefix_uses_fresh_submit_without_clock_rewrite() {
+    let _fixture = fixture();
+    let mut calls = 0;
+    for (n, kind) in ["username", "credential_entry"].iter().enumerate() {
+        let cap = format!("cap-{n}");
+        capture(&cap, kind);
+        input(&format!("input-{n}"), &cap, "episode", false, &mut calls).unwrap();
+    }
+    let original = age_acknowledged_prefix();
+    capture("fresh-submit", "submit");
+    input("input-2", "fresh-submit", "episode", false, &mut calls).unwrap();
+    assert_eq!(calls, 3);
+    let state = BrowserSessionSqliteStore::default_sqlite()
+        .unwrap()
+        .load_session_state()
+        .unwrap();
+    assert_eq!(
+        (
+            state.task_operations["task"]["input-0"].created_at_ms,
+            state.task_operations["task"]["input-1"].created_at_ms
+        ),
+        original
+    );
+}
+#[test]
+fn native_login_perception_public_journal_old_ack_prefix_still_refuses_rollback_context_and_stale_frame(
+) {
+    for scenario in ["rollback", "context", "stale"] {
+        let _fixture = fixture();
+        let mut calls = 0;
+        for (n, kind) in ["username", "credential_entry"].iter().enumerate() {
+            let cap = format!("cap-{n}");
+            capture(&cap, kind);
+            input(&format!("input-{n}"), &cap, "episode", false, &mut calls).unwrap();
+        }
+        age_acknowledged_prefix();
+        let store = BrowserSessionSqliteStore::default_sqlite().unwrap();
+        let mut state = store.load_session_state().unwrap();
+        if scenario == "rollback" {
+            state
+                .task_operations
+                .get_mut("task")
+                .unwrap()
+                .get_mut("input-0")
+                .unwrap()
+                .created_at_ms = clock() + 60_000;
+        }
+        if scenario == "context" {
+            state.tabs.get_mut("tab").unwrap().target_id = "foreign-target".into();
+        }
+        store.save_session_state(&state).unwrap();
+        drop(store);
+        capture("new-submit", "submit");
+        if scenario == "stale" {
+            let store = BrowserSessionSqliteStore::default_sqlite().unwrap();
+            let mut state = store.load_session_state().unwrap();
+            let row = state
+                .task_operations
+                .get_mut("task")
+                .unwrap()
+                .get_mut("new-submit")
+                .unwrap();
+            let mut observation: Value =
+                serde_json::from_str(&row.evidence_references["nativeLoginObservation"]).unwrap();
+            observation["binding"]["observedAtMs"] = json!(clock() - 10_001);
+            row.evidence_references.insert(
+                "nativeLoginObservation".into(),
+                serde_json::to_string(&observation).unwrap(),
+            );
+            store.save_session_state(&state).unwrap();
+        }
+        assert!(
+            input("input-2", "new-submit", "episode", false, &mut calls).is_err(),
+            "{scenario}"
+        );
+        assert_eq!(calls, 2);
+    }
 }
 
 #[test]

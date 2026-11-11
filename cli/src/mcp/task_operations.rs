@@ -253,6 +253,16 @@ pub(super) fn completion_failure_clock(error: &str) -> Option<Value> {
     )
 }
 
+fn bind_native_owner_allowance(command: &mut Value, admitted_at_ms: u64) {
+    if matches!(
+        command["action"].as_str(),
+        Some("native_input" | "native_capture")
+    ) && command.get("ownerTimeoutMs").is_some()
+    {
+        command["_nativeOwnerAdmittedAtMs"] = json!(admitted_at_ms);
+    }
+}
+
 /// The marker is durable before this closure can ensure a transport or send.
 pub(super) fn transport(
     mut command: Value,
@@ -264,6 +274,17 @@ pub(super) fn transport(
         operations::eligible_action(command["action"].as_str().unwrap_or_default())
             || operations::eligible_native(command["action"].as_str().unwrap_or_default(), &command)
     }) else {
+        if matches!(
+            command["action"].as_str(),
+            Some("native_input" | "native_capture")
+        ) && command.get("ownerTimeoutMs").is_some()
+        {
+            let admitted = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| "browser_native_owner_clock_invalid")?
+                .as_millis() as u64;
+            bind_native_owner_allowance(&mut command, admitted);
+        }
         return run(command);
     };
     if let Some(request_id) = context.request_id {
@@ -290,23 +311,26 @@ pub(super) fn transport(
             response_data(&mut response, &original, true);
             Ok(response)
         }
-        Admission::Dispatch(original) => match run(command) {
-            Ok(mut response) => {
-                let completed=operations::finish(&original,Some(&response)).map_err(|error| {
+        Admission::Dispatch(original) => {
+            bind_native_owner_allowance(&mut command, original.created_at_ms);
+            match run(command) {
+                Ok(mut response) => {
+                    let completed=operations::finish(&original,Some(&response)).map_err(|error| {
                     let clock=completion_failure_clock(&error).map(|value|format!(";observationClock={value}")).unwrap_or_default();
                     format!("browser_task_operation_completion_unavailable:{}:inspect original; no retry;cause={}{}",original.request_id,completion_failure_cause(&error),clock)
                 })?;
-                response_data(&mut response, &completed, false);
-                Ok(response)
+                    response_data(&mut response, &completed, false);
+                    Ok(response)
+                }
+                Err(_) => {
+                    let _ = operations::finish(&original, None);
+                    Err(format!(
+                        "browser_task_operation_uncertain:{}:inspect original; no retry",
+                        original.request_id
+                    ))
+                }
             }
-            Err(_) => {
-                let _ = operations::finish(&original, None);
-                Err(format!(
-                    "browser_task_operation_uncertain:{}:inspect original; no retry",
-                    original.request_id
-                ))
-            }
-        },
+        }
     }
 }
 

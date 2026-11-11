@@ -8,22 +8,11 @@ allowed-tools: Bash(agent-browser:*)
 
 Authelia admission grants operator access without local dashboard enrollment or roles. Dashboard-local password/cookie login is disabled; attribution uses the verified owner principal.
 
-Control and credentials: [setup and reconcile](references/cli-and-service.md).
+[Control and credentials](references/cli-and-service.md).
 
 Build failures: [readiness guidance](references/cli-and-service.md#build-readiness).
 
-For sealed candidate maintenance, use `candidate status --json` to inspect
-`coordinationLedger` and the exact active operation. `candidate inspect` takes
-`--manifest` and `--input-closure`; `candidate install` additionally requires
-`--binary`, `--sealed-artifact` and an explicit `--dry-run` or `--apply`.
-Build and test qualification do not themselves install a candidate. Preserve
-current custody and use the documented exact-transaction recovery choices.
-
-For an explicitly selected committed upgrade with a healthy staged dashboard,
-`install workstation recover --transaction-id <id>` can finish that exact
-backend promotion under original installation custody and then prove the sealed
-selected generation and physical runtime. It preserves absent authenticated
-presentation evidence; do not replace receipts or start unrelated cleanup.
+`candidate status` exposes `coordinationLedger`; `candidate inspect` uses `--input-closure`; `candidate install` needs `--sealed-artifact`. [Guide](references/cli-and-service.md#sealed-candidate-maintenance).
 
 ## Handoff creator context
 
@@ -38,12 +27,12 @@ Use `browser_open` with `{"serviceName":"my-app","agentName":"editor","taskName"
 
 Existing profiles: `profileMode:"existing"`. Temporary: `profileMode:"disposable"` without `profile`. The workflow owns selection, replay and scoped closure.
 
-Installed viewers: [Native journey qualification](references/cli-and-service.md#native-journey-qualification).
+Installed viewers: [qualification](references/cli-and-service.md#native-journey-qualification).
 
 Use `browser_handoff({ "taskId": "<task-id>" })` for human assistance. It defaults to interactive input and pauses cooperative automation. Use `interaction:"view"` for passive viewing. The authorized recipient needs no administrator override; visibility alone does not prove input readiness. Require `operatorVisible.state=ready`; return the complete `data.handoffUrl` and keep the task ID. For `remote_view_public_origin_missing`, check reviewed `AGENT_BROWSER_PUBLIC_ORIGIN` in `~/.agent-browser/.env` or `AGENT_BROWSER_ENV_FILE`; process settings win. Reconnect MCP after configuration changes because its environment is pinned at startup. Preserve the task. Never assemble provider URLs.
 
 Same-browser and desktop rail tab switches retain the viewer connection.
-A retained handoff may finish its original settled browser-close publication before recovery; keep the same task and handoff, and preserve unresolved effect or identity failures for readback. An interactive invitation survives physical replacement only through its recorded exact recovery mapping; missing legacy mapping or changed targets stay fenced, with the human hold preserved.
+Retained handoff recovery: [guide](references/cli-and-service.md#retained-handoff-recovery).
 
 After human input, use Give control back in the viewer, then `browser_continue` with the same `taskId` reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff.
 
@@ -99,8 +88,7 @@ Use the CLI while correcting integration; server tools/list does not prove clien
 Help is launch-free. MCP returns `success/data/error`; CLI errors add `type`. Read private journal `details.phase` for unknown outcomes.
 
 Read [Runtime health and cleanup diagnostics](references/cli-and-service.md#runtime-health-and-cleanup-diagnostics) before maintenance, expiry diagnosis or unknown-effect interpretation. Preserve peers and scrub exported URLs.
-Uncorrelated displays remain protected; absence from Service State does not prove
-Agent Browser ownership or authorize stopping another application.
+Uncorrelated displays stay protected: missing Service State proves no ownership or cleanup authority.
 
 CDP-free idle close uses verified original OS identity and exit confirmation.
 Explicit handoff can supersede idle cleanup after its worker ends and the exact
@@ -141,3 +129,7 @@ before those operations. Copies do not prove login; never replay pending or unce
 Public task tools: `browser_snapshot`, `browser_screenshot`, `browser_click`,
 `browser_fill`, `browser_navigate`, `browser_tab`, `browser_retention`,
 `browser_reconnect`, `browser_policy`, `browser_artifact`.
+
+Saved-entry/submit refinement preserves exact-account, mask and ambiguity checks. `ownerTimeoutMs` (100..300000) plus optional `ownerDeadlineAtMs` bound one admitted Native command to the remaining invocation deadline, without renewing frame freshness or permitting uncertain-input replay. See the Native workflow reference.
+
+SDK allowance:300s default. ACK-prefix resume preserves original clocks; unknown input stops, never replays.

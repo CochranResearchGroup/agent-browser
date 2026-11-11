@@ -47,7 +47,7 @@ assert.equal(lost.inputs.length,3);
 // A missing original record after an uncertain delivery cannot authorize replay.
 const unknown=fixture(),unknownBase=unknown.callTool;
 unknown.callTool=async(name,args)=>{if(args.action==='native_input'){unknown.inputs.push(args);throw Error('transport outcome unknown')}return unknownBase(name,args)};
-const unknownClient=createNativeSavedLoginClient({...unknown,expectedAccount:'configured@example.test'});
+const unknownClient=createNativeSavedLoginClient({...unknown,expectedAccount:'configured@example.test',timeoutMs:60000});
 assert.equal((await unknownClient.resolve({taskId:'task',episodeId:'episode'})).status,'uncertain');
 assert.equal((await unknownClient.resolve({taskId:'task',episodeId:'episode'})).status,'uncertain');
 assert.equal(unknown.inputs.length,1);
@@ -141,3 +141,51 @@ console.log('native saved login: shifted origins, overlapping duplicates, distin
 const freshAmbiguous=tiledFixture(({data,sequence})=>{if(sequence===4)data.loginControls.controls.push({...data.loginControls.controls[0],targetRef:'new-target',bounds:{x:980,y:770,width:100,height:40}});});
 assert.equal((await createNativeSavedLoginClient({...freshAmbiguous,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode'})).reason,'native_saved_login_target_ambiguous');
 assert.equal(freshAmbiguous.inputs.length,0);
+
+
+// New invocation allowances do not rewrite an already retained episode clock.
+import {test} from 'node:test';
+test('saved login new invocation allowance is configurable and defaults to five minutes',async()=>{
+ const f=fixture();await createNativeSavedLoginClient({...f,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode'});
+ const e=f.episodes.get('episode');assert.equal(e.deadlineAtMs-e.createdAtMs,300000);
+ const short=fixture(),base=short.callTool;short.callTool=async(...args)=>{short.clock=6001;return base(...args)};
+ const result=await createNativeSavedLoginClient({...short,expectedAccount:'configured@example.test',timeoutMs:5000}).resolve({taskId:'task',episodeId:'episode'});
+ assert.equal(result.reason,'native_saved_login_budget_exhausted');assert.equal(short.inputs.length,0);
+ for(const timeoutMs of [0,-1,NaN,Infinity,2147483648])assert.throws(()=>createNativeSavedLoginClient({...fixture(),expectedAccount:'configured@example.test',timeoutMs}),/configuration/);
+});
+async function acknowledgedPrefix(){
+ const f=fixture(),base=f.callTool;let block=true;
+ f.callTool=async(...args)=>{if(block&&args[1].action==='native_capture'&&f.step===2)throw Error('fixture deliberate read-only stop');return base(...args)};
+ const first=await createNativeSavedLoginClient({...f,expectedAccount:'configured@example.test',timeoutMs:60000}).resolve({taskId:'task',episodeId:'episode'});
+ assert.equal(first.status,'human_required');assert.equal(f.inputs.length,2);
+ const episode=f.episodes.get('episode');delete episode.timeoutMs;f.clock=episode.createdAtMs+7200000;block=false;
+ return f;
+}
+test('saved login explicit acknowledged resume preserves old clocks and never replays the prefix',async()=>{
+ const f=await acknowledgedPrefix(),old=structuredClone(f.episodes.get('episode'));
+ const client=createNativeSavedLoginClient({...f,expectedAccount:'configured@example.test',timeoutMs:300000});
+ assert.equal((await client.resolve({taskId:'task',episodeId:'episode'})).reason,'native_saved_login_budget_exhausted');assert.equal(f.inputs.length,2);
+ const result=await client.resolve({taskId:'task',episodeId:'episode',allowAcknowledgedResume:true});
+ assert.equal(result.status,'verified_access_after_native_saved_login');assert.equal(f.inputs.length,3);
+ assert.deepEqual(f.inputs.map(i=>i.requestId),['episode:input1','episode:input2','episode:input3']);
+ const after=f.episodes.get('episode');assert.equal(after.createdAtMs,old.createdAtMs);assert.equal(after.deadlineAtMs,old.deadlineAtMs);assert.deepEqual(after.inputs.slice(0,2),old.inputs);
+});
+test('saved login explicit resume refuses intent or unknown prefix without proof calls or upgrades',async()=>{
+ for(const state of ['intent','unknown']){const f=await acknowledgedPrefix();f.episodes.get('episode').inputs[1].state=state;let calls=0;const base=f.callTool;f.callTool=async(...a)=>{calls++;return base(...a)};
+ const result=await createNativeSavedLoginClient({...f,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode',allowAcknowledgedResume:true});assert.equal(result.status,'uncertain');assert.equal(calls,0);assert.equal(f.inputs.length,2);assert.equal(f.episodes.get('episode').inputs[1].state,state);}
+});
+test('saved login acknowledged resume refuses foreign context and bounds read-only proof work',async()=>{
+ const foreign=await acknowledgedPrefix(),base=foreign.callTool;foreign.callTool=async(...a)=>a[1].action==='task_briefing'?envelope({...foreign.binding,tabId:'foreign',control:{owner:'agent',epoch:0}}):base(...a);
+ const changed=await createNativeSavedLoginClient({...foreign,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode',allowAcknowledgedResume:true});assert.notEqual(changed.status,'verified_access_after_native_saved_login');assert.equal(foreign.inputs.length,2);
+ const slow=await acknowledgedPrefix(),slowBase=slow.callTool;const start=slow.episodes.get('episode').createdAtMs+7200000;slow.callTool=async(...a)=>{slow.clock=start+5001;return slowBase(...a)};
+ const expired=await createNativeSavedLoginClient({...slow,expectedAccount:'configured@example.test',timeoutMs:5000}).resolve({taskId:'task',episodeId:'episode',allowAcknowledgedResume:true});assert.equal(expired.reason,'native_saved_login_budget_exhausted');assert.equal(slow.inputs.length,2);
+});
+
+test('saved login acknowledged resume requires positive absence of the next original input',async()=>{
+ const f=await acknowledgedPrefix();f.operations.set('episode:input3',{taskId:'task',requestId:'episode:input3',action:'native_input',state:'owner_acknowledged',evidenceReferences:{nativeLoginEpisode:'episode',nativeLoginKind:'submit',nativeLoginStep:'2',nativeDelivery:'dispatched'}});let captures=0;const base=f.callTool;f.callTool=async(...a)=>{if(a[1].action==='native_capture')captures++;return base(...a)};
+ const r=await createNativeSavedLoginClient({...f,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode',allowAcknowledgedResume:true});assert.equal(r.reason,'native_saved_login_acknowledged_resume_unverified');assert.equal(captures,0);assert.equal(f.inputs.length,2);
+});
+test('saved login resume never creates a fresh episode or extends a fully spent episode',async()=>{
+ const fresh=fixture();assert.equal((await createNativeSavedLoginClient({...fresh,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode',allowAcknowledgedResume:true})).reason,'native_saved_login_acknowledged_resume_unverified');assert.equal(fresh.episodes.size,0);
+ const spent=fixture(),client=createNativeSavedLoginClient({...spent,expectedAccount:'configured@example.test'});await client.resolve({taskId:'task',episodeId:'episode'});const old=structuredClone(spent.episodes.get('episode'));assert.equal((await client.resolve({taskId:'task',episodeId:'episode',allowAcknowledgedResume:true})).reason,'native_saved_login_acknowledged_resume_unverified');assert.equal(spent.inputs.length,3);assert.deepEqual(spent.episodes.get('episode'),old);
+});

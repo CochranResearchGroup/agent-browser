@@ -6,24 +6,34 @@ const kinds=/** @type {const} */(['username','credential_entry','submit']);
 const same=(a,b,keys)=>keys.every(k=>a?.[k]!==undefined&&a[k]===b?.[k]);
 /** @param {import('./native-saved-login.d.ts').NativeSavedLoginOptions} options
  * @returns {import('./native-saved-login.d.ts').NativeSavedLoginClient} */
-export function createNativeSavedLoginClient({callTool,store,verifyAccess,expectedAccount,now=Date.now}){
- if(typeof callTool!=='function'||typeof verifyAccess!=='function'||!store||['load','save','withEpisode'].some(k=>typeof store[k]!=='function')||typeof expectedAccount!=='string'||!expectedAccount||expectedAccount.length>254)throw TypeError('native_saved_login_configuration_required');
+export function createNativeSavedLoginClient({callTool,store,verifyAccess,expectedAccount,now=Date.now,timeoutMs=300000}){
+ if(typeof callTool!=='function'||typeof verifyAccess!=='function'||!store||['load','save','withEpisode'].some(k=>typeof store[k]!=='function')||typeof expectedAccount!=='string'||!expectedAccount||expectedAccount.length>254||!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>2147483647)throw TypeError('native_saved_login_configuration_required');
  const accountDigest=createHash('sha256').update(expectedAccount).digest('hex');
- return {async resolve({taskId,episodeId}){
-  if(typeof taskId!=='string'||!taskId||typeof episodeId!=='string'||!/^[-A-Za-z0-9_.:]{1,96}$/.test(episodeId))throw TypeError('native_saved_login_stable_identity_required');
+ return {async resolve({taskId,episodeId,allowAcknowledgedResume=false}){
+  if(typeof taskId!=='string'||!taskId||typeof episodeId!=='string'||!/^[-A-Za-z0-9_.:]{1,96}$/.test(episodeId)||typeof allowAcknowledgedResume!=='boolean')throw TypeError('native_saved_login_stable_identity_required');
+  const invocationStartedAtMs=now(),invocationDeadlineAtMs=invocationStartedAtMs+timeoutMs;
   return store.withEpisode(episodeId,async()=>{
    /** @type {import('./native-saved-login.d.ts').SavedLoginResult} */
    const result={taskId,episodeId,status:'human_required',reason:'native_saved_login_unverified',retryAllowed:false};
    let episode=await store.load(episodeId);const fresh=episode===null;
-   if(!episode){const start=now();episode={schemaVersion:1,episodeId,taskId,accountDigest,createdAtMs:start,deadlineAtMs:start+60000,inputs:[],captureSequence:0};await store.save(episode);}
-   if(episode.schemaVersion!==1||episode.taskId!==taskId||episode.episodeId!==episodeId||episode.accountDigest!==accountDigest||episode.deadlineAtMs!==episode.createdAtMs+60000||episode.inputs.length>3)return {...result,reason:'native_saved_login_retained_identity_changed'};
+   if(!episode&&allowAcknowledgedResume)return {...result,reason:'native_saved_login_acknowledged_resume_unverified'};
+   if(!episode){const start=now();episode={schemaVersion:1,episodeId,taskId,accountDigest,createdAtMs:start,deadlineAtMs:start+timeoutMs,timeoutMs,inputs:[],captureSequence:0};await store.save(episode);}
+   if(episode.schemaVersion!==1||episode.taskId!==taskId||episode.episodeId!==episodeId||episode.accountDigest!==accountDigest||!Number.isSafeInteger(episode.createdAtMs)||!Number.isSafeInteger(episode.deadlineAtMs)||!Number.isSafeInteger(episode.timeoutMs??60000)||(episode.timeoutMs??60000)<1||(episode.timeoutMs??60000)>2147483647||episode.deadlineAtMs!==episode.createdAtMs+(episode.timeoutMs??60000)||episode.inputs.length>3)return {...result,reason:'native_saved_login_retained_identity_changed'};
    const checkpoint=episode;
+   // Explicit continuation never promotes an uncertain/intent prefix. The host
+   // retains the original checkpoint; save() may write a qualified sidecar.
+   if(allowAcknowledgedResume&&checkpoint.inputs.some(input=>input.state!=='acknowledged'))return {...result,status:'uncertain',reason:'native_saved_login_original_uncertain'};
+   if(allowAcknowledgedResume&&(checkpoint.inputs.length<1||checkpoint.inputs.length>2||checkpoint.inputs.some((input,index)=>input.requestId!==episodeId+':input'+(index+1)||input.kind!==kinds[index]||typeof input.targetRef!=='string'||!input.targetRef||typeof input.observationRequestId!=='string'||!input.observationRequestId)||!logical.every(k=>typeof checkpoint.binding?.[k]==='string'&&checkpoint.binding[k])||!Number.isSafeInteger(checkpoint.controlEpoch)||!same(checkpoint.physical,checkpoint.physical,physical)))return {...result,reason:'native_saved_login_acknowledged_resume_unverified'};
+   let resumeVerified=false;
    const fail=reason=>{throw Error(reason)};
-   function remaining(){const time=now();if(time<checkpoint.createdAtMs||time>=checkpoint.deadlineAtMs)fail('native_saved_login_budget_exhausted');return checkpoint.deadlineAtMs-time;}
+   function remaining(){const time=now(),deadline=allowAcknowledgedResume?invocationDeadlineAtMs:Math.min(checkpoint.deadlineAtMs,invocationDeadlineAtMs);if(time<checkpoint.createdAtMs||time<invocationStartedAtMs||time>=deadline)fail('native_saved_login_budget_exhausted');return deadline-time;}
    async function bounded(work){const timeoutMs=remaining(),controller=new AbortController();let timer;try{return await Promise.race([work({signal:controller.signal,timeoutMs}),new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(Error('native_saved_login_transport_unknown'))},timeoutMs)})]);}finally{clearTimeout(timer)}}
    const missing=value=>value?.code==='browser_task_operation_not_found'||value?.message==='browser_task_operation_not_found'||value?.data?.message==='browser_task_operation_not_found';
    function missingError(error){if(missing(error))return true;const message=error?.message;if(typeof message!=='string'||message.length>8192)return false;const start=message.indexOf('{'),end=message.lastIndexOf('}');if(start<0||end<start)return false;try{return missing(JSON.parse(message.slice(start,end+1)))}catch{return false}}
    async function call(action,args={}){
+    // The new allowance first permits read-only public proof, never Native work
+    // until the ACK prefix, current logical owner and next-input absence agree.
+    if(allowAcknowledgedResume&&!resumeVerified&&!['task_operation','task_briefing'].includes(action))fail('native_saved_login_acknowledged_resume_unverified');
     let reply;try{reply=await bounded(context=>callTool('browser_command',{taskId,action,...args},context))}catch(error){if(action==='task_operation'&&missingError(error))return null;throw error}
     const text=reply?.content?.find(x=>x.type==='text')?.text;if(typeof text!=='string'||text.length>2*1024*1024)fail('native_saved_login_response_unverified');
     let envelope;try{envelope=JSON.parse(text)}catch{fail('native_saved_login_response_unverified')}
@@ -32,6 +42,13 @@ export function createNativeSavedLoginClient({callTool,store,verifyAccess,expect
    async function briefing(){const data=await call('task_briefing');if(!same(data,data,logical)||!logical.every(k=>typeof data[k]==='string'&&data[k].length>0)||data.taskId!==taskId||data.control?.owner!=='agent'||!Number.isSafeInteger(data.control?.epoch))fail('native_saved_login_task_control_changed');if(checkpoint.binding&&!same(data,checkpoint.binding,logical))fail('native_saved_login_task_binding_changed');if(checkpoint.controlEpoch!==undefined&&checkpoint.controlEpoch!==data.control.epoch)fail('native_saved_login_task_control_changed');return data;}
    async function original(input){const data=await call('task_operation',{params:{requestId:input.requestId}});if(!data)return null;const op=data.operation;if(op?.taskId!==taskId||op.requestId!==input.requestId||op.action!=='native_input')fail('native_saved_login_original_unverified');const refs=op.evidenceReferences;if(op.state!=='owner_acknowledged'||refs?.nativeLoginEpisode!==episodeId||refs.nativeLoginKind!==input.kind||refs.nativeDelivery!=='dispatched'||refs.nativeLoginStep!==String(kinds.indexOf(input.kind))||(input.targetRef&&refs.nativeLoginTargetRef!==input.targetRef)||(input.observationRequestId&&refs.nativeLoginObservationRequestId!==input.observationRequestId))fail('native_saved_login_original_uncertain');return op;}
    try{
+    if(allowAcknowledgedResume){
+     for(const retained of checkpoint.inputs)if(!await original(retained))fail('native_saved_login_original_uncertain');
+     await briefing();
+     const index=checkpoint.inputs.length;
+     if(await original({requestId:episodeId+':input'+(index+1),kind:kinds[index],state:'intent'}))fail('native_saved_login_acknowledged_resume_unverified');
+     resumeVerified=true;
+    }
     for(let index=0;index<3;index++){
      const kind=kinds[index],requestId=episodeId+':input'+(index+1),retained=checkpoint.inputs[index];
      if(retained){if(retained.requestId!==requestId||retained.kind!==kind)fail('native_saved_login_retained_identity_changed');if(!await original(retained))fail('native_saved_login_original_uncertain');retained.state='acknowledged';await store.save(checkpoint);continue;}
