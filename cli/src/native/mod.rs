@@ -114,6 +114,7 @@ pub mod element;
 pub mod inspect_server;
 #[allow(dead_code)]
 pub mod interaction;
+mod native_login_ocr;
 pub(crate) mod native_login_perception;
 #[allow(dead_code)]
 pub mod network;

@@ -6507,6 +6507,28 @@ fn validate_browser_command_action(arguments: &Value) -> Result<&str, JsonRpcErr
                     "browser_command params.{key} is reserved"
                 )));
             }
+            if matches!(key.as_str(), "ownerTimeoutMs" | "ownerDeadlineAtMs")
+                && matches!(action, "native_capture" | "native_input")
+                && crate::native::remote_view_application_http::native_owner_timeout_ms(
+                    &Value::Object(params.clone()),
+                )
+                .is_err()
+            {
+                return Err(JsonRpcError::invalid_params(
+                    "Native owner allowance requires ownerTimeoutMs100..300000 and optional positive safe-integer ownerDeadlineAtMs",
+                ));
+            }
+            if key == "ownerDeadlineAtMs" && matches!(action, "native_capture" | "native_input") {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_err(|_| JsonRpcError::invalid_params("Native owner clock unavailable"))?
+                    .as_millis() as u64;
+                if params[key].as_u64().is_some_and(|deadline| deadline <= now) {
+                    return Err(JsonRpcError::invalid_params(
+                        "Native owner deadline expired before admission",
+                    ));
+                }
+            }
             if !page_arguments.contains_key(key) {
                 return Err(JsonRpcError::invalid_params(&format!(
                     "browser_command params.{key} is not a page argument"

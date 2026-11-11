@@ -454,3 +454,35 @@ fn native_policy_override_public_mcp_preserves_exact_scope_and_refusal() {
     }
     remove_fixture(&root);
 }
+
+#[test]
+fn native_owner_allowance596_public_schema_and_invalid_deadlines() {
+    for action in ["native_capture", "native_input"] {
+        for value in [100, 300000] {
+            let mut params =
+                json!({"ownerTimeoutMs":value,"ownerDeadlineAtMs":9007199254740991u64});
+            if action == "native_input" {
+                params["actions"] = json!([{"kind":"key","chord":"Tab"}]);
+            }
+            let arguments = json!({"taskId":"task","action":action,"params":params});
+            assert_eq!(validate_browser_command_action(&arguments).unwrap(), action);
+        }
+        for params in [
+            json!({"ownerTimeoutMs":99}),
+            json!({"ownerTimeoutMs":300001}),
+            json!({"ownerTimeoutMs":null}),
+            json!({"ownerTimeoutMs":1.5}),
+            json!({"ownerDeadlineAtMs":1000}),
+            json!({"ownerTimeoutMs":30000,"ownerDeadlineAtMs":0}),
+            json!({"ownerTimeoutMs":30000,"ownerDeadlineAtMs":1}),
+            json!({"ownerTimeoutMs":30000,"ownerDeadlineAtMs":"1000"}),
+            json!({"ownerTimeoutMs":30000,"ownerDeadlineAtMs":9007199254740992u64}),
+            json!({"_nativeOwnerAdmittedAtMs":1000}),
+        ] {
+            assert!(validate_browser_command_action(
+                &json!({"taskId":"task","action":action,"params":params})
+            )
+            .is_err());
+        }
+    }
+}
