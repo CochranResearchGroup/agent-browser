@@ -264,3 +264,41 @@ records that the convenience Native CLI bypasses request-context admission and
 response curation. Do not use that convenience surface for live saved-login input;
 its repair or typed refusal is separate. No OS replay was attempted or proved.
 596and Overleaf104 remain open until actual configured-profile qualification.
+
+
+## Compact chooser repair qualification
+
+A retained supported-browser observation exposed a compact chooser whose account
+row and Manage passwords footer occupy adjacent popup interiors. The previous
+expanded-heading rule returned no saved entry. The compact profile now proves
+aligned same-frame contours and repeated masked-dot pixels. Small antialiased
+bullet cores require a compact-only periodic template; general password-mask
+and plaintext-ring rules remain unchanged.
+
+When the base OCR cannot qualify a compact account row, one bounded nearest-
+neighbor2x pass uses the same owner frame and pinned local English Tesseract.
+Original desktop coordinates and frame identity are retained. Multiple account
+rows, a conflicting high-confidence identity, low confidence, changed frames,
+malformed coordinates and unavailable refinement remain conservative refusals.
+The SDK and its original deadline, durable episode and input limits do not change.
+
+Source qualification and the exact installed configured-profile workflow remain
+separate. Private pixels and OCR are kept outside Git. Local public regressions,
+actual offline-frame qualification and final artifact checks are recorded in the
+issue closeout; no live input or acceptance is inferred from source tests.
+
+Local source checks: the public compact-popup fixture failed before the repair.
+The final public production-module and OCR-parser selection passes23cases; the
+real CLI Native-login selection passes31cases in11.828seconds. Strict affected
+CLI Clippy and workspace Rustfmt pass, along with SDK saved-login, API/MCP parity
+and handoff-documentation checks. Test builds disable debug symbols only for the
+CLI package; assertions and existing dependencies remain unchanged. Hosted CI was
+not used.
+
+The final production module/helper observes the matching compact entry from the
+same privately retained frame in three measured offline executions. Their OCR
+callbacks pass in356,250and251milliseconds with unchanged confidence limits.
+One earlier conservative miss lacks a classified cause and remains retained;
+these results do not establish historical failure causation or installed login
+acceptance. No browser input, SDK continuation or shared-runtime replacement was
+performed by this source repair.

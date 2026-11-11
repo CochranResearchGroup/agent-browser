@@ -126,3 +126,5 @@ before those operations. Copies do not prove login; never replay pending or unce
 Public task tools: `browser_snapshot`, `browser_screenshot`, `browser_click`,
 `browser_fill`, `browser_navigate`, `browser_tab`, `browser_retention`,
 `browser_reconnect`, `browser_policy`, `browser_artifact`.
+
+Compact saved-entry perception keeps exact-account, mask and ambiguity checks. Refused evidence grants no input retry; see the Native workflow reference.

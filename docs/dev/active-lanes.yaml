@@ -2,6 +2,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: NATIVE-COMPACT-CHOOSER-596
+    product_lane: PL-BUGFIX
+    objective: Recognize the compact Chrome saved-credential popup through bounded same-frame evidence
+    plan: docs/dev/maintenance/native-saved-login596.md
+    branch: fix/native-login-compact596
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#596]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [NATIVE-SAVED-LOGIN-596]
+    overlaps: [NATIVE-SAVED-LOGIN-596]
+    reconciled_overlaps: ["One primary from installed source51041; preserve canonical607 and worker-status live trees; five absent registered historical checkouts retain refs and archived candidates without prune or GC"]
+    validation_status: Public module23 and CLI native-login31 pass; strict affected Clippy, Rustfmt, SDK/parity/docs pass; exact saved-frame compact entry observed in three measured offline executions; coordinator review pending
+    limitations: ["No SDK continuation or browser input; private pixels and OCR remain outside Git", "Historical absent596/coverage/611/579/619 entries reviewed as retained custody, not live primaries; review2026-11-12"]
+    updated_at: 2026-11-11
   - id: RETAINED-HANDOFF-613
     product_lane: PL-BUGFIX
     objective: Keep a valid handoff actionable after explicit task closure

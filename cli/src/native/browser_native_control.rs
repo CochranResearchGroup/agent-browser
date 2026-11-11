@@ -480,8 +480,12 @@ pub fn execute(
             {
                 return Err("browser_native_login_context_changed".into());
             }
-            let controls =
-                super::native_login_perception::observe(&capture, &body["region"], request)?;
+            let controls = super::native_login_perception::observe_refined(
+                &capture,
+                &body["region"],
+                request,
+                super::native_login_ocr::lines,
+            )?;
             let binding = json!({"desktopId":target.viewing_desktop_id,"generation":target.viewing_generation,"windowId":window["id"],"window":body["expectedWindow"],"displayWidth":width,"displayHeight":height,"region":body["region"],"nativeControlEpoch":body["controlEpoch"],"observedAtMs":observed_at_ms});
             return Ok(
                 json!({"source":"remote_view_native","loginControls":controls,"binding":binding,"nativeLoginObservation":{"binding":binding,"controls":controls},"taskCompleted":false}),

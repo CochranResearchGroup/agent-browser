@@ -4700,3 +4700,5 @@ before downloads, stale transport recovery, retirement or advanced administratio
 
 Return, store, and reopen only `handoffUrl` (standalone: `/remote-view/<handoff-id>`).
 Never send providerExternalUrl or raw Guacamole URLs.
+
+Compact saved-entry perception uses same-frame popup contours, a strict Manage passwords footer, an exact account row and masked-dot pixels. A single bounded local 2x OCR refinement requires the pinned Tesseract5.3.4 English model. Missing or conflicting evidence remains refused; the original episode deadline and input limit remain unchanged.

@@ -1239,7 +1239,7 @@ readback; inspection and selection still have no browser effects.
 
 ### Deterministic saved-login controls
 
-The opt-in `native_capture` parameter `loginControls` accepts profile `english-chrome-v1` and optional `expectedAccount`. Supported flat rectangular fields and saved-entry candidates require same-frame Native pixels plus pinned English Tesseract evidence. It returns safe labels and opaque references without raw OCR, pixels, passwords or field values. Candidate pixels do not independently prove browser-native origin.
+The opt-in `native_capture` parameter `loginControls` accepts profile `english-chrome-v1` and optional `expectedAccount`. Supported flat rectangular fields and saved-entry candidates require same-frame Native pixels plus pinned English Tesseract evidence. It returns safe labels and opaque references without raw OCR, pixels, passwords or field values. Candidate pixels do not independently prove browser-native origin. Compact Chrome saved entries also require an aligned popup, an exact account row and same-frame mask dots. One bounded 2x OCR pass may refine that popup with the pinned local English engine; confidence, ambiguity and episode limits stay unchanged.
 
 Select a returned reference through `native_input` parameter `loginTarget` with `observationRequestId`, `targetRef` and original `episodeId`. Native ownership, frame hash, process/window, geometry and controller checks precede one derived OS click. No caller coordinates or mixed raw actions are allowed. The durable per-task episode admits only username focus, configured-account entry and verified filled-form submission, within three clicks and60seconds. Pending or unknown input stops progression and cannot renew the episode.
 
