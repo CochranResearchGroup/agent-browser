@@ -113,7 +113,16 @@ fn fixture() -> Fixture {
                         && !line.is_empty()
                     {
                         let command: Value = serde_json::from_str(&line).unwrap();
+                        let admission = BrowserSessionSqliteStore::default_sqlite()
+                            .and_then(|store| store.load_session_state())
+                            .and_then(|state| {
+                                control::check_state(&state, "reconcile611", &command)
+                            });
                         observed.lock().unwrap().push(command);
+                        if let Err(error) = admission {
+                            writeln!(stream, "{}", json!({"success":false,"error":error})).unwrap();
+                            continue;
+                        }
                         if let Some(change) = *publish.lock().unwrap() {
                             let store = BrowserSessionSqliteStore::default_sqlite().unwrap();
                             let mut state =
@@ -486,4 +495,105 @@ fn terminal_request619_public_peer_task_cannot_clear_original_completed_click() 
     );
     assert_eq!(read_control(), before);
     assert!(f.commands.lock().unwrap().is_empty());
+}
+
+#[test]
+fn standalone_handoff_public_return_observes_same_target_before_resuming() {
+    let f = fixture();
+    std::fs::write(control::path("browser").unwrap(), json!({"epoch":0,"human":false,"pauseReads":false,"awaitingObservation":false,"actor":"fixture","reason":"initial","flights":{},"owners":{},"audit":[]}).to_string()).unwrap();
+    control::begin_handoff("browser", "invitation", &"a".repeat(64)).unwrap();
+    let result = call(
+        json!({"jsonrpc":"2.0","id":631,"method":"tools/call","params":{"name":"browser_control","arguments":{"taskId":"task","operation":"return","expectedEpoch":1,"actor":"fixture-owner","reason":"Owner requests view-only and continued automation"}}}),
+    );
+    assert!(result.get("error").is_none(), "{result}");
+    let status: Value =
+        serde_json::from_str(result["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(status["data"]["control"]["owner"], "agent");
+    assert_eq!(status["data"]["control"]["pauseReads"], false);
+    assert_eq!(status["data"]["control"]["epoch"], 2);
+    let commands = f.commands.lock().unwrap();
+    assert_eq!(commands.len(), 1);
+    assert_eq!(commands[0]["action"], "url");
+    assert_eq!(commands[0]["sessionId"], "task");
+    assert_eq!(commands[0]["targetId"], "target");
+}
+
+fn held_standalone_fixture() -> Fixture {
+    let f = fixture();
+    std::fs::write(control::path("browser").unwrap(), json!({"epoch":0,"human":false,"pauseReads":false,"awaitingObservation":false,"actor":"fixture","reason":"initial","flights":{},"owners":{},"audit":[]}).to_string()).unwrap();
+    control::begin_handoff("browser", "invitation", &"a".repeat(64)).unwrap();
+    f
+}
+fn standalone_return_request() -> Value {
+    json!({"jsonrpc":"2.0","id":631,"method":"tools/call","params":{"name":"browser_control","arguments":{"taskId":"task","operation":"return","expectedEpoch":1,"actor":"fixture-owner","reason":"Owner requests view-only and continued automation"}}})
+}
+#[test]
+fn standalone_handoff_public_failed_observation_keeps_human_hold() {
+    for response in [
+        json!({"url":"https://example.test/retained","urlObserved":false}),
+        json!({"mode":"cdp_free"}),
+        json!({"url":"https://example.test/other","targetId":"other"}),
+    ] {
+        let f = held_standalone_fixture();
+        let before = read_control();
+        *f.response.lock().unwrap() = json!({"success":true,"data":response});
+        let result = call(standalone_return_request());
+        assert!(
+            result
+                .to_string()
+                .contains("browser_control_fresh_target_observation_required"),
+            "{result}"
+        );
+        assert_eq!(read_control(), before);
+        assert_eq!(f.commands.lock().unwrap().len(), 1);
+    }
+}
+#[test]
+fn standalone_handoff_public_return_rechecks_process_target_and_epoch() {
+    for (change, expected) in [
+        ("target", "browser_control_observation_target_changed"),
+        ("process", "browser_control_original_process_changed"),
+        ("epoch", "browser_control_epoch_changed"),
+    ] {
+        let f = held_standalone_fixture();
+        *f.publication.lock().unwrap() = Some(change);
+        let result = call(standalone_return_request());
+        assert!(result.to_string().contains(expected), "{change}: {result}");
+        let retained = read_control();
+        assert_eq!(retained["human"], true);
+        assert_eq!(retained["pauseReads"], true);
+        assert!(!retained["audit"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event["operation"] == "return"));
+        assert_eq!(f.commands.lock().unwrap().len(), 1);
+    }
+}
+#[test]
+fn standalone_handoff_cli_return_and_mcp_status_share_one_release() {
+    let f = held_standalone_fixture();
+    let result = cli(&[
+        "mcp".into(),
+        "host-control".into(),
+        "task".into(),
+        "return".into(),
+        "1".into(),
+        "fixture-owner".into(),
+        "Continue after assistance".into(),
+    ])
+    .unwrap();
+    assert_eq!(result["data"]["control"]["owner"], "agent");
+    let status = call(
+        json!({"jsonrpc":"2.0","id":632,"method":"tools/call","params":{"name":"browser_control","arguments":{"taskId":"task","operation":"status"}}}),
+    );
+    let status: Value =
+        serde_json::from_str(status["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(status["data"]["control"]["epoch"], 2);
+    assert_eq!(status["data"]["control"]["owner"], "agent");
+    let duplicate = call(standalone_return_request());
+    assert!(duplicate
+        .to_string()
+        .contains("browser_control_epoch_changed"));
+    assert_eq!(f.commands.lock().unwrap().len(), 1);
 }

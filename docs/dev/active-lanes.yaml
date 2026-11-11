@@ -2,6 +2,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: STANDALONE-HANDOFF-RETURN-631
+    product_lane: PL-BUGFIX
+    objective: Return standalone human handoffs through the public agent control seam
+    plan: docs/dev/maintenance/standalone-handoff-return.md
+    branch: fix/standalone-handoff-return
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#631]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [TERMINAL-CONTROL-611, OPERATOR-MODE-RELAUNCH-607]
+    reconciled_overlaps: ["Reuse clean canonical checkout at origin/main9e1d805e; preserve existing return/reconciliation and conversion behavior; no new worktree or peer edits"]
+    validation_status: Three exact red boundaries; final33control and custody tests, workspace Clippy/format and docs gates pass; installed acceptance pending
+    limitations: ["Preparing canonical PR integration; no installed repair or source capture claimed"]
+    updated_at: 2026-11-11
   - id: TASK-OPERATION-KEY-627
     product_lane: PL-BUGFIX
     objective: Publish the task-operation MAC key safely across concurrent first writes

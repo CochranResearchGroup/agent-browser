@@ -97,8 +97,8 @@ fn load_return_key(_browser_id: &str) -> Option<agent_browser_lease_authority::C
 
 // Optional provenance sidecar: failure disables the optimization, never the
 // existing control/reconciliation path. Takeover or explicit owner-side
-// reconstruction may initialize it under the control lock; no return-path
-// durability write is introduced.
+// reconstruction may initialize it under the control lock. Explicit standalone
+// return can also prepare it after verifying the original process.
 #[cfg(unix)]
 fn prepare_return_key(browser_id: &str) -> Result<(), String> {
     use std::os::unix::fs::OpenOptionsExt;
@@ -325,6 +325,27 @@ fn flight_clear(control: &Control) -> bool {
         .any(|state| state == "dispatched" || state == "uncertain_in_flight")
 }
 
+/// Explicit standalone return may prepare missing observation provenance only
+/// after the public adapter verifies the original process. This keeps existing
+/// human control and epoch intact until the same target has been observed.
+pub(crate) fn prepare_standalone_return(
+    browser_id: &str,
+    expected: u64,
+    actor: &str,
+    reason: &str,
+) -> Result<(), String> {
+    validate_attribution(actor, reason)?;
+    transaction(&path(browser_id)?, |control| {
+        if control.epoch != expected {
+            return Err("browser_control_epoch_changed".into());
+        }
+        if !control.human || control.awaiting_observation || !flight_clear(control) {
+            return Err("browser_control_return_observation_unavailable".into());
+        }
+        prepare_return_key(browser_id)
+    })
+}
+
 /// Eligibility is read-only; ordinary automation remains human-held until the
 /// post-observation commit. Legacy awaiting/flight states use existing recovery.
 pub(crate) fn eligible_return_observation(
@@ -371,6 +392,30 @@ pub(crate) fn attest_return_observation(value: Value) -> Result<Value, String> {
         .map_err(|_| "browser_control_return_observation_scope_invalid".into())
 }
 
+/// Standalone return uses the existing managed process identity. A signed
+/// observation remains task-bound and cannot adopt a replacement process.
+fn standalone_return_process_is_current(
+    state: &BrowserSessionState,
+    browser: &agent_browser_service_model::ManagedBrowserInstance,
+) -> bool {
+    use super::browser_session_store::BrowserSessionSqliteStore;
+    let Ok(path) = BrowserSessionSqliteStore::default_sqlite_path() else {
+        return false;
+    };
+    let Ok(store) = BrowserSessionSqliteStore::open_read_only(&path) else {
+        return false;
+    };
+    let Some(original) = store.original_browser_identity(state, browser) else {
+        return false;
+    };
+    crate::process_identity::assess_process_ownership(
+        Some(&original),
+        crate::process_identity::observe_process(browser.pid),
+        crate::process_identity::LegacyProfileProof::Unproven,
+    )
+    .authorizes_adoption()
+}
+
 fn authorize_return_observation(
     state: &BrowserSessionState,
     command: &Value,
@@ -397,7 +442,9 @@ fn authorize_return_observation(
         || tab.browser_id != proof.browser_id
         || tab.session_id != proof.task_id
         || tab.target_id != proof.target_id
-        || !state.host_bindings.contains_key(&proof.task_id)
+        || (!state.host_bindings.contains_key(&proof.task_id)
+            && (command["retainedTaskOnly"] != true
+                || !standalone_return_process_is_current(state, browser)))
         || command
             .get("browserId")
             .is_some_and(|id| id.as_str() != Some(proof.browser_id.as_str()))

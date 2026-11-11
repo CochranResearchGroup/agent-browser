@@ -68,3 +68,8 @@ identity and current epoch; the attestation grants no effect authority or viewer
 access. Missing or unusable provenance disables only the optimization and retains
 the legacy return lane. The control JSON schema is unchanged. No user sign-in or
 additional viewer-grant ceremony is introduced.
+
+
+## Standalone human handoff return
+
+Ordinary managed tasks support explicit `browser_control` return with current epoch, actor and reason. The adapter verifies the original process, retains human control during the same-target observation, then rechecks identity and commits the release once. Failed or non-live observations keep the hold. Takeover and override still require a hosted binding. Passive viewing is separate and never releases a human hold; original pending mode operations and uncertain effects remain explicit.
