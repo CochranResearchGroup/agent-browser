@@ -920,6 +920,10 @@ unfinished operation, inspect its durable receipt and explicitly select its
 `resume` or `recover` action. A committed ownership transfer remains forward-only;
 its actual effects cannot be described as rolled back. Recovery checks the
 selected payload and exact runtime targets and preserves the recorded history.
+If that committed generation's dashboard remains staged, exact-transaction
+workstation recovery can promote its observed healthy managed backend under the
+original active installation custody before repeating physical selection proof.
+It does not create an authenticated presentation receipt.
 Live-work observations remain advisory throughout.
 `agent-browser install transactions list|inspect` are read-only. Guarded
 `resume`, `rollback`, and `close` require the exact transaction ID, current

@@ -2,6 +2,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: COMMITTED-DASHBOARD-RECOVERY-635
+    product_lane: PL-BUGFIX
+    objective: Recover a committed upgrade whose healthy dashboard remains staged
+    plan: docs/dev/maintenance/committed-dashboard-recovery635.md
+    branch: fix/committed-dashboard-recovery635
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#635]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [FOREIGN-DISPLAY-630, STANDALONE-HANDOFF-RETURN-631]
+    overlaps: [FOREIGN-DISPLAY-630, STANDALONE-HANDOFF-RETURN-631]
+    reconciled_overlaps: ["Root delegates the existing primary checkout exclusively for635 after stopping its exact build; no new worktree; preserve merged630 and631 hunks"]
+    validation_status: Two correct-seam REDs then20distinct tests GREEN; strict workspace Clippy, format, policy, docs build and link checks pass; uncommitted source frozen for root review
+    limitations: ["No runtime effects, deployment, commit or push within this delegated packet", "Keep635open until real same-transaction installed recovery readback succeeds"]
+    updated_at: 2026-11-11
   - id: FOREIGN-DISPLAY-630
     product_lane: PL-BUGFIX
     objective: Protect foreign or unowned displays from Agent Browser cleanup classification

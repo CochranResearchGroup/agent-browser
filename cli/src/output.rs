@@ -5878,7 +5878,10 @@ retry cannot reuse a candidate daemon left by an earlier failed transaction.
 A committed or finalized runtime handoff is forward-only. Transaction inspect
 then advertises resume and refuses rollback; later candidate deployment
 readiness failure retains the candidate and durable receipts for exact guarded
-resume rather than routing through workstation recover.
+resume. Exact workstation recovery can also finish a healthy staged dashboard
+promotion for the committed selected candidate under its original active install
+custody, then repeat sealed-generation and physical runtime proof. It does not
+create authenticated presentation evidence.
 If service projection metadata omits the runtime-profile name, orphan adoption
 recovers it only from one runtime-state record with the same exact process
 identity and DevTools browser endpoint; zero or multiple matches fail closed.
