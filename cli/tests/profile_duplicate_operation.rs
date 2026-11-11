@@ -1,3 +1,10 @@
+// Share the production schema ceiling without loading the binary runtime.
+mod native {
+    pub mod browser_session_store {
+        include!("../src/native/browser_runtime_schema.rs");
+    }
+}
+
 // The retained pre-adapter intent is a separate compatibility fixture.
 #[allow(dead_code)]
 #[path = "../src/native/profile_duplicate_operation.rs"]
