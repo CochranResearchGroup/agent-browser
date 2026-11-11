@@ -1941,7 +1941,13 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         &self.state,
                         handoff_id,
                     )?;
-                    self.recover_browser_for_command(&retained.browser.id, command)?;
+                    // A durable human link may present the exact live original
+                    // while mode conversion is pending. Reconnect must not advance
+                    // that operation, close the browser, or launch its replacement.
+                    // Absent or changed originals retain ordinary recovery fences.
+                    if !self.effects.browser_is_live(&retained.browser)? {
+                        self.recover_browser_for_command(&retained.browser.id, command)?;
+                    }
                     let target = agent_browser_service_model::resolve_remote_view_tab_handoff(
                         &self.state,
                         handoff_id,
@@ -3997,6 +4003,114 @@ fn current_unix_ms() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn native_handoff_preserves_live_browser_and_pending_mode_operation() {
+        for live in [true, false] {
+            let directory = TempDirectory::new();
+            let legacy = directory.0.join("state.json");
+            fs::write(&legacy, serde_json::json!({"profiles":{"work":{"id":"work","name":"Work","userDataDir":directory.0.join("work"),"profileClass":"durable_named"}}}).to_string()).unwrap();
+            let launches = std::rc::Rc::new(std::cell::Cell::new(0));
+            let mut host = BrowserSessionHost::load(
+                BrowserSessionSqliteStore::open_or_migrate(&directory.0, &legacy)
+                    .unwrap()
+                    .0,
+                BrowserSessionEffectAdapter::new(FixtureRuntime {
+                    live,
+                    initial_tabs: true,
+                    launch_attempts: launches.clone(),
+                    ..FixtureRuntime::default()
+                }),
+                &legacy,
+                BrowserSessionHostConfig {
+                    session_idle_timeout_ms: 300_000,
+                    remote_view_desktops: Vec::new(),
+                    default_disposable_policy: None,
+                    exact_url_history_maximum_bytes: 64 * 1024 * 1024,
+                },
+            )
+            .unwrap();
+            let opened = host
+                .open(OpenBrowserSession::exact_profile(
+                    "handoff-pending",
+                    "work",
+                    1_000,
+                ))
+                .unwrap();
+            host.tab_for_navigation(&opened.session_id, 1_000).unwrap();
+            let tab = host.state.sessions[&opened.session_id]
+                .current_tab_id
+                .clone()
+                .unwrap();
+            agent_browser_service_model::retain_remote_view_tab_handoff(
+                &mut host.state,
+                "same-link",
+                &opened.session_id,
+                &tab,
+            )
+            .unwrap();
+            host.state
+                .profile_operation_ids
+                .insert("work".into(), "pending-mode".into());
+            host.commit_state().unwrap();
+            // Retain the actual nonterminal journal shape that blocks recovery.
+            let mode_path = host
+                .persistence
+                .runtime_database_path()
+                .unwrap()
+                .with_extension("mode.sqlite3");
+            let mut operations =
+                super::super::browser_mode_operation::OperationStore::open(&mode_path).unwrap();
+            let mut operation = operations
+                .request(super::super::browser_mode_operation::Request {
+                    operation_id: "pending-mode".into(),
+                    browser_id: opened.browser_id.clone(),
+                    profile_id: "work".into(),
+                    original_process: "original-process-fixture".into(),
+                    executable: "/fixture/chrome".into(),
+                    executable_sha256: None,
+                    task_ids: vec![opened.session_id.clone()],
+                    requested_mode: super::super::browser_mode_operation::Mode::CdpFree,
+                })
+                .unwrap();
+            operation.phase = super::super::browser_mode_operation::Phase::Closing;
+            let journal = serde_json::to_string(&operation).unwrap();
+            rusqlite::Connection::open(&mode_path)
+                .unwrap()
+                .execute(
+                    "UPDATE browser_mode_operations SET state=?1 WHERE id='pending-mode'",
+                    [&journal],
+                )
+                .unwrap();
+            let before = launches.get();
+            let result = host.handle_command_result(&serde_json::json!({
+                "action":"service_remote_view_handoff_resolve", "handoffId":"same-link",
+                "nativeDesktop":true, "activityAtMs":2_000,
+            }));
+            if live {
+                let response =
+                    result.expect("a pending mode change must not block the original live desktop");
+                assert_eq!(response["operatorVisible"]["state"], "ready");
+                assert_eq!(response["browserId"], opened.browser_id);
+                assert_eq!(response["tabId"], tab);
+            } else {
+                assert!(
+                    result
+                        .unwrap_err()
+                        .contains("browser_profile_operation_in_progress"),
+                    "a missing original must retain the original mode fence"
+                );
+            }
+            assert_eq!(
+                launches.get(),
+                before,
+                "handoff must not launch a replacement"
+            );
+            assert_eq!(host.state.profile_operation_ids["work"], "pending-mode");
+            assert_eq!(operations.read("pending-mode").unwrap(), Some(operation));
+            assert_eq!(host.state.remote_view_tab_handoffs["same-link"].tab_id, tab);
+        }
+    }
+
     #[test]
     fn host_control_return_observation_during_mode_conversion_preserves_pending_operation() {
         for live in [true, false] {

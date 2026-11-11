@@ -2,6 +2,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: HANDOFF-PENDING-MODE-640
+    product_lane: PL-BUGFIX
+    objective: Keep an exact live browser handoff available during pending mode conversion
+    plan: docs/dev/maintenance/handoff-pending-mode640.md
+    branch: fix/handoff-pending-mode
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#640]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [NATIVE-RETURN-COMPATIBILITY-638]
+    overlaps: []
+    reconciled_overlaps: ["Reuse clean canonical checkout; no new worktree; preserve foreign compact596 edits and missing registrations"]
+    validation_status: Original authenticated503 and owner profile-operation refusal reproduced; host regression pending
+    limitations: ["Preserve live browser and original pending mode journal; no website input or conversion replay"]
+    updated_at: 2026-11-11
   - id: NATIVE-RETURN-COMPATIBILITY-638
     product_lane: PL-BUGFIX
     objective: Preserve deployed Native allowance and perception alongside standalone return and committed recovery
