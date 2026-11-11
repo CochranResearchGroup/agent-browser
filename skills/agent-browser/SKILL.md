@@ -86,6 +86,8 @@ Use the CLI while correcting integration; server tools/list does not prove clien
 Help is launch-free. MCP returns `success/data/error`; CLI errors add `type`. Read private journal `details.phase` for unknown outcomes.
 
 Read [Runtime health and cleanup diagnostics](references/cli-and-service.md#runtime-health-and-cleanup-diagnostics) before maintenance, expiry diagnosis or unknown-effect interpretation. Preserve peers and scrub exported URLs.
+Uncorrelated displays remain protected; absence from Service State does not prove
+Agent Browser ownership or authorize stopping another application.
 
 CDP-free idle close uses verified original OS identity and exit confirmation.
 Explicit handoff can supersede idle cleanup after its worker ends and the exact

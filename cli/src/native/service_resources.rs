@@ -1960,9 +1960,11 @@ fn classify_process(
             disposition = ResourceDisposition::Protected;
             reasons.push("retained_named_or_persistent_profile".to_string());
         } else if kind == ResourceKind::RemoteDisplay && correlation.browser_id.is_none() {
-            disposition = ResourceDisposition::Candidate;
-            reasons.push("orphaned_remote_display_process".to_string());
-            gc_action = Some("terminate_process".to_string());
+            // Absence from our state proves neither launch ownership nor exit
+            // of a foreign display owner. Keep it outside both GC and readiness
+            // candidate counts until a positive ownership contract exists.
+            disposition = ResourceDisposition::Protected;
+            reasons.push("remote_display_ownership_unproven".to_string());
         } else if correlation.browser_id.is_none() && kind == ResourceKind::AgentBrowser {
             reasons.push("agent_browser_process_unowned_by_service_state".to_string());
         } else if temporary_profile_path(correlation.profile_path.as_deref()) {
@@ -4687,12 +4689,71 @@ mod tests {
         assert_eq!(response["resources"][0]["disposition"], "protected");
         assert_eq!(
             response["resources"][0]["reasons"][0],
-            "runtime_environment_ownership_unproven"
+            "remote_display_ownership_unproven"
         );
     }
 
     #[test]
-    fn production_resources_preserve_orphan_remote_display_candidate_behavior() {
+    fn foreign_remote_display_never_reaches_gc_terminator() {
+        struct NoForeignTermination;
+        impl ProcessTerminator for NoForeignTermination {
+            fn terminate(&self, _: &ServiceState, _: &Value) -> Value {
+                panic!("foreign display reached a termination effect");
+            }
+        }
+        for age in [None, Some(0), Some(3600)] {
+            let display = sample(507, &["/usr/bin/Xvfb"], age);
+            let mut state = ServiceState::default();
+            let response = service_gc_apply_response_from_samples(
+                &mut state,
+                vec![display.clone()],
+                Vec::new(),
+                None,
+                true,
+                &FakeInspector {
+                    sample: Some(display.clone()),
+                },
+                &NoForeignTermination,
+            );
+            assert_eq!(response["candidateCount"], 0);
+            let response = service_gc_unattended_response_from_samples(
+                &mut state,
+                vec![display.clone()],
+                Vec::new(),
+                &FakeInspector {
+                    sample: Some(display),
+                },
+                &NoForeignTermination,
+            );
+            assert_eq!(response["candidateCount"], 0);
+            assert_eq!(state.events.len(), 2);
+            assert!(state.events.iter().all(|event| event
+                .details
+                .as_ref()
+                .is_some_and(|details| details["resourceGc"]["candidateCount"] == 0
+                    && details["resourceGc"]["counts"]["terminated"] == 0)));
+        }
+    }
+
+    #[test]
+    fn foreign_remote_display_is_not_a_production_cleanup_candidate() {
+        let response = service_resources_response_from_samples_for_environment(
+            &ServiceState::default(),
+            vec![sample(507, &["/usr/bin/Xvfb", ":193"], Some(3600))],
+            Vec::new(),
+            ResourceRuntimeEnvironment::Production,
+        );
+        assert_eq!(
+            response["summary"]["candidateCount"], 0,
+            "absence from Agent Browser state does not establish display ownership"
+        );
+        assert_eq!(response["resources"][0]["disposition"], "protected");
+        assert!(response["resources"][0]["gcAction"].is_null());
+        assert!(response["resources"][0]["candidateIdentity"].is_null());
+    }
+
+    #[test]
+    fn production_resources_do_not_claim_uncorrelated_remote_display() {
         let response = service_resources_response_from_samples_for_environment(
             &ServiceState::default(),
             vec![sample(
@@ -4703,11 +4764,11 @@ mod tests {
             Vec::new(),
             ResourceRuntimeEnvironment::Production,
         );
-        assert_eq!(response["summary"]["candidateCount"], 1);
-        assert_eq!(response["resources"][0]["disposition"], "candidate");
+        assert_eq!(response["summary"]["candidateCount"], 0);
+        assert_eq!(response["resources"][0]["disposition"], "protected");
         assert_eq!(
             response["resources"][0]["reasons"][0],
-            "orphaned_remote_display_process"
+            "remote_display_ownership_unproven"
         );
     }
 

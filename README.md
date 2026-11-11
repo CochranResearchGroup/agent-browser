@@ -4798,7 +4798,10 @@ IDs survive reboot. A package-launched or managed-attached Chrome lane is regist
 profile, exact process, CDP endpoint, owner-generation, and target-set evidence
 before it is projected ready. Ownership transfer, retained detach, recovery,
 and owned close move the same cleanup obligation; terminal close requires exact
-process exit and profile-lock release. Use
+process exit and profile-lock release.
+Uncorrelated display processes remain protected: missing Service State records
+do not prove package ownership, so foreign displays are neither cleanup
+candidates nor readiness-impacting stale resources. Use
 `service gc --dry-run` to receive a short-lived review token for conservative
 cleanup candidates, then use `service gc --apply --review-token <token>` only
 after reviewing that dry-run. A named or persistent profile remains protected
