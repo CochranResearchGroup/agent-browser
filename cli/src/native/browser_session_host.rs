@@ -4010,6 +4010,124 @@ fn current_unix_ms() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn retained_mode_native_target_accepts_only_observation_metadata_drift() {
+        let directory = TempDirectory::new();
+        let legacy = directory.0.join("state.json");
+        fs::write(&legacy, serde_json::json!({"profiles":{"work":{"id":"work","name":"Work","userDataDir":directory.0.join("work"),"profileClass":"durable_named"}}}).to_string()).unwrap();
+        let mut host = BrowserSessionHost::load(
+            BrowserSessionSqliteStore::open_or_migrate(&directory.0, &legacy)
+                .unwrap()
+                .0,
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                live: true,
+                initial_tabs: true,
+                ..FixtureRuntime::default()
+            }),
+            &legacy,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_view_desktops: vec![],
+                default_disposable_policy: None,
+                exact_url_history_maximum_bytes: 64 * 1024 * 1024,
+            },
+        )
+        .unwrap();
+        let opened = host
+            .open(OpenBrowserSession::exact_profile(
+                "mode-retained",
+                "work",
+                1_000,
+            ))
+            .unwrap();
+        host.tab_for_navigation(&opened.session_id, 1_000).unwrap();
+        host.state
+            .browsers
+            .get_mut(&opened.browser_id)
+            .unwrap()
+            .desktop = Some(agent_browser_service_model::RemoteViewFixedDesktop {
+            desktop_id: "fixture-desktop".into(),
+            friendly_route_label: "Fixture".into(),
+            generation: 1,
+        });
+        host.commit_state().unwrap();
+        let session = host.state.sessions[&opened.session_id].clone();
+        let retained = agent_browser_service_model::RemoteViewTabHandoffTarget {
+            browser: host.state.browsers[&session.browser_id].clone(),
+            tab: host.state.tabs[session.current_tab_id.as_ref().unwrap()].clone(),
+            session,
+        };
+        let session = host.state.sessions.get_mut(&opened.session_id).unwrap();
+        session.last_activity_at_ms += 5_000;
+        session.expires_at_ms += 5_000;
+        host.state
+            .tabs
+            .get_mut(&retained.tab.id)
+            .unwrap()
+            .last_activity_at_ms += 5_000;
+        host.commit_state().unwrap();
+        let target =
+            super::browser_mode_host::retained_mode_native_target(&retained, &host.state).unwrap();
+        let error = host
+            .native_browser_command(&target, &serde_json::json!({"action":"native_close"}))
+            .unwrap_err();
+        assert_eq!(error, "browser_native_original_identity_unavailable", "unchanged original target must pass the actual Native target guard; fixture has no process custody and cannot dispatch");
+        for (pointer, value) in [
+            ("/browser/id", serde_json::json!("other")),
+            ("/browser/profileId", serde_json::json!("other")),
+            ("/browser/pid", serde_json::json!(9001)),
+            ("/browser/cdpEndpoint", serde_json::json!("ws://other")),
+            ("/browser/desktop/desktop_id", serde_json::json!("other")),
+            ("/browser/desktop/generation", serde_json::json!(2)),
+            ("/browser/activeSessionIds", serde_json::json!(["peer"])),
+            ("/session/id", serde_json::json!("other")),
+            ("/session/name", serde_json::json!("other")),
+            ("/session/profileId", serde_json::json!("other")),
+            ("/session/browserId", serde_json::json!("other")),
+            ("/session/createdAtMs", serde_json::json!(9001)),
+            ("/session/currentTabId", serde_json::json!("other")),
+            ("/tab/id", serde_json::json!("other")),
+            ("/tab/targetId", serde_json::json!("other")),
+            ("/tab/browserId", serde_json::json!("other")),
+            ("/tab/sessionId", serde_json::json!("other")),
+            ("/tab/createdAtMs", serde_json::json!(9001)),
+        ] {
+            let mut changed = serde_json::json!({"browser":&target.browser,"session":&target.session,"tab":&target.tab});
+            *changed.pointer_mut(pointer).expect("fixture field exists") = value;
+            let changed = agent_browser_service_model::RemoteViewTabHandoffTarget {
+                browser: serde_json::from_value(changed["browser"].clone()).unwrap(),
+                session: serde_json::from_value(changed["session"].clone()).unwrap(),
+                tab: serde_json::from_value(changed["tab"].clone()).unwrap(),
+            };
+            let mut state = host.state.clone();
+            state
+                .browsers
+                .insert(retained.browser.id.clone(), changed.browser);
+            state
+                .sessions
+                .insert(retained.session.id.clone(), changed.session);
+            state.tabs.insert(retained.tab.id.clone(), changed.tab);
+            assert!(
+                super::browser_mode_host::retained_mode_native_target(&retained, &state).is_err(),
+                "identity change must reject: {pointer}"
+            );
+        }
+        let before = host.persisted_state.clone();
+        let mut concurrent = before.clone();
+        concurrent
+            .profile_operation_ids
+            .insert("peer-profile".into(), "peer-operation".into());
+        host.persistence
+            .compare_and_save_session_state(&before, &concurrent)
+            .unwrap();
+        assert_eq!(
+            host.native_browser_command(&target, &serde_json::json!({"action":"native_close"}))
+                .unwrap_err(),
+            "browser_native_target_changed:refresh task",
+            "current target metadata must not bypass concurrent persisted-state fence"
+        );
+    }
+
     use agent_browser_service_model::{RemoteViewApplicationAdapter, RemoteViewSessionEffects};
     #[test]
     fn native_handoff_preserves_live_browser_and_pending_mode_operation() {

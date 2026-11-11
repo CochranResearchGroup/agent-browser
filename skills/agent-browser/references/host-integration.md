@@ -187,3 +187,5 @@ PID-reuse absence stays conservatively blocked. This is recovery, not relocation
 and new native custody qualification is pending.
 
 Signed retained return uses an exact observation scope. It preserves pending mode changes and peer bindings; ordinary effectful operations remain guarded.
+
+Retained mode operations refresh only session activity/expiry and tab activity timestamps before Native calls and assignment qualification. Physical identity, affected tasks and concurrent persisted state remain guarded.

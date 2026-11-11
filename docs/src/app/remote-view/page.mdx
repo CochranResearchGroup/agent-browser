@@ -1174,7 +1174,7 @@ retain HTTPS validation; callers do not construct provider URLs.
 
 Right-click a managed browser heading or tab in the left rail to choose **Relaunch with CDP** or **Relaunch without CDP**. The tab actions button and browser mode menu offer the same controls. Review applies to the entire shared browser, including its other tasks. A successful explicit replacement preserves the logical task, durable profile and original handoff; it changes the physical browser process. Review the affected tasks before selecting relaunch. Unsaved page state and downloads may be lost; unknown URLs and uncertain website submissions are never replayed.
 
-Fullscreen Native handoffs also show a **CDP on/off** control in the top row. Switching it opens the same whole-browser relaunch review; it does not immediately restart the browser. Unverified mode stays unavailable. An interrupted conversion resumes its original operation, and completion reconnects the original handoff. Native Remote View and Agent Browser must both include this integration.
+Fullscreen Native handoffs also show a **CDP on/off** control in the top row. Switching it opens the same whole-browser relaunch review; it does not immediately restart the browser. Unverified mode stays unavailable. An interrupted conversion resumes its original operation, and completion reconnects the original handoff. Retained mode targets refresh only activity and expiry timestamps; process, profile, task, tab, target, desktop and concurrent-state changes remain guarded. Native Remote View and Agent Browser must both include this integration.
 
 Conversion qualifies the replacement's exact process, requested mode and Native
 window without injecting input. Selective agent input remains independently
