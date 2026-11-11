@@ -4636,7 +4636,7 @@ Nested field outlines normalize only with bounded edge drift and either uninterr
 
 The native-saved-login client exports createNativeSavedLoginClient with callTool,
 a serialized durable store, verifyAccess and expectedAccount. resolve takes taskId
-and original episodeId. It retains60seconds/three clicks across interruptions;
+and original episodeId. It retains at most three ordered inputs across interruptions;
 unknown or pending input requires readback, never replay. The host independently
 verifies authenticated intended-account access. Semantic workers are exceptional
 fallbacks outside this deterministic routine. Current source/image proofs do not
@@ -4702,3 +4702,5 @@ Return, store, and reopen only `handoffUrl` (standalone: `/remote-view/<handoff-
 Never send providerExternalUrl or raw Guacamole URLs.
 
 Compact saved-entry perception uses same-frame popup contours, a strict Manage passwords footer, an exact account row and masked-dot pixels. A single bounded local 2x OCR refinement requires the pinned Tesseract5.3.4 English model. Missing or conflicting evidence remains refused; the original episode deadline and input limit remain unchanged.
+
+Saved-login invocation allowance defaults to300000ms and is configurable through timeoutMs. Normal resolve preserves the recorded deadline. Explicit allowAcknowledgedResume resumes only a public-verified one/two-ACK prefix without rewriting its clocks or replaying its inputs; current owner, next-input absence and fresh frames remain required. Unknown/intent inputs stop.

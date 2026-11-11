@@ -81,14 +81,14 @@ The existing task-operation store commits pending input before transport. Native
 capture retains curated control/frame/binding evidence; loginTarget accepts only
 observationRequestId, opaque targetRef and original episodeId. One per-task episode
 allows username focus, configured saved-entry selection and filled-form submission,
-at most three clicks within60seconds from the first input. Prior pending/unknown
-input blocks advancement. Fresh captures cannot replace the original deadline or
-start another episode. Current Native window/generation/geometry/controller and
+at most three ordered inputs. Prior pending/unknown input blocks advancement.
+Fresh captures cannot replace input history or start another episode. Current Native window/generation/geometry/controller and
 expected pixels remain independent owner fences before derived OS input.
 
-The client retains its original60-second deadline from episode creation, stable
-input IDs and durable checkpoints across interruption, reopens original operation
-receipts and never replays uncertain input. The receiving host supplies a serialized
+The client retains recorded episode clocks, stable input IDs and durable
+checkpoints across interruption, reopens original operation receipts and never
+replays uncertain input. Invocation allowance and explicit acknowledged-prefix
+continuation are described below; historical60-second records remain unchanged. The receiving host supplies a serialized
 durable store and independent intended-account access proof. No semantic worker,
 password export, credential-store read or fixture-as-live claim is introduced.
 
@@ -266,7 +266,7 @@ its repair or typed refusal is separate. No OS replay was attempted or proved.
 596and Overleaf104 remain open until actual configured-profile qualification.
 
 
-## Compact chooser repair qualification
+## Compact chooser repair qualification (sourcef3fddb6a)
 
 A retained supported-browser observation exposed a compact chooser whose account
 row and Manage passwords footer occupy adjacent popup interiors. The previous
@@ -302,3 +302,27 @@ One earlier conservative miss lacks a classified cause and remains retained;
 these results do not establish historical failure causation or installed login
 acceptance. No browser input, SDK continuation or shared-runtime replacement was
 performed by this source repair.
+
+
+## Configurable invocation allowance and acknowledged continuation
+
+The operator removed the artificial elapsed60-second Native episode cutoff.
+Native admission retains rollback rejection, three ordered inputs, stable request
+identity, positive original acknowledgements, current owner/context and fresh
+observation/control/visual fences. Original input timestamps remain unchanged.
+
+The SDK accepts timeoutMs with a default of300000milliseconds for each invocation.
+New episodes record their chosen original allowance; legacy episodes without that
+field retain their original60-second deadline under ordinary resolve. An explicit
+allowAcknowledgedResume invocation can continue only a retained prefix of one or
+two already acknowledged inputs after public acknowledgement readback, unchanged
+current task ownership and positive absence of the next input. It uses one bounded
+invocation clock, including read-only proof, without rewriting the original clocks.
+Unknown/intent input never gains continuation authority, and spent three-input
+histories remain spent. Host-owned stores may retain the original file and save
+qualified continuation state in a separate sidecar. Independent access verification
+remains after submit; pre-submit application verification must preserve the form.
+
+Public regressions retain the old elapsed-age refusal and missing SDK allowance
+as RED. Source qualification and installed same-episode continuation remain
+separate; this source work performs no live input or checkpoint rewrite.

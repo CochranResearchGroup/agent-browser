@@ -1609,7 +1609,10 @@ fn login_episode_step(
                 .map(|r| r.created_at_ms)
         })
         .unwrap_or(now);
-    if now < start || now - start > 60_000 {
+    // Elapsed time is an SDK invocation policy, not authority to replay input.
+    // Retain rollback rejection; ordered ACKs, current context and fresh targets
+    // above/below still fence a later continuation of this same episode.
+    if now < start {
         return Err("browser_native_login_budget_exhausted".into());
     }
     let selection = super::native_login_perception::select_target(
