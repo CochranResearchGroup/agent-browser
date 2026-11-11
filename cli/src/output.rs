@@ -7986,6 +7986,7 @@ Service:
   service reconcile          Probe persisted records and optionally refresh authoritative route definitions
   service resources          Inspect boot-scoped processes, runtime lanes, and cleanup obligations
                              Kinds follow executable names; classification does not authorize cleanup
+                             Uncorrelated displays remain protected until package ownership is proven
                              Verified retained-browser descendants are protected by exact owner and ancestry evidence
                              Read commands do not persist seeding refreshes; Service reconciliation does
                              Diagnostic disconnects with no active profile tabs do not rewrite authority state

@@ -86,6 +86,7 @@ Use the CLI while correcting integration; server tools/list does not prove clien
 Help is launch-free. MCP returns `success/data/error`; CLI errors add `type`. Read private journal `details.phase` for unknown outcomes.
 
 Read [Runtime health and cleanup diagnostics](references/cli-and-service.md#runtime-health-and-cleanup-diagnostics) before maintenance, expiry diagnosis or unknown-effect interpretation. Preserve peers and scrub exported URLs.
+Uncorrelated displays stay protected: missing Service State proves no ownership or cleanup authority.
 
 CDP-free idle close uses verified original OS identity and exit confirmation.
 Explicit handoff can supersede idle cleanup after its worker ends and the exact
@@ -127,6 +128,6 @@ Public task tools: `browser_snapshot`, `browser_screenshot`, `browser_click`,
 `browser_fill`, `browser_navigate`, `browser_tab`, `browser_retention`,
 `browser_reconnect`, `browser_policy`, `browser_artifact`.
 
-Compact saved-entry and dark submit-button refinement keep exact-account, mask and ambiguity checks. Native owner RPC options `ownerTimeoutMs` (100..300000) and optional `ownerDeadlineAtMs` bound one admitted command; supply the remaining invocation deadline. They never renew frame freshness or allow uncertain-input replay. Refused evidence grants no input retry; see the Native workflow reference.
+Saved-entry/submit refinement preserves exact-account, mask and ambiguity checks. `ownerTimeoutMs` (100..300000) plus optional `ownerDeadlineAtMs` bound one admitted Native command to the remaining invocation deadline, without renewing frame freshness or permitting uncertain-input replay. See the Native workflow reference.
 
-Saved-login SDK invocation timeout defaults to300s. Explicit acknowledged-prefix resume keeps original clocks and never replays input; unknown input still stops.
+SDK allowance:300s default. ACK-prefix resume preserves original clocks; unknown input stops, never replays.

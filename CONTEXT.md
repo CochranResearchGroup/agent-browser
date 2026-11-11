@@ -509,6 +509,9 @@ _Avoid_: Best-effort cleanup, drop behavior
 
 **Reclaimable runtime resource**:
 A package-owned process tree, profile, display helper, transaction payload, or runtime generation whose lifecycle is terminal and which has no active ownership, lease, handoff, rollback, or process reference.
+An uncorrelated display has no proven package ownership and remains protected,
+including when another application owns it. Absence from Service State is not
+cleanup evidence.
 _Avoid_: Old resource, orphan
 
 **Runtime convergence window**:

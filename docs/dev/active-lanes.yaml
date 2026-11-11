@@ -12,11 +12,27 @@ lanes:
     work_items: [CochranResearchGroup/agent-browser#596]
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    dependencies: [NATIVE-SAVED-LOGIN-596, TASK-OPERATION-KEY-627]
-    overlaps: [NATIVE-SAVED-LOGIN-596, TASK-OPERATION-KEY-627]
+    dependencies: [NATIVE-SAVED-LOGIN-596, TASK-OPERATION-KEY-627, FOREIGN-DISPLAY-630]
+    overlaps: [NATIVE-SAVED-LOGIN-596, TASK-OPERATION-KEY-627, FOREIGN-DISPLAY-630]
     reconciled_overlaps: ["Reuse the existing596 primary; ordinary merge of selected main9e1d805 into qualified205f95f preserves both published histories; no canonical checkout writes, new checkout, prune or GC", "Keep source231 sealed artifact and stopped205 candidate inputs unchanged; no runtime installation or historical input replay"]
-    validation_status: Combined selected9e1 plus205 key4, owner4, HTTP14 and Native34 pass; strict Clippy/fmt/docs/parity pass; Native34 focused-target breach retained; artifact and runtime qualification pending
+    validation_status: Combined published630+7c resource34/key4/owner4/HTTP14/Native34 pass90; strict Clippy passes; initial skill-size failure retained and guidance compacted; artifact/installer qualification pending
     limitations: ["No production install or website input", "Private pixels, OCR, original unknown inputs and canceled-build receipts remain outside Git; review2026-11-12"]
+    updated_at: 2026-11-11
+  - id: FOREIGN-DISPLAY-630
+    product_lane: PL-BUGFIX
+    objective: Protect foreign or unowned displays from Agent Browser cleanup classification
+    plan: docs/dev/maintenance/foreign-display-630.md
+    branch: fix/foreign-display-630
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#630]
+    plan_state: OPEN
+    custody_state: INTEGRATION_READY
+    dependencies: []
+    overlaps: [STANDALONE-HANDOFF-RETURN]
+    reconciled_overlaps: ["630 owns service_resources and focused resource guidance; standalone handoff owns its source and shared handoff docs; catalog changes are separate entry hunks; no production effects"]
+    validation_status: Exact production-inventory RED then34 module tests GREEN; strict Clippy, Rustfmt and documentation gates pass; frozen public inventory and GC dry-run pass with unchanged foreign process and zero fixture residue
+    limitations: ["Source packet only; foreign service remains active; no cleanup or deployment", "Retain scoped primary for review and governed closeout; known missing registrations untouched"]
     updated_at: 2026-11-11
   - id: TASK-OPERATION-KEY-627
     product_lane: PL-BUGFIX

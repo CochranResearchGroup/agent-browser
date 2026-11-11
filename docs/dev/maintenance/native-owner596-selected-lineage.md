@@ -57,3 +57,23 @@ selected-binary baseline and post-resource-admission identity guard. Its exact
 sealed bytes require source-free installer qualification. Root owns any later
 installation and automated website acceptance. This source composition grants
 no live input, history rewrite, human-login acceptance or final106 review pass.
+
+## Foreign display630 composition
+
+Merge published630 source `5f427a8cbdcf1ba0c27d14748eb190ce4eef12a2`
+into the qualified7c branch through a normal merge. Preserve both lane records,
+the installed814 sealed artifact and all historical input evidence. The only
+source conflict was the lane catalog; both entries survive. The classifier and
+package filter match630 exactly. Uncorrelated displays are protected because
+absence from our state does not prove ownership; no service-name allowlist or
+foreign process effect is introduced.
+
+Reuse630 exact retained public RED/GREEN and34-case source proof; execute the
+combined resource34, key4, owner4, HTTP14 and Native34 groups. All90 pass with
+one ignored key subprocess helper in67.340s total; Native34 took52.18s,
+retaining the focused30s target breach without retry. Strict CLI Clippy passes
+63.781s with zero diagnostics. Preserve the initial skill-size parity failure:
+combined guidance exceeded10000 bytes, so redundant Native prose was shortened
+without removing guard semantics. No executable source changed after tests.
+Production artifact and global installer acceptance remain separate; the old
+transaction remains incomplete and no foreign GC is authorized.
