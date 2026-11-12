@@ -17,3 +17,23 @@ privacy check correctly refused them. The original hosted fixture reproduces
 0700 directories/0600 files explicitly; all helper/follow/enrolled/type checks
 pass under the same umask without changing the production check. Preserve the
 failed run; qualification continues on the corrected fixture source.
+
+The extra actual-source owner-playbook probe reached a separate historical parent
+contract mismatch: reviewed Receipts checkpoint d6e0722 refuses null pending
+review deadlines required by current Auth. The unchanged Browser472d264 baseline
+reproduces the same pending request, zero delivered prompts and approval-receive
+refusal, with zero private reads/inputs. Track Receipts52 with Auth354. This is an
+unwaived owner-review integration gap, not a failure caused by the read-only SDK
+forwarder. Do not report that parent journey as passed or the whole installed
+orchestration complete. Component helper/guidance/packaging checks and actual
+read-only SDK bridge remain independently verifiable; the combined owner journey
+requires a qualified current parent contract.
+
+An actual SDK producer bug was also exposed: source publication inherited group
+write permission for module directories under umask0002. Auth's producer now makes
+0700 subdirectories and its verifier rejects writable directories, matching the
+unchanged Browser guard. Two regression tests went red then green;32 Auth focused
+checks pass. The actual newly published Auth0995 SDK and this Browser helper pass
+SMS and Mail-alias discovery under that same umask, with zero Auth input/approval
+calls. Final changed-source Auth full validation and remaining component gates
+are pending; source and installed acceptance stay distinct.
