@@ -1932,6 +1932,22 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     &self.state,
                     handoff_id,
                 )?;
+                if command["nativeDesktop"] == true && reopen.is_none() && !reopening {
+                    let connection = rusqlite::Connection::open_with_flags(
+                        self.persistence.runtime_database_path()?,
+                        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+                    )
+                    .map_err(|_| "browser_handoff_mode_recovery_unconfirmed")?;
+                    if let Some(operation) = browser_mode_host::pending_mode_handoff_proof(
+                        &connection,
+                        &self.state,
+                        handoff_id,
+                    )? {
+                        return Ok(serde_json::json!({"handoffId":handoff_id,
+                            "status":"mode_recovery", "modeRecovery":{"operationId":operation},
+                            "operatorVisible":{"state":"not_ready","reason":"mode_operation_pending"}}));
+                    }
+                }
                 self.effects.begin_operation(&self.persisted_state)?;
                 self.effects
                     .retain_live_browser_for_handoff(&self.persisted_state, &retained.browser)?;
@@ -4198,7 +4214,7 @@ mod tests {
     use agent_browser_service_model::{RemoteViewApplicationAdapter, RemoteViewSessionEffects};
     #[test]
     fn native_handoff_preserves_live_browser_and_pending_mode_operation() {
-        for live in [true, false] {
+        for (live, recovery) in [(true, false), (false, false), (false, true)] {
             let directory = TempDirectory::new();
             let legacy = directory.0.join("state.json");
             fs::write(&legacy, serde_json::json!({"profiles":{"work":{"id":"work","name":"Work","userDataDir":directory.0.join("work"),"profileClass":"durable_named"}}}).to_string()).unwrap();
@@ -4244,6 +4260,9 @@ mod tests {
             host.state
                 .profile_operation_ids
                 .insert("work".into(), "pending-mode".into());
+            if recovery {
+                host.state.browsers.get_mut(&opened.browser_id).unwrap().pid = u32::MAX;
+            }
             host.commit_state().unwrap();
             // Retain the actual nonterminal journal shape that blocks recovery.
             let mode_path = host
@@ -4266,6 +4285,33 @@ mod tests {
                 })
                 .unwrap();
             operation.phase = super::super::browser_mode_operation::Phase::Closing;
+            if recovery {
+                operation.phase = super::super::browser_mode_operation::Phase::ClosePrompt;
+                operation.close_method =
+                    Some(super::super::browser_mode_operation::CloseMethod::Graceful);
+                let original = agent_browser_service_model::RecordedProcessIdentity {
+                    pid: u32::MAX,
+                    start_token: "linux:missing:1".into(),
+                    executable_path: Some("/fixture/chrome".into()),
+                    browser_family: Some("chrome".into()),
+                };
+                operation.request.original_process = serde_json::to_string(&original).unwrap();
+                let target = agent_browser_service_model::resolve_remote_view_tab_handoff(
+                    &host.state,
+                    "same-link",
+                )
+                .unwrap();
+                let frozen = serde_json::json!({"browser":target.browser,"session":target.session,"tab":target.tab});
+                let binding = serde_json::json!({"profile":host.catalog.profiles["work"],"browser":target.browser,"session":target.session,"tab":target.tab,"original":original,"original_mode":"Cdp","handoff_targets":{"same-link":frozen}});
+                let modes = rusqlite::Connection::open(&mode_path).unwrap();
+                modes.execute_batch("CREATE TABLE browser_mode_owner_bindings(id TEXT PRIMARY KEY,binding TEXT NOT NULL)").unwrap();
+                modes
+                    .execute(
+                        "INSERT INTO browser_mode_owner_bindings VALUES('pending-mode',?1)",
+                        [binding.to_string()],
+                    )
+                    .unwrap();
+            }
             let journal = serde_json::to_string(&operation).unwrap();
             rusqlite::Connection::open(&mode_path)
                 .unwrap()
@@ -4279,7 +4325,12 @@ mod tests {
                 "action":"service_remote_view_handoff_resolve", "handoffId":"same-link",
                 "nativeDesktop":true, "activityAtMs":2_000,
             }));
-            if live {
+            if recovery {
+                let response = result.expect("missing frozen original exposes read-only controls");
+                assert_eq!(response["status"], "mode_recovery");
+                assert_eq!(response["operatorVisible"]["state"], "not_ready");
+                assert_eq!(response["modeRecovery"]["operationId"], "pending-mode");
+            } else if live {
                 let response =
                     result.expect("a pending mode change must not block the original live desktop");
                 assert_eq!(response["operatorVisible"]["state"], "ready");

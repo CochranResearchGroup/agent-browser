@@ -353,7 +353,17 @@ pub(super) async fn resolve_location(
     .map_err(|_| "remote_view_browser_recovery_timeout")??;
     let response: serde_json::Value = serde_json::from_str(&response)
         .map_err(|_| "remote_view_browser_recovery_response_invalid")?;
-    if response["success"] != true || response["data"]["operatorVisible"]["state"] != "ready" {
+    let mode_recovery = response["success"] == true
+        && response["data"]["handoffId"] == id
+        && response["data"]["status"] == "mode_recovery"
+        && response["data"]["operatorVisible"]["state"] == "not_ready"
+        && response["data"]["operatorVisible"]["reason"] == "mode_operation_pending"
+        && response["data"]["modeRecovery"]["operationId"]
+            .as_str()
+            .is_some_and(|id| !id.is_empty());
+    if response["success"] != true
+        || (!mode_recovery && response["data"]["operatorVisible"]["state"] != "ready")
+    {
         return Err(response["error"]
             .as_str()
             .unwrap_or("remote_view_browser_recovery_pending")
@@ -364,6 +374,13 @@ pub(super) async fn resolve_location(
         .await
         .map_err(|_| "remote_view_presentation_join_failed")??;
     let mut location = presentation_url(&origin, &route)?;
+    if mode_recovery {
+        let mut url =
+            url::Url::parse(&location).map_err(|_| "remote_view_presentation_path_invalid")?;
+        url.query_pairs_mut()
+            .append_pair("browser-mode-recovery", "1");
+        return Ok(url.to_string());
+    }
     if let Some(registration) = human_use_registration(id, operator, headers, &response) {
         let prepared = tokio::time::timeout(
             std::time::Duration::from_secs(90),

@@ -31,7 +31,7 @@ Installed viewers: [qualification](references/cli-and-service.md#native-journey-
 
 Use `browser_handoff({ "taskId": "<task-id>" })` for human assistance. It defaults to interactive input and pauses cooperative automation. Use `interaction:"view"` for passive viewing. The authorized recipient needs no administrator override; visibility alone does not prove input readiness. Require `operatorVisible.state=ready`; return the complete `data.handoffUrl` and keep the task ID. For `remote_view_public_origin_missing`, check reviewed `AGENT_BROWSER_PUBLIC_ORIGIN` in `~/.agent-browser/.env` or `AGENT_BROWSER_ENV_FILE`; process settings win. Reconnect MCP after configuration changes because its environment is pinned at startup. Preserve the task. Never assemble provider URLs.
 
-Same-browser and desktop rail tab switches retain the viewer connection.
+Interrupted mode changes: reopen the same handoff for recovery controls; reconcile explicitly.
 Retained handoff recovery: [guide](references/cli-and-service.md#retained-handoff-recovery).
 
 After human input, use Give control back or `browser_control`, then `browser_continue` with the same `taskId`. Preserve edits and the [pending-mode boundary](references/cli-and-service.md#retained-handoff-recovery).
