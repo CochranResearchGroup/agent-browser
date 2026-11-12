@@ -7837,3 +7837,9 @@ inert request with no browser tools. Keep configuration, tokens, transcripts,
 recordings and actual account evidence outside the source repository.
 
 Convenience `mcp browser-native` loginControls/loginTarget calls are refused before transport. Use journaled public MCP `browser_command` and the retained saved-login SDK.
+
+### Cross-boot task retirement
+
+Discover browser operation `task_retirement`, then use `browser_command` with the original `taskId` and `params.choice`: `inspect` freezes an opaque `ownerBindingRef`; `retire` requires that ref as `expectedBindingRef` and a stable `operationId`; `status` reads the same operation ID after task removal. On an uncertain reply, inspect status before taking any further action.
+
+This Linux operation retires only exact original local metadata after the owning service verifies cross-boot process loss, profile vacancy, original launch custody and clear agent control. Missing proof, PID reuse, a changed generation or unresolved input keeps the task held. It sends no process signal and proves neither provider cleanup nor authentication. Historical routes without a previously frozen ref require qualified recovery rather than invented proof.
