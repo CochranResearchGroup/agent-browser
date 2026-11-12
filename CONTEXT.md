@@ -606,3 +606,12 @@ state. After proven profile-process absence, the exact record is retained beside
 immutable launch custody and permits replacement admission against an unchanged
 browser baseline. It does not establish locally performed cleanup, retire peer
 work, acknowledge input or authorize a second launch after an uncertain result.
+
+**Lost task retirement**: An owning-service transition for an explicitly
+abandoned exact task whose original Linux process belongs to a different boot.
+It requires qualified original process custody, frozen task/browser/selection
+and control identity, current absence and profile-occupancy evidence. Local task
+metadata and an immutable operation receipt become terminal atomically. The
+receipt survives task removal and never claims a blank page, provider cleanup,
+authentication or renewed credential authority. Source issue650 and Auth issue339
+retain the producer, consumer and installed qualification boundaries.
