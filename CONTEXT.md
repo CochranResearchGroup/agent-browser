@@ -606,3 +606,9 @@ state. After proven profile-process absence, the exact record is retained beside
 immutable launch custody and permits replacement admission against an unchanged
 browser baseline. It does not establish locally performed cleanup, retire peer
 work, acknowledge input or authorize a second launch after an uncertain result.
+
+**Interrupted-close mode restoration**: A confirmed choice on the original
+conversion can restore its previous mode after fresh exact-original exit proof,
+without launching the obsolete requested mode. Live or unverified originals,
+replacement uncertainty, profile custody and immutable request history remain
+separate guards.
