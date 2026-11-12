@@ -864,8 +864,30 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         self.recovery = Some(recovery);
         Ok(Some(proof))
     }
-    fn replacement_absent(&mut self, request: &Request) -> Result<bool, String> {
-        let profile = self.profile(request);
+    fn replacement_absent(&mut self, _request: &Request) -> Result<bool, String> {
+        // Absence settlement verifies the published catalog, before launch commits
+        // the requested mode. The transport-only profile is not published yet.
+        let published = self
+            .host
+            .catalog
+            .profiles
+            .get(&self.binding.profile.id)
+            .or_else(|| {
+                self.host
+                    .state
+                    .disposable_profiles
+                    .get(&self.binding.profile.id)
+                    .map(|allocation| &allocation.profile)
+            })
+            .ok_or("mode_operation_profile_missing")?;
+        let mut expected = self.binding.profile.clone();
+        expected
+            .manual_login_url
+            .clone_from(&published.manual_login_url);
+        if published != &expected {
+            return Err("mode_operation_profile_changed".into());
+        }
+        let profile = published.clone();
         super::super::browser_session_runtime::prove_profile_launch_absence(&profile)?;
         let path = self.host.persistence.runtime_database_path()?;
         BrowserSessionSqliteStore::open(path.parent().ok_or("mode_operation_store_unavailable")?)?
