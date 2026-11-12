@@ -4093,6 +4093,93 @@ fn current_unix_ms() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn restoration_uses_published_profile_for_custody_before_selecting_previous_mode() {
+        let directory = TempDirectory::new();
+        fs::create_dir_all(directory.0.join("work")).unwrap();
+        let legacy = directory.0.join("state.json");
+        fs::write(&legacy, serde_json::json!({"profiles":{"work":{"id":"work","name":"Synthetic","userDataDir":directory.0.join("work"),"profileClass":"durable_named"}}}).to_string()).unwrap();
+        let launches = std::rc::Rc::new(std::cell::Cell::new(0));
+        let mut host = BrowserSessionHost::load(
+            BrowserSessionSqliteStore::open_or_migrate(&directory.0, &legacy)
+                .unwrap()
+                .0,
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                launch_attempts: launches.clone(),
+                ..FixtureRuntime::default()
+            }),
+            &legacy,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_view_desktops: vec![],
+                default_disposable_policy: None,
+                exact_url_history_maximum_bytes: 64 * 1024 * 1024,
+            },
+        )
+        .unwrap();
+        let browser: ManagedBrowserInstance = serde_json::from_value(serde_json::json!({"id":"original","profileId":"work","pid":u32::MAX,"cdpEndpoint":"ws://synthetic-original","activeSessionIds":["task"]})).unwrap();
+        let session: agent_browser_service_model::ManagedBrowserSession = serde_json::from_value(serde_json::json!({"id":"task","name":"synthetic-mode-owner","profileId":"work","browserId":"original","createdAtMs":1,"lastActivityAtMs":1,"expiresAtMs":u64::MAX,"currentTabId":"tab"})).unwrap();
+        let tab: ManagedBrowserTab = serde_json::from_value(serde_json::json!({"id":"tab","targetId":"synthetic-target","browserId":"original","sessionId":"task","createdAtMs":1,"lastActivityAtMs":1})).unwrap();
+        host.state
+            .browsers
+            .insert(browser.id.clone(), browser.clone());
+        host.state
+            .sessions
+            .insert(session.id.clone(), session.clone());
+        host.state.tabs.insert(tab.id.clone(), tab.clone());
+        host.state
+            .profile_operation_ids
+            .insert("work".into(), "restore".into());
+        host.commit_state().unwrap();
+        let profile = host.catalog.profiles["work"].clone();
+        assert!(profile.manual_login_url.is_none());
+        let original = agent_browser_service_model::RecordedProcessIdentity {
+            pid: u32::MAX,
+            start_token: "synthetic-exited-original".into(),
+            executable_path: Some("/synthetic/must-not-launch".into()),
+            browser_family: None,
+        };
+        let binding = serde_json::json!({"profile":profile,"browser":browser,"session":session,"tab":tab,"original":original,"original_mode":"Cdp","selected_build":null,"previous_build":null,"profile_data_version":null});
+        let operation: crate::native::browser_mode_operation::Operation = serde_json::from_value(serde_json::json!({"request":{"operation_id":"restore","browser_id":"original","profile_id":"work","original_process":serde_json::to_string(&original).unwrap(),"executable":"/synthetic/must-not-launch","task_ids":["task"],"requested_mode":"CdpFree"},"phase":"OriginalExited","replacement":null,"close_method":null,"effective_mode":null,"failure":null,"launch_attempts":0,"restoring_previous":true})).unwrap();
+        let connection =
+            rusqlite::Connection::open(directory.0.join("runtime.mode.sqlite3")).unwrap();
+        crate::native::browser_mode_operation::OperationStore::open(
+            &directory.0.join("runtime.mode.sqlite3"),
+        )
+        .unwrap();
+        connection.execute_batch("CREATE TABLE browser_mode_owner_bindings(id TEXT PRIMARY KEY,binding TEXT NOT NULL)").unwrap();
+        connection
+            .execute(
+                "INSERT INTO browser_mode_owner_bindings VALUES('restore',?1)",
+                [binding.to_string()],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO browser_mode_operations(id,browser_id,terminal,state) VALUES('restore','original',0,?1)",
+                [serde_json::to_string(&operation).unwrap()],
+            )
+            .unwrap();
+        let result = host.handle_command_result(&serde_json::json!({"action":"browser_session_mode_convert","sessionId":"task","sessionName":"synthetic-mode-owner","operationId":"restore","mode":"cdp_free","choice":"restore_previous","ownerConfirmed":true})).unwrap();
+        assert_eq!(result["effectiveMode"], "cdp", "custody settlement must use the published profile before selecting the retained previous mode: {result}");
+        assert_eq!(result["launchAttempts"], 1);
+        assert_eq!(
+            result["failure"],
+            "browser_profile_build_selection_unsupported"
+        );
+        assert_eq!(
+            launches.get(),
+            0,
+            "the synthetic runtime must not launch a browser"
+        );
+        assert!(host.catalog.profiles["work"].manual_login_url.is_none());
+        assert_ne!(
+            result["failure"],
+            "mode_operation_launch_custody_readback_required"
+        );
+    }
+
     #[test]
     fn retained_mode_native_target_accepts_only_observation_metadata_drift() {
         let directory = TempDirectory::new();
