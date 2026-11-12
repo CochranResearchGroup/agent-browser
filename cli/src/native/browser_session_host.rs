@@ -1932,7 +1932,14 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     &self.state,
                     handoff_id,
                 )?;
-                if command["nativeDesktop"] == true && reopen.is_none() && !reopening {
+                if command["nativeDesktop"] == true
+                    && reopen.is_none()
+                    && !reopening
+                    && self
+                        .state
+                        .profile_operation_ids
+                        .contains_key(&retained.browser.profile_id)
+                {
                     let connection = rusqlite::Connection::open_with_flags(
                         self.persistence.runtime_database_path()?,
                         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
