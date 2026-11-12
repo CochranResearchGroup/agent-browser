@@ -6475,6 +6475,8 @@ generation receipt. It changes neither explicit leave-open nor credential permis
 Supply service-name, agent-name and task-name at creation; later sharing does not
 replace original provenance. Human identity is not inferred from the requester.
 Native human handoffs prepare observation before the operator opens the link.
+Mode relaunch retains the handoff and requalifies its replacement process.
+Graceful close uses the current Native agent epoch without taking human control.
 A pending mode change does not block the same handoff to its exact live original;
 reconnecting preserves the operation and does not close or replace that browser.
 An exact producer missing-context read refreshes observation under current
@@ -7474,6 +7476,7 @@ Commands:
   Copy/publication do not prove account identity, usable login or storage divergence.
   Reload/inspect reads the original operation; reconcile lost replies without replay.
   mode-convert JSON Inspect/relaunch/pause/cancel/restore_previous/select_build
+    Confirmed restore_previous can recover interrupted closing after exact original exit proof.
     Metadata remains available during human handoff; lifecycle choices keep confirmation checks.
     Conversion verifies mode/window without input; retained handoffs reconcile the original launch
     Fullscreen Native handoffs offer a top-row CDP on/off control with relaunch review

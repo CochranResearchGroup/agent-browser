@@ -189,3 +189,11 @@ and new native custody qualification is pending.
 Signed retained return uses an exact observation scope. It preserves pending mode changes and peer bindings; ordinary effectful operations remain guarded.
 
 Retained mode operations refresh only session activity/expiry and tab activity timestamps before Native calls and assignment qualification. Physical identity, affected tasks and concurrent persisted state remain guarded.
+
+Completed mode relaunches preserve existing handoffs through the owner's frozen
+per-handoff targets, completed mode journal and current launch custody. Legacy
+mode journals qualify only their frozen primary task; ambiguous or changed
+lineage stays fenced. Rebinding an invitation neither transfers Native control
+nor promotes a passive invitation. Graceful lifecycle close reads and passes
+the current agent epoch after exact process/window qualification; generic input
+does not fill missing epochs.

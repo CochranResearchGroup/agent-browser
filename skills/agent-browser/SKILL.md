@@ -54,7 +54,7 @@ missing authority, unavailable/partial sources, no match and account choice.
 Before saved-password Native input, use `native_ready`: owner authentication and
 consumer input policy must be ready for the exact target; viewer readiness alone
 is insufficient. Public `ready` and legacy `local_ready` desktop states require
-matching lifecycle identity and enabled input policy; Native control remains separate. Owner decisions, delivery and exact browser binding gate input. Managed-task receiving is product-owned: do not ask operators to create per-task enrollment or read vault secrets as a fallback. Approval comes through the Auth dashboard or Slack via Receipts. `browser_control` status/view inspect ordinary managed tasks; explicit return also supports standalone handoffs after exact-process and fresh same-target verification. Takeover/override keep hosted-app requirements. Passive view does not return a human hold. Signed return uses an exact read scope; pending mode changes and peer bindings stay intact. Mode targets tolerate activity timestamps. Retained task-briefing process IDs require independent physical verification. Keep unknown
+matching lifecycle identity and enabled input policy; Native control remains separate. Owner decisions, delivery and exact browser binding gate input. Managed-task receiving is product-owned: do not ask operators to create per-task enrollment or read vault secrets as a fallback. Approval comes through the Auth dashboard or Slack via Receipts. `browser_control` status/view inspect ordinary managed tasks; explicit return also supports standalone handoffs after exact-process and fresh same-target verification. Takeover/override keep hosted-app requirements. Passive view does not return a human hold. Signed return uses an exact read scope; pending mode changes and peer bindings stay intact. Activity drift is tolerated; mode relaunch retains handoff control. Task-briefing PIDs need live verification. Keep unknown
 attempts on their original requests; never replay private use.
 
 ## Hosted workflow guidance v1
@@ -132,4 +132,4 @@ Public task tools: `browser_snapshot`, `browser_screenshot`, `browser_click`,
 
 Saved-entry/submit refinement preserves exact-account, mask and ambiguity checks. `ownerTimeoutMs` (100..300000) plus optional `ownerDeadlineAtMs` bound one admitted Native command to the remaining invocation deadline, without renewing frame freshness or permitting uncertain-input replay. See the Native workflow reference.
 
-SDK allowance:300s default. ACK-prefix resume preserves original clocks; unknown input stops, never replays.
+SDK:300s default. ACK-prefix resume keeps original clocks; never replay unknown input.
