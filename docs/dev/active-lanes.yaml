@@ -35,7 +35,7 @@ lanes:
     dependencies: []
     overlaps: [retained Native handoff and mode conversion]
     reconciled_overlaps: [Single primary writer owns both serial repair halves; preserve unrelated lanes and runtime]
-    validation_status: Source-qualified219 handoff-close passes; strict workspace Clippy, format, docs and policy checks pass; candidate and installed acceptance pending
+    validation_status: PR652/887 installed; public on-to-off and same-link interactive passed; reverse close exposed keyboard defect; guarded window-close follow-up in local validation; full round-trip acceptance open
     updated_at: 2026-11-12
   - id: RETAINED-MODE-TARGET-647
     product_lane: PL-BUGFIX

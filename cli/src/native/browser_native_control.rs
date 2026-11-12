@@ -356,22 +356,26 @@ pub fn execute(
             json!({"source":"remote_view_native","delivery":reply["delivery"].as_str().unwrap_or("unknown"),"taskCompleted":false}),
         );
     }
-    if command["action"] == "native_close" && window["active"] != true {
-        owner.request(
+    if let Some(epoch) = close_epoch {
+        // Native window.close sends the window manager's graceful close request.
+        // Unlike a keyboard chord, it does not depend on focus or key delivery.
+        // The Native owner fences this exact window/process and control epoch;
+        // ModeHost must still independently confirm the original process exit.
+        let reply = owner.request(
             "window",
             &json!({"desktopId":target.viewing_desktop_id,
             "expectedGeneration":target.viewing_generation,"windowId":window["id"],
-            "expectedProcessIdentity":window["processIdentity"],"action":"activate",
-            "controlEpoch":close_epoch}),
+            "expectedProcessIdentity":window["processIdentity"],"action":"close",
+            "controlEpoch":epoch}),
         )?;
-        // Observe and fence again after focus. This recursion is bounded: the
-        // input action cannot take the close/focus branch a second time.
-        return execute(
-            original,
-            target,
-            &json!({"action":"native_input","controlEpoch":close_epoch,
-            "actions":[{"kind":"key","chord":"alt+F4"}]}),
-            owner,
+        if reply["operation"] != "window.close"
+            || reply["generation"] != target.viewing_generation
+            || reply["windowId"] != window["id"]
+        {
+            return Err("browser_native_close_unconfirmed:observe before retry".into());
+        }
+        return Ok(
+            json!({"source":"remote_view_native","delivery":"dispatched","taskCompleted":false}),
         );
     }
     let width = snapshot
@@ -387,9 +391,6 @@ pub fn execute(
     let mut body = json!({"desktopId":target.viewing_desktop_id,"expectedGeneration":target.viewing_generation,
         "windowId":window["id"],"expectedProcessIdentity":window["processIdentity"],"expectedWidth":width,"expectedHeight":height,
         "expectedWindow":{"x":window["x"],"y":window["y"],"width":window["width"],"height":window["height"]},"actions":actions});
-    if let Some(epoch) = close_epoch {
-        body["controlEpoch"] = json!(epoch);
-    }
     if let Some(evidence) = &attempt {
         if evidence.desktop_id != target.viewing_desktop_id
             || evidence.generation != target.viewing_generation
@@ -455,11 +456,6 @@ pub fn execute(
         }
         body["controlEpoch"] = b["nativeControlEpoch"].clone();
         body["expectedVisual"] = json!({"region":b["region"],"sha256":selected.frame_sha256});
-    }
-    if command["action"] == "native_close" {
-        // Remote View window.close destroys the window. Normal WM close is
-        // requested through native input; exit remains independent evidence.
-        body["actions"] = json!([{"kind":"key","chord":"alt+F4"}]);
     }
     if command["action"] == "native_capture" {
         body.as_object_mut().unwrap().remove("actions");

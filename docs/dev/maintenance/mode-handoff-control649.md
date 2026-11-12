@@ -12,13 +12,12 @@ An existing human viewer reflects a completed physical browser mode change and c
 
 ## Current State
 
-Source qualification passes. The exact compiled owner test artifact passes217
-handoff tests (one ignored) and two lifecycle-close tests, including active and
-returned mode invitations, current kernel/publication identity and refusal
-variants. Strict workspace Clippy, Rustfmt, docs build, policy wiring and changed
-links pass. Production candidate packaging, exact-binary install/discovery smokes,
-integration, preserving adoption and actual same-viewer acceptance remain open.
-The Remote View peer has37 passing browser checks; its source is separately owned.
+PR652 and Remote View PR887 are merged. Preserving installation and the public
+CDP on to CDP-free workflow passed, including same durable-link rejoin and Native
+interactive control. A reverse CDP-free to CDP acceptance failed because the
+keyboard close did not close the blank original window. The bounded exact-window
+close follow-up below remains in validation; installed round-trip acceptance is
+not complete. FigureLabs remains CDP-free and its durable link loads successfully.
 
 ## Validation
 
@@ -61,3 +60,37 @@ Development RED cases for failed/in-flight refresh and premature reconnect were
 resolved before this final pass. No current blocking Spec finding is accepted.
 Standards:0 open; Spec:0 open. Final broad review count:1. The installed same-viewer
 journey remains a separate acceptance gate.
+
+## Installed acceptance follow-up
+
+PR652 and Remote View PR887 were merged and their exact candidates installed
+through preserving adoption. The public disposable workflow passed CDP on to
+CDP-free, same durable-handoff rejoin, and interactive takeover. FigureLabs
+remained CDP-free and its exact pending return was confirmed before takeover.
+
+The reverse disposable CDP-free to CDP transition exposed a further live defect:
+`native_close` dispatched Alt+F4, but its active blank browser stayed alive,
+without a modal dialog. Remote View's exact-process, current-epoch `window.close`
+then gracefully closed that same window and the kernel confirmed process exit.
+Its implementation sends `_NET_CLOSE_WINDOW`; the previous comment describing
+it as window destruction was incorrect. The retained reverse mode operation
+remains open with zero replacement launches. No forced termination was used.
+
+The bounded follow-up replaces the keyboard chord with Remote View's guarded
+window-close operation. Regression coverage must require this exact window and
+process identity for active and inactive cases, preserve operator-lease refusal
+and generic input epoch requirements, and normalize only a qualified close ACK
+as dispatched. Process exit remains a separate ModeHost observation. Source
+checks and a fresh installed public round trip are still required.
+
+## Bounded close follow-up review
+
+Fixed point: `ed6dcf37cd17a03657e4f0b75d4b5a0c3a91031d`, preserving
+PR653/654. Review scope is the lifecycle-close adapter, its existing owner tests,
+the exact catalog assertion correction, and explanatory context.
+Standards: zero open findings. The Native owner retains window/process and epoch
+fencing; no generic input relaxation or foreign lease effect is introduced.
+Spec: zero open source findings. The dedicated graceful close addresses the
+measured keyboard delivery failure, while ModeHost still independently proves
+exit. Installed full round-trip acceptance remains open and is not inferred from
+this bounded review or the passing source tests.

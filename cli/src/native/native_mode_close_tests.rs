@@ -21,7 +21,7 @@ impl NativeOwner for CloseOwner {
                     return Err("input_control_conflict".into());
                 }
                 if operation == "window" {
-                    self.active = true;
+                    return Ok(json!({"operation":"window.close","generation":7,"windowId":11}));
                 }
                 Ok(json!({"delivery":"dispatched"}))
             }
@@ -67,12 +67,15 @@ fn native_mode_close_fences_active_and_inactive_window_with_current_agent_epoch(
             .iter()
             .filter(|(op, _)| matches!(op.as_str(), "window" | "input"))
             .collect();
-        assert_eq!(effects.len(), if active { 1 } else { 2 });
+        assert_eq!(effects.len(), 1);
         assert!(effects.iter().all(|(_, body)| body["controlEpoch"] == 9));
+        assert_eq!(effects[0].0, "window");
+        assert_eq!(effects[0].1["windowId"], 11);
         assert_eq!(
-            effects.last().unwrap().1["actions"],
-            json!([{"kind":"key","chord":"alt+F4"}])
+            effects[0].1["expectedProcessIdentity"]["start_token"],
+            "123"
         );
+        assert_eq!(effects[0].1["action"], "close");
     }
 }
 #[test]
@@ -103,4 +106,14 @@ fn native_mode_close_never_acquires_an_operator_lease_or_autofills_generic_input
         "input_control_conflict"
     );
     assert!(!owner.requests.iter().any(|(op, _)| op == "control"));
+    owner.requests.clear();
+    assert!(run(
+        &mut owner,
+        json!({"action":"native_close","controlEpoch":8})
+    )
+    .is_err());
+    assert!(!owner
+        .requests
+        .iter()
+        .any(|(op, _)| matches!(op.as_str(), "window" | "input")));
 }
