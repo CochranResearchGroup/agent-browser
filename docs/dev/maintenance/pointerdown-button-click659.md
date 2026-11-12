@@ -131,3 +131,31 @@ If full candidate qualification cannot complete, retain the exact pending gate
 and do not promote. Required milestones remain artifact qualification, source
 integration, preserving installed adoption and selected click acceptance.
 Google uncertainty and Superhuman human ownership remain independent gates.
+
+## Exact artifact qualification
+
+Production-shaped assembly at44cef672f passes, sealing binary
+aa3aa7c26fae31c95b42b222b9bfb9b5b3af1649e01f0fa9a3c37e34ad1fe281.
+The Native-backed synthetic boundary qualifies real managed Chrome identity.
+Installed baseline reproduces the DOM-only defect for CSS, cached refs and a
+child frame. The sealed successor passes all four cases: trusted pointer-down,
+mouse-down, pointer-up, mouse-up and click open each menu; ordinary onclick
+fires once. Fixture Chrome, owners and Xvfb are absent after owned cleanup.
+Cross-origin snapshot discovery was an earlier fixture limitation; this real
+frame sample is same-origin. Selected child-session routing also has protocol
+regression coverage. These are not Native viewer or real-provider acceptance.
+
+The exact installer fixture first failed when its latest-file assertion chose
+a failed transaction after a successful recovery. An unchanged diagnostic rerun
+passes and retains both records. Extend the existing exact-transaction fixture
+pattern to successful writer recovery, requiring exactly one new transaction
+and checking its accepted terminal state. All six exact-binary installer/service
+phases then pass in37.7 seconds, with zero owned runtime residue. The first
+failure and diagnostic remain private receipts. The test-only correction is
+outside the657-file executable closure; all657 file hashes still match the seal.
+No candidate rebuild is needed for that unchanged executable.
+
+Current-composition Rust validation remains active. No659 installed effect has
+occurred. Current selected runtime advanced independently while qualification
+ran; preserving adoption must use fresh generation, transaction and live-process
+readback rather than the earlier baseline.
