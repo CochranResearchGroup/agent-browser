@@ -41,3 +41,23 @@ Run local changed-surface checks, review the full slice, merge through a PR and 
 ## Coordination
 
 This repair is the primary writer for the mode-close and handoff continuity surfaces and the Remote View mode toolbar. The linked owner is the dependent half of this single serial repair. Earlier retained-target timestamp repair remains integrated; its interrupted build is separate.
+
+## Standards
+
+One final serial review compares `git diff 4f0b61959b97f0739374831a24cb0a0342998a02...HEAD`, including source
+checkpoint `ff2a33610`. Governing standards are AGENTS.md, the repository policy
+entry, its testing/ownership/runtime boundaries and existing domain vocabulary.
+No current hard-standard breach or blocking maintainability finding is accepted.
+The frozen target is private journal evidence; Native still owns physical input.
+Local source checks are distinct from candidate and installed acceptance.
+
+## Spec
+
+The user's coupled CDP/interactive failure, issues649/883 and the browser product
+contract govern the review. The implementation retains the same handoff, scopes
+Native return to this viewer, fences lifecycle close, derives replacement
+continuity from its completed owner record and refreshes the visible posture.
+Development RED cases for failed/in-flight refresh and premature reconnect were
+resolved before this final pass. No current blocking Spec finding is accepted.
+Standards:0 open; Spec:0 open. Final broad review count:1. The installed same-viewer
+journey remains a separate acceptance gate.
