@@ -8037,6 +8037,7 @@ MCP:
   mcp serve                  Run the MCP stdio server
   Workflow catalog: open, navigate, snapshot, click, fill, screenshot, tab, handoff, continue, close.
   browser_command runs task page actions; browser_discover loads advanced metadata on demand.
+  Auth SDK discoverLoginChannels reads IM/Mail proposals; see auth-receipts://guides/login-orchestration.
   Every page action uses taskId; browser_tab preserves peers and replays a stable tabKey.
   Tab close rejects a changed selection; refresh and select the intended tab again.
   Retired authority MCP operations and the legacy catalog are unavailable.

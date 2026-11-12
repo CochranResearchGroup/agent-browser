@@ -4,6 +4,8 @@ export type AuthOperationContext={
   binding:{taskId:string;browserId:string;profileId:string;tabId:string;origin:string;controlGeneration:string};
 };
 export interface OwnerAuthHelper {
+  /** Destination proposals only; no credential-use authority or live binding. */
+  discoverLoginChannels(options:{tenant:string;smsSuffix?:string;emailHint?:string;im?:{callTool(request:{name:string;arguments:Record<string,unknown>}):Promise<unknown>};mail?:{callTool(request:{name:string;arguments:Record<string,unknown>}):Promise<unknown>}}):Promise<Record<string,unknown>>;
   callerTaskId:string;
   installation:{product:'auth-receipts';contractVersion:1;identity:string;sourceRevision:string};
   requestLogin(options:{idempotencyKey:string;sourceId:string;recordId:string;origin:string;targetId:string;purpose:string;expiresAt:number}):Promise<Record<string,any>>;

@@ -24,6 +24,8 @@ Login flows, session persistence, OAuth, 2FA, and authenticated browsing.
 
 ## Standalone Auth Receipts
 
+For an ordinary browser login, read Auth's `auth-receipts://guides/login-orchestration` resource before asking for a phone number or mailbox address already held by connected services. Both connected Auth helpers expose `discoverLoginChannels({tenant, smsSuffix, emailHint, im, mail})`, forwarding only to the verified Auth SDK. It composes read-only IM/Mail MCP account metadata and bounded source evidence into destination proposals with provenance; it cannot authorize, arm, send, consume or submit input. Keep the original task/request, qualify fresh receiving state and use Auth's normal owner decision. Missing SDK support reports `auth_channel_discovery_unavailable` and requires installation repair, without an alternate client or private-store fallback.
+
 Website credential use belongs to standalone Auth Receipts; Bots is another
 consumer. The Node `connectHostedAuthHelper()` adapter discovers Auth's verified
 SDK at its data-directory `auth-receipts/client/current` selector. Missing SDK or
