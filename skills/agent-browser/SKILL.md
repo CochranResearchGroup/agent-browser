@@ -133,3 +133,7 @@ Public task tools: `browser_snapshot`, `browser_screenshot`, `browser_click`,
 Saved-entry/submit refinement preserves exact-account, mask and ambiguity checks. `ownerTimeoutMs` (100..300000) plus optional `ownerDeadlineAtMs` bound one admitted Native command to the remaining invocation deadline, without renewing frame freshness or permitting uncertain-input replay. See the Native workflow reference.
 
 SDK allowance:300s default. ACK-prefix resume preserves original clocks; unknown input stops, never replays.
+
+### Exact lost-task retirement
+
+For a qualified cross-boot lost task, discover browser `task_retirement`. Use the original `taskId`, inspect to obtain `ownerBindingRef`, then retire with `operationId` and `expectedBindingRef`. Preserve the frozen ref when enrolling a NEW receiving route. Do not overwrite historical routes or infer a ref from a missing process. Inspect/status do not grant credential or provider cleanup authority. If retirement's reply is uncertain, read `choice:"status"` with the SAME operation ID, or existing `task_operation`; never close a replacement browser or replay input. Unresolved inputs, missing custody, PID reuse and occupied profiles remain held.

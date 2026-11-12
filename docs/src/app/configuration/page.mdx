@@ -461,3 +461,9 @@ Run <code>pnpm test:rdp-gateway-readiness-live</code> on operator workstations t
 - **Unknown keys** are silently ignored for forward compatibility.
 
 > **Tip:** If your project-level `agent-browser.json` contains environment-specific values (paths, proxies), consider adding it to `.gitignore`.
+
+## Exact lost-task retirement
+
+Discover browser operation `task_retirement` and call `browser_command` with the original `taskId`. `params.choice` is `inspect`, `retire`, or `status`. Inspect returns an opaque `ownerBindingRef`. Retire requires `operationId` and `expectedBindingRef`; status requires the same `operationId` and works after task removal. Inspect status after an uncertain response before further actions.
+
+The Linux owner verifies original published process custody, a different kernel boot, absent original PID, profile vacancy and clear control while committing local metadata and its receipt atomically. Missing proof or unresolved input holds the task. No process signal, provider cleanup or authentication is asserted. Preserve a frozen ref only on a new receiving route; never reconstruct historical proof from process absence.

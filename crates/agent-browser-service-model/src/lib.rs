@@ -382,4 +382,7 @@ mod workspace_profile_library;
 pub use workspace_profile_library::*;
 
 mod lost_task_retirement;
-pub use lost_task_retirement::{freeze_task_retirement, retire_lost_task, LostTaskRetirementObservation, LostTaskRetirementRequest};
+pub use lost_task_retirement::{
+    freeze_task_retirement, retire_lost_task, LostTaskRetirementObservation,
+    LostTaskRetirementRequest,
+};

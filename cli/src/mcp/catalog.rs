@@ -201,6 +201,9 @@ fn operation_schema(category: &str, operation: &str) -> Result<Value, super::Jso
         .find(|tool| tool["name"] == tool_name)
         .map(|tool| tool["inputSchema"].clone())
         .or_else(|| match operation {
+            "task_retirement" => Some(json!({"type":"object","additionalProperties":false,
+                "properties":{"choice":{"enum":["inspect","retire","status"]},"operationId":{"type":"string","minLength":1,"maxLength":160},"expectedBindingRef":{"type":"string","pattern":"^[a-fA-F0-9]{64}$"}},"required":["choice"],
+                "oneOf":[{"properties":{"choice":{"const":"inspect"}},"not":{"anyOf":[{"required":["operationId"]},{"required":["expectedBindingRef"]}]}},{"properties":{"choice":{"const":"status"}},"required":["operationId"],"not":{"required":["expectedBindingRef"]}},{"properties":{"choice":{"const":"retire"}},"required":["operationId","expectedBindingRef"]}]})),
             "task_operation" => Some(json!({"type":"object","additionalProperties":false,
                 "properties":{"requestId":{"type":"string","minLength":1}},"required":["requestId"]})),
             "task_briefing" | "mode" | "back" | "forward" | "reload" | "service_resources" => {
@@ -335,4 +338,20 @@ fn service_execution(operation: &str) -> Value {
     };
     json!({"cli":cli,"api":{"method":method,"route":route},
         "guidance":"Supply the selected arguments through the documented CLI/API. Discovery performs no effects."})
+}
+
+#[cfg(test)]
+mod lost_task_retirement_tests {
+    #[test]
+    fn lost_task_retirement_public_contract_is_fixed_and_contains_no_caller_proofs() {
+        let schema = super::operation_schema("browser", "task_retirement").unwrap();
+        assert_eq!(schema["additionalProperties"], false);
+        let properties = schema["properties"].as_object().unwrap();
+        assert!(properties.contains_key("choice"));
+        assert!(properties.contains_key("operationId"));
+        assert!(properties.contains_key("expectedBindingRef"));
+        assert!(!properties.contains_key("originalPidAbsent"));
+        assert!(!properties.contains_key("profilePath"));
+        assert!(!properties.contains_key("currentBootId"));
+    }
 }
