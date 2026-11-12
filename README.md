@@ -7534,7 +7534,7 @@ prepare another copy or replay closure merely because a reply was lost.
 
 Right-click a managed browser heading or tab in the left rail to choose **Relaunch with CDP** or **Relaunch without CDP**. The tab actions button and browser mode menu offer the same controls. Review applies to the entire shared browser, including its other tasks. A successful explicit replacement preserves the logical task, durable profile and original handoff; it changes the physical browser process. Review the affected tasks before selecting relaunch. Unsaved page state and downloads may be lost; unknown URLs and uncertain website submissions are never replayed.
 
-Fullscreen Native handoffs also show a **CDP on/off** control in the top row. Switching it opens the same whole-browser relaunch review; it does not immediately restart the browser. Unverified mode stays unavailable. An interrupted conversion resumes its original operation, and completion reconnects the original handoff. Retained mode targets refresh only activity and expiry timestamps; process, profile, task, tab, target, desktop and concurrent-state changes remain guarded. Native Remote View and Agent Browser must both include this integration.
+Fullscreen Native handoffs also show a **CDP on/off** control in the top row. Switching it opens the same whole-browser relaunch review; it does not immediately restart the browser. Unverified mode stays unavailable. An interrupted conversion resumes its original operation, and completion reconnects the original handoff. Retained mode targets refresh only activity and expiry timestamps; process, profile, task, tab, target, desktop and concurrent-state changes remain guarded. A confirmed graceful relaunch returns only that viewer's own Native control before closing with the current agent epoch. The existing viewer rechecks CDP mode and rejoins the same durable handoff after a verified change. Its invitation follows only the exact completed mode journal and current launch custody; passive invitations remain passive. Native Remote View and Agent Browser must both include this integration.
 
 Conversion qualifies the replacement's exact process, requested mode and Native
 window without injecting input. Selective agent input remains independently
@@ -7565,6 +7565,10 @@ Inspect the original operation after a failed launch. Copy readback separates
 For `launch_absent`, explicitly confirm `retry_launch` or
 `finish_without_opening`; the latter retains the published independent copy.
 Mode `launch_absent` offers confirmed `relaunch` or `restore_previous`.
+A confirmed `restore_previous` also handles an interrupted `closing` or
+`close_prompt` after fresh proof that the exact original process exited. It
+restores the previous mode without first launching the obsolete requested mode;
+a live or unverified original remains held.
 A launched replacement with unavailable Native readiness reports
 `replacement_pending`; confirmed `restore_previous` selects the original mode
 through the same operation. Unknown launches and copy `launch_pending` first

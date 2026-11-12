@@ -1,4 +1,6 @@
 //! Capacity demand through the actual host, pool coordinator and SQLite owner.
+#[path = "ordinary_handoff_recovery_tests.rs"]
+mod ordinary_handoff_recovery_tests;
 use super::super::browser_session_host::BrowserSessionPersistence;
 use super::super::browser_session_store::BrowserProfileCatalogLoad;
 use super::*;

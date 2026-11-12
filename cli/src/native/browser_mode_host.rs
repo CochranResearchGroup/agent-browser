@@ -16,6 +16,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 #[derive(Clone, Serialize, Deserialize)]
+struct FrozenHandoffTarget {
+    browser: ManagedBrowserInstance,
+    session: ManagedBrowserSession,
+    tab: ManagedBrowserTab,
+}
+#[derive(Clone, Serialize, Deserialize)]
 struct Binding {
     profile: BrowserProfileCatalogEntry,
     browser: ManagedBrowserInstance,
@@ -29,6 +35,8 @@ struct Binding {
     previous_build: Option<ExecutableEvidence>,
     #[serde(default)]
     profile_data_version: Option<String>,
+    #[serde(default)]
+    handoff_targets: std::collections::BTreeMap<String, FrozenHandoffTarget>,
 }
 /// Refresh only observation timestamps for an already-bound mode operation.
 /// Native admission still compares these current objects and persisted state.
@@ -189,7 +197,30 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 }
             }
             let data_version = profile_data_version(&profile);
+            let handoff_targets = self
+                .state
+                .remote_view_tab_handoffs
+                .keys()
+                .filter_map(|id| {
+                    let target = agent_browser_service_model::resolve_remote_view_tab_handoff(
+                        &self.state,
+                        id,
+                    )
+                    .ok()?;
+                    (target.browser.id == browser.id).then(|| {
+                        (
+                            id.clone(),
+                            FrozenHandoffTarget {
+                                browser: target.browser,
+                                session: target.session,
+                                tab: target.tab,
+                            },
+                        )
+                    })
+                })
+                .collect();
             let binding = Binding {
+                handoff_targets,
                 profile,
                 browser: browser.clone(),
                 session: session.clone(),
@@ -833,8 +864,30 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         self.recovery = Some(recovery);
         Ok(Some(proof))
     }
-    fn replacement_absent(&mut self, request: &Request) -> Result<bool, String> {
-        let profile = self.profile(request);
+    fn replacement_absent(&mut self, _request: &Request) -> Result<bool, String> {
+        // Absence settlement verifies the published catalog, before launch commits
+        // the requested mode. The transport-only profile is not published yet.
+        let published = self
+            .host
+            .catalog
+            .profiles
+            .get(&self.binding.profile.id)
+            .or_else(|| {
+                self.host
+                    .state
+                    .disposable_profiles
+                    .get(&self.binding.profile.id)
+                    .map(|allocation| &allocation.profile)
+            })
+            .ok_or("mode_operation_profile_missing")?;
+        let mut expected = self.binding.profile.clone();
+        expected
+            .manual_login_url
+            .clone_from(&published.manual_login_url);
+        if published != &expected {
+            return Err("mode_operation_profile_changed".into());
+        }
+        let profile = published.clone();
         super::super::browser_session_runtime::prove_profile_launch_absence(&profile)?;
         let path = self.host.persistence.runtime_database_path()?;
         BrowserSessionSqliteStore::open(path.parent().ok_or("mode_operation_store_unavailable")?)?
@@ -998,6 +1051,22 @@ pub(crate) fn recovery_authorized(
     profile: &BrowserProfileCatalogEntry,
     browser: &ManagedBrowserInstance,
 ) -> bool {
+    mode_recovery_authorized(profile, browser, false)
+}
+
+/// Inspect the exact retained restoration without granting a manual launch.
+pub(crate) fn reconciliation_authorized(
+    profile: &BrowserProfileCatalogEntry,
+    browser: &ManagedBrowserInstance,
+) -> bool {
+    mode_recovery_authorized(profile, browser, true)
+}
+
+fn mode_recovery_authorized(
+    profile: &BrowserProfileCatalogEntry,
+    browser: &ManagedBrowserInstance,
+    allow_restore_inspection: bool,
+) -> bool {
     let Ok(database) = BrowserSessionSqliteStore::default_sqlite_path() else {
         return false;
     };
@@ -1024,10 +1093,13 @@ pub(crate) fn recovery_authorized(
         return false;
     };
     serde_json::from_str::<Operation>(&value).is_ok_and(|operation| {
-        matches!(
+        (matches!(
             operation.phase,
             Phase::LaunchDispatched | Phase::LaunchAbsent | Phase::ReplacementPending
-        ) && operation.request.browser_id == browser.id
+        ) || (allow_restore_inspection
+            && operation.phase == Phase::OriginalExited
+            && operation.restoring_previous))
+            && operation.request.browser_id == browser.id
             && operation.request.profile_id == profile.id
             && operation
                 .effective_mode
@@ -1099,3 +1171,11 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "mode_handoff_lineage_tests.rs"]
+mod handoff_lineage_tests;
+
+#[path = "mode_handoff_recovery.rs"]
+mod handoff_recovery;
+pub(in crate::native) use handoff_recovery::completed_mode_handoff_proof;

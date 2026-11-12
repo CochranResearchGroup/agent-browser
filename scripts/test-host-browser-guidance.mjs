@@ -23,7 +23,8 @@ try{
  await client.send('initialize',{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'host-guidance-v1-trial',version:'1'}});
  client.notify('notifications/initialized');
  const {tools}=await client.send('tools/list');
- assert.equal(tools.length,16,'Current host guidance requires the16-tool connected catalog');
+ const expectedTools=['browser_artifact','browser_click','browser_close','browser_command','browser_continue','browser_control','browser_discover','browser_fill','browser_handoff','browser_navigate','browser_open','browser_policy','browser_reconnect','browser_retention','browser_screenshot','browser_snapshot','browser_tab'];
+ assert.deepEqual(tools.map(tool=>tool.name).sort(),expectedTools,'Current connected catalog contains exactly the17 public task tools');
  for(const name of ['browser_reconnect','browser_policy','browser_artifact'])assert(tools.some(tool=>tool.name===name),`Discover ${name} before dispatch`);
  const reconnect=tools.find(tool=>tool.name==='browser_reconnect').inputSchema.properties;
  assert.deepEqual(reconnect.operation.enum,['status','disconnect','reconnect','rebind','configure','reopen']);
@@ -33,14 +34,14 @@ try{
  assert.equal(policy.policy.properties.version.const,1);
  const artifact=tools.find(tool=>tool.name==='browser_artifact').inputSchema.properties;
  assert.deepEqual(artifact.kind.enum,['screenshot','download']);
- checks.push('16-tool catalog and reconnect/policy/artifact schemas discovered');
+ checks.push('17-tool catalog and reconnect/policy/artifact schemas discovered');
  const open=tools.find(x=>x.name==='browser_open').inputSchema;
  for(const field of ['taskKey','serviceName','agentName','taskName'])assert(open.required.includes(field));
  for(const field of ['profileMode','hostBinding','attachment','taskPolicy'])assert(open.properties[field]);
  const control=tools.find(x=>x.name==='browser_control');assert(control.inputSchema.properties.operation);
  checks.push('connected launch/attach/control schemas discovered');
  const contracts=await client.send('resources/read',{uri:'agent-browser://contracts'});
- assert(JSON.parse(contracts.contents[0].text).mcpCatalog.tools.includes('browser_open'));
+ assert.deepEqual([...JSON.parse(contracts.contents[0].text).mcpCatalog.tools].sort(),expectedTools,'Published contract matches the connected catalog');
  await client.send('resources/read',{uri:'agent-browser://operating-guide'});
  const advanced=data(await call('browser_discover',{category:'browser',operation:'press'}));assert(advanced.inputSchema);
  checks.push('contracts, operating guide and selected advanced schema read');

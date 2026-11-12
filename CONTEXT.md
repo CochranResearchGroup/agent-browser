@@ -4,6 +4,12 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Mode replacement handoff lineage**: The owner's frozen original handoff target,
+completed mode operation and currently published replacement process. It permits
+rejoining that same invitation after replacement without changing its control
+epoch or promoting passive viewing. It is separate from an idle-retirement
+mapping and grants no Native input ownership.
+
 **Live handoff continuity**: A durable Native handoff presents the exact live original browser independently of a pending mode conversion. Presentation does not advance or cancel conversion, erase its journal, or permit a replacement launch.
 
 **Shared workspace authentication**: Authelia authenticates Agent Browser and Remote View. Native dashboard passwords and cookies remain disabled until compatible interoperation exists; Authelia admission grants workspace operator access without local dashboard enrollment or roles. An Agent Browser identity never proves a separate dependency session.
@@ -14,6 +20,13 @@ Agent Browser coordinates browser automation and operator-visible remote control
 CDP-free task after its exact original browser was conclusively closed by automatic
 retirement. Existing Native launch admission still applies. The profile and logical
 links survive; reopening the saved launch URL does not reconstruct in-memory state.
+
+**Ordinary-exit handoff recovery**: A retained CDP-backed task restores its profile
+and last recorded tab URL after conclusive original process absence. Its
+replacement publication records the exact per-tab physical mapping alongside
+launch custody, independently of idle retirement. The existing human invitation
+retains its epoch and paused reads. Missing historical mappings are not invented;
+fresh reconstruction has its own contemporaneous operation and target identity.
 
 **Closed-task handoff**: Link validity and target lifecycle are separate. A valid
 closed-task URL offers explicit reopening on that same link. The owner freezes
@@ -189,7 +202,9 @@ current page or verified authentication.
 
 **Mode conversion**: An explicit owner operation that replaces a physical
 browser with or without CDP while preserving its logical task, profile and
-original handoff. It reviews affected tasks and consequential close choices;
+original handoff. Graceful conversion close uses the Native owner's exact-window
+close request with the current agent control epoch, followed by independent
+original-process exit confirmation. It reviews affected tasks and consequential close choices;
 ordinary open never silently changes a running process's posture. Native fullscreen
 mode controls resolve the retained handoff through its owner, review the same
 durable conversion and reconnect the original link; Native viewer authentication
@@ -615,3 +630,9 @@ metadata and an immutable operation receipt become terminal atomically. The
 receipt survives task removal and never claims a blank page, provider cleanup,
 authentication or renewed credential authority. Source issue650 and Auth issue339
 retain the producer, consumer and installed qualification boundaries.
+
+**Interrupted-close mode restoration**: A confirmed choice on the original
+conversion can restore its previous mode after fresh exact-original exit proof,
+without launching the obsolete requested mode. Live or unverified originals,
+replacement uncertainty, profile custody and immutable request history remain
+separate guards.

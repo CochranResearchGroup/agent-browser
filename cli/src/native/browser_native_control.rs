@@ -312,6 +312,35 @@ pub fn execute(
             )
         }
     };
+    // Lifecycle close is an explicit whole-browser operation. Read its current
+    // Native fence only after joining the exact original process/window. This
+    // does not acquire a lease or relax epoch requirements for generic input.
+    let close_epoch = if command["action"] == "native_close" {
+        let control = owner.request(
+            "control",
+            &json!({
+                "desktopId":target.viewing_desktop_id,
+                "expectedGeneration":target.viewing_generation,"operation":"status"
+            }),
+        )?;
+        let epoch = control["epoch"].as_u64();
+        if control["desktopId"] != target.viewing_desktop_id
+            || control["generation"] != target.viewing_generation
+            || control["owner"] != "agent"
+            || epoch.is_none()
+            || command
+                .get("controlEpoch")
+                .is_some_and(|expected| expected != &control["epoch"])
+        {
+            return Err(
+                "browser_native_close_control_unavailable:return human control before relaunch"
+                    .into(),
+            );
+        }
+        epoch
+    } else {
+        None
+    };
     if command["action"] == "native_ready" {
         return Ok(
             json!({"source":"remote_view_native","ready":true,"windowId":window["id"],"window":{"x":window["x"],"y":window["y"],"width":window["width"],"height":window["height"],"active":window["active"]},"nativeContextScope":"browser","taskCompleted":false}),
@@ -327,21 +356,26 @@ pub fn execute(
             json!({"source":"remote_view_native","delivery":reply["delivery"].as_str().unwrap_or("unknown"),"taskCompleted":false}),
         );
     }
-    if command["action"] == "native_close" && window["active"] != true {
-        owner.request(
+    if let Some(epoch) = close_epoch {
+        // Native window.close sends the window manager's graceful close request.
+        // Unlike a keyboard chord, it does not depend on focus or key delivery.
+        // The Native owner fences this exact window/process and control epoch;
+        // ModeHost must still independently confirm the original process exit.
+        let reply = owner.request(
             "window",
             &json!({"desktopId":target.viewing_desktop_id,
             "expectedGeneration":target.viewing_generation,"windowId":window["id"],
-            "expectedProcessIdentity":window["processIdentity"],"action":"activate"}),
+            "expectedProcessIdentity":window["processIdentity"],"action":"close",
+            "controlEpoch":epoch}),
         )?;
-        // Observe and fence again after focus. This recursion is bounded: the
-        // input action cannot take the close/focus branch a second time.
-        return execute(
-            original,
-            target,
-            &json!({"action":"native_input",
-            "actions":[{"kind":"key","chord":"alt+F4"}]}),
-            owner,
+        if reply["operation"] != "window.close"
+            || reply["generation"] != target.viewing_generation
+            || reply["windowId"] != window["id"]
+        {
+            return Err("browser_native_close_unconfirmed:observe before retry".into());
+        }
+        return Ok(
+            json!({"source":"remote_view_native","delivery":"dispatched","taskCompleted":false}),
         );
     }
     let width = snapshot
@@ -422,11 +456,6 @@ pub fn execute(
         }
         body["controlEpoch"] = b["nativeControlEpoch"].clone();
         body["expectedVisual"] = json!({"region":b["region"],"sha256":selected.frame_sha256});
-    }
-    if command["action"] == "native_close" {
-        // Remote View window.close destroys the window. Normal WM close is
-        // requested through native input; exit remains independent evidence.
-        body["actions"] = json!([{"kind":"key","chord":"alt+F4"}]);
     }
     if command["action"] == "native_capture" {
         body.as_object_mut().unwrap().remove("actions");
@@ -741,3 +770,7 @@ pub fn execute(
 #[cfg(test)]
 #[path = "native_login_perception_tests.rs"]
 mod login_perception_tests;
+
+#[cfg(test)]
+#[path = "native_mode_close_tests.rs"]
+mod mode_close_tests;
