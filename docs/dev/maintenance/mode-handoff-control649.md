@@ -1,7 +1,7 @@
 # Mode-change and Native control continuity
 
 Product lane: PL-BUGFIX
-State: OPEN
+State: COMPLETED
 Work item: CochranResearchGroup/agent-browser#649
 Related owner: CochranResearchGroup/remote-view#883
 Branch: fix/mode-handoff-control649
@@ -183,3 +183,37 @@ integration is this lane: move its complete retirement instructions into the
 existing linked reference, retaining a root entry and every safety requirement
 so embedded guidance remains below the10000-byte limit. Refresh matched combined
 source gates before build; do not inherit a live retirement acceptance claim.
+
+
+## Final source qualification
+
+PR660 merged as `653d3de0a9ecae1434371ba3626dd2d924a5cbe9`. Its tree is
+identical to the qualified `b60823df68c566464a71e223bf9891d19a7318ee`.
+The combined current-main gate passes466 Rust tests in30 suites, formatting
+and strict workspace Clippy with zero errors, warnings or failures. It includes
+ordinary retained recovery, settled manual-idle recovery, mode invariants,
+retirement regressions and the full service-model package. Documentation build,
+policy wiring11, changed-link and handoff-guidance checks pass. Embedded root
+guidance is9992bytes; complete retirement instructions remain in its reference.
+
+The production-shaped candidate was built from frozen clean merged source and
+sealed successfully. Exact-artifact qualification passes public MCP discovery
+with17 tools, guidance-budget and invalid-intent refusal checks, plus the
+source-free workstation installer and owned-host cleanup fixtures. An earlier
+build correctly refused sealing after source changed during compilation; it
+was not installed or relabeled.
+
+Remote View PR891 supplies the companion recovery-only page. Its640 Rust tests,
+strict Clippy, formatting and38 browser checks pass. Source-backed qualification
+is separate from installed or operator acceptance; installation transactions,
+process-preservation evidence and authenticated same-link workflow receipts
+remain in private runtime state. No retirement or Auth qualification is claimed.
+
+
+The companion slow-navigation repair is Remote View PR892. Its unchanged-script
+browser regression detects repeated owner polling while a navigation is pending;
+a single-flight rejoin fences further choices and stops the inspection timer.
+All39 mode/control browser checks pass. Bounded requested installed acceptance
+is complete in private runtime receipts; source qualification does not claim
+retirement, provider authentication, audio, or unrelated workflow acceptance.
+The build checkout retains sealed candidates under explicit closeout custody.
