@@ -19,7 +19,8 @@ Remote View PR887 delivers mode refresh, completion-gated reconnect and own-leas
 return before confirmed conversion. PR655 replaces unreliable keyboard close
 with the Native owner's exact-window graceful close operation. Its source is
 `cff99da8c08e154c24291df4a668d67def419249`; merge
-`632354ddcffe058a479f9090f3599530c3427b9c` has the same source tree.
+`632354ddcffe058a479f9090f3599530c3427b9c` has the same executable inputs;
+its additional ordinary-recovery qualification documents are preserved.
 
 The keyboard-close regression reported dispatched delivery while an active
 about:blank browser stayed alive without a modal dialog. The exact-window close
