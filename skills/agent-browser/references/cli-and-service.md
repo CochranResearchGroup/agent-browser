@@ -3943,7 +3943,8 @@ A retained manual browser with a valid handoff can recover after its exact origi
 was conclusively automatically closed. Recovery requires matching completed
 retirement, immutable original identity, unchanged logical scope and fresh process
 absence before existing Native launch admission. It preserves the task, tab, profile
-and links and opens the profile's saved launch URL. It cannot restore unsaved page
+and links and asks Chrome to restore its saved session. Fresh launch still uses
+the configured startup URL. It cannot restore unsaved page
 memory or replay website actions. Unqualified ended manual tasks remain refused.
 
 The automatic-close candidate persists its exact operation before preparing
@@ -4750,3 +4751,14 @@ Button clicks deliver pointer input for controls such as pointer-down account
 menus. Verify page state after the dispatch acknowledgement.
 
 Existing profiles: `profileMode:"existing"`. Temporary: `profileMode:"disposable"` without `profile`. The workflow owns selection, replay and scoped closure.
+
+
+### Retained manual page continuity
+
+After an already-qualified retained CDP-free browser exits, recovery asks Chrome
+to restore the session saved in the same profile. It omits the initial startup
+URL so a configured `about:blank` cannot replace saved pages. New browser launches
+keep their configured URL. This uses no CDP listener or URL replay, preserves
+existing process-absence and custody checks, and retains the same task/handoff.
+Chrome-saved pages do not prove unsaved form state or authenticated account
+continuity; qualify the actual destination separately from viewer controls.

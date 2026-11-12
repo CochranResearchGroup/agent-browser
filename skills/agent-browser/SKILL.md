@@ -4,9 +4,9 @@ description: Browser task workflows through Agent Browser MCP, with CLI fallback
 allowed-tools: Bash(agent-browser:*)
 ---
 
-# Browser Automation with agent-browser
+# Agent Browser
 
-Authelia supplies operator identity/access; dashboard-local login, enrollment and roles are disabled.
+Authelia supplies identity/access; dashboard login, enrollment and roles are disabled.
 
 [Control and credentials](references/cli-and-service.md).
 
@@ -136,3 +136,5 @@ SDK:300s default. ACK-prefix resume keeps original clocks; never replay unknown 
 ### Exact lost-task retirement
 
 Read [exact retirement](references/cli-and-service.md#exact-lost-task-retirement) before browser `task_retirement`. Preserve task/operation IDs; never replay unknown input.
+
+Retained CDP-free recovery restores saved pages; fresh launch keeps its URL.

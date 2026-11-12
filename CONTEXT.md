@@ -17,9 +17,11 @@ mapping and grants no Native input ownership.
 **Dashboard build readiness**: Installation requires embedded frontend assets, not only a responding HTTP listener and matching executable digest. The one-file Rust fallback is useful for source compilation but cannot qualify a workstation candidate. Dashboard presence is separate from authenticated viewer and browser workflow acceptance.
 
 **Retained manual-browser recovery**: A valid handoff can wake the same logical
-CDP-free task after its exact original browser was conclusively closed by automatic
-retirement. Existing Native launch admission still applies. The profile and logical
-links survive; reopening the saved launch URL does not reconstruct in-memory state.
+CDP-free task after positive original-process absence, through settled automatic
+retirement or qualified ordinary exit. Existing Native launch admission still
+applies. Recovery requests Chrome's saved session in the same profile; a new
+browser uses its initial startup URL. Logical links survive, but saved pages do
+not reconstruct unsaved in-memory state or prove an authenticated account.
 
 **Ordinary-exit handoff recovery**: A retained CDP-backed task restores its profile
 and last recorded tab URL after conclusive original process absence. Its

@@ -10392,6 +10392,13 @@ fn copy_disposal_case(case: &str) {
         std::fs::write(fixture.root.join(id).join("retained"), bytes).unwrap();
     }
     let processes = CopyProcessFixture::new(&fixture.root);
+    // Explicit whole-browser close requires independent original-kernel exit
+    // readback. The process fixture owns and reaps these exact children.
+    std::fs::write(
+        fixture.root.join("operator-os-close-readback"),
+        "real kernel",
+    )
+    .unwrap();
     let owner = CopyDisposalHttp::new(&fixture.root, &environment);
     let provider = Rc::new(RefCell::new(Provider {
         pool_maximum: Some(4),

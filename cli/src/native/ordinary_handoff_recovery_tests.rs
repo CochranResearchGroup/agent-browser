@@ -36,6 +36,13 @@ fn ordinary_handoff_fixture(reconstruct_legacy: bool, manual: bool, passive: boo
     env.set("AGENT_BROWSER_HOME", sandbox.root.to_str().unwrap());
     env.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
     let _children = CopyProcessFixture::new(&fixture.root);
+    if manual {
+        std::fs::write(
+            fixture.root.join("capture-manual-worker-arguments"),
+            "actual worker",
+        )
+        .unwrap();
+    }
     // The retained production browser is CDP-backed. The common child fixture
     // defaults to CDP-free manual mode, which has a separate recovery contract.
     if !manual {

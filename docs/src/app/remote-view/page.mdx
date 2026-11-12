@@ -1077,9 +1077,10 @@ cannot restore the deleted link or change its browser and tab.
 After conclusive automatic closure, a valid retained CDP-free handoff can wake its
 logical browser through the existing Native owner. Matching completed retirement,
 unchanged task/tab scope and fresh original-process absence qualify recovery;
-ordinary ended manual tasks and unknown close outcomes remain refused. The same
-links and profile survive, and the profile's saved launch URL reopens. Unsaved
-in-memory page state cannot be reconstructed, and website actions are not replayed.
+unknown close outcomes remain refused. The same links and profile survive.
+Qualified CDP-free recovery requests Chrome's saved session instead of its initial
+startup URL; a fresh launch still uses the configured URL. Unsaved in-memory page
+state cannot be reconstructed, and website actions are not replayed.
 
 A physical close requires a fresh atomic attempt admission. A stale coordinator
 reads the original pending attempt instead of treating an idempotent record

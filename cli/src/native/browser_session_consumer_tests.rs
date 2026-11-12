@@ -245,6 +245,15 @@ impl RemoteViewBrowserProcessEffects for Process {
         observation: &RemoteViewAssignmentObservation,
     ) -> Result<BrowserLaunch, RemoteViewBrowserProcessError> {
         self.prove_recovery_absence(browser, profile)?;
+        #[cfg(target_os = "linux")]
+        let environment = probe_manual_worker_arguments(
+            &self.root,
+            profile,
+            Some(browser),
+            intent,
+            environment,
+            observation,
+        );
         let mut launch = self.launch(profile, intent, environment, observation)?;
         launch.browser_id = browser.id.clone();
         std::fs::remove_file(self.root.join("idle-process-absent")).unwrap();
@@ -263,6 +272,19 @@ impl RemoteViewBrowserProcessEffects for Process {
         environment: RemoteViewPrivateLaunchEnvironment,
         observation: &RemoteViewAssignmentObservation,
     ) -> Result<BrowserLaunch, RemoteViewBrowserProcessError> {
+        #[cfg(target_os = "linux")]
+        let environment = if !self.root.join("idle-process-absent").exists() {
+            probe_manual_worker_arguments(
+                &self.root,
+                profile,
+                None,
+                intent,
+                environment,
+                observation,
+            )
+        } else {
+            environment
+        };
         let environment = environment
             .into_environment(observation, &intent.assignment)
             .unwrap();
@@ -377,6 +399,146 @@ impl Process {
 #[cfg(target_os = "linux")]
 thread_local! {
     static COPY_PROCESS_CHILDREN: std::cell::RefCell<std::collections::BTreeMap<(PathBuf, u32), std::process::Child>> = const { std::cell::RefCell::new(std::collections::BTreeMap::new()) };
+}
+/// Reach the real worker and Chrome argument builder, then stop at an owned
+/// executable that records argv and exits. No X server or browser is required.
+#[cfg(target_os = "linux")]
+fn probe_manual_worker_arguments(
+    root: &std::path::Path,
+    profile: &BrowserProfileCatalogEntry,
+    original: Option<&ManagedBrowserInstance>,
+    intent: &BrowserLaunchIntent,
+    environment: RemoteViewPrivateLaunchEnvironment,
+    observation: &RemoteViewAssignmentObservation,
+) -> RemoteViewPrivateLaunchEnvironment {
+    if !root.join("capture-manual-worker-arguments").exists() {
+        return environment;
+    }
+    use super::browser_session_runtime::{BrowserManagerRuntime, BrowserManagerRuntimeConfig};
+    let executable = root.join(if original.is_some() {
+        "recovery-chrome"
+    } else {
+        "initial-chrome"
+    });
+    use std::io::Write;
+    let mut compiler = std::process::Command::new("cc")
+        .args(["-x", "c", "-O0", "-o"])
+        .arg(&executable)
+        .arg("-")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("Rust fixture host must supply its native C linker/compiler");
+    compiler
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(
+            br#"
+#include <stdio.h>
+int main(int argc, char **argv) {
+    char path[4096];
+    if (snprintf(path, sizeof(path), "%s.args", argv[0]) >= sizeof(path)) return 74;
+    FILE *out = fopen(path, "w");
+    if (!out) return 75;
+    for (int i = 1; i < argc; i++) fprintf(out, "%s\n", argv[i]);
+    return fclose(out) ? 76 : 73;
+}
+"#,
+        )
+        .unwrap();
+    let compiled = compiler.wait_with_output().unwrap();
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let mut runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
+        executable_path: Some(executable.to_string_lossy().into_owned()),
+        ..Default::default()
+    })
+    .unwrap();
+    let result = match original {
+        Some(browser) => runtime.recover_launch(browser, profile, intent, environment, observation),
+        None => runtime.launch(profile, intent, environment, observation),
+    };
+    // A native executable satisfies the same process-identity fence as Chrome.
+    // Reap an admitted probe before inspecting its output or publishing fixtures.
+    if let Ok(launch) = &result {
+        use super::browser_session_runtime::BrowserRuntimeDriver;
+        let probe = ManagedBrowserInstance {
+            id: launch.browser_id.clone(),
+            profile_id: profile.id.clone(),
+            pid: launch.pid,
+            cdp_endpoint: launch.cdp_endpoint.clone(),
+            desktop: launch.desktop.clone(),
+            active_session_ids: vec![],
+        };
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            match runtime.browser_is_live(&probe) {
+                Ok(false) => break,
+                Ok(true) => {}
+                Err(reason) => {
+                    // The recorder can exit between the worker's Child poll and
+                    // its independent OS read. Accept only that exact zombie
+                    // (or confirmed absence), then ask the owner to reap it.
+                    assert_eq!(reason, "manual_login_original_process_changed");
+                    let ended = match crate::process_identity::observe_process(probe.pid) {
+                        crate::process_identity::ProcessObservation::Missing => true,
+                        crate::process_identity::ProcessObservation::Observed(current) => {
+                            current.start_token.as_deref()
+                                == Some(
+                                    launch
+                                        .process_identity
+                                        .as_ref()
+                                        .unwrap()
+                                        .start_token
+                                        .as_str(),
+                                )
+                                && std::fs::read_to_string(format!("/proc/{}/stat", probe.pid))
+                                    .is_ok_and(|stat| {
+                                        stat.rsplit_once(')').is_some_and(|(_, fields)| {
+                                            fields.split_whitespace().next() == Some("Z")
+                                        })
+                                    })
+                        }
+                        _ => false,
+                    };
+                    assert!(ended, "argv probe must not ignore a changed live process");
+                }
+            }
+            assert!(
+                std::time::Instant::now() < until,
+                "owned argv probe must exit"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+    }
+    let args = std::fs::read_to_string(executable.with_extension("args")).unwrap_or_else(|error| {
+        panic!("actual worker did not reach argv probe: {error}; {result:?}")
+    });
+    let args = args.lines().collect::<Vec<_>>();
+    assert!(!args.iter().any(|arg| arg.contains("--remote-debugging")));
+    if original.is_some() {
+        assert!(
+            args.contains(&"--restore-last-session"),
+            "retained manual recovery must restore saved pages: {args:?}"
+        );
+        assert!(!args.contains(&profile.manual_login_url.as_deref().unwrap()));
+    } else {
+        assert!(args.contains(&profile.manual_login_url.as_deref().unwrap()));
+        assert!(!args.contains(&"--restore-last-session"));
+    }
+    // Issue a separate synthetic provider response; production private inputs
+    // remain single-consumption and are never cloned or serialized.
+    RemoteViewPrivateLaunchEnvironment::from_response(
+        wire()["launchEnvironment"].clone(),
+        observation,
+        &intent.assignment,
+    )
+    .unwrap()
 }
 #[cfg(target_os = "linux")]
 struct CopyProcessFixture {
