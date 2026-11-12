@@ -7536,6 +7536,10 @@ Right-click a managed browser heading or tab in the left rail to choose **Relaun
 
 Fullscreen Native handoffs also show a **CDP on/off** control in the top row. Switching it opens the same whole-browser relaunch review; it does not immediately restart the browser. Unverified mode stays unavailable. An interrupted conversion resumes its original operation, and completion reconnects the original handoff. Retained mode targets refresh only activity and expiry timestamps; process, profile, task, tab, target, desktop and concurrent-state changes remain guarded. A confirmed graceful relaunch returns only that viewer's own Native control before closing with the current agent epoch. The existing viewer rechecks CDP mode and rejoins the same durable handoff after a verified change. Its invitation follows only the exact completed mode journal and current launch custody; passive invitations remain passive. Native Remote View and Agent Browser must both include this integration.
 
+If the exact original browser exits during a pending graceful conversion, reopening the same handoff shows its existing recovery controls without connecting a desktop or taking input control. Choose **Reconcile operation** to continue the original approved conversion. Opening the link alone never launches its replacement.
+
+A valid retained CDP-free handoff also recovers an ordinary browser exit using the same profile and task without enabling debugging. Recovery does not reconstruct unsaved page state or replay CDP navigation.
+
 Conversion qualifies the replacement's exact process, requested mode and Native
 window without injecting input. Selective agent input remains independently
 governed and may be unavailable. Reopening the durable handoff reconciles an

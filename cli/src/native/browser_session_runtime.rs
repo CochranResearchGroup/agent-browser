@@ -1422,7 +1422,9 @@ fn run_browser_worker(
                             return Err("browser_login_mode_conflict".into());
                         }
                         manual.verify(browser).and_then(|live| {
-                            if live || manual::idle_recovery_authorized(&profile, browser)? {
+                            if live
+                                || manual::retained_handoff_recovery_authorized(&profile, browser)?
+                            {
                                 Ok(())
                             } else {
                                 Err("manual_login_ended: close the login task before reopening"
@@ -1444,7 +1446,7 @@ fn run_browser_worker(
                     if let Some(browser) = recovery_browser.as_ref() {
                         if !super::browser_session_host::browser_mode_host::recovery_authorized(
                             &profile, browser,
-                        ) && !manual::idle_recovery_authorized(&profile, browser)?
+                        ) && !manual::retained_handoff_recovery_authorized(&profile, browser)?
                         {
                             return Err("manual_login_recovery_requires_explicit_reopen".into());
                         }

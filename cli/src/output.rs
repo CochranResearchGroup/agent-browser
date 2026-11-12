@@ -7480,6 +7480,8 @@ Commands:
     Metadata remains available during human handoff; lifecycle choices keep confirmation checks.
     Conversion verifies mode/window without input; retained handoffs reconcile the original launch
     Fullscreen Native handoffs offer a top-row CDP on/off control with relaunch review
+    After exact original exit, a pending graceful conversion opens controls only; explicitly reconcile.
+    Retained CDP-free handoffs recover ordinary exit without debugging or CDP navigation replay.
   watch-host-task TASK Changed NDJSON; fresh reconnect
   host-control      Reconcile terminal uncertainty on the exact owned task; never replay.
   Completed DOM clicks may use exact owner-terminal producer provenance with a live shared supervisor; native/private input keeps its dispatcher-exit guard.

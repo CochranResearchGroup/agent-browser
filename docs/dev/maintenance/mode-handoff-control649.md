@@ -64,13 +64,11 @@ qualification is distinct from installed Native workflow acceptance.
 
 ## Remaining workflow qualification
 
-Final acceptance must exercise public CDP on/off/on/off plus interactive takeover
-and confirmed return on one durable handoff. Require operation completion and a
-new document on the same link, not an early physical-mode observation. Takeover
-must retain a freshly observed agent epoch; another controller must not be
-silently displaced. An unavailable acceptance desktop is an open gate, not a
-passing test. Preserve the exact disposable task for continuation and normal
-scoped cleanup, with its locator in runtime state.
+The public CDP on/off/on/off workflow and interactive takeover/confirmed return
+passed on one durable handoff after PR655 adoption. Every conversion completed
+and loaded a new document on the same link; takeover used a fresh agent epoch.
+Disposable test cleanup and runtime identities remain in associated private state.
+This qualifies that workflow, not universal interrupted-navigation resilience.
 
 Explicit reconciliation can continue a previously approved operation and launch
 its replacement. It is not observation-only. Preserve the original operation ID
@@ -98,3 +96,90 @@ counts do not close the remaining workflow and interrupted-navigation gaps.
 Generic input still requires its supplied epoch; lifecycle close neither acquires
 nor returns a foreign operator lease. Private original processes and frozen
 handoff targets stay in owner journals, outside source documentation.
+
+## Read-only interrupted-conversion recovery
+
+The next bounded slice exposes the existing operation on the same Native viewer
+when its exact original has exited and a graceful close remains pending. The
+owner must prove the retained handoff against its frozen mode binding, current
+logical scope, exclusive browser custody and positive original absence. It
+returns a not-ready recovery outcome, never owned-window readiness. No navigation
+advances the operation, launches a replacement or updates Native use evidence.
+
+Remote View accepts a narrowly validated recovery posture on its existing Native
+page. That posture initializes only the existing mode controls: no desktop
+stream, recording, input connection or automatic takeover. Existing mode actions
+retain their original operation and confirmation requirements. A completed
+operation rejoins the same durable link. Provider rendering/URL support lands
+before the owner emits that posture.
+
+Primary writer: this lane for the mode journal proof, handoff resolver and Native
+mode-viewer glue. Dependencies: integrated ordinary recovery PR653/654 and the
+Remote View recording work on main. Preserve recording/audio/assistance sources
+and the separate shared Cargo target; use an isolated Remote View build target.
+Acceptance requires a red interrupted-close fixture, read-only recovery proof,
+refusal variants, exact existing-operation reconciliation and same-link Native
+continuation. Keep tenant/operator evidence outside Git.
+
+
+Follow-up checkpoint: public missing-original navigation reproduces HTTP503 with
+its retained ClosePrompt and zero launch attempts. The existing viewer recovery
+regression fails against pristine viewer source and passes against this slice.
+All38 browser checks pass after updating the Native HTML fixture to substitute
+production script selection; initial fixture failures are retained separately.
+Policy wiring11, changed links, handoff guidance and docs build pass. Rust and
+installed recovery qualification remain pending; this checkpoint is not merge-ready.
+
+
+## Ordinary CDP-free exit follow-up
+
+A fresh same-link acceptance found a separate missing-original case with no
+active conversion. The owner returns `manual_login_ended` because manual runtime
+reconciliation permits only mode or settled-idle recovery. A valid retained
+handoff after ordinary process exit has neither. This is a newly demonstrated
+blocking case for the requested existing-profile CDP-free relaunch; it reopens
+only the manual runtime classification and actual-runtime ordinary-exit fixture.
+The isolated source candidate already building remains bound to its earlier
+commit and cannot qualify this follow-up. Do not deploy it as the final repair.
+
+Keep this lane primary writer for manual recovery and its focused fixture;
+preserve integrated599 ordinary publication/rebinding and658 mode restoration.
+Require exact persisted browser/profile scope, exclusive ownership, a valid
+retained handoff, published original identity and positive original absence.
+Existing recovery coordination still proves whole-profile absence and Native
+assignment before any launch. No idle event is fabricated; unhanded ended login
+tasks, concurrent profile operations and foreign/unknown processes remain fenced.
+Add the actual worker regression before the fix, then qualify same-profile,
+same-task, same-link recovery without CDP. Runtime facts remain outside Git.
+
+
+The actual worker regression reproduces `manual_login_ended` in2.58seconds.
+After runtime classification is repaired, the existing model's Native publication
+guard exposes its idle-only restriction. The admitted Native launch and complete
+replacement identity are retained while extending publication to a retained
+handoff. No CDP page replay is introduced. The expanded fixture then reproduces
+`browser_handoff_target_changed` for an already-returned invitation after ordinary
+recovery. Exact existing recovery proof now rebinds that passive invitation and
+permits a Native-only no-op return without changing cooperative custody. Unknown
+passive histories retain their prior no-rebind behavior. Validation remains open.
+A stale compiled navigation assertion produced one fixture-only failure and is
+excluded from product RED; source is frozen before subsequent compilation.
+
+
+## Current-main integration
+
+The combined repair at `b994118e6d4a805ff92255ffb2e28d2dd5627827` passes
+formatting, strict workspace Clippy and47 selected Rust tests: ordinary handoff
+recovery, manual idle recovery, mode invariants and service-model recovery. The
+separate current-main restoration check also passes. Source qualification used
+one Cargo job with an enforced6GiB ceiling through the unchanged repository
+admission wrapper; production builds retain their separate production budget.
+
+Current main subsequently integrated AUTH-LOST-TASK-RETIREMENT-650. This lane
+consumes that owner's source unchanged and preserves its open Auth/runtime
+qualification boundaries. No retirement, provider cleanup or credential effect
+is requested or claimed by this repair. Primary writer for the shared skill
+integration is this lane: move its complete retirement instructions into the
+existing linked reference, retaining a root entry and every safety requirement
+so embedded guidance remains below the10000-byte limit. Refresh matched combined
+source gates before build; do not inherit a live retirement acceptance claim.

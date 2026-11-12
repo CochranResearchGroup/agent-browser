@@ -6,18 +6,17 @@ allowed-tools: Bash(agent-browser:*)
 
 # Browser Automation with agent-browser
 
-Authelia admission grants operator access without local dashboard enrollment or roles. Dashboard-local password/cookie login is disabled; attribution uses the verified owner principal.
+Authelia supplies operator identity/access; dashboard-local login, enrollment and roles are disabled.
 
 [Control and credentials](references/cli-and-service.md).
 
-Build failures: [readiness guidance](references/cli-and-service.md#build-readiness).
+Build failures: [readiness](references/cli-and-service.md#build-readiness).
 
 `candidate status` exposes `coordinationLedger`; `candidate inspect` uses `--input-closure`; `candidate install` needs `--sealed-artifact`. [Guide](references/cli-and-service.md#sealed-candidate-maintenance).
 
 ## Handoff creator context
 
-Creation requires immutable `serviceName`, `agentName` and concrete `taskName`.
-They are attribution, not authenticated identity. Read [creator context](references/cli-and-service.md#handoff-creator-context).
+Immutable `serviceName`, `agentName` and concrete `taskName` attribute creation; they are not authenticated identity. [Creator context](references/cli-and-service.md#handoff-creator-context).
 
 ## MCP task workflow
 
@@ -31,7 +30,7 @@ Installed viewers: [qualification](references/cli-and-service.md#native-journey-
 
 Use `browser_handoff({ "taskId": "<task-id>" })` for human assistance. It defaults to interactive input and pauses cooperative automation. Use `interaction:"view"` for passive viewing. The authorized recipient needs no administrator override; visibility alone does not prove input readiness. Require `operatorVisible.state=ready`; return the complete `data.handoffUrl` and keep the task ID. For `remote_view_public_origin_missing`, check reviewed `AGENT_BROWSER_PUBLIC_ORIGIN` in `~/.agent-browser/.env` or `AGENT_BROWSER_ENV_FILE`; process settings win. Reconnect MCP after configuration changes because its environment is pinned at startup. Preserve the task. Never assemble provider URLs.
 
-Same-browser and desktop rail tab switches retain the viewer connection.
+Reuse the same handoff after a CDP-free exit; reconcile interrupted conversions explicitly.
 Retained handoff recovery: [guide](references/cli-and-service.md#retained-handoff-recovery).
 
 After human input, use Give control back or `browser_control`, then `browser_continue` with the same `taskId`. Preserve edits and the [pending-mode boundary](references/cli-and-service.md#retained-handoff-recovery).
@@ -130,10 +129,10 @@ Public task tools: `browser_snapshot`, `browser_screenshot`, `browser_click`,
 `browser_fill`, `browser_navigate`, `browser_tab`, `browser_retention`,
 `browser_reconnect`, `browser_policy`, `browser_artifact`.
 
-Saved-entry/submit refinement preserves exact-account, mask and ambiguity checks. `ownerTimeoutMs` (100..300000) plus optional `ownerDeadlineAtMs` bound one admitted Native command to the remaining invocation deadline, without renewing frame freshness or permitting uncertain-input replay. See the Native workflow reference.
+Native saved entry/submit keeps exact-account, mask and ambiguity checks. `ownerTimeoutMs` (100..300000) and optional `ownerDeadlineAtMs` bound one invocation without renewing freshness or replaying input; see the Native workflow reference.
 
 SDK:300s default. ACK-prefix resume keeps original clocks; never replay unknown input.
 
 ### Exact lost-task retirement
 
-For a qualified cross-boot lost task, discover browser `task_retirement`. Use the original `taskId`, inspect to obtain `ownerBindingRef`, then retire with `operationId` and `expectedBindingRef`. Preserve the frozen ref when enrolling a NEW receiving route. Do not overwrite historical routes or infer a ref from a missing process. Inspect/status do not grant credential or provider cleanup authority. If retirement's reply is uncertain, read `choice:"status"` with the SAME operation ID, or existing `task_operation`; never close a replacement browser or replay input. Unresolved inputs, missing custody, PID reuse and occupied profiles remain held.
+Read [exact retirement](references/cli-and-service.md#exact-lost-task-retirement) before browser `task_retirement`. Preserve task/operation IDs; never replay unknown input.

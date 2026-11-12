@@ -2015,10 +2015,16 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         owner_replacement: bool,
     ) -> Result<(), String> {
         let targets = recovered.target_ids.values().collect::<BTreeSet<_>>();
-        // An automatically closed owned Native browser can retain its logical
-        // task without gaining debugging. Require the existing admitted Native
-        // launch and complete new kernel identity, never a caller-supplied flag.
-        let native_idle_recovery = self.state.idle_closed_browsers.contains_key(&browser.id)
+        // An owned Native browser can retain its task after settled idle close
+        // or ordinary exit with a retained handoff. Its runtime/coordinator must
+        // still qualify original and whole-profile absence before admitted launch.
+        // Require the existing Native intent and complete new process identity;
+        // neither a handoff locator nor a caller flag grants launch authority.
+        let native_retained_recovery = (self.state.idle_closed_browsers.contains_key(&browser.id)
+            || self.state.remote_view_tab_handoffs.values().any(|link| {
+                crate::resolve_remote_view_tab_handoff(self.state, &link.id)
+                    .is_ok_and(|target| target.browser == browser)
+            }))
             && browser.cdp_endpoint.is_empty()
             && !self.state.shared_browser_ids.contains(&browser.id)
             && !self.state.app_browser_attachments.contains_key(&browser.id)
@@ -2046,7 +2052,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             || recovered.launch.pid == 0
             || (recovered.launch.cdp_endpoint.is_empty()
                 && !owner_replacement
-                && !native_idle_recovery)
+                && !native_retained_recovery)
             || (!current_desktop_rebind
                 && !self.state.shared_browser_ids.contains(&browser.id)
                 && browser.desktop.is_some()

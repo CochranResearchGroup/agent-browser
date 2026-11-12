@@ -289,3 +289,130 @@ fn completed_mode_handoff_keeps_a_returned_invitation_passive() {
         before.epoch
     );
 }
+
+#[test]
+fn pending_mode_handoff_exposes_only_exact_missing_original_without_mutation() {
+    for case in [
+        "exact",
+        "other_owner",
+        "missing_owner",
+        "shared",
+        "task",
+        "phase",
+        "launched",
+        "replacement",
+        "forced",
+        "changed",
+        "unfrozen",
+        "alive",
+        "ambiguous",
+    ] {
+        let mut f = Fixture::new();
+        let modes = rusqlite::Connection::open(f.root.join("runtime.mode.sqlite3")).unwrap();
+        let raw: String = modes
+            .query_row("SELECT binding FROM browser_mode_owner_bindings", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        let mut binding: Binding = serde_json::from_str(&raw).unwrap();
+        f.state
+            .browsers
+            .insert(f.browser.clone(), binding.browser.clone());
+        f.state
+            .tabs
+            .insert(binding.tab.id.clone(), binding.tab.clone());
+        f.state
+            .profile_operation_ids
+            .insert("profile".into(), "mode-operation".into());
+        if case == "alive" {
+            let identity =
+                crate::process_identity::capture_process_identity(std::process::id(), None, None)
+                    .unwrap();
+            binding.original = identity.clone();
+            binding.browser.pid = identity.pid;
+            f.state
+                .browsers
+                .insert(f.browser.clone(), binding.browser.clone());
+        }
+        binding.handoff_targets.insert(
+            f.handoff.clone(),
+            FrozenHandoffTarget {
+                browser: binding.browser.clone(),
+                session: binding.session.clone(),
+                tab: binding.tab.clone(),
+            },
+        );
+        let mut operation = f.operation.clone();
+        operation.phase = Phase::ClosePrompt;
+        operation.launch_attempts = 0;
+        operation.replacement = None;
+        operation.close_method = Some(crate::native::browser_mode_operation::CloseMethod::Graceful);
+        operation.request.original_process = serde_json::to_string(&binding.original).unwrap();
+        match case {
+            "other_owner" => {
+                f.state
+                    .profile_operation_ids
+                    .insert("profile".into(), "other".into());
+            }
+            "missing_owner" => {
+                f.state.profile_operation_ids.remove("profile");
+            }
+            "shared" => {
+                f.state.shared_browser_ids.insert(f.browser.clone());
+            }
+            "task" => operation.request.task_ids.push("other".into()),
+            "phase" => operation.phase = Phase::Prepared,
+            "launched" => operation.launch_attempts = 1,
+            "replacement" => operation.replacement = f.operation.replacement.clone(),
+            "forced" => {
+                operation.close_method =
+                    Some(crate::native::browser_mode_operation::CloseMethod::Forced)
+            }
+            "changed" => f.state.tabs.get_mut("tab").unwrap().target_id = "other".into(),
+            "unfrozen" => binding.handoff_targets.clear(),
+            _ => {}
+        }
+        modes
+            .execute(
+                "UPDATE browser_mode_owner_bindings SET binding=?1",
+                [serde_json::to_string(&binding).unwrap()],
+            )
+            .unwrap();
+        f.write_operation(&operation);
+        if case == "ambiguous" {
+            operation.request.operation_id = "second".into();
+            modes
+                .execute(
+                    "INSERT INTO browser_mode_operations VALUES('second',?1)",
+                    [serde_json::to_string(&operation).unwrap()],
+                )
+                .unwrap();
+        }
+        drop(modes);
+        let before = std::fs::read(f.root.join("runtime.mode.sqlite3")).unwrap();
+        let control = std::fs::read(browser_host_control::path(&f.browser).unwrap()).unwrap();
+        let state = f.state.clone();
+        let connection = rusqlite::Connection::open(f.database()).unwrap();
+        let proof = pending_mode_handoff_proof(&connection, &f.state, &f.handoff).unwrap();
+        assert_eq!(
+            proof,
+            if case == "exact" {
+                Some("mode-operation".into())
+            } else {
+                None
+            },
+            "{case}"
+        );
+        assert_eq!(f.state, state, "{case}");
+        assert_eq!(
+            std::fs::read(f.root.join("runtime.mode.sqlite3")).unwrap(),
+            before,
+            "{case}"
+        );
+        assert_eq!(
+            std::fs::read(browser_host_control::path(&f.browser).unwrap()).unwrap(),
+            control,
+            "{case}"
+        );
+    }
+}

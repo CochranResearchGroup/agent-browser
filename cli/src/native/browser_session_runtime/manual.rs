@@ -28,11 +28,11 @@ pub(super) struct ManualBrowsers {
     >,
 }
 
-/// A retained Native handoff may wake a conclusively idle-closed manual browser.
+/// A valid retained Native handoff may recover its conclusively ended browser.
 /// This classification grants no launch authority: the existing Native recovery
 /// coordinator still proves profile absence and admits the exact replacement.
-/// Ordinary ended manual tasks and mode-conversion authority remain separate.
-pub(super) fn idle_recovery_authorized(
+/// Tasks without a valid handoff and mode-conversion authority remain separate.
+pub(super) fn retained_handoff_recovery_authorized(
     profile: &BrowserProfileCatalogEntry,
     browser: &ManagedBrowserInstance,
 ) -> Result<bool, String> {
@@ -47,11 +47,27 @@ pub(super) fn idle_recovery_authorized(
         super::super::browser_session_store::BrowserSessionSqliteStore::open_read_only(&path)?;
     let state = store.load_session_state()?;
     if state.browsers.get(&browser.id) != Some(browser)
-        || !state.idle_closed_browsers.contains_key(&browser.id)
         || state.shared_browser_ids.contains(&browser.id)
         || state.app_browser_attachments.contains_key(&browser.id)
         || state.profile_operation_ids.contains_key(&profile.id)
+        || state
+            .browsers
+            .values()
+            .any(|other| other.id != browser.id && other.profile_id == profile.id)
     {
+        return Ok(false);
+    }
+    let catalog = store
+        .load_profile_catalog()
+        .map_err(|_| unavailable())?
+        .catalog;
+    let published = catalog.profiles.get(&profile.id).or_else(|| {
+        state
+            .disposable_profiles
+            .get(&profile.id)
+            .map(|allocation| &allocation.profile)
+    });
+    if published != Some(profile) {
         return Ok(false);
     }
     let Some(identity) = store
@@ -71,36 +87,38 @@ pub(super) fn idle_recovery_authorized(
     }) {
         return Ok(false);
     }
-    let completed = records
-        .iter()
-        .filter(|record| {
-            record.completed.is_some()
-                && record.published_state_digest.is_some()
-                && record.has_settled_browser_close(&browser.id)
-                && record.intent.scopes.len() == 1
-                && record.intent.scopes[0].browser == *browser
-                && record.intent.scopes[0].process_identity.as_ref() == Some(&identity)
-        })
-        .collect::<Vec<_>>();
-    let [record] = completed.as_slice() else {
-        return Ok(false);
-    };
-    let scope = &record.intent.scopes[0];
-    if scope.tabs.len()
-        != state
-            .tabs
-            .values()
-            .filter(|tab| tab.browser_id == browser.id)
-            .count()
-        || scope.tabs.iter().any(|tab| {
-            state.tabs.get(&tab.id).is_none_or(|current| {
-                let mut expected = tab.clone();
-                expected.last_activity_at_ms = current.last_activity_at_ms;
-                expected != *current
+    if state.idle_closed_browsers.contains_key(&browser.id) {
+        let completed = records
+            .iter()
+            .filter(|record| {
+                record.completed.is_some()
+                    && record.published_state_digest.is_some()
+                    && record.has_settled_browser_close(&browser.id)
+                    && record.intent.scopes.len() == 1
+                    && record.intent.scopes[0].browser == *browser
+                    && record.intent.scopes[0].process_identity.as_ref() == Some(&identity)
             })
-        })
-    {
-        return Ok(false);
+            .collect::<Vec<_>>();
+        let [record] = completed.as_slice() else {
+            return Ok(false);
+        };
+        let scope = &record.intent.scopes[0];
+        if scope.tabs.len()
+            != state
+                .tabs
+                .values()
+                .filter(|tab| tab.browser_id == browser.id)
+                .count()
+            || scope.tabs.iter().any(|tab| {
+                state.tabs.get(&tab.id).is_none_or(|current| {
+                    let mut expected = tab.clone();
+                    expected.last_activity_at_ms = current.last_activity_at_ms;
+                    expected != *current
+                })
+            })
+        {
+            return Ok(false);
+        }
     }
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
