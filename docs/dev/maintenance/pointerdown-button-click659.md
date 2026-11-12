@@ -10,7 +10,8 @@ The installed public click acknowledges the request, but a disposable synthetic
 pointer-down menu records only an untrusted JavaScript click and remains closed.
 The real selected SSO account menu exhibits the same failure. Browser and Auth
 independently agree on document identity; the button is visible, focused,
-enabled and unobstructed. This blocks independent website-account proof.
+enabled and unobstructed. This blocks mouse-driven website-account proof. Supported focus/Space separately
+completed Auth existing-session acceptance; it does not settle this click defect.
 
 `interaction::click` currently invokes HTMLElement.click for one left click on
 buttons, button-like inputs and role=button controls. Its successful shortcut
@@ -81,10 +82,11 @@ reviewed executable selection; the next lacked an owned tab handle. That tactic
 is ended. The supported MCP fixture admits its task; a parsing error and then
 an unverified process guard are retained as separate setup/identity failures.
 No additional pointer replay is allowed while the fixture's mode is unverified.
-A final read-first persistent-profile probe may diagnose mode before any click,
-matching the selected SSO workflow. If it stays unverified, stop that fixture
-approach and retain the exact reason; do not change authority or production
-configuration. The production public synthetic RED remains valid.
+The final read-first persistent-profile probe also stopped before input: mode
+is unverified with original_identity_unavailable. All owned fixture processes
+were closed and fresh absence checks passed. The providerless tactic is ended;
+use the maintained Native-backed fixture for any successor, preserving launch
+custody checks. The production public synthetic RED remains valid.
 
 Current659 execution window ends2026-11-12T14:50Z, including earlier effort.
 Controller: this SSO lane. Before any build/adoption beyond that window, assess
@@ -93,3 +95,20 @@ SSO objective and original first failures remain. No cheap fixture repair resets
 the allowance; source integration, exact artifact qualification, preserving
 adoption and actual selected account proof remain required. Review date:2026-11-13, owner: current SSO
 qualification lane. Prior handoff candidates remain retained without alteration.
+
+## Draft checkpoint and remaining gates
+
+Source checkpoint f3869006a206f93f834890ba39afded1a707d1db contains the repair,
+protocol regression and required user documentation. Formatting check, policy
+wiring, documentation links, remote-view handoff documentation and docs build
+pass. Host provisioning, fresh-workstation harness, Guacamole assets, Postgres
+durability and route-specific user-sync fixtures pass. Installer fixture cleanup
+passes, then its selected stale local executable lacks the workstation interface;
+that failed first run is retained and needs the exact successor candidate.
+
+Focused interaction GREEN and strict workspace Clippy remain queued behind
+normal shared Cargo admission. No claim is made that queued work passed. No new
+candidate has been built, qualified or installed. Publish this as a draft for
+remote custody; do not merge or adopt until the remaining checks, real Chrome
+pointer sequence and exact artifact proof pass. Auth347 and Auth332 are closed
+on their separately verified acceptance; Browser659 blocks wider Auth298.
