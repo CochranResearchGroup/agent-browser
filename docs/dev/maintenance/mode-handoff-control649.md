@@ -164,3 +164,22 @@ permits a Native-only no-op return without changing cooperative custody. Unknown
 passive histories retain their prior no-rebind behavior. Validation remains open.
 A stale compiled navigation assertion produced one fixture-only failure and is
 excluded from product RED; source is frozen before subsequent compilation.
+
+
+## Current-main integration
+
+The combined repair at `b994118e6d4a805ff92255ffb2e28d2dd5627827` passes
+formatting, strict workspace Clippy and47 selected Rust tests: ordinary handoff
+recovery, manual idle recovery, mode invariants and service-model recovery. The
+separate current-main restoration check also passes. Source qualification used
+one Cargo job with an enforced6GiB ceiling through the unchanged repository
+admission wrapper; production builds retain their separate production budget.
+
+Current main subsequently integrated AUTH-LOST-TASK-RETIREMENT-650. This lane
+consumes that owner's source unchanged and preserves its open Auth/runtime
+qualification boundaries. No retirement, provider cleanup or credential effect
+is requested or claimed by this repair. Primary writer for the shared skill
+integration is this lane: move its complete retirement instructions into the
+existing linked reference, retaining a root entry and every safety requirement
+so embedded guidance remains below the10000-byte limit. Refresh matched combined
+source gates before build; do not inherit a live retirement acceptance claim.
