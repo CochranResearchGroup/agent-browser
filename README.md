@@ -1244,6 +1244,9 @@ or incompatible SDKs report installation diagnostics without legacy fallback.
 An explicit `installationRoot` is a diagnostic override, not required per task.
 The retained legacy callback playbook below is separate from owner-login methods.
 
+For an ordinary browser login, read Auth's `auth-receipts://guides/login-orchestration` resource before asking for a phone number or mailbox address already held by connected services. Both connected Auth helpers expose `discoverLoginChannels({tenant, smsSuffix, emailHint, im, mail})`, forwarding only to the verified Auth SDK. It composes read-only IM/Mail MCP account metadata and bounded source evidence into destination proposals with provenance; it cannot authorize, arm, send, consume or submit input. Keep the original task/request, qualify fresh receiving state and use Auth's normal owner decision. Missing SDK support reports `auth_channel_discovery_unavailable` and requires installation repair, without an alternate client or private-store fallback.
+
+
 Unattended applications use the distinct `connectEnrolledAuthHelper` export from
 `@agent-browser/client/hosted-auth-helper`. Supply explicit `discoveryFile` and
 `operationContext` with operationId/recoveryId UUIDs and the exact
@@ -1270,6 +1273,8 @@ All factories retain original request custody and independently verify identity.
 `reconcile: true` on owner login is readback-only and requires an existing checkpoint.
 
 Before private use is attempted, owner login may renew a typed `plan_stale` hold caused by owner-review delay. Renewal requires complete, unchanged guide, control, expected-state and task/profile/browser/tab bindings with the same receiving generation. The fresh plan is validated and durably saved against the original request before dispatch intent. Missing or changed proof stays held; attempted or unknown input never renews a plan or creates replacement approval.
+
+After durable owner waiting, the playbook receives the Auth decision before private use. An Auth-issued approved unused permission may start a new use window for the same request and scope. The helper saves that permission reference and deadline, then freshly validates the original receiving plan before input. The original caller intent stays unchanged; attempted, uncertain, changed or unpersisted authority remains held.
 Qualified receivers may return bounded `browserActionEvidence` v1 for protected
 input and submission acknowledgement. It is separate from verified authentication
 and never authorizes another use, even when no browser input was attempted.

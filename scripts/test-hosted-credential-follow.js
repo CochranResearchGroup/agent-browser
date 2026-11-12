@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir as mkdirOwned,writeFile as writeFileOwned,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -7,6 +7,9 @@ import {connectHostedAuthHelper} from '../packages/client/src/hosted-auth-helper
 
 // Synthetic installed SDK boundary. Real owner broker/native/Slack acceptance
 // remains in Auth; this contract catches adapter fallback and client replacement.
+// Fixture privacy is explicit, independent of the service or shell umask.
+const mkdir=(path,options={})=>mkdirOwned(path,{...options,mode:0o700});
+const writeFile=(path,data,options={})=>writeFileOwned(path,data,{...options,mode:0o600});
 const root=await mkdtemp(join(tmpdir(),'hosted-credential-follow-'));
 const previous=process.env.CODEX_THREAD_ID;process.env.CODEX_THREAD_ID='synthetic-caller';
 try{
