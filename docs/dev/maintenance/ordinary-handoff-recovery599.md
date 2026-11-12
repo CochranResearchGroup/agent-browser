@@ -4,7 +4,7 @@ Product lane: PL-BUGFIX
 Work item: 599
 Branch: fix/ordinary-handoff-recovery
 Base: 4f0b61959b97f0739374831a24cb0a0342998a02
-State: PRE_INTEGRATION_SOURCE_TESTS_GREEN
+State: SOURCE_QUALIFIED_INSTALLED_ACCEPTANCE_PENDING
 
 Recovering the original profile and last known tab through the existing human
 link is established product behavior. An ordinary process exit must not require
@@ -72,13 +72,33 @@ Final Rustfmt/Clippy were not run on the pre-integration source: the admitted
 job had not reached compilation and its exact own memory-capacity waiter was
 cancelled after main advanced through652 and651. Its143 receipt is cancellation,
 not a compiler/test failure. Strict workspace Clippy, formatting and affected
-tests must qualify the integrated source before merge readiness or installation.
+tests subsequently pass on integrated source
+ae3fe011ebbbcb14d4731c146f5dc973ff9b2a64, including main through
+df359a635308ceb58dca457fdae6bc0d224efdde. The exact commands are
+scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check,
+scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings,
+and scripts/ci/rust-tests.sh --focused ordinary_handoff_recovery_tests.
+All have zero compiler errors/warnings. Fifteen distinct affected tests pass on
+the integrated pinned unit binary, SHA-256
+20b7e419f686640c5a631a21dbfb20607311267cd84cc01bb8da05a9e84f36f2,
+including the three mode-lineage and two Native close cases. Their negative
+variants retain existing authority fences. Full logs and candidate/runtime state
+remain intentionally private in the operator tenant; these fixture commands
+reproduce the source checks without live credentials. No hosted CI was used.
+
+An initial pin-inspection assertion assumed an absolute manifest directory was
+embedded in the executable; that assumption is excluded as setup evidence.
+The final pin is bound instead to the successful Cargo job, exact SHA-256, and
+the composed two ordinary, three mode-lineage and two close test identities.
+Draft PR653 publishes the source; sealed candidate and installed acceptance
+remain pending. The independent pre-existing upgrade reached accepted on its
+own generation; this lane has performed no runtime installation.
 
 | Requirement | Source qualified | Integrated/installed | User verified |
 | --- | --- | --- | --- |
-| Ordinary-exit mapping and last URL | Yes, public owner regression | Pending integration | No |
-| Previously unmapped same-link reconstruction | Yes, fresh operation regression | Pending integration | No |
-| Changed target, missing receipt and prior refusal guards | Yes, focused fixtures | Pending integration | No |
+| Ordinary-exit mapping and last URL | Yes, public owner regression | Branch composed; not installed | No |
+| Previously unmapped same-link reconstruction | Yes, fresh operation regression | Branch composed; not installed | No |
+| Changed target, missing receipt and prior refusal guards | Yes, focused fixtures | Branch composed; not installed | No |
 | Original authenticated viewer link | No installed evidence yet | Not installed | No |
 | Selected SSO completion | Incomplete, separate Auth qualification | Incomplete | No |
 
