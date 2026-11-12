@@ -177,3 +177,32 @@ preserving install/selected-task acceptance. No additional build attempt or
 resource escalation is admitted if this composition fails. Reuse prior six
 interaction tests only with unchanged relevant input hashes; repeat real Chrome
 on the new executable. All wider SSO/human/unknown gates remain independent.
+
+## Installed composition and retained-read hold
+
+PR662 merges e901bceb3d405d2662f250f7462d34d5a1c1ac97. Its Git tree equals
+build source 5d9d62b0b. Combined strict workspace Clippy, formatting and refreshed
+policy/links/handoff/docs checks pass. The unchanged focused interaction inputs
+retain six passing tests. Production binary
+986e9d3500e47b99f6dbe1b543d2d7a3c9e3b2734f8a3cfb97c704fb4601096e
+passes six exact installer/service phases and four real managed Chrome cases.
+The pre660 seal is retained and was never installed.
+
+Normal preserving adoption accepts generation 0.28.0-986e9d3500e4-c8de3b429d44.
+All six then-live browser kernel identities are unchanged. Current source
+ancestry, configured ports and original task control/outcome snapshots are
+preserved; install doctor passes. No human return or unknown clearing occurs.
+
+Actual original-task acceptance is held by #664. Metadata reports managed CDP
+mode and agent control, but its first page-state evaluate returns no result
+within the client's 45-second allowance. Original operation lookup still reports
+retained_matches, pending, unverified site outcome and retryAllowed=false.
+Separate control status reports zero pending control outcomes. No menu click,
+credential request or fresh SSO journey was sent. Do not replay that read or
+claim current website/click acceptance from isolated tests or metadata readiness.
+
+Google separately retains its original uncertain evaluate and read-only
+retirement inspection refuses control_unverified without a binding. Superhuman
+retains human ownership and paused reads. Original viewer and full Auth298/292
+qualification remain open. This window ends without another runtime effect or
+build; the same primary and named candidates remain retained for diagnosis #664.
