@@ -38,20 +38,20 @@ lanes:
     product_lane: PL-BUGFIX
     owner: ecochran76
     accountable_owner: ecochran76
-    objective: Preserve CDP mode and interactive control across browser relaunch
-    work_items: [CochranResearchGroup/agent-browser#649]
-    plan: docs/dev/maintenance/mode-handoff-control649.md
+    objective: Preserve saved pages during qualified retained CDP-free recovery
+    work_items: [CochranResearchGroup/agent-browser#649, CochranResearchGroup/agent-browser#670]
+    plan: docs/dev/maintenance/manual-page-recovery670.md
     plan_ref: fix/mode-handoff-control649
     branch: fix/mode-handoff-control649
     target: main
-    plan_state: COMPLETED
+    plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
     remote_ref: refs/heads/fix/mode-handoff-control649
     integration: pull request
     dependencies: [AUTH-LOST-TASK-RETIREMENT-650]
     overlaps: [retained Native handoff and mode conversion]
     reconciled_overlaps: [Single primary writer owns mode/manual recovery and shared skill reference integration; preserve650 source and its open Auth qualification]
-    validation_status: PR660 and companion891/892 merged; composed466 Rust tests, strict Clippy/fmt, docs and exact sealed MCP17/installer fixtures pass; requested same-link mode/control and recovery acceptance retained privately.
+    validation_status: Prior649 controls qualified;670 disposable real Chrome probe is RED with blank startup and GREEN with native session restore; worker argument regression and final source/runtime gates pending.
     custody_note: Sealed candidates retained through governed closeout; no broad process cleanup or task-retirement effect.
     updated_at: 2026-11-12
   - id: RETAINED-MODE-TARGET-647

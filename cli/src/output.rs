@@ -7061,9 +7061,10 @@ CDP-free idle close uses original OS identity and confirms exit without debuggin
 or force kill. Explicit handoff can retain a verified live original after its idle
 worker ends, preserving the attempted-close history and unsettled outcome.
 An exact completed automatic close also permits a valid retained CDP-free handoff
-to wake its logical browser through Native admission and reopen the saved launch
-URL. The profile and links survive; unsaved page memory cannot be reconstructed.
-Unknown close evidence or changed targets remain refused.
+to wake its logical browser through Native admission and restore Chrome's saved
+session without CDP navigation replay. New launches use the configured startup
+URL. The profile and links survive; saved pages do not prove unsaved form state
+or account authentication. Unknown close evidence or changed targets remain refused.
 Handoff-link deletion wins concurrent lifetime edits without closing the target.
 
 Use service --help or service -h for local help without starting a browser

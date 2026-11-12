@@ -1472,10 +1472,18 @@ fn run_browser_worker(
                         attachable: false,
                         executable_path: Some(executable),
                         profile: Some(profile.user_data_dir.clone()),
-                        args: vec![profile
-                            .manual_login_url
-                            .clone()
-                            .expect("matched login mode")],
+                        // Only an already-qualified replacement restores Chrome's
+                        // saved session. Passing the initial URL here can replace
+                        // the saved pages with about:blank. Fresh launches keep
+                        // their configured URL; no CDP navigation is replayed.
+                        args: if recovery_browser.is_some() {
+                            vec!["--restore-last-session".into()]
+                        } else {
+                            vec![profile
+                                .manual_login_url
+                                .clone()
+                                .expect("matched login mode")]
+                        },
                         display: Some(display),
                         remote_headed: true,
                         private_launch_environment: Some(private),
