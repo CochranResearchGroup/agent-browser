@@ -112,3 +112,22 @@ candidate has been built, qualified or installed. Publish this as a draft for
 remote custody; do not merge or adopt until the remaining checks, real Chrome
 pointer sequence and exact artifact proof pass. Auth347 and Auth332 are closed
 on their separately verified acceptance; Browser659 blocks wider Auth298.
+
+## Resumed qualification after queued checks
+
+On the operator continuation, focused interaction tests completed: six pass,
+zero failures. Strict workspace Clippy completed with zero warnings/errors.
+Both receipts retain their original elapsed admission wait. The remote main
+has since integrated mode-restoration and exact-generation retirement work;
+it is merged into this same owned branch before candidate assembly. The
+interaction repair is unchanged. These source additions do not authorize any
+retirement or uncertain-operation clearing in the selected SSO tasks.
+
+This successor ends2026-11-12T17:15Z, including setup, build, qualification and
+source/runtime evidence. Reassess after30 active minutes without workflow
+progress. One maintained production-shaped assembly and one Native-backed
+synthetic qualification are ready; allow one demonstrated setup correction.
+If full candidate qualification cannot complete, retain the exact pending gate
+and do not promote. Required milestones remain artifact qualification, source
+integration, preserving installed adoption and selected click acceptance.
+Google uncertainty and Superhuman human ownership remain independent gates.
