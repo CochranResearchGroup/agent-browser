@@ -5,12 +5,12 @@ Product lane: PL-BUGFIX
 Consolidation: required
 Owner: root
 Source baseline: 4f0b61959b97f0739374831a24cb0a0342998a02
-Branch: fix/mode-restore-reconcile-scope
+Branch: fix/mode-restoration-published-profile
 Original integrated branch: fix/restore-mode-after-original-exit
 
 ## Current State
 
-PR651 is merged and its exact artifact is installed through an accepted preserving transaction; all 10 pre-apply browser roots survived. Installed doctor passes after natural monitor recovery. The original operation advanced to OriginalExited with 0 replacement launches, then exposed browser_login_mode_conflict during pre-launch reconciliation. The selected profile is confirmed privately. One bounded real-runtime regression/remediation addresses RECONCILE_SCOPE; product LinkedIn acceptance remains unproven. The first regression build exhausted its setup/admission time budget without a test verdict and is preserved as timed out; its exact scope is inactive before the unchanged-input retry.
+The operator resumed completion of the custody fix and installed LinkedIn retest. The branch includes current main 32d3e315b26818c9ad099548e46ccfcb9be7762e, preserving the newer Native close repair. The actual host-path regression reproduces mode_operation_launch_custody_readback_required with zero launches. The scoped published-profile repair now passes it: previous CDP mode selected, one coordinator launch entry and deliberate refusal by the synthetic build selector before any browser process. All 25 focused tests and formatting pass; strict workspace Clippy passes. A new production artifact and installed recovery/content acceptance remain pending. Earlier installed outcomes below remain historical, not current completion proof.
 
 ## Consolidated batch
 
@@ -94,3 +94,36 @@ Strict workspace Clippy passed with zero warnings in 130.472 seconds. Cargo-wrap
 Standards and Spec were reviewed serially in the primary context against the frozen diff from df359a635308ceb58dca457fdae6bc0d224efdde, AGENTS.md, the domain contract, policies 0042 and 0051, and the RECONCILE_SCOPE requirement above. Standards: 0 accepted blocking findings. Spec: 0 accepted blocking findings. The shared private helper retains the existing fences; only the read-only call site uses the additional restoration scope. The actual launch call site keeps its prior guard. This is a bounded remediation review, not the Contacts program's reserved final review.
 
 The follow-up is source-qualified. Its preserving production deployment, original-operation recovery and real product canary remain pending; earlier-binary acceptance is not evidence for this source.
+
+
+## PR654 installed retest and custody finding
+
+PR654 merged at 110788ccbbee5f18173955122159648535a4517c, identical in tree to reviewed source ad8cd0820cd40ce7500bd7e36b7e271826eb62f2. A clean production-shaped build sealed binary 91c01efcaad69cfebcef6b50fbd7cf27bf87aae01ffbc64d171c012e3b56ac04 in 1437.188 seconds with zero errors/warnings. Its source-free installer fixture passed with two owned hosts and zero residue. Preserving installation was accepted, the installed hash matches and doctor passes with the existing operator-journey advisory; the monitor is healthy.
+
+Fresh OS census confirmed 10 of 11 pre-apply browser roots survived. One system Chrome root exited during the interval; causality is unproven. This does not establish whole-runtime preservation or authorize unrelated recovery. The prior deployment's separate 10-of-10 result remains historical evidence only.
+
+The original public restoration passed the repaired reconciliation branch, then stopped at mode_operation_launch_custody_readback_required, still OriginalExited with zero launches. Read-only source/state comparison proves the retained and published profiles match, while the transient requested-mode copy differs in manualLoginUrl. The custody store requires exact published-catalog equality. Do not weaken that equality or edit live journals/catalog state to clear the error.
+
+Accepted finding PUBLISHED_PROFILE_CUSTODY: absence settlement must use the exact currently published profile, while retaining all bound profile identity and state checks. Before another deployment, exercise the real host dispatch through restoration preparation, SQLite custody settlement and the next synthetic launch boundary. A regression is added on fix/mode-restoration-published-profile from main ed6dcf37cd17a03657e4f0b75d4b5a0c3a91031d, which includes independently merged ordinary-handoff repair653. The proposed implementation is private and unapplied pending a trustworthy RED/GREEN verdict. This is a changed local verification tactic, not a reset of cumulative repair/replay accounting.
+
+Cumulative delivery evidence: two production-shaped candidates, two preserving replacements, 3507.563 seconds of production builds, plus retained compilation/admission waits. No useful LinkedIn source observations were collected. No social write, credential replay, global input release, forced closure or profile reset was performed by this delivery. Final Contacts program review/TDD remain unused. The finite continuation cutoff is 2026-11-12T07:10:00Z; another production cycle must fit its remaining qualification, installation and consumer proof, rather than spending the last window on another intermediate artifact.
+
+The host-path regression attempt timed out after 600.004 seconds in memory admission, with no compilation or test verdict. Its exact wrapper is inactive. The proposed fix remains unapplied. Another complete source-qualification, production-build, install and consumer-proof cycle cannot fit the remaining continuation window, so no third candidate or replacement is started. The completed requested PR delivery and failed installed retest are recorded separately from the unfinished consumer outcome.
+
+
+## Resumed custody qualification | 2026-11-12
+
+The user explicitly requested completion of the build and another try. The regression fixture was qualified locally before another production cycle. Retained setup failures exposed a missing sessionName, an incomplete manually authored operation table, noncanonical operation serialization and a missing synthetic profile directory. The final fixture uses the actual OperationStore schema and Operation type, the real host dispatch and exact SQLite settlement, and an existing synthetic directory. It is Linux-only because process-absence proof is Linux-only. A further fixture expectation was corrected to the intentional unsupported build-selector stop; no failure is erased or counted as a product regression.
+
+The trustworthy RED at baseline 32d3e315b26818c9ad099548e46ccfcb9be7762e reports the exact installed custody error, zero launches and no effective mode in 2.28 seconds. The fix passes the same host path in 4.33 seconds. The passing regression verifies effective CDP mode, one durable coordinator launch entry, the synthetic selector's refusal and zero browser process launches. This proves restoration preparation through custody and the next transition; it does not stand in for installed Native/browser acceptance.
+
+The implementation obtains the currently published named/disposable profile for absence settlement and verifies it against the retained bound identity, allowing only the mode-marker difference. The custody store's exact full-catalog and state checks remain unchanged. Launch still commits the explicitly selected mode afterward. No live state edits, weakened store checks, profile resets or global control changes are introduced.
+
+Focused local qualification: 1 real-host regression, 17 durable mode-operation cases, 1 read-only restore-scope regression, 1 exact custody-settlement case, 3 completed-mode handoff cases and 2 Native close cases pass (25 total). The filtered Cargo integration execution matched zero cases and is excluded; its exact compiled integration artifact separately ran all 17 cases. The remaining focused executions used an isolated home/runtime tree, removed afterward. Formatting, policy wiring (11 cases), documentation links and patch hygiene pass. Strict Clippy and clean source-bound production delivery are next; no hosted CI or cross-platform runtime claim.
+
+
+### Custody repair review and final source gates
+
+At baseline 32d3e315b26818c9ad099548e46ccfcb9be7762e, Standards and Spec were reviewed serially in the primary context against the closed-world PUBLISHED_PROFILE_CUSTODY finding, AGENTS.md, the domain contract and policies 0042/0051. Standards: 0 accepted blocking findings. Spec: 0 accepted blocking findings. The published profile is verified against retained identity, and the storage transaction still compares the full published profile and runtime state before settlement. The regression reaches actual host dispatch and custody storage, stops at the synthetic selector, and leaves process launch unimplemented. No independent-agent approval or final Contacts program review is claimed.
+
+Strict workspace Clippy passed with zero warnings in 150.421 seconds. All 25 focused cases, formatting, policy wiring (11 cases), documentation links and patch hygiene pass. Local Linux/WSL checks satisfy the operator CI cost policy; hosted CI is skipped. This closes source qualification only. One clean source-bound production-shaped build, exact artifact fixture, preserving installation and actual original-operation/content retest follow under the operator's resumed authority.
