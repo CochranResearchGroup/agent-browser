@@ -433,6 +433,17 @@ impl OperationStore {
             if !confirmed {
                 return Err("mode_operation_restore_confirmation_required".into());
             }
+            // A close reply or the owner can be lost before OriginalExited is
+            // recorded. Restore only after fresh proof for this exact original;
+            // do not launch the now-obsolete requested mode just to reach restore.
+            if matches!(operation.phase, Phase::Closing | Phase::ClosePrompt)
+                && matches!(
+                    runtime.original_status(&effect_request)?,
+                    OriginalStatus::Exited
+                )
+            {
+                self.transition(&mut operation, Phase::OriginalExited)?;
+            }
             if !matches!(
                 operation.phase,
                 Phase::OriginalExited

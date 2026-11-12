@@ -1,3 +1,21 @@
+## Interrupted-close restore delivery | 2026-11-12
+
+The operator authorized PR review, merge, preserving deployment and the original
+consumer retest for [P304](docs/dev/plans/0304-2026-11-12-restore-mode-after-interrupted-close.md).
+Serial Standards/Spec review found0blocking findings on each axis. Reuse the
+source-bound17-test, strict-Clippy, format and documentation evidence; no hosted CI.
+Deployment and actual acquisition remain pending until exact runtime receipts.
+
+## Interrupted-close restore diagnosis | 2026-11-12
+
+[Source packet](docs/dev/plans/0304-2026-11-12-restore-mode-after-interrupted-close.md):
+consumer acquisition reproduces a retained conversion fence; confirmed previous-mode
+restoration reproduces phase conflict after original process exit. A durable
+coordinator regression first failed on that conflict. The targeted source change
+reconciles proven original exit before restoration admission. Local qualification passes17mode-operation tests, strict workspace Clippy, formatting
+and documentation links. No installed runtime, browser, profile or shared control change.
+No commit, push or new worktree.
+
 ## Terminal request619 source qualification | 2026-11-10
 
 [619 packet](docs/dev/maintenance/terminal-request619.md) retains all failed
