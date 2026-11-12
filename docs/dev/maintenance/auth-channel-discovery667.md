@@ -45,3 +45,22 @@ and log equivalence. All2,680 Browser files and813 Auth dependency files plus
 driver/stage logs were independently verified. Actual SDK0995/Browser discovery
 bridge remains passed. Receipts52 owner-review acceptance remains failed/unwaived;
 these results qualify the read-only component, not the whole installed journey.
+
+
+### Current parent qualification and Browser669
+
+Receipts52 reconciliation found current merged parent5783fea already implements
+null pending deadlines. The d6e failure above is historical fixture selection,
+not a missing current parent implementation. Exact public source files from5783
+were qualified for the synthetic owner journey. Normal review and negative
+cases pass. That journey exposed Browser669: binding the original caller deadline
+forever rejects the service-issued use window after a delayed real decision.
+
+Owner login now receives the decision before input, persists the approved unused
+permission reference and new service deadline against the same request and scope,
+and freshly validates its original receiving plan. Original caller intent remains
+unchanged. A focused public-playbook regression covers changed/missing authority,
+unknown attempts, failed persistence and changed receiving generation. Actual Auth
+and current parent source composition passes normal use, age-only renewal, delayed
+decision and existing refusal cases. These are synthetic authority fixtures;
+installed parent/owner qualification and provider acceptance remain separate.

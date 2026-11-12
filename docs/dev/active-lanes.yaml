@@ -2108,7 +2108,7 @@ lanes:
     branch: fix/auth354-login-channel-discovery
     target: main
     accountable_owner: ecochran76
-    work_items: [CochranResearchGroup/agent-browser#667, CochranResearchGroup/auth-receipts#354]
+    work_items: [CochranResearchGroup/agent-browser#667, CochranResearchGroup/agent-browser#669, CochranResearchGroup/auth-receipts#354, CochranResearchGroup/receipts#52]
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
     dependencies: []

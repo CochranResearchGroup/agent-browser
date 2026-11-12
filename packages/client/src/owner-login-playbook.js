@@ -40,10 +40,19 @@ export function createOwnerLoginPlaybook({browser,auth,checkpoints}){
    /** @param {string} status @param {string} reasonCode @param {string} effectState */
    const result=(status,reasonCode,effectState)=>({schemaVersion:'agent-browser.routine-result.v1',routine:'login',taskId:options.taskId,guideId:options.guideId,status,reasonCode,effectState,...(request?.browserActionEvidence?{browserActionEvidence:request.browserActionEvidence}:{}),...(checkpoint?{requestId:checkpoint.requestId,actionId:checkpoint.requestId,...checkpoint.receiving}:{}),contract});
    /** @param {Record<string,any>} value */
-   const bound=value=>{
+   const scopeBound=value=>{
     const e=value?.browserActionEvidence;
     const evidenceBound=e===undefined||e?.contractVersion===1&&Object.keys(e).every(k=>['contractVersion','requestId','attemptId','generation','input','submission'].includes(k))&&e.requestId===value.requestId&&e.attemptId===value.attemptId&&e.generation===checkpoint?.receiving.generation&&['not_attempted','unknown','acknowledged'].includes(e.input)&&['not_attempted','unknown','acknowledged'].includes(e.submission);
-    return evidenceBound&&checkpoint&&value?.requestId===checkpoint.requestId&&value.taskId===auth.callerTaskId&&value.sourceId===checkpoint.selected.sourceId&&value.recordId===checkpoint.selected.recordId&&value.origin===options.origin&&value.targetId===options.targetId&&value.expiresAt===options.expiresAt&&value.mode==='private'&&value.operation==='login';
+    return evidenceBound&&checkpoint&&value?.requestId===checkpoint.requestId&&value.taskId===auth.callerTaskId&&value.sourceId===checkpoint.selected.sourceId&&value.recordId===checkpoint.selected.recordId&&value.origin===options.origin&&value.targetId===options.targetId&&value.mode==='private'&&value.operation==='login';
+   };
+   /** Auth owns executable deadlines; the original caller intent stays immutable. */
+   const bound=value=>scopeBound(value)&&value.expiresAt===(checkpoint?.authorityExpiresAt??options.expiresAt)&&(!checkpoint?.authorityGrantId||value.grantId===checkpoint.authorityGrantId)&&(!checkpoint?.authorityRuleId||value.ruleId===checkpoint.authorityRuleId);
+   /** Adopt only a positively approved unused grant after observed durable waiting.
+    * @param {Record<string,any>} value */
+   const admitApprovedWindow=async value=>{
+    if(!checkpoint||!scopeBound(value)||!checkpoint.pendingDecisionObserved||checkpoint.advanceIntent||checkpoint.outcomeUnknown||value.state!=='approved'||value.attemptId||value.running||value.releasedAt||value.dispatchedAt||value.authentication!==undefined||(!nonempty(value.grantId)&&!nonempty(value.ruleId))||!nonempty(value.approvedBy)||!Number.isSafeInteger(value.expiresAt)||value.expiresAt<=0)return;
+    checkpoint={...checkpoint,authorityExpiresAt:value.expiresAt,authorityGrantId:nonempty(value.grantId)?value.grantId:undefined,authorityRuleId:nonempty(value.grantId)?undefined:value.ruleId,pendingDecisionObserved:false};
+    await checkpoints.save(key,checkpoint);
    };
    /** @param {Record<string,any>} value */
    const sameTarget=value=>{const current=checkpoint;return !!current&&receivingFields.every(field=>value?.[field]===current.receiving[field]);};
@@ -82,13 +91,14 @@ export function createOwnerLoginPlaybook({browser,auth,checkpoints}){
     if(!checkpoint.requestId){
      if(options.reconcile)return result('waiting','request_required_for_reconciliation','no_effect');
      let requested;try{requested=await auth.requestLogin({...checkpoint.selected,idempotencyKey:options.idempotencyKey,origin:options.origin,targetId:options.targetId,purpose:options.purpose,expiresAt:options.expiresAt});}catch(error){return result('waiting',errorCode(error)??'auth_unavailable','no_effect');}
-     checkpoint={...checkpoint,requestId:requested.requestId};
+     checkpoint={...checkpoint,requestId:requested.requestId,...(requested.state==='pending'&&requested.decisionPending===true&&requested.decisionExpiresAt===null&&!requested.attemptId?{pendingDecisionObserved:true}:{})};
      if(!bound(requested))throw Error('owner_request_binding_mismatch');
      await checkpoints.save(key,checkpoint);
     }
     const requestId=checkpoint.requestId;if(!requestId)throw Error('owner_request_binding_mismatch');
     try{request=await auth.helper('inspect_credential_request',{requestId:checkpoint.requestId});}catch(error){return result('waiting',errorCode(error)??'auth_unavailable',checkpoint.advanceIntent?'unknown':'no_effect');}
-    if(!bound(request))throw Error('owner_request_binding_mismatch');
+    if(!bound(request)){await admitApprovedWindow(request);if(!bound(request))throw Error('owner_request_binding_mismatch');}
+    if(request.state==='pending'&&request.decisionPending===true&&request.decisionExpiresAt===null&&!request.attemptId&&!checkpoint.advanceIntent&&!checkpoint.outcomeUnknown){checkpoint={...checkpoint,pendingDecisionObserved:true};await checkpoints.save(key,checkpoint);}
     if(['denied','revoked','cancelled','expired'].includes(request.state))return result('failed',`auth_${request.state}`,request.attemptId||checkpoint.advanceIntent||checkpoint.outcomeUnknown?'unknown':'no_effect');
     if(request.attemptId||request.state==='unknown'||request.authentication!==undefined){
      if(request.authentication!=='verified'){
@@ -130,6 +140,19 @@ export function createOwnerLoginPlaybook({browser,auth,checkpoints}){
      }
     }
     if(validation.status!=='completed')return {...validation,...result(validation.status,validation.reasonCode,'no_effect')};
+    // Receiving an owner response is not private-input dispatch. Observe and
+    // durably bind a fresh approved window before writing the input intent.
+    if(request.state==='pending'&&request.decisionPending===true&&request.decisionExpiresAt===null){
+     try{request=await auth.helper('receive_credential_approval',{requestId});}catch(error){return result('waiting',errorCode(error)??'auth_review_unavailable','no_effect');}
+     if(!bound(request)){await admitApprovedWindow(request);if(!bound(request))throw Error('owner_request_binding_mismatch');}
+     if(request.attemptId||request.running||request.releasedAt||request.dispatchedAt||request.authentication!==undefined){checkpoint={...checkpoint,outcomeUnknown:true};await checkpoints.save(key,checkpoint);return result('waiting','auth_reconciliation_pending','unknown');}
+     if(request.state==='pending'){checkpoint={...checkpoint,advanceIntent:false};await checkpoints.save(key,checkpoint);return result('waiting','approval_required','no_effect');}
+     if(['denied','revoked','cancelled','expired'].includes(request.state))return result('failed',`auth_${request.state}`,'no_effect');
+     if(request.state!=='approved'||request.attemptId||request.authentication!==undefined)return result('waiting','auth_reconciliation_pending','unknown');
+     let approvedPlan;try{approvedPlan=await browser.validatePlan({...options,plan:checkpoint.preparedPlan});}catch{return result('waiting','receiving_unavailable','no_effect');}
+     if(!sameTarget(approvedPlan))return result('adaptation_required','task_target_changed','no_effect');
+     if(approvedPlan.status!=='completed')return result(approvedPlan.status,approvedPlan.reasonCode,'no_effect');
+    }
     checkpoint={...checkpoint,advanceIntent:true};await checkpoints.save(key,checkpoint);
     try{request=await auth.advanceLogin({requestId});}catch(error){const code=errorCode(error);checkpoint={...checkpoint,outcomeUnknown:true,...(['auth_capture_held','auth_target_busy','auth_not_authorized'].includes(code??'')?{refusalCode:code}:{})};await checkpoints.save(key,checkpoint);return result('waiting',code??'auth_outcome_uncertain','unknown');}
     if(!bound(request))throw Error('owner_request_binding_mismatch');

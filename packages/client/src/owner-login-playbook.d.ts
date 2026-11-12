@@ -20,6 +20,8 @@ export interface OwnerLoginCheckpoint {
  issuer?:'auth-receipts';callerTaskId?:string;
  receiving:Record<string,string>;
  selected:{sourceId:string;recordId:string};preparedPlan:Record<string,unknown>;
+ /** Only Auth may issue this approved-use window after observed durable owner waiting. */
+ pendingDecisionObserved?:boolean;authorityExpiresAt?:number;authorityGrantId?:string;authorityRuleId?:string;
  requestId?:string;advanceIntent?:boolean;outcomeUnknown?:boolean;refusalCode?:string;
 }
 export interface OwnerLoginDependencies {

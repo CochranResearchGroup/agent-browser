@@ -5344,6 +5344,9 @@ unavailable/partial sources, no match and account choice remain distinct holds.
 Owner login can renew an unchanged age-stale plan before any private-use intent.
 Fresh validation and durable metadata preserve the original owner request;
 changed proof or attempted/unknown input remains held without replacement approval.
+After durable waiting, receive the Auth decision before use; save its approved
+unused permission window and freshly validate the original receiving plan.
+Original intent is unchanged; unknown input or failed persistence stays held.
 
 Usage: agent-browser auth <subcommand> [args]
 
