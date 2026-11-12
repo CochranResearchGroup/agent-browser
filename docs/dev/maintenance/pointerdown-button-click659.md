@@ -74,7 +74,7 @@ The first build exhausted compiler helper threads; the second caught a missing
 test import. Those are retained setup/resource failures, not behavioral RED.
 Warm shared-target test compilation then produced the actual RED. The repair
 removes the low-level DOM shortcut and retains upper link/new-tab branches;
-focused GREEN and strict validation are pending. No659 candidate or installed
+focused GREEN and strict validation are pending. No #659 candidate or installed
 Browser effect has occurred.
 
 Two bare-CLI fixture setups were stopped before input: one lacked explicit
@@ -134,7 +134,7 @@ Google uncertainty and Superhuman human ownership remain independent gates.
 
 ## Exact artifact qualification
 
-Production-shaped assembly at44cef672f passes, sealing binary
+Production-shaped assembly at 44cef672f passes, sealing binary
 aa3aa7c26fae31c95b42b222b9bfb9b5b3af1649e01f0fa9a3c37e34ad1fe281.
 The Native-backed synthetic boundary qualifies real managed Chrome identity.
 Installed baseline reproduces the DOM-only defect for CSS, cached refs and a
@@ -150,12 +150,30 @@ a failed transaction after a successful recovery. An unchanged diagnostic rerun
 passes and retains both records. Extend the existing exact-transaction fixture
 pattern to successful writer recovery, requiring exactly one new transaction
 and checking its accepted terminal state. All six exact-binary installer/service
-phases then pass in37.7 seconds, with zero owned runtime residue. The first
+phases then pass in 37.7 seconds, with zero owned runtime residue. The first
 failure and diagnostic remain private receipts. The test-only correction is
-outside the657-file executable closure; all657 file hashes still match the seal.
+outside the 657-file executable closure; all 657 file hashes still match the seal.
 No candidate rebuild is needed for that unchanged executable.
 
-Current-composition Rust validation remains active. No659 installed effect has
+Current-composition Rust validation remains active. No #659 installed effect has
 occurred. Current selected runtime advanced independently while qualification
 ran; preserving adoption must use fresh generation, transaction and live-process
 readback rather than the earlier baseline.
+
+## Concurrent handoff composition
+
+Remote main 653d3de0a integrates PR660 while this lane qualifies the first seal.
+The pre660 artifact remains retained and was never installed. Its six focused
+interaction tests and strict workspace Clippy finish successfully on 44cef672f.
+Merge the new source into this same primary and preserve its mode/handoff logic.
+Keep the root skill below 10000 bytes by moving the complete existing profile
+paragraph and detailed click note into its linked reference; retain pointer
+semantics and the original profile/ownership rules. This is a combined-source
+rebuild, not a retry of the completed artifact. The overall 17:15Z bound remains.
+
+The remaining window can cover one observed 30-minute production build, the
+combined-source lint and exact artifact fixtures, source integration and one
+preserving install/selected-task acceptance. No additional build attempt or
+resource escalation is admitted if this composition fails. Reuse prior six
+interaction tests only with unchanged relevant input hashes; repeat real Chrome
+on the new executable. All wider SSO/human/unknown gates remain independent.
