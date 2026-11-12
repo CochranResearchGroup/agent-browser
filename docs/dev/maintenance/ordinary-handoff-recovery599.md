@@ -4,7 +4,7 @@ Product lane: PL-BUGFIX
 Work item: 599
 Branch: fix/ordinary-handoff-recovery
 Base: 4f0b61959b97f0739374831a24cb0a0342998a02
-State: SOURCE_QUALIFIED_INSTALLED_ACCEPTANCE_PENDING
+State: INSTALLED_NATIVE_USE_OBSERVED_USER_VERIFICATION_PENDING
 
 Recovering the original profile and last known tab through the existing human
 link is established product behavior. An ordinary process exit must not require
@@ -90,16 +90,50 @@ An initial pin-inspection assertion assumed an absolute manifest directory was
 embedded in the executable; that assumption is excluded as setup evidence.
 The final pin is bound instead to the successful Cargo job, exact SHA-256, and
 the composed two ordinary, three mode-lineage and two close test identities.
-Draft PR653 publishes the source; sealed candidate and installed acceptance
-remain pending. The independent pre-existing upgrade reached accepted on its
-own generation; this lane has performed no runtime installation.
+At that source checkpoint, draft PR653 published the source while sealed
+candidate and installed acceptance remained pending. The independent preceding
+upgrade reached accepted on its own generation; it was not this lane's effect.
+
+## Installed qualification, November 12
+
+PR653 merged as ed6dcf37cd17a03657e4f0b75d4b5a0c3a91031d, composing the
+ordinary-exit repair with the current mode-restoration repair through PR654.
+Formatting, strict workspace Clippy and both focused repair selections pass on
+that exact source with zero compiler errors or warnings. Sixteen distinct
+affected tests also pass on pinned unit bytes, SHA-256
+cee4cfcb6a5565f0bcbdb4f2f85a3d64e80703eb8e2fa797cb97b6bbb042e9c2.
+
+The clean production-shaped sealed release, SHA-256
+dd600ab8ad22ba54138a55368a3dc97aa07c5a022695ac9c6be3fae5d66e38ad,
+passes the workstation installation fixture and all five selected read-only
+service smokes. Supported preserving adoption reaches accepted on generation
+0.28.0-dd600ab8ad22-3c6fd6bacd94. No profile reset, manual database edit,
+fabricated historical mapping, replacement invitation or credential replay was
+used. The original saved profile's kernel-verified browser remains live.
+
+The first authenticated original-link probe timed out during navigation. Its
+receipt is retained; it is not a first-open viewer pass. A subsequent explicit
+owner diagnostic resolves the original link, and later settled opens of that
+same URL reach a connected Native viewer canvas. The owner additionally records
+private Native provider evidence matching the exact target digest, viewer
+connection, lifecycle/viewing generations and frame-sync acknowledgement.
+Qualified first use is recorded independently of page navigation. This proves
+installed same-link use after recovery, without claiming that the intervening
+owner diagnostic was unnecessary or that the original short probe qualified
+automatic first-open behavior.
+
+Fresh OS readback confirms the saved browser is live and all seven isolated QA
+scopes are inactive. Human custody remains held at the fresh reconstruction's
+epoch, with paused reads and zero pending control outcomes. No SSO target DOM,
+pixels or input were read during that hold. User verification/return and selected
+SSO acceptance remain separate gates. Private evidence stays outside Git.
 
 | Requirement | Source qualified | Integrated/installed | User verified |
 | --- | --- | --- | --- |
-| Ordinary-exit mapping and last URL | Yes, public owner regression | Branch composed; not installed | No |
-| Previously unmapped same-link reconstruction | Yes, fresh operation regression | Branch composed; not installed | No |
-| Changed target, missing receipt and prior refusal guards | Yes, focused fixtures | Branch composed; not installed | No |
-| Original authenticated viewer link | No installed evidence yet | Not installed | No |
+| Ordinary-exit mapping and last URL | Yes, public owner regression | Merged and installed; ordinary-exit prevention remains fixture proof | No |
+| Previously unmapped same-link reconstruction | Yes, fresh operation regression | Installed original link recovers saved profile and target | Pending |
+| Changed target, missing receipt and prior refusal guards | Yes, focused fixtures | Qualified code installed; no adverse live effects attempted | Not applicable |
+| Original authenticated viewer link | Connected canvas and exact-context Native frame acknowledgement | Same URL used after owner diagnostic; first short probe inconclusive | Pending |
 | Selected SSO completion | Incomplete, separate Auth qualification | Incomplete | No |
 
 This admitted worktree owns browser_launch_custody_store.rs, its ordinary-exit
