@@ -24,7 +24,7 @@ Writer custody survives executable unlink.
 
 Use `browser_open` with `{"serviceName":"my-app","agentName":"editor","taskName":"Edit draft","profile":"editorial","profileMode":"persistent","taskKey":"editing","url":"https://example.com"}`. Read `data.taskId`, `profileId`, `browserId`, `tabId`, `url`. Address actions with `taskId`. Reuse `taskKey` to preserve the page/edits without navigation; distinct keys separate tasks. `browser_close` ends only the addressed task.
 
-Existing profiles: `profileMode:"existing"`. Temporary: `profileMode:"disposable"` without `profile`. The workflow owns selection, replay and scoped closure.
+Clicks deliver pointer input; verify page state. [Profile rules](references/cli-and-service.md#task-clicks-and-profiles).
 
 Installed viewers: [qualification](references/cli-and-service.md#native-journey-qualification).
 

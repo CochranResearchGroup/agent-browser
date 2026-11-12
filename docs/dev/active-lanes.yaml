@@ -2,6 +2,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: POINTERDOWN-BUTTON-659
+    product_lane: PL-BUGFIX
+    objective: Open pointer-down account menus through ordinary owned task clicks
+    plan: docs/dev/maintenance/pointerdown-button-click659.md
+    branch: fix/sso-pointerdown-click
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#659]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: []
+    reconciled_overlaps: ["Same owned SSO primary continues after integrated599 source; preserve its branch/candidates and all foreign mode-restoration work"]
+    validation_status: Compiled protocol RED then6 GREEN; production-shaped sealed artifact and4 real-Chrome pointer cases plus6 exact-binary fixtures pass; current-composition Rust checks active and installed acceptance pending
+    limitations: ["Auth R3 source/adoption separate", "Full SSO and original viewer access remain open"]
+    updated_at: 2026-11-12
   - id: ORDINARY-HANDOFF-599
     product_lane: PL-BUGFIX
     objective: Recover the retained profile and tab after ordinary browser exit
@@ -11,12 +27,12 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#599]
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     dependencies: [MANUAL-IDLE-HANDOFF-599]
     overlaps: [MANUAL-IDLE-HANDOFF-599]
     reconciled_overlaps: ["Own launch custody, ordinary helper/tests and session-host reconstruction; preserve foreign649 human-control/mode recovery and shared glossary/catalog intent; isolated admitted worktree from4f0b61959"]
     validation_status: PR653 merged ed6 with654; fmt and strict Clippy pass; sixteen distinct tests pass; sealed release passes six fixture/smoke phases; preserving adoption accepted; original same-link Native frame acknowledgement recorded
-    limitations: ["First short UI probe inconclusive; later same-link use followed owner diagnostic; user verification pending", "Human custody and paused reads retained; SSO qualification remains incomplete"]
+    limitations: ["First short UI probe inconclusive; later same-link use followed owner diagnostic; user verification pending", "Human custody and paused reads retained; SSO qualification remains incomplete", "Source integrated; same primary checkout continues659 while599 runtime evidence/candidates remain retained"]
     updated_at: 2026-11-12
   - id: MODE-HANDOFF-CONTROL-649
     product_lane: PL-BUGFIX

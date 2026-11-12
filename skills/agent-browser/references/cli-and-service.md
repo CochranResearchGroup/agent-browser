@@ -4743,3 +4743,10 @@ A retained handoff may finish its original settled browser-close publication bef
 ## Exact lost-task retirement
 
 For a qualified cross-boot lost task, discover browser `task_retirement`. Use the original `taskId`, inspect to obtain `ownerBindingRef`, then retire with `operationId` and `expectedBindingRef`. Preserve the frozen ref when enrolling a NEW receiving route. Do not overwrite historical routes or infer a ref from a missing process. Inspect/status do not grant credential or provider cleanup authority. If retirement's reply is uncertain, read `choice:"status"` with the SAME operation ID, or existing `task_operation`; never close a replacement browser or replay input. Unresolved inputs, missing custody, PID reuse and occupied profiles remain held.
+
+## Task clicks and profiles
+
+Button clicks deliver pointer input for controls such as pointer-down account
+menus. Verify page state after the dispatch acknowledgement.
+
+Existing profiles: `profileMode:"existing"`. Temporary: `profileMode:"disposable"` without `profile`. The workflow owns selection, replay and scoped closure.

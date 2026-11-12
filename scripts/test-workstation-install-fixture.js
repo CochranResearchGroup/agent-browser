@@ -1003,10 +1003,15 @@ try {
     'a failed apply must not activate systemd units',
   );
 
+  const failedWriterTransactionStore = join(failedInstallRoot, '.agent-browser/runtime-adoption/transactions');
+  const beforeRecoveryTransactions = new Set(readdirSync(failedWriterTransactionStore));
   const afterFailedWriter = runInstaller(failedInstallRoot, ['--apply', '--json']);
   assert.equal(afterFailedWriter.status, 0, afterFailedWriter.stderr);
   assertJsonSuccess(afterFailedWriter.stdout, 'apply after failed writer exit');
-  assertTransactionTerminal(join(failedInstallRoot, '.agent-browser/runtime-adoption/transactions'), 'accepted');
+  const recoveryTransactions = readdirSync(failedWriterTransactionStore)
+    .filter(name => !beforeRecoveryTransactions.has(name));
+  assert.equal(recoveryTransactions.length, 1, 'writer recovery must publish one attributable transaction');
+  assertTransactionTerminal(failedWriterTransactionStore, 'accepted', recoveryTransactions[0]);
 
   const staleDrainPath = join(
     drainBlockedRoot,
