@@ -4,6 +4,12 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Mode replacement handoff lineage**: The owner's frozen original handoff target,
+completed mode operation and currently published replacement process. It permits
+rejoining that same invitation after replacement without changing its control
+epoch or promoting passive viewing. It is separate from an idle-retirement
+mapping and grants no Native input ownership.
+
 **Live handoff continuity**: A durable Native handoff presents the exact live original browser independently of a pending mode conversion. Presentation does not advance or cancel conversion, erase its journal, or permit a replacement launch.
 
 **Shared workspace authentication**: Authelia authenticates Agent Browser and Remote View. Native dashboard passwords and cookies remain disabled until compatible interoperation exists; Authelia admission grants workspace operator access without local dashboard enrollment or roles. An Agent Browser identity never proves a separate dependency session.

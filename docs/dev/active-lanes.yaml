@@ -2,6 +2,25 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: MODE-HANDOFF-CONTROL-649
+    product_lane: PL-BUGFIX
+    owner: ecochran76
+    accountable_owner: ecochran76
+    objective: Preserve CDP mode and interactive control across browser relaunch
+    work_items: [CochranResearchGroup/agent-browser#649]
+    plan: docs/dev/maintenance/mode-handoff-control649.md
+    plan_ref: fix/mode-handoff-control649
+    branch: fix/mode-handoff-control649
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    remote_ref: refs/heads/fix/mode-handoff-control649
+    integration: pull request
+    dependencies: []
+    overlaps: [retained Native handoff and mode conversion]
+    reconciled_overlaps: [Single primary writer owns both serial repair halves; preserve unrelated lanes and runtime]
+    validation_status: Source-qualified219 handoff-close passes; strict workspace Clippy, format, docs and policy checks pass; candidate and installed acceptance pending
+    updated_at: 2026-11-12
   - id: RETAINED-MODE-TARGET-647
     product_lane: PL-BUGFIX
     objective: Preserve exact mode targeting across observation metadata drift
