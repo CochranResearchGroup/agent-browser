@@ -24,6 +24,9 @@ use sha2::{Digest, Sha256};
 
 use super::service_store::default_service_state_path;
 
+#[path = "browser_lost_task_retirement_store.rs"]
+mod lost_task_retirement;
+
 #[path = "browser_mode_inspection.rs"]
 pub(crate) mod mode_inspection;
 #[path = "browser_profile_build_store.rs"]

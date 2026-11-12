@@ -760,6 +760,7 @@ try {
     'selector-committed',
   ];
   for (const [index, phase] of failurePhases.entries()) {
+    const beforeTransactions = new Set(readdirSync(transactionStore));
     const failedUpgrade = runInstaller(
       installRoot,
       ['--apply', '--dashboard-port', String(4800 + index), '--json'],
@@ -791,7 +792,9 @@ try {
       3 + index,
       `${phase} failure must write exactly one durable transaction`,
     );
-    assertTransactionTerminal(transactionStore, 'failed_preserved_old_generation');
+    const addedTransactions = readdirSync(transactionStore).filter((name) => !beforeTransactions.has(name));
+    assert.equal(addedTransactions.length, 1, `${phase} failure must publish one attributable transaction`);
+    assertTransactionTerminal(transactionStore, 'failed_preserved_old_generation', addedTransactions[0]);
   }
 
   const previousMcp = await startFixtureMcp(join(baselineGenerationRoot, 'bin', 'agent-browser'));
@@ -1311,8 +1314,9 @@ function assertGenerationStoreHealthy(generationStore) {
   }
 }
 
-function assertTransactionTerminal(transactionStore, expectedState) {
+function assertTransactionTerminal(transactionStore, expectedState, transactionName) {
   const transactions = readdirSync(transactionStore)
+    .filter((name) => transactionName === undefined || name === transactionName)
     .map((name) => {
       const path = join(transactionStore, name);
       return {

@@ -2068,3 +2068,18 @@ lanes:
     validation_status: Public22 perception guards, offline private field disambiguation and final strict clippy/format/docs/planning pass; installed qualification pending
     limitations: ["Source qualification only; no runtime capture/input or budget changes"]
     updated_at: 2026-11-10
+  - id: AUTH-LOST-TASK-RETIREMENT-650
+    product_lane: PL-BUGFIX
+    objective: Retire an explicitly abandoned prior-boot task through exact owning-service evidence
+    branch: fix/auth339-owner-retirement
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#650, CochranResearchGroup/auth-receipts#339]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: []
+    reconciled_overlaps: ["Separate owning-service source checkout; retain other active mode and handoff repair work unchanged"]
+    validation_status: Current-main integration passes fmt, workspace clippy, model423 and owner/MCP10; synthetic Auth composition and ci packaging remain separately scoped
+    limitations: ["Current live-kernel retirement acceptance held by unqualified browser profile evidence; preserve unknown intents", "No installed adoption or provider acceptance", "Full release build and integrated Auth gates remain required before production deployment"]
+    updated_at: 2026-11-12

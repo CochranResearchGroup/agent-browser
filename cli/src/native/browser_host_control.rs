@@ -29,6 +29,14 @@ pub(crate) use human_handoff::{
 mod reopen_control;
 pub(crate) use reopen_control::{attest_reopen_command, preflight as preflight_reopen};
 
+#[cfg(unix)]
+#[path = "browser_lost_task_control.rs"]
+mod lost_task_control;
+#[cfg(all(test, unix))]
+pub(crate) use lost_task_control::fixture_guard;
+#[cfg(unix)]
+pub(crate) use lost_task_control::{retirement_guard, RetirementGuard};
+
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct Control {
