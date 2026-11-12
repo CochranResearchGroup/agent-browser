@@ -45,7 +45,7 @@ export async function connectHostedAuthHelper({installationRoot=defaultInstallat
     const {sdk,installation}=await installedAuthSdk(installationRoot);
     if(typeof sdk.createHostedAuthClient!=='function')throw Object.assign(Error('Installed Auth SDK lacks the supported client export'),{code:'auth_sdk_incompatible'});
     const client=sdk.createHostedAuthClient({discoveryFile,threadId:()=>callerTaskId});
-    return ownerAuthHelper(client,installation,callerTaskId,sdk.followCredentialLogin);
+    return ownerAuthHelper(client,installation,callerTaskId,sdk.followCredentialLogin,sdk.discoverLoginChannels);
   }catch(error){return installationFailure(error);}
 }
 
@@ -62,13 +62,13 @@ export async function connectEnrolledAuthHelper(options){
     if(typeof sdk.createEnrolledAuthClient!=='function')throw Object.assign(Error('Installed Auth SDK lacks enrolled consumer support'),{code:'auth_sdk_incompatible'});
     const client=await sdk.createEnrolledAuthClient({discoveryFile,operationContext});
     if(typeof client?.call!=='function'||typeof client.callerTaskId!=='string'||!client.callerTaskId)throw Object.assign(Error('Installed Auth SDK returned an incompatible enrolled client'),{code:'auth_sdk_incompatible'});
-    return ownerAuthHelper(client,installation,client.callerTaskId,sdk.followCredentialLogin);
+    return ownerAuthHelper(client,installation,client.callerTaskId,sdk.followCredentialLogin,sdk.discoverLoginChannels);
   }catch(error){return installationFailure(error,['auth_invalid_request','auth_unavailable','auth_not_authorized']);}
 }
 
 /** Keep private login policy and uncertain-attempt handling identical for both
  * genuine Codex callers and explicitly enrolled service consumers. */
-function ownerAuthHelper(client,installation,callerTaskId,followCredentialLogin){
+function ownerAuthHelper(client,installation,callerTaskId,followCredentialLogin,discoverLoginChannels){
   const migration=()=>Object.assign(Error('Installed owner-authority login is unavailable'),{code:'auth_authority_migration_required'});
   const requireOwner=async()=>{
     if(typeof followCredentialLogin!=='function')throw migration();
@@ -79,6 +79,13 @@ function ownerAuthHelper(client,installation,callerTaskId,followCredentialLogin)
   const bound=(request,requestId)=>{if(!request||request.requestId!==requestId||request.mode!=='private'||request.operation!=='login')throw invalid();return request;};
   return {
     callerTaskId,installation,
+    /** Read-only IM/Mail proposals through the verified Auth SDK. This neither
+     * grants authority nor invokes Auth credential use or a private receiver.
+     * @param {{tenant:string,smsSuffix?:string,emailHint?:string,im?:{callTool:(request:any)=>Promise<any>},mail?:{callTool:(request:any)=>Promise<any>}} options */
+    async discoverLoginChannels(options){
+      if(typeof discoverLoginChannels!=='function')throw Object.assign(Error('Installed Auth SDK lacks channel discovery; use auth-receipts://guides/login-orchestration and repair the verified SDK installation'),{code:'auth_channel_discovery_unavailable'});
+      return discoverLoginChannels(options);
+    },
     /** Request only private login under the existing owner policy. @param {{idempotencyKey:string,sourceId:string,recordId:string,origin:string,targetId:string,purpose:string,expiresAt:number}} options */
     async requestLogin(options){
       if(!options||Object.keys(options).some(key=>!['idempotencyKey','sourceId','recordId','origin','targetId','purpose','expiresAt'].includes(key)))throw invalid();

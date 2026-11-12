@@ -2093,10 +2093,27 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#650, CochranResearchGroup/auth-receipts#339]
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    custody_state: RETAINED_REF
     dependencies: []
     overlaps: []
     reconciled_overlaps: ["Separate owning-service source checkout; retain other active mode and handoff repair work unchanged"]
     validation_status: Current-main integration passes fmt, workspace clippy, model423 and owner/MCP10; synthetic Auth composition and ci packaging remain separately scoped
     limitations: ["Current live-kernel retirement acceptance held by unqualified browser profile evidence; preserve unknown intents", "No installed adoption or provider acceptance", "Full release build and integrated Auth gates remain required before production deployment"]
+    updated_at: 2026-11-12
+
+  - id: AUTH-CHANNEL-DISCOVERY-667
+    product_lane: PL-BUGFIX
+    objective: Expose verified Auth IM and Mail destination discovery before asking for retrievable login facts
+    plan: docs/dev/maintenance/auth-channel-discovery667.md
+    branch: fix/auth354-login-channel-discovery
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#667, CochranResearchGroup/agent-browser#669, CochranResearchGroup/auth-receipts#354, CochranResearchGroup/receipts#52]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [AUTH-LOST-TASK-RETIREMENT-650]
+    reconciled_overlaps: ["Reuse the existing primary checkout after650 source merge; retain its branch/history and open provider evidence; no new checkout or browser/runtime mutation"]
+    validation_status: RED missing helper method then hosted and enrolled forwarding GREEN; existing Auth helper and TypeScript checks pass; full source and adoption checks pending
+    limitations: ["Requires qualified Auth354 SDK export; no fallback or inferred approval", "Installed SDK and component skill propagation remain open"]
     updated_at: 2026-11-12

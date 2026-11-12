@@ -41,7 +41,9 @@ Saved login: use [native login controls](references/cli-and-service.md#native-lo
 
 ## Standalone authentication
 
-Website credentials use standalone Auth Receipts through its verified SDK.
+Website credentials use standalone Auth Receipts through its verified SDK. For ordinary logon, discover connected IM/Mail account and destination evidence before asking the operator for known facts. Read Auth MCP resource `auth-receipts://guides/login-orchestration`; the connected helper exposes read-only `discoverLoginChannels`. Proposals grant no authority.
+
+After durable owner waiting, the playbook receives the Auth decision before private use. An Auth-issued approved unused permission may start a new use window for the same request and scope. The helper saves that permission reference and deadline, then freshly validates the original receiving plan before input. The original caller intent stays unchanged; attempted, uncertain, changed or unpersisted authority remains held.
 Use `connectHostedAuthHelper` only for a genuine current Codex caller.
 An explicitly enrolled unattended application uses `connectEnrolledAuthHelper`
 with its own discovery file and exact operation/recovery/browser context; never

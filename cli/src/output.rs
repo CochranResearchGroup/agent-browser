@@ -5344,6 +5344,9 @@ unavailable/partial sources, no match and account choice remain distinct holds.
 Owner login can renew an unchanged age-stale plan before any private-use intent.
 Fresh validation and durable metadata preserve the original owner request;
 changed proof or attempted/unknown input remains held without replacement approval.
+After durable waiting, receive the Auth decision before use; save its approved
+unused permission window and freshly validate the original receiving plan.
+Original intent is unchanged; unknown input or failed persistence stays held.
 
 Usage: agent-browser auth <subcommand> [args]
 
@@ -8037,6 +8040,7 @@ MCP:
   mcp serve                  Run the MCP stdio server
   Workflow catalog: open, navigate, snapshot, click, fill, screenshot, tab, handoff, continue, close.
   browser_command runs task page actions; browser_discover loads advanced metadata on demand.
+  Auth SDK discoverLoginChannels reads IM/Mail proposals; see auth-receipts://guides/login-orchestration.
   Every page action uses taskId; browser_tab preserves peers and replays a stable tabKey.
   Tab close rejects a changed selection; refresh and select the intended tab again.
   Retired authority MCP operations and the legacy catalog are unavailable.
