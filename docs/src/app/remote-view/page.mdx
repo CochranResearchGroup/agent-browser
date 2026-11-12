@@ -1418,3 +1418,11 @@ A pending browser mode change does not block the same durable handoff while the
 exact original browser remains live. Reconnecting preserves the mode operation
 and does not close or replace that browser. An absent original still follows
 the existing recovery checks.
+
+A completed mode replacement keeps the same durable handoff. Rejoining verifies
+the frozen original handoff, completed owner operation and currently published
+replacement process before updating its invitation. A previously returned view
+remains passive. A confirmed graceful relaunch returns only the current viewer's
+own Native control lease, then closes with the fresh agent epoch. Generic input
+still requires its supplied epoch. A different controller or unresolved original
+return keeps the browser open and reports the precise control boundary.

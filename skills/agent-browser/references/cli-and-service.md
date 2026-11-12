@@ -4578,6 +4578,12 @@ prove uncertain actions safe to replay or resolve an unknown profile operation.
 
 ## Browser mode and builds
 
+For an explicitly requested previous-mode restore after interrupted conversion,
+`restore_previous` with owner confirmation can recover `closing`/`close_prompt`
+only after the exact original process is proven exited. Keep the original
+operation and task; do not first launch the obsolete requested mode or replay
+site input. A live or unverified original remains held.
+
 Inspect `browser_command`/`taskId` action `mode`. Discover `mode_convert`, `profile_duplicate`, `browser_build`. Build and mode are independent; copies do not prove login. Read [copy experiments](cli-and-service.md#profile-lab-independent-copies) and [controls/recovery](cli-and-service.md#browser-build-selection). Reconcile the original operation after lost replies.
 
 Owned manual copies use normal close without desktop agent input. Inspect uncertain closes; cancel the original operation before reviewing a new attempt. A reboot is not clean-close proof. Window readiness is separate from agent input authority.

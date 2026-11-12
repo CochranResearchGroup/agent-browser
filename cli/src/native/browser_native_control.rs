@@ -312,6 +312,35 @@ pub fn execute(
             )
         }
     };
+    // Lifecycle close is an explicit whole-browser operation. Read its current
+    // Native fence only after joining the exact original process/window. This
+    // does not acquire a lease or relax epoch requirements for generic input.
+    let close_epoch = if command["action"] == "native_close" {
+        let control = owner.request(
+            "control",
+            &json!({
+                "desktopId":target.viewing_desktop_id,
+                "expectedGeneration":target.viewing_generation,"operation":"status"
+            }),
+        )?;
+        let epoch = control["epoch"].as_u64();
+        if control["desktopId"] != target.viewing_desktop_id
+            || control["generation"] != target.viewing_generation
+            || control["owner"] != "agent"
+            || epoch.is_none()
+            || command
+                .get("controlEpoch")
+                .is_some_and(|expected| expected != &control["epoch"])
+        {
+            return Err(
+                "browser_native_close_control_unavailable:return human control before relaunch"
+                    .into(),
+            );
+        }
+        epoch
+    } else {
+        None
+    };
     if command["action"] == "native_ready" {
         return Ok(
             json!({"source":"remote_view_native","ready":true,"windowId":window["id"],"window":{"x":window["x"],"y":window["y"],"width":window["width"],"height":window["height"],"active":window["active"]},"nativeContextScope":"browser","taskCompleted":false}),
@@ -332,14 +361,15 @@ pub fn execute(
             "window",
             &json!({"desktopId":target.viewing_desktop_id,
             "expectedGeneration":target.viewing_generation,"windowId":window["id"],
-            "expectedProcessIdentity":window["processIdentity"],"action":"activate"}),
+            "expectedProcessIdentity":window["processIdentity"],"action":"activate",
+            "controlEpoch":close_epoch}),
         )?;
         // Observe and fence again after focus. This recursion is bounded: the
         // input action cannot take the close/focus branch a second time.
         return execute(
             original,
             target,
-            &json!({"action":"native_input",
+            &json!({"action":"native_input","controlEpoch":close_epoch,
             "actions":[{"kind":"key","chord":"alt+F4"}]}),
             owner,
         );
@@ -357,6 +387,9 @@ pub fn execute(
     let mut body = json!({"desktopId":target.viewing_desktop_id,"expectedGeneration":target.viewing_generation,
         "windowId":window["id"],"expectedProcessIdentity":window["processIdentity"],"expectedWidth":width,"expectedHeight":height,
         "expectedWindow":{"x":window["x"],"y":window["y"],"width":window["width"],"height":window["height"]},"actions":actions});
+    if let Some(epoch) = close_epoch {
+        body["controlEpoch"] = json!(epoch);
+    }
     if let Some(evidence) = &attempt {
         if evidence.desktop_id != target.viewing_desktop_id
             || evidence.generation != target.viewing_generation
@@ -741,3 +774,7 @@ pub fn execute(
 #[cfg(test)]
 #[path = "native_login_perception_tests.rs"]
 mod login_perception_tests;
+
+#[cfg(test)]
+#[path = "native_mode_close_tests.rs"]
+mod mode_close_tests;

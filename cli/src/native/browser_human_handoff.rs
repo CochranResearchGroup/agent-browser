@@ -180,6 +180,19 @@ fn relinquish(control: &mut Control, id: &str, digest: &str, request: &str) -> R
     if handoff.returned_by.as_deref() == Some(request) {
         return Ok(());
     }
+    // A completed mode replacement can retain a previously returned, passive
+    // invitation. A later Native-only return has no cooperative hold to clear.
+    // Require that exact recorded mode rebind; ordinary stale holds stay fenced.
+    if !control.human
+        && !control.pause_reads
+        && control.audit.iter().rev().any(|event| {
+            event["operation"] == "human_handoff_mode_replacement"
+                && event["humanHandoff"]["id"] == id
+                && event["humanHandoff"]["targetDigest"] == digest
+        })
+    {
+        return Ok(());
+    }
     if intent(control, id, digest) != "interactive" {
         return Err("browser_handoff_control_changed".into());
     }
@@ -271,8 +284,7 @@ pub(crate) fn recovery_rebind_pending(
     id: &str,
     digest: &str,
 ) -> Result<bool, String> {
-    Ok(invitation(&read(browser)?, id)
-        .is_some_and(|handoff| handoff.returned_by.is_none() && handoff.target_digest != digest))
+    Ok(invitation(&read(browser)?, id).is_some_and(|handoff| handoff.target_digest != digest))
 }
 
 /// The SQLite writer fence stays held through the existing atomic control-journal
@@ -298,7 +310,8 @@ pub(crate) fn reconcile_recovered_handoff(
     if original.target_digest == digest {
         return Ok(());
     }
-    if intent(&before, id, &original.target_digest) != "interactive" {
+    let interactive = intent(&before, id, &original.target_digest) == "interactive";
+    if !interactive && (before.human || before.pause_reads) {
         return Err("browser_handoff_control_changed".into());
     }
     let mut connection = rusqlite::Connection::open_with_flags(
@@ -326,13 +339,37 @@ pub(crate) fn reconcile_recovered_handoff(
         .get(id)
         .ok_or("remote_view_tab_handoff_missing")?
         .check_link_at(now_ms)?;
-    let proof = crate::native::browser_launch_custody_store::retained_handoff_recovery_proof(
-        &transaction,
-        &current,
-        id,
-        &original.target_digest,
-    )?;
-    transaction_control_rebind(&target.browser.id, &original, &digest, proof)?;
+    let mode_proof =
+        crate::native::browser_session_host::browser_mode_host::completed_mode_handoff_proof(
+            &transaction,
+            &current,
+            id,
+            &original.target_digest,
+        )?;
+    if let Some(proof) = mode_proof {
+        super::transaction(&path(&target.browser.id)?, |control| {
+            if invitation(control, id).as_ref() != Some(&original)
+                || control.epoch != before.epoch
+                || control.human != before.human
+                || control.pause_reads != before.pause_reads
+            {
+                return Err("browser_handoff_control_changed".into());
+            }
+            let mut next = original.clone();
+            next.target_digest = digest.clone();
+            control.audit.push(json!({"epoch":control.epoch,"operation":"human_handoff_mode_replacement","previousTargetDigest":original.target_digest,"recovery":proof,"humanHandoff":next}));
+            Ok(())
+        })?;
+    } else if interactive {
+        let proof = crate::native::browser_launch_custody_store::retained_handoff_recovery_proof(
+            &transaction,
+            &current,
+            id,
+            &original.target_digest,
+        )?;
+        transaction_control_rebind(&target.browser.id, &original, &digest, proof)?;
+    } // Unqualified passive history retains the existing no-rebind behavior.
+
     transaction
         .commit()
         .map_err(|_| "browser_handoff_recovery_store_unavailable".into())
