@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,access,rm,chmod} from 'node:fs/promises';
+import {mkdtemp,mkdir as mkdirOwned,writeFile as writeFileOwned,access,rm,chmod} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {connectHostedAuthHelper} from '../packages/client/src/hosted-auth-helper.js';
 
 // Provider-free installation boundary. The opt-in standalone bootstrap and owner
 // compositions separately qualify actual Auth SDK/broker/authority source.
+// Fixture privacy is explicit, independent of the service or shell umask.
+const mkdir=(path,options={})=>mkdirOwned(path,{...options,mode:0o700});
+const writeFile=(path,data,options={})=>writeFileOwned(path,data,{...options,mode:0o600});
 const root=await mkdtemp(join(tmpdir(),'auth-client-installation-'));
 const previous=process.env.CODEX_THREAD_ID;process.env.CODEX_THREAD_ID='synthetic-caller';
 try{

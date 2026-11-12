@@ -9,3 +9,11 @@ Scope: client JS/types/tests plus five required guidance surfaces. One existing 
 Validation: actual RED missing method then GREEN for hosted/enrolled forwarding and old-SDK refusal, existing helper/follow/enrollment tests plus TypeScript. Before source integration run client/guide/type checks, policy/docs checks, formatter, and an actual freshly published Auth SDK bridge. Qualify any changed artifact/install separately. Preserve exact source, logs and remaining gates; no paid hosted CI.
 
 Non-goals: choosing a factor by policy, owner approval, SMS/email request, OTP extraction, a fresh login, browser mutation, profile reset or a new first-release claim. Full cross-product skill propagation and installed same-task use remain open until demonstrated.
+
+A service-context run exposed a fixture setup defect: permissive umask0002 made
+SDK fixture directories/files group writable, so the unchanged production SDK
+privacy check correctly refused them. The original hosted fixture reproduces
+`auth_sdk_invalid` under that umask. The four helper fixtures now create owned
+0700 directories/0600 files explicitly; all helper/follow/enrolled/type checks
+pass under the same umask without changing the production check. Preserve the
+failed run; qualification continues on the corrected fixture source.

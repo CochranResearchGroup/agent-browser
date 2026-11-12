@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,rm,chmod,access} from 'node:fs/promises';
+import {mkdtemp,mkdir as mkdirOwned,writeFile as writeFileOwned,rm,chmod,access} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import * as helpers from '../packages/client/src/hosted-auth-helper.js';
 
+// Fixture privacy is explicit, independent of the service or shell umask.
+const mkdir=(path,options={})=>mkdirOwned(path,{...options,mode:0o700});
+const writeFile=(path,data,options={})=>writeFileOwned(path,data,{...options,mode:0o600});
 const root=await mkdtemp(join(tmpdir(),'enrolled-auth-helper-'));
 const previous=process.env.CODEX_THREAD_ID;delete process.env.CODEX_THREAD_ID;
 const operationContext={operationId:'d03cd7bc-95af-4601-a171-de46a78ea3f1',recoveryId:'932b97f6-2836-4d59-89d4-8db425a67c4d',binding:{taskId:'task',browserId:'browser',profileId:'profile',tabId:'tab',origin:'https://example.test',controlGeneration:'generation-1'}};
