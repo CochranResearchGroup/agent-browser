@@ -2080,6 +2080,6 @@ lanes:
     dependencies: []
     overlaps: []
     reconciled_overlaps: ["Separate owning-service source checkout; retain other active mode and handoff repair work unchanged"]
-    validation_status: Owner model423 and focused owner/MCP10 pass; fmt and workspace clippy pass; actual synthetic Auth composition and ci packaging fixtures qualified separately
+    validation_status: Current-main integration passes fmt, workspace clippy, model423 and owner/MCP10; synthetic Auth composition and ci packaging remain separately scoped
     limitations: ["Current live-kernel retirement acceptance held by unqualified browser profile evidence; preserve unknown intents", "No installed adoption or provider acceptance", "Full release build and integrated Auth gates remain required before production deployment"]
     updated_at: 2026-11-12
