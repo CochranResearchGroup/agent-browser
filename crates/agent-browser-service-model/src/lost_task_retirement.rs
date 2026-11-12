@@ -36,18 +36,21 @@ fn digest(value: &impl Serialize) -> Result<String, String> {
         Sha256::digest(serde_json::to_vec(value).map_err(|_| held())?)
     ))
 }
-fn boot(token: &str) -> Result<&str, String> {
-    let parts: Vec<_> = token.split(':').collect();
-    if parts.len() != 3
-        || parts[0] != "linux"
-        || parts[1].len() != 36
-        || !parts[1].bytes().enumerate().all(|(i, b)| {
+fn valid_boot_id(value: &str) -> bool {
+    value.len() == 36
+        && value.bytes().enumerate().all(|(i, b)| {
             if [8, 13, 18, 23].contains(&i) {
                 b == b'-'
             } else {
                 b.is_ascii_hexdigit()
             }
         })
+}
+fn boot(token: &str) -> Result<&str, String> {
+    let parts: Vec<_> = token.split(':').collect();
+    if parts.len() != 3
+        || parts[0] != "linux"
+        || !valid_boot_id(parts[1])
         || parts[2].is_empty()
         || !parts[2].bytes().all(|b| b.is_ascii_digit())
     {
@@ -135,8 +138,10 @@ pub fn retire_lost_task(
         }
         return Err("browser_task_retirement_operation_conflict".into());
     }
-    if observed.current_boot_id.is_empty()
-        || observed.current_boot_id == boot(&observed.original_process.start_token)?
+    if !valid_boot_id(&observed.current_boot_id)
+        || observed
+            .current_boot_id
+            .eq_ignore_ascii_case(boot(&observed.original_process.start_token)?)
         || !observed.original_pid_absent
         || !observed.profile_unoccupied
     {
