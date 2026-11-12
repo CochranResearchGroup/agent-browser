@@ -129,3 +129,38 @@ All38 browser checks pass after updating the Native HTML fixture to substitute
 production script selection; initial fixture failures are retained separately.
 Policy wiring11, changed links, handoff guidance and docs build pass. Rust and
 installed recovery qualification remain pending; this checkpoint is not merge-ready.
+
+
+## Ordinary CDP-free exit follow-up
+
+A fresh same-link acceptance found a separate missing-original case with no
+active conversion. The owner returns `manual_login_ended` because manual runtime
+reconciliation permits only mode or settled-idle recovery. A valid retained
+handoff after ordinary process exit has neither. This is a newly demonstrated
+blocking case for the requested existing-profile CDP-free relaunch; it reopens
+only the manual runtime classification and actual-runtime ordinary-exit fixture.
+The isolated source candidate already building remains bound to its earlier
+commit and cannot qualify this follow-up. Do not deploy it as the final repair.
+
+Keep this lane primary writer for manual recovery and its focused fixture;
+preserve integrated599 ordinary publication/rebinding and658 mode restoration.
+Require exact persisted browser/profile scope, exclusive ownership, a valid
+retained handoff, published original identity and positive original absence.
+Existing recovery coordination still proves whole-profile absence and Native
+assignment before any launch. No idle event is fabricated; unhanded ended login
+tasks, concurrent profile operations and foreign/unknown processes remain fenced.
+Add the actual worker regression before the fix, then qualify same-profile,
+same-task, same-link recovery without CDP. Runtime facts remain outside Git.
+
+
+The actual worker regression reproduces `manual_login_ended` in2.58seconds.
+After runtime classification is repaired, the existing model's Native publication
+guard exposes its idle-only restriction. The admitted Native launch and complete
+replacement identity are retained while extending publication to a retained
+handoff. No CDP page replay is introduced. The expanded fixture then reproduces
+`browser_handoff_target_changed` for an already-returned invitation after ordinary
+recovery. Exact existing recovery proof now rebinds that passive invitation and
+permits a Native-only no-op return without changing cooperative custody. Unknown
+passive histories retain their prior no-rebind behavior. Validation remains open.
+A stale compiled navigation assertion produced one fixture-only failure and is
+excluded from product RED; source is frozen before subsequent compilation.

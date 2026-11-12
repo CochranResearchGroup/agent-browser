@@ -4731,6 +4731,8 @@ presentation evidence; do not replace receipts or start unrelated cleanup.
 
 ## Retained handoff recovery
 
+A valid retained CDP-free handoff also recovers an ordinary browser exit using the same profile and task without enabling debugging. Recovery does not reconstruct unsaved page state or replay CDP navigation. Returned invitations stay passive across qualified recovery. Native-only return clears no cooperative hold.
+
 After exact original exit during a pending graceful conversion, the same link opens existing mode controls only. It neither starts a desktop stream nor takes input control. Explicitly reconcile the original operation to continue; navigation never launches its replacement.
 
 After human input, use Give control back in the viewer, then `browser_continue` with the same `taskId` reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff. A pending browser mode change does not block the same durable handoff while the exact original browser remains live. Reconnecting preserves the mode operation and does not close or replace that browser.

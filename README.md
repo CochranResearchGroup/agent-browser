@@ -7538,6 +7538,8 @@ Fullscreen Native handoffs also show a **CDP on/off** control in the top row. Sw
 
 If the exact original browser exits during a pending graceful conversion, reopening the same handoff shows its existing recovery controls without connecting a desktop or taking input control. Choose **Reconcile operation** to continue the original approved conversion. Opening the link alone never launches its replacement.
 
+A valid retained CDP-free handoff also recovers an ordinary browser exit using the same profile and task without enabling debugging. Recovery does not reconstruct unsaved page state or replay CDP navigation.
+
 Conversion qualifies the replacement's exact process, requested mode and Native
 window without injecting input. Selective agent input remains independently
 governed and may be unavailable. Reopening the durable handoff reconciles an
