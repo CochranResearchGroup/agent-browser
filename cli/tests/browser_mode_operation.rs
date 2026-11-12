@@ -1113,3 +1113,76 @@ fn conversion_with_visible_replacement_does_not_require_selective_input() {
     drop(store);
     std::fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn restore_previous_after_interrupted_close_requires_proven_original_exit() {
+    for exited in [false, true] {
+        let directory =
+            std::env::temp_dir().join(format!("mode-interrupted-restore-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&directory).unwrap();
+        let path = directory.join("operations.sqlite3");
+        let mut store = OperationStore::open(&path).unwrap();
+        store.request(request()).unwrap();
+        let mut runtime = SyntheticRuntime {
+            process: "boot:pid:start".into(),
+            mode: Mode::Cdp,
+            closes: 0,
+            launches: 0,
+            published: false,
+            lose_launch_reply: false,
+            fail_before_launch: false,
+            native_unready: false,
+            lose_restore_reply: false,
+            prompt: false,
+            uncertain_close: true,
+            forces: 0,
+            focuses: 0,
+        };
+        let closing = store
+            .advance(
+                "convert-1",
+                Choice::Relaunch { confirmed: true },
+                &mut runtime,
+            )
+            .unwrap();
+        assert_eq!(closing.phase, Phase::Closing);
+        assert_eq!(runtime.launches, 0);
+        if !exited {
+            runtime.process = "boot:pid:start".into();
+        }
+        drop(store);
+        let mut store = OperationStore::open(&path).unwrap();
+        let restored = store.advance(
+            "convert-1",
+            Choice::RestorePrevious { confirmed: true },
+            &mut runtime,
+        );
+        if exited {
+            let restored = restored.expect(
+                "verified original exit must permit restoring CDP without first launching CDP-free",
+            );
+            assert_eq!(restored.phase, Phase::Completed);
+            assert_eq!(restored.request.requested_mode, Mode::CdpFree);
+            assert_eq!(restored.replacement.unwrap().mode, Mode::Cdp);
+            assert_eq!(
+                (
+                    runtime.closes,
+                    runtime.launches,
+                    runtime.forces,
+                    runtime.focuses
+                ),
+                (1, 1, 0, 0)
+            );
+            assert!(runtime.published);
+        } else {
+            assert!(restored.is_err());
+            assert_eq!(
+                store.read("convert-1").unwrap().unwrap().phase,
+                Phase::Closing
+            );
+            assert_eq!((runtime.closes, runtime.launches), (1, 0));
+        }
+        drop(store);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+}

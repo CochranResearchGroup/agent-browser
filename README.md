@@ -7565,6 +7565,10 @@ Inspect the original operation after a failed launch. Copy readback separates
 For `launch_absent`, explicitly confirm `retry_launch` or
 `finish_without_opening`; the latter retains the published independent copy.
 Mode `launch_absent` offers confirmed `relaunch` or `restore_previous`.
+A confirmed `restore_previous` also handles an interrupted `closing` or
+`close_prompt` after fresh proof that the exact original process exited. It
+restores the previous mode without first launching the obsolete requested mode;
+a live or unverified original remains held.
 A launched replacement with unavailable Native readiness reports
 `replacement_pending`; confirmed `restore_previous` selects the original mode
 through the same operation. Unknown launches and copy `launch_pending` first

@@ -133,3 +133,9 @@ Public task tools: `browser_snapshot`, `browser_screenshot`, `browser_click`,
 Saved-entry/submit refinement preserves exact-account, mask and ambiguity checks. `ownerTimeoutMs` (100..300000) plus optional `ownerDeadlineAtMs` bound one admitted Native command to the remaining invocation deadline, without renewing frame freshness or permitting uncertain-input replay. See the Native workflow reference.
 
 SDK allowance:300s default. ACK-prefix resume preserves original clocks; unknown input stops, never replays.
+
+For an explicitly requested previous-mode restore after interrupted conversion,
+`restore_previous` with owner confirmation can recover `closing`/`close_prompt`
+only after the exact original process is proven exited. Keep the original
+operation and task; do not first launch the obsolete requested mode or replay
+site input. A live or unverified original remains held.
