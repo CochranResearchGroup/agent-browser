@@ -1029,6 +1029,22 @@ pub(crate) fn recovery_authorized(
     profile: &BrowserProfileCatalogEntry,
     browser: &ManagedBrowserInstance,
 ) -> bool {
+    mode_recovery_authorized(profile, browser, false)
+}
+
+/// Inspect the exact retained restoration without granting a manual launch.
+pub(crate) fn reconciliation_authorized(
+    profile: &BrowserProfileCatalogEntry,
+    browser: &ManagedBrowserInstance,
+) -> bool {
+    mode_recovery_authorized(profile, browser, true)
+}
+
+fn mode_recovery_authorized(
+    profile: &BrowserProfileCatalogEntry,
+    browser: &ManagedBrowserInstance,
+    allow_restore_inspection: bool,
+) -> bool {
     let Ok(database) = BrowserSessionSqliteStore::default_sqlite_path() else {
         return false;
     };
@@ -1055,10 +1071,13 @@ pub(crate) fn recovery_authorized(
         return false;
     };
     serde_json::from_str::<Operation>(&value).is_ok_and(|operation| {
-        matches!(
+        (matches!(
             operation.phase,
             Phase::LaunchDispatched | Phase::LaunchAbsent | Phase::ReplacementPending
-        ) && operation.request.browser_id == browser.id
+        ) || (allow_restore_inspection
+            && operation.phase == Phase::OriginalExited
+            && operation.restoring_previous))
+            && operation.request.browser_id == browser.id
             && operation.request.profile_id == profile.id
             && operation
                 .effective_mode
