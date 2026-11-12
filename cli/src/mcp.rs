@@ -25,6 +25,7 @@ mod profile_duplicate;
 mod task_operations;
 #[cfg(test)]
 mod task_operations_tests;
+mod task_retirement;
 mod workflow;
 
 use crate::connection::Response;
@@ -110,6 +111,7 @@ const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
 // supports a source profile without acquiring a task.
 const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = &[
     "task_operation",
+    "task_retirement",
     "mode",
     "task_briefing",
     "native_capture",
@@ -5680,6 +5682,9 @@ fn call_service_mcp_tool_inner(
         }
         if arguments["action"] == "profile_duplicate" {
             return profile_duplicate::call(arguments, session);
+        }
+        if arguments["action"] == "task_retirement" {
+            return task_retirement::call(arguments, session);
         }
         if arguments["action"] == "task_operation" {
             return task_operations::call(arguments, session);

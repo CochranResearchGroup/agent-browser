@@ -7506,6 +7506,7 @@ Workflow tools (16):
   browser_policy        App defaults, task replacement/clear and override
   browser_artifact      Screenshot/download to local handle; no publication
   browser_command       Advanced task action with params
+    task_retirement     Linux exact cross-boot inspect/retire/status; stable operationId; no input replay
   browser_discover      Discover browser/playbook/diagnostic schemas
 
 Rules:
