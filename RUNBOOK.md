@@ -1,20 +1,16 @@
-## Interrupted-close restore delivery | 2026-11-12
+## Interrupted-close restore accepted | 2026-11-12
 
-The operator authorized PR review, merge, preserving deployment and the original
-consumer retest for [P304](docs/dev/plans/0304-2026-11-12-restore-mode-after-interrupted-close.md).
-Serial Standards/Spec review found0blocking findings on each axis. Reuse the
-source-bound17-test, strict-Clippy, format and documentation evidence; no hosted CI.
-Deployment and actual acquisition remain pending until exact runtime receipts.
-
-## Interrupted-close restore diagnosis | 2026-11-12
-
-[Source packet](docs/dev/plans/0304-2026-11-12-restore-mode-after-interrupted-close.md):
-consumer acquisition reproduces a retained conversion fence; confirmed previous-mode
-restoration reproduces phase conflict after original process exit. A durable
-coordinator regression first failed on that conflict. The targeted source change
-reconciles proven original exit before restoration admission. Local qualification passes17mode-operation tests, strict workspace Clippy, formatting
-and documentation links. No installed runtime, browser, profile or shared control change.
-No commit, push or new worktree.
+[P304](docs/dev/plans/0304-2026-11-12-restore-mode-after-interrupted-close.md) is CLOSED.
+PR658 is merged; sealed source c70042adf / installed binary be758b83d5b3 pass
+25 focused cases, strict Clippy, formatting, policy/link checks and the exact
+installer fixture. Preserving installation retained all five pre-apply browser
+roots; final doctor passes and monitor is healthy. Actual original restoration
+completed in CDP with one launch. The configured product connector verified its
+account/target and retained one visible overview section; overall coverage is
+partial. Its task was closed with original task/profile browser preserved.
+Fuller Contacts section and four-interface acceptance remain open. Failed timing
+attempts and cumulative build economics are retained in the linked plan and
+private consumer evidence; no global lease effect, reset or credential replay.
 
 ## Terminal request619 source qualification | 2026-11-10
 
