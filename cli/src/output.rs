@@ -4301,6 +4301,8 @@ Usage: agent-browser click <selector> [--new-tab] [--capture-clipboard-write]
 
 Clicks on the specified element. The selector can be a CSS selector,
 XPath, or an element reference from snapshot (e.g., @e1).
+Button activation includes pointer press/release for pointer-down menus.
+Read back the resulting page state to verify the site effect.
 
 Options:
   --new-tab            Open link in a new tab instead of navigating current tab

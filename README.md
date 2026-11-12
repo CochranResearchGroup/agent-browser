@@ -1372,6 +1372,9 @@ fixtures to validate its selectors before relying on it for an account.
 
 ### Core Commands
 
+Button clicks deliver normal pointer input, including pointer-down account
+menus. Read back the page state after dispatch to verify the result.
+
 ```bash
 agent-browser open <url>              # Navigate to URL (aliases: goto, navigate)
 agent-browser click <sel>             # Click element (--new-tab or --capture-clipboard-write)

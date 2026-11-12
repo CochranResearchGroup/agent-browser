@@ -4,6 +4,13 @@ Command help is local and read-only. Use `agent-browser service --help` or
 `agent-browser service -h` without starting a browser or changing Service State.
 Unsupported commands and subcommands return typed errors.
 
+## Button activation
+
+`browser_click` delivers pointer input for ordinary buttons, including menus
+that open on pointer-down. Use the same owned task and verify the resulting
+page state. An acknowledged dispatch retains an unverified site outcome until
+that readback succeeds. Explicit link/new-tab handling remains separate.
+
 ## Hosted reconnect, rules and artifacts
 
 The connected MCP catalog has 17 workflow tools. Discover actual schemas before

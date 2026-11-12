@@ -6,6 +6,8 @@ use super::element::{resolve_element_center, resolve_element_object_id, RefMap};
 use agent_browser_cdp::client::CdpClient;
 use agent_browser_cdp::types::*;
 
+/// Activate the selected target through one pointer sequence, including controls
+/// that handle pointer-down. Transport acknowledgement still needs site readback.
 pub async fn click(
     client: &CdpClient,
     session_id: &str,
@@ -15,59 +17,6 @@ pub async fn click(
     click_count: i32,
     iframe_sessions: &HashMap<String, String>,
 ) -> Result<(), String> {
-    if button == "left" && click_count == 1 {
-        let (object_id, effective_session_id) = resolve_element_object_id(
-            client,
-            session_id,
-            ref_map,
-            selector_or_ref,
-            iframe_sessions,
-        )
-        .await?;
-
-        let activation_result: Value = client
-            .send_command_typed(
-                "Runtime.callFunctionOn",
-                &CallFunctionOnParams {
-                    function_declaration: r#"function() {
-                        const el = this.closest?.('a[href], button, input, [role="button"]') || this;
-                        const tag = el.tagName ? el.tagName.toUpperCase() : "";
-                        const type = el.type ? String(el.type).toLowerCase() : "";
-                        const role = el.getAttribute?.("role");
-                        const isLink = tag === "A" && !!el.href;
-                        const isDomClickTarget =
-                            tag === "BUTTON" ||
-                            (tag === "INPUT" && ["button", "submit", "reset", "checkbox", "radio"].includes(type)) ||
-                            role === "button";
-
-                        if (!isLink && !isDomClickTarget) {
-                            return null;
-                        }
-
-                        el.focus?.();
-                        el.click();
-                        return "dom-click";
-                    }"#
-                    .to_string(),
-                    object_id: Some(object_id),
-                    arguments: None,
-                    return_by_value: Some(true),
-                    await_promise: Some(false),
-                },
-                Some(&effective_session_id),
-            )
-            .await?;
-
-        let activation_mode = activation_result
-            .get("result")
-            .and_then(|v| v.get("value"))
-            .and_then(|v| v.as_str());
-
-        if activation_mode == Some("dom-click") {
-            return Ok(());
-        }
-    }
-
     let (x, y, effective_session_id) = resolve_element_center(
         client,
         session_id,
@@ -1167,8 +1116,100 @@ fn named_key_info(key: &str) -> (String, String, i32) {
 mod tests {
     use super::*;
     use futures_util::{SinkExt, StreamExt};
+    use serde_json::json;
     use tokio::net::TcpListener;
     use tokio_tungstenite::tungstenite::Message;
+
+    #[tokio::test]
+    async fn single_button_click_dispatches_pointer_input_for_selectors_refs_and_frames() {
+        use std::sync::{Arc, Mutex};
+
+        for (selector, frame) in [("#menu", None), ("@e1", None), ("@e1", Some("frame-1"))] {
+            let expected_session = if frame.is_some() {
+                "child-session"
+            } else {
+                "page-session"
+            };
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let commands = Arc::new(Mutex::new(Vec::<Value>::new()));
+            let observed = commands.clone();
+            let server = tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.unwrap();
+                let mut websocket = tokio_tungstenite::accept_async(stream).await.unwrap();
+                while let Some(message) = websocket.next().await {
+                    let message = message.unwrap();
+                    if !message.is_text() {
+                        continue;
+                    }
+                    let command: Value = serde_json::from_str(message.to_text().unwrap()).unwrap();
+                    observed.lock().unwrap().push(command.clone());
+                    let result = match command["method"].as_str().unwrap() {
+                        "Runtime.evaluate" if command["params"]["returnByValue"] == false => {
+                            json!({"result":{"type":"object","objectId":"synthetic-button"}})
+                        }
+                        "Runtime.evaluate" => {
+                            json!({"result":{"type":"object","value":{"x":80.0,"y":50.0}}})
+                        }
+                        "DOM.resolveNode" => {
+                            json!({"object":{"type":"object","objectId":"synthetic-button"}})
+                        }
+                        "Runtime.callFunctionOn" => {
+                            let function =
+                                command["params"]["functionDeclaration"].as_str().unwrap();
+                            if function.contains("el.click()") {
+                                // The synthetic button's DOM activation returns successfully but
+                                // never delivers the pointer input its menu handler requires.
+                                json!({"result":{"type":"string","value":"dom-click"}})
+                            } else {
+                                json!({"result":{"type":"boolean","value":true}})
+                            }
+                        }
+                        "DOM.getBoxModel" => {
+                            let quad = [30.0, 30.0, 130.0, 30.0, 130.0, 70.0, 30.0, 70.0];
+                            json!({"model":{"content":quad,"padding":quad,"border":quad,"margin":quad,"width":100,"height":40}})
+                        }
+                        "Input.dispatchMouseEvent" => json!({}),
+                        other => panic!("Unexpected synthetic CDP command: {other}"),
+                    };
+                    websocket
+                        .send(Message::Text(
+                            json!({"id":command["id"],"result":result}).to_string(),
+                        ))
+                        .await
+                        .unwrap();
+                }
+            });
+            let client = CdpClient::connect(&format!("ws://{address}"))
+                .await
+                .unwrap();
+            let mut refs = RefMap::new();
+            refs.add_with_frame("e1".into(), Some(7), "button", "Account", None, frame);
+            let frames = HashMap::from([("frame-1".to_string(), "child-session".to_string())]);
+            let result = click(&client, "page-session", &refs, selector, "left", 1, &frames).await;
+            server.abort();
+            let _ = server.await;
+            result.unwrap();
+            let commands = commands.lock().unwrap();
+            let mouse: Vec<_> = commands
+                .iter()
+                .filter(|c| c["method"] == "Input.dispatchMouseEvent")
+                .collect();
+            assert_eq!(
+                mouse
+                    .iter()
+                    .map(|c| c["params"]["type"].as_str().unwrap())
+                    .collect::<Vec<_>>(),
+                ["mouseMoved", "mousePressed", "mouseReleased"],
+                "Button activation must deliver one pointer sequence: {selector}, {frame:?}"
+            );
+            for event in mouse {
+                assert_eq!(event["sessionId"], expected_session);
+                assert_eq!(event["params"]["x"], 80.0);
+                assert_eq!(event["params"]["y"], 50.0);
+            }
+        }
+    }
 
     #[tokio::test]
     async fn selectorless_scroll_uses_cdp_wheel_input() {
