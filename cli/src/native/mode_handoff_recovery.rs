@@ -15,7 +15,10 @@ pub(in crate::native) fn pending_mode_handoff_proof(
     handoff: &str,
 ) -> Result<Option<String>, String> {
     let target = resolve_remote_view_tab_handoff(state, handoff)?;
-    if !state.profile_operation_ids.contains_key(&target.browser.profile_id) {
+    if !state
+        .profile_operation_ids
+        .contains_key(&target.browser.profile_id)
+    {
         return Ok(None);
     }
     if state.shared_browser_ids.contains(&target.browser.id)
@@ -91,7 +94,11 @@ pub(in crate::native) fn pending_mode_handoff_proof(
         session: frozen.session.clone(),
         tab: frozen.tab.clone(),
     };
-    if retained_mode_native_target(&prior, state).is_err() || binding.browser != frozen.browser {
+    if prior.session.id != target.session.id
+        || prior.tab.id != target.tab.id
+        || retained_mode_native_target(&prior, state).is_err()
+        || binding.browser != frozen.browser
+    {
         return Ok(None);
     }
     let Ok(original) =

@@ -294,6 +294,8 @@ fn completed_mode_handoff_keeps_a_returned_invitation_passive() {
 fn pending_mode_handoff_exposes_only_exact_missing_original_without_mutation() {
     for case in [
         "exact",
+        "other_owner",
+        "missing_owner",
         "shared",
         "task",
         "phase",
@@ -347,6 +349,14 @@ fn pending_mode_handoff_exposes_only_exact_missing_original_without_mutation() {
         operation.close_method = Some(crate::native::browser_mode_operation::CloseMethod::Graceful);
         operation.request.original_process = serde_json::to_string(&binding.original).unwrap();
         match case {
+            "other_owner" => {
+                f.state
+                    .profile_operation_ids
+                    .insert("profile".into(), "other".into());
+            }
+            "missing_owner" => {
+                f.state.profile_operation_ids.remove("profile");
+            }
             "shared" => {
                 f.state.shared_browser_ids.insert(f.browser.clone());
             }
