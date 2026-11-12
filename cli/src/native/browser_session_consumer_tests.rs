@@ -448,7 +448,8 @@ fn copy_process_launch(
         browser_id: format!("browser:{}", profile.id),
         pid,
         process_identity: Some(original),
-        cdp_endpoint: String::new(),
+        cdp_endpoint: std::fs::read_to_string(root.join("copy-process-cdp-endpoint"))
+            .unwrap_or_default(),
         desktop: Some(RemoteViewFixedDesktop {
             desktop_id: intent.assignment.desktop_id.clone(),
             generation: intent.assignment.generation,
@@ -769,6 +770,9 @@ impl BrowserSessionEffects for Process {
         _tab: &ManagedBrowserTab,
         url: &str,
     ) -> Result<(), String> {
+        if self.root.join("copy-process-cdp-endpoint").exists() {
+            std::fs::write(self.root.join("copy-process-last-navigation"), url).unwrap();
+        }
         if std::fs::read_to_string(self.root.join("command-activity-unknown-profile"))
             .is_ok_and(|profile| profile == browser.profile_id)
             && url == "https://synthetic.example/unknown"

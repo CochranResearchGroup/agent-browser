@@ -2,6 +2,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: ORDINARY-HANDOFF-599
+    product_lane: PL-BUGFIX
+    objective: Recover the retained profile and tab after ordinary browser exit
+    plan: docs/dev/maintenance/ordinary-handoff-recovery599.md
+    branch: fix/ordinary-handoff-recovery
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#599]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [MANUAL-IDLE-HANDOFF-599]
+    overlaps: [MANUAL-IDLE-HANDOFF-599]
+    reconciled_overlaps: ["Own launch custody, ordinary helper/tests and session-host reconstruction; preserve foreign649 human-control/mode recovery and shared glossary/catalog intent; isolated admitted worktree from4f0b61959"]
+    validation_status: Integrated652/651; strict workspace Clippy and fmt pass; fifteen distinct composed handoff/mode/close tests pass; PR653 draft; sealed candidate and installed acceptance pending
+    limitations: ["Installed same-link viewer acceptance pending", "Human custody and paused reads retained; SSO qualification remains incomplete"]
+    updated_at: 2026-11-11
   - id: MODE-HANDOFF-CONTROL-649
     product_lane: PL-BUGFIX
     owner: ecochran76

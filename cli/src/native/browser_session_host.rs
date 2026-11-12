@@ -1924,7 +1924,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     Some("reopen_with_new_profile") => Some(true),
                     _ => None,
                 };
-                self.recreate_expired_handoff(handoff_id, now_ms, reopen)?;
+                self.recreate_expired_handoff(handoff_id, now_ms, reopen, false)?;
                 let reopening = self.state.remote_view_tab_handoffs[handoff_id]
                     .reopen
                     .is_some();
@@ -1963,14 +1963,53 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                             &digest,
                         )?
                     {
-                        super::browser_host_control::reconcile_recovered_handoff(
-                            &self.persistence.runtime_database_path()?,
-                            &self.persisted_state,
-                            handoff_id,
-                            now_ms,
-                        )?;
+                        let mut reconciliation =
+                            super::browser_host_control::reconcile_recovered_handoff(
+                                &self.persistence.runtime_database_path()?,
+                                &self.persisted_state,
+                                handoff_id,
+                                now_ms,
+                            );
+                        if reconciliation.as_ref().is_err_and(|reason| {
+                            reason == "browser_handoff_recovery_publication_conflict"
+                        }) {
+                            // A different task can publish metadata between
+                            // focus and this transaction. Re-read once, keeping
+                            // the exact physical target and every owner fence.
+                            self.refresh_before_ordinary_command()?;
+                            let fresh =
+                                agent_browser_service_model::resolve_remote_view_tab_handoff(
+                                    &self.state,
+                                    handoff_id,
+                                )?;
+                            if agent_browser_service_model::remote_view_native_target_digest(
+                                handoff_id, &fresh,
+                            )? != digest
+                            {
+                                return Err("browser_handoff_recovery_publication_conflict".into());
+                            }
+                            reconciliation =
+                                super::browser_host_control::reconcile_recovered_handoff(
+                                    &self.persistence.runtime_database_path()?,
+                                    &self.persisted_state,
+                                    handoff_id,
+                                    now_ms,
+                                );
+                        }
+                        match reconciliation {
+                            Err(reason)
+                                if reason == "browser_handoff_recovery_mapping_unrecorded" =>
+                            {
+                                self.reconstruct_unmapped_handoff(handoff_id, now_ms)?;
+                            }
+                            other => other?,
+                        }
                     }
                     self.complete_handoff_reopen_interaction(handoff_id, now_ms)?;
+                    let target = agent_browser_service_model::resolve_remote_view_tab_handoff(
+                        &self.state,
+                        handoff_id,
+                    )?;
                     return Ok(serde_json::json!({
                         "handoffId":handoff_id, "status":"opened",
                         "createdAtMs":self.state.remote_view_tab_handoffs[handoff_id].created_at_ms,
@@ -2800,9 +2839,11 @@ where
         handoff_id: &str,
         now_ms: u64,
         choice: Option<bool>,
+        reconstruct_unmapped: bool,
     ) -> Result<(), String> {
-        if agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, handoff_id)
-            .is_ok()
+        if !reconstruct_unmapped
+            && agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, handoff_id)
+                .is_ok()
         {
             return Ok(());
         }
@@ -2931,6 +2972,32 @@ where
         if response["success"] != true {
             return Err("remote_view_handoff_recreation_navigation_failed".into());
         }
+        Ok(())
+    }
+
+    /// Repair an old publication by admitting a new exact target through the
+    /// existing frozen reconstruction owner. Historical mapping stays absent.
+    fn reconstruct_unmapped_handoff(&mut self, id: &str, now_ms: u64) -> Result<(), String> {
+        let target = agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, id)?;
+        super::browser_host_control::preflight_reopen(&target.browser.id, id)?;
+        let connection = rusqlite::Connection::open(self.persistence.runtime_database_path()?)
+            .map_err(|_| "browser_handoff_reconstruction_custody_unconfirmed")?;
+        super::browser_launch_custody_store::qualify_unmapped_handoff_reconstruction(
+            &connection,
+            &self.persisted_state,
+            id,
+        )?;
+        let intent = agent_browser_service_model::remote_view_handoff_resume_intent(
+            &self.state,
+            id,
+            now_ms,
+        )?;
+        if intent.url.is_none() {
+            return Err("browser_handoff_reconstruction_destination_unavailable".into());
+        }
+        self.recreate_expired_handoff(id, now_ms, Some(false), true)?;
+        let target = agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, id)?;
+        self.focus_browser(&target.browser.id, Some(&target.tab.target_id), now_ms)?;
         Ok(())
     }
 
