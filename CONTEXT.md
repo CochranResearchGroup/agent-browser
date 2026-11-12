@@ -15,6 +15,13 @@ CDP-free task after its exact original browser was conclusively closed by automa
 retirement. Existing Native launch admission still applies. The profile and logical
 links survive; reopening the saved launch URL does not reconstruct in-memory state.
 
+**Ordinary-exit handoff recovery**: A retained CDP-backed task restores its profile
+and last recorded tab URL after conclusive original process absence. Its
+replacement publication records the exact per-tab physical mapping alongside
+launch custody, independently of idle retirement. The existing human invitation
+retains its epoch and paused reads. Missing historical mappings are not invented;
+fresh reconstruction has its own contemporaneous operation and target identity.
+
 **Closed-task handoff**: Link validity and target lifecycle are separate. A valid
 closed-task URL offers explicit reopening on that same link. The owner freezes
 its reconstruction request and profile choice before effects. Missing saved

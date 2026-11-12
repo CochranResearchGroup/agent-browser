@@ -1,4 +1,6 @@
 //! Durable process intent before launch and atomic session publication afterward.
+#[path = "browser_ordinary_handoff_recovery.rs"]
+mod ordinary_handoff_recovery;
 use std::collections::{BTreeMap, BTreeSet};
 
 use agent_browser_service_model::{
@@ -2287,6 +2289,16 @@ fn single_retirement_recovery_proof(
 }
 
 const HANDOFF_RECOVERY_SCHEMA: &str = "agent-browser.handoff-recovery-binding.v1";
+
+/// Admission for a new reconstruction, never evidence of an old tab mapping.
+pub(super) fn qualify_unmapped_handoff_reconstruction(
+    connection: &Connection,
+    state: &BrowserSessionState,
+    id: &str,
+) -> Result<(), String> {
+    ordinary_handoff_recovery::qualify_reconstruction(connection, state, id)
+}
+
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct HandoffRecoveryBinding {
@@ -2329,6 +2341,7 @@ pub(super) fn record_handoff_recovery_bindings(
         let Ok(recovery) =
             single_retirement_recovery_proof(connection, after, id, &previous_target_digest)
         else {
+            ordinary_handoff_recovery::record(connection, intent, before, after, id)?;
             continue;
         };
         if recovery["launchIntentId"] != intent.intent_id {
@@ -2372,7 +2385,9 @@ pub(super) fn retained_handoff_recovery_proof(
         &handoff_recovery_kind(handoff_id, &digest),
         HANDOFF_RECOVERY_SCHEMA,
     )?;
-    let receipt = receipt.ok_or("browser_handoff_recovery_mapping_unrecorded")?;
+    let Some(receipt) = receipt else {
+        return ordinary_handoff_recovery::proof(connection, state, handoff_id, previous_digest);
+    };
     if receipt.handoff_id != handoff_id
         || receipt.previous_target_digest != previous_digest
         || receipt.target_digest != digest
