@@ -1,6 +1,6 @@
 # Restore previous mode after an interrupted close
 
-Status: OPEN
+Status: CLOSED
 Product lane: PL-BUGFIX
 Consolidation: required
 Owner: root
@@ -10,7 +10,9 @@ Original integrated branch: fix/restore-mode-after-original-exit
 
 ## Current State
 
-The operator resumed completion of the custody fix and installed LinkedIn retest. The branch includes current main 32d3e315b26818c9ad099548e46ccfcb9be7762e, preserving the newer Native close repair. The actual host-path regression reproduces mode_operation_launch_custody_readback_required with zero launches. The scoped published-profile repair now passes it: previous CDP mode selected, one coordinator launch entry and deliberate refusal by the synthetic build selector before any browser process. All 25 focused tests and formatting pass; strict workspace Clippy passes. A new production artifact and installed recovery/content acceptance remain pending. Earlier installed outcomes below remain historical, not current completion proof.
+The browser restoration repair is delivered and accepted. PR658 is merged; source c70042adfb3a42611f54e9f43bb60cef134df3df sealed production binary be758b83d5b3583f3d029c28da0c9eba61d2c8fd272bf575554f837e361d8c92 in 1666.253 seconds. The exact artifact passed its installer fixture and an accepted preserving installation; all five pre-apply browser roots survived unchanged. Installed doctor passes and the unattended monitor is healthy after its scheduled recovery from a startup lock timeout.
+
+The original retained operation completed with observed/effective CDP mode, one launch and no failure. The actual product connector verified its configured account and selected target, retained one nonempty, visible, complete overview section, and closed its own canary task while preserving the original task and authenticated profile browser. Overall source coverage remains partial; complete LinkedIn section extraction and the broader Contacts product acceptance remain open in the consumer plan. Earlier failed and pending outcomes below are historical evidence, not current status.
 
 ## Consolidated batch
 
@@ -127,3 +129,16 @@ Focused local qualification: 1 real-host regression, 17 durable mode-operation c
 At baseline 32d3e315b26818c9ad099548e46ccfcb9be7762e, Standards and Spec were reviewed serially in the primary context against the closed-world PUBLISHED_PROFILE_CUSTODY finding, AGENTS.md, the domain contract and policies 0042/0051. Standards: 0 accepted blocking findings. Spec: 0 accepted blocking findings. The published profile is verified against retained identity, and the storage transaction still compares the full published profile and runtime state before settlement. The regression reaches actual host dispatch and custody storage, stops at the synthetic selector, and leaves process launch unimplemented. No independent-agent approval or final Contacts program review is claimed.
 
 Strict workspace Clippy passed with zero warnings in 150.421 seconds. All 25 focused cases, formatting, policy wiring (11 cases), documentation links and patch hygiene pass. Local Linux/WSL checks satisfy the operator CI cost policy; hosted CI is skipped. This closes source qualification only. One clean source-bound production-shaped build, exact artifact fixture, preserving installation and actual original-operation/content retest follow under the operator's resumed authority.
+
+
+## Installed acceptance | 2026-11-12
+
+PR658 merge 276d58c850a22bacb237c66043afc755c67b852b has the qualified source tree. Accepted transaction upgrade-ecf0650f-1e0b-4134-8878-768a853d8bc4 selected generation 0.28.0-be758b83d5b3-4b8c80c84c96. Installed bytes match the seal. The source-free fixture passed with two owned hosts and zero residue; fresh OS census preserved all five pre-apply roots. Final doctor passes with the separate dashboard operator-journey advisory; the monitor's initial lock timeout recovered through its normal scheduled backoff, without a reset or override.
+
+The same original operation is Completed, effective and observed mode CDP, launchAttempts=1, failure=None. Fresh process proof confirms the retained browser executable and a CDP endpoint. A diagnostic command-line parser initially missed collapsed arguments; its corrected regex confirms the debugging flag. No new profile, credential replay, global lease effect, force close or live journal edit was used.
+
+The product API canary encountered two separately retained timing limits after browser recovery. A client read timeout lost the open reply after task creation; exact deterministic task binding, read-only briefing and continuation proved the owned outcome with no uncertain operations before task-scoped cleanup. A later three-minute operation verified the account but exhausted time before returning to the target. The trusted client wait was increased from 60 to 180 seconds, then one six-minute acquisition used the same three-page, 20-action and 4000-token ceilings. Both earlier tasks were closed through the public API with the profile browser preserved. The candidate API was restarted only through its reviewed identity fences; an initial stopped-API connection timeout was reconciled with the same idempotency key before any source run.
+
+The final bounded product run completed in 379.549366 seconds, including an in-flight call beyond the six-minute admission deadline. It verified the configured account and target and retained one real nonempty overview section (24 characters), complete and visible for that section. Overall state is partial / section coverage incomplete; fuller extraction is not accepted. The canary task is closed, original task remains and the authenticated profile browser is live. No semantic finding or contact identity was applied. Detailed personal evidence/configuration and all failed receipts remain outside Git.
+
+Exit: original installed restoration and useful product acquisition are proven. Consumer section completeness and four-interface program acceptance remain separate; final Contacts program review/TDD stay unused. Three production builds across the cumulative repair chain consumed 5173.816 seconds; this resumed candidate consumed 1666.253 seconds. No further native build was needed for the trusted client-wait and canary-time adjustments.
