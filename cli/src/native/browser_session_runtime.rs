@@ -1404,7 +1404,7 @@ fn run_browser_worker(
                 ..
             } if profile.manual_login_url.is_some() => {
                 if let Some(browser) = browser.as_ref().filter(|browser| {
-                    super::browser_session_host::browser_mode_host::recovery_authorized(
+                    super::browser_session_host::browser_mode_host::reconciliation_authorized(
                         &profile, browser,
                     )
                 }) {
@@ -3227,6 +3227,97 @@ fn tab_acquisition(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn restoring_previous_reconciles_absent_manual_replacement_without_launch_authority() {
+        use crate::native::browser_session_store::BrowserSessionSqliteStore;
+        use crate::test_utils::EnvGuard;
+        use agent_browser_service_model::BrowserSessionState;
+        let root =
+            std::env::temp_dir().join(format!("mode-restore-reconcile-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join(".agent-browser/service")).unwrap();
+        let env = EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        env.set("HOME", root.to_str().unwrap());
+        env.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        let directory = root.join(".agent-browser/service");
+        let mut store = BrowserSessionSqliteStore::launch_custody_fixture(
+            rusqlite::Connection::open(directory.join("runtime.sqlite3")).unwrap(),
+            true,
+        )
+        .unwrap();
+        let profile = BrowserProfileCatalogEntry {
+            id: "profile".into(),
+            name: "Synthetic".into(),
+            user_data_dir: root.join("profile").to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Named,
+            manual_login_url: Some("about:blank".into()),
+        };
+        let browser = ManagedBrowserInstance {
+            id: "original".into(),
+            profile_id: profile.id.clone(),
+            pid: u32::MAX,
+            cdp_endpoint: "ws://synthetic-original".into(),
+            desktop: None,
+            active_session_ids: vec![],
+        };
+        let mut state = BrowserSessionState::default();
+        state.browsers.insert(browser.id.clone(), browser.clone());
+        state
+            .profile_operation_ids
+            .insert(profile.id.clone(), "restore".into());
+        store.save_session_state(&state).unwrap();
+        store
+            .remote_view_mutation_connection()
+            .pragma_update(None, "user_version", 2)
+            .unwrap();
+        drop(store);
+        let database = BrowserSessionSqliteStore::default_sqlite_path().unwrap();
+        let connection =
+            rusqlite::Connection::open(database.with_extension("mode.sqlite3")).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE browser_mode_operations(id TEXT PRIMARY KEY,state TEXT NOT NULL)",
+            )
+            .unwrap();
+        let mut operation = serde_json::json!({"request":{"operation_id":"restore","browser_id":"original","profile_id":"profile","original_process":"synthetic-exited-original","executable":"/synthetic/must-not-launch","task_ids":[],"requested_mode":"CdpFree"},"phase":"OriginalExited","replacement":null,"close_method":null,"effective_mode":null,"failure":null,"launch_attempts":0,"restoring_previous":false});
+        connection
+            .execute(
+                "INSERT INTO browser_mode_operations VALUES('restore',?1)",
+                [operation.to_string()],
+            )
+            .unwrap();
+        let mut runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
+            executable_path: Some("/synthetic/must-not-launch".into()),
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(
+            runtime
+                .reconcile_profile_browser(&profile, Some(&browser), &[], &[])
+                .unwrap_err(),
+            "browser_login_mode_conflict"
+        );
+        operation["restoring_previous"] = serde_json::json!(true);
+        connection
+            .execute(
+                "UPDATE browser_mode_operations SET state=?1 WHERE id='restore'",
+                [operation.to_string()],
+            )
+            .unwrap();
+        assert!(
+            !super::super::browser_session_host::browser_mode_host::recovery_authorized(
+                &profile, &browser
+            ),
+            "read-only reconciliation must not grant a manual replacement launch"
+        );
+        assert!(runtime
+            .reconcile_profile_browser(&profile, Some(&browser), &[], &[])
+            .expect("retained restoration must reconcile an absent replacement before any launch")
+            .is_none());
+        drop(runtime);
+        drop(connection);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn retained_observation_binding_preserves_peers_and_rejects_all_identity_changes() {
         let original = BorrowedAppBrowser {
