@@ -2022,7 +2022,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         // neither a handoff locator nor a caller flag grants launch authority.
         let native_retained_recovery = (self.state.idle_closed_browsers.contains_key(&browser.id)
             || self.state.remote_view_tab_handoffs.values().any(|link| {
-                crate::resolve_remote_view_tab_handoff(&self.state, &link.id)
+                crate::resolve_remote_view_tab_handoff(self.state, &link.id)
                     .is_ok_and(|target| target.browser == browser)
             }))
             && browser.cdp_endpoint.is_empty()
