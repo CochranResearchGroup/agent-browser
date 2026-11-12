@@ -48,9 +48,9 @@ lanes:
     custody_state: ACTIVE_WORKTREE
     remote_ref: refs/heads/fix/mode-handoff-control649
     integration: pull request
-    dependencies: []
+    dependencies: [AUTH-LOST-TASK-RETIREMENT-650]
     overlaps: [retained Native handoff and mode conversion]
-    reconciled_overlaps: [Single primary writer owns both serial repair halves; preserve unrelated lanes and runtime]
+    reconciled_overlaps: [Single primary writer owns mode/manual recovery and shared skill reference integration; preserve650 source and its open Auth qualification]
     validation_status: PR652/887 and655 merged; production-shaped sealed candidate,27 mode tests, strict Clippy/fmt and exact-binary fixtures pass; installed acceptance evidence stays in runtime state; full workflow and interrupted-navigation gap remain open
     updated_at: 2026-11-12
   - id: RETAINED-MODE-TARGET-647

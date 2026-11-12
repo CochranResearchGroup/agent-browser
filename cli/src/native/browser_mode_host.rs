@@ -1178,4 +1178,6 @@ mod handoff_lineage_tests;
 
 #[path = "mode_handoff_recovery.rs"]
 mod handoff_recovery;
-pub(in crate::native) use handoff_recovery::completed_mode_handoff_proof;
+pub(in crate::native) use handoff_recovery::{
+    completed_mode_handoff_proof, pending_mode_handoff_proof,
+};

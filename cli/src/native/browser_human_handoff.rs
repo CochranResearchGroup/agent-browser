@@ -180,14 +180,16 @@ fn relinquish(control: &mut Control, id: &str, digest: &str, request: &str) -> R
     if handoff.returned_by.as_deref() == Some(request) {
         return Ok(());
     }
-    // A completed mode replacement can retain a previously returned, passive
-    // invitation. A later Native-only return has no cooperative hold to clear.
-    // Require that exact recorded mode rebind; ordinary stale holds stay fenced.
+    // A proof-backed replacement can retain a returned, passive invitation.
+    // A later Native-only return has no cooperative hold to clear. Require its
+    // exact recorded rebind; unqualified stale holds stay fenced.
     if !control.human
         && !control.pause_reads
         && control.audit.iter().rev().any(|event| {
-            event["operation"] == "human_handoff_mode_replacement"
-                && event["humanHandoff"]["id"] == id
+            matches!(
+                event["operation"].as_str(),
+                Some("human_handoff_mode_replacement" | "human_handoff_recovery")
+            ) && event["humanHandoff"]["id"] == id
                 && event["humanHandoff"]["targetDigest"] == digest
         })
     {
@@ -368,6 +370,29 @@ pub(crate) fn reconcile_recovered_handoff(
             &original.target_digest,
         )?;
         transaction_control_rebind(&target.browser.id, &original, &digest, proof)?;
+    } else if let Ok(proof) =
+        crate::native::browser_launch_custody_store::retained_handoff_recovery_proof(
+            &transaction,
+            &current,
+            id,
+            &original.target_digest,
+        )
+    {
+        // Keep a qualified returned invitation passive across ordinary Native
+        // recovery. Never clear a hold or infer a missing historical mapping.
+        super::transaction(&path(&target.browser.id)?, |control| {
+            if invitation(control, id).as_ref() != Some(&original)
+                || control.epoch != before.epoch
+                || control.human
+                || control.pause_reads
+            {
+                return Err("browser_handoff_control_changed".into());
+            }
+            let mut next = original.clone();
+            next.target_digest = digest.clone();
+            control.audit.push(json!({"epoch":control.epoch,"operation":"human_handoff_recovery","previousTargetDigest":original.target_digest,"recovery":proof,"humanHandoff":next}));
+            Ok(())
+        })?;
     } // Unqualified passive history retains the existing no-rebind behavior.
 
     transaction
