@@ -4654,6 +4654,11 @@ replace separately authorized installed saved-password acceptance.
 
 ## Build readiness
 
+Managed MCP tasks honor the configured executable and StealthCDP manifest. If
+`service.defaultBrowserBuild` requires `stealthcdp_chromium`, resolve a missing
+build before opening a task; do not substitute testing Chrome.
+
+
 A `dashboard_build_incomplete` install/doctor failure requires rebuilding the frontend and recompiling the candidate. The maintained `pnpm build:development-candidate` command includes both steps.
 
 ## Handoff search
