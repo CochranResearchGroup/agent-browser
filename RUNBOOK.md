@@ -1,3 +1,16 @@
+## Stock popup default deployed | 2026-11-13
+
+[693](https://github.com/CochranResearchGroup/agent-browser/issues/693),
+[acceptance evidence](docs/dev/maintenance/stock-popup-default.md): PR694 merged
+as 0e2206dbee; sealed production binary 1d0d0b64f4b4 accepted by preserving install.
+Fresh installed MCP with configured StealthCDP blocks unsolicited popups and
+allows a real clicked popup, with webdriver=false. Scoped close and fresh OS
+readback prove zero owned profile writers. 93 focused tests and strict local gates
+pass. The exact installer fixture passed on an instrumented rerun; its initial
+null retirement-receipt failure is retained. Codec configuration qualification
+belongs to Chromium; codec-enabled build/playback remain pending there.
+Retain primary and sealed artifacts; see the packet for doctor limits.
+
 ## Addressed handoff TDD repair deployed | 2026-11-13
 
 [677](https://github.com/CochranResearchGroup/agent-browser/issues/677),

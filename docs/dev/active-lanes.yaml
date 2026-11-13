@@ -10,13 +10,13 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#693]
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    plan_state: CLOSED
+    custody_state: INTEGRATED
     dependencies: []
     overlaps: [MCP-STEALTHCDP-676]
     reconciled_overlaps: ["Reuse own clean primary; preserve prior branch and sealed artifacts; no new checkout or peer source changes"]
-    validation_status: Actual browser RED/GREEN;93 selected tests, strict workspace Clippy, Rustfmt and docs gates pass; merged-source adoption pending
-    limitations: ["No production change before merged-source qualification", "Codec qualification remains in the parent Chromium task"]
+    validation_status: Actual browser RED/GREEN;93 selected tests, strict workspace Clippy, Rustfmt and docs gates pass; merged production 1d0d0b64 installed; exact MCP default/click acceptance and cleanup pass
+    limitations: ["Codec qualification remains in the parent Chromium task"]
     updated_at: 2026-11-13
   - id: RECEIVING-BINDING-681
     product_lane: PL-BUGFIX
