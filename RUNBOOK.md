@@ -1,3 +1,15 @@
+## Handoff maintenance repair deployed | 2026-11-13
+
+[677](https://github.com/CochranResearchGroup/agent-browser/issues/677),
+[deployment evidence](docs/dev/maintenance/handoff-maintenance677.md): PR682 merged
+as 9d9a6aca5; sealed production 934f03443c98 installed through a preserving
+transaction. Pool 144, model 424, strict gates, exact installer fixture and doctor
+pass. Fresh owned-window handoff is ready; five public viewer-document probes
+from Cooper took 3.194 to 6.284 seconds. Original task is closed with a valid link.
+Several-second latency and independent first-pixel qualification remain open;
+maintenance samples do not prove a controlled wall-time improvement. Disposable
+check closed with no process residue. Retain primary and sealed artifact.
+
 ## StealthCDP managed MCP default deployed | 2026-11-12
 
 [#676](https://github.com/CochranResearchGroup/agent-browser/issues/676),

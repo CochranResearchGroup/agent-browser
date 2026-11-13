@@ -116,3 +116,64 @@ assignment case to make that publication guard explicit. This bounded correction
 resolves the validation dependency with issue599 without changing recovery owners.
 The initial production build was stopped at its exact task-owned Cargo scope
 before source correction; its failed receipt and partial cache remain retained.
+
+
+## Merged and installed | 2026-11-13
+
+PR682 merged as `9d9a6aca5846f821ec60ee18e779b7c343a51e64`.
+The sealed source `24bb970c84e5d1d98fc9e7c0f50d88e1c1d74538` entered main's
+ancestry with an identical complete source tree. Integration includes receiving
+binding681. Its combined CLI Clippy and formatting pass; the selected pool suite
+was rerun from an immutable test binary with the runner's disposable HOME/XDG
+layout and passes 144 tests, with one existing ignored test. The earlier integrated
+pool run also passed. All 424 service-model tests across 26 suites remain valid:
+receiving binding681 changes no model code or dependencies. Policy wiring and
+changed-link checks pass. No hosted CI ran.
+
+### Standards
+
+Serial primary review found no outstanding accepted standards finding. Model
+contracts, SQLite custody and CLI orchestration remain separate; fresh snapshots
+end before effects and do not replace final admission/publication.
+
+### Spec
+
+The repeated-read regression passes at the real adapter/store seam after RED.
+The accepted recovery blocker is repaired: two exact immutable assignments,
+completed retirement and original absence remain mandatory while a qualified
+replacement may use its published desktop. Positive recovery and eleven adverse
+cases pass, including a foreign replacement assignment. No outstanding source
+finding remains; live latency limitations below remain explicit.
+
+The production release build passed with zero Rust warnings/errors. Binary
+SHA256 is `934f03443c98ccc92db21ea9f43c6a42148c81c3a7fe826eb472b3ee1bc335c5`;
+artifact seal SHA256 is
+`53ec036c810b420c240b9d8148ee74d58e4ea5f5c9e5e92bca7e23ff7d5300f3`.
+Exact-binary source-free installer fixtures and sealed install dry-run pass.
+Fresh readback found no active transaction before the preserving install.
+Installation returns success, complete and ready; candidate status is accepted
+with no active custody. Installed CLI and the current maintenance producer both
+hash to the sealed binary. Final doctor succeeds.
+
+A fresh installed MCP client opened one disposable synthetic page. Native handoff
+reported an owned browser window ready; the page snapshot contained its expected
+heading. Five independently authenticated public redirect chains reached the
+viewer document in 6.284, 3.720, 3.194, 5.373 and 3.389 seconds. The original link
+currently reports a closed task with its link still valid; it was not reopened.
+Checks used public HTTPS from Cooper, not an independent off-host vantage. Viewer
+first-pixel and private input latency were not measured. The retired old MCP
+connection closed as expected; fresh installed MCP passed.
+
+Current-load maintenance samples before installation were 3.939, 3.123 and
+3.228 seconds. Post-install samples ranged from 2.720 to 8.957 seconds, including
+startup and browser-check activity. These do not establish a controlled wall-time
+improvement. The historical 89-second incident is separate evidence. The source
+read amplification is removed and this deployment's public probes passed, but
+several-second latency remains; keep677 open for further performance qualification.
+
+Task-scoped close reports browser_closed. Fresh OS readback proves its original
+PID absent and zero processes referencing the exact disposable profile. Profile
+files retain their configured policy; no peer browser, profile or rollback
+payload was removed. Raw protocols, identities, invitations and receipts stay in
+private user state. Retain this worktree and its sealed candidate as deployment
+provenance; no worktree or candidate cleanup is implied.
