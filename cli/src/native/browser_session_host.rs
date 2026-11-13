@@ -995,9 +995,22 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         target_id: Option<&str>,
         activity_at_ms: u64,
     ) -> Result<agent_browser_service_model::FocusBrowserResult, String> {
-        let result = self
-            .manager()?
-            .focus_browser(browser_id, target_id, activity_at_ms)?;
+        self.refresh_before_ordinary_command()?;
+        let browser = self
+            .state
+            .browsers
+            .get(browser_id)
+            .cloned()
+            .ok_or_else(|| format!("browser_session_browser_not_found:{browser_id}"))?;
+        self.effects
+            .begin_browser_operation(&self.persisted_state, &browser)?;
+        let result = BrowserSessionManager::new(
+            &mut self.state,
+            &self.catalog,
+            &mut self.effects,
+            self.manager_config.clone(),
+        )
+        .focus_browser(browser_id, target_id, activity_at_ms)?;
         self.commit_state()?;
         Ok(result)
     }
@@ -1955,7 +1968,8 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                             "operatorVisible":{"state":"not_ready","reason":"mode_operation_pending"}}));
                     }
                 }
-                self.effects.begin_operation(&self.persisted_state)?;
+                self.effects
+                    .begin_browser_operation(&self.persisted_state, &retained.browser)?;
                 self.effects
                     .retain_live_browser_for_handoff(&self.persisted_state, &retained.browser)?;
                 if command["nativeDesktop"] == true || reopen.is_some() || reopening {

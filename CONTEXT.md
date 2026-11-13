@@ -54,6 +54,12 @@ The original close attempt and unresolved physical outcome remain recorded.
 Unchanged task publication and Native reservation completion restore access;
 neither asserts that the browser exited or the close was never dispatched.
 
+**Addressed handoff operation**: Focus and live handoff initialization reconcile
+only activity and Native retirement groups containing the addressed profile.
+They retain the complete durable snapshot and all custody records. Own-profile
+and shared-group fences remain binding; unrelated provider work stays with its
+owner and global maintenance. This does not bound waiting on the shared host lock.
+
 **Session publication reconciliation**: Used by task continuation and handoff
 consumers before target selection. A three-way merge of a host's loaded
 baseline, resident metadata and current durable metadata inside one SQLite
