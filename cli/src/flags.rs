@@ -849,6 +849,31 @@ fn manifest_executable_path(
         .map(|path| path.to_string())
 }
 
+/// Resolve managed-host defaults through the same config and manifest sources
+/// as CLI launch flags, without parsing a command or exiting the host process.
+pub(crate) fn managed_browser_executable() -> Result<Option<String>, String> {
+    let config = load_config(&[])?;
+    let required = service_state_from_store(config.service_state_snapshot()).default_browser_build
+        == Some(BrowserBuild::StealthcdpChromium);
+    let manifests =
+        resolve_browser_build_manifests(&browser_build_manifest_configs_from_sources(&config));
+    let executable = env::var("AGENT_BROWSER_EXECUTABLE_PATH")
+        .ok()
+        .or(config.executable_path)
+        .or_else(|| manifest_executable_path(&manifests, "stealthcdp_chromium"));
+    if required
+        && (executable
+            .as_ref()
+            .is_none_or(|path| !Path::new(path).is_file())
+            || manifests
+                .get("stealthcdp_chromium")
+                .is_some_and(|status| status["ready"] != true))
+    {
+        return Err("browser_build_executable_unavailable:stealthcdp_chromium: configure an available executable and ready build manifest".into());
+    }
+    Ok(executable)
+}
+
 fn selected_runtime_profile_from_sources(args: &[String], config: &Config) -> Option<String> {
     extract_named_value(args, "--runtime-profile")
         .or_else(|| env::var("AGENT_BROWSER_RUNTIME_PROFILE").ok())

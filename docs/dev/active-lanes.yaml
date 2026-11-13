@@ -2,6 +2,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: MCP-STEALTHCDP-676
+    product_lane: PL-BUGFIX
+    objective: Honor configured StealthCDP in managed MCP launches
+    plan: docs/dev/maintenance/mcp-stealthcdp-default.md
+    branch: fix/mcp-stealthcdp-default
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#676]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [RECOVERY-DESKTOP-672]
+    reconciled_overlaps: ["Own host startup executable selection and focused regressions only; preserve recovery placement PR675 and all peer checkouts; source-only sixth operator-task primary, no auxiliary"]
+    validation_status: Both regressions RED then GREEN; composed-main118 focused tests, strict Clippy, Rustfmt, docs and five workstation harnesses pass
+    limitations: ["No full-suite claim; initial unrelated standalone integration import failure retained", "No production installation or shared-skill publication; PR679 pending integration", "Retain primary for review and acceptance handoff; review2026-11-14"]
+    updated_at: 2026-11-12
   - id: RECOVERY-DESKTOP-672
     product_lane: PL-BUGFIX
     objective: Prefer vacant desktops for replacement browsers with durable custody
