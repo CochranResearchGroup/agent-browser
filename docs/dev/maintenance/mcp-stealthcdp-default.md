@@ -2,7 +2,7 @@
 
 Product lane: PL-BUGFIX
 Owner: ecochran76
-State: OPEN
+State: CLOSED
 Branch: fix/mcp-stealthcdp-default
 Base: origin/main 37974eff22e40c2547fddda57e28add998160620
 
@@ -14,14 +14,13 @@ discovery.
 
 ## Current State
 
-The source repair is implemented and both real-host regressions demonstrated
-RED then GREEN. Source `39736fd14116a35f361b6eaa5518211c3e19498a` is composed
-with main `bd3d9212230aec7812421900446862824967fefa` and passes all 118 selected
-Rust tests, strict workspace Clippy, formatting and documentation gates.
-PR #679 contains the repair; merge and installed adoption remain outside this
-source-only packet. The plan remains OPEN for that integration boundary.
-The initial unrelated standalone integration-target compile failure remains
-unqualified, with no full-suite validation claim.
+PR #679 is merged as `ea9bcb186b41209b2887a871aaf38d7ef6f3115f` and deployed.
+The sealed production-shaped binary `077575e6852123003c68e06197a2f4cf17e7e2b6db2a0775e67bdd7c4e93b301`
+is installed as generation `0.28.0-077575e68521-cd74725e9db2`.
+Fresh MCP disposable acceptance selects the configured Chromium StealthCDP
+156.0.8078.73 manifest executable and reports navigator.webdriver false.
+The task closed normally and its original browser PID is absent. This packet
+is CLOSED; the full-suite and dashboard-journey limits below remain explicit.
 
 ## Seams and acceptance
 
@@ -151,11 +150,52 @@ recorders, not the hosted OS matrix. No Chrome for Testing was downloaded or
 compiled by these tests. Dependency setup downloaded an upstream Agent Browser
 native CLI locally; it was removed and never installed or used for acceptance.
 
-Next action: review PR #679 and address integration/production adoption under
-separate authority. Retain the clean primary for that review and acceptance
-handoff; owner ecochran76, next review 2026-11-14. No auxiliary checkouts exist.
+## Integrated production acceptance | 2026-11-12
 
-Memory disposition: unavailable. The receipted Graphiti remember attempt was
-rejected before queue acceptance because another Graphiti operation held the
-read/queue boundary. No job ID or accepted write was returned; safe_to_retry
-was false and no retry was attempted. Repository evidence remains authoritative.
+The operator authorized PR, review, merge and deployment after the source-only
+packet. Serial Standards and Spec review of fixed PR head b8cab826 returned
+zero blocking findings; this is primary review, not independent approval.
+PR #679 merged with exact reviewed tree equivalence. The fresh remote still
+matched ea9bcb186b41 immediately before installation.
+
+The maintained candidate builder produced a clean merged-source Linux release:
+opt-level 3, fat LTO, one codegen unit, no features, rustc 1.94.1. Production build
+passed in 2077.896 seconds with zero compiler warnings/errors. Executable-input
+SHA256 is `000d154f353e662852539059d34457de2550cbbc70814bfb34c3dcf5880db0ba`;
+artifact seal SHA256 is `b346c35160db6e1200581fef53243b7af8c373f1523beb81f4f4791d8a5733c3`.
+An earlier attempt finished the dashboard but waited for memory admission;
+only its exact owned waiting wrapper was stopped before compilation. Supported
+retry retained the failed claim and used one job with 8 GiB claim/4 GiB reserve.
+No peer compiler or runtime was stopped.
+
+Exact sealed candidate install dry-run passed. Preserving install transaction
+`upgrade-587d0e37-bc0e-4c75-b027-b263cf50ecbb` reached accepted revision 13;
+complete, ready and success are true. Installed binary SHA256 matches the seal;
+current candidate status reports merged source, accepted and no active operation.
+No retained profile was copied, cleared or migrated.
+
+Fresh installed MCP stdio opened one disposable about:blank task with no
+executable hint or override. OS process identity matched the configured
+StealthCDP manifest executable, Chromium 156.0.8078.73, SHA256
+`36294494abee9f0e304793797c8ebe8c70a65814f0924abf05b21a5511d12eaa`.
+Public evaluate returned navigator.webdriver false. Scoped browser_close
+returned closed=true; fresh /proc inspection proved that original PID absent.
+Private user-state receipts retain exact launch, close, process and installation
+evidence; no private task/profile payload is published here.
+
+Installed doctor exits 0: one selected-generation dashboard, one runtime host,
+zero legacy daemons and zero stale runtime generations. It reports the advisory
+warning dashboard_operator_journey_not_ready because this generation lacks a
+matching authenticated dashboard journey receipt. MCP acceptance does not
+qualify that separate UI journey. Linux/WSL only; the unrelated initial
+standalone integration import failure and full-suite limits remain historical.
+No hosted CI or Chrome for Testing build/install was performed.
+
+Artifact custody: retain the primary worktree and its sealed candidate as the
+installed generation's source and build evidence; no checkout deletion is
+selected. No further production action is required for issue 676.
+
+The source packet's earlier memory disposition remains historical: its write
+was rejected before queue acceptance by a busy Graphiti boundary and was not
+retried. Deployment closeout disposition is recorded separately in the final
+user-scoped receipt.

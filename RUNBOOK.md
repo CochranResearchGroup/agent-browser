@@ -1,3 +1,15 @@
+## StealthCDP managed MCP default deployed | 2026-11-12
+
+[#676](https://github.com/CochranResearchGroup/agent-browser/issues/676),
+[closed packet](docs/dev/maintenance/mcp-stealthcdp-default.md): PR679 merged as
+ea9bcb186b41; sealed production binary 077575e68521 installed with preserving
+transaction accepted. Fresh installed MCP selects configured StealthCDP
+Chromium 156.0.8078.73, navigator.webdriver=false, then scoped close proves its
+PID gone. 118 focused source tests, strict gates, production build and doctor
+pass. Doctor retains the advisory missing authenticated dashboard journey
+receipt; full-suite and UI journey are not qualified. Retain primary and sealed
+artifact; no further deployment action for 676.
+
 ## Replacement desktop placement source qualification | 2026-11-12
 
 [#672](https://github.com/CochranResearchGroup/agent-browser/issues/672), [source packet](docs/dev/maintenance/recovery-desktop-placement.md): pooled replacement launches prefer observed vacant capacity and persist wrap-around order. SQLite custody and manager publication permit only qualified replacement placement while preserving original history and handoff continuity. Final45 focused CLI cases, full service-model package, strict workspace Clippy, Rustfmt, policy/link/docs checks pass. Initial publication-guard, fixture-observation, stale synthetic-target and lint failures are retained in the packet. No production installation or existing browser relocation.
