@@ -6,13 +6,24 @@ pub(super) struct LinuxOwner {
     #[cfg(test)]
     roots: Option<std::path::PathBuf>,
     browser_id: String,
+    binding_only: bool,
     control: crate::native::browser_host_control::RetirementGuard,
 }
 impl LinuxOwner {
+    pub(super) fn acquire_binding(browser_id: &str) -> Result<Self, String> {
+        Ok(Self {
+            #[cfg(test)]
+            roots: None,
+            browser_id: browser_id.into(),
+            binding_only: true,
+            control: crate::native::browser_host_control::binding_guard(browser_id)?,
+        })
+    }
     #[cfg(test)]
     pub(super) fn fixture(browser_id: &str, root: &Path) -> Result<Self, String> {
         Ok(Self {
             browser_id: browser_id.into(),
+            binding_only: false,
             control: crate::native::browser_host_control::fixture_guard(
                 &root.join("control.json"),
             )?,
@@ -24,6 +35,7 @@ impl LinuxOwner {
             #[cfg(test)]
             roots: None,
             browser_id: browser_id.into(),
+            binding_only: false,
             control: crate::native::browser_host_control::retirement_guard(browser_id)?,
         })
     }
@@ -41,7 +53,7 @@ impl super::OwnerObserver for LinuxOwner {
         original: &RecordedProcessIdentity,
         epoch: u64,
     ) -> Result<LostTaskRetirementObservation, String> {
-        if epoch != self.control.epoch() {
+        if self.binding_only || epoch != self.control.epoch() {
             return Err(super::held());
         }
         #[cfg(test)]

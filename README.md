@@ -1228,6 +1228,8 @@ the complete agent, operator, reconnect, and troubleshooting workflows.
 
 ## SiteGuides and website routines
 
+Read-only `task_retirement` inspection can freeze the current receiving identity after explicit control reconciliation. This does not acknowledge the original input or relax actual retirement, credential approval or private-use checks.
+
 Use capability-aware `discover_credentials({ query, accountHint })` for current
 owner login. Empty legacy caller scopes do not imply an empty credential source.
 Missing authority, unavailable or partial sources, complete no-match results and

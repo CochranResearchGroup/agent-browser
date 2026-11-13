@@ -35,7 +35,7 @@ mod lost_task_control;
 #[cfg(all(test, unix))]
 pub(crate) use lost_task_control::fixture_guard;
 #[cfg(unix)]
-pub(crate) use lost_task_control::{retirement_guard, RetirementGuard};
+pub(crate) use lost_task_control::{binding_guard, retirement_guard, RetirementGuard};
 
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
