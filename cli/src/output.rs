@@ -7065,7 +7065,8 @@ to wake its logical browser through Native admission and restore Chrome's saved
 session without CDP navigation replay. New launches use the configured startup
 URL. CDP-free startup skips Chrome first-run and default-browser prompts. The profile and links survive; saved pages do not prove unsaved form state
 or account authentication. Unknown close evidence or changed targets remain refused. Mode replacement
-checks Native readiness on its exact observed launch assignment before publication.
+checks Native window readiness on its exact observed launch assignment before publication.
+Window qualification observes only; input-policy readiness does not gate mode completion.
 Handoff-link deletion wins concurrent lifetime edits without closing the target.
 
 Use service --help or service -h for local help without starting a browser

@@ -4560,7 +4560,8 @@ in-memory page state cannot be reconstructed. Missing absence proof, unsettled
 close operations and changed targets remain refused; recovery never resets the
 profile or replays CDP navigation. During mode replacement, Native readiness is
 checked against the observed replacement launch assignment before atomic
-publication, including when placement changes its desktop.
+publication, including when placement changes its desktop. Window visibility
+qualification uses observation only and does not wait for input-policy readiness.
 An acknowledged handoff-link deletion also wins a concurrent lifetime edit;
 stale publication cannot restore that link.
 

@@ -4,6 +4,7 @@ Product lane: PL-BUGFIX
 State: OPEN
 Work item: CochranResearchGroup/agent-browser#673
 Primary writer: MODE-HANDOFF-CONTROL-649
+Consolidation: required
 
 ## Bounded outcome
 
@@ -106,3 +107,88 @@ StealthCDP filter passed 9 tests with 1 ignored browser e2e. Both managed defaul
 launch and required-build refusal cases ran. The merged docs build passes. Peer
 configured-build guidance is retained verbatim in the linked readiness reference;
 the compact root guide is 9,993 bytes. No shared user-scoped guide was overwritten.
+
+
+## Observation-only lifecycle follow-up
+
+PR686 is merged and its exact installed candidate passed guidance and installer
+fixtures. Actual public acceptance retained the marker page on the replacement
+and independently observed its new Native desktop, with CDP absent and first-run
+UI suppressed. Conversion still timed out: the retained operation remained
+launch-dispatched with one attempt. This is failed workflow evidence, not a pass.
+
+The mode qualifier still called the guarded-input readiness adapter. A real
+owner-HTTP fixture is RED: an observable exact window returned ready=false when
+input policy was disabled. Lifecycle completion must observe the window without
+consulting input readiness. Factor the existing retained-window observation-only
+adapter for reuse by an exactly claimed pending process. Keep persisted-state,
+viewing-generation and process-identity checks; ordinary input policy remains
+unchanged. Match positive observation and wrong-process rejection, retained-window
+fences, mode operation checks and strict quality before final installed acceptance.
+The page-continuity and public interactive/return gate remain open.
+
+
+## Consolidated batch
+
+One fresh-profile mode workflow includes first-run suppression, exact pending
+assignment and observation-only lifecycle qualification. The first two are
+integrated; this follow-up addresses the remaining Native completion dependency.
+Preserve peer placement and configured-build selection. Do not expand to unrelated
+input policy, provider capacity, global task closure or new viewer work.
+
+## Delivery sequence and budget
+
+Run the focused lifecycle regression, retained-window and mode checks plus strict
+quality; review serially, merge, qualify one frozen production candidate, then
+reconcile the original disposable operation and exercise the public workflow.
+The resumed window has 70 active minutes remaining including build/observation,
+at most one further production build and install. Prior failed attempts count;
+this does not reset cumulative accounting. Reassess after two no-outcome
+checkpoints or 30 minutes. Another discovered blocker ends this build tactic.
+
+## Worker assignments
+
+The primary owns this checkout, Native host extraction, mode call site, matched
+fixtures and guidance. No delegation or parallel source writer is required.
+
+## Evidence and exit
+
+Reuse the unchanged first-run and pending-assignment evidence. New gates cover
+the observation-only process boundary, existing retained-window identity/state
+fences, mode transitions, strict Clippy/fmt and documentation. Exact-artifact
+checks and same-page, same-handoff CDP-free conversion plus interactive return
+remain mandatory; no fixture substitutes for public acceptance. Record failures
+and preserve pending launch custody rather than issuing a second launch.
+
+
+## Exact pending desktop publication
+
+A bounded reconciliation readback sharpened the live failure to
+browser_session_recovery_identity_conflict. The retained operation already held
+qualified replacement evidence, including successful Native observation. A live
+owner differential returned enabled input policy and the exact marker window
+quickly. Thus input readiness was an unnecessary lifecycle dependency, but did
+not explain this publication failure.
+
+The owner replacement seam still passed current_desktop_rebind=false. Its final
+recovery guard rejected the new desktop despite qualified pending launch custody.
+The model regression is RED at this exact publication seam with the same error.
+Allow a desktop rebind only for a valid observed pending intent whose profile,
+desktop and generation match the replacement, under the existing operation fence.
+Unknown moves, foreign profiles, mismatched generations, invalid intent and a
+different operation remain refused without state changes. Ordinary recovery and
+input guards are unchanged. Consolidate this demonstrated blocker with the
+observation-only change before the single remaining candidate cycle.
+
+Serial Standards review against integrated baseline c4861df82 found no blocker:
+the observation adapter is extracted rather than duplicated; custody remains in
+the existing model/CLI seam; all user-facing guidance surfaces are updated.
+Serial Spec review found the change addresses the actual publication conflict
+without authorizing arbitrary movement. Matching pending profile/desktop/generation
+and operation fences remain required; real public acceptance remains the exit.
+
+Combined source passes strict workspace Clippy and formatting, 15 focused CLI
+host/handoff cases and all 424 service-model tests across 26 suites. Policy,
+changed-link, handoff documentation and docs build pass. The zero-match unit
+filter for mode-operation integration tests is excluded; the explicit integration
+binary passed all 17 tests. No hosted CI ran.

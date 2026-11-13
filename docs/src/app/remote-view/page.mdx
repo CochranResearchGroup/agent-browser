@@ -1086,6 +1086,7 @@ startup URL; a fresh launch still uses the configured URL. CDP-free startup supp
 Chrome first-run onboarding and default-browser prompts so they do not replace
 the intended page. Mode replacement checks Native readiness against its exact
 observed launch assignment before publication, including a changed desktop.
+This window observation does not wait for input-policy readiness or grant control.
 Unsaved in-memory page
 state cannot be reconstructed, and website actions are not replayed.
 
