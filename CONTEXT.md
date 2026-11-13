@@ -4,6 +4,11 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Browser popup default**: New Chromium launches preserve normal blocking of
+unsolicited popups. User-activation clicks can open legitimate popup workflows;
+explicit custom launch arguments remain a separate opt-out. Retained browsers
+keep their original launch posture.
+
 **Managed executable default**: The browser owner resolves its startup executable
 from explicit environment/configuration and the StealthCDP artifact manifest.
 This is independent of a service access-plan recommendation. A required missing

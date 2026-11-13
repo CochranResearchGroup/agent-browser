@@ -2,6 +2,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: STOCK-POPUP-693
+    product_lane: PL-BUGFIX
+    objective: Restore stock unsolicited popup blocking in ordinary managed launches
+    plan: docs/dev/maintenance/stock-popup-default.md
+    branch: fix/stock-popup-default
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#693]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [MCP-STEALTHCDP-676]
+    reconciled_overlaps: ["Reuse own clean primary; preserve prior branch and sealed artifacts; no new checkout or peer source changes"]
+    validation_status: Actual browser RED/GREEN;93 selected tests, strict workspace Clippy, Rustfmt and docs gates pass; merged-source adoption pending
+    limitations: ["No production change before merged-source qualification", "Codec qualification remains in the parent Chromium task"]
+    updated_at: 2026-11-13
   - id: RECEIVING-BINDING-681
     product_lane: PL-BUGFIX
     objective: Freeze current receiving identity after reconciliation without relaxing retirement
