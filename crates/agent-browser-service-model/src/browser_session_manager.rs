@@ -94,6 +94,15 @@ pub trait BrowserSessionEffects {
     ) -> Result<crate::RemoteViewApplicationTarget, String> {
         Err("remote_view_native_observation_unsupported".into())
     }
+    /// Locate Native readiness for one observed replacement before publication.
+    /// This is observation only; the caller separately proves its process identity.
+    fn native_replacement_assignment_target(
+        &mut self,
+        target: &crate::RemoteViewTabHandoffTarget,
+        _recovery: &BrowserRecovery,
+    ) -> Result<crate::RemoteViewApplicationTarget, String> {
+        self.native_handoff_assignment_target(target)
+    }
     /// Register continuity with the native provider owner without a viewer
     /// grant or use assertion, after publication of the registration intent.
     fn register_native_handoff_observation(

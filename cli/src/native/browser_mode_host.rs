@@ -644,7 +644,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         let target = self
             .host
             .effects
-            .native_handoff_assignment_target(&retained_target)?;
+            .native_replacement_assignment_target(&retained_target, recovery)?;
         let mut ready = None;
         for _ in 0..30 {
             match self.host.native_process_command(

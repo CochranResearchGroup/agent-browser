@@ -4558,7 +4558,9 @@ and profile and asks Chrome to restore its saved session instead of opening the
 initial startup URL. Fresh launches still use that configured URL. CDP-free startup suppresses Chrome's first-run and default-browser prompts so they do not replace the intended page. Unsaved
 in-memory page state cannot be reconstructed. Missing absence proof, unsettled
 close operations and changed targets remain refused; recovery never resets the
-profile or replays CDP navigation.
+profile or replays CDP navigation. During mode replacement, Native readiness is
+checked against the observed replacement launch assignment before atomic
+publication, including when placement changes its desktop.
 An acknowledged handoff-link deletion also wins a concurrent lifetime edit;
 stale publication cannot restore that link.
 
