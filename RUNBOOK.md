@@ -1,3 +1,7 @@
+## Replacement desktop placement source qualification | 2026-11-12
+
+[#672](https://github.com/CochranResearchGroup/agent-browser/issues/672), [source packet](docs/dev/maintenance/recovery-desktop-placement.md): pooled replacement launches prefer observed vacant capacity and persist wrap-around order. SQLite custody and manager publication permit only qualified replacement placement while preserving original history and handoff continuity. Final45 focused CLI cases, full service-model package, strict workspace Clippy, Rustfmt, policy/link/docs checks pass. Initial publication-guard, fixture-observation, stale synthetic-target and lint failures are retained in the packet. No production installation or existing browser relocation.
+
 ## Interrupted-close restore accepted | 2026-11-12
 
 [P304](docs/dev/plans/0304-2026-11-12-restore-mode-after-interrupted-close.md) is CLOSED.

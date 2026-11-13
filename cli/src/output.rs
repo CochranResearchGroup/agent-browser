@@ -8355,6 +8355,7 @@ Environment:
   AGENT_BROWSER_REMOTE_VIEW_POOL   Application pool name (required with origin; same-key terminal acquisition readback preserves history)
   AGENT_BROWSER_REMOTE_VIEW_APPLICATION Application selector (default: agent-browser)
   AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT Warm desktop minimum (default: 1; demand grows to pool limit)
+                                 Replacement launches prefer vacant desktops after proven process absence, then wrap at capacity. Live reuse and explicit placement keep their desktop constraints.
   AGENT_BROWSER_DURABLE_HANDOFF_TTL_MS Durable handoff TTL; 0 means unlimited (default: 0)
   AGENT_BROWSER_DISPOSABLE_HANDOFF_TTL_MS Disposable link TTL; 0 is perpetual (default: 0)
   AGENT_BROWSER_DISPOSABLE_INACTIVITY_MS Positive disposable inactivity retention (default: 86400000)

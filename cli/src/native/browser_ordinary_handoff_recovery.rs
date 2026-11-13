@@ -62,6 +62,9 @@ fn qualify(
     let mut expected = binding.browser.clone();
     expected.pid = browser.pid;
     expected.cdp_endpoint = browser.cdp_endpoint.clone();
+    // Replacement placement may change; both original and current assignments
+    // are independently joined to immutable published launch custody below.
+    expected.desktop = browser.desktop.clone();
     if expected != *browser
         || binding.browser.pid == browser.pid
         || binding.tabs.len()
@@ -270,10 +273,9 @@ pub(super) fn qualify_reconstruction(
     let ([current], [prior]) = (current.as_slice(), prior.as_slice()) else {
         return Err(refused());
     };
-    if assignment_fenced(&records, &current.intent.assignment)
-        || current.intent.assignment.desktop_id != prior.intent.assignment.desktop_id
-        || current.intent.assignment.generation != prior.intent.assignment.generation
-    {
+    // Reconstruction joins the current assignment to current publication and
+    // proves the prior process absent below; placement need not remain fixed.
+    if assignment_fenced(&records, &current.intent.assignment) {
         return Err(refused());
     }
     (**current)
