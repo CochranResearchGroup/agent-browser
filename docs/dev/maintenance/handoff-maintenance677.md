@@ -222,3 +222,34 @@ Reassess at two no-progress checkpoints or 30 minutes without outcome progress.
 The existing review/merge/deploy authorization covers continuation of 677 inside
 its original target and preserving effect class; source readiness alone grants
 no additional effect. Retain the prior installed candidate and every peer task.
+
+
+Source qualification for the continuation: pool 145 pass with one existing ignored
+test; all 424 service-model tests, the addressed own-profile pending-effect guard,
+strict workspace Clippy, formatting, policy wiring, changed links and docs build
+pass. Test homes, runtime directories and provider replies are synthetic. WSL
+uses rustc 1.94.1, four Cargo jobs, debug symbols disabled, eight test codegen units
+and a private target directory. No hosted or cross-platform qualification ran.
+
+Exact RED and GREEN test command (same command, before and after the repair):
+
+```bash
+scripts/ci/rust-tests.sh --focused handoff677_live_target
+```
+
+Affected checks:
+
+```bash
+scripts/ci/rust-tests.sh --focused automatic_retirement_pending_effect_denies_conflicting_browser_commands
+scripts/ci/rust-tests.sh --focused pool_tests
+scripts/ci/cargo-safe.sh test -p agent-browser-service-model -- --test-threads=1
+scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings
+scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check
+```
+
+Serial Standards review against 2e9106fcb found no blocking ownership or convention
+finding. Serial Spec review found the blocked foreign-provider case repaired
+without relaxing own-profile or shared-group custody. No refactoring is required
+for this slice. Preserve the warm installed handoff across the one authorized
+preserving upgrade for a same-task, same-URL before/after comparison. This remains
+separate from the command-seam test and does not claim independent off-host pixels.
