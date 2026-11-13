@@ -98,3 +98,11 @@ Strict Clippy/fmt and 37 focused executions passed (2 pending assignment, 30 mod
 2 placement, 3 ordinary recovery). The complete service-model package, its
 integration binaries and doc tests passed. Policy/link/handoff docs and docs build
 passed. Installed acceptance remains open; the first failed attempt is retained.
+
+Final integration preserves PR679 configured-build defaults and its installed
+source. Combined strict Clippy/fmt and both pending-assignment cases pass. The
+initial configured-build filter matched zero tests and is excluded; the corrected
+StealthCDP filter passed 9 tests with 1 ignored browser e2e. Both managed default
+launch and required-build refusal cases ran. The merged docs build passes. Peer
+configured-build guidance is retained verbatim in the linked readiness reference;
+the compact root guide is 9,993 bytes. No shared user-scoped guide was overwritten.
