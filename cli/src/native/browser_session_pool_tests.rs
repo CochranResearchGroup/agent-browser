@@ -600,6 +600,10 @@ struct Provider {
     lose_retirement_completion: bool,
     lose_retirement_preparation: bool,
     unavailable_idle_retirement_assignment: Option<String>,
+    blocked_idle_retirement: Option<(
+        String,
+        std::sync::Arc<(std::sync::Mutex<bool>, std::sync::Condvar)>,
+    )>,
 }
 struct NativeOwnerBridge {
     owner_url: String,
@@ -751,6 +755,15 @@ impl RemoteViewApplicationTransport for PoolTransport {
                 )
             }
             RemoteViewApplicationRequest::ReadIdleRetirement { assignment_id, .. } => {
+                if let Some((blocked, gate)) = &provider.blocked_idle_retirement {
+                    if blocked == assignment_id {
+                        let (released, changed) = &**gate;
+                        let mut released = released.lock().unwrap();
+                        while !*released {
+                            released = changed.wait(released).unwrap();
+                        }
+                    }
+                }
                 provider.operations.push("read_idle_retirement");
                 if provider.unavailable_idle_retirement_assignment.as_ref() == Some(assignment_id) {
                     return Err(RemoteViewApplicationTransportError::Unavailable);
@@ -2431,6 +2444,85 @@ fn native_handoff_assignment_history_preserves_exact_target_and_rejects_active_a
         assert_eq!(provider.borrow().view_requests.len(), 1);
         assert_eq!(calls.get(), 1);
     }
+}
+
+#[test]
+fn handoff677_live_target_is_ready_while_another_profiles_retirement_provider_is_blocked() {
+    use std::sync::{mpsc, Arc, Condvar, Mutex};
+    use std::time::Duration;
+
+    let gate = Arc::new((Mutex::new(false), Condvar::new()));
+    let blocked = gate.clone();
+    let (ready_tx, ready_rx) = mpsc::sync_channel(1);
+    let (result_tx, result_rx) = mpsc::sync_channel(1);
+    let worker = std::thread::spawn(move || {
+        let fixture = Fixture::new();
+        let env = crate::test_utils::EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+        ]);
+        env.set("HOME", fixture.root.to_str().unwrap());
+        env.set("AGENT_BROWSER_HOME", fixture.root.to_str().unwrap());
+        env.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        let provider = Rc::new(RefCell::new(Provider::default()));
+        let mut consumer = host(&fixture, provider.clone(), Rc::new(Cell::new(0)));
+        let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+            "action":"navigate", "url":"https://synthetic.example/", "profileId":"profile-a", "activityAtMs":100,
+        })).unwrap().unwrap();
+        let identity = &opened["browserSession"];
+        let alice = consumer.state().browsers[identity["browserId"].as_str().unwrap()].clone();
+        provider
+            .borrow_mut()
+            .occupied_desktops
+            .insert(alice.desktop.as_ref().unwrap().desktop_id.clone());
+        let bob = consumer
+            .open(OpenBrowserSession::exact_profile("Bob", "profile-b", 101))
+            .unwrap();
+        provider.borrow_mut().occupied_desktops.clear();
+        let baseline = consumer.state().clone();
+        let intent = claim_fixture_retirement(
+            &fixture,
+            provider.clone(),
+            &baseline,
+            &baseline.browsers[&bob.browser_id],
+        );
+        assert_ne!(
+            intent.provider.assignment.desktop_id,
+            alice.desktop.as_ref().unwrap().desktop_id
+        );
+        fixture
+            .store(false)
+            .admit_idle_retirement_preparation(&intent)
+            .unwrap();
+        provider.borrow_mut().window_pid = Some(alice.pid);
+        provider.borrow_mut().blocked_idle_retirement =
+            Some((intent.provider.assignment.assignment_id, blocked));
+        ready_tx.send(()).unwrap();
+        let response = consumer.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":identity["handoffId"],
+            "nativeDesktop":true, "activityAtMs":2001,
+        }));
+        result_tx
+            .send((identity["targetId"].clone(), response))
+            .unwrap();
+    });
+    ready_rx
+        .recv_timeout(Duration::from_secs(30))
+        .expect("synthetic handoff setup must finish");
+    let completed = result_rx.recv_timeout(Duration::from_secs(2));
+    // Release and join even on RED, so the unavailable external provider cannot
+    // leave a blocked worker or prevent fixture cleanup.
+    *gate.0.lock().unwrap() = true;
+    gate.1.notify_all();
+    worker
+        .join()
+        .expect("synthetic owner must finish after provider release");
+    let (target, response) =
+        completed.expect("live handoff waited on another profile's blocked maintenance provider");
+    assert_eq!(response["success"], true, "{response}");
+    assert_eq!(response["data"]["operatorVisible"]["state"], "ready");
+    assert_eq!(response["data"]["targetId"], target);
 }
 
 #[test]
@@ -7510,7 +7602,9 @@ fn automatic_retirement_pending_effect_denies_conflicting_browser_commands() {
         || uuid::Uuid::new_v4().to_string(),
     )
     .unwrap();
-    effects.begin_operation(&baseline).unwrap();
+    effects
+        .begin_browser_operation(&baseline, &browser)
+        .unwrap();
     assert_eq!(
         effects
             .navigate(&browser, &tab, "https://synthetic.example/")

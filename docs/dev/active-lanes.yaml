@@ -2170,14 +2170,14 @@ lanes:
     accountable_owner: ecochran76
     objective: Remove maintenance contention that stalls authenticated handoffs
     plan: docs/dev/maintenance/handoff-maintenance677.md
-    branch: fix/handoff-maintenance-latency
+    branch: fix/handoff-latency677-tdd
     target: main
     work_items: [CochranResearchGroup/agent-browser#677]
     plan_state: OPEN
-    custody_state: INTEGRATED
+    custody_state: ACTIVE_WORKTREE
     dependencies: []
     overlaps: [MCP-STEALTHCDP-676, MODE-HANDOFF-CONTROL-649]
     reconciled_overlaps: ["677 owns maintenance/custody and regression surfaces;676 retains host launch defaults;673 retains Chrome onboarding; preserve dirty peers and reconcile catalog entries at integration"]
-    validation_status: PR682 merged and deployed; pool 144 and model 424 pass, strict gates and exact installer fixture pass; doctor and ready synthetic handoff pass; public viewer documents 3.194 to 6.284 seconds
+    validation_status: Prior deployment accepted; residual latency continuation uses public handoff command TDD with blocked unrelated Native maintenance; RED timeout then GREEN at the command seam; final guard and source gates pending
     limitations: ["Further performance qualification remains open; maintenance timings do not prove a controlled wall-time improvement", "No independent off-host or first-pixel timing", "Retain primary worktree and sealed artifact as deployment provenance"]
     updated_at: 2026-11-13

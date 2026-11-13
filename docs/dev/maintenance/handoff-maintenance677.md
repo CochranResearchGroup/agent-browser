@@ -177,3 +177,48 @@ files retain their configured policy; no peer browser, profile or rollback
 payload was removed. Raw protocols, identities, invitations and receipts stay in
 private user state. Retain this worktree and its sealed candidate as deployment
 provenance; no worktree or candidate cleanup is implied.
+
+
+## Residual latency TDD continuation
+
+Product lane: PL-BUGFIX. Branch: fix/handoff-latency677-tdd. Reuse the existing
+primary checkout and preserve its sealed installed candidate. The operator
+invoked TDD for 677 after reconnecting MCP. This slice owns addressed handoff and
+operation setup; preserve peer launch, mode and receiving-binding surfaces.
+
+Seams under test:
+
+- Browser Runtime `service_remote_view_handoff_resolve`: prove an exact live
+  target remains ready while another profile's Native retirement provider is
+  blocked. This catches foreground dependence on unrelated provider work; it
+  misses external ingress and first-pixel delivery.
+- Existing profile retirement admission: retain own-profile unresolved-operation
+  refusal after the first GREEN result. This catches accidentally weakening the
+  target's lifecycle fence; add only after the first slice completes.
+
+Use the existing real SQLite/host/provider harness. Block only the external
+Native provider boundary with explicit synchronization. Assert the addressed
+handoff response and target within a deadline while the foreign provider remains
+held. Do not assert internal read counts, query the database as a result oracle,
+cache mutable ownership across requests or remove uncertain journals.
+Source work preserves production; exact installed acceptance remains separate.
+
+
+The first command-seam test is RED on baseline 2e9106fcb: the exact failure is
+"live handoff waited on another profile's blocked maintenance provider: Timeout".
+The focused suite ran in 8.40 seconds after compilation. The minimal implementation
+scopes operation setup to the addressed profile while retaining all records and
+full snapshot authority. The same test is GREEN in 7.09 seconds after compilation;
+its handoff result arrived while the foreign provider was still blocked.
+Recheck with per-fixture control HOME isolation, and exercise the existing
+pending-effect guard through addressed initialization. Global maintenance is
+unchanged. This command-seam proof does not bound waiting behind an already
+running global maintenance pass or prove installed end-to-end timing.
+
+Controller: primary 677. Bound this continuation to one addressed-operation slice,
+one review pass with at most one correction, one qualified candidate build and
+one preserving installed acceptance cycle within two hours of this continuation.
+Reassess at two no-progress checkpoints or 30 minutes without outcome progress.
+The existing review/merge/deploy authorization covers continuation of 677 inside
+its original target and preserving effect class; source readiness alone grants
+no additional effect. Retain the prior installed candidate and every peer task.

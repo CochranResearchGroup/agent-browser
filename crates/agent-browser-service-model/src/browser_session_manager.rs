@@ -225,6 +225,17 @@ pub trait BrowserSessionEffects {
         Ok(())
     }
 
+    /// Start an addressed operation without depending on unrelated profiles'
+    /// maintenance providers. The complete snapshot and target's own fences
+    /// remain authoritative; adapters without scoped work retain their behavior.
+    fn begin_browser_operation(
+        &mut self,
+        expected: &BrowserSessionState,
+        _browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        self.begin_operation(expected)
+    }
+
     /// Initialize only an exact retained browser observation. Implementations
     /// must not reconcile, settle activity, launch, close or contact a provider.
     fn begin_retained_observation(

@@ -528,6 +528,7 @@ impl<
         &mut self,
         expected: &BrowserSessionState,
         requested_profile: Option<&str>,
+        operation_profile: Option<&str>,
     ) -> Result<(), String> {
         // Recover exact native preparation before attempting any new effect.
         // A known prepared operation with no admitted effects can publish an
@@ -536,6 +537,15 @@ impl<
         let reconcilable = self
             .retirements
             .values()
+            .filter(|record| {
+                operation_profile.is_none_or(|profile| {
+                    record
+                        .intent
+                        .scopes
+                        .iter()
+                        .any(|scope| scope.browser.profile_id == profile)
+                })
+            })
             .filter(|record| match requested_profile {
                 Some(profile) => {
                     // A request may finish only its own proven settled scope.
@@ -644,6 +654,7 @@ impl<
         &mut self,
         expected: &BrowserSessionState,
         reconcile_native: bool,
+        operation_profile: Option<&str>,
     ) -> Result<(), String>
     where
         E: BrowserSessionEffects,
@@ -669,10 +680,10 @@ impl<
         // exactly equal scope. Unknown evidence still retains every obligation;
         // positive original exit settles each durable activity independently.
         let mut observations: Vec<(BrowserIdleRetirementScope, bool)> = Vec::new();
-        for activity in activities
-            .into_iter()
-            .filter(|activity| !activity.original_ended)
-        {
+        for activity in activities.into_iter().filter(|activity| {
+            !activity.original_ended
+                && operation_profile.is_none_or(|profile| activity.browser.profile_id == profile)
+        }) {
             let scope = BrowserIdleRetirementScope {
                 browser: activity.browser.clone(),
                 process_identity: activity.process_identity.clone(),
@@ -705,7 +716,7 @@ impl<
             .map(|record| (record.intent.id.clone(), record))
             .collect();
         if reconcile_native {
-            self.reconcile_native_retirements(expected, None)?;
+            self.reconcile_native_retirements(expected, None, operation_profile)?;
         }
         self.operation_retirements.clear();
 
@@ -826,7 +837,7 @@ impl<
         next.retain_live_for_handoff()
             .map_err(|_| "browser_session_idle_readback_required")?;
         self.update_retirement(&record, next)?;
-        self.reconcile_native_retirements(expected, Some(&browser.profile_id))?;
+        self.reconcile_native_retirements(expected, Some(&browser.profile_id), None)?;
         if self
             .store
             .idle_retirement_records()
@@ -1041,7 +1052,7 @@ impl<
             .as_ref()
             .ok_or("remote_view_session_operation_baseline_missing")?
             .clone();
-        self.reconcile_native_retirements(&expected, Some(&profile.id))?;
+        self.reconcile_native_retirements(&expected, Some(&profile.id), None)?;
         let Some(mut recovered) = self
             .effects
             .reconcile_profile_browser(profile, browser, tabs, navigation)?
@@ -1313,7 +1324,18 @@ impl<
     }
 
     fn begin_operation(&mut self, expected: &BrowserSessionState) -> Result<(), String> {
-        self.begin_operation_scope(expected, true)
+        self.begin_operation_scope(expected, true, None)
+    }
+
+    fn begin_browser_operation(
+        &mut self,
+        expected: &BrowserSessionState,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        if expected.browsers.get(&browser.id) != Some(browser) {
+            return Err("browser_session_operation_target_changed".into());
+        }
+        self.begin_operation_scope(expected, true, Some(&browser.profile_id))
     }
 
     fn begin_retained_observation(
@@ -1428,7 +1450,7 @@ impl<
         &mut self,
         expected: &BrowserSessionState,
     ) -> Result<(), String> {
-        self.begin_operation_scope(expected, false)
+        self.begin_operation_scope(expected, false, None)
     }
     fn pending_browser_activity_ids(&self) -> Vec<String> {
         self.activities.iter().cloned().collect()
