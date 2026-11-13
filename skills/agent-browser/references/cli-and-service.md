@@ -4766,3 +4766,12 @@ continuity; qualify the actual destination separately from viewer controls.
 CDP-free Chrome startup suppresses first-run onboarding and default-browser
 prompts, preserving the requested page/session without adding automation or
 mock-keychain flags. CDP-backed manual-login posture is unchanged.
+
+## Replacement placement
+
+CDP-free startup skips setup; recovery requests saved pages. Fresh launches keep
+their configured URL. Replacement browser recovery prefers a vacant eligible
+desktop after proving the original process absent. At capacity it follows the
+persisted wrap-around order. Live profile reuse keeps its desktop; explicit
+placement remains binding. Task, profile and durable handoff identity survive
+replacement.

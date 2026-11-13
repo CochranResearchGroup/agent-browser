@@ -1865,18 +1865,55 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             self.effects
                 .select_profile_browser_executable(profile.id.clone(), path.clone())?;
         }
-        let recovered = self.effects.recover_browser(
-            &browser,
-            &profile,
-            &tabs,
-            &self.state.navigation_history,
-        )?;
+        let recovered = if let Some(placement) = placement {
+            if let Some(candidates) = self.effects.remote_view_placement_candidates(placement)? {
+                let desktop = placement.select(&candidates)?;
+                self.effects.recover_browser_at(
+                    &browser,
+                    &profile,
+                    &tabs,
+                    &self.state.navigation_history,
+                    &desktop,
+                )?
+            } else {
+                self.effects.recover_browser(
+                    &browser,
+                    &profile,
+                    &tabs,
+                    &self.state.navigation_history,
+                )?
+            }
+        } else {
+            self.effects.recover_browser(
+                &browser,
+                &profile,
+                &tabs,
+                &self.state.navigation_history,
+            )?
+        };
         if placement.is_some_and(|placement| !placement.accepts(recovered.launch.desktop.as_ref()))
         {
             return Err("browser_placement_conflict:recovery selected another desktop; explicitly relocate/rebind".into());
         }
         let browser_id = browser.id.clone();
-        self.publish_recovery(browser, tabs, recovered, false, false)?;
+        let desktop_id = recovered
+            .launch
+            .desktop
+            .as_ref()
+            .map(|desktop| desktop.desktop_id.clone());
+        // The adapter has proved profile absence and retained fresh replacement
+        // custody. Only that exact admitted assignment may change desktop here.
+        let admitted_placement = self.effects.pending_launch_intent().is_some_and(|intent| {
+            intent.profile_id == browser.profile_id
+                && recovered.launch.desktop.as_ref().is_some_and(|desktop| {
+                    desktop.desktop_id == intent.assignment.desktop_id
+                        && desktop.generation == intent.assignment.generation
+                })
+        });
+        self.publish_recovery(browser, tabs, recovered, admitted_placement, false)?;
+        if placement.is_none() && desktop_id.is_some() {
+            self.state.last_remote_view_desktop_id = desktop_id;
+        }
         // A positively absent replacement has fresh launch custody; prior shared attachment does not transfer.
         self.state.shared_browser_ids.remove(&browser_id);
         self.state
