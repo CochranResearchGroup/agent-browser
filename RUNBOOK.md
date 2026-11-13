@@ -1,3 +1,19 @@
+## Maintenance mutex wait repaired and deployed | 2026-11-13
+
+[677](https://github.com/CochranResearchGroup/agent-browser/issues/677),
+[evidence](docs/dev/maintenance/handoff-maintenance677.md): PR696 merged as ce149abff;
+sealed production 975a387e7132 accepted through one preserving installation.
+The actual queued handoff is RED behind a blocked maintenance provider and GREEN
+with independent retained adapters, preserving its target and renewed activity.
+Pool 146, strict gates, daemon 13, regular tab-close contracts, exact installer
+fixture and doctor pass. The original synthetic browser process, profile, tab,
+target and handoff survive installation; scoped close and fresh OS check prove
+no process residue. Five public document probes from Cooper have medians 4.381s
+before and 4.982s after, with a 9.468s cold sample. No general speedup, independent
+off-host or first-pixel result is claimed. Keep #677 open for residual viewer
+latency; this bounded mutex repair/deployment is complete. Retain primary and
+all three sealed artifacts.
+
 ## Stock popup default deployed | 2026-11-13
 
 [693](https://github.com/CochranResearchGroup/agent-browser/issues/693),
