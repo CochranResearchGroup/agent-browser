@@ -2164,3 +2164,20 @@ lanes:
     validation_status: RED missing helper method then hosted and enrolled forwarding GREEN; existing Auth helper and TypeScript checks pass; full source and adoption checks pending
     limitations: ["Requires qualified Auth354 SDK export; no fallback or inferred approval", "Installed SDK and component skill propagation remain open"]
     updated_at: 2026-11-12
+
+  - id: HANDOFF-MAINTENANCE-677
+    product_lane: PL-BUGFIX
+    accountable_owner: ecochran76
+    objective: Remove maintenance contention that stalls authenticated handoffs
+    plan: docs/dev/maintenance/handoff-maintenance677.md
+    branch: fix/handoff-maintenance-latency
+    target: main
+    work_items: [CochranResearchGroup/agent-browser#677]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [MCP-STEALTHCDP-676, MODE-HANDOFF-CONTROL-649]
+    reconciled_overlaps: ["677 owns maintenance/custody and regression surfaces;676 retains host launch defaults;673 retains Chrome onboarding; preserve dirty peers and reconcile catalog entries at integration"]
+    validation_status: Live maintenance contention reproduced; synthetic regression pending
+    limitations: ["No production installation or lifecycle-policy change authorized by source readiness"]
+    updated_at: 2026-11-12

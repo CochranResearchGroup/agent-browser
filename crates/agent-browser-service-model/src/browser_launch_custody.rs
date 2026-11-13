@@ -52,6 +52,14 @@ pub struct BrowserLaunchCustodyRecord {
     pub published: bool,
 }
 
+/// Immutable launch evidence read together for one retirement preflight.
+/// Missing legacy identity stays missing; this is not a current OS observation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PublishedBrowserLaunchCustody {
+    pub assignment: RemoteViewAssignmentRecord,
+    pub process_identity: Option<crate::RecordedProcessIdentity>,
+}
+
 impl BrowserLaunchCustodyRecord {
     pub fn pending(intent: BrowserLaunchIntent) -> Result<Self, BrowserLaunchCustodyError> {
         intent.validate()?;
@@ -232,6 +240,50 @@ pub trait BrowserLaunchCustodyStore {
         _browser: &crate::ManagedBrowserInstance,
     ) -> Result<crate::RemoteViewAssignmentRecord, LaunchCustodyStoreError> {
         Err(LaunchCustodyStoreError::Unavailable)
+    }
+
+    /// Read selected assignments without repeatedly loading the owner aggregate.
+    /// Durable adapters may read one fresh transaction; no snapshot survives an
+    /// operation or substitutes for effect admission and publication checks.
+    fn published_launch_assignments(
+        &mut self,
+        browsers: &[crate::ManagedBrowserInstance],
+    ) -> Result<
+        std::collections::BTreeMap<String, RemoteViewAssignmentRecord>,
+        LaunchCustodyStoreError,
+    > {
+        browsers
+            .iter()
+            .map(|browser| {
+                Ok((
+                    browser.id.clone(),
+                    self.published_launch_assignment(browser)?,
+                ))
+            })
+            .collect()
+    }
+
+    /// Join peer assignment and immutable process evidence in one fresh snapshot.
+    /// The fallback preserves existing store implementations and their guards.
+    fn published_launch_custody(
+        &mut self,
+        browsers: &[crate::ManagedBrowserInstance],
+    ) -> Result<
+        std::collections::BTreeMap<String, PublishedBrowserLaunchCustody>,
+        LaunchCustodyStoreError,
+    > {
+        browsers
+            .iter()
+            .map(|browser| {
+                Ok((
+                    browser.id.clone(),
+                    PublishedBrowserLaunchCustody {
+                        assignment: self.published_launch_assignment(browser)?,
+                        process_identity: self.published_launch_process_identity(browser)?,
+                    },
+                ))
+            })
+            .collect()
     }
 
     /// Presentation may use an explicitly borrowed app assignment. This grants

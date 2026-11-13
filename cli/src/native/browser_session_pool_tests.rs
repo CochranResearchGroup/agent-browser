@@ -7670,6 +7670,15 @@ fn automatic_retirement_legacy_identity_defers_before_native_preparation() {
 
 #[test]
 fn automatic_retirement_legacy_group_preflight_precedes_every_native_fence() {
+    legacy_group_preflight_fixture(None);
+}
+
+#[test]
+fn retirement_preflight677_bounds_snapshot_reads_across_peer_groups() {
+    legacy_group_preflight_fixture(Some(2));
+}
+
+fn legacy_group_preflight_fixture(snapshot_read_budget: Option<usize>) {
     let fixture = Fixture::new();
     std::fs::write(fixture.root.join("legacy-launch-no-kernel"), "profile-b").unwrap();
     let provider = Rc::new(RefCell::new(Provider::default()));
@@ -7725,10 +7734,15 @@ fn automatic_retirement_legacy_group_preflight_precedes_every_native_fence() {
         baseline.browsers[&alice.browser_id].clone(),
         baseline.browsers[&bob.browser_id].clone(),
     ];
+    let before_reads = crate::native::browser_session_store::session_snapshot_read_count();
     let reason = match effects.acquire_idle_retirement_guard(&browsers) {
         Err(reason) => reason,
         Ok(_) => panic!("legacy identity deferral must retain an inspectable reason"),
     };
+    let reads = crate::native::browser_session_store::session_snapshot_read_count() - before_reads;
+    if let Some(budget) = snapshot_read_budget {
+        assert!(reads > 0 && reads <= budget, "retirement preflight reloaded the owner aggregate {reads} times for two peer groups; it must use at most one selected snapshot and one peer snapshot");
+    }
     assert_eq!(reason, "browser_session_idle_original_identity_missing");
     assert!(
         fixture
@@ -7743,6 +7757,52 @@ fn automatic_retirement_legacy_group_preflight_precedes_every_native_fence() {
         .operations
         .contains(&"prepare_idle_retirement"));
     assert_eq!(fixture.store(false).load_session_state().unwrap(), baseline);
+}
+
+#[test]
+fn retirement_preflight677_batch_rechecks_owner_and_invalid_history() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider, calls);
+    let opened = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let baseline = consumer.state().clone();
+    let browser = baseline.browsers[&opened.browser_id].clone();
+    drop(consumer);
+    let mut store = fixture.store(false);
+    let snapshot = store
+        .published_launch_custody(std::slice::from_ref(&browser))
+        .unwrap();
+    assert!(snapshot[&browser.id].process_identity.is_some());
+    let mut changed = baseline.clone();
+    changed.browsers.get_mut(&browser.id).unwrap().pid += 1;
+    fixture.store(false).save_session_state(&changed).unwrap();
+    assert_eq!(
+        store.published_launch_custody(std::slice::from_ref(&browser)),
+        Err(LaunchCustodyStoreError::Conflict),
+        "a prior preflight cannot cache authority across peer publication"
+    );
+    fixture.store(false).save_session_state(&baseline).unwrap();
+    assert_eq!(
+        store
+            .published_launch_custody(std::slice::from_ref(&browser))
+            .unwrap(),
+        snapshot
+    );
+    rusqlite::Connection::open(fixture.root.join("runtime.sqlite3"))
+        .unwrap()
+        .execute(
+            "UPDATE state_documents SET json = 'invalid' WHERE kind = 'browser_launch_custody'",
+            [],
+        )
+        .unwrap();
+    assert_eq!(
+        store.published_launch_custody(std::slice::from_ref(&browser)),
+        Err(LaunchCustodyStoreError::InvalidRecord),
+        "batching must retain full history validation"
+    );
 }
 
 #[test]
@@ -11060,6 +11120,7 @@ fn retained_interactive_recovery_rejects_unqualified_scope_and_control() {
     for case in [
         "missing_prior",
         "ambiguous_launch",
+        "foreign_assignment",
         "nonterminal_retirement",
         "changed_tab",
         "target_swap",
@@ -11234,12 +11295,19 @@ fn retained_handoff_retirement_fixture(interactive: bool, refusal: Option<&str>)
             matching[0]["recovery"]["retirementId"], retirement.intent.id,
             "{case}"
         );
-        if case == "missing_prior" || case == "ambiguous_launch" {
+        if case == "missing_prior" || case == "ambiguous_launch" || case == "foreign_assignment" {
             let mut ledger = read_document("browser_launch_custody");
             let records = ledger["records"].as_object_mut().unwrap();
             if case == "missing_prior" {
                 records
                     .retain(|_, record| record["observedPid"] != before.browsers[browser_id].pid);
+            } else if case == "foreign_assignment" {
+                let record = records
+                    .values_mut()
+                    .find(|record| record["observedPid"] != before.browsers[browser_id].pid)
+                    .unwrap();
+                record["intent"]["assignment"]["desktopId"] =
+                    uuid::Uuid::new_v4().to_string().into();
             } else {
                 let mut record = records
                     .values()

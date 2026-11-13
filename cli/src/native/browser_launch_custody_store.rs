@@ -7,9 +7,9 @@ use agent_browser_service_model::{
     prepare_remote_view_application_cleanup, BrowserLaunch, BrowserLaunchCustodyRecord,
     BrowserLaunchCustodyStore, BrowserLaunchIntent, BrowserReleaseCustodyStore,
     BrowserSessionState, LaunchCustodyAdmission, LaunchCustodyStoreError,
-    RemoteViewApplicationCleanupPermit, RemoteViewApplicationCleanupSnapshot,
-    RemoteViewApplicationReleaseTarget, RemoteViewJoinedReleaseOutcome,
-    BROWSER_SESSION_STATE_SCHEMA_V1,
+    PublishedBrowserLaunchCustody, RemoteViewApplicationCleanupPermit,
+    RemoteViewApplicationCleanupSnapshot, RemoteViewApplicationReleaseTarget,
+    RemoteViewJoinedReleaseOutcome, BROWSER_SESSION_STATE_SCHEMA_V1,
 };
 use rusqlite::{Connection, TransactionBehavior};
 use serde::{Deserialize, Serialize};
@@ -399,6 +399,17 @@ fn published_launch_record(
         return Err(LaunchCustodyStoreError::Conflict);
     }
     let ledger = ledger(connection)?;
+    published_launch_record_in(&state, &ledger, browser)
+}
+
+fn published_launch_record_in(
+    state: &BrowserSessionState,
+    ledger: &Ledger,
+    browser: &agent_browser_service_model::ManagedBrowserInstance,
+) -> Result<BrowserLaunchCustodyRecord, LaunchCustodyStoreError> {
+    if state.browsers.get(&browser.id) != Some(browser) {
+        return Err(LaunchCustodyStoreError::Conflict);
+    }
     let records = ledger
         .records
         .values()
@@ -413,14 +424,44 @@ fn published_launch_record(
         _ => return Err(LaunchCustodyStoreError::Conflict),
     };
     record
-        .confirm_publication(&state)
+        .confirm_publication(state)
         .map_err(|_| LaunchCustodyStoreError::Conflict)?;
-    if assignment_fenced(&ledger, &record.intent.assignment)
-        && !assignment_release_completed(connection, &record.intent.assignment)?
-    {
+    let release_completed = ledger.release_fences.iter().any(|(id, target)| {
+        target.assignment == record.intent.assignment && ledger.release_outcomes.contains_key(id)
+    });
+    if assignment_fenced(ledger, &record.intent.assignment) && !release_completed {
         return Err(LaunchCustodyStoreError::ReleaseFenced);
     }
     Ok(record)
+}
+
+/// One read transaction joins current ownership, validated launch history and
+/// release outcomes. It is dropped before provider reads or retirement effects.
+fn published_launch_records(
+    connection: &Connection,
+    browsers: &[agent_browser_service_model::ManagedBrowserInstance],
+) -> Result<BTreeMap<String, BrowserLaunchCustodyRecord>, LaunchCustodyStoreError> {
+    if browsers.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let transaction = connection
+        .unchecked_transaction()
+        .map_err(|_| LaunchCustodyStoreError::Unavailable)?;
+    let state = current(&transaction)?;
+    let ledger = ledger(&transaction)?;
+    let records = browsers
+        .iter()
+        .map(|browser| {
+            Ok((
+                browser.id.clone(),
+                published_launch_record_in(&state, &ledger, browser)?,
+            ))
+        })
+        .collect::<Result<BTreeMap<_, _>, LaunchCustodyStoreError>>()?;
+    transaction
+        .commit()
+        .map_err(|_| LaunchCustodyStoreError::Unavailable)?;
+    Ok(records)
 }
 
 impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
@@ -469,6 +510,41 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
     ) -> Result<agent_browser_service_model::RemoteViewAssignmentRecord, LaunchCustodyStoreError>
     {
         published_assignment(self.remote_view_mutation_connection(), browser)
+    }
+
+    fn published_launch_assignments(
+        &mut self,
+        browsers: &[agent_browser_service_model::ManagedBrowserInstance],
+    ) -> Result<
+        BTreeMap<String, agent_browser_service_model::RemoteViewAssignmentRecord>,
+        LaunchCustodyStoreError,
+    > {
+        Ok(
+            published_launch_records(self.remote_view_mutation_connection(), browsers)?
+                .into_iter()
+                .map(|(id, record)| (id, record.intent.assignment))
+                .collect(),
+        )
+    }
+
+    fn published_launch_custody(
+        &mut self,
+        browsers: &[agent_browser_service_model::ManagedBrowserInstance],
+    ) -> Result<BTreeMap<String, PublishedBrowserLaunchCustody>, LaunchCustodyStoreError> {
+        Ok(
+            published_launch_records(self.remote_view_mutation_connection(), browsers)?
+                .into_iter()
+                .map(|(id, record)| {
+                    (
+                        id,
+                        PublishedBrowserLaunchCustody {
+                            assignment: record.intent.assignment,
+                            process_identity: record.observed_process_identity,
+                        },
+                    )
+                })
+                .collect(),
+        )
     }
 
     fn published_presentation_assignment(
@@ -2205,6 +2281,9 @@ fn single_retirement_recovery_proof(
     let mut expected_browser = scope.browser.clone();
     expected_browser.pid = browser.pid;
     expected_browser.cdp_endpoint = browser.cdp_endpoint.clone();
+    // Recovery may claim a new desktop. Both immutable launch records below
+    // must confirm their own exact assignments before this mapping is trusted.
+    expected_browser.desktop = browser.desktop.clone();
     if expected_browser != *browser
         || scope.browser.pid == browser.pid
         || scope.tabs.len()

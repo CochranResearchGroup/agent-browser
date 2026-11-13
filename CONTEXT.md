@@ -327,6 +327,10 @@ restart reads immutable custody instead of filling missing evidence from a live
 PID. Missing legacy evidence stays missing. Its first durable observation
 atomically promotes the database reader version. Retirement use of this evidence
 still requires separate effect and readback qualification.
+Retirement preflight joins selected and peer launch evidence in fresh
+operation-local SQLite snapshots. It does not reload the aggregate per field or
+cache authority across passes; effect admission and publication retain their
+independent current-state checks.
 _Avoid_: Global runtime lock, browser readiness, profile access policy
 
 **Native idle retirement fence**:

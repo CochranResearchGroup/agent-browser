@@ -178,7 +178,7 @@ impl<
             .expected
             .clone()
             .ok_or("browser_session_idle_custody_unavailable")?;
-        let mut groups = BTreeMap::new();
+        let mut selected = Vec::new();
         for browser in browsers {
             if self.borrows_browser_without_native_desktop(browser) {
                 continue;
@@ -197,17 +197,59 @@ impl<
             if expected.idle_closed_browsers.contains_key(&baseline.id) {
                 continue;
             }
-            let assignment = self
-                .store
-                .published_launch_assignment(baseline)
-                .map_err(|_| "browser_session_idle_custody_unavailable")?;
-            groups.insert(assignment.assignment_id.clone(), assignment);
+            selected.push(baseline.clone());
         }
+        let selected_assignments = self
+            .store
+            .published_launch_assignments(&selected)
+            .map_err(|_| "browser_session_idle_custody_unavailable")?;
+        if selected_assignments.len() != selected.len()
+            || selected
+                .iter()
+                .any(|browser| !selected_assignments.contains_key(&browser.id))
+        {
+            return Err("browser_session_idle_custody_unavailable".into());
+        }
+        let groups = selected_assignments
+            .into_values()
+            .map(|assignment| (assignment.assignment_id.clone(), assignment))
+            .collect::<BTreeMap<_, _>>();
         // Qualify all new groups before any claim or provider mutation. A
         // deterministic legacy deferral must not leave an earlier group fenced.
         // Existing operations retain their exact immutable readback obligation.
         let mut original_identities = BTreeMap::new();
         let mut assignment_browser_ids: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        // Read each relevant peer once in a fresh custody snapshot. Repeated
+        // per-field aggregate loads otherwise amplify maintenance lock time.
+        // Existing operations keep their immutable journal readback path.
+        let peers = expected
+            .browsers
+            .values()
+            .filter(|browser| {
+                !expected.idle_closed_browsers.contains_key(&browser.id)
+                    && groups.values().any(|assignment| {
+                        !self.retirements.values().any(|record| {
+                            !record.is_terminal()
+                                && record.intent.provider.assignment == *assignment
+                        }) && browser.desktop.as_ref().is_some_and(|desktop| {
+                            desktop.desktop_id == assignment.desktop_id
+                                && desktop.generation == assignment.generation
+                        })
+                    })
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let peer_custody = self
+            .store
+            .published_launch_custody(&peers)
+            .map_err(|_| "browser_session_idle_custody_unavailable")?;
+        if peer_custody.len() != peers.len()
+            || peers
+                .iter()
+                .any(|browser| !peer_custody.contains_key(&browser.id))
+        {
+            return Err("browser_session_idle_custody_unavailable".into());
+        }
         for assignment in groups.values() {
             if self.retirements.values().any(|record| {
                 !record.is_terminal() && record.intent.provider.assignment == *assignment
@@ -221,18 +263,13 @@ impl<
                             && desktop.generation == assignment.generation
                     })
             }) {
-                let Some(identity) = self
-                    .store
-                    .published_launch_process_identity(browser)
-                    .map_err(|_| "browser_session_idle_custody_unavailable")?
-                else {
+                let custody = peer_custody
+                    .get(&browser.id)
+                    .ok_or("browser_session_idle_custody_unavailable")?;
+                let Some(identity) = custody.process_identity.clone() else {
                     return Err("browser_session_idle_original_identity_missing".into());
                 };
-                let published_assignment = self
-                    .store
-                    .published_launch_assignment(browser)
-                    .map_err(|_| "browser_session_idle_custody_unavailable")?;
-                if published_assignment != *assignment {
+                if custody.assignment != *assignment {
                     // A desktop can be allocated again within one lifecycle generation.
                     // Exclude earlier allocation history only after original-process
                     // readback proves it ended. Live or uncertain peers still veto.

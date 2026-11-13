@@ -17,6 +17,7 @@ mod browser_launch_custody;
 pub use browser_launch_custody::{
     BrowserLaunchCustodyError, BrowserLaunchCustodyRecord, BrowserLaunchCustodyStore,
     BrowserLaunchIntent, LaunchCustodyAdmission, LaunchCustodyStoreError,
+    PublishedBrowserLaunchCustody,
 };
 mod abandoned_browser_retirement;
 mod browser_capability_registry;
