@@ -48,8 +48,16 @@ pub(crate) type DefaultBrowserSessionHost = BrowserSessionHost<
     super::browser_session_remote_view::RuntimeSessionEffects,
 >;
 
-pub(crate) type SharedBrowserSessionHost =
-    std::sync::Arc<std::sync::Mutex<Option<DefaultBrowserSessionHost>>>;
+/// Foreground and maintenance retain independent adapters over the same durable
+/// owner state. Provider waits in maintenance must not hold the request mutex;
+/// SQLite publication and lifecycle custody still fence conflicting effects.
+#[derive(Default)]
+pub(crate) struct BrowserSessionHosts {
+    pub(crate) requests: std::sync::Mutex<Option<DefaultBrowserSessionHost>>,
+    pub(crate) maintenance: std::sync::Mutex<Option<DefaultBrowserSessionHost>>,
+}
+
+pub(crate) type SharedBrowserSessionHost = std::sync::Arc<BrowserSessionHosts>;
 
 /// Validate pending-human configuration before any owner or browser effect.
 /// Zero selects no automatic deadline; ordinary agent work has no human hold.
@@ -124,6 +132,7 @@ pub(crate) async fn shared_managed_request_selected(
     }
     tokio::task::spawn_blocking(move || {
         let host = shared
+            .requests
             .lock()
             .map_err(|_| "browser_session_host_lock_poisoned")?;
         if let Some(host) = host.as_ref() {
@@ -189,6 +198,7 @@ pub(crate) async fn execute_shared_remote_view_open(
     pending_human_retention(&command)?;
     tokio::task::spawn_blocking(move || {
         let mut shared = shared
+            .requests
             .lock()
             .map_err(|_| "browser_session_host_lock_poisoned")?;
         if shared.is_none() {
@@ -362,6 +372,7 @@ pub(crate) async fn execute_shared_managed_command(
     }
     tokio::task::spawn_blocking(move || {
         let mut host = shared
+            .requests
             .lock()
             .map_err(|_| "browser_session_host_lock_poisoned")?;
         if host.is_none() {
@@ -392,6 +403,7 @@ pub(crate) async fn close_shared_operator_tab(
     tokio::task::spawn_blocking(move || {
         use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
         let mut host = shared
+            .requests
             .lock()
             .map_err(|_| "browser_session_host_lock_poisoned")?;
         let snapshot = LockedServiceStateRepository::default_json()?.load_snapshot()?;
@@ -417,6 +429,7 @@ pub(crate) async fn resolve_shared_handoff_command(
     };
     tokio::task::spawn_blocking(move || {
         let mut host = shared
+            .requests
             .lock()
             .map_err(|_| "browser_session_host_lock_poisoned")?;
         if host.is_none() {
@@ -452,6 +465,7 @@ pub(crate) fn reap_shared_browser_sessions(
     shared: SharedBrowserSessionHost,
 ) -> Result<ReapBrowserSessionsResult, String> {
     let mut host = shared
+        .maintenance
         .lock()
         .map_err(|_| "browser_session_host_lock_poisoned")?;
     reap_browser_session_host(&mut host, || {
