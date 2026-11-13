@@ -53,20 +53,20 @@ lanes:
     product_lane: PL-BUGFIX
     owner: ecochran76
     accountable_owner: ecochran76
-    objective: Preserve saved pages during qualified retained CDP-free recovery
-    work_items: [CochranResearchGroup/agent-browser#649, CochranResearchGroup/agent-browser#670]
-    plan: docs/dev/maintenance/manual-page-recovery670.md
+    objective: Preserve fresh-profile page continuity when switching CDP off
+    work_items: [CochranResearchGroup/agent-browser#649, CochranResearchGroup/agent-browser#670, CochranResearchGroup/agent-browser#673]
+    plan: docs/dev/maintenance/first-run-mode673.md
     plan_ref: fix/mode-handoff-control649
     branch: fix/mode-handoff-control649
     target: main
-    plan_state: COMPLETED
+    plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
     remote_ref: refs/heads/fix/mode-handoff-control649
     integration: pull request
     dependencies: [AUTH-LOST-TASK-RETIREMENT-650]
     overlaps: [retained Native handoff and mode conversion]
-    reconciled_overlaps: [Single primary writer owns mode/manual recovery and shared skill reference integration; preserve650 source and its open Auth qualification]
-    validation_status: PR671 merged, production artifact qualified and preserving install accepted; same-link CDP-free saved-marker recovery and exact disposable cleanup passed. First-run onboarding during initial mode conversion remains separate.
+    reconciled_overlaps: [673 primary writer owns only manual Chrome args and matched fixture/guidance; peer placement and MCP default-mode work remain separate; preserve650 Auth qualification]
+    validation_status: PR671 merged, production artifact qualified and preserving install accepted; same-link CDP-free saved-marker recovery and exact disposable cleanup passed. 673 isolated real Chrome loop is RED without first-run suppression and GREEN with suppression; source and installed gates pending.
     custody_note: Sealed candidates retained through governed closeout; no broad process cleanup or task-retirement effect.
     updated_at: 2026-11-12
   - id: RETAINED-MODE-TARGET-647

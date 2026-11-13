@@ -6,7 +6,7 @@ allowed-tools: Bash(agent-browser:*)
 
 # Agent Browser
 
-Authelia supplies identity/access; dashboard login, enrollment and roles are disabled.
+Authelia supplies access; dashboard login, enrollment and roles are disabled.
 
 [Control and credentials](references/cli-and-service.md).
 
@@ -137,6 +137,4 @@ SDK:300s default. ACK-prefix resume keeps original clocks; never replay unknown 
 
 Read [exact retirement](references/cli-and-service.md#exact-lost-task-retirement) before browser `task_retirement`. Preserve task/operation IDs; never replay unknown input.
 
-CDP-free recovery requests saved pages; fresh launch keeps its URL.
-
-Replacement browser recovery prefers a vacant eligible desktop after proving the original process absent. At capacity it follows the persisted wrap-around order. Live profile reuse keeps its desktop; explicit placement remains binding. Task, profile and durable handoff identity survive replacement.
+[Recovery rules](references/cli-and-service.md#replacement-placement).

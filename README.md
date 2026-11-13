@@ -4555,7 +4555,7 @@ A valid retained CDP-free handoff can recover a conclusively ended browser throu
 existing Native recovery. Settled automatic closure and ordinary exit keep their
 respective proof requirements. Recovery preserves the logical task, tab, links
 and profile and asks Chrome to restore its saved session instead of opening the
-initial startup URL. Fresh launches still use that configured URL. Unsaved
+initial startup URL. Fresh launches still use that configured URL. CDP-free startup suppresses Chrome's first-run and default-browser prompts so they do not replace the intended page. Unsaved
 in-memory page state cannot be reconstructed. Missing absence proof, unsettled
 close operations and changed targets remain refused; recovery never resets the
 profile or replays CDP navigation.
