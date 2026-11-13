@@ -504,7 +504,7 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
     let remote_view_desktops = Vec::new();
     let runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
         headless: display.is_none(),
-        executable_path: std::env::var("AGENT_BROWSER_EXECUTABLE_PATH").ok(),
+        executable_path: crate::flags::managed_browser_executable()?,
         display,
         remote_headed: false,
         maximum_browser_processes: None,
@@ -5876,3 +5876,7 @@ fn validate_handoff_ttl(
     }
     Ok(())
 }
+
+#[cfg(all(test, target_os = "linux"))]
+#[path = "browser_session_default_build_tests.rs"]
+mod default_build_tests;

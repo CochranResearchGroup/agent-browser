@@ -4,6 +4,12 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Managed executable default**: The browser owner resolves its startup executable
+from explicit environment/configuration and the StealthCDP artifact manifest.
+This is independent of a service access-plan recommendation. A required missing
+StealthCDP default cannot authorize generic testing-Chrome discovery; existing
+profile selection and running-browser custody remain separate.
+
 **Mode replacement handoff lineage**: The owner's frozen original handoff target,
 completed mode operation and currently published replacement process. It permits
 rejoining that same invitation after replacement without changing its control

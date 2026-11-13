@@ -11,6 +11,9 @@ Authelia supplies access; dashboard login, enrollment and roles are disabled.
 [Control and credentials](references/cli-and-service.md).
 
 Build failures: [readiness](references/cli-and-service.md#build-readiness).
+Managed MCP tasks honor the configured executable and StealthCDP manifest. If
+`service.defaultBrowserBuild` requires `stealthcdp_chromium`, resolve a missing
+build before opening a task; do not substitute testing Chrome.
 
 `candidate status` exposes `coordinationLedger`; `candidate inspect` uses `--input-closure`; `candidate install` needs `--sealed-artifact`. [Guide](references/cli-and-service.md#sealed-candidate-maintenance).
 
