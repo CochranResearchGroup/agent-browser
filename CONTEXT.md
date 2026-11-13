@@ -4,6 +4,12 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Managed executable default**: The browser owner resolves its startup executable
+from explicit environment/configuration and the StealthCDP artifact manifest.
+This is independent of a service access-plan recommendation. A required missing
+StealthCDP default cannot authorize generic testing-Chrome discovery; existing
+profile selection and running-browser custody remain separate.
+
 **Mode replacement handoff lineage**: The owner's frozen original handoff target,
 completed mode operation and currently published replacement process. It permits
 rejoining that same invitation after replacement without changing its control
@@ -19,7 +25,12 @@ mapping and grants no Native input ownership.
 **Retained manual-browser recovery**: A valid handoff can wake the same logical
 CDP-free task after positive original-process absence, through settled automatic
 retirement or qualified ordinary exit. Existing Native launch admission still
-applies. Recovery requests Chrome's saved session in the same profile; a new
+applies. CDP-free startup suppresses Chrome first-run and default-browser prompts.
+Mode qualification uses the exact observed unpublished replacement assignment
+before publication, while logical task and kernel-process checks remain binding.
+Window qualification observes only; input-policy readiness does not gate lifecycle completion.
+Owner publication permits desktop movement only with exact valid pending assignment custody.
+Recovery requests Chrome's saved session in the same profile; a new
 browser uses its initial startup URL. Logical links survive, but saved pages do
 not reconstruct unsaved in-memory state or prove an authenticated account.
 

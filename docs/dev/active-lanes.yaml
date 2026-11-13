@@ -2,6 +2,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: MCP-STEALTHCDP-676
+    product_lane: PL-BUGFIX
+    objective: Honor configured StealthCDP in managed MCP launches
+    plan: docs/dev/maintenance/mcp-stealthcdp-default.md
+    branch: fix/mcp-stealthcdp-default
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#676]
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    dependencies: []
+    overlaps: [RECOVERY-DESKTOP-672]
+    reconciled_overlaps: ["Own host startup executable selection and focused regressions only; preserve recovery placement PR675 and all peer checkouts; retained sixth operator-task primary and sealed production artifact, no auxiliary"]
+    validation_status: PR679 merged and deployed; 118 focused tests and strict gates pass; sealed production build, preserving install, fresh MCP StealthCDP webdriver false and scoped close pass
+    limitations: ["No full-suite claim; initial unrelated standalone integration import failure retained", "Authenticated dashboard journey remains unqualified; doctor warning retained", "Retain primary and sealed artifact as installed-source evidence"]
+    updated_at: 2026-11-12
   - id: RECOVERY-DESKTOP-672
     product_lane: PL-BUGFIX
     objective: Prefer vacant desktops for replacement browsers with durable custody
@@ -53,22 +69,22 @@ lanes:
     product_lane: PL-BUGFIX
     owner: ecochran76
     accountable_owner: ecochran76
-    objective: Preserve saved pages during qualified retained CDP-free recovery
-    work_items: [CochranResearchGroup/agent-browser#649, CochranResearchGroup/agent-browser#670]
-    plan: docs/dev/maintenance/manual-page-recovery670.md
+    objective: Preserve fresh-profile page continuity when switching CDP off
+    work_items: [CochranResearchGroup/agent-browser#649, CochranResearchGroup/agent-browser#670, CochranResearchGroup/agent-browser#673]
+    plan: docs/dev/maintenance/first-run-mode673.md
     plan_ref: fix/mode-handoff-control649
     branch: fix/mode-handoff-control649
     target: main
-    plan_state: COMPLETED
+    plan_state: COMPLETE
     custody_state: ACTIVE_WORKTREE
     remote_ref: refs/heads/fix/mode-handoff-control649
     integration: pull request
     dependencies: [AUTH-LOST-TASK-RETIREMENT-650]
     overlaps: [retained Native handoff and mode conversion]
-    reconciled_overlaps: [Single primary writer owns mode/manual recovery and shared skill reference integration; preserve650 source and its open Auth qualification]
-    validation_status: PR671 merged, production artifact qualified and preserving install accepted; same-link CDP-free saved-marker recovery and exact disposable cleanup passed. First-run onboarding during initial mode conversion remains separate.
+    reconciled_overlaps: [673 primary owns manual Chrome args, pending assignment and observation-only Native lifecycle qualification with matched fixtures/guidance; peer placement and MCP defaults are integrated dependencies; preserve650 Auth qualification]
+    validation_status: PR686 installed and marker survives CDP-off replacement; public workflow still fails at exact pending desktop publication. PR688 merged and preserving-installed; strict Clippy/fmt,424 model,15 CLI,17 mode integration and exact artifact fixtures pass. Original pending operation reconciles with one launch; fresh public same-handoff CDP-off,page render,interactive and return pass; exact fresh-profile cleanup verified.
     custody_note: Sealed candidates retained through governed closeout; no broad process cleanup or task-retirement effect.
-    updated_at: 2026-11-12
+    updated_at: 2026-11-13
   - id: RETAINED-MODE-TARGET-647
     product_lane: PL-BUGFIX
     objective: Preserve exact mode targeting across observation metadata drift

@@ -74,6 +74,7 @@ fn exact_navigation_history_compacts_oldest_rows_into_restart_safe_daily_summari
 
 #[derive(Default)]
 struct FixtureEffects {
+    pending_launch: Option<agent_browser_service_model::BrowserLaunchIntent>,
     qualified_adoption: Option<agent_browser_service_model::BrowserRecovery>,
     idle_retirement_permitted: Option<bool>,
     idle_retirement_error_browser: Option<String>,
@@ -272,6 +273,9 @@ fn open_after_expiry_ends_old_session_before_new_epoch() {
 }
 
 impl BrowserSessionEffects for FixtureEffects {
+    fn pending_launch_intent(&self) -> Option<agent_browser_service_model::BrowserLaunchIntent> {
+        self.pending_launch.clone()
+    }
     fn permits_idle_browser_close(
         &mut self,
         browser: &agent_browser_service_model::ManagedBrowserInstance,
@@ -2791,6 +2795,15 @@ fn owner_operation_retains_tasks_during_automatic_reaping() {
 
 #[test]
 fn owner_mode_replacement_preserves_logical_task_and_handoff() {
+    owner_mode_replacement_fixture(false);
+}
+
+#[test]
+fn owner_mode_replacement_publishes_exact_pending_new_desktop() {
+    owner_mode_replacement_fixture(true);
+}
+
+fn owner_mode_replacement_fixture(changed_desktop: bool) {
     let catalog = catalog_with_named_profile();
     let mut state = BrowserSessionState::default();
     let mut effects = FixtureEffects {
@@ -2837,7 +2850,7 @@ fn owner_mode_replacement_preserves_logical_task_and_handoff() {
             friendly_route_label: "Original display label".into(),
         });
     let previous = state.clone();
-    let replacement = agent_browser_service_model::BrowserRecovery {
+    let mut replacement = agent_browser_service_model::BrowserRecovery {
         launch: BrowserLaunch {
             browser_id: opened.browser_id.clone(),
             pid: 999,
@@ -2868,6 +2881,57 @@ fn owner_mode_replacement_preserves_logical_task_and_handoff() {
             "browser_session_recovery_identity_conflict"
         );
         assert_eq!(state, previous, "changed desktop bindings cannot publish");
+    }
+    if changed_desktop {
+        let desktop = replacement.launch.desktop.as_mut().unwrap();
+        desktop.desktop_id = "30450000-0000-4000-8000-000000000687".into();
+        desktop.generation = 9;
+        effects.pending_launch = Some(agent_browser_service_model::BrowserLaunchIntent {
+            intent_id: "30450000-0000-4000-8000-000000000688".into(),
+            profile_id: "profile-a".into(),
+            assignment: agent_browser_service_model::RemoteViewAssignmentRecord {
+                assignment_id: "pending-mode-assignment".into(),
+                registration_id: "owner-registration".into(),
+                pool_id: "owner-pool".into(),
+                desktop_id: desktop.desktop_id.clone(),
+                generation: desktop.generation,
+                presentation: None,
+                state: agent_browser_service_model::RemoteViewAssignmentState::Active,
+            },
+        });
+        let qualified = effects.pending_launch.clone().unwrap();
+        for failure in ["profile", "desktop", "generation", "invalid_intent"] {
+            let mut changed = qualified.clone();
+            match failure {
+                "profile" => changed.profile_id = "foreign-profile".into(),
+                "desktop" => {
+                    changed.assignment.desktop_id = "30450000-0000-4000-8000-000000000689".into()
+                }
+                "generation" => changed.assignment.generation += 1,
+                _ => changed.intent_id = "invalid".into(),
+            }
+            effects.pending_launch = Some(changed);
+            assert_eq!(
+                BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+                    .publish_owner_replacement(&opened.browser_id, "mode-one", replacement.clone())
+                    .unwrap_err(),
+                "browser_session_recovery_identity_conflict",
+                "{failure} pending custody must not authorize relocation"
+            );
+            assert_eq!(state, previous);
+        }
+        effects.pending_launch = Some(qualified);
+        assert_eq!(
+            BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+                .publish_owner_replacement(
+                    &opened.browser_id,
+                    "different-operation",
+                    replacement.clone()
+                )
+                .unwrap_err(),
+            "browser_owner_replacement_identity_unverified"
+        );
+        assert_eq!(state, previous);
     }
     BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
         .publish_owner_replacement(&opened.browser_id, "mode-one", replacement)

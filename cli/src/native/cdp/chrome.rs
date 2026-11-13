@@ -950,6 +950,15 @@ fn build_chrome_args(
         ]
     };
 
+    // A fresh automation profile can still require Chrome's first-run UI when
+    // relaunched without CDP. Keep setup/default-browser prompts from consuming
+    // its saved-session restoration, without adding automation or mock-keychain
+    // flags to the manual browser. CDP-backed manual login keeps its own posture.
+    if manual_login_mode && !remote_debugging {
+        args.push("--no-first-run".to_string());
+        args.push("--no-default-browser-check".to_string());
+    }
+
     if remote_debugging {
         args.push("--remote-debugging-port=0".to_string());
     }
@@ -5259,6 +5268,39 @@ mod tests {
             .any(|a| a == "--disable-background-networking"));
         assert!(result.args.iter().any(|a| a == "--password-store=basic"));
         assert!(!result.args.iter().any(|a| a == "--use-mock-keychain"));
+    }
+
+    #[test]
+    fn test_build_args_cdp_free_restore_suppresses_first_run_without_automation() {
+        let opts = LaunchOptions {
+            headless: false,
+            manual_login: true,
+            attachable: false,
+            args: vec!["--restore-last-session".into()],
+            ..Default::default()
+        };
+        let result = build_chrome_args(&opts, false).unwrap();
+        for required in [
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--restore-last-session",
+        ] {
+            assert!(result.args.iter().any(|arg| arg == required), "{required}");
+        }
+        assert!(!result
+            .args
+            .iter()
+            .any(|arg| arg.contains("--remote-debugging")));
+        for forbidden in [
+            "--enable-automation",
+            "--use-mock-keychain",
+            "--disable-sync",
+        ] {
+            assert!(
+                !result.args.iter().any(|arg| arg == forbidden),
+                "{forbidden}"
+            );
+        }
     }
 
     #[test]

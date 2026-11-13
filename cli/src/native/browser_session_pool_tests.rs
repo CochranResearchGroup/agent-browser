@@ -11838,3 +11838,136 @@ fn replacement_placement_fixture(at_capacity: bool) {
         Some(vacant_desktop)
     );
 }
+
+#[test]
+fn pending_mode_replacement_observes_its_new_assignment_before_publication() {
+    pending_mode_replacement_assignment_fixture(false);
+}
+
+#[test]
+fn pending_mode_replacement_observes_unchanged_explicit_assignment() {
+    pending_mode_replacement_assignment_fixture(true);
+}
+
+fn pending_mode_replacement_assignment_fixture(explicit: bool) {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    let opened = consumer
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    let session = opened["browserSession"]["sessionId"].as_str().unwrap();
+    let tab = opened["browserSession"]["tabId"].as_str().unwrap();
+    let browser = opened["browserSession"]["browserId"].as_str().unwrap();
+    let before = consumer.state().clone();
+    let target = agent_browser_service_model::RemoteViewTabHandoffTarget {
+        browser: before.browsers[browser].clone(),
+        session: before.sessions[session].clone(),
+        tab: before.tabs[tab].clone(),
+    };
+    provider
+        .borrow_mut()
+        .occupied_desktops
+        .insert(target.browser.desktop.as_ref().unwrap().desktop_id.clone());
+    std::fs::write(fixture.root.join("idle-process-absent"), "absent").unwrap();
+    let profile = fixture
+        .store(false)
+        .load_profile_catalog()
+        .unwrap()
+        .catalog
+        .profiles["profile-a"]
+        .clone();
+    let mut effects = RemoteViewSessionEffects::new(
+        Process {
+            mode: Mode::IdleRecovery,
+            root: fixture.root.clone(),
+            calls,
+        },
+        adapter(&fixture, provider),
+        fixture.store(false),
+        Vec::new(),
+        || uuid::Uuid::new_v4().to_string(),
+    )
+    .unwrap()
+    .with_pool(RemoteViewSessionPool {
+        name: "main".into(),
+        desired_desktops: 1,
+    })
+    .unwrap();
+    effects.begin_operation(&before).unwrap();
+    assert!(
+        effects
+            .native_replacement_assignment_target(
+                &target,
+                &agent_browser_service_model::BrowserRecovery {
+                    launch: agent_browser_service_model::BrowserLaunch {
+                        browser_id: target.browser.id.clone(),
+                        pid: target.browser.pid,
+                        cdp_endpoint: target.browser.cdp_endpoint.clone(),
+                        desktop: target.browser.desktop.clone(),
+                        process_identity: None,
+                    },
+                    target_ids: Default::default(),
+                }
+            )
+            .is_err(),
+        "a published original is not pending replacement proof"
+    );
+    let recovery = if explicit {
+        effects.recover_browser_at(
+            &target.browser,
+            &profile,
+            &[target.tab.clone()],
+            &[],
+            target.browser.desktop.as_ref().unwrap(),
+        )
+    } else {
+        effects.recover_browser(&target.browser, &profile, &[target.tab.clone()], &[])
+    }
+    .unwrap();
+    assert_eq!(recovery.launch.desktop == target.browser.desktop, explicit);
+    let observed = effects
+        .native_replacement_assignment_target(&target, &recovery)
+        .unwrap();
+    let desktop = recovery.launch.desktop.as_ref().unwrap();
+    assert_eq!(
+        observed.desktop_id, desktop.desktop_id,
+        "mode qualification must observe the launched replacement, not the old presentation"
+    );
+    assert_eq!(observed.lifecycle_generation, desktop.generation);
+    assert_eq!(
+        *consumer.state(),
+        before,
+        "observation must not publish replacement state"
+    );
+    assert_eq!(
+        fixture
+            .store(false)
+            .unpublished_launch_records()
+            .unwrap()
+            .len(),
+        1
+    );
+    let mut wrong = recovery.clone();
+    wrong.launch.pid += 1;
+    assert!(effects
+        .native_replacement_assignment_target(&target, &wrong)
+        .is_err());
+    let mut foreign = target.clone();
+    foreign.browser.profile_id = "foreign-profile".into();
+    assert!(effects
+        .native_replacement_assignment_target(&foreign, &recovery)
+        .is_err());
+}

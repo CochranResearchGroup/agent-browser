@@ -7063,8 +7063,10 @@ worker ends, preserving the attempted-close history and unsettled outcome.
 An exact completed automatic close also permits a valid retained CDP-free handoff
 to wake its logical browser through Native admission and restore Chrome's saved
 session without CDP navigation replay. New launches use the configured startup
-URL. The profile and links survive; saved pages do not prove unsaved form state
-or account authentication. Unknown close evidence or changed targets remain refused.
+URL. CDP-free startup skips Chrome first-run and default-browser prompts. The profile and links survive; saved pages do not prove unsaved form state
+or account authentication. Unknown close evidence or changed targets remain refused. Mode replacement
+checks Native window readiness on its exact observed launch assignment before publication.
+Window qualification observes only; input-policy readiness does not gate mode completion.
 Handoff-link deletion wins concurrent lifetime edits without closing the target.
 
 Use service --help or service -h for local help without starting a browser
@@ -8210,7 +8212,7 @@ Configuration:
     --headed false     (disables "headed": true from config)
 
   Extensions from user and project configs are merged (not replaced).
-  Set service.defaultBrowserBuild to stealthcdp_chromium after executablePath, AGENT_BROWSER_EXECUTABLE_PATH, or service.browserBuildManifests.stealthcdp_chromium.manifestPath points at the patched Chromium artifact. If no explicit default is configured and a ready stealthcdp_chromium manifest is available, fresh installs prefer that build automatically.
+  Set service.defaultBrowserBuild to stealthcdp_chromium after executablePath, AGENT_BROWSER_EXECUTABLE_PATH, or service.browserBuildManifests.stealthcdp_chromium.manifestPath points at the patched Chromium artifact. Managed MCP tasks, including disposable profiles, honor that executable default and reject unavailable required StealthCDP instead of discovering another Chrome executable. If no explicit default is configured and a ready stealthcdp_chromium manifest is available, fresh installs prefer that build automatically.
   Set service.profiles.<id>.browserBuild when a profile must stay on stock_chrome, stealthcdp_chromium, or cdp_free_headed.
   Development provider staging requires AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL to be a reviewed public HTTPS origin and AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION to identify the immutable reviewed ingress deployment. Both must be set together; loopback remains local diagnostics only.
   An installed v1 development provider is upgradeable only when its loopback URL equals the new local diagnostic URL and every other provider identity matches. Status remains drifted until explicit provider apply writes v2 authority; all other manifest drift remains blocking.
