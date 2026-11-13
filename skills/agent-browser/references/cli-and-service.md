@@ -4784,4 +4784,5 @@ replacement.
 Mode replacement qualifies Native readiness against the exact observed,
 unpublished launch assignment before atomic publication. The original logical
 target, pending custody, process identity and changed/foreign target checks remain
-binding; ordinary browser input still uses published assignment custody.
+binding; ordinary browser input still uses published assignment custody. Window
+qualification observes only and does not query input policy or grant control.

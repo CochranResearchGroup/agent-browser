@@ -2043,7 +2043,18 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .filter(|tab| tab.browser_id == browser.id)
             .cloned()
             .collect();
-        self.publish_recovery(browser, tabs, recovered, false, true)?;
+        // A mode replacement may move only to its observed pending assignment.
+        // The lifecycle adapter qualifies the process and provider observation;
+        // a changed desktop without this exact custody remains a conflict.
+        let pending_desktop_rebind = self.effects.pending_launch_intent().is_some_and(|intent| {
+            intent.validate().is_ok()
+                && intent.profile_id == browser.profile_id
+                && recovered.launch.desktop.as_ref().is_some_and(|desktop| {
+                    desktop.desktop_id == intent.assignment.desktop_id
+                        && desktop.generation == intent.assignment.generation
+                })
+        });
+        self.publish_recovery(browser, tabs, recovered, pending_desktop_rebind, true)?;
         self.state.app_browser_attachments.remove(browser_id);
         self.state.shared_browser_ids.remove(browser_id);
         self.state

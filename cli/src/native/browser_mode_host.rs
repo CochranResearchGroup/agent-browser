@@ -647,11 +647,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             .native_replacement_assignment_target(&retained_target, recovery)?;
         let mut ready = None;
         for _ in 0..30 {
-            match self.host.native_process_command(
-                original,
-                &target,
-                &json!({"action":"native_ready"}),
-            ) {
+            match self.host.native_process_window_ready(original, &target) {
                 Ok(observed) => {
                     ready = Some(observed);
                     break;
