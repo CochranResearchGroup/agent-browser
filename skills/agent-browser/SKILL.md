@@ -50,11 +50,7 @@ copy CODEX_THREAD_ID or fall back to Codex discovery. Auth owns enrollment and
 current authority; the adapter does not expose bearer or credential contents.
 Use current `discover_credentials`, not empty legacy scopes, to distinguish
 missing authority, unavailable/partial sources, no match and account choice.
-Before saved-password Native input, use `native_ready`: owner authentication and
-consumer input policy must be ready for the exact target; viewer readiness alone
-is insufficient. Public `ready` and legacy `local_ready` desktop states require
-matching lifecycle identity and enabled input policy; Native control remains separate. Owner decisions, delivery and exact browser binding gate input. Managed-task receiving is product-owned: do not ask operators to create per-task enrollment or read vault secrets as a fallback. Approval comes through the Auth dashboard or Slack via Receipts. `browser_control` status/view inspect ordinary managed tasks; explicit return also supports standalone handoffs after exact-process and fresh same-target verification. Takeover/override keep hosted-app requirements. Passive view does not return a human hold. Signed return uses an exact read scope; pending mode changes and peer bindings stay intact. Activity drift is tolerated; mode relaunch retains handoff control. Task-briefing PIDs need live verification. Keep unknown
-attempts on their original requests; never replay private use.
+Before saved-password Native input, read [input and control ownership](references/authentication.md#native-input-and-control-ownership). Keep original unknown attempts; never replay private use.
 
 ## Hosted workflow guidance v1
 
@@ -135,6 +131,6 @@ SDK:300s default. ACK-prefix resume keeps original clocks; never replay unknown 
 
 ### Exact lost-task retirement
 
-Read [exact retirement](references/cli-and-service.md#exact-lost-task-retirement) before browser `task_retirement`. Preserve task/operation IDs; never replay unknown input.
+Read [exact retirement](references/cli-and-service.md#exact-lost-task-retirement) before browser `task_retirement`. Preserve task/operation IDs; never replay unknown input. Identity inspection accepts reconciled history; retirement remains strict.
 
 [Window recovery](references/cli-and-service.md#replacement-placement).

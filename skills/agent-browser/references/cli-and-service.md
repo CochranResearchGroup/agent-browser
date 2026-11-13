@@ -4781,6 +4781,8 @@ persisted wrap-around order. Live profile reuse keeps its desktop; explicit
 placement remains binding. Task, profile and durable handoff identity survive
 replacement.
 
+Read-only `task_retirement` inspection may freeze current identity after explicit control reconciliation. Human control, awaiting observation and unobserved dispatch still block it. The binding-only observer cannot observe process loss or authorize retirement. Actual retirement retains its strict control and unresolved-task-operation checks.
+
 Mode replacement qualifies Native readiness against the exact observed,
 unpublished launch assignment before atomic publication. The original logical
 target, pending custody, process identity and changed/foreign target checks remain
