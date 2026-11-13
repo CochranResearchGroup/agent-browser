@@ -50,6 +50,16 @@ const BROWSER_RUNTIME_BACKUP_CURRENT: &str = "runtime.current.sqlite3";
 const BROWSER_RUNTIME_BACKUP_PREVIOUS: &str = "runtime.previous.sqlite3";
 const BROWSER_RUNTIME_BACKUP_MANIFEST: &str = "manifest.json";
 pub(super) const SESSION_STATE_DOCUMENT: &str = "browser_session_state";
+#[cfg(test)]
+thread_local! {
+    static SESSION_SNAPSHOT_READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Count real aggregate reads on this test thread, independently of fixture size.
+#[cfg(test)]
+pub(crate) fn session_snapshot_read_count() -> usize {
+    SESSION_SNAPSHOT_READS.get()
+}
 const PROFILE_CATALOG_DOCUMENT: &str = "browser_profile_catalog";
 const BROWSER_RECOVERY_REGISTRY_DOCUMENT: &str = "browser_recovery_registry";
 const BROWSER_RECOVERY_REGISTRY_SCHEMA_V1: &str = "agent-browser.browser-recovery-registry.v1";
@@ -1420,6 +1430,10 @@ fn load_document<T: DeserializeOwned>(
     kind: &str,
     expected_schema: &str,
 ) -> Result<T, String> {
+    #[cfg(test)]
+    if kind == SESSION_STATE_DOCUMENT {
+        SESSION_SNAPSHOT_READS.set(SESSION_SNAPSHOT_READS.get() + 1);
+    }
     let (schema, json) = connection
         .query_row(
             "SELECT schema_version, json FROM state_documents WHERE kind = ?1",
@@ -1446,6 +1460,10 @@ pub(super) fn load_optional_document<T: DeserializeOwned + Default>(
     kind: &str,
     expected_schema: &str,
 ) -> Result<T, String> {
+    #[cfg(test)]
+    if kind == SESSION_STATE_DOCUMENT {
+        SESSION_SNAPSHOT_READS.set(SESSION_SNAPSHOT_READS.get() + 1);
+    }
     let row = connection
         .query_row(
             "SELECT schema_version, json FROM state_documents WHERE kind = ?1",
