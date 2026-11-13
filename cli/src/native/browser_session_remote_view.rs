@@ -409,6 +409,16 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
             Self::Remote(e) => e.native_handoff_assignment_target(target),
         }
     }
+    fn native_replacement_assignment_target(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+        recovery: &BrowserRecovery,
+    ) -> Result<RemoteViewApplicationTarget, String> {
+        match self {
+            Self::Local(e) => e.native_replacement_assignment_target(target, recovery),
+            Self::Remote(e) => e.native_replacement_assignment_target(target, recovery),
+        }
+    }
     fn register_native_handoff_observation(
         &mut self,
         target: &RemoteViewTabHandoffTarget,

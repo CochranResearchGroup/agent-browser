@@ -47,6 +47,7 @@ fn disabled_owner(action: &str) -> (Result<Value, String>, usize) {
     let inputs = Arc::new(AtomicUsize::new(0));
     let thread_stop = stop.clone();
     let thread_inputs = inputs.clone();
+    let window_only = action.starts_with("native_window_");
     let server = std::thread::spawn(move || {
         while !thread_stop.load(Ordering::SeqCst) {
             let (mut socket, _) = match listener.accept() {
@@ -88,6 +89,10 @@ fn disabled_owner(action: &str) -> (Result<Value, String>, usize) {
                 .eq_ignore_ascii_case("authorization: Bearer synthetic-owner-token-519-123456")));
             let first = request.lines().next().unwrap();
             let reply = if first.starts_with("GET /v1/desktops/lifecycle-519 ") {
+                assert!(
+                    !window_only,
+                    "lifecycle window observation must not query input policy"
+                );
                 json!({"schemaVersion":1,"desktop":{"desktopId":"lifecycle-519","generation":3,"state":"local_ready"},"inputCapability":{"policyState":"disabled"}})
             } else if first.starts_with("POST /v1/agent-desktop/observe ") {
                 json!({"desktopId":"viewing-519","generation":7,"windows":{"windows":[{"id":5,"pid":42,"active":true,"x":0,"y":0,"width":400,"height":300,"processIdentity":{"pid":42,"executable":"/synthetic/chrome","boot_id":"fixture-boot","start_token":"99"}}]},"geometry":{"current":{"width":800,"height":600}}})
@@ -112,7 +117,11 @@ fn disabled_owner(action: &str) -> (Result<Value, String>, usize) {
         native_use_cursor: 0,
     };
     let original = RecordedProcessIdentity {
-        pid: 42,
+        pid: if action == "native_window_wrong_process" {
+            43
+        } else {
+            42
+        },
         start_token: "linux:fixture-boot:99".into(),
         executable_path: Some("/synthetic/chrome".into()),
         browser_family: None,
@@ -125,8 +134,17 @@ fn disabled_owner(action: &str) -> (Result<Value, String>, usize) {
         viewing_desktop_id: "viewing-519".into(),
         viewing_generation: 7,
     };
-    let command = json!({"action":action,"actions":[{"kind":"key","chord":"Tab"}]});
-    let result = host.native_process_command(&original, &target, &command);
+    let owner_action = if action.starts_with("native_window_") {
+        "native_ready"
+    } else {
+        action
+    };
+    let command = json!({"action":owner_action,"actions":[{"kind":"key","chord":"Tab"}]});
+    let result = if action.starts_with("native_window_") {
+        host.native_process_window_ready(&original, &target)
+    } else {
+        host.native_process_command(&original, &target, &command)
+    };
     stop.store(true, Ordering::SeqCst);
     server.join().unwrap();
     let count = inputs.load(Ordering::SeqCst);
@@ -169,4 +187,26 @@ fn native_host_readiness_stops_disabled_input_before_owner_dispatch() {
         "browser_native_input_disabled:configure_consumer_selective_input"
     );
     assert_eq!(inputs, 0, "disabled consumer must receive no input request");
+}
+
+#[test]
+fn native_host_lifecycle_window_ready_ignores_disabled_input_policy() {
+    let (result, inputs) = disabled_owner("native_window_ready");
+    let result = result.unwrap();
+    assert_eq!(
+        result["ready"], true,
+        "visible replacement must complete lifecycle qualification independently of input policy"
+    );
+    assert!(result.get("inputReadiness").is_none());
+    assert_eq!(inputs, 0);
+}
+
+#[test]
+fn native_host_lifecycle_window_ready_rejects_different_process() {
+    let (result, inputs) = disabled_owner("native_window_wrong_process");
+    assert!(
+        result.is_err(),
+        "a different process must not qualify lifecycle completion"
+    );
+    assert_eq!(inputs, 0);
 }

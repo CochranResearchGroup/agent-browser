@@ -26,6 +26,10 @@ mapping and grants no Native input ownership.
 CDP-free task after positive original-process absence, through settled automatic
 retirement or qualified ordinary exit. Existing Native launch admission still
 applies. CDP-free startup suppresses Chrome first-run and default-browser prompts.
+Mode qualification uses the exact observed unpublished replacement assignment
+before publication, while logical task and kernel-process checks remain binding.
+Window qualification observes only; input-policy readiness does not gate lifecycle completion.
+Owner publication permits desktop movement only with exact valid pending assignment custody.
 Recovery requests Chrome's saved session in the same profile; a new
 browser uses its initial startup URL. Logical links survive, but saved pages do
 not reconstruct unsaved in-memory state or prove an authenticated account.

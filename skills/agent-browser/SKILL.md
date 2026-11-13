@@ -10,10 +10,7 @@ Authelia supplies access; dashboard login, enrollment and roles are disabled.
 
 [Control and credentials](references/cli-and-service.md).
 
-Build failures: [readiness](references/cli-and-service.md#build-readiness).
-Managed MCP tasks honor the configured executable and StealthCDP manifest. If
-`service.defaultBrowserBuild` requires `stealthcdp_chromium`, resolve a missing
-build before opening a task; do not substitute testing Chrome.
+Builds: [defaults/readiness](references/cli-and-service.md#build-readiness).
 
 `candidate status` exposes `coordinationLedger`; `candidate inspect` uses `--input-closure`; `candidate install` needs `--sealed-artifact`. [Guide](references/cli-and-service.md#sealed-candidate-maintenance).
 
@@ -136,4 +133,4 @@ SDK:300s default. ACK-prefix resume keeps original clocks; never replay unknown 
 
 Read [exact retirement](references/cli-and-service.md#exact-lost-task-retirement) before browser `task_retirement`. Preserve task/operation IDs; never replay unknown input. Identity inspection accepts reconciled history; retirement remains strict.
 
-[Recovery rules](references/cli-and-service.md#replacement-placement).
+[Window recovery](references/cli-and-service.md#replacement-placement).
