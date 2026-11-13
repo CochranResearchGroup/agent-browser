@@ -660,6 +660,139 @@ async fn e2e_chromium_stealthcdp_navigator_webdriver_false() {
 }
 
 // ---------------------------------------------------------------------------
+// Popup launch defaults
+// ---------------------------------------------------------------------------
+
+#[cfg(target_os = "linux")]
+async fn observe_headed_popup_behavior(extra_args: Vec<&str>) -> Value {
+    let executable = std::env::var("AGENT_BROWSER_EXECUTABLE_PATH")
+        .expect("pin a reviewed Chromium StealthCDP executable for this browser test");
+    let (profile_dir, profile) = e2e_temp_profile("stock-popup");
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}/", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move {
+        loop {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                break;
+            };
+            tokio::spawn(async move {
+                let mut request = [0_u8; 8192];
+                let _ = stream.read(&mut request).await;
+                let body = r#"<!doctype html><title>Owned popup probe</title>
+<button id="user-popup" onclick="window.userPopupProbe=probePopup()">Open popup</button>
+<script>
+function probePopup() {
+  const active = navigator.userActivation.isActive;
+  const popup = window.open('about:blank', '_blank', 'width=180,height=100');
+  const result = {opened: !!popup, userActivation: active, webdriver: navigator.webdriver};
+  if (popup) popup.close();
+  return result;
+}
+window.unsolicitedPopupProbe = probePopup();
+</script>"#;
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(), body
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+            });
+        }
+    });
+    let mut state = DaemonState::new();
+    let mut browser_pid = None;
+    let measured: Result<Value, String> = async {
+        for command in [
+            json!({"id":"popup-launch", "action":"launch", "headless":false,
+                "executablePath":executable, "profile":profile, "args":extra_args}),
+            json!({"id":"popup-navigate", "action":"navigate", "url":url}),
+        ] {
+            let response = execute_command(&command, &mut state).await;
+            if response["success"] != true {
+                return Err(response.to_string());
+            }
+        }
+        let pid = execute_command(
+            &json!({"id":"popup-pid", "action":"browser_pid"}),
+            &mut state,
+        )
+        .await;
+        browser_pid = pid["data"]["pid"].as_u64();
+        let unsolicited = execute_command(
+            &json!({"id":"popup-observe", "action":"evaluate",
+                "script":"window.unsolicitedPopupProbe"}),
+            &mut state,
+        )
+        .await;
+        if unsolicited["success"] != true {
+            return Err(unsolicited.to_string());
+        }
+        let click = execute_command(
+            &json!({"id":"popup-user-click", "action":"click", "selector":"#user-popup"}),
+            &mut state,
+        )
+        .await;
+        if click["success"] != true {
+            return Err(click.to_string());
+        }
+        let user = execute_command(
+            &json!({"id":"popup-user-observe", "action":"evaluate",
+                "script":"window.userPopupProbe"}),
+            &mut state,
+        )
+        .await;
+        if user["success"] != true {
+            return Err(user.to_string());
+        }
+        Ok(json!({"unsolicited":unsolicited["data"]["result"], "user":user["data"]["result"]}))
+    }
+    .await;
+    // Close before asserting the behavioral verdict, including the expected RED.
+    let close = execute_command(&json!({"id":"popup-close", "action":"close"}), &mut state).await;
+    server.abort();
+    assert_success(&close);
+    let pid = browser_pid.unwrap_or_else(|| {
+        panic!("public browser_pid must identify the owned process; probe result: {measured:?}")
+    });
+    for _ in 0..50 {
+        if !std::path::Path::new(&format!("/proc/{pid}")).exists() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(
+        !std::path::Path::new(&format!("/proc/{pid}")).exists(),
+        "the exact fixture browser must exit before profile cleanup"
+    );
+    std::fs::remove_dir_all(profile_dir).unwrap();
+    measured.expect("public launch, navigate, click and evaluate must succeed")
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+#[ignore = "requires a pinned StealthCDP executable and headed display"]
+async fn e2e_stock_popup_default_blocks_unsolicited_but_allows_user_click() {
+    let home = e2e_temp_home("stock-popup");
+    let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_SESSION", "AGENT_BROWSER_ARGS"]);
+    guard.set("HOME", home.to_str().unwrap());
+    guard.set("AGENT_BROWSER_SESSION", "e2e-stock-popup-default");
+    guard.remove("AGENT_BROWSER_ARGS");
+    let observed = observe_headed_popup_behavior(Vec::new()).await;
+    guard.set("AGENT_BROWSER_SESSION", "e2e-stock-popup-opt-out");
+    let opted_out = observe_headed_popup_behavior(vec!["--disable-popup-blocking"]).await;
+    std::fs::remove_dir_all(home).unwrap();
+    assert_eq!(observed["unsolicited"]["userActivation"], false);
+    assert_eq!(observed["user"]["userActivation"], true);
+    assert_eq!(observed["user"]["opened"], true);
+    assert_eq!(
+        observed["unsolicited"]["opened"], false,
+        "ordinary launches must preserve stock unsolicited popup blocking: {observed}"
+    );
+    assert_eq!(opted_out["unsolicited"]["userActivation"], false);
+    assert_eq!(opted_out["unsolicited"]["opened"], true);
+    assert_eq!(opted_out["user"]["opened"], true);
+}
+
+// ---------------------------------------------------------------------------
 // Runtime stream lifecycle
 // ---------------------------------------------------------------------------
 

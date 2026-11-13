@@ -933,6 +933,7 @@ fn build_chrome_args(
             "--hide-crash-restore-bubble".to_string(),
         ]
     } else {
+        // Keep stock popup blocking; workflows may opt out through explicit args.
         vec![
             "--no-first-run".to_string(),
             "--no-default-browser-check".to_string(),
@@ -941,7 +942,6 @@ fn build_chrome_args(
             "--disable-component-update".to_string(),
             "--disable-default-apps".to_string(),
             "--disable-hang-monitor".to_string(),
-            "--disable-popup-blocking".to_string(),
             "--disable-prompt-on-repost".to_string(),
             "--disable-sync".to_string(),
             "--disable-features=Translate".to_string(),

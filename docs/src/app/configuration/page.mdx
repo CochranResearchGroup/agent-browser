@@ -284,7 +284,7 @@ Every CLI flag can be set in the config file using its camelCase equivalent:
     <tr><td><code>state</code></td><td><code>--state</code></td><td>string</td></tr>
     <tr><td><code>proxy</code></td><td><code>--proxy</code></td><td>string</td></tr>
     <tr><td><code>proxyBypass</code></td><td><code>--proxy-bypass</code></td><td>string</td></tr>
-    <tr><td><code>args</code></td><td><code>--args</code>, browser-launching commands only</td><td>string</td></tr>
+    <tr><td><code>args</code></td><td><code>--args</code>, new browser launches only. Normal popup blocking is preserved; an explicit <code>--disable-popup-blocking</code> opts out for that launch. Existing browsers retain their original settings.</td><td>string</td></tr>
     <tr><td><code>userAgent</code></td><td><code>--user-agent</code></td><td>string</td></tr>
     <tr><td><code>provider</code></td><td><code>-p, --provider</code></td><td>string</td></tr>
     <tr><td><code>device</code></td><td><code>--device</code></td><td>string</td></tr>

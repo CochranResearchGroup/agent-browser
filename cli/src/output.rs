@@ -8148,6 +8148,8 @@ Options:
   --extension <path>         Load browser extensions (repeatable)
   --args <args>              Browser launch args, comma or newline separated (or AGENT_BROWSER_ARGS)
                              Applied only to commands that can launch a browser
+                             Normal popup blocking is retained; explicit opt-out:
+                             --args "--disable-popup-blocking"
                              e.g., --args "--no-sandbox,--disable-gpu"
   --user-agent <ua>          Custom User-Agent (or AGENT_BROWSER_USER_AGENT)
   --proxy <server>           Proxy server URL (or AGENT_BROWSER_PROXY, HTTP_PROXY, HTTPS_PROXY, ALL_PROXY)
