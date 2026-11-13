@@ -396,3 +396,68 @@ Final focused commands use `scripts/ci/rust-tests.sh --focused` with filters
 All Rust commands use cargo-safe admission, private test HOME/runtime and target,
 rustc 1.94.1, four build jobs, eight test codegen units and no debug symbols.
 Linux local results do not establish hosted CI or other platform execution.
+
+
+## Independent maintenance adapter deployed
+
+PR696 merged as ce149abff53171a436410e2ed6fba661c2c83407. Its clean canonical source
+produced one sealed production-shaped candidate, binary
+975a387e7132d5f0729ec7a9ce9ef25e01caaa638dc39a8a6036c2796f357261. The release
+build uses rustc 1.94.1, x86_64-unknown-linux-gnu, optimization level 3, fat LTO,
+one codegen unit and no features. It completed with no compiler warnings or
+errors. The exact binary passes
+`AGENT_BROWSER_FIXTURE_BIN=<sealed-binary> pnpm test:workstation-install-fixture`.
+No hosted CI ran. Local Linux qualification does not establish other platforms.
+
+Before the effect, a fresh fetch matched the candidate source exactly, the
+sealed-payload installation dry-run reported no integrity blockers, and fresh
+status showed no active operation. The installed baseline remained
+1d0d0b64f4b4a31eb29e3aff573b6e9d90d55a5865c9ef55eaf54d2f04854386.
+One preserving installation, without force or full shutdown, reached accepted:
+upgrade-7107c8e0-a21f-4ac8-8beb-761522c14d41, observed elapsed 91.3 seconds.
+The installed command and freshly observed maintenance producer both match the
+sealed binary. Final status is accepted with no active operation or coordination
+custody. `agent-browser install doctor` exits zero. It retains advisory workspace
+candidate drift and missing authenticated dashboard operator-journey evidence;
+this check does not qualify that dashboard journey.
+
+A disposable synthetic page obtained owned-window ready handoff before the
+installation. Afterward, fresh installed MCP reads the same page marker. Actual
+task briefing and OS readbacks preserve the original process PID/start token,
+browser, profile, tab, target and opaque handoff URL. No original reported user
+task was reopened. A separate anonymous context follows the expected Cooper
+authentication redirect; authenticated requests use that realm's independent
+agent account without persisting cookies or credentials in artifacts.
+
+Five requests through the same authenticated public HTTPS handoff from Cooper
+reach the native viewer document before and after installation:
+
+| Sample | Before seconds | After seconds |
+| --- | ---: | ---: |
+| 1 | 6.994 | 9.468 |
+| 2 | 3.272 | 4.291 |
+| 3 | 3.165 | 4.982 |
+| 4 | 4.381 | 6.702 |
+| 5 | 5.128 | 4.687 |
+| Median | 4.381 | 4.982 |
+
+All samples pass the 60-second document budget, but the median is slower after
+installation. These observations establish no general latency improvement. The
+first after sample's initial handoff redirect completes at 0.230 seconds, native
+continuation redirect at 9.209 seconds, and viewer document at 9.468 seconds;
+that locates the observed delay, without identifying its internal cause. Retain
+all samples. Timing excludes authentication setup and does not measure pixels,
+input or an independent off-host network vantage.
+
+The deterministic source regression qualifies removal of the actual shared
+maintenance-mutex wait, including renewed activity surviving concurrent
+publication. It does not establish a general viewer latency SLO. Keep #677 open
+for residual end-to-end latency qualification rather than describing the public
+comparison as faster. The selected shared-owner repair and preserving deployment
+are complete; no next runtime effect is selected here.
+
+Task-scoped close returns browser_closed. Fresh OS readback proves the original
+PID absent and zero processes referencing its exact disposable profile. Profile
+files retain existing policy and peers remain untouched. Raw protocols and
+identities stay in private user-scoped evidence. Retain this primary checkout
+and all three sealed candidates as deployment provenance.
