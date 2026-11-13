@@ -2281,6 +2281,9 @@ fn single_retirement_recovery_proof(
     let mut expected_browser = scope.browser.clone();
     expected_browser.pid = browser.pid;
     expected_browser.cdp_endpoint = browser.cdp_endpoint.clone();
+    // Recovery may claim a new desktop. Both immutable launch records below
+    // must confirm their own exact assignments before this mapping is trusted.
+    expected_browser.desktop = browser.desktop.clone();
     if expected_browser != *browser
         || scope.browser.pid == browser.pid
         || scope.tabs.len()

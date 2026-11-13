@@ -97,3 +97,22 @@ A final fetch observed `origin/main` at
 `ea9bcb186b41209b2887a871aaf38d7ef6f3115f`, including peer work 673 and 676.
 This draft retains the tested baseline above; integration with the new tip and
 its overlapping domain/catalog prose remains a separate gate before merge.
+
+
+## Authorized review, merge and deployment
+
+The operator requested review, merge and deploy on 2026-11-13. Integrated main
+at df24da179. Serial Standards review found no blocking convention or ownership
+issue. Spec review retained operation-local snapshot authority and unchanged
+admission/publication fences; live timing remains an acceptance gate.
+
+The two baseline recovery failures reproduced after integration. The recovery
+proof compared the retired and replacement desktops for equality even though
+current recovery claims a fresh desktop. Align only that field for the logical
+browser comparison, then require both immutable launch records to confirm their
+own exact assignments, the completed retirement and original absence. Existing
+positive and ten adverse recovery cases changed from RED to GREEN; add a foreign
+assignment case to make that publication guard explicit. This bounded correction
+resolves the validation dependency with issue599 without changing recovery owners.
+The initial production build was stopped at its exact task-owned Cargo scope
+before source correction; its failed receipt and partial cache remain retained.

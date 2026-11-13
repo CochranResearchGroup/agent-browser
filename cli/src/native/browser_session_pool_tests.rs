@@ -11120,6 +11120,7 @@ fn retained_interactive_recovery_rejects_unqualified_scope_and_control() {
     for case in [
         "missing_prior",
         "ambiguous_launch",
+        "foreign_assignment",
         "nonterminal_retirement",
         "changed_tab",
         "target_swap",
@@ -11294,12 +11295,19 @@ fn retained_handoff_retirement_fixture(interactive: bool, refusal: Option<&str>)
             matching[0]["recovery"]["retirementId"], retirement.intent.id,
             "{case}"
         );
-        if case == "missing_prior" || case == "ambiguous_launch" {
+        if case == "missing_prior" || case == "ambiguous_launch" || case == "foreign_assignment" {
             let mut ledger = read_document("browser_launch_custody");
             let records = ledger["records"].as_object_mut().unwrap();
             if case == "missing_prior" {
                 records
                     .retain(|_, record| record["observedPid"] != before.browsers[browser_id].pid);
+            } else if case == "foreign_assignment" {
+                let record = records
+                    .values_mut()
+                    .find(|record| record["observedPid"] != before.browsers[browser_id].pid)
+                    .unwrap();
+                record["intent"]["assignment"]["desktopId"] =
+                    uuid::Uuid::new_v4().to_string().into();
             } else {
                 let mut record = records
                     .values()
