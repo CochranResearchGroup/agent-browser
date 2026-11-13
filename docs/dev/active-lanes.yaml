@@ -75,14 +75,14 @@ lanes:
     plan_ref: fix/mode-handoff-control649
     branch: fix/mode-handoff-control649
     target: main
-    plan_state: OPEN
+    plan_state: COMPLETE
     custody_state: ACTIVE_WORKTREE
     remote_ref: refs/heads/fix/mode-handoff-control649
     integration: pull request
     dependencies: [AUTH-LOST-TASK-RETIREMENT-650]
     overlaps: [retained Native handoff and mode conversion]
     reconciled_overlaps: [673 primary owns manual Chrome args, pending assignment and observation-only Native lifecycle qualification with matched fixtures/guidance; peer placement and MCP defaults are integrated dependencies; preserve650 Auth qualification]
-    validation_status: PR686 installed and marker survives CDP-off replacement; public workflow still fails at exact pending desktop publication. Both regression loops RED/GREEN; strict Clippy/fmt,424 model tests,15 focused CLI and17 mode integration pass; docs/policy/links pass. Public installed workflow remains open.
+    validation_status: PR686 installed and marker survives CDP-off replacement; public workflow still fails at exact pending desktop publication. PR688 merged and preserving-installed; strict Clippy/fmt,424 model,15 CLI,17 mode integration and exact artifact fixtures pass. Original pending operation reconciles with one launch; fresh public same-handoff CDP-off,page render,interactive and return pass; exact fresh-profile cleanup verified.
     custody_note: Sealed candidates retained through governed closeout; no broad process cleanup or task-retirement effect.
     updated_at: 2026-11-13
   - id: RETAINED-MODE-TARGET-647

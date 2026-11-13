@@ -1,7 +1,7 @@
 # Fresh-profile CDP-free mode continuity
 
 Product lane: PL-BUGFIX
-State: OPEN
+State: COMPLETE
 Work item: CochranResearchGroup/agent-browser#673
 Primary writer: MODE-HANDOFF-CONTROL-649
 Consolidation: required
@@ -192,3 +192,31 @@ host/handoff cases and all 424 service-model tests across 26 suites. Policy,
 changed-link, handoff documentation and docs build pass. The zero-match unit
 filter for mode-operation integration tests is excluded; the explicit integration
 binary passed all 17 tests. No hosted CI ran.
+
+
+## Installed workflow acceptance
+
+PR688 merged as d217a3820. The sealed production binary
+fb29957c2e4034a8bfeedbdb032a44eb20acb416ca0a1452b0e0a7b24e852be3
+passed exact-artifact MCP guidance and source-free installer fixtures, including
+zero residue from two fixture hosts. The preserving install is accepted. Final
+doctor passes with a healthy, fresh, ready monitor; workspace-candidate and
+operator-journey receipt warnings remain advisory.
+
+The previously interrupted disposable conversion reconciled to completed with
+its original single launch. Its unchanged durable handoff connected and displayed
+CDP off without touching its existing operator hold. A fresh disposable public
+workflow then passed initial CDP on, interactive takeover, confirmed CDP-off
+relaunch, same-handoff reconnection, interactive takeover after conversion and
+confirmed return. Native capture showed the unique marker heading and body on
+the active page, without onboarding or a blank page. Kernel readback proved the
+original absent and replacement running without remote debugging, with native
+session restoration and first-run suppression.
+
+Task-scoped close removed the fresh browser. Exact allocation-path and executable
+readback found no Chrome or crashpad residue for that profile. An earlier
+operator-held synthetic browser and its marker server remain deliberately
+retained; their private cleanup obligation is separate from this passed repair.
+No original user browser was reopened and no unrelated task was closed. Raw
+runtime identities, URLs, captures and receipts stay outside Git. This qualifies
+the installed local workflow; it does not claim a hosted or other-platform run.
