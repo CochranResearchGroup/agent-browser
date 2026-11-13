@@ -137,4 +137,4 @@ SDK:300s default. ACK-prefix resume keeps original clocks; never replay unknown 
 
 Read [exact retirement](references/cli-and-service.md#exact-lost-task-retirement) before browser `task_retirement`. Preserve task/operation IDs; never replay unknown input.
 
-CDP-free recovery requests saved pages; fresh launch keeps its URL.
+CDP-free startup skips setup; recovery requests saved pages.

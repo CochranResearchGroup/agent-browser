@@ -7063,7 +7063,7 @@ worker ends, preserving the attempted-close history and unsettled outcome.
 An exact completed automatic close also permits a valid retained CDP-free handoff
 to wake its logical browser through Native admission and restore Chrome's saved
 session without CDP navigation replay. New launches use the configured startup
-URL. The profile and links survive; saved pages do not prove unsaved form state
+URL. CDP-free startup skips Chrome first-run and default-browser prompts. The profile and links survive; saved pages do not prove unsaved form state
 or account authentication. Unknown close evidence or changed targets remain refused.
 Handoff-link deletion wins concurrent lifetime edits without closing the target.
 

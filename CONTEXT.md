@@ -19,7 +19,8 @@ mapping and grants no Native input ownership.
 **Retained manual-browser recovery**: A valid handoff can wake the same logical
 CDP-free task after positive original-process absence, through settled automatic
 retirement or qualified ordinary exit. Existing Native launch admission still
-applies. Recovery requests Chrome's saved session in the same profile; a new
+applies. CDP-free startup suppresses Chrome first-run and default-browser prompts.
+Recovery requests Chrome's saved session in the same profile; a new
 browser uses its initial startup URL. Logical links survive, but saved pages do
 not reconstruct unsaved in-memory state or prove an authenticated account.
 
