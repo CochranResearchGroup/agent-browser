@@ -4654,6 +4654,11 @@ replace separately authorized installed saved-password acceptance.
 
 ## Build readiness
 
+Managed MCP tasks honor the configured executable and StealthCDP manifest. If
+`service.defaultBrowserBuild` requires `stealthcdp_chromium`, resolve a missing
+build before opening a task; do not substitute testing Chrome.
+
+
 A `dashboard_build_incomplete` install/doctor failure requires rebuilding the frontend and recompiling the candidate. The maintained `pnpm build:development-candidate` command includes both steps.
 
 ## Handoff search
@@ -4775,3 +4780,8 @@ desktop after proving the original process absent. At capacity it follows the
 persisted wrap-around order. Live profile reuse keeps its desktop; explicit
 placement remains binding. Task, profile and durable handoff identity survive
 replacement.
+
+Mode replacement qualifies Native readiness against the exact observed,
+unpublished launch assignment before atomic publication. The original logical
+target, pending custody, process identity and changed/foreign target checks remain
+binding; ordinary browser input still uses published assignment custody.

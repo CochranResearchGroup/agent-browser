@@ -870,6 +870,63 @@ impl<
             .map(|observed| observed.target)
             .map_err(|_| "remote_view_native_target_unavailable".into())
     }
+    fn native_replacement_assignment_target(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+        recovery: &BrowserRecovery,
+    ) -> Result<RemoteViewApplicationTarget, String> {
+        self.require_operation()?;
+        let expected = self
+            .expected
+            .as_ref()
+            .ok_or("remote_view_session_operation_baseline_missing")?;
+        if expected.browsers.get(&target.browser.id) != Some(&target.browser)
+            || expected.tabs.get(&target.tab.id) != Some(&target.tab)
+            || expected.sessions.get(&target.session.id) != Some(&target.session)
+        {
+            return Err("remote_view_native_target_changed".into());
+        }
+        let intent = self
+            .pending
+            .as_ref()
+            .filter(|(_, observed)| *observed)
+            .map(|(intent, _)| intent.clone())
+            .ok_or("remote_view_native_replacement_unobserved")?;
+        let launch = &recovery.launch;
+        let desktop = launch
+            .desktop
+            .as_ref()
+            .ok_or("remote_view_native_replacement_desktop_missing")?;
+        if intent.profile_id != target.browser.profile_id
+            || launch.browser_id != target.browser.id
+            || desktop.desktop_id != intent.assignment.desktop_id
+            || desktop.generation != intent.assignment.generation
+        {
+            return Err("remote_view_native_replacement_changed".into());
+        }
+        let claim = self
+            .store
+            .unpublished_launch_records()
+            .map_err(|_| "remote_view_native_replacement_custody_unavailable")?
+            .into_iter()
+            .find(|claim| claim.intent == intent)
+            .ok_or("remote_view_native_replacement_custody_missing")?;
+        if claim.validate().is_err()
+            || claim.published
+            || claim.observed_browser_id.as_deref() != Some(launch.browser_id.as_str())
+            || claim.observed_pid != Some(launch.pid)
+            || claim.observed_process_identity != launch.process_identity
+        {
+            return Err("remote_view_native_replacement_changed".into());
+        }
+        // The original presentation stays published until atomic replacement
+        // commit. Only this exact observed launch supplies the readiness target.
+        // Native process qualification still independently checks the kernel.
+        self.adapter
+            .observe_assignment(&intent.assignment)
+            .map(|observed| observed.target)
+            .map_err(|_| "remote_view_native_replacement_target_unavailable".into())
+    }
     fn register_native_handoff_observation(
         &mut self,
         target: &RemoteViewTabHandoffTarget,

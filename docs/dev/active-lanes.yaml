@@ -82,9 +82,9 @@ lanes:
     dependencies: [AUTH-LOST-TASK-RETIREMENT-650]
     overlaps: [retained Native handoff and mode conversion]
     reconciled_overlaps: [673 primary writer owns only manual Chrome args and matched fixture/guidance; peer placement and MCP default-mode work remain separate; preserve650 Auth qualification]
-    validation_status: PR671 merged, production artifact qualified and preserving install accepted; same-link CDP-free saved-marker recovery and exact disposable cleanup passed. 673 isolated real Chrome loop is RED without first-run suppression and GREEN with suppression; source and installed gates pending.
+    validation_status: PR678 flag repair installed; actual public conversion exposed pending Native assignment defect. Corrected adapter RED/GREEN,37 focused and423 model tests pass; final merged strict gates,pending2 andStealthCDP9pass1ignored; installed full workflow remains open.
     custody_note: Sealed candidates retained through governed closeout; no broad process cleanup or task-retirement effect.
-    updated_at: 2026-11-12
+    updated_at: 2026-11-13
   - id: RETAINED-MODE-TARGET-647
     product_lane: PL-BUGFIX
     objective: Preserve exact mode targeting across observation metadata drift
