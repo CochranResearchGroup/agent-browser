@@ -63,7 +63,9 @@ neither asserts that the browser exited or the close was never dispatched.
 only activity and Native retirement groups containing the addressed profile.
 They retain the complete durable snapshot and all custody records. Own-profile
 and shared-group fences remain binding; unrelated provider work stays with its
-owner and global maintenance. This does not bound waiting on the shared host lock.
+owner and global maintenance. Foreground and maintenance retain separate runtime adapters over the same durable
+owner state. Maintenance provider waits do not hold the foreground request mutex;
+publication and lifecycle fences still govern conflicting operations.
 
 **Session publication reconciliation**: Used by task continuation and handoff
 consumers before target selection. A three-way merge of a host's loaded

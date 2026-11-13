@@ -2951,13 +2951,35 @@ fn completed_view_reconciles_peer_publication_and_reuses_ledger_after_restart() 
 
 #[tokio::test]
 async fn queued_action_executor_resolves_managed_handoff_through_the_registered_host() {
+    queued_handoff_maintenance_fixture(false).await;
+}
+
+#[tokio::test]
+async fn handoff677_queued_target_is_ready_while_background_maintenance_provider_is_blocked() {
+    queued_handoff_maintenance_fixture(true).await;
+}
+
+async fn queued_handoff_maintenance_fixture(block_maintenance: bool) {
     use crate::native::browser_session_remote_view::RuntimeSessionEffects;
     use crate::native::browser_session_runtime::{
         BrowserManagerRuntime, BrowserManagerRuntimeConfig, BrowserSessionEffectAdapter,
     };
     use crate::native::remote_view_application_http::RemoteViewApplicationHttp;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let fixture = Fixture::new();
+    let sandbox = Fixture::new();
+    let env = crate::test_utils::EnvGuard::new(&[
+        "HOME",
+        "AGENT_BROWSER_HOME",
+        "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+    ]);
+    env.set("HOME", sandbox.root.to_str().unwrap());
+    env.set(
+        "AGENT_BROWSER_HOME",
+        sandbox.root.join(".agent-browser").to_str().unwrap(),
+    );
+    env.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+    std::fs::create_dir_all(sandbox.root.join(".agent-browser/service")).unwrap();
+    let fixture = Fixture::with_root(sandbox.root.join(".agent-browser/service"), true);
     let cdp_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let cdp_endpoint = format!(
         "ws://{}/devtools/browser/fixture",
@@ -2981,123 +3003,200 @@ async fn queued_action_executor_resolves_managed_handoff_through_the_registered_
     drop(source);
     let before = fixture.store(false).load_session_state().unwrap();
     let target = before.tabs.values().next().unwrap().target_id.clone();
+    let expected_target = target.clone();
     let cdp_server = tokio::spawn(async move {
         use futures_util::{SinkExt, StreamExt};
-        let (stream, _) = cdp_listener.accept().await.unwrap();
-        let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
-        while let Some(Ok(message)) = socket.next().await {
-            let tokio_tungstenite::tungstenite::Message::Text(text) = message else {
-                continue;
-            };
-            let request: Value = serde_json::from_str(&text).unwrap();
-            let result = match request["method"].as_str().unwrap() {
-                "SystemInfo.getProcessInfo" => serde_json::json!({"processInfo":[{
-                    "type":"browser", "id":std::process::id()
-                }]}),
-                "Target.getTargets" => serde_json::json!({"targetInfos":[{
-                    "targetId":target, "type":"page", "title":"Fixture",
-                    "url":"https://synthetic.example/", "attached":false
-                }]}),
-                "Browser.getWindowForTarget" => serde_json::json!({"windowId":42}),
-                "Target.attachToTarget" => serde_json::json!({"sessionId":"fixture-session"}),
-                "Runtime.evaluate" => {
-                    serde_json::json!({"result":{"type":"string", "value":"https://synthetic.example/"}})
+        loop {
+            let (stream, _) = cdp_listener.accept().await.unwrap();
+            let target = target.clone();
+            tokio::spawn(async move {
+                let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
+                while let Some(Ok(message)) = socket.next().await {
+                    let tokio_tungstenite::tungstenite::Message::Text(text) = message else {
+                        continue;
+                    };
+                    let request: Value = serde_json::from_str(&text).unwrap();
+                    let result = match request["method"].as_str().unwrap() {
+                        "SystemInfo.getProcessInfo" => serde_json::json!({"processInfo":[{
+                            "type":"browser", "id":std::process::id()
+                        }]}),
+                        "Target.getTargets" => serde_json::json!({"targetInfos":[{
+                            "targetId":target, "type":"page", "title":"Fixture",
+                            "url":"https://synthetic.example/", "attached":false
+                        }]}),
+                        "Browser.getWindowForTarget" => serde_json::json!({"windowId":42}),
+                        "Target.attachToTarget" => {
+                            serde_json::json!({"sessionId":"fixture-session"})
+                        }
+                        "Runtime.evaluate" => {
+                            serde_json::json!({"result":{"type":"string", "value":"https://synthetic.example/"}})
+                        }
+                        _ => serde_json::json!({}),
+                    };
+                    socket
+                        .send(tokio_tungstenite::tungstenite::Message::Text(
+                            serde_json::json!({"id":request["id"], "result":result})
+                                .to_string()
+                                .into(),
+                        ))
+                        .await
+                        .unwrap();
                 }
-                _ => serde_json::json!({}),
-            };
-            socket
-                .send(tokio_tungstenite::tungstenite::Message::Text(
-                    serde_json::json!({"id":request["id"], "result":result})
-                        .to_string()
-                        .into(),
-                ))
-                .await
-                .unwrap();
+            });
         }
     });
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
+    let armed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let entered = std::sync::Arc::new(tokio::sync::Notify::new());
+    let release = std::sync::Arc::new(tokio::sync::Notify::new());
+    let server_armed = armed.clone();
+    let server_entered = entered.clone();
+    let server_release = release.clone();
     let server = tokio::spawn(async move {
         let fixture = wire();
         loop {
             let (mut stream, _) = listener.accept().await.unwrap();
-            let mut bytes = Vec::new();
-            let (header_end, length) = loop {
-                let mut chunk = [0_u8; 4096];
-                let count = stream.read(&mut chunk).await.unwrap();
-                assert!(count > 0 && bytes.len() + count < 65536);
-                bytes.extend_from_slice(&chunk[..count]);
-                if let Some(end) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
-                    let header = std::str::from_utf8(&bytes[..end]).unwrap();
-                    let length = header
-                        .lines()
-                        .find_map(|line| {
-                            let (key, value) = line.split_once(':')?;
-                            key.eq_ignore_ascii_case("content-length")
-                                .then(|| value.trim().parse::<usize>().unwrap())
-                        })
-                        .unwrap();
-                    if bytes.len() >= end + 4 + length {
-                        break (end + 4, length);
+            let armed = server_armed.clone();
+            let entered = server_entered.clone();
+            let release = server_release.clone();
+            let fixture = fixture.clone();
+            tokio::spawn(async move {
+                let mut bytes = Vec::new();
+                let (header_end, length) = loop {
+                    let mut chunk = [0_u8; 4096];
+                    let count = stream.read(&mut chunk).await.unwrap();
+                    assert!(count > 0 && bytes.len() + count < 65536);
+                    bytes.extend_from_slice(&chunk[..count]);
+                    if let Some(end) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
+                        let header = std::str::from_utf8(&bytes[..end]).unwrap();
+                        let length = header
+                            .lines()
+                            .find_map(|line| {
+                                let (key, value) = line.split_once(':')?;
+                                key.eq_ignore_ascii_case("content-length")
+                                    .then(|| value.trim().parse::<usize>().unwrap())
+                            })
+                            .unwrap();
+                        if bytes.len() >= end + 4 + length {
+                            break (end + 4, length);
+                        }
                     }
+                };
+                let envelope: Value =
+                    serde_json::from_slice(&bytes[header_end..header_end + length]).unwrap();
+                if armed.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                    entered.notify_one();
+                    release.notified().await;
                 }
-            };
-            let envelope: Value =
-                serde_json::from_slice(&bytes[header_end..header_end + length]).unwrap();
-            let response = match envelope["request"]["operation"].as_str().unwrap() {
-                "inventory" => fixture["inventory"].clone(),
-                "observe_assignment" => fixture["assignmentObservation"].clone(),
-                "windows" => {
-                    let mut windows = fixture["windows"].clone();
-                    windows["windows"][0]["pid"] = serde_json::json!(std::process::id());
-                    windows
+                let response = match envelope["request"]["operation"].as_str().unwrap() {
+                    "inventory" => fixture["inventory"].clone(),
+                    "observe_assignment" => fixture["assignmentObservation"].clone(),
+                    "windows" => {
+                        let mut windows = fixture["windows"].clone();
+                        windows["windows"][0]["pid"] = serde_json::json!(std::process::id());
+                        windows
+                    }
+                    "activate" => fixture["activation"].clone(),
+                    _ if !block_maintenance => panic!("queued resolver must not launch or acquire"),
+                    _ => serde_json::json!({"fixture":"unsupported maintenance request"}),
                 }
-                "activate" => fixture["activation"].clone(),
-                _ => panic!("queued resolver must not launch or acquire"),
-            }
-            .to_string();
-            stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}", response.len()).as_bytes()).await.unwrap();
+                .to_string();
+                stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}", response.len()).as_bytes()).await.unwrap();
+            });
         }
     });
-    let runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
-        headless: true,
-        executable_path: None,
-        display: None,
-        remote_headed: false,
-        maximum_browser_processes: None,
-        remote_view_desktop_contexts: Vec::new(),
-    })
-    .unwrap();
-    let transport =
-        RemoteViewApplicationHttp::new(&origin, std::time::Duration::from_secs(2)).unwrap();
-    let effects = RemoteViewSessionEffects::new(
-        BrowserSessionEffectAdapter::new(runtime),
-        RemoteViewApplicationAdapter::new("agent-browser".into(), transport).unwrap(),
-        fixture.store(false),
-        Vec::new(),
-        || uuid::Uuid::new_v4().to_string(),
-    )
-    .unwrap()
-    .with_pool(RemoteViewSessionPool {
-        name: "main".into(),
-        desired_desktops: 1,
-    })
-    .unwrap();
-    let registered = BrowserSessionHost::load(
-        fixture.store(false),
-        RuntimeSessionEffects::Remote(Box::new(effects)),
-        &fixture.root.join("unused.json"),
-        BrowserSessionHostConfig {
-            session_idle_timeout_ms: 300_000,
-            remote_view_desktops: Vec::new(),
-            default_disposable_policy: None,
-            exact_url_history_maximum_bytes: 1024,
-        },
-    )
-    .unwrap();
-    let shared = std::sync::Arc::new(std::sync::Mutex::new(Some(registered)));
+    let make_host = || {
+        let runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
+            headless: true,
+            executable_path: None,
+            display: None,
+            remote_headed: false,
+            maximum_browser_processes: None,
+            remote_view_desktop_contexts: Vec::new(),
+        })
+        .unwrap();
+        let transport =
+            RemoteViewApplicationHttp::new(&origin, std::time::Duration::from_secs(15)).unwrap();
+        let effects = RemoteViewSessionEffects::new(
+            BrowserSessionEffectAdapter::new(runtime),
+            RemoteViewApplicationAdapter::new("agent-browser".into(), transport).unwrap(),
+            fixture.store(false),
+            Vec::new(),
+            || uuid::Uuid::new_v4().to_string(),
+        )
+        .unwrap()
+        .with_pool(RemoteViewSessionPool {
+            name: "main".into(),
+            desired_desktops: 1,
+        })
+        .unwrap();
+        BrowserSessionHost::load(
+            fixture.store(false),
+            RuntimeSessionEffects::Remote(Box::new(effects)),
+            &fixture.root.join("unused.json"),
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_view_desktops: Vec::new(),
+                default_disposable_policy: None,
+                exact_url_history_maximum_bytes: 1024,
+            },
+        )
+        .unwrap()
+    };
+    let shared = std::sync::Arc::new(super::super::browser_session_host::BrowserSessionHosts {
+        requests: std::sync::Mutex::new(Some(make_host())),
+        maintenance: std::sync::Mutex::new(if block_maintenance {
+            Some(make_host())
+        } else {
+            None
+        }),
+    });
     let mut state =
         crate::native::action_runtime::DaemonState::new().with_managed_session_host(shared.clone());
+    if block_maintenance {
+        armed.store(true, std::sync::atomic::Ordering::SeqCst);
+        let maintenance_owner = shared.clone();
+        let maintenance = tokio::task::spawn_blocking(move || {
+            super::super::browser_session_host::reap_shared_browser_sessions(maintenance_owner)
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(5), entered.notified())
+            .await
+            .expect("actual maintenance must reach the held external provider");
+        let activity_at_ms = crate::native::browser_session_reaper::now_ms();
+        let request = serde_json::json!({
+            "id":"concurrent-handoff", "action":"service_remote_view_handoff_resolve", "handoffId":id,
+            "activityAtMs":activity_at_ms,
+        });
+        let completed = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            crate::native::actions::execute_command(&request, &mut state),
+        )
+        .await;
+        // Always release the external boundary, including on RED, then join the
+        // real maintenance worker before asserting the public response.
+        release.notify_one();
+        maintenance
+            .await
+            .expect("maintenance worker must finish")
+            .ok();
+        server.abort();
+        cdp_server.abort();
+        let response = completed.expect("live handoff waited behind active background maintenance");
+        assert_eq!(response["success"], true, "{response}");
+        assert_eq!(response["data"]["handoffId"], id);
+        assert_eq!(response["data"]["operatorVisible"]["state"], "ready");
+        assert_eq!(response["data"]["targetId"], expected_target);
+        let retained = fixture.store(false).load_session_state().unwrap();
+        let link = &retained.remote_view_tab_handoffs[&id];
+        let tab = &retained.tabs[&link.tab_id];
+        assert_eq!(tab.target_id, expected_target);
+        assert_eq!(tab.last_activity_at_ms, activity_at_ms);
+        assert!(retained.browsers.contains_key(&tab.browser_id));
+        assert!(!retained.idle_closed_browsers.contains_key(&tab.browser_id));
+        return;
+    }
+
     let response = crate::native::actions::execute_command(
         &serde_json::json!({
             "id":"queued-resolve", "action":"service_remote_view_handoff_resolve", "handoffId":id,
@@ -3124,7 +3223,10 @@ async fn queued_action_executor_resolves_managed_handoff_through_the_registered_
     }
     assert_eq!(after.tabs, expected_tabs);
     assert_eq!(after.navigation_history, before.navigation_history);
-    assert_eq!(shared.lock().unwrap().as_ref().unwrap().state(), &after);
+    assert_eq!(
+        shared.requests.lock().unwrap().as_ref().unwrap().state(),
+        &after
+    );
     let repeated = crate::native::actions::execute_command(
         &serde_json::json!({
             "id":"queued-repeat", "action":"service_remote_view_handoff_resolve", "handoffId":id,

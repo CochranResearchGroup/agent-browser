@@ -311,3 +311,88 @@ files and peer state retain existing policy. Private protocols and identities
 remain in user-scoped evidence. Retain this primary checkout and both sealed
 candidates as deployment provenance. The bounded TDD delivery is complete; no
 further production effect is selected by this packet.
+
+
+## Remaining shared-owner wait diagnosis
+
+Product lane: PL-BUGFIX. Primary branch: fix/handoff677-maintenance-wait.
+The operator selected diagnosis of the remaining global-maintenance wait after
+the bounded addressed-operation deployment. Reuse the retained primary checkout
+and both sealed artifacts. Reconciled inventory has 14 registered worktrees;
+stock-popup launch changes on current main remain outside this slice's writer
+scope. Use the actual queued handoff consumer and actual maintenance adapter,
+blocking only an external provider response. First require an observed deadline
+failure while maintenance is held; then minimise and test ranked hypotheses.
+Retain same-profile lifecycle and publication fences. Bound this continuation
+to two hours, one correction, one qualified candidate and one preserving install;
+reassess after two no-progress checkpoints or 30 minutes without acceptance
+progress. Existing review/merge/deploy authority applies to the same target and
+preserving effect class; no foreign closure, broad cleanup or ingress change.
+
+
+The real queued-consumer/maintenance regression is RED twice on baseline
+3b93da921: "live handoff waited behind active background maintenance". The
+one-command loop is `scripts/ci/rust-tests.sh --focused handoff677_queued_target`;
+the two test runs take 5.98 and 6.35 seconds excluding compilation. The existing
+queued handoff without held maintenance passes. A missing fixture directory was
+a harness failure, corrected before these RED results. Minimal case: one retained
+browser, one handoff, one maintenance provider response held after entry.
+
+Ranked predictions: (1) a shared owner mutex causes the wait, so a separate
+retained maintenance adapter should remove it; (2) a SQLite writer remains held,
+so independent adapters would still wait; (3) provider/runtime serialization
+remains, so independent host and database access would still wait. Test the first
+prediction with persistent request and maintenance adapters over the same SQLite
+owner and existing custody/publication protocol. This does not add another viewer
+or allocation authority, discard adapters between passes, or relax target fences.
+
+
+The independent-adapter regression is GREEN in 4.80 seconds. Restoring only the
+maintenance entrypoint's old request-mutex choice makes the final concurrent
+fixture RED again (5.99 seconds), confirming the first prediction. The final
+fixture additionally renews activity with current time and checks that the
+retained target, browser and activity survive maintenance publication. Restore
+the independent maintenance mutex for final qualification. No production effect
+has occurred in this diagnosis checkpoint.
+
+
+The full affected pool run passes 146 cases with one existing ignored case;
+both677 regressions, own-profile pending-retirement guard, ordinary queued
+handoff, both startup reaper cases, strict workspace Clippy and formatting pass.
+Policy wiring (11 cases) and docs build pass locally. The selector recommends
+focused Rust plus policy/link gates for these seven changed paths, excluding
+unrelated Dashboard, Service Client, Repository Tooling and Workstation suites.
+The service-model sources are unchanged; no new model-package execution is claimed.
+
+Serial Standards review against the fetched baseline finds no hard ownership or
+style violation. Its one accepted test correction preserves the original ordinary
+queued fixture's explicit rejection of unexpected provider launch/acquisition.
+The maintenance variant alone tolerates a deferred provider result. Serial Spec
+review finds the concurrency requirement implemented and target renewal retained;
+no additional workflow or authority is introduced. Verify the corrected ordinary
+case, both677 regressions, daemon routing and tab-close contracts, then reuse the
+full pool evidence for unchanged cases under policy0042. Runtime acceptance is
+still pending; no public latency improvement claim is made by source tests.
+
+
+### Standards
+
+Final correction verification passes the ordinary queued case, both677 cases,
+13 daemon tests and three regular tab-close contracts (physical opt-in remains
+ignored), plus strict workspace Clippy and formatting. One accepted test
+finding is resolved; zero remaining hard standards findings.
+
+### Spec
+
+Zero blocking findings. Actual maintenance waits at the external boundary while
+the public queued handoff returns ready within one second, retaining the same
+target and renewed activity after maintenance returns. Own-profile unresolved
+retirement remains fenced. Source qualification does not prove public pixels.
+
+Final focused commands use `scripts/ci/rust-tests.sh --focused` with filters
+`handoff677`, `automatic_retirement_pending_effect_denies_conflicting_browser_commands`,
+`queued_action_executor_resolves_managed_handoff_through_the_registered_host`,
+`startup_reaper`, `native::daemon::tests`, `operator_tab_close_` and `pool_tests`.
+All Rust commands use cargo-safe admission, private test HOME/runtime and target,
+rustc 1.94.1, four build jobs, eight test codegen units and no debug symbols.
+Linux local results do not establish hosted CI or other platform execution.

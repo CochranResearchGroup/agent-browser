@@ -432,8 +432,7 @@ struct RuntimeLane {
 #[derive(Clone)]
 struct RuntimeHostRouter {
     lanes: Arc<crate::runtime_host::RuntimeLaneRegistry<RuntimeLane>>,
-    browser_sessions:
-        Arc<std::sync::Mutex<Option<super::browser_session_host::DefaultBrowserSessionHost>>>,
+    browser_sessions: super::browser_session_host::SharedBrowserSessionHost,
     creation_lock: Arc<Mutex<()>>,
     socket_dir: PathBuf,
     service_reconcile_interval_ms: Option<u64>,
@@ -469,7 +468,8 @@ impl RuntimeHostRouter {
         let lanes = Arc::new(crate::runtime_host::RuntimeLaneRegistry::new(
             crate::runtime_host::DEFAULT_MAX_RUNTIME_LANES,
         ));
-        let browser_sessions = Arc::new(std::sync::Mutex::new(None));
+        let browser_sessions =
+            Arc::new(super::browser_session_host::BrowserSessionHosts::default());
         let initial_state = match initial_config.as_ref() {
             Some(config) => DaemonState::new_for_runtime_lane_with_stream(
                 initial_session,
@@ -652,8 +652,11 @@ impl RuntimeHostRouter {
         }
         let browser_sessions = self.browser_sessions.clone();
         let _ = tokio::task::spawn_blocking(move || {
-            if let Ok(mut host) = browser_sessions.lock() {
-                host.take();
+            // Drop each retained adapter independently; never hold both locks.
+            for owner in [&browser_sessions.requests, &browser_sessions.maintenance] {
+                if let Ok(mut host) = owner.lock() {
+                    host.take();
+                }
             }
         })
         .await;
@@ -663,6 +666,7 @@ impl RuntimeHostRouter {
         let browser_sessions = self.browser_sessions.clone();
         match tokio::task::spawn_blocking(move || {
             let mut host = browser_sessions
+                .requests
                 .lock()
                 .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
             if host.is_none() {
@@ -763,6 +767,7 @@ impl RuntimeHostRouter {
         let browser_sessions = self.browser_sessions.clone();
         match tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
             let mut host = browser_sessions
+                .requests
                 .lock()
                 .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
             if host.is_none() {
@@ -832,7 +837,7 @@ impl RuntimeHostRouter {
             let reaped = super::browser_session_reaper::run_pass(&receipt, started_at_ms, || {
                 super::browser_session_host::reap_shared_browser_sessions(browser_sessions)
             });
-            // Provider provisioning runs after the shared host lock is released.
+            // Provider provisioning runs after the maintenance owner lock is released.
             // Even a failed reap must not suppress independent spare maintenance.
             let replenished =
                 super::browser_session_remote_view::replenish_configured_remote_view_pool();

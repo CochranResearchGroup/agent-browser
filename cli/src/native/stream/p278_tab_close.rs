@@ -184,11 +184,11 @@ async fn operator_tab_close_real_headless_owner_preserves_peer_and_closes_last_b
         minimum_assurance:ProfileIdentityAssurance::AuthenticatedIngress, permissions:vec![ProfilePermission::TabCloseAny] });
     let state: ServiceState = serde_json::from_value(json!({"profiles":{"profile-a":{"id":"profile-a","accessPolicy":policy}}})).unwrap();
     LockedServiceStateRepository::default_json().unwrap().mutate(|snapshot| { *snapshot = state.clone(); Ok(()) }).unwrap();
-    let shared: SharedBrowserSessionHost = Arc::new(std::sync::Mutex::new(Some(load_default_browser_session_host().unwrap())));
+    let shared: SharedBrowserSessionHost = Arc::new(crate::native::browser_session_host::BrowserSessionHosts { requests: std::sync::Mutex::new(Some(load_default_browser_session_host().unwrap())), ..Default::default() });
     struct Cleanup(SharedBrowserSessionHost);
     impl Drop for Cleanup {
         fn drop(&mut self) {
-            let mut host = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut host = self.0.requests.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             if let Some(host) = host.as_mut() {
                 let ids = host.state().sessions.keys().cloned().collect::<Vec<_>>();
                 let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
@@ -198,7 +198,7 @@ async fn operator_tab_close_real_headless_owner_preserves_peer_and_closes_last_b
     }
     let cleanup = Cleanup(shared.clone());
     let (browser, first, second, session_name) = {
-        let mut guard = shared.lock().unwrap(); let host = guard.as_mut().unwrap();
+        let mut guard = shared.requests.lock().unwrap(); let host = guard.as_mut().unwrap();
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
         let opened = host.open(OpenBrowserSession::exact_profile("Alice", "profile-a", now)).unwrap();
         let first = host.tab_for_navigation(&opened.session_id, now + 1).unwrap();
