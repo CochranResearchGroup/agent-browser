@@ -2,6 +2,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: RECEIVING-BINDING-681
+    product_lane: PL-BUGFIX
+    objective: Freeze current receiving identity after reconciliation without relaxing retirement
+    plan: docs/dev/maintenance/receiving-binding681.md
+    branch: fix/reconciled-binding-inspect
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#681]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [POINTERDOWN-BUTTON-659]
+    reconciled_overlaps: ["Same SSO primary continues;659 branch and candidates retained; no auxiliary checkout or changes to peer maintenance677, mode649 or launch676"]
+    validation_status: RED confirmed; 11 focused tests and standard strict workspace Clippy passed; exact production candidate pending
+    limitations: ["No runtime effect until exact candidate qualification", "Auth361 installed separately; actual password and SMS acceptance remains open"]
+    updated_at: 2026-11-13
   - id: MCP-STEALTHCDP-676
     product_lane: PL-BUGFIX
     objective: Honor configured StealthCDP in managed MCP launches
@@ -42,7 +58,7 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#659]
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    custody_state: RETAINED_REF
     dependencies: []
     overlaps: []
     reconciled_overlaps: ["Same owned SSO primary continues after integrated599 source; preserve its branch/candidates and all foreign mode-restoration work"]

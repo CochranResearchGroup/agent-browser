@@ -80,7 +80,7 @@ impl BrowserSessionSqliteStore {
             .ok_or_else(held)?
             .browser_id
             .clone();
-        let owner = linux_observer::LinuxOwner::acquire(&browser)?;
+        let owner = linux_observer::LinuxOwner::acquire_binding(&browser)?;
         self.inspect_task_retirement_with(task_id, &owner)
     }
 

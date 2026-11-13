@@ -15,12 +15,22 @@ impl RetirementGuard {
 pub(crate) fn retirement_guard(browser_id: &str) -> Result<RetirementGuard, String> {
     lock_at(&super::path(browser_id)?)
 }
+pub(crate) fn binding_guard(browser_id: &str) -> Result<RetirementGuard, String> {
+    binding_lock_at(&super::path(browser_id)?)
+}
+fn binding_lock_at(path: &Path) -> Result<RetirementGuard, String> {
+    lock_with(path, true)
+}
 #[cfg(test)]
 pub(crate) fn fixture_guard(path: &Path) -> Result<RetirementGuard, String> {
     lock_at(path)
 }
 
 fn lock_at(path: &Path) -> Result<RetirementGuard, String> {
+    lock_with(path, false)
+}
+
+fn lock_with(path: &Path, allow_reconciled: bool) -> Result<RetirementGuard, String> {
     use std::io::Read;
     use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
     let held = || "browser_task_retirement_control_unverified".to_string();
@@ -81,7 +91,11 @@ fn lock_at(path: &Path) -> Result<RetirementGuard, String> {
     let control: Control = serde_json::from_slice(&raw).map_err(|_| held())?;
     if control.human
         || control.awaiting_observation
-        || control.flights.values().any(|s| s != "observed_completed")
+        || control.flights.values().any(|state| match state.as_str() {
+            "observed_completed" => false,
+            "observed_uncertain_no_replay" => !allow_reconciled,
+            _ => true,
+        })
     {
         return Err(held());
     }
@@ -95,6 +109,45 @@ fn lock_at(path: &Path) -> Result<RetirementGuard, String> {
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
+    #[test]
+    fn reconciled_binding_inspection_does_not_relax_retirement() {
+        let dir = std::env::temp_dir().join(format!("binding681-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&dir).unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        struct Cleanup(std::path::PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                std::fs::remove_dir_all(&self.0).unwrap();
+            }
+        }
+        let _cleanup = Cleanup(dir.clone());
+        let path = dir.join("control.json");
+        let mut control = Control {
+            epoch: 3,
+            ..Default::default()
+        };
+        control.flights.insert(
+            "original-selection".into(),
+            "observed_uncertain_no_replay".into(),
+        );
+        std::fs::write(&path, serde_json::to_vec(&control).unwrap()).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        assert_eq!(binding_lock_at(&path).unwrap().epoch(), 3);
+        assert!(lock_at(&path).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        for pending in ["dispatched", "uncertain_in_flight", "uncertain_no_replay"] {
+            control
+                .flights
+                .insert("original-selection".into(), pending.into());
+            std::fs::write(&path, serde_json::to_vec(&control).unwrap()).unwrap();
+            assert!(binding_lock_at(&path).is_err());
+        }
+        control.flights.clear();
+        control.human = true;
+        std::fs::write(&path, serde_json::to_vec(&control).unwrap()).unwrap();
+        assert!(binding_lock_at(&path).is_err());
+    }
     #[test]
     fn lost_task_retirement_control_lock_is_held_and_unknown_flights_refused() {
         let dir = std::env::temp_dir().join(format!("auth650-control-{}", uuid::Uuid::new_v4()));
