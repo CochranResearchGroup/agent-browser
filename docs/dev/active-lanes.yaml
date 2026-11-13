@@ -2,6 +2,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: RECOVERY-DESKTOP-672
+    product_lane: PL-BUGFIX
+    objective: Prefer vacant desktops for replacement browsers with durable custody
+    plan: docs/dev/maintenance/recovery-desktop-placement.md
+    branch: fix/recovery-desktop-placement
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#672]
+    plan_state: OPEN
+    custody_state: INTEGRATION_READY
+    dependencies: [ORDINARY-HANDOFF-599, MODE-HANDOFF-CONTROL-649]
+    overlaps: []
+    reconciled_overlaps: ["Reuse clean canonical primary after integrated lifecycle work; serial writer owns placement, custody and focused tests; no runtime effects"]
+    validation_status: 45 focused CLI cases, complete service-model package, strict workspace Clippy, Rustfmt, policy/link checks and docs build pass; source only
+    updated_at: 2026-11-12
   - id: POINTERDOWN-BUTTON-659
     product_lane: PL-BUGFIX
     objective: Open pointer-down account menus through ordinary owned task clicks

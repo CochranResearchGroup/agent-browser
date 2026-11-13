@@ -110,6 +110,16 @@ fn ordinary_handoff_fixture(reconstruct_legacy: bool, manual: bool, passive: boo
         fixture_retirement_records(&fixture.root).is_empty(),
         "ordinary process exit must not require a fictional idle retirement"
     );
+    // Another profile now occupies the old desktop. Recovery must preserve this
+    // invitation while selecting fresh vacant capacity, not pile onto its peer.
+    provider.borrow_mut().occupied_desktops.insert(
+        before.browsers[&browser_id]
+            .desktop
+            .as_ref()
+            .unwrap()
+            .desktop_id
+            .clone(),
+    );
     std::fs::write(
         fixture.root.join("idle-process-absent"),
         "verified kernel absence",
@@ -203,6 +213,11 @@ fn ordinary_handoff_fixture(reconstruct_legacy: bool, manual: bool, passive: boo
     assert_eq!(result["data"]["browserId"], browser_id);
     assert_eq!(result["data"]["tabId"], tab);
     assert_eq!(recovered.state().sessions[&task].profile_id, "profile-a");
+    assert_ne!(
+        recovered.state().browsers[&browser_id].desktop,
+        before.browsers[&browser_id].desktop,
+        "ordinary handoff recovery must use vacant capacity instead of the occupied original desktop"
+    );
     let after = crate::native::browser_host_control::read(&browser_id).unwrap();
     assert_eq!(after.human, !passive);
     assert_eq!(after.pause_reads, !passive);

@@ -7216,6 +7216,9 @@ Browser placement reads current public inventory and windows, then refreshes
 exact desktop identity before launch. Occupied healthy desktops retain their
 assignments and become eligible for wrap-around only at the growth limit. Unknown
 window observations cannot qualify a desktop as free or eligible for wrap-around.
+Replacement browsers follow the same vacancy preference and persisted wrap-around
+order after the original process is proven absent. Live profile reuse stays on
+its existing desktop, and explicit desktop placement remains binding.
 An unrelated unavailable destination does not veto a separately proven usable
 one. If no eligible destination is proven, placement returns an actionable error. Managed commands address the session's current
 tab through its managed owner, without a second legacy tab-catalog lookup.

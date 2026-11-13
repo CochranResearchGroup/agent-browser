@@ -1068,6 +1068,10 @@ impl RemoteViewApplicationTransport for PoolTransport {
                         })
                     {
                         windows["windows"][0]["pid"] = serde_json::json!(pid.unwrap());
+                    } else if provider.occupied_desktops.contains(&assignment.desktop_id) {
+                        // A separately observed peer survives the original fixture
+                        // browser's exit and still makes this desktop occupied.
+                        windows["windows"][0]["pid"] = serde_json::json!(std::process::id());
                     } else {
                         windows["windows"] = serde_json::json!([]);
                     }
@@ -11642,4 +11646,135 @@ fn closed_handoff_reopens_in_shared_browser_preserving_peer_and_its_own_human_ho
             .and_then(|binding| binding.observation.as_ref())
             .is_some());
     }
+}
+
+#[test]
+fn replacement_recovery_prefers_vacant_assignment() {
+    replacement_placement_fixture(false);
+}
+
+#[test]
+fn replacement_recovery_wraps_at_capacity_after_restart() {
+    replacement_placement_fixture(true);
+}
+
+fn replacement_placement_fixture(at_capacity: bool) {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    let command =
+        serde_json::json!({"action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100});
+    let opened = consumer
+        .execute_managed_command("Alice", &command)
+        .unwrap()
+        .unwrap();
+    let session_id = opened["browserSession"]["sessionId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let tab_id = opened["browserSession"]["tabId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let browser_id = opened["browserSession"]["browserId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let old_desktop = consumer.state().browsers[&browser_id]
+        .desktop
+        .as_ref()
+        .unwrap()
+        .desktop_id
+        .clone();
+    let mut before = consumer.state().clone();
+    let handoff = retain_remote_view_tab_handoff_at(
+        &mut before,
+        "replacement-placement",
+        &session_id,
+        &tab_id,
+        101,
+    )
+    .unwrap();
+    drop(consumer);
+    fixture.store(false).save_session_state(&before).unwrap();
+    provider
+        .borrow_mut()
+        .occupied_desktops
+        .insert(old_desktop.clone());
+    let prepared = prepare_remote_view_session_pool(
+        &mut adapter(&fixture, provider.clone()),
+        &mut fixture.store(false),
+        &RemoteViewSessionPool {
+            name: "main".into(),
+            desired_desktops: 1,
+        },
+    )
+    .unwrap();
+    assert_eq!(prepared.desktops.len(), 1);
+    let vacant_desktop = prepared.desktops[0].desktop.desktop_id.clone();
+    assert_ne!(old_desktop, vacant_desktop);
+    if at_capacity {
+        provider
+            .borrow_mut()
+            .occupied_desktops
+            .insert(vacant_desktop.clone());
+    }
+    std::fs::write(fixture.root.join("idle-process-absent"), "absent").unwrap();
+    let mut resumed = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    let result = resumed
+        .execute_managed_command("Alice", &command)
+        .unwrap()
+        .unwrap();
+    assert_eq!(result["success"], true, "{result}");
+    assert_eq!(calls.get(), 2, "must test a physical replacement launch");
+    let actual = &resumed.state().browsers[&browser_id]
+        .desktop
+        .as_ref()
+        .unwrap()
+        .desktop_id;
+    assert_eq!(actual, &vacant_desktop, "replacement browser must prefer the vacant allocated desktop over the occupied old desktop");
+    assert_eq!(result["browserSession"]["sessionId"], session_id);
+    assert_eq!(result["browserSession"]["tabId"], tab_id);
+    assert_eq!(
+        resumed.state().last_remote_view_desktop_id.as_ref(),
+        Some(&vacant_desktop)
+    );
+    assert_eq!(
+        resumed.state().sessions[&session_id].profile_id,
+        before.sessions[&session_id].profile_id
+    );
+    assert!(fixture
+        .store(false)
+        .unpublished_launch_records()
+        .unwrap()
+        .is_empty());
+    let continued =
+        agent_browser_service_model::resolve_remote_view_tab_handoff(resumed.state(), &handoff.id)
+            .unwrap();
+    assert_eq!(continued.browser.id, browser_id);
+    assert_eq!(continued.tab.id, tab_id);
+    assert_eq!(
+        continued.browser.desktop.as_ref().unwrap().desktop_id,
+        vacant_desktop
+    );
+    drop(resumed);
+    assert_eq!(
+        fixture
+            .store(false)
+            .load_session_state()
+            .unwrap()
+            .last_remote_view_desktop_id,
+        Some(vacant_desktop)
+    );
 }

@@ -214,6 +214,9 @@ pub trait BrowserLaunchCustodyStore {
 
     /// Admit replacement custody for an exact published browser. Implementations
     /// retain prior launch history and reject competing profile claims or release fences.
+    /// After adapter-qualified profile absence, ordinary replacements may select
+    /// another eligible desktop; durable admission rechecks the original process.
+    /// Replacing a process does not assert release of its shared old assignment.
     fn admit_recovery_launch_intent(
         &mut self,
         _intent: &BrowserLaunchIntent,

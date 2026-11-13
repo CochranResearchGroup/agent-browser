@@ -1875,6 +1875,32 @@ impl<
         S: BrowserLaunchCustodyStore + RemoteViewPoolRequestStore + BrowserIdleRetirementCustodyStore,
     > RemoteViewSessionEffects<E, T, S>
 {
+    /// Share the persisted independent-launch cursor after pool vacancy filtering.
+    fn select_recovery_desktop(
+        &self,
+        candidates: &[RemoteViewDesktopCandidate],
+    ) -> Result<RemoteViewFixedDesktop, String> {
+        let ready = candidates
+            .iter()
+            .filter(|candidate| candidate.ready)
+            .collect::<Vec<_>>();
+        let last = self
+            .expected
+            .as_ref()
+            .and_then(|state| state.last_remote_view_desktop_id.as_ref());
+        let index = last
+            .and_then(|last| {
+                ready
+                    .iter()
+                    .position(|candidate| &candidate.desktop.desktop_id == last)
+            })
+            .map_or(0, |index| (index + 1) % ready.len());
+        ready
+            .get(index)
+            .map(|candidate| candidate.desktop.clone())
+            .ok_or_else(|| "browser_session_recovery_desktop_unavailable".into())
+    }
+
     fn recover_browser_with_target(
         &mut self,
         browser: &ManagedBrowserInstance,
@@ -1909,12 +1935,6 @@ impl<
                 .reconcile_absent_recovery(&claim, expected, browser)
                 .map_err(|_| "browser_session_recovery_readback_required")?;
         }
-        let borrowed = self
-            .expected
-            .as_ref()
-            .expect("qualified baseline")
-            .shared_browser_ids
-            .contains(&browser.id);
         let (mut assignment, mut desktop) = if let Some(desktop) = target {
             let placement = BrowserPlacement::Required {
                 desktop: BrowserDesktopBinding {
@@ -1939,27 +1959,23 @@ impl<
                 .cloned()
                 .ok_or("browser_reconnect_recovery_target_unavailable")?;
             (assignment, desktop.clone())
-        } else if let Some(desktop) = browser.desktop.as_ref().filter(|_| !borrowed) {
+        } else if let Some(desktop) = browser.desktop.as_ref().filter(|_| self.pool.is_none()) {
+            // Fixed-assignment adapters have no pool allocator to consult.
             let assignment = self
                 .store
                 .published_launch_assignment(browser)
                 .map_err(|_| "browser_session_recovery_prior_custody_unavailable")?;
             (assignment, desktop.clone())
         } else {
-            // Local and borrowed browsers have no native launch custody to
-            // inherit. Current profile absence qualifies a fresh placement.
+            // A replacement is fresh process demand after positive absence,
+            // even when its logical browser retains an older assignment.
             let pool = self
                 .pool
                 .as_ref()
                 .ok_or("browser_session_recovery_pool_missing")?;
             let prepared =
                 prepare_remote_view_session_pool(&mut self.adapter, &mut self.store, pool)?;
-            let desktop = prepared
-                .desktops
-                .first()
-                .ok_or("browser_session_recovery_desktop_unavailable")?
-                .desktop
-                .clone();
+            let desktop = self.select_recovery_desktop(&prepared.desktops)?;
             let assignment = prepared
                 .assignments
                 .into_iter()
@@ -1989,12 +2005,7 @@ impl<
                 .ok_or("browser_session_recovery_pool_missing")?;
             let prepared =
                 prepare_remote_view_session_pool(&mut self.adapter, &mut self.store, pool)?;
-            desktop = prepared
-                .desktops
-                .first()
-                .ok_or("browser_session_recovery_desktop_unavailable")?
-                .desktop
-                .clone();
+            desktop = self.select_recovery_desktop(&prepared.desktops)?;
             assignment = prepared
                 .assignments
                 .into_iter()
@@ -2041,12 +2052,7 @@ impl<
                     .ok_or("browser_session_recovery_pool_missing")?;
                 let prepared =
                     prepare_remote_view_session_pool(&mut self.adapter, &mut self.store, pool)?;
-                desktop = prepared
-                    .desktops
-                    .first()
-                    .ok_or("browser_session_recovery_desktop_unavailable")?
-                    .desktop
-                    .clone();
+                desktop = self.select_recovery_desktop(&prepared.desktops)?;
                 intent.assignment = prepared
                     .assignments
                     .into_iter()

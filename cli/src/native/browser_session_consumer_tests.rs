@@ -533,12 +533,10 @@ int main(int argc, char **argv) {
     }
     // Issue a separate synthetic provider response; production private inputs
     // remain single-consumption and are never cloned or serialized.
-    RemoteViewPrivateLaunchEnvironment::from_response(
-        wire()["launchEnvironment"].clone(),
-        observation,
-        &intent.assignment,
-    )
-    .unwrap()
+    let mut response = wire()["launchEnvironment"].clone();
+    response["target"] = serde_json::to_value(&observation.target).unwrap();
+    RemoteViewPrivateLaunchEnvironment::from_response(response, observation, &intent.assignment)
+        .unwrap()
 }
 #[cfg(target_os = "linux")]
 struct CopyProcessFixture {

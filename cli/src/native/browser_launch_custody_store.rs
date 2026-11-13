@@ -1602,6 +1602,8 @@ mod tests {
                 .unwrap_err(),
             LaunchCustodyStoreError::ProfileOccupied
         );
+        // A new desktop is ordinary replacement demand, not an assignment release.
+        replacement.assignment.desktop_id = "33333333-3333-4333-8333-333333333333".into();
         let mut stale = browser.clone();
         stale.pid += 1;
         assert_eq!(
@@ -1639,6 +1641,7 @@ mod tests {
         ));
         let mut new_launch = launch.clone();
         new_launch.pid = 43;
+        new_launch.desktop.as_mut().unwrap().desktop_id = replacement.assignment.desktop_id.clone();
         new_launch.cdp_endpoint = "http://127.0.0.1:9322".into();
         store
             .observe_launch_intent(&replacement, &new_launch)
@@ -1647,6 +1650,7 @@ mod tests {
         let current = recovered.browsers.get_mut(&browser.id).unwrap();
         current.pid = new_launch.pid;
         current.cdp_endpoint = new_launch.cdp_endpoint;
+        current.desktop = new_launch.desktop;
         store
             .publish_launch_intent(&replacement, &retained, &recovered)
             .unwrap();
@@ -1660,7 +1664,7 @@ mod tests {
             store
                 .published_launch_assignment(&recovered.browsers[&browser.id])
                 .unwrap(),
-            old.assignment
+            replacement.assignment
         );
         assert!(store.unpublished_launch_records().unwrap().is_empty());
     }
@@ -2051,11 +2055,27 @@ impl BrowserSessionSqliteStore {
                 .collect::<Vec<_>>();
             let explicit_target =
                 explicit_hosted_recovery_target(&state, browser, &intent.assignment);
+            // Ordinary placement may change after the adapter's exact-profile
+            // absence proof. Recheck original process absence inside the writer
+            // transaction; explicit host placement retains its separate proof.
+            let ordinary_replacement = browser
+                .desktop
+                .as_ref()
+                .is_some_and(|desktop| desktop.desktop_id != intent.assignment.desktop_id)
+                && !state.app_browser_attachments.contains_key(&browser.id)
+                && !state.sessions.values().any(|task| {
+                    task.browser_id == browser.id && state.host_bindings.contains_key(&task.id)
+                })
+                && matches!(
+                    crate::process_identity::observe_process(browser.pid),
+                    crate::process_identity::ProcessObservation::Missing
+                );
             let prior_conflict = if let [prior] = prior.as_slice() {
                 owner_terminal_replacement = owner_release_observed(&transaction, prior)?;
                 (prior.intent.assignment != intent.assignment
                     && !owner_terminal_replacement
                     && !explicit_target
+                    && !ordinary_replacement
                     && (!state.idle_closed_browsers.contains_key(&browser.id)
                         || !assignment_release_completed(&transaction, &prior.intent.assignment)?))
                     || (*prior).clone().confirm_publication(&state).is_err()
