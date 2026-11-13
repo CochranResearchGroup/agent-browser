@@ -253,3 +253,61 @@ without relaxing own-profile or shared-group custody. No refactoring is required
 for this slice. Preserve the warm installed handoff across the one authorized
 preserving upgrade for a same-task, same-URL before/after comparison. This remains
 separate from the command-seam test and does not claim independent off-host pixels.
+
+
+## Addressed-operation deployment and retained-browser comparison
+
+PR691 merged as 3a7ab465f87bd7bda3a580e50ced27fb90b04b81. The single qualified
+production-shaped build sealed binary
+88972f41067b0a9b9fbce88c2698414bbc0b92a79e91741bb080376b70eec9f1 from that clean
+canonical source. Release optimization is level 3, fat LTO and one codegen unit;
+rustc 1.94.1 targets x86_64-unknown-linux-gnu. The maintained builder completed
+successfully with no compiler warnings or errors. The exact sealed binary passed
+`AGENT_BROWSER_FIXTURE_BIN=<sealed-binary> pnpm test:workstation-install-fixture`.
+No hosted CI ran. Local Linux validation does not establish other platform results.
+
+A fresh fetch matched the candidate source exactly, installation dry-run reported
+an eligible sealed production artifact with no integrity preconditions, and fresh
+status showed no active transaction. The existing authorization selected one
+preserving installation, without force or full shutdown. Transaction
+upgrade-9005d7bf-102d-46fa-96b6-5012ef5a8130 reached accepted in 95.1 seconds.
+Installed command and a freshly observed maintenance producer both hash to the
+sealed binary. Final candidate status is accepted with no active operation;
+`agent-browser install doctor` exits zero. Doctor retains advisory observations
+about the different workspace candidate and missing authenticated dashboard
+operator-journey receipt; this is not dashboard journey qualification.
+
+Before installation, a disposable synthetic page obtained an owned-window ready
+handoff. After installation, fresh MCP automation read the same page marker.
+The exact original browser PID and process start token, profile path, browser ID,
+and opaque handoff URL were unchanged. Neither the original reported user task
+nor another browser was reopened or closed for this check.
+
+Five authenticated public HTTPS probes from Cooper followed the same durable
+handoff URL to the native viewer document before and after installation:
+
+| Sample | Before seconds | After seconds |
+| --- | ---: | ---: |
+| 1 | 6.766 | 13.607 |
+| 2 | 3.519 | 4.327 |
+| 3 | 7.915 | 4.769 |
+| 4 | 3.757 | 3.483 |
+| 5 | 7.231 | 3.958 |
+| Median | 6.766 | 4.327 |
+
+Every sample passed the 60-second document budget. The first post-install sample
+was slower: its initial handoff redirect completed at 0.146 seconds, the native
+continuation redirect at 13.394 seconds, and viewer document at 13.607 seconds.
+Retain that sample. These observations are descriptive, not a controlled latency
+improvement claim. They exclude authentication setup, first pixels and interactive
+input, and do not provide an independent off-host network vantage. The source
+regression proves foreground operation setup avoids another profile's blocked
+provider; waiting behind an already-running global maintenance pass remains
+unbounded by this repair. Issue677 remains open for that residual path.
+
+Task-scoped close returned browser_closed. Fresh OS readback proves the original
+PID absent and zero processes referencing the exact synthetic profile. Profile
+files and peer state retain existing policy. Private protocols and identities
+remain in user-scoped evidence. Retain this primary checkout and both sealed
+candidates as deployment provenance. The bounded TDD delivery is complete; no
+further production effect is selected by this packet.

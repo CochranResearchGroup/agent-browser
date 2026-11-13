@@ -1,14 +1,16 @@
-## Handoff maintenance repair deployed | 2026-11-13
+## Addressed handoff TDD repair deployed | 2026-11-13
 
 [677](https://github.com/CochranResearchGroup/agent-browser/issues/677),
-[deployment evidence](docs/dev/maintenance/handoff-maintenance677.md): PR682 merged
-as 9d9a6aca5; sealed production 934f03443c98 installed through a preserving
-transaction. Pool 144, model 424, strict gates, exact installer fixture and doctor
-pass. Fresh owned-window handoff is ready; five public viewer-document probes
-from Cooper took 3.194 to 6.284 seconds. Original task is closed with a valid link.
-Several-second latency and independent first-pixel qualification remain open;
-maintenance samples do not prove a controlled wall-time improvement. Disposable
-check closed with no process residue. Retain primary and sealed artifact.
+[deployment evidence](docs/dev/maintenance/handoff-maintenance677.md): PR691 merged
+as 3a7ab465f; production 88972f41067b accepted through one preserving install.
+Command-seam RED then GREEN, pool 145, model 424, strict gates, exact installer
+fixture and doctor pass. The original synthetic browser process, profile and
+handoff URL survived installation. Five public viewer-document probes from
+Cooper measured 3.519 to 7.915 seconds before and 3.483 to 13.607 afterward;
+medians 6.766 and 4.327. Retain the slower cold sample. This is not controlled
+latency or independent first-pixel proof. Global maintenance lock waiting remains
+open under #677. Scoped close and fresh OS check prove no synthetic process residue.
+Retain primary and both sealed artifacts; bounded TDD deployment is complete.
 
 ## StealthCDP managed MCP default deployed | 2026-11-12
 
