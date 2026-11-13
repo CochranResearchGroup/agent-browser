@@ -39,7 +39,7 @@ argument tests, 3 ordinary recovery tests, 28 mode tests and the manual-login
 guard passed. Strict workspace Clippy and formatting passed. Policy wiring (11),
 changed links, handoff documentation, docs build, host provisioning, VM harness,
 viewer assets, database durability and route-user contracts passed locally.
-The root guide is 9,991 bytes; independently edited shared guidance is preserved.
+The root guide is 9,992 bytes; independently edited shared guidance is preserved.
 No hosted CI ran. Production and installed workflow qualification remain open.
 
 Serial Standards review found no blocking breach: no new API, viewer, CDP,
@@ -47,3 +47,7 @@ private-input reuse or process-identity bypass. Serial Spec review found the
 change matches the isolated first-run failure while retaining the distinct
 CDP-backed manual-login posture. Actual page continuity through the public mode
 toggle remains a required acceptance gate, not inferred from argument tests.
+
+Main placement repair PR675 is integrated. Combined-source strict Clippy and
+formatting pass; all 3 ordinary recovery and 2 replacement-placement cases pass.
+The placement and startup guide intents remain in one linked reference.
