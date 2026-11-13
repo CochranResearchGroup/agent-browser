@@ -1,7 +1,7 @@
 # Retained CDP-free page continuity
 
 Product lane: PL-BUGFIX
-State: OPEN
+State: COMPLETED
 Work item: CochranResearchGroup/agent-browser#670
 Branch: fix/mode-handoff-control649
 Primary writer: MODE-HANDOFF-CONTROL-649
@@ -68,4 +68,32 @@ absence before asking the owner to reap it. All six failed cases passed afterwar
 
 Documentation links, handoff contracts, docs build, policy wiring, host provision,
 VM harness, Guacamole assets, Postgres durability and route-user contracts passed.
-No hosted CI was run. Installed saved-page acceptance remains outstanding.
+No hosted CI was run. Installed saved-page acceptance passed as recorded below.
+
+
+## Installed acceptance
+
+PR671 merged at `88be02cc9d4d3edd06a301b2e8c9e3c8405d0720`. The frozen
+production-shaped build sealed binary
+`2c03c4cafd7b3d88274775ff3e18a78907017fe92a600072fb0497c1458fc39c`.
+Exact public MCP and embedded guidance checks passed, including the 9,998-byte
+root skill. The installer fixture passed with zero owned host residue. Supported
+preserving installation reached accepted; fresh doctor and selected executable
+hash checks passed. Runtime identities and receipts remain outside Git.
+
+A disposable loopback marker browser passed public CDP on-to-off relaunch,
+interactive takeover and confirmed return through one durable handoff. Chrome's
+first-run onboarding appeared during this initial conversion; only the disposable
+profile completed its signed-out setup. This is a separate fresh-profile
+continuity limitation, not proof of page preservation during conversion.
+
+After navigating that CDP-free browser to the marker, the exact Native window was
+gracefully closed and its original kernel process was confirmed absent. Opening
+the same durable handoff restored the marker in a new process with native session
+restore and no debugging flag. The viewer confirmed CDP off. Normal task cleanup
+closed the disposable browser; fresh process readback found zero profile Chrome
+residue. The original operator browser remained the same process with CDP off.
+
+This qualifies retained CDP-free saved-page recovery. It does not qualify account
+authentication, unsaved page memory, or uninterrupted first-run mode conversion.
+Sealed candidates remain in the existing governed checkout custody.
