@@ -34,6 +34,24 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     };
     const operation=(kind,id,phase)=>({schemaVersion:kind==='mode_convert'?'agent-browser.mode-operation.v1':'agent-browser.profile-duplication.v1',operationId:id,kind,browserId:'browser',profileId:'profile',taskId:'task-one',source:{id:'profile'},destination:{id:'destination-'+id,name:'Copy '+id},requestedMode:'cdp_free',phase,affectedTaskIds:['task-one'],actions:phase==='prepared'?[{action:kind==='mode_convert'?'relaunch':'close_and_duplicate',requiresConfirmation:true},{action:'cancel',requiresConfirmation:false}]:[{action:'reconcile',requiresConfirmation:false}]});
     const lookup=(kind,operations)=>({schemaVersion:'agent-browser.browser-operations.v1',kind,profileId:'profile',browserId:'browser',taskId:'task-one',operations});
+    {
+      const page=await browser.newPage();const commands=[];const id='slow-owner-mode';
+      const retained=operation('mode_convert',id,'prepared');
+      await page.route('**/api/command',async route=>{
+        const command=route.request().postDataJSON();commands.push(command);
+        if(command.choice==='inspect'){await route.fulfill({json:{success:true,data:lookup('mode_convert',[retained])}});return;}
+        await new Promise(resolve=>setTimeout(resolve,17000));
+        await route.fulfill({json:{success:true,data:{...retained,phase:'complete',actions:[]}}}).catch(()=>{});
+      });
+      await page.goto(origin);await open(page,'mode_convert');
+      await page.getByText('Operation: '+id,{exact:true}).waitFor();
+      await page.getByRole('checkbox',{name:'Confirm the selected browser action'}).check();
+      await page.getByRole('button',{name:'Relaunch now',exact:true}).click();
+      await page.getByRole('status').filter({hasText:/^complete$/}).waitFor({timeout:22000});
+      assert.deepEqual(commands.map(command=>command.choice),['inspect','relaunch'],'A slow mode owner reply must not require replay or reconciliation');
+      assert.equal(commands.at(-1).operationId,id);
+      checks.push('mode_convert:slow-owner-response');await page.close();
+    }
     for(const kind of ['mode_convert','profile_duplicate'])for(const state of ['prepared','pending','lost_response']) {
       const page=await browser.newPage();const commands=[];const id=`original-${kind}-${state}`;
       let retained=operation(kind,id,state==='pending'?'launch_dispatched':'prepared');

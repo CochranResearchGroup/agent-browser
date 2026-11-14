@@ -1517,6 +1517,17 @@ fn dashboard_ingress_first_response_timeout(request: &[u8]) -> Duration {
     if workspace_launch {
         return DASHBOARD_INGRESS_WORKSPACE_LAUNCH_TIMEOUT;
     }
+    let browser_command = request.starts_with(b"POST ")
+        && std::str::from_utf8(request)
+            .ok()
+            .and_then(|request| request.lines().next()?.split_whitespace().nth(1))
+            .is_some_and(|path| path.split('?').next() == Some("/api/command"));
+    if browser_command {
+        // The authenticated command handler bounds owner mode relaunches at
+        // 90 seconds. Leave room for its response and the client's 95 seconds.
+        // A delivered mutation still cannot replay to a fallback generation.
+        return Duration::from_secs(100);
+    }
     let native_handoff = request.starts_with(b"GET ")
         && std::str::from_utf8(request)
             .ok()
@@ -3364,6 +3375,43 @@ mod tests {
 
     #[tokio::test]
     async fn workspace_launch_waits_for_owner_without_replaying_to_fallback() {
+        assert_owner_reply_without_fallback("/api/dashboard/browser-launch").await;
+    }
+
+    #[tokio::test]
+    async fn browser_mode_command_waits_for_owner_without_replaying_to_fallback() {
+        assert_owner_reply_without_fallback("/api/command").await;
+    }
+
+    #[test]
+    fn browser_command_deadline_matches_only_the_command_post() {
+        for path in ["/api/command", "/api/command?source=workspace"] {
+            assert_eq!(
+                dashboard_ingress_first_response_timeout(
+                    format!("POST {path} HTTP/1.1\r\n\r\n").as_bytes()
+                ),
+                Duration::from_secs(100)
+            );
+        }
+        for path in ["/api/command/other", "/api/command-extra", "/api/other"] {
+            assert_eq!(
+                dashboard_ingress_first_response_timeout(
+                    format!("POST {path} HTTP/1.1\r\n\r\n").as_bytes()
+                ),
+                DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT
+            );
+        }
+        assert_eq!(
+            dashboard_ingress_first_response_timeout(b"GET /api/command HTTP/1.1\r\n\r\n"),
+            DASHBOARD_INGRESS_SERVICE_STATUS_FIRST_RESPONSE_TIMEOUT
+        );
+        assert_eq!(
+            dashboard_ingress_first_response_timeout(b"PUT /api/command HTTP/1.1\r\n\r\n"),
+            DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT
+        );
+    }
+
+    async fn assert_owner_reply_without_fallback(path: &'static str) {
         let selected_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
         let fallback_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
         let mut registry = DashboardIngressRegistry::new(DashboardBackend::new(
@@ -3386,7 +3434,7 @@ mod tests {
         let backend = tokio::spawn(async move {
             let (mut connection, _) = selected_listener.accept().await.unwrap();
             let request = read_initial_http_request(&mut connection).await.unwrap();
-            assert!(request.starts_with(b"POST /api/dashboard/browser-launch "));
+            assert!(request.starts_with(format!("POST {path} ").as_bytes()));
             tokio::time::sleep(Duration::from_millis(2_100)).await;
             // A late backend reply may fail to write on the RED baseline.
             let _ = connection
@@ -3402,7 +3450,13 @@ mod tests {
         let mut client = TcpStream::connect(("127.0.0.1", ingress_port))
             .await
             .unwrap();
-        client.write_all(b"POST /api/dashboard/browser-launch HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\n\r\n{}").await.unwrap();
+        client
+            .write_all(
+                format!("POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\n\r\n{{}}")
+                    .as_bytes(),
+            )
+            .await
+            .unwrap();
         client.shutdown().await.unwrap();
         let mut response = Vec::new();
         timeout(Duration::from_secs(5), client.read_to_end(&mut response))
@@ -3415,11 +3469,11 @@ mod tests {
             timeout(Duration::from_millis(50), fallback_listener.accept())
                 .await
                 .is_err(),
-            "a delivered workspace launch was replayed to fallback"
+            "a delivered owner command was replayed to fallback"
         );
         assert!(
             response.starts_with(b"HTTP/1.1 200"),
-            "workspace launch was cut off before owner acknowledgement: {}",
+            "owner command was cut off before owner acknowledgement: {}",
             String::from_utf8_lossy(&response)
         );
         assert!(response.ends_with(b"owner-ready"));
