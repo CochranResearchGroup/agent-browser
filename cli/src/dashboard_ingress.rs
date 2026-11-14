@@ -19,6 +19,8 @@ use tokio::time::timeout;
 
 pub(crate) const DASHBOARD_INGRESS_SCHEMA_VERSION: &str = "agent-browser.dashboard-ingress.v1";
 const DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(2);
+// The workspace launcher waits 60 seconds; allow delivery of its owner's reply.
+const DASHBOARD_INGRESS_WORKSPACE_LAUNCH_TIMEOUT: Duration = Duration::from_secs(65);
 // PrimaryTask::ready bounds startup at 16 seconds; retain five seconds for delivery.
 const DASHBOARD_INGRESS_PRIMARY_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(21);
 const DASHBOARD_INGRESS_SERVICE_STATUS_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
@@ -1507,6 +1509,14 @@ fn dashboard_ingress_request_identity(request: &[u8]) -> (String, String, String
 /// timeout plus a small response grace so a committed request is not reported
 /// as a retryable backend failure.
 fn dashboard_ingress_first_response_timeout(request: &[u8]) -> Duration {
+    let workspace_launch = request.starts_with(b"POST ")
+        && std::str::from_utf8(request)
+            .ok()
+            .and_then(|request| request.lines().next()?.split_whitespace().nth(1))
+            .is_some_and(|path| path.split('?').next() == Some("/api/dashboard/browser-launch"));
+    if workspace_launch {
+        return DASHBOARD_INGRESS_WORKSPACE_LAUNCH_TIMEOUT;
+    }
     let native_handoff = request.starts_with(b"GET ")
         && std::str::from_utf8(request)
             .ok()
@@ -3318,6 +3328,101 @@ mod tests {
         backend.await.unwrap();
         ingress.await.unwrap();
         assert!(response.ends_with(b"committed"));
+    }
+
+    #[test]
+    fn workspace_launch_deadline_matches_only_the_launch_post() {
+        for path in [
+            "/api/dashboard/browser-launch",
+            "/api/dashboard/browser-launch?source=toolbar",
+        ] {
+            assert_eq!(
+                dashboard_ingress_first_response_timeout(
+                    format!("POST {path} HTTP/1.1\r\nHost: localhost\r\n\r\n").as_bytes()
+                ),
+                Duration::from_secs(65)
+            );
+        }
+        for request in [
+            "POST /api/dashboard/browser-launch/other HTTP/1.1\r\n\r\n",
+            "POST /api/dashboard/browser-launch-extra HTTP/1.1\r\n\r\n",
+            "PUT /api/dashboard/browser-launch HTTP/1.1\r\n\r\n",
+            "POST /api/other HTTP/1.1\r\n\r\n",
+        ] {
+            assert_eq!(
+                dashboard_ingress_first_response_timeout(request.as_bytes()),
+                DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT
+            );
+        }
+        assert_eq!(
+            dashboard_ingress_first_response_timeout(
+                b"GET /api/dashboard/browser-launch HTTP/1.1\r\n\r\n"
+            ),
+            DASHBOARD_INGRESS_SERVICE_STATUS_FIRST_RESPONSE_TIMEOUT
+        );
+    }
+
+    #[tokio::test]
+    async fn workspace_launch_waits_for_owner_without_replaying_to_fallback() {
+        let selected_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let fallback_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let mut registry = DashboardIngressRegistry::new(DashboardBackend::new(
+            "generation-old",
+            fallback_listener.local_addr().unwrap().port(),
+            "old-manifest",
+        ));
+        registry
+            .stage_candidate(DashboardBackend::new(
+                "generation-new",
+                selected_listener.local_addr().unwrap().port(),
+                "new-manifest",
+            ))
+            .unwrap();
+        registry
+            .commit_candidate(CandidateOperatorJourney::ready(ready_evidence(
+                "generation-new",
+            )))
+            .unwrap();
+        let backend = tokio::spawn(async move {
+            let (mut connection, _) = selected_listener.accept().await.unwrap();
+            let request = read_initial_http_request(&mut connection).await.unwrap();
+            assert!(request.starts_with(b"POST /api/dashboard/browser-launch "));
+            tokio::time::sleep(Duration::from_millis(2_100)).await;
+            // A late backend reply may fail to write on the RED baseline.
+            let _ = connection
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\nConnection: close\r\n\r\nowner-ready")
+                .await;
+        });
+        let ingress_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let ingress_port = ingress_listener.local_addr().unwrap().port();
+        let ingress = tokio::spawn(async move {
+            let (mut connection, _) = ingress_listener.accept().await.unwrap();
+            proxy_ingress_request(&mut connection, &registry).await;
+        });
+        let mut client = TcpStream::connect(("127.0.0.1", ingress_port))
+            .await
+            .unwrap();
+        client.write_all(b"POST /api/dashboard/browser-launch HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\n\r\n{}").await.unwrap();
+        client.shutdown().await.unwrap();
+        let mut response = Vec::new();
+        timeout(Duration::from_secs(5), client.read_to_end(&mut response))
+            .await
+            .unwrap()
+            .unwrap();
+        backend.await.unwrap();
+        ingress.await.unwrap();
+        assert!(
+            timeout(Duration::from_millis(50), fallback_listener.accept())
+                .await
+                .is_err(),
+            "a delivered workspace launch was replayed to fallback"
+        );
+        assert!(
+            response.starts_with(b"HTTP/1.1 200"),
+            "workspace launch was cut off before owner acknowledgement: {}",
+            String::from_utf8_lossy(&response)
+        );
+        assert!(response.ends_with(b"owner-ready"));
     }
 
     #[tokio::test]
