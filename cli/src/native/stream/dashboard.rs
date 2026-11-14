@@ -892,6 +892,50 @@ async fn handle_service_api_request(
             // The backend stamps its runtime lane during daemon relay. Keep an
             // addressed task on its existing owner rather than borrowing the
             // dashboard backend's launch and profile configuration.
+            if let Some(session_name) = session.as_str().filter(|name| {
+                !name.is_empty() && *name != "." && *name != ".." && !name.contains(['/', '\\'])
+            }) {
+                if crate::connection::daemon_ready(session_name) {
+                    // Managed lanes share an authenticated command endpoint and
+                    // need not publish a legacy HTTP stream. Relay once to the
+                    // addressed owner, without acquisition or backend fallback.
+                    let result = timeout(
+                        Duration::from_secs(90),
+                        relay_command_to_daemon(session_name, body),
+                    )
+                    .await;
+                    match result {
+                        Ok(Ok(response)) => match serde_json::from_str::<Value>(&response) {
+                            Ok(response) => write_json_value(stream, "200 OK", response).await,
+                            Err(_) => {
+                                write_json_error(
+                                    stream,
+                                    "502 Bad Gateway",
+                                    "browser_command_owner_response_invalid",
+                                )
+                                .await;
+                            }
+                        },
+                        Ok(Err(_)) => {
+                            write_json_error(
+                                stream,
+                                "502 Bad Gateway",
+                                "browser_command_owner_relay_failed",
+                            )
+                            .await;
+                        }
+                        Err(_) => {
+                            write_json_error(
+                                stream,
+                                "504 Gateway Timeout",
+                                "browser_command_owner_timeout",
+                            )
+                            .await;
+                        }
+                    }
+                    return;
+                }
+            }
             let Some(port) = session.as_str().and_then(session_port_for_name) else {
                 write_json_error(
                     stream,
@@ -4346,6 +4390,59 @@ mod tests {
         );
         assert_eq!(payload["data"]["request"], body);
         owner_task.await.unwrap();
+        #[cfg(unix)]
+        {
+            use tokio::io::AsyncBufReadExt;
+            let session = "socket-owner";
+            let token = uuid::Uuid::new_v4().to_string();
+            crate::connection::write_daemon_auth_token(session, &token).unwrap();
+            let socket_path = crate::connection::get_socket_path(session);
+            let listener = tokio::net::UnixListener::bind(&socket_path).unwrap();
+            assert!(!sockets.join(format!("{session}.stream")).exists());
+            let owner_task = tokio::spawn(async move {
+                loop {
+                    let (socket, _) = listener.accept().await.unwrap();
+                    let mut stream = tokio::io::BufReader::new(socket);
+                    let mut line = String::new();
+                    if stream.read_line(&mut line).await.unwrap() == 0 {
+                        continue;
+                    }
+                    let request: Value = serde_json::from_str(&line).unwrap();
+                    assert_eq!(request["_agentBrowserAuthToken"], token);
+                    let response =
+                        json!({"success":true,"data":{"owner":"socket-owner","request":request}});
+                    stream
+                        .write_all(format!("{response}\n").as_bytes())
+                        .await
+                        .unwrap();
+                    break;
+                }
+            });
+            let body = json!({"action":"browser_session_mode_convert","sessionId":"exact-task","sessionName":session,"sourceProfileId":"exact-profile","browserId":"exact-browser","choice":"inspect"});
+            let denied = exchange("POST", "/api/command", "", &body.to_string()).await;
+            assert_eq!(http_response_status(&denied), Some(401));
+            for invalid_name in ["", ".", "..", "../other", "other/name", "other\\name"] {
+                let mut invalid = body.clone();
+                invalid["sessionName"] = json!(invalid_name);
+                let result = exchange("POST", "/api/command", cookie, &invalid.to_string()).await;
+                assert_eq!(http_response_status(&result), Some(503));
+            }
+            let result = exchange("POST", "/api/command", cookie, &body.to_string()).await;
+            assert_eq!(
+                http_response_status(&result),
+                Some(200),
+                "an authenticated owner socket must not require a legacy HTTP stream"
+            );
+            let payload: Value =
+                serde_json::from_slice(http_response_body(&result).unwrap()).unwrap();
+            assert_eq!(payload["data"]["owner"], session);
+            for (key, value) in body.as_object().unwrap() {
+                assert_eq!(&payload["data"]["request"][key], value);
+            }
+            owner_task.await.unwrap();
+            std::fs::remove_file(socket_path).unwrap();
+            assert_eq!(observed.lock().unwrap().len(), 4);
+        }
         let body = json!({"action":"browser_session_mode_convert","sessionId":"exact-task","sessionName":"missing-owner","choice":"prepare"});
         let result = exchange("POST", "/api/command", cookie, &body.to_string()).await;
         assert_eq!(

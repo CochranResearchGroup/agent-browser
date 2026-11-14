@@ -1,3 +1,15 @@
+## External mode owner repair qualified | 2026-11-14
+
+[704](https://github.com/CochranResearchGroup/agent-browser/issues/704),
+[evidence](docs/dev/maintenance/mode-owner-lookup704.md): external mode inspection
+incorrectly requires a legacy HTTP stream although its authenticated owner
+socket answers. Repair uses that exact owner socket without acquisition or
+fallback. RED fixtures also prove premature command ingress and dialog deadlines;
+the mode path now retains the existing90-second owner budget. Local dashboard70,
+ingress45, mounted recovery19, mode inspection, dashboard build, Rustfmt, strict
+Clippy, policy wiring11 and links pass. Sealed production installation and actual
+external supported-browser round trips remain pending; no CFT acceptance.
+
 ## Workspace launch ingress deployed | 2026-11-14
 
 [700](https://github.com/CochranResearchGroup/agent-browser/issues/700),

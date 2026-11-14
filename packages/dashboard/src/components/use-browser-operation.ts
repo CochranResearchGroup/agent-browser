@@ -52,7 +52,7 @@ export function useBrowserOperation(open: boolean, scope: Scope, onRefresh: () =
     if (pending.current || loading || !readable || candidates.length || (unknown && choice !== "reconcile")) return;
     pending.current = true; setBusy(true); setError(null);
     try {
-      const response = await fetch("/api/command", { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(15000), body: JSON.stringify({ ...JSON.parse(key), ...params, operationId, choice, ownerConfirmed: confirmed }) });
+      const response = await fetch("/api/command", { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(scope.kind === "mode_convert" ? 95000 : 15000), body: JSON.stringify({ ...JSON.parse(key), ...params, operationId, choice, ownerConfirmed: confirmed }) });
       const reply = await response.json();
       const refusal = typeof reply.error === "string" ? reply.error.split(":", 1)[0] : "";
       if (reply.success === false && ["mode_operation_affected_tasks_changed", "mode_operation_task_binding_changed", "mode_operation_id_conflict", "mode_operation_profile_busy", "mode_operation_browser_busy", "profile_duplicate_operation_id_conflict", "profile_duplicate_task_profile_conflict", "profile_duplicate_owner_confirmation_required", "profile_duplicate_source_operation_busy", "browser_operation_task_binding_changed", "browser_operation_target_binding_changed"].includes(refusal)) {
