@@ -1,3 +1,18 @@
+## Workspace launch ingress deployed | 2026-11-14
+
+[700](https://github.com/CochranResearchGroup/agent-browser/issues/700),
+[evidence](docs/dev/maintenance/workspace-launch-ingress700.md): PR702 merged `0501d15cf`;
+sealed production `1f981ba3e542` accepted through one preserving installation.
+Ingress 43, strict Rust quality, exact-binary installer fixture and installed
+doctor exit 0 pass. The authenticated external workspace launches explicitly
+selected stable Chrome with HTTP 200/state ready after 20.275 seconds, beyond the
+former two-second deadline. Selected runtime/backend digests and retained QA
+process identity match. The isolated test browser is closed with fresh OS
+absence; disposable data follows its five-minute cleanup. Actual mode conversion
+remains unqualified: its operation inspection returns 503
+`browser_command_owner_unavailable`, tracked in [704](https://github.com/CochranResearchGroup/agent-browser/issues/704).
+Original uncertain requests remain preserved; no Chrome for Testing acceptance.
+
 ## Maintenance mutex wait repaired and deployed | 2026-11-13
 
 [677](https://github.com/CochranResearchGroup/agent-browser/issues/677),
