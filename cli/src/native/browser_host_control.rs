@@ -609,9 +609,9 @@ pub(crate) fn observed(browser_id: &str, expected: u64) -> Result<(), String> {
 }
 
 /// Read existing producer provenance; never create a completion or accept caller
-/// supplied evidence. Restrict the live-supervisor exception to a terminal DOM
-/// click. Native/private input uncertainty retains positive-dispatcher-exit rules.
-fn completed_dom_request(
+/// supplied evidence. Restrict the live-supervisor exception to terminal ordinary
+/// click/evaluate requests. Native/private input uncertainty retains positive-dispatcher-exit rules.
+fn completed_ordinary_request(
     browser_id: &str,
     caller_task_id: &str,
     expected: u64,
@@ -644,7 +644,7 @@ fn completed_dom_request(
         return false;
     };
     original.task_id == caller_task_id
-        && original.action == "click"
+        && matches!(original.action.as_str(), "click" | "evaluate")
         && original.state == agent_browser_service_model::BrowserTaskOperationState::Uncertain
         && original
             .completed_at_ms
@@ -663,7 +663,7 @@ fn completed_dom_request(
         && store.original_browser_identity(&state, browser) == original.process_identity
 }
 
-/// Read-first admission: terminal DOM clicks may use existing completion proof;
+/// Read-first admission: terminal ordinary requests may use existing completion proof;
 /// all other uncertainty requires positive dispatcher absence or PID reuse.
 fn reconcile_ready(
     browser_id: &str,
@@ -696,7 +696,7 @@ fn reconcile_ready(
     // Only the dispatch owner writes this terminal flight state after its run
     // returns. A task completion timestamp alone can also follow a lost reply.
     if outcome == "uncertain_no_replay"
-        && completed_dom_request(browser_id, caller_task_id, expected, request_id)
+        && completed_ordinary_request(browser_id, caller_task_id, expected, request_id)
     {
         return Ok(());
     }

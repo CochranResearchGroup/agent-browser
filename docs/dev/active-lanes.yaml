@@ -2,6 +2,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: CONTACTS-AUTH-RECOVERY-698
+    product_lane: PL-BUGFIX
+    objective: Recover terminal evaluation failures without a false live-dispatch veto
+    plan: docs/dev/maintenance/contacts-auth-recovery698.md
+    branch: fix/terminal-evaluate-recovery
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#698]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [RECEIVING-BINDING-681]
+    reconciled_overlaps: ["Isolated Contacts repair; preserve prior receiving and maintenance branches and installed identity"]
+    validation_status: Actual public regression RED; green and sealed production qualification pending
+    limitations: ["No private input replay or native-input exception", "Auth389 owns consumer recovery and application acceptance"]
+    updated_at: 2026-11-14
   - id: STOCK-POPUP-693
     product_lane: PL-BUGFIX
     objective: Restore stock unsolicited popup blocking in ordinary managed launches

@@ -6017,6 +6017,7 @@ must still pass before the view is ready.
 Task continuation and handoff resolution reconcile resident and durable metadata without
 replaying browser effects. Current resource identity wins overlapping observations;
 private runtime receipts preserve their differences. Independent tasks continue.
+Completed ordinary click/evaluate failures reconcile from exact terminal producer proof; no action is replayed.
 Known occupied or reserved desktops can justify separate bounded capacity;
 failed window observations never qualify a target or justify another acquisition.
 Legacy Chrome lock ownership diagnostics are advisory and cannot veto an authorized
