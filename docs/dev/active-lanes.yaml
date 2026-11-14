@@ -2,6 +2,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: WORKSPACE-LAUNCH-700
+    product_lane: PL-BUGFIX
+    objective: Preserve bounded owner acknowledgement for external workspace launches
+    plan: docs/dev/maintenance/workspace-launch-ingress700.md
+    branch: fix/workspace-launch-ingress-budget
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#700]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [HANDOFF-MAINTENANCE-677]
+    reconciled_overlaps: ["Primary writer owns exact launcher deadline and TCP regression; preserve677 lifecycle/maintenance adapters and foreign mode/control worktrees; reuse clean canonical primary without a new checkout"]
+    validation_status: Live external Chromium launch captured502 after2.1s; delayed TCP RED pending; no installation or toggle acceptance
+    updated_at: 2026-11-14
   - id: CONTACTS-AUTH-RECOVERY-698
     product_lane: PL-BUGFIX
     objective: Recover terminal evaluation failures without a false live-dispatch veto

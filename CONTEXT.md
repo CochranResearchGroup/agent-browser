@@ -4,6 +4,12 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Workspace launch acknowledgement**: The original operator-bound launch intent
+and owner response for one immutable operation. Stable ingress must allow the
+bounded launch response to arrive; an ingress timeout never proves a launch was
+refused or grants replay. Profile publication, Native visibility and successful
+CDP mode conversion require separate evidence.
+
 **Browser popup default**: New Chromium launches preserve normal blocking of
 unsolicited popups. User-activation clicks can open legitimate popup workflows;
 explicit custom launch arguments remain a separate opt-out. Retained browsers
