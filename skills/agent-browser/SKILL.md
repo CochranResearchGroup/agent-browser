@@ -139,3 +139,8 @@ SDK:300s default. ACK-prefix resume keeps original clocks; never replay unknown 
 Read [exact retirement](references/cli-and-service.md#exact-lost-task-retirement) before browser `task_retirement`. Preserve task/operation IDs; never replay unknown input. Identity inspection accepts reconciled history; retirement remains strict.
 
 [Window recovery](references/cli-and-service.md#replacement-placement).
+
+Completed ordinary click/evaluate failures support original-request reconciliation
+while the shared dispatcher supervisor remains alive. Exact producer completion,
+current task/process/epoch and fresh target observation are required. Unknown
+outcomes remain retained; this never permits replay or private/native input.

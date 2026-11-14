@@ -365,30 +365,33 @@ fn terminal_control611_public_target_process_epoch_races_preserve_original() {
 }
 
 #[test]
-fn terminal_request619_public_completed_dom_request_with_live_supervisor_reconciles() {
-    let f = fixture();
-    let crate::process_identity::ProcessObservation::Observed(owner) =
-        crate::process_identity::observe_process(std::process::id())
-    else {
-        panic!("owner")
-    };
-    let mut original = read_control();
-    original["owners"]["original"] = json!([owner.pid, owner.start_token]);
-    std::fs::write(control::path("browser").unwrap(), original.to_string()).unwrap();
-    BrowserSessionSqliteStore::default_sqlite().unwrap().mutate_session_state(|state| {
+fn terminal_request619_public_completed_ordinary_request_with_live_supervisor_reconciles() {
+    for action in ["click", "evaluate"] {
+        let f = fixture();
+        let crate::process_identity::ProcessObservation::Observed(owner) =
+            crate::process_identity::observe_process(std::process::id())
+        else {
+            panic!("owner")
+        };
+        let mut original = read_control();
+        original["owners"]["original"] = json!([owner.pid, owner.start_token]);
+        std::fs::write(control::path("browser").unwrap(), original.to_string()).unwrap();
+        BrowserSessionSqliteStore::default_sqlite().unwrap().mutate_session_state(|state| {
         let identity = state.adopted_browser_process_identities["browser"].process.clone();
-        let value = json!({"requestId":"original","taskId":"task","profileId":"profile","browserId":"browser","tabId":"tab","targetId":"target","processPid":identity.pid,"processIdentity":identity,"controlEpoch":2,"action":"click","fingerprint":"a".repeat(64),"state":"uncertain","createdAtMs":1,"completedAtMs":2,"evidenceReferences":{}});
+        let value = json!({"requestId":"original","taskId":"task","profileId":"profile","browserId":"browser","tabId":"tab","targetId":"target","processPid":identity.pid,"processIdentity":identity,"controlEpoch":2,"action":action,"fingerprint":"a".repeat(64),"state":"uncertain","createdAtMs":1,"completedAtMs":2,"evidenceReferences":{}});
         state.task_operations.entry("task".into()).or_default().insert("original".into(), serde_json::from_value(value).unwrap());
         Ok(())
     }).unwrap();
-    let result = call(request());
-    assert!(result.get("error").is_none(), "{result}");
-    assert_eq!(
-        read_control()["flights"]["original"],
-        "observed_uncertain_no_replay"
-    );
-    assert_eq!(f.commands.lock().unwrap().len(), 1);
+        let result = call(request());
+        assert!(result.get("error").is_none(), "{result}");
+        assert_eq!(
+            read_control()["flights"]["original"],
+            "observed_uncertain_no_replay"
+        );
+        assert_eq!(f.commands.lock().unwrap().len(), 1);
+    }
 }
+
 #[test]
 fn terminal_request619_public_incomplete_or_private_request_keeps_live_dispatch_guard() {
     for case in [
