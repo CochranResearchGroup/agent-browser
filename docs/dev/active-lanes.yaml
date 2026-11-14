@@ -25,12 +25,12 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#698]
-    plan_state: OPEN
+    plan_state: CLOSED
     custody_state: ACTIVE_WORKTREE
     dependencies: []
     overlaps: [RECEIVING-BINDING-681]
     reconciled_overlaps: ["Isolated Contacts repair; preserve prior receiving and maintenance branches and installed identity"]
-    validation_status: Actual public regression RED; green and sealed production qualification pending
+    validation_status: 48 tests, Rustfmt, strict Clippy, installer fixture and installed live recovery passed
     limitations: ["No private input replay or native-input exception", "Auth389 owns consumer recovery and application acceptance"]
     updated_at: 2026-11-14
   - id: STOCK-POPUP-693
