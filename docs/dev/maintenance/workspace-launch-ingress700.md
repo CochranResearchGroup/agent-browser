@@ -5,7 +5,7 @@ Work item: https://github.com/CochranResearchGroup/agent-browser/issues/700
 Owner: ecochran76
 Branch: fix/workspace-launch-ingress-budget
 Base: 0edab79d21996d018c9a0fdbbf50b450392204e1
-State: SOURCE_VALIDATED; installed acceptance pending
+State: INSTALLED; external launch accepted; mode qualification blocked by704
 
 ## Observed failure and bounded diagnosis
 
@@ -94,3 +94,65 @@ marked under the user's QA debug directory, outside Git.
 PR702 is the reviewable source repair. Issue700 stays open. The next installed
 acceptance must verify the original unminimized external workflow; the repair is
 not described as a completed CDP/CDP-free toggle qualification.
+
+## Reviewed, merged and preserving-installed
+
+The operator directed review, merge and deployment. Separate Standards and Spec
+self-reviews found no accepted blocking findings. PR702 merged as
+`0501d15cfdbea370703a6d66efe7d033bf6be90c`. The clean canonical source produced
+sealed production candidate `candidate-f881028fad1c2402-1f981ba3e5427033`, binary
+SHA256 `1f981ba3e54270331eb826c6419d6dd0272eee9be43183582b5f721dd098c95f`,
+with Rust 1.94.1, x86_64-unknown-linux-gnu, release optimization 3, fat LTO,
+one codegen unit and no features. The retained Cargo Signal build exited zero
+in 2,153.095 seconds with no compiler errors or warnings.
+
+`AGENT_BROWSER_FIXTURE_BIN=<exact-sealed-binary> pnpm test:workstation-install-fixture`
+passed in 42.322 seconds. Candidate install dry-run validated the immutable binary
+and manifests, recommended install and reported no active operation or integrity
+preconditions. Fresh canonical main `50ca5973a` contained `0501d15cf` and only two
+subsequent documentation changes, neither in the executable-input closure. The
+exact sealed artifact was reused rather than rebuilt.
+
+One preserving candidate install reached accepted in 126.932 seconds through
+transaction `upgrade-5a1d4da5-e473-46a0-8660-bf55ef8806a7`, selecting generation
+`0.28.0-1f981ba3e542-b1d56beedaad`. The installed command, freshly observed runtime
+host and dashboard backend all match the sealed binary digest. Candidate status
+reports accepted with no active operation or integrity preconditions. Installed
+`agent-browser install doctor --json` exits zero, retaining advisory workspace
+binary drift and missing authenticated operator-journey evidence. The original
+QA browser retained its exact process start identity and executable. Original
+uncertain requests and unrelated browsers were preserved.
+
+## Actual external acceptance and remaining mode blocker
+
+Through the authenticated public HTTPS workspace, the launcher selected the
+explicit stable Google Chrome 157.0.8103.78 build, fingerprint
+`91e519ce83eac12740d54398364583b3131116055eca863d0a240d6062e84053`, independently
+verified against the installed official executable. A distinct disposable,
+connected synthetic Example Domain task returned HTTP 200/state ready in 20.275s.
+This is a live response beyond the former two-second cutoff. The actual browser
+process matched that selected fingerprint. Ordinary automation read the expected
+URL/title and wrote and read a synthetic localStorage marker. Chrome for Testing
+was not used for this acceptance.
+
+The next external UI step remains failed: Relaunch without CDP opens Change
+browser mode with Review relaunch disabled and an existing-operations read error.
+The dialog's exact read-only scoped POST to `/api/command` returned HTTP 503
+`browser_command_owner_unavailable` in 25ms. No mode preparation or conversion
+was dispatched. This is a separate receiving-owner failure, not a recurrence of
+the launch deadline. Both actual toggle directions remain unqualified under
+[704](https://github.com/CochranResearchGroup/agent-browser/issues/704); do not
+claim the deployment completed the broader profile-cloning or mode matrix.
+
+The isolated Chrome browser closed through its exact owner. The close receipt
+and fresh OS observation prove its original process absent; task and browser
+records are removed. Disposable data was queued for its configured five-minute
+cleanup. The original observer and earlier uncertain requests remain retained.
+Temporary browser-local fetch instrumentation was removed. Private identifiers,
+raw traces, browser state, installer and Cargo Signal receipts stay outside Git.
+Hosted CI was skipped under operator policy; local checks do not prove other
+platforms or independent off-host vantage.
+
+The documentation-only closeout passes `pnpm --dir docs build` (34.057seconds),
+policy wiring (11 cases), changed-link validation and patch hygiene. It changes
+no executable inputs and does not require another binary build or installation.

@@ -6,16 +6,16 @@ lanes:
     product_lane: PL-BUGFIX
     objective: Preserve bounded owner acknowledgement for external workspace launches
     plan: docs/dev/maintenance/workspace-launch-ingress700.md
-    branch: fix/workspace-launch-ingress-budget
+    branch: docs/workspace-launch700-installed
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#700]
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     dependencies: []
     overlaps: [HANDOFF-MAINTENANCE-677]
     reconciled_overlaps: ["Primary writer owns exact launcher deadline and TCP regression; preserve677 lifecycle/maintenance adapters and foreign mode/control worktrees; reuse clean canonical primary without a new checkout"]
-    validation_status: TCP regression RED2.20s then ingress43 GREEN; strict workspace Clippy, Rustfmt, policy11 and links pass on43577bef2; PR702 source repair; no installation or toggle acceptance
+    validation_status: PR702 merged0501d15cf; sealed1f981ba3e542 preserving install accepted; exact fixture, doctor0 and external stock Chrome launch200 after20.275s pass; toggle prerequisite503 remains704
     updated_at: 2026-11-14
   - id: CONTACTS-AUTH-RECOVERY-698
     product_lane: PL-BUGFIX
