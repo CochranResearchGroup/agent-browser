@@ -1,3 +1,19 @@
+## External CDP toggle live qualification remains partial | 2026-11-14
+
+[704](https://github.com/CochranResearchGroup/agent-browser/issues/704),
+[evidence](docs/dev/maintenance/mode-owner-lookup704.md): PR706 merged as e83c07434;
+sealed production478f219f6756 was accepted by one preserving installation.
+The external owner lookup now returns200. Official stable Chrome completed
+CDP to CDP-free to CDP through the external workspace and existing Native
+handoff, with three process roots, correct debugging posture and unchanged
+logical/profile identity. Its stored marker survives after manual navigation,
+but the returned task is `about:blank`. Continuation therefore FAILS and
+[707](https://github.com/CochranResearchGroup/agent-browser/issues/707) owns the
+remaining repair. Chromium is NOT RUN; CFT is excluded. The exact test browser
+and its recorded processes and disposable data are absent; the final quiet
+doctor exited0.
+Original uncertain requests and the original observer remain preserved.
+
 ## External mode owner repair qualified | 2026-11-14
 
 [704](https://github.com/CochranResearchGroup/agent-browser/issues/704),
