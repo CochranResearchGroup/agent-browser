@@ -15,6 +15,22 @@ No707 candidate or installation yet. Independent external sign-in passes, but th
 old catalog returned503. Preserve uncertain requests and the separate711 install
 transaction; fresh external Chrome and Chromium acceptance remain open.
 
+## Unqualified launch no longer blocks unrelated tasks | 2026-11-15
+
+[711](https://github.com/CochranResearchGroup/agent-browser/issues/711),
+[evidence](docs/dev/maintenance/request-host711.md): PR713 merged `85c98e7abb`.
+The real owner/SQLite regression is RED then GREEN; three existing tests,
+Rustfmt, strict workspace Clippy, links and11policy checks pass locally.
+Sealed production binary `5d303f1f9e496583` is installed as generation
+`0.28.0-5d303f1f9e49-29a046eb5e20`; cooperative transaction
+`upgrade-ce88bb6b-8651-4230-a5cc-7717e5840973` is accepted.
+Installed MCP open/snapshot/normal close passes; the exact test root and12
+recorded descendants are absent. Doctor exits0 with an advisory missing
+new-generation authenticated viewer receipt; no human viewer acceptance is claimed.
+The unchanged broad integration-target compilation failure remains recorded;
+no comprehensive-suite or all-peer continuity claim. Original private-input
+journals and unrelated #707 work remain outside this repair.
+
 ## External CDP toggle live qualification remains partial | 2026-11-14
 
 [704](https://github.com/CochranResearchGroup/agent-browser/issues/704),

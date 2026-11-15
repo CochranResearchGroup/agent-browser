@@ -21,16 +21,16 @@ lanes:
     product_lane: PL-BUGFIX
     objective: Continue unrelated profile work after an unqualified launch with no logical delta
     plan: docs/dev/maintenance/request-host711.md
-    branch: fix/request-host-isolation711
+    branch: docs/request-host711-installed
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#711]
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    plan_state: CLOSED
+    custody_state: INTEGRATED
     dependencies: []
     overlaps: [CDP-TOGGLE-707]
     reconciled_overlaps: ["Independent real-owner two-profile regression; same narrow pending-refresh predicate as707; preserve foreign dirty files and integrate serially without its other changes"]
-    validation_status: Actual-owner regression RED then GREEN;3 existing publication/replacement tests, Rustfmt, links and11policy checks pass; strict Clippy pending
+    validation_status: PR713 merged85c98e7; four focused tests, Rustfmt, strict Clippy, links and11policy checks pass; sealed5d303f1f9e49 installed; doctor exit0; owned MCP open/snapshot/close and OS cleanup pass; viewer receipt advisory remains
     updated_at: 2026-11-15
   - id: MODE-OWNER-704
     product_lane: PL-BUGFIX
