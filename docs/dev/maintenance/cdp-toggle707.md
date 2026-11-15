@@ -106,6 +106,11 @@ The operator authorized completing validation, PR integration, a qualified
 production candidate, preserving installation and fresh workflow acceptance
 in the veto-diagnosis session. This resumes the previously stopped packet;
 it does not replay the original uncertain launch requests.
+Retain the prior two-hour effort in cumulative accounting. This explicitly
+resumed delivery window has a two-hour ceiling from2026-11-15T04:00Z,
+one production build, one preserving installation and one fresh round trip
+per supported browser. Reassess at the30-minute no-outcome boundary; source
+qualification, integration and installed workflow acceptance remain separate.
 
 Policy wiring11 cases, changed documentation links and patch hygiene pass
 again. The pool retry first stalled in the compiler cache's version probe
