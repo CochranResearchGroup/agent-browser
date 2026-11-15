@@ -4,6 +4,12 @@ mod browser_native_control;
 #[allow(dead_code)]
 #[path = "../src/native/browser_native_image.rs"]
 mod browser_native_image;
+#[allow(dead_code)]
+#[path = "../src/native/native_login_perception.rs"]
+mod native_login_perception;
+#[allow(dead_code)]
+#[path = "../src/native/native_login_ocr.rs"]
+mod native_login_ocr;
 // This integration fixture exercises only the Native input HTTP subset.
 #[allow(dead_code)]
 #[path = "../src/native/remote_view_application_http.rs"]

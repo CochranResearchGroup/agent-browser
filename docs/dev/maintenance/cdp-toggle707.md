@@ -99,3 +99,23 @@ two-hour overall diagnostic ceiling expired; a one-hour extension was requested
 and remains unanswered. No production candidate, installation or fixed-build
 external acceptance is claimed. Resume the pending local gates and qualified711
 dependency before candidate qualification and fresh supported-browser rows.
+
+## Resumed qualification
+
+The operator authorized completing validation, PR integration, a qualified
+production candidate, preserving installation and fresh workflow acceptance
+in the veto-diagnosis session. This resumes the previously stopped packet;
+it does not replay the original uncertain launch requests.
+
+Policy wiring11 cases, changed documentation links and patch hygiene pass
+again. The pool retry first stalled in the compiler cache's version probe
+before tests began and was interrupted with exit130. Its retained retry uses
+the supported cache opt-out, four jobs, an8GiB claim and hard limit, and the
+unchanged16GiB host reserve. Pool and mode/control jobs retain private receipts.
+
+The existing Native-control integration target failed compilation because its
+test crate omitted the login perception and OCR modules referenced by its
+imported production code. Add those module declarations so this planned gate
+can execute; this is fixture wiring, not a new browser failure. Update the
+readiness comment to describe exact process/window observation accurately.
+The provider711 merge remains a prerequisite to707 integration.

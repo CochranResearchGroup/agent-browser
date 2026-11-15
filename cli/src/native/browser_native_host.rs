@@ -181,7 +181,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
 impl<P: BrowserSessionPersistence, E> BrowserSessionHost<P, E> {
     /// Observe an exactly claimed launched process without requiring input policy.
     /// The caller owns launch custody; this adapter permits only observation and
-    /// rechecks persisted task state before querying the exact Native target.
+    /// verifies the exact process and Native window without a global state fence.
     pub(crate) fn native_process_window_ready(
         &self,
         original: &agent_browser_service_model::RecordedProcessIdentity,
