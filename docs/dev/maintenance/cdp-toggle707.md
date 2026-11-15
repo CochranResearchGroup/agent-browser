@@ -4,7 +4,7 @@ Product lane: PL-BUGFIX
 Work item: https://github.com/CochranResearchGroup/agent-browser/issues/707
 Branch: fix/operator-mode-restart707
 Base: a354cb4411144b85d1677c02485354a899d64013
-State: RUST_SOURCE_QUALIFIED; pinned installer fixture and installed external acceptance pending
+State: MERGED_SOURCE_ONLY; sealed production candidate and installed external acceptance incomplete
 
 The actual external Native workflow completes CDP-off, then leaves the CDP-on
 replacement awaiting Native qualification. One replacement process exists;
@@ -316,3 +316,40 @@ browser record. Source qualification does not assert saved-page or native-viewer
 acceptance. The pinned installer fixture is still pending at this custody commit;
 merge readiness, sealed candidate reuse, preserving installation and both actual
 supported-browser rows remain open gates. No hosted CI or formal release.
+
+
+## Source merged; production build incomplete
+
+PR715 merged source4533bc711 into maine93beff6e on2026-11-15. The pinned
+source-free installer fixture subsequently passed, including cleanup of its two
+owned test hosts with zero residue. Final qualification is424 model cases and157
+selected CLI cases, with8 intentionally ignored live-browser cases, plus strict
+Rust quality and the documented Node/docs checks. No hosted CI ran.
+
+The one production-shaped build hit its configured1800-second command limit.
+No compiler error was reported, but no executable or sealed artifact was
+produced. Its object file is empty and the incremental directory has no work
+products. The builder and compiler are absent. Preserve the partial build and its
+abandoned claim for supported recovery; do not invent a seal or promote a debug
+binary. A fresh build window must allow the complete optimized compile.
+
+No installation was performed. The installed generation remains the previous
+PR712 candidate. Public authentication and separate-context anonymous redirect
+checks pass, but neither supported-browser toggle row ran against this repair.
+The prior retained operation remains LaunchAbsent. Its task, profile, tab and
+original operation are preserved; the old handoff remains unavailable. This is
+not successful CDP-toggle, native-handoff or account-login acceptance.
+
+The independent observer was closed normally. Its process identities and cleanup
+readback remain in private QA artifacts. Candidate-build receipts, exact recovery
+identity, original mode operation, synthetic profile identifiers, opaque URLs and
+restart-safe instructions are outside Git. Retain this primary worktree and the
+source branch at4533bc711 so recovery can reuse the exact build request and
+compiled dependencies. The delivery window ends2026-11-15T17:15Z; no automatic
+build retry or time-budget reset is implied by this checkpoint.
+
+The remaining public acceptance seam is three total tabs shared by two sessions
+(Alice two, Bob one), actual external mode controls, URL-to-session and retained
+logical-tab mapping, same-profile storage, replacement-process resolution for
+both clients, same-link Native readiness and normal cleanup. Local database and
+kernel observations support this proof; they do not replace it.

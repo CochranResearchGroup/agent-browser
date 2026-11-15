@@ -1,3 +1,17 @@
+## CDP toggle707 source merged; deployment incomplete | 2026-11-15
+
+[PR715](https://github.com/CochranResearchGroup/agent-browser/pull/715) merged
+source4533bc711 at maine93beff6e. The [source packet](docs/dev/maintenance/cdp-toggle707.md)
+records424 model and157 selected CLI passes, final strict Rust quality, and the
+pinned source-free installer fixture with zero owned-host residue.
+
+The production-shaped build timed out before producing an executable or seal.
+No installation occurred; the prior PR712 generation remains selected. Actual
+external Chrome/Chromium toggles, three-tab/session mapping and same-link Native
+acceptance remain unverified. Preserve the original LaunchAbsent operation,
+partial build, exact source branch and private restart-safe handoff. The current
+window ends2026-11-15T17:15Z; this checkpoint does not authorize an automatic retry.
+
 ## CDP toggle707 source qualification | 2026-11-15
 
 [707](https://github.com/CochranResearchGroup/agent-browser/issues/707),
