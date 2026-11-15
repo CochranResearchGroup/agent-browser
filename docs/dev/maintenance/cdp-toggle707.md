@@ -137,3 +137,25 @@ admission and confirmed, epoch-bound Native window close; it still expects
 Alt+F4. Update only that fixture's owner reply and assertions, retaining exact
 window/process/control identity and the dispatch-versus-exit distinction.
 Its red receipt remains retained; the full affected integration target is rerun.
+
+The corrected Native-control target passes62 cases; mode-operation integration
+passes17. Final strict workspace Clippy and formatting pass. The pool job
+exhausted its1800-second command budget after67 passing cases and no reported
+test failure, including10m42s of compilation. Its interrupted case has no
+verdict. Resume exactly the81 unfinished cases with a hash-pinned copy of that
+same test executable, an isolated home and serial execution. List verification
+proves that the continuation excludes every completed green case. This is a
+disjoint continuation, not a clean full-suite result until it completes.
+
+The external harness passes syntax and independent Cooper sign-in. The first
+catalog helper used an invalid relative API URL; correcting its base resolves
+that harness error. Authenticated catalog readback then returns503
+`selected_backend_unavailable` on the prior installed generation. No application
+browser is launched. All ten temporary controller process identities are absent
+after scoped closure. This is baseline availability evidence, not fixed-build
+acceptance or a global zero-residue claim.
+
+Concurrent711 work is preparing a production package. Runtime ownership for a
+combined707/711 candidate is being reconciled before another build or upgrade;
+source validation continues independently. No707 production build or installation
+has started in this resumed window.
