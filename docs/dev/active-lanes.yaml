@@ -15,7 +15,7 @@ lanes:
     dependencies: [MODE-OWNER-704, REQUEST-HOST-711]
     overlaps: [MODE-HANDOFF-CONTROL-649, REQUEST-HOST-711]
     reconciled_overlaps: ["Reuse canonical primary from6556af69d;707 owns readiness/startup and mode regressions;711 is primary writer for the compatible shared refresh predicate and independent two-profile regression; freeze707 predicate during validation and integrate provider711 first; preserve all foreign work; no new checkout"]
-    validation_status: Three regression failures observed and repaired; focused5 pass; broader Rust and strict gates running; external off passed, original on replacement pending; fresh installed page continuation remains unqualified
+    validation_status: PR712 draft; three defects repaired; focused5, host40, runtime36, fmt and strict Clippy pass; pool compilation interrupted at execution ceiling;711 integration, pool/control and installed acceptance pending; original failed test closed with fresh OS absence
     updated_at: 2026-11-14
   - id: MODE-OWNER-704
     product_lane: PL-BUGFIX

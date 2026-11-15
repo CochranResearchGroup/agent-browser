@@ -4,8 +4,10 @@
 [source packet](docs/dev/maintenance/cdp-toggle707.md): CDP recovery omitted the
 saved-session restore request; an isolated real-Chrome differential is RED4.532s
 and GREEN4.300s with that one flag. Three source regressions were reproduced and
-repaired; focused5, host40, formatting and strict workspace Clippy pass.
-Broader runtime/pool and mode/control checks are running.711 owns the compatible
+repaired; focused5, host40, runtime36, formatting and strict workspace Clippy pass.
+Pool compilation was interrupted at the execution ceiling; pool and mode/control
+checks remain pending. PR712 is draft and the time extension is unanswered.
+711 owns the compatible
 shared refresh predicate and merges first;707 owns startup and observation-only
 readiness. The installed original mode operation completed after711's separate
 host restart, still returned aboutblank and retained its storage marker after

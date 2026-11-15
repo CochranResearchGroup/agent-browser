@@ -4,7 +4,7 @@ Product lane: PL-BUGFIX
 Work item: https://github.com/CochranResearchGroup/agent-browser/issues/707
 Branch: fix/cdp-toggle707
 Base: 6556af69d
-State: SOURCE FIXED; broader qualification pending
+State: SOURCE FIXED; qualification incomplete; time extension pending
 
 The actual external Native workflow completes CDP-off, then leaves the CDP-on
 replacement awaiting Native qualification. One replacement process exists;
@@ -62,7 +62,7 @@ begins a fresh observation scope only when no local logical delta exists,
 retaining the durable launch record. Both startup paths share the restore
 decision. Observation-only readiness keeps process/window identity checks and
 leaves publication and effectful input state fences intact. Broader host/runtime,
-mode/control, formatting and strict workspace Clippy gates are running.
+mode/control, formatting and strict workspace Clippy gates were selected.
 
 ## Shared refresh dependency
 
@@ -78,8 +78,11 @@ recovery requires a fresh process readback.
 
 ## Source checkpoint
 
-Focused5, host40, Rustfmt and strict workspace Clippy pass. Runtime, pool and
-mode/control gates remain pending; this custody checkpoint is not merge-ready.
+Focused5, host40, runtime36, Rustfmt and strict workspace Clippy pass. Runtime
+qualification retains8 intentionally ignored cases. Pool compilation was
+interrupted at the execution ceiling; pool and mode/control gates remain
+pending. The qualification job exited130 with76 passing tests and no test
+failures. This custody checkpoint is not merge-ready.
 The original installed operation reconciled after711's host restart with its
 single replacement intact and still returned aboutblank. Manual navigation
 confirmed the original storage marker. Its ordinary close reported residue;
@@ -90,3 +93,9 @@ Review against6556af69d separates Standards and Spec. No source standards blocke
 was found. Spec requires installed external acceptance and the qualified711
 dependency before this work is complete. Effectful Native guards, atomic launch
 publication and exact process/window joins are retained.
+
+Draft PR712 preserves commit3c865df09 and this source checkpoint. The recorded
+two-hour overall diagnostic ceiling expired; a one-hour extension was requested
+and remains unanswered. No production candidate, installation or fixed-build
+external acceptance is claimed. Resume the pending local gates and qualified711
+dependency before candidate qualification and fresh supported-browser rows.
