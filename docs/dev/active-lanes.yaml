@@ -15,7 +15,7 @@ lanes:
     dependencies: [MODE-OWNER-704, REQUEST-HOST-711]
     overlaps: [MODE-HANDOFF-CONTROL-649, REQUEST-HOST-711]
     reconciled_overlaps: ["Reuse canonical primary from6556af69d;707 owns readiness/startup and mode regressions;711 is primary writer for the compatible shared refresh predicate and independent two-profile regression; freeze707 predicate during validation and integrate provider711 first; preserve all foreign work; no new checkout"]
-    validation_status: Final Rust source qualified; 424 model and 157 selected CLI cases; strict format and Clippy pass; pinned installer fixture and sealed candidate pending; retained Chrome operation LaunchAbsent; external Chrome and Chromium acceptance pending
+    validation_status: PR715 merged maine93beff6e; 424 model and157 selected CLI pass, plus pinned installer fixture and strict Rust quality; production build timed out before seal; no install; retained Chrome LaunchAbsent; external Chrome and Chromium rows not run
     updated_at: 2026-11-15
   - id: REQUEST-HOST-711
     product_lane: PL-BUGFIX
