@@ -6,16 +6,16 @@ lanes:
     product_lane: PL-BUGFIX
     objective: Complete external CDP and CDP-free round trips through the existing owner
     plan: docs/dev/maintenance/mode-owner-lookup704.md
-    branch: fix/mode-owner-lookup704
+    branch: docs/mode704-live-verification
     target: main
     accountable_owner: ecochran76
-    work_items: [CochranResearchGroup/agent-browser#704]
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#704, CochranResearchGroup/agent-browser#707]
+    plan_state: BLOCKED
+    custody_state: INTEGRATED
     dependencies: [WORKSPACE-LAUNCH-700]
     overlaps: [WORKSPACE-LAUNCH-700]
     reconciled_overlaps: ["Sole writer owns dashboard owner routing and regression; preserve launch deadline, original uncertain requests and foreign mode/control checkouts"]
-    validation_status: Dashboard70, ingress45, mounted recovery19, mode inspection, dashboard build, fmt, strict Clippy, wiring11 and links pass; external supported-browser round trips pending
+    validation_status: PR706 merged e83c07434; sealed478f219f6756 preserving install accepted; owner lookup200 and stable Chrome process/profile round trip pass; navigation returns aboutblank; Chromium unrun;707 owns continuation
     updated_at: 2026-11-14
   - id: WORKSPACE-LAUNCH-700
     product_lane: PL-BUGFIX
