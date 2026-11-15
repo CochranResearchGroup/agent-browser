@@ -43,6 +43,9 @@ Window qualification observes only; input-policy readiness does not gate lifecyc
 Peer observations do not publish an unqualified replacement or invalidate its
 exact process/window readiness. Durable launch custody survives owner refresh.
 Owner publication permits desktop movement only with exact valid pending assignment custody.
+An observed launch without an admitted logical state change stays in its durable
+journal. A new operation may reset that temporary observation before adopting a
+peer snapshot; this neither publishes the replacement nor replays its launch.
 Both CDP-backed and CDP-free recovery request Chrome's saved session in the same profile; a new
 browser uses its initial startup URL. Logical links survive, but saved pages do
 not reconstruct unsaved in-memory state or prove an authenticated account.
