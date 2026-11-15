@@ -1,19 +1,19 @@
-## CDP toggle707 source repair | 2026-11-14
+## CDP toggle707 source qualification | 2026-11-15
 
 [707](https://github.com/CochranResearchGroup/agent-browser/issues/707),
-[source packet](docs/dev/maintenance/cdp-toggle707.md): CDP recovery omitted the
-saved-session restore request; an isolated real-Chrome differential is RED4.532s
-and GREEN4.300s with that one flag. Three source regressions were reproduced and
-repaired; focused5, host40, runtime36, formatting and strict workspace Clippy pass.
-Pool compilation was interrupted at the execution ceiling; pool and mode/control
-checks remain pending. PR712 is draft and the time extension is unanswered.
-711 owns the compatible
-shared refresh predicate and merges first;707 owns startup and observation-only
-readiness. The installed original mode operation completed after711's separate
-host restart, still returned aboutblank and retained its storage marker after
-manual navigation. This is failing baseline evidence, not fixed-build acceptance.
-No new production candidate or installation yet; fresh external Chrome and
-Chromium round trips remain unqualified. Preserve uncertain launch requests.
+[source packet](docs/dev/maintenance/cdp-toggle707.md): the saved-session startup,
+owner refresh and observation-only readiness repairs are source-qualified in
+PR712. PR713's shared predicate is integrated. Focused5, host40, runtime36,
+mode17, Native-control62, argv1, formatting and strict Clippy pass. Pool evidence
+retains146 unaffected passes, one ignored case and its repaired147th caller.
+The initial timeout and fixture failures remain retained; the argv-recorder race
+has a deterministic one-second RED/GREEN kernel regression. No production process
+check was weakened. The original installed test still returned aboutblank before
+manual navigation recovered its storage marker; it was subsequently closed with
+fresh OS absence. This is failing-baseline evidence, not fixed-build acceptance.
+No707 candidate or installation yet. Independent external sign-in passes, but the
+old catalog returned503. Preserve uncertain requests and the separate711 install
+transaction; fresh external Chrome and Chromium acceptance remain open.
 
 ## External CDP toggle live qualification remains partial | 2026-11-14
 

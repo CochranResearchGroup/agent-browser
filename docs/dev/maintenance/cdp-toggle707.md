@@ -4,7 +4,7 @@ Product lane: PL-BUGFIX
 Work item: https://github.com/CochranResearchGroup/agent-browser/issues/707
 Branch: fix/cdp-toggle707
 Base: 6556af69d
-State: SOURCE FIXED; qualification incomplete; time extension pending
+State: SOURCE QUALIFIED; candidate and installed acceptance pending
 
 The actual external Native workflow completes CDP-off, then leaves the CDP-on
 replacement awaiting Native qualification. One replacement process exists;
@@ -159,3 +159,43 @@ Concurrent711 work is preparing a production package. Runtime ownership for a
 combined707/711 candidate is being reconciled before another build or upgrade;
 source validation continues independently. No707 production build or installation
 has started in this resumed window.
+
+## Qualified source checkpoint
+
+The continuation completed79 passing cases, one failure and one ignored case.
+With the initial67 passes, that is146 passes, one ignored case and one failing
+argv-recorder fixture. Its isolated retry passed, so the lane was not called
+clean. The fixture rejected an unavailable identity observation even when the
+recorder had become the exact unreaped zombie.
+
+Extract its existing predicate unchanged. A small regression with a real zombie
+and unavailable identity observation is deterministic RED in1.04s. A fixture-only
+raw-stat check bound to the recorded boot identity and start token makes it
+GREEN in1.038s. Live or changed processes remain refused. The original manual
+ordinary-exit caller passes after rebuilding. Production process checks and
+cleanup authority are unchanged. Retain146 unaffected passes and one ignored
+case; that repaired caller supplies the147th passing case. Only that caller
+enables the argv recorder.
+
+Final formatting, strict workspace Clippy and the normal CLI-package `argv_probe`
+target pass. Host40, runtime36 with8 ignored, focused5, mode17 and Native-control62
+remain qualified by unchanged inputs. Relevant executed commands include:
+
+```bash
+scripts/ci/rust-tests.sh --focused pending_mode_replacement
+scripts/ci/rust-tests.sh --focused browser_session_host::
+scripts/ci/rust-tests.sh --focused browser_session_runtime::
+scripts/ci/rust-tests.sh --focused pool_tests::
+scripts/ci/rust-tests.sh --focused retained_manual_handoff_recovers_after_ordinary_browser_exit_through_real_runtime
+scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml --test remote_view_native_control --test browser_mode_operation -- --test-threads=1
+scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml --test remote_view_native_control -- --test-threads=1
+scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml --test argv_probe -- --test-threads=1
+scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check
+scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings
+```
+
+The combined integration invocation retained its first failure; the corrected
+target was rerun separately. Hash-pinned pool continuation excluded green cases.
+Private receipts bind commands, results, source readback and binary identity.
+These are selected Linux/WSL checks, not comprehensive or platform-matrix CI.
+No hosted CI, formal release or707 production installation is claimed here.
