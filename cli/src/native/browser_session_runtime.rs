@@ -23,6 +23,16 @@ use super::action_runtime::runtime::DaemonState;
 use super::browser::{BrowserManager, WaitUntil};
 use super::cdp::chrome::LaunchOptions;
 
+fn profile_startup_args(profile: &BrowserProfileCatalogEntry, recovering: bool) -> Vec<String> {
+    // Both CDP-backed and manual replacements resume the same saved session.
+    // Only a fresh manual browser consumes its configured initial URL.
+    if recovering {
+        vec!["--restore-last-session".into()]
+    } else {
+        profile.manual_login_url.iter().cloned().collect()
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub(crate) struct BrowserManagerRuntimeConfig {
     pub(crate) headless: bool,
@@ -1476,14 +1486,7 @@ fn run_browser_worker(
                         // saved session. Passing the initial URL here can replace
                         // the saved pages with about:blank. Fresh launches keep
                         // their configured URL; no CDP navigation is replayed.
-                        args: if recovery_browser.is_some() {
-                            vec!["--restore-last-session".into()]
-                        } else {
-                            vec![profile
-                                .manual_login_url
-                                .clone()
-                                .expect("matched login mode")]
-                        },
+                        args: profile_startup_args(&profile, recovery_browser.is_some()),
                         display: Some(display),
                         remote_headed: true,
                         private_launch_environment: Some(private),
@@ -1846,6 +1849,7 @@ fn run_browser_worker(
                                 .cloned()
                                 .or_else(|| config.executable_path.clone()),
                             profile: Some(profile.user_data_dir.clone()),
+                            args: profile_startup_args(&profile, recovery_browser.is_some()),
                             display,
                             remote_headed: config.remote_headed || desktop.is_some(),
                             private_launch_environment: environment,
@@ -3237,6 +3241,32 @@ fn tab_acquisition(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn pending_mode_replacement_cdp_startup_requests_saved_session() {
+        use agent_browser_service_model::{BrowserProfileCatalogEntry, BrowserProfileKind};
+        let mut profile = BrowserProfileCatalogEntry {
+            id: "retained".into(),
+            name: "Retained".into(),
+            user_data_dir: "/synthetic/retained".into(),
+            kind: BrowserProfileKind::Named,
+            manual_login_url: None,
+        };
+        assert!(super::profile_startup_args(&profile, false).is_empty());
+        assert_eq!(
+            super::profile_startup_args(&profile, true),
+            vec!["--restore-last-session"]
+        );
+        profile.manual_login_url = Some("https://synthetic.example/start".into());
+        assert_eq!(
+            super::profile_startup_args(&profile, false),
+            vec!["https://synthetic.example/start"]
+        );
+        assert_eq!(
+            super::profile_startup_args(&profile, true),
+            vec!["--restore-last-session"]
+        );
+    }
+
     #[test]
     fn restoring_previous_reconciles_absent_manual_replacement_without_launch_authority() {
         use crate::native::browser_session_store::BrowserSessionSqliteStore;

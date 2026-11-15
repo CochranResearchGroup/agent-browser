@@ -400,6 +400,10 @@ impl Process {
 thread_local! {
     static COPY_PROCESS_CHILDREN: std::cell::RefCell<std::collections::BTreeMap<(PathBuf, u32), std::process::Child>> = const { std::cell::RefCell::new(std::collections::BTreeMap::new()) };
 }
+#[cfg(target_os = "linux")]
+#[path = "../../tests/support/argv_probe.rs"]
+mod argv_probe;
+
 /// Reach the real worker and Chrome argument builder, then stop at an owned
 /// executable that records argv and exits. No X server or browser is required.
 #[cfg(target_os = "linux")]
@@ -485,27 +489,19 @@ int main(int argc, char **argv) {
                     // its independent OS read. Accept only that exact zombie
                     // (or confirmed absence), then ask the owner to reap it.
                     assert_eq!(reason, "manual_login_original_process_changed");
-                    let ended = match crate::process_identity::observe_process(probe.pid) {
-                        crate::process_identity::ProcessObservation::Missing => true,
+                    let current = crate::process_identity::observe_process(probe.pid);
+                    let observed = match &current {
+                        crate::process_identity::ProcessObservation::Missing => Ok(None),
                         crate::process_identity::ProcessObservation::Observed(current) => {
-                            current.start_token.as_deref()
-                                == Some(
-                                    launch
-                                        .process_identity
-                                        .as_ref()
-                                        .unwrap()
-                                        .start_token
-                                        .as_str(),
-                                )
-                                && std::fs::read_to_string(format!("/proc/{}/stat", probe.pid))
-                                    .is_ok_and(|stat| {
-                                        stat.rsplit_once(')').is_some_and(|(_, fields)| {
-                                            fields.split_whitespace().next() == Some("Z")
-                                        })
-                                    })
+                            current.start_token.as_deref().map(Some).ok_or(())
                         }
-                        _ => false,
+                        _ => Err(()),
                     };
+                    let ended = argv_probe::original_has_ended(
+                        probe.pid,
+                        &launch.process_identity.as_ref().unwrap().start_token,
+                        observed,
+                    );
                     assert!(ended, "argv probe must not ignore a changed live process");
                 }
             }

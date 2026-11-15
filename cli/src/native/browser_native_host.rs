@@ -181,7 +181,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
 impl<P: BrowserSessionPersistence, E> BrowserSessionHost<P, E> {
     /// Observe an exactly claimed launched process without requiring input policy.
     /// The caller owns launch custody; this adapter permits only observation and
-    /// rechecks persisted task state before querying the exact Native target.
+    /// verifies the exact process and Native window without a global state fence.
     pub(crate) fn native_process_window_ready(
         &self,
         original: &agent_browser_service_model::RecordedProcessIdentity,
@@ -194,31 +194,23 @@ impl<P: BrowserSessionPersistence, E> BrowserSessionHost<P, E> {
             std::time::Duration::from_secs(10),
         )
         .map_err(|_| "browser_native_owner_configuration_invalid")?;
-        struct WindowOwner<'a, P> {
+        struct WindowOwner {
             http: super::super::remote_view_application_http::RemoteViewApplicationHttp,
-            persistence: &'a P,
-            expected: &'a BrowserSessionState,
         }
-        impl<P: BrowserSessionPersistence> super::super::browser_native_control::NativeOwner
-            for WindowOwner<'_, P>
-        {
+        impl super::super::browser_native_control::NativeOwner for WindowOwner {
             fn request(&mut self, operation: &str, body: &Value) -> Result<Value, String> {
                 if operation != "observe" {
                     return Err("browser_native_window_observation_only".into());
                 }
-                if self.persistence.load_session_state()? != *self.expected {
-                    return Err("browser_native_target_changed:refresh task".into());
-                }
+                // Readiness observes the exact kernel process and Native window;
+                // unrelated owner activity must not invalidate that observation.
+                // Publication and effectful commands retain their own state fences.
                 self.http
                     .native_request(operation, body)
                     .map_err(|_| "browser_native_window_observation_unavailable".into())
             }
         }
-        let mut owner = WindowOwner {
-            http,
-            persistence: &self.persistence,
-            expected: &self.persisted_state,
-        };
+        let mut owner = WindowOwner { http };
         super::super::browser_native_control::execute(
             original,
             assignment,

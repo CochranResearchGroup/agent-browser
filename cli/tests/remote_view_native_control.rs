@@ -4,6 +4,12 @@ mod browser_native_control;
 #[allow(dead_code)]
 #[path = "../src/native/browser_native_image.rs"]
 mod browser_native_image;
+#[allow(dead_code)]
+#[path = "../src/native/native_login_ocr.rs"]
+mod native_login_ocr;
+#[allow(dead_code)]
+#[path = "../src/native/native_login_perception.rs"]
+mod native_login_perception;
 // This integration fixture exercises only the Native input HTTP subset.
 #[allow(dead_code)]
 #[path = "../src/native/remote_view_application_http.rs"]
@@ -138,6 +144,29 @@ fn native_task_capture_is_fenced_to_the_browser_window_without_input() {
 
 #[test]
 fn native_task_window_remediation_uses_only_the_verified_window() {
+    struct RemediationOwner(NativeFixture);
+    impl browser_native_control::NativeOwner for RemediationOwner {
+        fn request(
+            &mut self,
+            operation: &str,
+            body: &serde_json::Value,
+        ) -> Result<serde_json::Value, String> {
+            if operation == "control" {
+                self.0.calls.push((operation.into(), body.clone()));
+                assert_eq!(body["operation"], "status");
+                return Ok(serde_json::json!({
+                    "desktopId":"viewing","generation":9,"owner":"agent","epoch":4
+                }));
+            }
+            if operation == "window" && body["action"] == "close" {
+                self.0.calls.push((operation.into(), body.clone()));
+                return Ok(serde_json::json!({
+                    "operation":"window.close","generation":9,"windowId":7
+                }));
+            }
+            self.0.request(operation, body)
+        }
+    }
     let original = agent_browser_service_model::RecordedProcessIdentity {
         pid: 42,
         start_token: "linux:boot:11".into(),
@@ -153,7 +182,7 @@ fn native_task_window_remediation_uses_only_the_verified_window() {
         viewing_generation: 9,
     };
     for (action, expected) in [("native_close", "close"), ("native_focus", "activate")] {
-        let mut owner = NativeFixture { calls: vec![] };
+        let mut owner = RemediationOwner(NativeFixture { calls: vec![] });
         let result = browser_native_control::execute(
             &original,
             &target,
@@ -162,26 +191,19 @@ fn native_task_window_remediation_uses_only_the_verified_window() {
         )
         .unwrap();
         assert_eq!(result["taskCompleted"], false);
-        if action == "native_close" {
-            assert_eq!(
-                owner.calls[1].0, "input",
-                "graceful close must never destroy the native window"
-            );
-            assert_eq!(
-                owner.calls[1].1["actions"],
-                serde_json::json!([{"kind":"key","chord":"alt+F4"}])
-            );
-            assert_eq!(
-                owner.calls[1].1["expectedProcessIdentity"]["start_token"],
-                "11"
-            );
+        let call = if action == "native_close" {
+            assert_eq!(owner.0.calls[1].0, "control");
+            assert_eq!(owner.0.calls[2].1["controlEpoch"], 4);
+            &owner.0.calls[2]
         } else {
-            assert_eq!(owner.calls[1].0, "window");
-            assert_eq!(
-                owner.calls[1].1,
-                serde_json::json!({"desktopId":"viewing","expectedGeneration":9,"windowId":7,"expectedProcessIdentity":{"pid":42,"boot_id":"boot","start_token":"11","executable":"/synthetic/chrome","uid":1000,"cgroup":"fixture"},"action":expected})
-            );
+            &owner.0.calls[1]
+        };
+        assert_eq!(call.0, "window");
+        let mut expected_body = serde_json::json!({"desktopId":"viewing","expectedGeneration":9,"windowId":7,"expectedProcessIdentity":{"pid":42,"boot_id":"boot","start_token":"11","executable":"/synthetic/chrome","uid":1000,"cgroup":"fixture"},"action":expected});
+        if action == "native_close" {
+            expected_body["controlEpoch"] = serde_json::json!(4);
         }
+        assert_eq!(call.1, expected_body);
         assert!(
             result.get("processExited").is_none(),
             "dispatch does not prove exit"

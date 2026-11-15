@@ -1,3 +1,20 @@
+## CDP toggle707 source qualification | 2026-11-15
+
+[707](https://github.com/CochranResearchGroup/agent-browser/issues/707),
+[source packet](docs/dev/maintenance/cdp-toggle707.md): the saved-session startup,
+owner refresh and observation-only readiness repairs are source-qualified in
+PR712. PR713's shared predicate is integrated. Focused5, host40, runtime36,
+mode17, Native-control62, argv1, formatting and strict Clippy pass. Pool evidence
+retains146 unaffected passes, one ignored case and its repaired147th caller.
+The initial timeout and fixture failures remain retained; the argv-recorder race
+has a deterministic one-second RED/GREEN kernel regression. No production process
+check was weakened. The original installed test still returned aboutblank before
+manual navigation recovered its storage marker; it was subsequently closed with
+fresh OS absence. This is failing-baseline evidence, not fixed-build acceptance.
+No707 candidate or installation yet. Independent external sign-in passes, but the
+old catalog returned503. Preserve uncertain requests and the separate711 install
+transaction; fresh external Chrome and Chromium acceptance remain open.
+
 ## Unqualified launch no longer blocks unrelated tasks | 2026-11-15
 
 [711](https://github.com/CochranResearchGroup/agent-browser/issues/711),
