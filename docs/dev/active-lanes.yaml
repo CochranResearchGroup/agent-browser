@@ -6,16 +6,16 @@ lanes:
     product_lane: PL-BUGFIX
     objective: Complete operator-commanded mode restart with tabs and all session consumers preserved
     plan: docs/dev/maintenance/cdp-toggle707.md
-    branch: fix/operator-mode-restart707
+    branch: fix/operator-restart707-acceptance
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#707]
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    plan_state: COMPLETE
+    custody_state: MERGED_RETAINED
     dependencies: [MODE-OWNER-704, REQUEST-HOST-711]
     overlaps: [MODE-HANDOFF-CONTROL-649, REQUEST-HOST-711]
     reconciled_overlaps: ["Reuse canonical primary from6556af69d;707 owns readiness/startup and mode regressions;711 is primary writer for the compatible shared refresh predicate and independent two-profile regression; freeze707 predicate during validation and integrate provider711 first; preserve all foreign work; no new checkout"]
-    validation_status: PR715 merged maine93beff6e; 424 model and157 selected CLI pass, plus pinned installer fixture and strict Rust quality; production build timed out before seal; no install; retained Chrome LaunchAbsent; external Chrome and Chromium rows not run
+    validation_status: PR715 source4533 installed generation fade691c8cdd; doctor and live public Chrome/Chromium three-tab two-session round trips pass; original handoffs ready; local MCP noncurrent-tab selection precedes public URL assertions; five tasks closed; zero matching identities among54 captured processes
     updated_at: 2026-11-15
   - id: REQUEST-HOST-711
     product_lane: PL-BUGFIX

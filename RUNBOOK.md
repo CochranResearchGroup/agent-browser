@@ -1,16 +1,18 @@
-## CDP toggle707 source merged; deployment incomplete | 2026-11-15
+## CDP toggle707 installed and accepted | 2026-11-15
 
-[PR715](https://github.com/CochranResearchGroup/agent-browser/pull/715) merged
-source4533bc711 at maine93beff6e. The [source packet](docs/dev/maintenance/cdp-toggle707.md)
-records424 model and157 selected CLI passes, final strict Rust quality, and the
-pinned source-free installer fixture with zero owned-host residue.
-
-The production-shaped build timed out before producing an executable or seal.
-No installation occurred; the prior PR712 generation remains selected. Actual
-external Chrome/Chromium toggles, three-tab/session mapping and same-link Native
-acceptance remain unverified. Preserve the original LaunchAbsent operation,
-partial build, exact source branch and private restart-safe handoff. The current
-window ends2026-11-15T17:15Z; this checkpoint does not authorize an automatic retry.
+[707](https://github.com/CochranResearchGroup/agent-browser/issues/707),
+[acceptance packet](docs/dev/maintenance/cdp-toggle707.md): PR715 source4533bc711
+is installed as `0.28.0-fade691c8cdd-efa0a7e32d39`. Preserving installation and
+installed doctor pass. Actual public dashboard and Native viewer controls pass
+CDP to CDP-free to CDP for official Chrome and Chromium, each with three tabs
+across two sessions. Public URL/storage assertions, logical tab continuity,
+same-link Native readiness and replacement process epochs pass. One noncurrent
+tab per browser used the installed MCP selector before its public URL assertion.
+Chrome for Testing is absent from the installed supported chooser.
+Normal closure of all five QA tasks leaves zero matching identities among54
+captured browser/observer processes. Synthetic durable QA profiles remain inert.
+The source packet retains harness route failures and external-path limitations;
+no account login or private profile cloning acceptance is claimed.
 
 ## CDP toggle707 source qualification | 2026-11-15
 
