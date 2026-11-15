@@ -300,6 +300,7 @@ struct Runtime {
     absent: bool,
     fail_restoration: bool,
     next_target: u32,
+    restored_tabs: bool,
 }
 impl RemoteViewBrowserProcessEffects for Runtime {
     fn prove_recovery_absence(
@@ -397,14 +398,35 @@ impl BrowserSessionEffects for Runtime {
     fn acquire_initial_tab(
         &mut self,
         browser: &ManagedBrowserInstance,
-        _: &[String],
+        attributed: &[String],
     ) -> Result<BrowserTabAcquisition, String> {
+        if self.restored_tabs {
+            assert_eq!(attributed.len(), self.next_target as usize);
+            self.next_target += 1;
+            return Ok(BrowserTabAcquisition {
+                tab_id: format!("physical-{}", self.next_target),
+                target_id: format!("physical-{}", self.next_target),
+                source: BrowserTabSource::Bootstrap,
+            });
+        }
         self.create_tab(browser)
+    }
+    fn acquire_recovery_tab(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        attributed: &[String],
+        _url: Option<&str>,
+    ) -> Result<BrowserTabAcquisition, String> {
+        self.acquire_initial_tab(browser, attributed)
     }
     fn create_tab(
         &mut self,
         browser: &ManagedBrowserInstance,
     ) -> Result<BrowserTabAcquisition, String> {
+        assert!(
+            !self.restored_tabs,
+            "reuse the three restored tabs instead of creating duplicates"
+        );
         assert_eq!(browser.pid, 43);
         self.next_target += 1;
         Ok(BrowserTabAcquisition {
@@ -465,11 +487,12 @@ impl BrowserSessionEffects for Runtime {
 
 #[test]
 fn recovery_restores_peer_tabs_and_failed_restoration_keeps_unpublished_custody() {
-    for (absent, fail_restoration, reject_environment) in [
-        (false, false, false),
-        (true, true, false),
-        (true, false, false),
-        (true, false, true),
+    for (absent, fail_restoration, reject_environment, restored_tabs) in [
+        (false, false, false, false),
+        (true, true, false, false),
+        (true, false, false, false),
+        (true, false, true, false),
+        (true, false, false, true),
     ] {
         let mut f: Value = serde_json::from_str(include_str!(
             "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
@@ -501,7 +524,7 @@ fn recovery_restores_peer_tabs_and_failed_restoration_keeps_unpublished_custody(
             }),
             active_session_ids: vec!["alice".into(), "bob".into()],
         };
-        let tabs = ["alice", "bob"].map(|id| ManagedBrowserTab {
+        let tabs = ["alice", "bob", "alice-second"].map(|id| ManagedBrowserTab {
             id: format!("tab-{id}"),
             target_id: format!("old-{id}"),
             browser_id: browser.id.clone(),
@@ -529,6 +552,7 @@ fn recovery_restores_peer_tabs_and_failed_restoration_keeps_unpublished_custody(
                 absent,
                 fail_restoration,
                 next_target: 0,
+                restored_tabs,
             },
             RemoteViewApplicationAdapter::new(
                 "agent-browser".into(),
@@ -577,20 +601,26 @@ fn recovery_restores_peer_tabs_and_failed_restoration_keeps_unpublished_custody(
                     recovered.target_ids,
                     BTreeMap::from([
                         ("tab-alice".into(), "physical-1".into()),
-                        ("tab-bob".into(), "physical-2".into())
+                        ("tab-bob".into(), "physical-2".into()),
+                        ("tab-alice-second".into(), "physical-3".into())
                     ])
                 );
                 assert!(effects.pending_launch_intent().is_some());
                 assert_eq!(
                     evidence.borrow().effects,
-                    [
-                        "absence",
-                        "claim",
-                        "launch",
-                        "record",
-                        "restore:tab-alice:https://example.test/2",
-                        "restore:tab-bob:about:blank"
-                    ]
+                    if restored_tabs {
+                        vec!["absence", "claim", "launch", "record"]
+                    } else {
+                        vec![
+                            "absence",
+                            "claim",
+                            "launch",
+                            "record",
+                            "restore:tab-alice:https://example.test/2",
+                            "restore:tab-bob:about:blank",
+                            "restore:tab-alice-second:about:blank",
+                        ]
+                    }
                 );
             }
             // Interrupted bookkeeping does not poison the next ordinary task.
@@ -602,6 +632,7 @@ fn recovery_restores_peer_tabs_and_failed_restoration_keeps_unpublished_custody(
                     absent,
                     fail_restoration,
                     next_target: 0,
+                    restored_tabs: false,
                 },
                 RemoteViewApplicationAdapter::new(
                     "agent-browser".into(),
@@ -662,6 +693,7 @@ fn pooled_idle_retirement_preserves_runtime_controller_and_operation_veto() {
             absent: false,
             fail_restoration: false,
             next_target: 0,
+            restored_tabs: false,
         },
         RemoteViewApplicationAdapter::new(
             "agent-browser".into(),
@@ -792,6 +824,7 @@ fn hosted_reconnect_explicit_generation_recovery_uses_fresh_target_without_acqui
             absent: true,
             fail_restoration: false,
             next_target: 0,
+            restored_tabs: false,
         },
         RemoteViewApplicationAdapter::new(
             "agent-browser".into(),
@@ -864,6 +897,7 @@ fn unresolved_initial_launch_readback_never_authorizes_implicit_second_launch() 
             absent: false,
             fail_restoration: false,
             next_target: 0,
+            restored_tabs: false,
         },
         RemoteViewApplicationAdapter::new(
             "agent-browser".into(),
@@ -986,6 +1020,7 @@ fn borrowed_tab_lifetime_does_not_require_native_browser_launch_custody() {
                     absent: false,
                     fail_restoration: false,
                     next_target: 0,
+                    restored_tabs: false,
                 },
                 RemoteViewApplicationAdapter::new(
                     "agent-browser".into(),
@@ -1097,6 +1132,7 @@ fn retirement_peer_fixture_with_absence(
             absent,
             fail_restoration: false,
             next_target: 0,
+            restored_tabs: false,
         },
         RemoteViewApplicationAdapter::new(
             "agent-browser".into(),

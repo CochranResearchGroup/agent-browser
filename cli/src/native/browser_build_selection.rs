@@ -218,9 +218,13 @@ fn version_output(path: &Path) -> Option<(String, String)> {
         .take(4096)
         .read_to_string(&mut text)
         .ok()?;
-    let family = if text.starts_with("Chromium ") {
+    let family = if text.starts_with("Google Chrome for Testing ")
+        || text.starts_with("Chrome for Testing ")
+    {
+        "chrome_for_testing"
+    } else if text.starts_with("Chromium ") {
         "chromium"
-    } else if text.starts_with("Google Chrome ") || text.starts_with("Chrome for Testing ") {
+    } else if text.starts_with("Google Chrome ") {
         "chrome"
     } else {
         return None;
@@ -240,7 +244,9 @@ pub(super) fn inspect_executable(path: &Path) -> ExecutableEvidence {
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
     let hint = path.to_string_lossy().to_ascii_lowercase();
-    let family = if hint.contains("chromium") {
+    let family = if hint.contains("chrome-for-testing") || hint.contains("chrome_for_testing") {
+        Some("chrome_for_testing".into())
+    } else if hint.contains("chromium") {
         Some("chromium".into())
     } else if hint.contains("chrome") {
         Some("chrome".into())
@@ -582,7 +588,8 @@ pub(super) fn verify_build(path: &str, expected: Option<&str>) -> Result<(), Str
     Ok(())
 }
 
-/// Installed build choices without allocating a profile or opening a browser.
+/// Supported Chrome/Chromium choices without allocating a profile or opening
+/// a browser. Chrome for Testing has a distinct identity and is excluded.
 pub(super) fn workspace_builds() -> Result<Vec<Value>, String> {
     Ok(candidate_paths(&json!({}), &[])?
         .into_iter()
@@ -598,4 +605,40 @@ pub(super) fn workspace_builds() -> Result<Vec<Value>, String> {
             public
         })
         .collect())
+}
+
+#[cfg(all(test, unix))]
+mod testing_brand_tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn testing_brand_is_distinct_from_supported_chrome() {
+        struct Cleanup(PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let root =
+            std::env::temp_dir().join(format!("browser-testing-brand-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let _cleanup = Cleanup(root.clone());
+        let executable = root.join("chrome");
+        for brand in ["Google Chrome for Testing", "Chrome for Testing"] {
+            std::fs::write(
+                &executable,
+                format!("#!/bin/sh\nprintf '%s\\n' '{brand} 157.0.8103.78'\n"),
+            )
+            .unwrap();
+            std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+            let evidence = inspect_executable(&executable);
+            assert_eq!(evidence.version.as_deref(), Some("157.0.8103.78"));
+            assert_eq!(
+                evidence.family.as_deref(),
+                Some("chrome_for_testing"),
+                "testing brands must not enter supported Chrome choices"
+            );
+        }
+    }
 }

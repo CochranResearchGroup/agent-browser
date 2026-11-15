@@ -181,6 +181,21 @@ pub(crate) trait BrowserRuntimeDriver {
         browser: &ManagedBrowserInstance,
         attributed_target_ids: &[String],
     ) -> Result<BrowserTabAcquisition, String>;
+    /// Reuse one restored page, preferring its recorded URL, before creating a tab.
+    /// Existing restored pages retain their current document and form state.
+    fn acquire_recovery_tab(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        attributed_target_ids: &[String],
+        _url: Option<&str>,
+    ) -> Result<BrowserTabAcquisition, String> {
+        if attributed_target_ids.is_empty() {
+            self.acquire_initial_tab(browser, attributed_target_ids)
+        } else {
+            self.create_tab(browser)
+        }
+    }
+
     fn acquire_session_initial_tab(
         &mut self,
         browser: &ManagedBrowserInstance,
@@ -446,6 +461,16 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
     ) -> Result<BrowserTabAcquisition, String> {
         self.runtime
             .acquire_initial_tab(browser, attributed_target_ids)
+    }
+
+    fn acquire_recovery_tab(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        attributed_target_ids: &[String],
+        url: Option<&str>,
+    ) -> Result<BrowserTabAcquisition, String> {
+        self.runtime
+            .acquire_recovery_tab(browser, attributed_target_ids, url)
     }
 
     fn create_tab(
@@ -716,6 +741,7 @@ enum BrowserRuntimeCommand {
             agent_browser_service_model::ManagedBrowserSession,
         )>,
         attributed_target_ids: Vec<String>,
+        preferred_url: Option<String>,
         reply: mpsc::Sender<Result<BrowserTabAcquisition, String>>,
     },
     CreateTab {
@@ -968,6 +994,7 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
                 browser: browser.clone(),
                 session_context: Some((profile.clone(), session.clone())),
                 attributed_target_ids: attributed_target_ids.to_vec(),
+                preferred_url: None,
                 reply,
             },
         )
@@ -1264,6 +1291,26 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
                 browser: browser.clone(),
                 session_context: None,
                 attributed_target_ids: attributed_target_ids.to_vec(),
+                preferred_url: None,
+                reply,
+            },
+        )
+    }
+
+    fn acquire_recovery_tab(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        attributed_target_ids: &[String],
+        url: Option<&str>,
+    ) -> Result<BrowserTabAcquisition, String> {
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::AcquireInitialTab {
+                browser: browser.clone(),
+                session_context: None,
+                attributed_target_ids: attributed_target_ids.to_vec(),
+                preferred_url: url.map(str::to_owned),
                 reply,
             },
         )
@@ -1943,6 +1990,7 @@ fn run_browser_worker(
                 browser,
                 session_context,
                 attributed_target_ids,
+                preferred_url,
                 reply,
             } => {
                 #[cfg(not(target_os = "linux"))]
@@ -1976,13 +2024,26 @@ fn run_browser_worker(
                             targets.insert(acquisition.target_id.clone());
                             return Ok(acquisition);
                         }
-                        if let Some(tab) = manager.tab_list(true).into_iter().find(|tab| {
-                            tab.get("targetId")
-                                .and_then(Value::as_str)
-                                .is_some_and(|target_id| {
-                                    !attributed_target_ids.iter().any(|id| id == target_id)
-                                })
-                        }) {
+                        let available = manager
+                            .tab_list(true)
+                            .into_iter()
+                            .filter(|tab| {
+                                tab.get("targetId")
+                                    .and_then(Value::as_str)
+                                    .is_some_and(|id| {
+                                        !attributed_target_ids.iter().any(|used| used == id)
+                                    })
+                            })
+                            .collect::<Vec<_>>();
+                        let selected = preferred_url
+                            .as_deref()
+                            .and_then(|url| {
+                                available
+                                    .iter()
+                                    .find(|tab| tab.get("url").and_then(Value::as_str) == Some(url))
+                            })
+                            .or_else(|| available.first());
+                        if let Some(tab) = selected.cloned() {
                             return tab_acquisition(tab, BrowserTabSource::Bootstrap);
                         }
                         let tab = manager.tab_new(None).await?;

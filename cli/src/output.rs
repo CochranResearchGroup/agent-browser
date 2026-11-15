@@ -7485,6 +7485,8 @@ Commands:
   Copy/publication do not prove account identity, usable login or storage divergence.
   Reload/inspect reads the original operation; reconcile lost replies without replay.
   mode-convert JSON Inspect/relaunch/pause/cancel/restore_previous/select_build
+    Confirmed restart retains tabs/session names and updates all tasks to the replacement process.
+    Supported workspace choices exclude Chrome for Testing.
     Confirmed restore_previous can recover interrupted closing after exact original exit proof.
     Metadata remains available during human handoff; lifecycle choices keep confirmation checks.
     Conversion verifies mode/window without input; retained handoffs reconcile the original launch

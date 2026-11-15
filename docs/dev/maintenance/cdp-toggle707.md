@@ -2,9 +2,9 @@
 
 Product lane: PL-BUGFIX
 Work item: https://github.com/CochranResearchGroup/agent-browser/issues/707
-Branch: fix/cdp-toggle707
-Base: 6556af69d
-State: SOURCE QUALIFIED; candidate and installed acceptance pending
+Branch: fix/operator-mode-restart707
+Base: a354cb4411144b85d1677c02485354a899d64013
+State: RUST_SOURCE_QUALIFIED; pinned installer fixture and installed external acceptance pending
 
 The actual external Native workflow completes CDP-off, then leaves the CDP-on
 replacement awaiting Native qualification. One replacement process exists;
@@ -199,3 +199,120 @@ target was rerun separately. Hash-pinned pool continuation excluded green cases.
 Private receipts bind commands, results, source readback and binary identity.
 These are selected Linux/WSL checks, not comprehensive or platform-matrix CI.
 No hosted CI, formal release or707 production installation is claimed here.
+
+## Operator-commanded restart repair
+
+Product lane: PL-BUGFIX. The operator has renewed implementation direction:
+mode conversion must complete the requested browser restart, preserve all tabs
+and session names, record the replacement process, and update every consumer of
+the old browser. An exited PID is expected transition state, not refusal evidence.
+
+PR712 merged at a354cb441. Its exact production candidate was installed and
+installation doctor passed. Fresh Chrome conversion stopped before replacement
+launch with `browser_session_recovery_custody_conflict`. Reconciliation established
+`LaunchAbsent`, not successful conversion. Chromium was not run. The unresolved
+operation and synthetic profile remain outside Git; the independent controller
+was closed with a fresh process census.
+
+The renewed source repair has one two-hour window from2026-11-15T15:15Z to17:15Z,
+with the previous delivery effort retained. Build a failing restart regression,
+repair the actual cause, validate three-tab and shared-session continuity, and
+run the selected local Rust quality checks. Reassess before another build or
+installed acceptance cycle. No hosted CI or speculative replacement launch.
+
+
+## Restart refusal audit
+
+The continuation audits the complete owned restart path: graceful process exit,
+exact-profile absence, assignment admission, one replacement launch, restored
+page acquisition, Native readiness, atomic publication, logical session and tab
+references, hosted desktop bindings, and durable Remote View handoffs.
+
+The same-desktop custody regression failed before its repair. The three-restored
+page regression failed when recovery created duplicate pages. Recovery now claims
+unattributed restored pages, prefers the recorded URL, and preserves each restored
+document without replaying navigation. Shared-session fixtures initialize Bob's
+lazy first tab before asserting three tabs; setup failures are not product REDs.
+The corrected model recovery and session suite passes69 cases.
+
+A real SQLite publication-readback regression changes only the session sequence
+and fails with `mode_operation_publication_conflict` despite an exact published
+process. The same test also changes the browser PID and requires rejection.
+Publication readback now consults current durable state and exact launch custody;
+publication itself uses the existing atomic reconciliation transaction instead
+of a second whole-service equality veto. A separate admission regression checks
+unrelated peer bookkeeping before an exited browser restarts on the same desktop.
+
+Retained integrity checks cover changed task/profile/build selection, actual
+profile occupancy, unresolved replacement launches, changed kernel process
+identity, conflicting assignment ownership, incomplete unique tab mappings and
+changed handoff lineage. Their presence is not evidence of a false refusal.
+Source regressions and live supported-browser acceptance remain separate gates.
+
+
+The expanded custody loop reproduced four independent false refusals: admission,
+owner-release recording, absent-claim reconciliation, and exact-profile absence
+settlement. Each rejected unrelated profile operations or task counters. The
+repair compares this profile's operation and launch inputs while retaining exact
+browser, assignment, unresolved-launch and occupancy checks. A hosted-consumer
+case independently reproduced rejection of a valid owner restart; its existing
+profile operation now permits that transition. Changed target-operation cases
+remain conflicts in each step.
+
+Review also reproduced a genuine integrity gap: publication accepted a changed
+operation on the same profile. The selected-profile comparison now runs inside
+the existing SQLite publication transaction, after the exact idempotent case.
+This is distinct from removing whole-service bookkeeping vetoes.
+
+The supported chooser defect is confirmed independently: both testing-brand
+version strings were classified as ordinary Chrome. They now have the distinct
+`chrome_for_testing` identity, excluded by the existing Chrome/Chromium chooser
+filter. The regression invokes the real executable-inspection path. It does not
+qualify a testing browser as a supported workflow.
+
+
+## Final source qualification
+
+The PID-reuse loop also failed before repair: a positively different kernel epoch
+at the recorded PID was treated as the original browser. Recovery now recognizes
+the exited recorded identity while refusing a matching live original and unknown
+observations. All21 custody cases, final formatting and strict workspace Clippy
+pass after that last production change. The prior selected CLI batch passes155
+cases with8 intentionally ignored live-browser cases; its136 unaffected cases
+are reused, with custody rerun on the final source. The full Service Model lane
+passes424 cases. Both mode integration17 and Native control62 are in the selected
+CLI batch. These are Linux/WSL local checks, not hosted or platform-matrix CI.
+
+Executed source commands include:
+
+```bash
+scripts/ci/cargo-safe.sh test -p agent-browser-service-model -- --test-threads=1
+scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check
+scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings
+scripts/ci/rust-tests.sh --focused browser_launch_custody_store::tests::
+scripts/ci/rust-tests.sh --focused testing_brand_is_distinct_from_supported_chrome
+scripts/ci/rust-tests.sh --focused browser_session_host::tests::
+scripts/ci/rust-tests.sh --focused browser_session_runtime::tests::
+scripts/ci/rust-tests.sh --focused handoff_lineage_tests::
+scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml --test browser_mode_operation --test remote_view_native_control -- --test-threads=1
+pnpm test:policy-wiring
+pnpm test:documentation-links -- --base a354cb4411144b85d1677c02485354a899d64013
+pnpm test:remote-view-handoff-docs
+pnpm --dir docs build
+```
+
+The initial workstation installer fixture used a mutable debug executable that
+Cargo replaced during the run. Its later payload failure is retained as an
+invalidated harness run, not a product RED or a passing gate. The rerun pins an
+immutable debug copy. Installer/support inputs and browserless fixture paths are
+unchanged by the later PID-epoch branch; production-profile candidate checks and
+installed doctor remain separate. Other selected host-provision, VM-harness,
+Guacamole-asset, PostgreSQL-durability and route-user-sync fixtures pass.
+
+Standards review accepts no remaining source finding. Spec review resolved the
+atomic selected-profile publication gap and confirms that all active sessions,
+logical tab IDs, hosted desktop bindings and durable handoffs use the replacement
+browser record. Source qualification does not assert saved-page or native-viewer
+acceptance. The pinned installer fixture is still pending at this custody commit;
+merge readiness, sealed candidate reuse, preserving installation and both actual
+supported-browser rows remain open gates. No hosted CI or formal release.

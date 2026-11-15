@@ -410,6 +410,21 @@ pub trait BrowserSessionEffects {
         attributed_target_ids: &[String],
     ) -> Result<BrowserTabAcquisition, String>;
 
+    /// Reuse one restored page, preferring its recorded URL, before creating a tab.
+    /// Existing restored pages retain their current document and form state.
+    fn acquire_recovery_tab(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        attributed_target_ids: &[String],
+        _url: Option<&str>,
+    ) -> Result<BrowserTabAcquisition, String> {
+        if attributed_target_ids.is_empty() {
+            self.acquire_initial_tab(browser, attributed_target_ids)
+        } else {
+            self.create_tab(browser)
+        }
+    }
+
     /// Acquire this named task's first tab without replaying an observed effect
     /// when session publication fails. Profile and task context are authoritative
     /// request inputs, rather than inferred bootstrap-tab ownership.

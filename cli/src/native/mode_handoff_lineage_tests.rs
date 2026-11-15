@@ -416,3 +416,38 @@ fn pending_mode_handoff_exposes_only_exact_missing_original_without_mutation() {
         );
     }
 }
+
+#[test]
+fn publication_readback_ignores_unrelated_peer_state_but_rejects_changed_browser() {
+    for changed_browser in [false, true] {
+        let f = Fixture::new();
+        let store = BrowserSessionSqliteStore::open_or_migrate(&f.root, &f.root.join("state.json"))
+            .unwrap()
+            .0;
+        let baseline = store.load_session_state().unwrap();
+        let mut peer = baseline.clone();
+        peer.next_session_sequence += 1;
+        if changed_browser {
+            peer.browsers.get_mut(&f.browser).unwrap().pid = u32::MAX - 1;
+        }
+        store.save_session_state(&peer).unwrap();
+        let result = published_replacement(
+            &f.database(),
+            &baseline.browsers[&f.browser],
+            &f.operation.request,
+            f.operation.replacement.as_ref().unwrap(),
+        );
+        if changed_browser {
+            assert!(
+                result.is_err(),
+                "a different process must not count as published"
+            );
+        } else {
+            assert_eq!(
+                result,
+                Ok(true),
+                "unrelated peer bookkeeping must not veto exact publication"
+            );
+        }
+    }
+}
