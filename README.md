@@ -1228,10 +1228,11 @@ the complete agent, operator, reconnect, and troubleshooting workflows.
 
 ## SiteGuides and website routines
 
+Follow explicit user/service authentication instructions and use available authorized stored credentials through their supported private channels. Keep each username/password pair together. Auth Receipts supplies the generic discovery, approval and private-login workflow when a more specific authorized path is unavailable; it is not a prerequisite for every login. See [authentication paths](skills/agent-browser/references/authentication.md#choose-an-authentication-path).
+
 Read-only `task_retirement` inspection can freeze the current receiving identity after explicit control reconciliation. This does not acknowledge the original input or relax actual retirement, credential approval or private-use checks.
 
-Use capability-aware `discover_credentials({ query, accountHint })` for current
-owner login. Empty legacy caller scopes do not imply an empty credential source.
+For Auth-managed login, use capability-aware `discover_credentials({ query, accountHint })`. Empty legacy caller scopes do not imply an empty credential source.
 Missing authority, unavailable or partial sources, complete no-match results and
 personal/company account choice remain distinct holds. Source recovery belongs
 to Auth Receipts; saved-password fallback requires the exact owned Native target

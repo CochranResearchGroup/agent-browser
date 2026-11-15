@@ -36,6 +36,10 @@ agent-browser session list
 agent-browser session
 ```
 
+## Choosing an authentication path
+
+Follow explicit user instructions and service-specific login guidance. Use an available authorized stored credential through its supported private channel, keeping its username and password paired. Auth Receipts is the generic discovery, approval and login workflow when a more specific authorized path is unavailable. Existing authenticated sessions, authorized credential files, saved logins and user-directed SSO/manual flows do not require migration into Auth. Preserve browser ownership, account/realm checks and secret-safe input on every path.
+
 ## Guarded runtime host
 
 Set <code>AGENT_BROWSER_RUNTIME_HOST=1</code> for disposable validation of the

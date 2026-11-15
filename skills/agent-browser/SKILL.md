@@ -46,7 +46,25 @@ Saved login: use [native login controls](references/cli-and-service.md#native-lo
 
 ## Standalone authentication
 
-Before login, MFA or recovery, read [Standalone Auth](references/authentication.md#standalone-auth-receipts). Discover connected channels before asking the operator. Proposals grant no authority.
+Follow explicit user instructions and service-specific authentication guidance.
+Use an available authorized stored credential through its supported private
+channel. Auth Receipts is the generic path when an agent needs credential
+discovery, owner approval or private login orchestration and no more specific
+authorized path is available. It is not required for every browser login.
+
+Keep the username and password from the same credential source together. A
+service account name selects its matching credential pair; it does not replace
+the username belonging to another saved password. Do not mix pairs based on an
+account hint or discovery ranking. An explicitly requested alternative mapping
+must remain explicit rather than becoming an inferred default.
+
+Preserve account, realm, browser ownership and private-input checks for every
+path. Read secret files only inside the authorized login process; never put
+secrets in model context, command arguments, logs, screenshots or Git. An
+already-authorized credential file or saved login does not need migration into
+Auth before use.
+
+For route selection and special cases, read [authentication paths](references/authentication.md#choose-an-authentication-path). The following Auth helper rules apply when Auth is the selected path. Discover connected channels before asking the operator; proposals grant no authority.
 
 Use `connectHostedAuthHelper` only for a genuine current Codex caller.
 An explicitly enrolled unattended application uses `connectEnrolledAuthHelper`

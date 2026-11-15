@@ -6,6 +6,7 @@ Login flows, session persistence, OAuth, 2FA, and authenticated browsing.
 
 ## Contents
 
+- [Choose an authentication path](#choose-an-authentication-path)
 - [Standalone Auth Receipts](#standalone-auth-receipts)
 
 - [Managed Runtime Profiles](#managed-runtime-profiles)
@@ -22,19 +23,44 @@ Login flows, session persistence, OAuth, 2FA, and authenticated browsing.
 - [Token Refresh Handling](#token-refresh-handling)
 - [Security Best Practices](#security-best-practices)
 
+## Choose an authentication path
+
+Follow explicit user instructions and service-specific authentication guidance.
+Use an available authorized stored credential through its supported private
+channel. Auth Receipts is the generic path when an agent needs credential
+discovery, owner approval or private login orchestration and no more specific
+authorized path is available. It is not required for every browser login.
+
+Keep the username and password from the same credential source together. A
+service account name selects its matching credential pair; it does not replace
+the username belonging to another saved password. Do not mix pairs based on an
+account hint or discovery ranking. An explicitly requested alternative mapping
+must remain explicit rather than becoming an inferred default.
+
+Preserve account, realm, browser ownership and private-input checks for every
+path. Read secret files only inside the authorized login process; never put
+secrets in model context, command arguments, logs, screenshots or Git. An
+already-authorized credential file or saved login does not need migration into
+Auth before use.
+
+Examples: use a service skill's dedicated agent username with its matching private password file; use a password manager's saved username with that saved password; retain an existing authenticated session; or follow an explicit user-directed SSO/manual flow. Use Auth for generic discovery and owner-reviewed login when those paths do not already resolve the task. A failure in Auth does not cancel a separately authorized path, and a source-specific permission or actual rejected login still needs its own resolution.
+
 ## Standalone Auth Receipts
 
 After durable owner waiting, the playbook receives the Auth decision before private use. An Auth-issued approved unused permission may start a new use window for the same request and scope. The helper saves that permission reference and deadline, then freshly validates the original receiving plan before input. The original caller intent stays unchanged; attempted, uncertain, changed or unpersisted authority remains held.
 
-For an ordinary browser login, read Auth's `auth-receipts://guides/login-orchestration` resource before asking for a phone number or mailbox address already held by connected services. Both connected Auth helpers expose `discoverLoginChannels({tenant, smsSuffix, emailHint, im, mail})`, forwarding only to the verified Auth SDK. It composes read-only IM/Mail MCP account metadata and bounded source evidence into destination proposals with provenance; it cannot authorize, arm, send, consume or submit input. Keep the original task/request, qualify fresh receiving state and use Auth's normal owner decision. Missing SDK support reports `auth_channel_discovery_unavailable` and requires installation repair, without an alternate client or private-store fallback.
+When using Auth for a browser login, read Auth's `auth-receipts://guides/login-orchestration` resource before asking for a phone number or mailbox address already held by connected services. Both connected Auth helpers expose `discoverLoginChannels({tenant, smsSuffix, emailHint, im, mail})`, forwarding only to the verified Auth SDK. It composes read-only IM/Mail MCP account metadata and bounded source evidence into destination proposals with provenance; it cannot authorize, arm, send, consume or submit input. Keep the original task/request, qualify fresh receiving state and use Auth's normal owner decision. Missing SDK support reports `auth_channel_discovery_unavailable` and requires installation repair, without an alternate client or private-store fallback.
 
-Website credential use belongs to standalone Auth Receipts; Bots is another
-consumer. The Node `connectHostedAuthHelper()` adapter discovers Auth's verified
-SDK at its data-directory `auth-receipts/client/current` selector. Missing SDK or
-capabilities require Auth installation/enrollment diagnostics, not direct vault
-access or a legacy auth fallback. Private discovery and bearer material stay in
-the SDK. Owner decisions, required delivery and exact browser binding still gate
-input. Never repeat an unknown credential attempt.
+Auth provides the generic discovery, owner-review and private-delivery workflow;
+Bots is another consumer. Credentials selected from Auth remain subject to its
+SDK and approval policy. The Node `connectHostedAuthHelper()` adapter discovers
+Auth's verified SDK at its data-directory `auth-receipts/client/current` selector.
+Missing Auth SDK capabilities require diagnostics for that path; they do not
+forbid a separately authorized stored credential or service-specific path.
+Do not read an Auth-managed vault directly to bypass its policy. Private
+discovery and bearer material stay in the SDK. Owner decisions, required
+delivery and exact browser binding still gate Auth input. Never repeat an
+unknown credential attempt.
 
 For an explicitly enrolled unattended application, use the separate
 `connectEnrolledAuthHelper({discoveryFile, operationContext})` export from
