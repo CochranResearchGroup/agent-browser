@@ -195,6 +195,56 @@ pub(super) fn idle_release_admitted(
             }))
 }
 
+/// Admission concerns this profile's owner and launch inputs. Unrelated task
+/// counters, observations and profile operations are independent writers.
+fn profile_inputs_match(
+    expected: &BrowserSessionState,
+    current: &BrowserSessionState,
+    profile_id: &str,
+) -> bool {
+    expected.schema_version == current.schema_version
+        && expected.profile_operation_ids.get(profile_id)
+            == current.profile_operation_ids.get(profile_id)
+        && expected.profile_executables.get(profile_id)
+            == current.profile_executables.get(profile_id)
+        && expected
+            .disposable_profiles
+            .get(profile_id)
+            .map(|row| &row.profile)
+            == current
+                .disposable_profiles
+                .get(profile_id)
+                .map(|row| &row.profile)
+}
+
+/// A reused PID is not the original process. Unknown kernel observations remain
+/// unresolved; only absence or a positively different recorded epoch qualifies.
+fn published_process_has_exited(
+    browser: &agent_browser_service_model::ManagedBrowserInstance,
+    prior: &[&BrowserLaunchCustodyRecord],
+) -> bool {
+    match crate::process_identity::observe_process(browser.pid) {
+        crate::process_identity::ProcessObservation::Missing => true,
+        crate::process_identity::ProcessObservation::Observed(current) => {
+            let [record] = prior else {
+                return false;
+            };
+            record
+                .observed_process_identity
+                .as_ref()
+                .is_some_and(|original| {
+                    original.pid == browser.pid
+                        && !original.start_token.is_empty()
+                        && current
+                            .start_token
+                            .as_deref()
+                            .is_some_and(|token| !token.is_empty() && token != original.start_token)
+                })
+        }
+        _ => false,
+    }
+}
+
 impl BrowserSessionSqliteStore {
     /// Settle only unpublished exact-profile occupancy after a current OS absence
     /// proof. Retain every intent as history and preserve all published claims.
@@ -210,10 +260,11 @@ impl BrowserSessionSqliteStore {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|_| Error::Unavailable)?;
         let state = current(&transaction)?;
-        if state != *expected
+        if !profile_inputs_match(expected, &state, &profile.id)
             || match expected_browser {
                 Some(browser) => {
                     browser.profile_id != profile.id
+                        || expected.browsers.get(&browser.id) != Some(browser)
                         || state.browsers.get(&browser.id) != Some(browser)
                 }
                 None => {
@@ -476,7 +527,11 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
             .remote_view_mutation_connection()
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|_| Error::Unavailable)?;
-        if current(&transaction)? != *expected {
+        let state = current(&transaction)?;
+        if !profile_inputs_match(expected, &state, &browser.profile_id)
+            || expected.browsers.get(&browser.id) != Some(browser)
+            || state.browsers.get(&browser.id) != Some(browser)
+        {
             return Err(Error::Conflict);
         }
         let prior = published_launch_record(&transaction, browser)?;
@@ -623,7 +678,8 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
             .map_err(|_| Error::Unavailable)?;
         let state = current(&transaction)?;
         let mut records = ledger(&transaction)?;
-        if state != *expected
+        if !profile_inputs_match(expected, &state, &browser.profile_id)
+            || expected.browsers.get(&browser.id) != Some(browser)
             || state.browsers.get(&browser.id) != Some(browser)
             || claim.published
             || claim.intent.profile_id != browser.profile_id
@@ -706,6 +762,9 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
                 .confirm_publication(&actual)
                 .map_err(|_| Error::Conflict)?;
             return Ok(());
+        }
+        if !profile_inputs_match(expected, &actual, &intent.profile_id) {
+            return Err(Error::Conflict);
         }
         let merged = super::browser_session_host::reconciliation::reconcile_and_record(
             &transaction,
@@ -1040,9 +1099,9 @@ mod tests {
             .insert("foreign".into(), "foreign-operation".into());
         assert_eq!(
             store.settle_unpublished_profile_launch_absence(&profile, &stale, None),
-            Err(LaunchCustodyStoreError::Conflict)
+            Ok(())
         );
-        assert_eq!(store.unpublished_launch_records().unwrap().len(), 1);
+        assert!(store.unpublished_launch_records().unwrap().is_empty());
         let stale_profile = agent_browser_service_model::BrowserProfileCatalogEntry {
             name: "stale catalog name".into(),
             ..profile.clone()
@@ -1051,7 +1110,7 @@ mod tests {
             store.settle_unpublished_profile_launch_absence(&stale_profile, &expected, None),
             Err(LaunchCustodyStoreError::Conflict)
         );
-        assert_eq!(store.unpublished_launch_records().unwrap().len(), 1);
+        assert!(store.unpublished_launch_records().unwrap().is_empty());
         store
             .settle_unpublished_profile_launch_absence(&profile, &expected, None)
             .unwrap();
@@ -1633,6 +1692,205 @@ mod tests {
     }
 
     #[test]
+    fn exited_browser_restart_rebinds_assignment_on_same_desktop() {
+        restart_peer_case("admit");
+    }
+
+    #[test]
+    fn restart_peer_changes_do_not_veto_owner_release() {
+        restart_peer_case("release");
+    }
+
+    #[test]
+    fn restart_peer_changes_do_not_veto_absent_reconciliation() {
+        restart_peer_case("reconcile");
+    }
+
+    #[test]
+    fn owner_restart_with_hosted_consumers_uses_its_profile_operation() {
+        restart_peer_case("hosted");
+    }
+
+    #[test]
+    fn restart_publication_rejects_a_changed_profile_owner_atomically() {
+        restart_peer_case("publish");
+    }
+
+    #[test]
+    fn reused_browser_pid_does_not_veto_its_exited_identity() {
+        restart_peer_case("reused");
+    }
+
+    #[test]
+    fn live_original_browser_still_prevents_replacement() {
+        restart_peer_case("live");
+    }
+
+    fn restart_peer_case(action: &str) {
+        for peer_change in [false, true] {
+            let fixture = Fixture::new();
+            let mut store = fixture.open(true);
+            let old = intent();
+            let initial = store.load_session_state().unwrap();
+            store.admit_launch_intent(&old, &initial).unwrap();
+            let mut launch = BrowserLaunch {
+                process_identity: None,
+                browser_id: "alice-browser".into(),
+                pid: u32::MAX,
+                cdp_endpoint: "http://127.0.0.1:9222".into(),
+                desktop: Some(RemoteViewFixedDesktop {
+                    desktop_id: old.assignment.desktop_id.clone(),
+                    generation: old.assignment.generation,
+                    friendly_route_label: "synthetic".into(),
+                }),
+            };
+            if matches!(action, "reused" | "live") {
+                let mut identity = crate::process_identity::capture_process_identity(
+                    std::process::id(),
+                    None,
+                    None,
+                )
+                .unwrap();
+                if action == "reused" {
+                    identity.start_token.push_str("-old-epoch");
+                }
+                launch.pid = identity.pid;
+                launch.process_identity = Some(identity);
+            }
+            store.observe_launch_intent(&old, &launch).unwrap();
+            let mut browser = ManagedBrowserInstance {
+                id: launch.browser_id.clone(),
+                profile_id: old.profile_id.clone(),
+                pid: launch.pid,
+                cdp_endpoint: launch.cdp_endpoint.clone(),
+                desktop: launch.desktop.clone(),
+                active_session_ids: vec![],
+            };
+            let mut retained = initial.clone();
+            if action == "hosted" {
+                browser.active_session_ids.push("hosted-task".into());
+                retained.sessions.insert(
+                    "hosted-task".into(),
+                    serde_json::from_value(serde_json::json!({
+                        "id":"hosted-task", "name":"Bob", "profileId":browser.profile_id,
+                        "browserId":browser.id, "createdAtMs":1,"lastActivityAtMs":1,
+                        "expiresAtMs":u64::MAX,"currentTabId":null
+                    }))
+                    .unwrap(),
+                );
+                let desktop = browser.desktop.clone().unwrap();
+                retained.host_bindings.insert(
+                    "hosted-task".into(),
+                    agent_browser_service_model::BrowserHostTaskBinding {
+                        request: agent_browser_service_model::BrowserHostBinding {
+                            version: 1,
+                            host_id: "app".into(),
+                            participant_id: "Bob".into(),
+                            session_id: "hosted-task".into(),
+                            placement: agent_browser_service_model::BrowserPlacement::Required {
+                                desktop: agent_browser_service_model::BrowserDesktopBinding {
+                                    desktop_id: desktop.desktop_id.clone(),
+                                    generation: desktop.generation,
+                                },
+                            },
+                        },
+                        desktop,
+                    },
+                );
+                retained
+                    .profile_operation_ids
+                    .insert(browser.profile_id.clone(), "owner-mode-operation".into());
+            }
+            retained
+                .browsers
+                .insert(browser.id.clone(), browser.clone());
+            store
+                .publish_launch_intent(&old, &initial, &retained)
+                .unwrap();
+            let mut replacement = old.clone();
+            replacement.intent_id = uuid::Uuid::new_v4().to_string();
+            replacement.assignment.assignment_id = "replacement-assignment".into();
+            replacement.assignment.generation += 1;
+            let claim = if matches!(action, "reconcile" | "publish") {
+                store
+                    .admit_recovery_launch_intent(&replacement, &retained, &browser)
+                    .unwrap();
+                Some(store.unpublished_launch_records().unwrap().pop().unwrap())
+            } else {
+                None
+            };
+            let mut after = retained.clone();
+            if action == "publish" {
+                let mut launched = launch.clone();
+                launched.pid = u32::MAX - 1;
+                launched.desktop.as_mut().unwrap().generation = replacement.assignment.generation;
+                store
+                    .observe_launch_intent(&replacement, &launched)
+                    .unwrap();
+                let current = after.browsers.get_mut(&browser.id).unwrap();
+                current.pid = launched.pid;
+                current.desktop = launched.desktop;
+            }
+            if peer_change {
+                let mut current = retained.clone();
+                current.next_session_sequence += 1;
+                store.save_session_state(&current).unwrap();
+            }
+            let observed = store.load_session_state().unwrap();
+            let mut other_owner = observed.clone();
+            other_owner
+                .profile_operation_ids
+                .insert(browser.profile_id.clone(), "different-operation".into());
+            store.save_session_state(&other_owner).unwrap();
+            let mut released = old.assignment.clone();
+            released.state = agent_browser_service_model::RemoteViewAssignmentState::Released;
+            let changed_owner = match action {
+                "publish" => store.publish_launch_intent(&replacement, &retained, &after),
+                "admit" | "hosted" | "reused" | "live" => store
+                    .admit_recovery_launch_intent(&replacement, &retained, &browser)
+                    .map(|_| ()),
+                "release" => store.retain_owner_released_assignment(&browser, &retained, &released),
+                "reconcile" => {
+                    store.reconcile_absent_recovery(claim.as_ref().unwrap(), &retained, &browser)
+                }
+                _ => unreachable!(),
+            };
+            assert_eq!(
+                changed_owner,
+                Err(LaunchCustodyStoreError::Conflict),
+                "a changed operation on this profile remains a real conflict"
+            );
+            store.save_session_state(&observed).unwrap();
+            match action {
+                "live" => assert_eq!(
+                    store.admit_recovery_launch_intent(&replacement, &retained, &browser),
+                    Err(LaunchCustodyStoreError::Conflict)
+                ),
+                "publish" => store
+                    .publish_launch_intent(&replacement, &retained, &after)
+                    .unwrap(),
+                "admit" | "hosted" | "reused" => assert_eq!(
+                    store.admit_recovery_launch_intent(&replacement, &retained, &browser),
+                    Ok(LaunchCustodyAdmission::New),
+                    "an exited browser's old desktop assignment must not veto its replacement"
+                ),
+                "release" => {
+                    let mut released = old.assignment.clone();
+                    released.state =
+                        agent_browser_service_model::RemoteViewAssignmentState::Released;
+                    store
+                        .retain_owner_released_assignment(&browser, &retained, &released)
+                        .unwrap();
+                }
+                "reconcile" => store
+                    .reconcile_absent_recovery(claim.as_ref().unwrap(), &retained, &browser)
+                    .unwrap(),
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    #[test]
     fn sqlite_recovery_launch_preserves_prior_custody_and_fences_competing_replay() {
         let fixture = Fixture::new();
         let mut store = fixture.open(true);
@@ -2104,7 +2362,9 @@ impl BrowserSessionSqliteStore {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|_| Error::Unavailable)?;
         let state = current(&transaction)?;
-        if state != *expected {
+        if !profile_inputs_match(expected, &state, &intent.profile_id)
+            || recovery.is_some_and(|browser| expected.browsers.get(&browser.id) != Some(browser))
+        {
             return Err(Error::Conflict);
         }
         super::browser_idle_retirement_store::reject_retirement_admission(
@@ -2119,6 +2379,7 @@ impl BrowserSessionSqliteStore {
         }
 
         let mut owner_terminal_replacement = false;
+        let mut ordinary_replacement = false;
         if let Some(browser) = recovery {
             let prior = records
                 .records
@@ -2131,21 +2392,17 @@ impl BrowserSessionSqliteStore {
                 .collect::<Vec<_>>();
             let explicit_target =
                 explicit_hosted_recovery_target(&state, browser, &intent.assignment);
-            // Ordinary placement may change after the adapter's exact-profile
-            // absence proof. Recheck original process absence inside the writer
-            // transaction; explicit host placement retains its separate proof.
-            let ordinary_replacement = browser
-                .desktop
-                .as_ref()
-                .is_some_and(|desktop| desktop.desktop_id != intent.assignment.desktop_id)
-                && !state.app_browser_attachments.contains_key(&browser.id)
-                && !state.sessions.values().any(|task| {
-                    task.browser_id == browser.id && state.host_bindings.contains_key(&task.id)
-                })
-                && matches!(
-                    crate::process_identity::observe_process(browser.pid),
-                    crate::process_identity::ProcessObservation::Missing
-                );
+            // The old process has exited. Its desktop assignment is history,
+            // including when Native gives the same desktop a new generation.
+            // Recheck absence inside the writer transaction before rebinding.
+            ordinary_replacement = !state.app_browser_attachments.contains_key(&browser.id)
+                && (state
+                    .profile_operation_ids
+                    .contains_key(&browser.profile_id)
+                    || !state.sessions.values().any(|task| {
+                        task.browser_id == browser.id && state.host_bindings.contains_key(&task.id)
+                    }))
+                && published_process_has_exited(browser, &prior);
             let prior_conflict = if let [prior] = prior.as_slice() {
                 owner_terminal_replacement = owner_release_observed(&transaction, prior)?;
                 (prior.intent.assignment != intent.assignment
@@ -2183,6 +2440,7 @@ impl BrowserSessionSqliteStore {
             if state.idle_closed_browsers.contains_key(&browser.id)
                 || (recovery == Some(browser)
                     && (owner_terminal_replacement
+                        || ordinary_replacement
                         || explicit_hosted_recovery_target(&state, browser, &intent.assignment)))
             {
                 return false;

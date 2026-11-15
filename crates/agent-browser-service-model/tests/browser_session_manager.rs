@@ -2829,6 +2829,27 @@ fn owner_mode_replacement_fixture(changed_desktop: bool) {
     BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
         .navigate(&opened.session_id, "https://synthetic.test/", 1001)
         .unwrap();
+    effects.initial_tab = Some(BrowserTabAcquisition {
+        tab_id: "peer-tab".into(),
+        target_id: "peer-target".into(),
+        source: BrowserTabSource::SessionInitial,
+    });
+    let peer = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::exact_profile("Bob", "profile-a", 1002))
+        .unwrap();
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .navigate(&peer.session_id, "https://synthetic.test/peer", 1002)
+        .unwrap();
+    effects.new_tab = Some(BrowserTabAcquisition {
+        tab_id: "alice-second-tab".into(),
+        target_id: "alice-second-target".into(),
+        source: BrowserTabSource::ExplicitNew,
+    });
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .new_tab(&opened.session_id, 1003)
+        .unwrap();
+    assert_eq!(peer.browser_id, opened.browser_id);
+    assert_eq!(state.tabs.len(), 3);
     let tab = state.sessions[&opened.session_id]
         .current_tab_id
         .clone()
@@ -2867,7 +2888,11 @@ fn owner_mode_replacement_fixture(changed_desktop: bool) {
                 browser_family: Some("chrome".into()),
             }),
         },
-        target_ids: BTreeMap::from([(tab.clone(), "native-window-new".into())]),
+        target_ids: state
+            .tabs
+            .keys()
+            .map(|id| (id.clone(), format!("native-window-new-{id}")))
+            .collect(),
     };
     for (desktop_id, generation) in [("other-desktop", 7), ("same-desktop", 8)] {
         let mut changed = replacement.clone();
@@ -2941,7 +2966,16 @@ fn owner_mode_replacement_fixture(changed_desktop: bool) {
         state.remote_view_tab_handoffs,
         previous.remote_view_tab_handoffs
     );
-    assert_eq!(state.tabs[&tab].target_id, "native-window-new");
+    for (id, previous_tab) in &previous.tabs {
+        assert_eq!(state.tabs[id].target_id, format!("native-window-new-{id}"));
+        assert_eq!(state.tabs[id].session_id, previous_tab.session_id);
+        assert_eq!(state.tabs[id].browser_id, previous_tab.browser_id);
+    }
+    assert_eq!(state.navigation_history, previous.navigation_history);
+    assert_eq!(
+        state.browsers[&opened.browser_id].active_session_ids,
+        previous.browsers[&opened.browser_id].active_session_ids
+    );
     assert_eq!(state.browsers[&opened.browser_id].pid, 999);
     assert!(state.browsers[&opened.browser_id].cdp_endpoint.is_empty());
 }

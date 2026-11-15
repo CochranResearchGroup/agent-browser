@@ -814,10 +814,12 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             .filter(|tab| tab.browser_id == self.binding.browser.id)
             .cloned()
             .collect::<Vec<_>>();
-        let recovery =
-            self.host
-                .effects
-                .recover_browser(&self.binding.browser, &profile, &tabs, &[])?;
+        let recovery = self.host.effects.recover_browser(
+            &self.binding.browser,
+            &profile,
+            &tabs,
+            &self.host.state.navigation_history,
+        )?;
         let proof = self.qualify(request, &recovery).map_err(|error| {
             if error.starts_with("mode_operation_replacement_") {
                 error
@@ -845,7 +847,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             &profile,
             Some(&self.binding.browser),
             &tabs,
-            &[],
+            &self.host.state.navigation_history,
         )?
         else {
             return Ok(None);
@@ -933,7 +935,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             &profile,
             Some(&self.binding.browser),
             &tabs,
-            &[],
+            &self.host.state.navigation_history,
         )? {
             let identity = recovery
                 .launch
@@ -963,56 +965,23 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         request: &Request,
         replacement: &Replacement,
     ) -> Result<bool, String> {
-        if self.host.persistence.load_session_state()? != self.host.persisted_state {
-            return Err("mode_operation_publication_conflict".into());
-        }
-        let current = self
-            .host
-            .state
-            .browsers
-            .get(&request.browser_id)
-            .ok_or("mode_operation_browser_missing")?;
-        let expected: RecordedProcessIdentity = serde_json::from_str(&replacement.process_identity)
-            .map_err(|_| "mode_operation_replacement_identity_invalid")?;
-        let published = BrowserSessionSqliteStore::open_read_only(
+        published_replacement(
             &self.host.persistence.runtime_database_path()?,
-        )?
-        .published_launch_process_identity(current)
-        .map_err(|_| "mode_operation_publication_readback_required")?;
-        if published.as_ref() == Some(&expected) {
-            if current.profile_id != request.profile_id
-                || current.pid != expected.pid
-                || !original_matches(&expected)?
-                || self.host.persistence.load_session_state()? != self.host.persisted_state
-            {
-                return Err("mode_operation_replacement_changed:inspect current target".into());
-            }
-            return Ok(true);
-        }
-        if current != &self.binding.browser {
-            return Err("mode_operation_replacement_changed:inspect current target".into());
-        }
-        Ok(false)
+            &self.binding.browser,
+            request,
+            replacement,
+        )
     }
+
     fn publish(&mut self, request: &Request, replacement: &Replacement) -> Result<(), String> {
-        if let Some(current) = self
-            .host
-            .state
-            .browsers
-            .get(&request.browser_id)
-            .filter(|browser| browser.pid != self.binding.browser.pid)
-        {
-            let original: RecordedProcessIdentity =
-                serde_json::from_str(&replacement.process_identity)
-                    .map_err(|_| "mode_operation_replacement_identity_invalid")?;
-            let published = BrowserSessionSqliteStore::open_read_only(
-                &self.host.persistence.runtime_database_path()?,
-            )?
-            .published_launch_process_identity(current)
-            .map_err(|_| "mode_operation_publication_readback_required")?;
-            if published.as_ref() != Some(&original) || !original_matches(&original)? {
-                return Err("mode_operation_replacement_changed:inspect current target".into());
-            }
+        if published_replacement(
+            &self.host.persistence.runtime_database_path()?,
+            &self.binding.browser,
+            request,
+            replacement,
+        )? {
+            self.host.state = self.host.persistence.load_session_state()?;
+            self.host.persisted_state = self.host.state.clone();
             return Ok(());
         }
         if self.recovery.is_none() {
@@ -1027,9 +996,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             .recovery
             .take()
             .ok_or("mode_operation_replacement_readback_required")?;
-        if self.host.persistence.load_session_state()? != self.host.persisted_state {
-            return Err("mode_operation_publication_conflict".into());
-        }
+        // Atomic launch publication reconciles unrelated peer changes under its
+        // SQLite writer lock and confirms this exact observed replacement.
+        // Keep the pending launch intent; a new observation scope would lose it.
         BrowserSessionManager::new(
             &mut self.host.state,
             &self.host.catalog,
@@ -1039,6 +1008,39 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         .publish_owner_replacement(&request.browser_id, &request.operation_id, recovery)?;
         self.host.commit_state()
     }
+}
+
+/// Read publication from durable owner state, independently of cached observations.
+fn published_replacement(
+    database: &Path,
+    original: &ManagedBrowserInstance,
+    request: &Request,
+    replacement: &Replacement,
+) -> Result<bool, String> {
+    let mut store = BrowserSessionSqliteStore::open_read_only(database)?;
+    let state = store.load_session_state()?;
+    let current = state
+        .browsers
+        .get(&request.browser_id)
+        .ok_or("mode_operation_browser_missing")?;
+    let expected: RecordedProcessIdentity = serde_json::from_str(&replacement.process_identity)
+        .map_err(|_| "mode_operation_replacement_identity_invalid")?;
+    let published = store
+        .published_launch_process_identity(current)
+        .map_err(|_| "mode_operation_publication_readback_required")?;
+    if published.as_ref() == Some(&expected) {
+        if current.profile_id != request.profile_id
+            || current.pid != expected.pid
+            || !original_matches(&expected)?
+        {
+            return Err("mode_operation_replacement_changed:inspect current target".into());
+        }
+        return Ok(true);
+    }
+    if current != original {
+        return Err("mode_operation_replacement_changed:inspect current target".into());
+    }
+    Ok(false)
 }
 
 /// Only a private owner journal and its published profile fence authorize manual

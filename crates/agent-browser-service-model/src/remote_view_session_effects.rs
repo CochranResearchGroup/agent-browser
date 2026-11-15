@@ -2238,14 +2238,7 @@ impl<
         }
         // Custody remains unpublished throughout restoration. A crash or failed
         // restoration cannot authorize another process or duplicate tab replay.
-        for (index, tab) in tabs.iter().enumerate() {
-            let acquired = if index == 0 {
-                self.effects.acquire_initial_tab(&restored_browser, &[])?
-            } else {
-                self.effects.create_tab(&restored_browser)?
-            };
-            let mut restored_tab = tab.clone();
-            restored_tab.target_id = acquired.target_id.clone();
+        for tab in tabs {
             let url = navigation
                 .iter()
                 .filter(|row| {
@@ -2254,9 +2247,22 @@ impl<
                         && row.browser_id == browser.id
                 })
                 .max_by_key(|row| row.visited_at_ms)
-                .map_or("about:blank", |row| row.url.as_str());
-            self.effects
-                .navigate(&restored_browser, &restored_tab, url)?;
+                .map(|row| row.url.as_str());
+            let attributed = target_ids.values().cloned().collect::<Vec<_>>();
+            let acquired =
+                self.effects
+                    .acquire_recovery_tab(&restored_browser, &attributed, url)?;
+            // Chrome restored this document from the same profile. Navigation
+            // would replace its current page and could repeat a website action.
+            if acquired.source != BrowserTabSource::Bootstrap {
+                let mut restored_tab = tab.clone();
+                restored_tab.target_id = acquired.target_id.clone();
+                self.effects.navigate(
+                    &restored_browser,
+                    &restored_tab,
+                    url.unwrap_or("about:blank"),
+                )?;
+            }
             target_ids.insert(tab.id.clone(), acquired.target_id);
         }
         self.pending = Some((intent, true));
