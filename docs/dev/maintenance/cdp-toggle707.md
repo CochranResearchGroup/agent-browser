@@ -353,3 +353,63 @@ The remaining public acceptance seam is three total tabs shared by two sessions
 logical-tab mapping, same-profile storage, replacement-process resolution for
 both clients, same-link Native readiness and normal cleanup. Local database and
 kernel observations support this proof; they do not replace it.
+
+
+## Installed external acceptance | 2026-11-15
+
+The operator resumed execution with `finish`. The abandoned production build was
+recovered through its original request and produced a sealed release-profile
+candidate from source `4533bc7119f1e6308ce59e4162c2a659ed252384`, already merged
+by PR715. The recovered build passed in1563 seconds with zero compiler errors
+or warnings. Its exact binary digest is
+`fade691c8cdd92cbb5cd1503a51959b0584beebdee2b1fc136a1b32ceded708e`.
+Preserving installation accepted generation `0.28.0-fade691c8cdd-efa0a7e32d39`;
+`agent-browser install doctor` exited0. The earlier timeout remains a failed
+build attempt, not installation evidence. No hosted CI or formal release ran.
+
+The retained absent Chrome operation completed its original CDP-free request,
+then returned to CDP. Its original URL, storage marker, logical tab and opaque
+Native handoff survived. Fresh tests used synthetic durable QA profiles and
+reviewed official Google Chrome157.0.8103.78 and Chromium157.0.8103.38.
+Each browser had exactly three tabs: two owned by Alice's session and one by
+Bob's independent session, sharing one browser and profile.
+
+For both browsers, actual controls in the authenticated public dashboard and
+Native viewer completed CDP to CDP-free to CDP with one launch per fresh
+conversion. The durable operation journal reports completed phases. Each
+CDP-free process had neither a remote-debugging flag nor a recorded CDP endpoint;
+the CDP replacement restored both. Both clients resolve the same replacement
+process epoch and reviewed executable, with the same profile data path.
+No target DOM or CDP inspection ran while CDP-free.
+
+Public HTTPS service requests verified both sessions' original URLs and storage
+markers before any post-toggle navigation. All three URLs remained present;
+original logical session names and tab IDs retained their mapping. The
+noncurrent Alice tab was selected by its original logical ID through the
+installed documented MCP `browser_tab` selector, followed by a public HTTPS URL
+read of that exact logical tab. That selector setup was local; the mode controls,
+page assertions and viewer acceptance used the external route. Raw conflicting
+selectors and legacy index switching were invalid harness routes; their failed
+receipts are retained and are not passing acceptance evidence.
+
+The same opaque handoff for each tested browser was ready in both modes with
+`operatorVisible.state=ready`; reopening that same URL produced fresh Native
+WebSocket frames. No substitute provider URL or new reconnect handoff was used.
+The installed public chooser lists only Chrome and Chromium. Chrome for Testing
+is excluded and was not used as a supported test browser.
+
+All five QA tasks closed through normal task-scoped `browser_close`. A fresh OS
+readback found zero matching identities among54 captured browser and independent
+observer processes. Small synthetic durable QA profiles remain as inert test data.
+No foreign browser was closed and no broad cleanup or forced close was used.
+Private evidence lives in the operator-scoped restart707 packet, including build,
+install, public request/reply, mode journal, process epoch and cleanup receipts.
+No browser state, credentials or viewer capture is copied into Git.
+
+The workflow is accepted for the tested Linux/WSL installation. This does not
+claim Google account authentication, private profile cloning acceptance, other
+platforms, or an entirely external implementation of the logical-tab selector.
+The generic dashboard exec route returned uncertain gateway outcomes for page
+reads, and CDP-free browsers were absent from the dashboard inventory; the
+supported service request route and Native mode control completed acceptance.
+These diagnostic limitations remain distinct from the successful mode round trip.
