@@ -12045,15 +12045,20 @@ fn replacement_placement_fixture(at_capacity: bool) {
 
 #[test]
 fn pending_mode_replacement_observes_its_new_assignment_before_publication() {
-    pending_mode_replacement_assignment_fixture(false);
+    pending_mode_replacement_assignment_fixture(false, false);
 }
 
 #[test]
 fn pending_mode_replacement_observes_unchanged_explicit_assignment() {
-    pending_mode_replacement_assignment_fixture(true);
+    pending_mode_replacement_assignment_fixture(true, false);
 }
 
-fn pending_mode_replacement_assignment_fixture(explicit: bool) {
+#[test]
+fn pending_mode_replacement_allows_owner_refresh_after_peer_observation() {
+    pending_mode_replacement_assignment_fixture(false, true);
+}
+
+fn pending_mode_replacement_assignment_fixture(explicit: bool, refresh_owner: bool) {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));
     let calls = Rc::new(Cell::new(0));
@@ -12097,7 +12102,7 @@ fn pending_mode_replacement_assignment_fixture(explicit: bool) {
         Process {
             mode: Mode::IdleRecovery,
             root: fixture.root.clone(),
-            calls,
+            calls: calls.clone(),
         },
         adapter(&fixture, provider),
         fixture.store(false),
@@ -12174,4 +12179,45 @@ fn pending_mode_replacement_assignment_fixture(explicit: bool) {
     assert!(effects
         .native_replacement_assignment_target(&foreign, &recovery)
         .is_err());
+    if refresh_owner {
+        // Qualification failed after the real adapter observed a replacement,
+        // leaving its launch journal pending and logical state unchanged.
+        let launches = calls.get();
+        let mut resumed = BrowserSessionHost::load(
+            fixture.store(false),
+            effects,
+            &fixture.root.join("unused.json"),
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_view_desktops: Vec::new(),
+                default_disposable_policy: None,
+                exact_url_history_maximum_bytes: 1024,
+            },
+        )
+        .unwrap();
+        let mut current = before.clone();
+        current.next_session_sequence += 1;
+        fixture
+            .store(false)
+            .compare_and_save_session_state(&before, &current)
+            .unwrap();
+        let reply = resumed.handle_command(&serde_json::json!({
+            "action":"browser_session_mode_convert", "sessionId":session,
+            "sessionName":"Alice", "operationId":uuid::Uuid::new_v4().to_string(),
+            "mode":"cdp", "choice":"reconcile"
+        }));
+        assert_ne!(
+            reply["error"], "browser_session_launch_publication_conflict",
+            "refresh must not publish an unqualified replacement: {reply}"
+        );
+        assert_eq!(resumed.state(), &current);
+        assert_eq!(calls.get(), launches, "refresh must not launch again");
+        let pending = fixture.store(false).unpublished_launch_records().unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].observed_pid, Some(recovery.launch.pid));
+        assert!(
+            !pending[0].published,
+            "qualification still owns publication"
+        );
+    }
 }

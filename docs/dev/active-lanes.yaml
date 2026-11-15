@@ -2,6 +2,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: CDP-TOGGLE-707
+    product_lane: PL-BUGFIX
+    objective: Reconcile an existing mode replacement without premature publication or relaunch
+    plan: docs/dev/maintenance/cdp-toggle707.md
+    branch: fix/cdp-toggle707
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#707]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [MODE-OWNER-704, REQUEST-HOST-711]
+    overlaps: [MODE-HANDOFF-CONTROL-649, REQUEST-HOST-711]
+    reconciled_overlaps: ["Reuse canonical primary from6556af69d;707 owns readiness/startup and mode regressions;711 is primary writer for the compatible shared refresh predicate and independent two-profile regression; freeze707 predicate during validation and integrate provider711 first; preserve all foreign work; no new checkout"]
+    validation_status: Three regression failures observed and repaired; focused5 pass; broader Rust and strict gates running; external off passed, original on replacement pending; fresh installed page continuation remains unqualified
+    updated_at: 2026-11-14
   - id: MODE-OWNER-704
     product_lane: PL-BUGFIX
     objective: Complete external CDP and CDP-free round trips through the existing owner

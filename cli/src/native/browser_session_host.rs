@@ -2307,6 +2307,12 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             self.catalog = catalog;
             return Ok(());
         }
+        if self.state == self.persisted_state && self.effects.pending_launch_intent().is_some() {
+            // A failed qualification left no logical delta to publish. Start
+            // a new observation scope against the current snapshot; the durable
+            // launch record still fences recovery of that exact replacement.
+            self.effects.begin_operation(&current)?;
+        }
         if self.state == self.persisted_state
             && self.effects.pending_launch_intent().is_none()
             && !self.effects.pending_idle_retirement_ids().is_empty()
@@ -4889,6 +4895,121 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn pending_mode_replacement_window_observation_ignores_peer_activity() {
+        use std::io::{Read, Write};
+        use std::time::{Duration, Instant};
+        let environment = crate::test_utils::EnvGuard::new(&[
+            "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
+            "AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE",
+        ]);
+        environment.remove("AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE");
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        environment.set(
+            "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
+            &format!("http://{}", listener.local_addr().unwrap()),
+        );
+        listener.set_nonblocking(true).unwrap();
+        let original =
+            crate::process_identity::capture_process_identity(std::process::id(), None, None)
+                .unwrap();
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
+        ))
+        .unwrap();
+        let target: agent_browser_service_model::RemoteViewApplicationTarget =
+            serde_json::from_value(fixture["assignmentObservation"]["target"].clone()).unwrap();
+        let token = original.start_token.strip_prefix("linux:").unwrap();
+        let (boot, start) = token.split_once(':').unwrap();
+        let snapshot = serde_json::json!({
+            "desktopId":target.viewing_desktop_id,"generation":target.viewing_generation,
+            "windows":{"windows":[{"id":1,"pid":original.pid,"active":true,
+                "x":0,"y":0,"width":100,"height":100,
+                "processIdentity":{"pid":original.pid,"executable":original.executable_path,
+                    "boot_id":boot,"start_token":start}}]}
+        })
+        .to_string();
+        let server = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while Instant::now() < deadline {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        stream
+                            .set_read_timeout(Some(Duration::from_secs(2)))
+                            .unwrap();
+                        let mut bytes = Vec::new();
+                        loop {
+                            let mut chunk = [0; 4096];
+                            let count = stream.read(&mut chunk).unwrap();
+                            assert!(count > 0, "observation request ended early");
+                            bytes.extend_from_slice(&chunk[..count]);
+                            assert!(bytes.len() < 32_768);
+                            if let Some(end) = bytes.windows(4).position(|v| v == b"\r\n\r\n") {
+                                let headers = String::from_utf8_lossy(&bytes[..end]);
+                                let length: usize = headers
+                                    .lines()
+                                    .find_map(|line| {
+                                        let (name, value) = line.split_once(':')?;
+                                        name.eq_ignore_ascii_case("content-length")
+                                            .then(|| value.trim().parse().unwrap())
+                                    })
+                                    .unwrap();
+                                if bytes.len() >= end + 4 + length {
+                                    break;
+                                }
+                            }
+                        }
+                        assert!(String::from_utf8_lossy(&bytes)
+                            .starts_with("POST /v1/agent-desktop/observe HTTP/1.1"));
+                        write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",snapshot.len(),snapshot).unwrap();
+                        return true;
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("observation listener failed: {error}"),
+                }
+            }
+            false
+        });
+        let directory = TempDirectory::new();
+        let store = BrowserSessionSqliteStore::launch_custody_fixture(
+            rusqlite::Connection::open(directory.0.join("runtime.sqlite3")).unwrap(),
+            true,
+        )
+        .unwrap();
+        store
+            .save_profile_catalog(&BrowserProfileCatalog::default())
+            .unwrap();
+        let mut host = BrowserSessionHost::load(
+            store,
+            BrowserSessionEffectAdapter::new(FixtureRuntime::default()),
+            &directory.0.join("unused.json"),
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_view_desktops: Vec::new(),
+                default_disposable_policy: None,
+                exact_url_history_maximum_bytes: 1024,
+            },
+        )
+        .unwrap();
+        let before = host.persisted_state.clone();
+        let mut current = before.clone();
+        current.next_session_sequence += 1;
+        host.persistence
+            .compare_and_save_session_state(&before, &current)
+            .unwrap();
+        let ready = host.native_process_window_ready(&original, &target);
+        let observed = server.join().unwrap();
+        assert!(
+            ready.is_ok(),
+            "peer activity must not block observation: {ready:?}"
+        );
+        assert!(observed, "readiness must observe the exact process window");
+        assert_eq!(host.persistence.load_session_state().unwrap(), current);
     }
 
     #[test]
