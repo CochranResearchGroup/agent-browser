@@ -2307,6 +2307,12 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             self.catalog = catalog;
             return Ok(());
         }
+        if self.state == self.persisted_state && self.effects.pending_launch_intent().is_some() {
+            // A failed qualification left no logical delta to publish. Start
+            // a new observation scope against the current snapshot; the durable
+            // launch record still fences recovery of that exact replacement.
+            self.effects.begin_operation(&current)?;
+        }
         if self.state == self.persisted_state
             && self.effects.pending_launch_intent().is_none()
             && !self.effects.pending_idle_retirement_ids().is_empty()

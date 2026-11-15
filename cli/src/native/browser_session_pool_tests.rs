@@ -1,8 +1,8 @@
 //! Capacity demand through the actual host, pool coordinator and SQLite owner.
-#[path = "pending_launch_refresh_tests.rs"]
-mod pending_launch_refresh_tests;
 #[path = "ordinary_handoff_recovery_tests.rs"]
 mod ordinary_handoff_recovery_tests;
+#[path = "pending_launch_refresh_tests.rs"]
+mod pending_launch_refresh_tests;
 use super::super::browser_session_host::BrowserSessionPersistence;
 use super::super::browser_session_store::BrowserProfileCatalogLoad;
 use super::*;

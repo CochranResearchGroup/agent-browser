@@ -15,7 +15,7 @@ lanes:
     dependencies: []
     overlaps: [CDP-TOGGLE-707]
     reconciled_overlaps: ["Independent real-owner two-profile regression; same narrow pending-refresh predicate as707; preserve foreign dirty files and integrate serially without its other changes"]
-    validation_status: Regression construction; no product fix yet
+    validation_status: Actual-owner regression RED then GREEN;3 existing publication/replacement tests, Rustfmt, links and11policy checks pass; strict Clippy pending
     updated_at: 2026-11-15
   - id: MODE-OWNER-704
     product_lane: PL-BUGFIX
