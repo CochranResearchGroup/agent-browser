@@ -41,6 +41,9 @@ Mode qualification uses the exact observed unpublished replacement assignment
 before publication, while logical task and kernel-process checks remain binding.
 Window qualification observes only; input-policy readiness does not gate lifecycle completion.
 Owner publication permits desktop movement only with exact valid pending assignment custody.
+An observed launch without an admitted logical state change stays in its durable
+journal. A new operation may reset that temporary observation before adopting a
+peer snapshot; this neither publishes the replacement nor replays its launch.
 Recovery requests Chrome's saved session in the same profile; a new
 browser uses its initial startup URL. Logical links survive, but saved pages do
 not reconstruct unsaved in-memory state or prove an authenticated account.
