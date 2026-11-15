@@ -124,3 +124,16 @@ imported production code. Add those module declarations so this planned gate
 can execute; this is fixture wiring, not a new browser failure. Update the
 readiness comment to describe exact process/window observation accurately.
 The provider711 merge remains a prerequisite to707 integration.
+
+PR713 is now merged as85c98e7ab and integrated into this branch. The refresh
+function is byte-identical to both qualified parents. Glossary and lane-catalog
+conflicts preserve both intents; policy wiring and links pass after resolution.
+
+Mode-operation integration passes17 cases. Native-control compilation now
+succeeds, exposing one stale close fixture:61 cases pass and one fails with
+`browser_native_close_control_unavailable`. The exact single-case binary loop
+reproduces in under a second. The fixture predates current control-status
+admission and confirmed, epoch-bound Native window close; it still expects
+Alt+F4. Update only that fixture's owner reply and assertions, retaining exact
+window/process/control identity and the dispatch-versus-exit distinction.
+Its red receipt remains retained; the full affected integration target is rerun.
