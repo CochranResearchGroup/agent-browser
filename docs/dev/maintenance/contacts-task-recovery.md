@@ -1,6 +1,6 @@
 # Contacts task recovery
 
-Status: OPEN
+Status: CLOSED
 Product lane: PL-BUGFIX
 Owner: Contacts recovery session
 Work item: #629 observation refusal; restart lifecycle scope to be reconciled.
@@ -8,7 +8,7 @@ Branch: fix/contacts-task-recovery
 
 ## Current State
 
-Reused clean existing Contacts repair checkout at current origin/main2817e3bae; no new checkout. Operator requests clean stuck-task restart and continuation after explicit browser termination. Existing scoped browser-close refuses when peer tasks exist. Restarted acquisition opens and evaluates, then navigation fails browser_task_changed_during_observation. Existing issue629 describes the same observation error; root causality remains unproven until deterministic measurement. Graphiti read timed out; governance packet unavailable, canonical policies read directly.
+PR718 is merged as bd89d29d66e89c4fd0b1b2d3517119d3f1d739d5 and deployed. Sealed binary3e1f3f85d4dfb1550f820fc928a55d0d11e0e989a97aeb440f5c7f65eec89185 matches the running production host. Exact-binary installer fixture, preserving installation and installed doctor pass. Six recorded original browser processes survive unchanged. Fresh installed Contacts LinkedIn acquisition completes in61.448s with eight successful calls; profile URL, current role, employment history and education are observed. Network remains incomplete. No failing-navigation blocker recurred in this run; broader reliability and controlled latency acceptance remain separate.
 
 ## Scope and acceptance
 
@@ -29,7 +29,7 @@ Issue629's observation failure is independently reproduced by a real two-connect
 
 Ranked hypotheses were membership comparison, changed task/process identity, and a broader store race. The narrow fix ignores only peer membership in the browser observation comparison, retaining browser/profile/PID/CDP-endpoint/desktop identity and original task-incarnation checks. Focused mode tests pass8/8; removed-task and replaced-process rejection remain covered. Close-policy tests pass7/7. Changed error messages now name supported recovery; README, help, skill/reference and documentation site describe same-mode relaunch and task recovery tabs.
 
-## Local validation and limitations
+## Pre-delivery source qualification
 
 Base:2817e3bae. No commit, push, source integration or candidate installation in this slice. Local docs links and11policy checks pass; strict workspace Clippy and final formatting check pass. Hosted CI excluded under operator policy. Build retries retain the initial incorrect library-target selection, a thread-exhaustion compiler failure, and stopped cache-blocked attempts. Final compilation uses the existing wrapper with2jobs,2CPUs, a10GiB claim,12GiB cap and unchanged16GiB workstation reserve; shared compiler-cache service remains untouched. Builds use a minimal environment; raw error logs are private. Production still runs the pre-fix observation guard. No temporary source logging or disposable browsers were created; the operator's persistent browser and recovered task are retained deliberately.
 
@@ -40,3 +40,12 @@ Final source qualification: focused8 GREEN (206.513s build/check wall), close-po
 ## Review and delivery 2026-11-16
 
 Operator explicitly requested review, merge and deployment. Fixed review baseline2817e3bae17512a8b90e80d1c7391ce744dae224, current origin/main at review. Standards axis: no blocking findings; the two small repeated SQLite setups match nearby tests and do not justify a new fixture abstraction in this bounded repair. Spec axis: no blocking findings against629 and operator recovery scope. Physical task/process/endpoint/desktop comparisons remain; only peer membership is excluded. Recovery remains explicit and original uncertain actions are not replayed. No claim that the historical live trigger was captured or that a complete latency repair is proven. Deployment will use a sealed production-shaped candidate and preserving workstation installation, then installed acquisition acceptance.
+
+
+## Installed acceptance 2026-11-16
+
+Standards and Spec reviews have zero accepted blocking findings. PR718 squash integration retains the exact validated Rust bytes from fb08d285f. Production-shaped release/fat-LTO build completed in2171.982s, sealed as candidate-f353361cc2fff3b8-3e1f3f85d4dfb155. Exact-binary workstation installer fixture passes in33.090s. Supported install transaction upgrade-fbb8afc4-b5e2-4578-ae61-bbaa8c629252 reports ready; generation and running host SHA match the sealed artifact. Installed doctor exits0; no independent public-viewer acceptance is claimed. Fresh OS start-time readback preserves all6 original recorded browser processes. Persistent profile data was not reset.
+
+Fresh installed acquisition:61.448s overall,8returned browser calls, observed profile URL/current role/history/education, incomplete network. This is one successful acquisition, not complete network coverage, a live UI-button/graph-application result, or proof of a causal latency improvement. The previous94.669s saved call total is an uncontrolled historical sample. Source facts and raw results remain exclusively in tenant storage; project receipts retain metadata only. Test/browser processes from the installer fixture remain fixture-owned and cleaned by that passing fixture; existing authenticated browsers are intentionally retained.
+
+Retained custody: Contacts recovery lane keeps this clean primary checkout and its sealed candidates for rollback/support provenance. Review retention by2026-11-23; do not remove pinned artifacts or prior branches implicitly.
