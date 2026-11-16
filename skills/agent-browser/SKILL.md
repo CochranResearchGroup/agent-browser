@@ -25,6 +25,8 @@ workflows through an ordinary user-activation click. A workflow that explicitly
 needs unsolicited popups may opt out with the existing browser launch args;
 changing launch args does not reconfigure a retained browser.
 
+Unrelated session metadata updates do not block ordinary activity on an unchanged browser; admission checks the current browser identity and conflicting close operations atomically.
+
 Writer custody survives executable unlink.
 
 Use `browser_open` with `{"serviceName":"my-app","agentName":"editor","taskName":"Edit draft","profile":"editorial","profileMode":"persistent","taskKey":"editing","url":"https://example.com"}`. Read `data.taskId`, `profileId`, `browserId`, `tabId`, `url`. Address actions with `taskId`. Reuse `taskKey` to preserve the page/edits without navigation; distinct keys separate tasks. `browser_close` ends only the addressed task.

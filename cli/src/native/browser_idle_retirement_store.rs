@@ -333,14 +333,23 @@ impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|_| Error::Unavailable)?;
         let mut records = ledger(&transaction)?;
-        if current(&transaction)? != *expected
-            || expected.browsers.get(&browser.id).is_none_or(|root| {
-                root.pid != browser.pid
-                    || root.cdp_endpoint != browser.cdp_endpoint
-                    || root.profile_id != browser.profile_id
-                    || root.desktop != browser.desktop
+        let actual = current(&transaction)?;
+        // Metadata publication is independent of physical browser use. A peer
+        // counter, tab timestamp or session membership update must not veto a
+        // command on the same browser. Bind admission to the current resource
+        // inside this writer transaction, while preserving lifecycle exclusion.
+        let same_browser = |state: &BrowserSessionState| {
+            state.browsers.get(&browser.id).is_some_and(|root| {
+                root.id == browser.id
+                    && root.pid == browser.pid
+                    && root.cdp_endpoint == browser.cdp_endpoint
+                    && root.profile_id == browser.profile_id
+                    && root.desktop == browser.desktop
             })
-            || expected.idle_closed_browsers.contains_key(&browser.id)
+        };
+        if !same_browser(expected)
+            || !same_browser(&actual)
+            || actual.idle_closed_browsers.contains_key(&browser.id)
             || records.activities.contains_key(id)
             || records.records.values().any(|record| {
                 !record.is_terminal()
@@ -353,9 +362,9 @@ impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
         {
             return Err(Error::Conflict);
         }
-        let root = expected.browsers.get(&browser.id).ok_or(Error::Conflict)?;
+        let root = actual.browsers.get(&browser.id).ok_or(Error::Conflict)?;
         let process_identity =
-            if root.desktop.is_none() || expected.shared_browser_ids.contains(&root.id) {
+            if root.desktop.is_none() || actual.shared_browser_ids.contains(&root.id) {
                 None
             } else {
                 match super::browser_launch_custody_store::published_process_identity(
@@ -790,6 +799,61 @@ mod tests {
     impl Drop for Fixture {
         fn drop(&mut self) {
             std::fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+
+    #[test]
+    fn ordinary_activity_survives_unrelated_metadata_publication() {
+        let fixture = Fixture::new();
+        let mut owner = fixture.open(true);
+        let (baseline, intent, _) = setup(&mut owner);
+        let mut peer = fixture.open(false);
+        let mut metadata = baseline.clone();
+        metadata.next_session_sequence += 1;
+        peer.compare_and_save_session_state(&baseline, &metadata)
+            .unwrap();
+        owner
+            .admit_browser_activity(
+                &uuid::Uuid::new_v4().to_string(),
+                &intent.scopes[0].browser,
+                &baseline,
+            )
+            .expect("unrelated metadata must not block activity on the unchanged browser");
+        assert_eq!(owner.load_session_state().unwrap(), metadata);
+    }
+
+    #[test]
+    fn ordinary_activity_rechecks_current_browser_identity_after_peer_publication() {
+        for change in ["pid", "endpoint", "profile", "desktop", "removed"] {
+            let fixture = Fixture::new();
+            let mut owner = fixture.open(true);
+            let (baseline, intent, _) = setup(&mut owner);
+            let mut peer = fixture.open(false);
+            let mut replacement = baseline.clone();
+            let browser = replacement.browsers.get_mut("browser-a").unwrap();
+            match change {
+                "pid" => browser.pid += 1,
+                "endpoint" => browser.cdp_endpoint.push_str("/replacement"),
+                "profile" => browser.profile_id = "replacement-profile".into(),
+                "desktop" => browser.desktop.as_mut().unwrap().generation += 1,
+                "removed" => {
+                    replacement.browsers.remove("browser-a");
+                }
+                _ => unreachable!(),
+            }
+            peer.compare_and_save_session_state(&baseline, &replacement)
+                .unwrap();
+            assert_eq!(
+                owner.admit_browser_activity(
+                    &uuid::Uuid::new_v4().to_string(),
+                    &intent.scopes[0].browser,
+                    &baseline,
+                ),
+                Err(Error::Conflict),
+                "must reject changed current {change}"
+            );
+            assert!(owner.browser_activity_records().unwrap().is_empty());
+            assert_eq!(owner.load_session_state().unwrap(), replacement);
         }
     }
 
