@@ -1,7 +1,7 @@
 # Ordinary browser activity after unrelated metadata updates
 
 Product lane: PL-BUGFIX
-Status: SOURCE_QUALIFIED
+Status: CLOSED
 Branch: fix/activity-metadata-admission
 Baseline: 2817e3bae17512a8b90e80d1c7391ce744dae224
 
@@ -54,3 +54,17 @@ No accepted blocking findings. Source uses existing SQLite transaction and fixtu
 No accepted blocking findings against the stated stale-metadata requirement and bounded plan. Two live SQLite clients exercise the exact failure path. Current browser fields, current closed marker and nonterminal same-profile retirement are checked atomically; peer metadata is neither replaced nor silently discarded. Physical replacement controls and adjacent uncertain-command recovery pass. Generic error-cause conflation remains an explicit separate limitation rather than an alleged live root cause.
 
 Summary: Standards0accepted blocking; Spec0accepted blocking. User authorizes normal reviewed integration and preserving deployment; no formal release/version bump, profile reset or broad browser shutdown.
+
+## Merged and installed acceptance
+
+PR721 merged as8ebf0c33a848dae081dc9dcda22859b78b37573c. Exact tracked-tree comparison against sealed source2feac50c2880317b6a8715a8eebaf88fe7f3cea8 is empty. Rebased14store and7adjacent cases pass; refreshed strict workspace Clippy passes in49.35s. Local checks satisfy validation; no hosted CI run was requested.
+
+The supported production-shaped release/fat-LTO build completed in33m21s and sealed candidate-af11d43917c5d88b-abdbd60b73db6da5. Binary SHA256 abdbd60b73db6da5c1fb5a3b10d6f4b96e0201569007c2401b96c67ec50391d7. Supported install preview reports eligible; preserving installation upgrade-c7a38a1f-0558-4632-af2f-330dc9956409 reports ready/accepted. Selected generation0.28.0-abdbd60b73db-d083484bbb96 and on-disk installed binary match the seal. Doctor success is true. All8live managed browsers recorded immediately before installation preserve exact OS start time and executable after installation and after workflow acceptance. No profile reset or whole-browser shutdown.
+
+Exact-binary installer fixture: first attempt failed at reconcile with SIGPIPE; both owned fixture hosts were cleaned. One bounded unmodified repeat passed, including source-free install and zero owned-host residue. Cause of the transient signal is unproven and no signal repair is claimed. Retain both receipts; do not describe this as an uninterrupted first-run pass.
+
+Installed public workflow: original tool connection reported Transport closed after upgrade. A fresh installed stdio MCP client opened one disposable task. The initial heading assertion was unsuitable: the snapshot returned the correct example.com origin and Learn more link, but no heading even with non-interactive text requested. Acceptance was corrected to the observed origin plus expected link semantics, then passed on the same addressed task; task close succeeded. No second browser was opened for these snapshot checks. The test browser is absent from current published browser inventory; absence alone is not independent physical exit proof. Eight original managed processes remain intact. This is not LinkedIn acquisition, Enrich-button acceptance, controlled latency evidence, or attribution of the historical LinkedIn failure.
+
+Private deployment, failure and workflow receipts live in the user-scoped activity-metadata-review runtime directory. Candidate artifact retained in the canonical checkout for installed rollback/support; review by2026-11-23. Startup build storage was62GiB with197GiBfree; the active sealed build is an explicit retention exception to the20GiB review threshold. No unrelated cache, checkout or browser cleanup.
+
+Deployment closeout memory disposition:queued, job25b4fe57-3c91-4111-89eb-e0a39da772f9; user-scoped receipt activity-metadata-review/deployment-memory.json. Queue accepted; persistence and retrieval are not claimed.
