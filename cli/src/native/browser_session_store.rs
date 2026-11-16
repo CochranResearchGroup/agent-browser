@@ -207,7 +207,17 @@ impl BrowserSessionSqliteStore {
                 && current_task.created_at_ms == task.created_at_ms
                 && current_task.browser_id == task.browser_id
                 && current_task.profile_id == task.profile_id
-        }) || current.browsers.get(&browser.id) != Some(browser)
+        }) || !current
+            .browsers
+            .get(&browser.id)
+            .is_some_and(|current_browser| {
+                // Peer task attachment changes membership, not the addressed Chrome.
+                current_browser.id == browser.id
+                    && current_browser.profile_id == browser.profile_id
+                    && current_browser.pid == browser.pid
+                    && current_browser.cdp_endpoint == browser.cdp_endpoint
+                    && current_browser.desktop == browser.desktop
+            })
         {
             return Err("browser_task_changed_during_observation:refresh inventory".into());
         }
@@ -1853,6 +1863,106 @@ mod tests {
         assert_eq!(store.original_browser_identity(&state, &conflicting), None);
         state.shared_browser_ids.clear();
         assert_eq!(store.original_browser_identity(&state, &browser), None);
+    }
+
+    #[test]
+    fn browser_mode_inspection_rejects_replaced_browser_process() {
+        let directory = TempDirectory::new("mode-process-race");
+        let path = directory.0.join("runtime.sqlite3");
+        let connection = Connection::open(&path).unwrap();
+        initialize_runtime_schema(&connection).unwrap();
+        let writer = BrowserSessionSqliteStore { connection };
+        let mut state = BrowserSessionState::default();
+        state.sessions.insert(
+            "task".into(),
+            ManagedBrowserSession {
+                id: "task".into(),
+                name: "Task".into(),
+                profile_id: "profile".into(),
+                browser_id: "browser".into(),
+                created_at_ms: 1,
+                last_activity_at_ms: 1,
+                expires_at_ms: 99999,
+                current_tab_id: None,
+            },
+        );
+        state.browsers.insert(
+            "browser".into(),
+            ManagedBrowserInstance {
+                id: "browser".into(),
+                profile_id: "profile".into(),
+                pid: 42,
+                cdp_endpoint: String::new(),
+                desktop: None,
+                active_session_ids: vec!["task".into()],
+            },
+        );
+        writer.save_session_state(&state).unwrap();
+        let reader = BrowserSessionSqliteStore {
+            connection: Connection::open(&path).unwrap(),
+        };
+        let result = reader.inspect_task_mode_with("task", |_, _| {
+            // An actual process replacement must invalidate the observation.
+            state.browsers.get_mut("browser").unwrap().pid += 1;
+            writer.save_session_state(&state).unwrap();
+            serde_json::json!({"mode":"cdp","browserId":"browser","profileId":"profile"})
+        });
+        assert!(result
+            .unwrap_err()
+            .starts_with("browser_task_changed_during_observation"));
+    }
+
+    #[test]
+    fn browser_mode_inspection_allows_peer_session_membership_change() {
+        let directory = TempDirectory::new("mode-peer-membership-race");
+        let path = directory.0.join("runtime.sqlite3");
+        let connection = Connection::open(&path).unwrap();
+        initialize_runtime_schema(&connection).unwrap();
+        let writer = BrowserSessionSqliteStore { connection };
+        let mut state = BrowserSessionState::default();
+        state.sessions.insert(
+            "task".into(),
+            ManagedBrowserSession {
+                id: "task".into(),
+                name: "Task".into(),
+                profile_id: "profile".into(),
+                browser_id: "browser".into(),
+                created_at_ms: 1,
+                last_activity_at_ms: 1,
+                expires_at_ms: 99999,
+                current_tab_id: None,
+            },
+        );
+        state.browsers.insert(
+            "browser".into(),
+            ManagedBrowserInstance {
+                id: "browser".into(),
+                profile_id: "profile".into(),
+                pid: 42,
+                cdp_endpoint: String::new(),
+                desktop: None,
+                active_session_ids: vec!["task".into()],
+            },
+        );
+        writer.save_session_state(&state).unwrap();
+        let reader = BrowserSessionSqliteStore {
+            connection: Connection::open(&path).unwrap(),
+        };
+        let result = reader.inspect_task_mode_with("task", |_, _| {
+            // Independent peer attachment does not change this task or Chrome.
+            state
+                .browsers
+                .get_mut("browser")
+                .unwrap()
+                .active_session_ids
+                .push("peer".into());
+            writer.save_session_state(&state).unwrap();
+            serde_json::json!({"mode":"cdp","browserId":"browser","profileId":"profile"})
+        });
+        assert!(
+            result.is_ok(),
+            "unrelated peer membership rejected: {result:?}"
+        );
     }
 
     #[test]

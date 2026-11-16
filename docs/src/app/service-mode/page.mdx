@@ -2227,3 +2227,11 @@ Native fence readback and atomic publication before completing that fence; it
 never repeats the physical close. This reconciliation is limited to the requested
 profile. Unresolved effects, changed identities and unavailable Native proof
 retain their original reconciliation requirement.
+
+
+## Restart a stuck managed browser
+
+For an operator-requested restart, inspect the task with `browser_command` action `mode`. Use `mode_convert` with the same mode and one stable `operationId`: first `prepare`, then `relaunch` with `ownerConfirmed: true`. This restarts the selected browser even when it serves multiple tasks, preserving its profile and logical task identities. It does not toggle CDP or replay website actions. Inspect or reconcile the same operation after a lost reply, then verify the retained page with `browser_continue`. Ordinary task closure remains separate; browser-scope close is not the shared-browser restart path.
+
+
+If the task has no tab (`mode_operation_tab_missing`), create one through `browser_tab` with `operation: "new"` and a stable `tabKey`, using `about:blank` or an explicitly requested read-only URL. This rejoins the verified browser without removing profile data. Then prepare the restart with the same operation ID. A recovery tab is a new action; it does not resolve or replay the original uncertain action.

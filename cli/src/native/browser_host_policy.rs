@@ -255,7 +255,7 @@ pub(crate) fn broader_close_plan(
         .any(|peer| peer.browser_id == task.browser_id && peer.id != task_id)
     {
         return Err(
-            "browser_lifecycle_peer_scope_conflict: close only this task's created tabs".into(),
+            "browser_lifecycle_peer_scope_conflict: for an operator-requested restart use mode_convert prepare/relaunch with the current mode and ownerConfirmed:true; ordinary close ends only this task".into(),
         );
     }
     Ok(task.browser_id.clone())

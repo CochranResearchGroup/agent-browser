@@ -45,6 +45,8 @@ Nested login outlines require same-frame boundary or bounded connected-field pro
 
 Saved login: use [native login controls](references/cli-and-service.md#native-login-controls) with the retained episode; no password export or input replay.
 
+For an operator-requested stuck-browser restart, inspect `mode`, then use `mode_convert` with that same mode and one stable `operationId`: `prepare`, then `relaunch` with `ownerConfirmed: true`. Keep the profile and logical tasks; reconcile lost replies on that operation and verify the retained page with `browser_continue`. Browser-scope `browser_close` is not the shared-browser restart path.
+
 ## Standalone authentication
 
 Follow explicit user instructions and service-specific authentication guidance.
@@ -163,3 +165,6 @@ Completed ordinary click/evaluate failures support original-request reconciliati
 while the shared dispatcher supervisor remains alive. Exact producer completion,
 current task/process/epoch and fresh target observation are required. Unknown
 outcomes remain retained; this never permits replay or private/native input.
+
+
+If the task has no tab (`mode_operation_tab_missing`), create one through `browser_tab` with `operation: "new"` and a stable `tabKey`, using `about:blank` or an explicitly requested read-only URL. This rejoins the verified browser without removing profile data. Then prepare the restart with the same operation ID. A recovery tab is a new action; it does not resolve or replay the original uncertain action.

@@ -7485,6 +7485,9 @@ Commands:
   Copy/publication do not prove account identity, usable login or storage divergence.
   Reload/inspect reads the original operation; reconcile lost replies without replay.
   mode-convert JSON Inspect/relaunch/pause/cancel/restore_previous/select_build
+    Operator restart: inspect current mode, prepare it unchanged, then relaunch with ownerConfirmed:true.
+    Missing task tab: browser_tab new with a stable tabKey creates a recovery tab before prepare.
+    Shared-browser restart retains all logical tasks; browser-scope close is not its recovery path.
     Confirmed restart retains tabs/session names and updates all tasks to the replacement process.
     Supported workspace choices exclude Chrome for Testing.
     Confirmed restore_previous can recover interrupted closing after exact original exit proof.

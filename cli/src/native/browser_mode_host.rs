@@ -152,7 +152,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
                 .as_ref()
                 .and_then(|id| self.state.tabs.get(id))
                 .cloned()
-                .ok_or("mode_operation_tab_missing")?;
+                .ok_or("mode_operation_tab_missing: use browser_tab new with a stable tabKey to create a recovery tab, then prepare this same operationId")?;
             let profile = self
                 .catalog
                 .profiles
