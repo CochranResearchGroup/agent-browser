@@ -7463,6 +7463,7 @@ Commands:
   New durable profiles retain data; manual tasks remain until explicitly closed.
   Compatible connected profiles get an independent task/tab; conflicts need a choice.
   Lost launch replies retain the original operation; inspect before another creation.
+  Unrelated session metadata does not block activity on an unchanged browser.
   Profiles and SiteGuides manages intended site/account/workspace associations.
   Teach this site consumes finalized Native video and selected human narration.
   Choose exact task/profile/site and intended identity; labels are not login proof.
