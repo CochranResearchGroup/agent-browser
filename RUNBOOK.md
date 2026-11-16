@@ -665,3 +665,16 @@ source qualification is in progress. Earlier uncertain live input has not been
 attributed, replayed or reset. No runtime adoption or live effects in this slice.
 
 - [Native login outline repair621](docs/dev/maintenance/native-login-outlines621.md) — source-only same-widget perception qualification; runtime acceptance remains separate.
+
+
+### Ordinary activity metadata admission installed (2026-11-16)
+
+[Admission repair](docs/dev/maintenance/activity-metadata-admission.md), issue720,
+PR721, is merged and installed as sealed binary `abdbd60b73db`. A peer session
+counter no longer rejects work on the unchanged browser. Current selected
+resource checks and actual close/activity exclusion remain atomic. Twenty-one
+focused tests, strict Clippy, exact installer fixture repeat and installed doctor
+pass. Fresh installed MCP open/read/close succeeds, and all eight pre-install
+managed browser identities survive. Retained SIGPIPE fixture flake, stale client
+transport and corrected snapshot oracle are explicit in the acceptance note.
+No LinkedIn latency, all-source UI or historical error attribution claim.

@@ -6,16 +6,16 @@ lanes:
     product_lane: PL-BUGFIX
     objective: Admit valid browser work despite unrelated stale metadata
     plan: docs/dev/maintenance/activity-metadata-admission.md
-    branch: fix/activity-metadata-admission
+    branch: docs/activity-metadata-installed
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#720]
-    plan_state: SOURCE_QUALIFIED
-    custody_state: ACTIVE_WORKTREE
+    plan_state: CLOSED
+    custody_state: MERGED_RETAINED
     dependencies: []
     overlaps: [IDLE-ACTIVITY-562]
     reconciled_overlaps: ["Canonical checkout primary owns admission; preserve prior publication repair and peer checkouts; no new worktree or runtime effect"]
-    validation_status: Real SQLite RED to GREEN;14store and7adjacent cases, strict workspace Clippy, Rustfmt,11policy cases, docs links/guidance/site build pass; committed source qualification; preserving deployment authorized
+    validation_status: PR721 merged8ebf0c33a; sealedabdbd60b73db installed and ready;21focused cases and strict Clippy pass; exact installer fixture passes after retained SIGPIPE flake; doctor and fresh MCP open/read/close pass;8original browsers preserved
     updated_at: 2026-11-16
   - id: CONTACTS-TASK-RECOVERY
     product_lane: PL-BUGFIX
