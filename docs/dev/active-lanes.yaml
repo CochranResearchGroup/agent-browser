@@ -2,6 +2,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: CONTACTS-TASK-RECOVERY
+    product_lane: PL-BUGFIX
+    objective: Recover task continuation after harmless peer membership changes and expose bounded restart
+    plan: docs/dev/maintenance/contacts-task-recovery.md
+    branch: fix/contacts-task-recovery
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#629]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [REQUEST-HOST-711, CONTACTS-AUTH-RECOVERY-698]
+    reconciled_overlaps: ["Reuse clean former Contacts repair checkout;629 owns observation seam; preserve previous branches and candidates; no new checkout"]
+    validation_status: SQLite RED then focused8 and close-policy7 GREEN; live same-mode restart and missing-tab recovery verified; strict Clippy/format/docs/policy pass; local source not committed or installed
+    updated_at: 2026-11-16
   - id: CDP-TOGGLE-707
     product_lane: PL-BUGFIX
     objective: Complete operator-commanded mode restart with tabs and all session consumers preserved
@@ -71,13 +86,13 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#698]
     plan_state: CLOSED
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     dependencies: []
     overlaps: [RECEIVING-BINDING-681]
     reconciled_overlaps: ["Isolated Contacts repair; preserve prior receiving and maintenance branches and installed identity"]
     validation_status: 48 tests, Rustfmt, strict Clippy, installer fixture and installed live recovery passed
-    limitations: ["No private input replay or native-input exception", "Auth389 owns consumer recovery and application acceptance"]
-    updated_at: 2026-11-14
+    limitations: ["No private input replay or native-input exception", "Auth389 owns consumer recovery and application acceptance", "Clean checkout reassigned to CONTACTS-TASK-RECOVERY; prior branch and candidates retained"]
+    updated_at: 2026-11-16
   - id: STOCK-POPUP-693
     product_lane: PL-BUGFIX
     objective: Restore stock unsolicited popup blocking in ordinary managed launches
