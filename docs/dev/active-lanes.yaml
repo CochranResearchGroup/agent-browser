@@ -6,16 +6,16 @@ lanes:
     product_lane: PL-BUGFIX
     objective: Recover task continuation after harmless peer membership changes and expose bounded restart
     plan: docs/dev/maintenance/contacts-task-recovery.md
-    branch: fix/contacts-task-recovery
+    branch: docs/contacts-task-recovery-installed
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#629]
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    plan_state: CLOSED
+    custody_state: MERGED_RETAINED
     dependencies: []
     overlaps: [REQUEST-HOST-711, CONTACTS-AUTH-RECOVERY-698]
     reconciled_overlaps: ["Reuse clean former Contacts repair checkout;629 owns observation seam; preserve previous branches and candidates; no new checkout"]
-    validation_status: SQLite RED then focused8 and close-policy7 GREEN; live same-mode restart and missing-tab recovery verified; strict Clippy/format/docs/policy pass; local source not committed or installed
+    validation_status: PR718 merged bd89d29d6; sealed3e1f3f85d4df installed; exact installer fixture/doctor pass;6 browsers preserved; installed acquisition61.448s observes4 profile categories; network incomplete
     updated_at: 2026-11-16
   - id: CDP-TOGGLE-707
     product_lane: PL-BUGFIX

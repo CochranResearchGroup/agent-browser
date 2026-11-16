@@ -1,3 +1,17 @@
+## Contacts task recovery deployed | 2026-11-16
+
+[718](https://github.com/CochranResearchGroup/agent-browser/pull/718),
+[acceptance](docs/dev/maintenance/contacts-task-recovery.md): source bd89d29d6
+is installed as sealed binary3e1f3f85d4df. SQLite RED then focused8 and
+close-policy7 GREEN; strict local Rust gates, docs/policy and exact installer
+fixture pass. Preserving upgrade and doctor pass; all6 recorded original
+browser processes survive. Fresh installed LinkedIn acquisition completes
+in61.448s across8successful calls with profile URL, current role, history and
+education observed. Network remains incomplete. No causal speedup, complete
+network, UI-button/graph application or independent viewer proof is claimed.
+Keep prior failure receipts, original uncertain navigation and sealed rollback
+artifacts. The recovery paths retain profile/task identities without input replay.
+
 ## CDP toggle707 installed and accepted | 2026-11-15
 
 [707](https://github.com/CochranResearchGroup/agent-browser/issues/707),
