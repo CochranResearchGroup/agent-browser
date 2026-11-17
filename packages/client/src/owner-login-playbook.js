@@ -11,6 +11,30 @@ const nonempty=value=>typeof value==='string'&&value.length>0;
 /** @param {unknown} error */
 const errorCode=error=>error&&typeof error==='object'&&'code' in error&&typeof error.code==='string'?error.code:undefined;
 
+/** Recovery suggestions are read-only diagnostics, never credential-use authority.
+ * @param {string} status @param {string} reasonCode @param {string} effectState
+ * @param {string|undefined} requestId
+ * @returns {import('./owner-login-playbook.d.ts').OwnerLoginRecovery} */
+function loginRecovery(status,reasonCode,effectState,requestId){
+ const observe=/** @type {const} */ ({target:'browser',operation:'verifyLogin'});
+ const capabilities=/** @type {const} */ ({target:'auth',operation:'auth_capabilities'});
+ if(status==='completed')return {classification:'authenticated',fallbackEligible:false,nextOperations:[]};
+ if(['auth_not_authorized','auth_denied','auth_revoked','auth_cancelled','auth_expired'].includes(reasonCode))return {classification:'authorization_denied',fallbackEligible:false,nextOperations:[observe,...(requestId?[{target:/** @type {const} */ ('auth'),operation:/** @type {const} */ ('inspect_credential_request'),arguments:{requestId}}]:[])]};
+ if(effectState==='unknown')return {classification:'unknown_outcome',fallbackEligible:false,nextOperations:[observe,...(requestId?[{target:/** @type {const} */ ('auth'),operation:/** @type {const} */ ('reconcile_credential_request'),arguments:{requestId}}]:[])]};
+ /** @type {Record<string,import('./owner-login-playbook.d.ts').OwnerLoginRecovery['classification']>} */
+ const classifications={
+  credential_not_found:'credential_not_found',account_ambiguous:'account_ambiguous',
+  credential_source_unavailable:'source_unavailable',credential_discovery_incomplete:'source_unavailable',credential_unavailable:'source_unavailable',
+  auth_sdk_incompatible:'capability_unavailable',auth_channel_discovery_unavailable:'capability_unavailable',auth_authority_migration_required:'capability_unavailable',auth_unknown_operation:'capability_unavailable',
+  auth_unavailable:'integration_failure',auth_sdk_invalid:'integration_failure',auth_review_unavailable:'integration_failure',
+  receiving_unavailable:'receiving_unready',receiving_binding_required:'guidance_mismatch',task_target_changed:'guidance_mismatch',credential_recipient_mismatch:'guidance_mismatch',
+  approval_required:'approval_required',notification_required:'approval_required',
+ };
+ const classification=Object.hasOwn(classifications,reasonCode)?classifications[reasonCode]:status==='adaptation_required'?'guidance_mismatch':'unclassified';
+ const authDiagnostic=['source_unavailable','capability_unavailable','integration_failure'].includes(classification);
+ return {classification,fallbackEligible:effectState==='no_effect'&&['credential_not_found','source_unavailable','capability_unavailable','integration_failure'].includes(classification),...(classification==='integration_failure'?{repairOwner:/** @type {const} */ ('auth-receipts')}:{}),nextOperations:[observe,...(authDiagnostic?[capabilities]:[])]};
+}
+
 /** Compose owner credential requests with guarded SiteGuide routines. Auth owns
  * all policy, private use and receiver privacy; this client persists metadata
  * before dispatch and independently verifies the intended receiving account.
@@ -36,9 +60,10 @@ export function createOwnerLoginPlaybook({browser,auth,checkpoints}){
    if(busy.has(key))throw Error('owner_login_busy');busy.add(key);
    const intent=JSON.stringify({...Object.fromEntries(intentFields.map(field=>[field,options[field]])),callerTaskId:auth.callerTaskId});
    /** @type {OwnerLoginCheckpoint|null} */ let checkpoint=null;
+   /** @type {Record<string,string>|undefined} */ let receiving;
    /** @type {Record<string,any>|undefined} */ let request;
    /** @param {string} status @param {string} reasonCode @param {string} effectState */
-   const result=(status,reasonCode,effectState)=>({schemaVersion:'agent-browser.routine-result.v1',routine:'login',taskId:options.taskId,guideId:options.guideId,status,reasonCode,effectState,...(request?.browserActionEvidence?{browserActionEvidence:request.browserActionEvidence}:{}),...(checkpoint?{requestId:checkpoint.requestId,actionId:checkpoint.requestId,...checkpoint.receiving}:{}),contract});
+   const result=(status,reasonCode,effectState)=>({schemaVersion:'agent-browser.routine-result.v1',routine:'login',taskId:options.taskId,guideId:options.guideId,...receiving,status,reasonCode,effectState,recovery:loginRecovery(status,reasonCode,checkpoint?.advanceIntent||checkpoint?.outcomeUnknown?'unknown':effectState,checkpoint?.requestId),...(request?.browserActionEvidence?{browserActionEvidence:request.browserActionEvidence}:{}),...(checkpoint?{requestId:checkpoint.requestId,actionId:checkpoint.requestId,...checkpoint.receiving}:{}),contract});
    /** @param {Record<string,any>} value */
    const scopeBound=value=>{
     const e=value?.browserActionEvidence;
@@ -71,6 +96,7 @@ export function createOwnerLoginPlaybook({browser,auth,checkpoints}){
      if(options.reconcile)return result('waiting','checkpoint_required_for_reconciliation','no_effect');
      let observed;try{observed=await browser.verifyLogin(options);}catch{return result('waiting','receiving_unavailable','no_effect');}
      if(receivingFields.some(field=>!nonempty(observed[field])||options[field]!==undefined&&options[field]!==observed[field]))return result('adaptation_required','receiving_binding_required','no_effect');
+     receiving=Object.fromEntries(receivingFields.map(field=>[field,observed[field]]));
      if(observed.status==='completed')return {...observed,...result('completed',observed.reasonCode,'verified')};
      if(!['identifier_required','password_required','login_required'].includes(observed.reasonCode))return {...observed,...result(observed.status,observed.reasonCode,'no_effect')};
      let preparation;try{preparation=await browser.prepareLogin(options);}catch{return result('waiting','receiving_unavailable','no_effect');}
