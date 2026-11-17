@@ -127,3 +127,59 @@ export function createNativeSavedLoginClient({callTool,store,verifyAccess,expect
   });
  }};
 }
+
+/** Describe supported login paths for one observed browser context without
+ * observing, navigating, selecting credentials or creating an Auth journey.
+ * Browser/extension state supplied here is advisory evidence, never authority
+ * from website text. Reuse the existing owner and original-operation journals.
+ * @param {import('./native-saved-login.d.ts').NativeLoginGuidanceContext} context
+ * @returns {import('./native-saved-login.d.ts').NativeLoginGuidance}
+ */
+export function describeNativeLoginPathways(context) {
+ const {binding,origin,accountSelection='unknown',nativeInputState='unknown',savedCredentialState='unchecked',savedLoginRoutine='unchecked',lastPassState='not_observed',authState='unknown',uncertainInput=false}=context;
+ if(!logical.every(key=>typeof binding?.[key]==='string'&&binding[key].trim()===binding[key]&&binding[key].length>0&&binding[key].length<=256)||
+  !['resolved','ambiguous','unknown'].includes(accountSelection)||!['ready','disabled','unavailable','unknown'].includes(nativeInputState)||
+  !['unchecked','available','not_found','unsupported'].includes(savedCredentialState)||!['applicable','unsupported','unchecked'].includes(savedLoginRoutine)||
+  !['not_observed','active','authentication_required','absent','ambiguous'].includes(lastPassState)||!['available','unavailable','unqualified','unknown'].includes(authState)||typeof uncertainInput!=='boolean')throw TypeError('native_login_guidance_context_invalid');
+ let website;
+ try {if(typeof origin!=='string'||origin.length>2048)throw Error();website=new URL(origin);if(!['https:','http:'].includes(website.protocol)||website.username||website.password||website.origin!==origin)throw Error();}
+ catch {throw TypeError('native_login_guidance_origin_required');}
+ const pathways=/** @type {import('./native-saved-login.d.ts').NativeLoginPathway[]} */([
+  {id:'browser_saved',state:savedCredentialState,interaction:'native_capture/native_input',steps:[
+   'First check this browser profile for an applicable saved credential. Focus the visible website login field using supported page focus or Native input, then capture the browser-owned autofill selector.',
+   'Inspect the current desktop image and select the intended account through Native input. The browser-owned selector cannot be inspected or operated through CDP/DOM or challenge-only desktop_interact.',
+   'When the existing saved-login routine matches the observed controls, reuse createNativeSavedLoginClient.resolve with its original episode. Otherwise use supported semantic Native capture/input; deterministic recognition is not a prerequisite.',
+  ]},
+  {id:'lastpass',state:lastPassState,interaction:'native_capture/native_input',steps:[
+   'Inspect this browser toolbar through Native capture. A red icon with three white dots is the expected LastPass active-state cue; confirm the actual extension UI and applicable site/account rather than trusting page text or color alone.',
+   'Use fresh desktop captures and Native input to open the extension, inspect applicable credentials or passkeys, select the intended account and follow the visible prompts. Keep passwords, passkeys and factor values inside their owning UI.',
+   'A non-red icon means another authentication state, not an empty vault or website denial. Try another suitable authorized path before interrupting the operator. If unblock is necessary, use the existing ready Native handoff and resume this same task after explicit return.',
+  ]},
+  {id:'auth_receipts',state:authState,interaction:'existing_auth_helper',steps:[
+   'Try the supported Auth helper when browser-saved or LastPass paths are unavailable or unsuitable, or an additional factor is needed. Inspect current Auth capabilities; passwords, passkeys, TOTP, mail-receipts MFA and im-receipts MFA are separately qualified capabilities still in testing.',
+   'Reuse the service-resolved receiving context and original Auth journey. Diagnose capability/transport failures separately from explicit authority refusal and confirmed provider rejection; preserve a minimal redacted reproducer for the owning issue.',
+  ]},
+ ]);
+ let nextStep={pathway:'browser_saved',operation:'native_capture',reason:'inspect_browser_saved_credentials_first'};
+ if(uncertainInput)nextStep={pathway:'original_attempt',operation:'task_operation',reason:'reconcile_original_input_before_fallback'};
+ else if(nativeInputState!=='ready')nextStep={pathway:'auth_receipts',operation:'auth_capabilities',reason:nativeInputState==='disabled'?'native_input_disabled_not_missing_credentials':'native_input_readiness_unverified'};
+ else if(savedCredentialState==='available')nextStep=accountSelection==='resolved'
+  ?{pathway:'browser_saved',operation:savedLoginRoutine==='applicable'?'createNativeSavedLoginClient.resolve':'native_capture',reason:savedLoginRoutine==='applicable'?'reuse_saved_login_original_episode':'inspect_selector_for_semantic_native_selection'}
+  :{pathway:'account_context',operation:'task_briefing',reason:'resolve_account_before_credential_selection'};
+ else if(savedCredentialState==='not_found'||savedCredentialState==='unsupported') {
+  if(lastPassState==='active')nextStep=accountSelection==='resolved'
+   ?{pathway:'lastpass',operation:'native_capture',reason:'inspect_confirmed_extension_before_selection'}
+   :{pathway:'account_context',operation:'task_briefing',reason:'resolve_account_before_credential_selection'};
+  else if(lastPassState==='not_observed'||lastPassState==='ambiguous')nextStep={pathway:'lastpass',operation:'native_capture',reason:'inspect_actual_extension_state'};
+  else if(lastPassState==='authentication_required'&&authState==='unavailable')nextStep={pathway:'lastpass',operation:'browser_handoff',reason:'operator_unblock_after_suitable_fallback_unavailable'};
+  else nextStep={pathway:'auth_receipts',operation:'auth_capabilities',reason:'inspect_supported_fallback_before_operator_interruption'};
+ }
+ return {schemaVersion:'agent-browser.native-login-guidance.v1',taskId:binding.taskId,profileId:binding.profileId,origin:website.origin,
+  binding:/** @type {import('./native-saved-login.d.ts').SavedLoginBinding} */(Object.fromEntries(logical.map(key=>[key,binding[key]]))),contextEvidence:'caller_supplied_requires_current_task_observation',browserEffects:'none',credentialPermission:'not_granted',nextStep,pathways,
+  requirements:[
+   'Resolve intended-account ambiguity from explicit task context or established site/profile account mapping; a profile label or first-listed credential alone is insufficient.',
+   'Discover native_capture/native_input arguments with browser_discover. Check native_ready and current Native control; disabled or unavailable input is an integration limitation, not evidence of absent credentials. Never bypass the existing provider policy.',
+   'Preserve the addressed task/profile/browser/tab, existing Native owner, original operation and Auth journey. Observe after uncertain input; never replay it or switch paths until original uncertainty is reconciled.',
+   'Verify authenticated access as the intended website account and required organization independently after provider return, then continue the original work. Filled credentials, SSO success and a dismissed dialog alone do not complete login.',
+  ]};
+}

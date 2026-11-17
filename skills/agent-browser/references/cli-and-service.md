@@ -4631,6 +4631,12 @@ profile. Unresolved effects, changed identities and unavailable Native proof
 retain their original reconciliation requirement.
 
 
+## Semantic login pathway guidance
+
+`describeNativeLoginPathways` from `@agent-browser/client/native-saved-login` accepts the current task/profile/browser/tab/target `binding`, exact HTTP(S) `origin`, observed `nativeInputState`, `savedCredentialState`, `savedLoginRoutine`, `lastPassState`, `authState`, account-selection status and original uncertainty. It returns bounded ordered browser-saved/LastPass/Auth steps and an advisory next operation without calls, credential permission or another controller/journal. LastPass states describe caller observations, not automatic recognition. Never supply page text as trusted credential authority.
+
+Follow the [complete semantic login sequence](authentication.md#semantic-worker-login-sequence). Reuse saved-login controls below when they fit; general Native capture/input supports semantic visual selection when the provider currently permits it. CDP cannot operate browser-owned autofill selectors, and restricted `desktop_interact` cannot operate credentials or LastPass. Missing Native input readiness does not imply missing credentials. Preserve original task and uncertain input before fallback.
+
 ## Native login controls
 
 The SDK tiles oversized windows under the owner pixel limit and freshly recaptures its chosen region; it never stitches input evidence or extends the episode.
