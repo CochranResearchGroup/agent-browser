@@ -3374,11 +3374,16 @@ fn service_status_probe() -> serde_json::Value {
     let mut command = Command::new(&current_exe);
     command
         .args(["--json", "--session", &probe_session, "service", "status"])
-        .env("AGENT_BROWSER_HOME", &temp_home)
+        .env("HOME", &temp_home)
+        .env("USERPROFILE", &temp_home)
+        .env("AGENT_BROWSER_HOME", temp_home.join(".agent-browser"))
         .env("AGENT_BROWSER_ARGS", "--no-sandbox");
     let output =
         run_install_doctor_command_with_timeout(command, INSTALL_DOCTOR_SERVICE_STATUS_TIMEOUT);
-    let state_path = temp_home.join("service").join("state.json");
+    let state_path = temp_home
+        .join(".agent-browser")
+        .join("service")
+        .join("state.json");
 
     let result = match output {
         InstallDoctorCommandResult::Output(output) => {
@@ -3456,7 +3461,9 @@ fn service_status_probe() -> serde_json::Value {
     let mut close_command = Command::new(&current_exe);
     close_command
         .args(["--json", "--session", &probe_session, "close"])
-        .env("AGENT_BROWSER_HOME", &temp_home)
+        .env("HOME", &temp_home)
+        .env("USERPROFILE", &temp_home)
+        .env("AGENT_BROWSER_HOME", temp_home.join(".agent-browser"))
         .env("AGENT_BROWSER_ARGS", "--no-sandbox");
     let _ = run_install_doctor_command_with_timeout(
         close_command,

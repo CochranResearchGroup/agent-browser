@@ -2,6 +2,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: INSTALL-DOCTOR-HOME-734
+    product_lane: PL-BUGFIX
+    objective: Isolate no-launch readiness probe from production Service State
+    plan: docs/dev/maintenance/install-doctor-home-isolation.md
+    branch: fix/install-doctor-home-isolation
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#734]
+    plan_state: OPEN
+    custody_state: ACTIVE
+    dependencies: []
+    overlaps: []
+    reconciled_overlaps: ["Reuse canonical primary after727 merge; sole install.rs writer; preserve sealed727 candidate and existing forward recovery transaction; no additional checkout"]
+    validation_status: strict workspace Clippy passed; formatting and exact production installer validation pending
+    updated_at: 2026-11-17
   - id: ACTIVITY-METADATA-ADMISSION
     product_lane: PL-BUGFIX
     objective: Admit valid browser work despite unrelated stale metadata

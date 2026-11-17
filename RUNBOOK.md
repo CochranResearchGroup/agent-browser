@@ -679,14 +679,20 @@ managed browser identities survive. Retained SIGPIPE fixture flake, stale client
 transport and corrected snapshot oracle are explicit in the acceptance note.
 No LinkedIn latency, all-source UI or historical error attribution claim.
 
-### Contacts LinkedIn command scope — source validated
+### Contacts command scope selected; final readiness pending (2026-11-17)
 
-[Selected-browser maintenance](docs/dev/maintenance/contacts-browser-command-scope.md)
-on fix/contacts-browser-command-scope reproduces3peer original-process observations
-for one page read, then passes with0peer observations and selected-profile checks
-retained. The concrete runtime now forwards existing selected-browser scope.
-All27selected consumer/wrapper tests and strict production-binary Clippy pass.
-Changes remain local and uncommitted; installed binaryabdbd60b73db is unchanged.
-Stable Time-qualified installed baseline passes initial profile readiness within
-32.127seconds; full source acquisition upper76.833seconds. The patch's installed
-speedup is unverified and awaits release comparison.
+[Selected-browser correction](docs/dev/maintenance/contacts-browser-command-scope.md)
+merged through PR727, sourceb05d4f859 and target ed62bb3a3 have identical trees.
+Sealed production binary64edfce51b7b is selected and all14 original managed
+browser processes survived transfer. Exact installer fixture passed. Preserving
+transaction committed generation selection but failed final doctor status timeout.
+[Doctor home isolation](docs/dev/maintenance/install-doctor-home-isolation.md),
+issue734, owns the bounded repair in the reused canonical checkout. Production
+Service State ignored the probe's AGENT_BROWSER_HOME override. Direct status
+upper25.181seconds falls to9.626seconds with an actual private operating-system
+home. Strict workspace Clippy passes; sealed installer and recovery remain open.
+
+New installed LinkedIn acquisition upper98.042seconds is slower than baseline
+76.833seconds; no speedup is claimed. Initial profile upper40.311seconds passes
+60seconds. Four profile categories and10connections observed; network remains
+partial. Original UI Enrich submission and completed source job remain pending.
