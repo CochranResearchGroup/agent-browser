@@ -1,6 +1,6 @@
 # Install doctor service home isolation
 
-Status: OPEN
+Status: CLOSED (installed correction)
 Product lane: PL-BUGFIX
 Branch: fix/install-doctor-home-isolation
 Owner: current Contacts release operator
@@ -30,3 +30,15 @@ Serial review against AGENTS, CONTEXT, product contract, shared runtime custody 
 Serial review against issue734: both status and matching close use the actual private home, and state-path observation matches native Service State. No doctor readiness bypass. Exact production fixture and installed recovery still required; no installed completion claim.
 
 Local strict workspace Clippy passes at the reviewed source diff. Formatting check initially identified one wrapping difference, corrected before candidate seal. Hosted CI omitted under operator cost policy. Cargo uses2jobs,4GiB claim,16GiB reserve and8GiB disk floor for this incremental correction; original default20GiB floor reported disk pressure with roughly14GiB available. No cleanup or reserve reduction performed.
+
+## Installed acceptance (2026-11-17)
+
+Issue734 closed through PR735, source7acee0cb35301a378e53eb0b1efe8d795f3a0678 and squash6ccb45df4d49ecd10e060b94e0da65f48e466427 have identical trees. The clean production-shaped candidate uses opt3, fat LTO and one codegen unit. Sealed binary408821d0c76f6ae0395a5b520faac98c7710883e5cac88d6238e63d77437c8c3 is installed as generation0.28.0-408821d0c76f-53b7e4a9bfc5. The actual selected supervisor process digest matches the seal. Formatting, strict workspace Clippy and candidate inspection passed locally. No hosted CI or formal version release.
+
+The first exact installer fixture failed before its explicit doctor call because latestTransaction.mcpClientRetirement was null. A diagnostic repeat retained transaction/status output, kept all original assertions and passed the complete fixture. Both runs proved exact owned-host cleanup, and a fresh process scan found zero processes executing the sealed fixture binary. Root cause of the first failure is unresolved; this is a retained nonblocking fixture flake, not a clean first-pass or reproducibility claim. PL-BUGFIX owns follow-up; do not hide or generalize it into installation success.
+
+The original PR727 install committed its generation but failed final service status. One exact forward resume failed the same probe. The immutable old candidate cannot acquire this correction. Its inactive committing custody was explicitly cancelled through the supported compare-and-swap coordination action, retaining the failed transaction. The corrected preserving update then selected408821d0c76f; the service-status probe passed, but three retained runtime-host generations prevented final acceptance. No state file or doctor result was edited.
+
+The exact obsolete systemd supervisor daemon was verified by unit, PID, process birth token and executable digest. Its existing KillMode=process stop preserves browser/display descendants, matching the production accepted-upgrade mechanism. Stopping that obsolete daemon preserved all14 original managed browsers. Exact revision/census guarded resume of the current transaction then reached accepted, with zero outstanding owner obligations. The supervisor is active on the selected generation. Final standalone install doctor exits0: service ready, one runtime host. The retained dashboard_operator_journey_not_ready warning is advisory; Native viewer acceptance is not claimed. All14 original browser PID/start/executable/profile identities and the boot identity match the pre-install census. No browser reset or profile replacement.
+
+Current transaction: upgrade-94688746-d2d1-47aa-b82e-20f8d56c60b0, accepted revision17. Previous failed transaction remains attributable historical evidence. Private receipts include release734-resume.json, release734-doctor-final.json and release734-preservation-verdict.json in the reviewed tenant acceptance directory. Sealed candidates are retained; no checkout, cache or generation cleanup performed.
