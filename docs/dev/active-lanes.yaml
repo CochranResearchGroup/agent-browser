@@ -16,7 +16,7 @@ lanes:
     overlaps: [AUTH-CHANNEL-DISCOVERY-667, NATIVE-SAVED-LOGIN-596, P300]
     reconciled_overlaps: ["Root owns contextual observation; identity worker owns playbooks until freeze; pathway worker owns shared docs; preserve all foreign work and candidates; no runtime mutation"]
     validation_status: Four unblocked source tickets assigned; cumulative gates pending; one final review and remediation remain unused
-    limitations: ["Actual installed autofill, LastPass and individual Auth factors require separate bounded evidence", "Initial inventory retains12 present checkouts and7 missing registrations; no foreign cleanup"]
+    limitations: ["Actual installed autofill, LastPass and individual Auth factors require separate bounded evidence", "Initial inventory retains11 present checkouts and7 missing registrations; no foreign cleanup"]
     updated_at: 2026-11-17
   - id: ACTIVITY-METADATA-ADMISSION
     product_lane: PL-BUGFIX

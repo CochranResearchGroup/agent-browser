@@ -28,23 +28,45 @@ struct ProviderBranch {
 
 impl LoginGuidance {
     pub(super) fn validate(&self, guide: &SiteGuide) -> Result<(), JsonRpcError> {
-        if self.version.is_empty() || self.version.len() > 80
-            || self.source.is_empty() || self.source.len() > 160
-            || !matches!(self.validation_class.as_str(), "authored" | "offline_validated" | "observed_workflow" | "fresh_repeat")
-            || self.evidence_date.as_ref().is_some_and(|date| date.len() != 10 || !date.bytes().enumerate().all(|(index, byte)| if index == 4 || index == 7 { byte == b'-' } else { byte.is_ascii_digit() }))
-            || self.limitations.len() > 8 || self.limitations.iter().any(|value| value.len() > 160)
+        if self.version.is_empty()
+            || self.version.len() > 80
+            || self.source.is_empty()
+            || self.source.len() > 160
+            || !matches!(
+                self.validation_class.as_str(),
+                "authored" | "offline_validated" | "observed_workflow" | "fresh_repeat"
+            )
+            || self.evidence_date.as_ref().is_some_and(|date| {
+                date.len() != 10
+                    || !date.bytes().enumerate().all(|(index, byte)| {
+                        if index == 4 || index == 7 {
+                            byte == b'-'
+                        } else {
+                            byte.is_ascii_digit()
+                        }
+                    })
+            })
+            || self.limitations.len() > 8
+            || self.limitations.iter().any(|value| value.len() > 160)
             || self.provider_branches.len() > 4
         {
             return Err(fault("siteguide_login_guidance_invalid"));
         }
         let mut ids = std::collections::BTreeSet::new();
         for branch in &self.provider_branches {
-            let provider = url::Url::parse(&branch.provider_origin).map_err(|_| fault("siteguide_provider_origin_invalid"))?;
-            if !valid_guide_id(&branch.branch_id) || !ids.insert(&branch.branch_id)
+            let provider = url::Url::parse(&branch.provider_origin)
+                .map_err(|_| fault("siteguide_provider_origin_invalid"))?;
+            if !valid_guide_id(&branch.branch_id)
+                || !ids.insert(&branch.branch_id)
+                || branch.starting_origin.len() > 512
+                || branch.provider_origin.len() > 512
+                || branch.return_origin.len() > 512
                 || !guide.allowed_origins.contains(&branch.starting_origin)
                 || !guide.allowed_origins.contains(&branch.return_origin)
-                || provider.scheme() != "https" || provider.origin().ascii_serialization() != branch.provider_origin
-                || branch.selector.is_empty() || branch.selector.len() > 512
+                || provider.scheme() != "https"
+                || provider.origin().ascii_serialization() != branch.provider_origin
+                || branch.selector.is_empty()
+                || branch.selector.len() > 512
             {
                 return Err(fault("siteguide_provider_branch_invalid"));
             }
@@ -67,17 +89,28 @@ fn summary(guide: &SiteGuide) -> Value {
 
 /// Read-only metadata discovery is available before authentication to the site.
 pub(super) fn summaries() -> Result<Vec<Value>, JsonRpcError> {
-    guide_names()?.iter().map(|name|load_guide(name).map(|guide|summary(&guide))).collect()
+    guide_names()?
+        .iter()
+        .map(|name| load_guide(name).map(|guide| summary(&guide)))
+        .collect()
 }
 
 /// Enrich only a successful public addressed snapshot. Failure of optional
 /// assistance leaves the original observation available without retrying input.
 pub(in crate::mcp) fn enrich_snapshot(task_id: &str, session: &str, response: &mut Value) {
-    let Some(text) = response.pointer("/content/0/text").and_then(Value::as_str) else { return; };
-    let Ok(mut payload) = serde_json::from_str::<Value>(text) else { return; };
-    if payload["success"] != true || !payload["data"].is_object() { return; }
+    let Some(text) = response.pointer("/content/0/text").and_then(Value::as_str) else {
+        return;
+    };
+    let Ok(mut payload) = serde_json::from_str::<Value>(text) else {
+        return;
+    };
+    if payload["success"] != true || !payload["data"].is_object() {
+        return;
+    }
     match observe(task_id, session) {
-        Ok(Some(hint)) => { payload["data"]["loginGuidance"] = hint; }
+        Ok(Some(hint)) => {
+            payload["data"]["loginGuidance"] = hint;
+        }
         Ok(None) => return,
         Err(_) => {
             payload["data"]["loginGuidance"] = json!({"status":"unavailable","taskId":task_id,
@@ -86,13 +119,17 @@ pub(in crate::mcp) fn enrich_snapshot(task_id: &str, session: &str, response: &m
                 "recovery":"Keep this task. Use ordinary observation and supported Auth guidance; do not replay uncertain input."});
         }
     }
-    if let Ok(text) = serde_json::to_string(&payload) { response["content"][0]["text"] = json!(text); }
+    if let Ok(text) = serde_json::to_string(&payload) {
+        response["content"][0]["text"] = json!(text);
+    }
 }
 
 /// Observation failure retains the original error and points to same-task
 /// readback. It never declares a lost browser or authorizes replacement input.
 pub(in crate::mcp) fn observation_recovery(task_id: &str, error: &mut JsonRpcError) {
-    if error.data.is_none() { error.data = Some(json!({})); }
+    if error.data.is_none() {
+        error.data = Some(json!({}));
+    }
     if let Some(data) = error.data.as_mut().and_then(Value::as_object_mut) {
         data.insert("loginRecovery".into(), json!({"taskId":task_id,"classification":"observation_unavailable",
             "browserLost":false,"effectOutcome":"unchanged_by_hint","replayAllowed":false,
@@ -102,17 +139,23 @@ pub(in crate::mcp) fn observation_recovery(task_id: &str, error: &mut JsonRpcErr
 }
 
 fn observe(task_id: &str, session: &str) -> Result<Option<Value>, JsonRpcError> {
-    let guides = guide_names()?.iter().map(|name|load_guide(name)).collect::<Result<Vec<_>,_>>()?;
+    let guides = guide_names()?
+        .iter()
+        .map(|name| load_guide(name))
+        .collect::<Result<Vec<_>, _>>()?;
     let descriptors = guides.iter().filter(|guide|guide.authenticated_selector.is_some() && !guide.states.is_empty()).map(|guide| {
         let branches = guide.login_guidance.as_ref().map(|m|m.provider_branches.iter().map(|branch|json!({"branchId":branch.branch_id,"startingOrigin":branch.starting_origin,"selector":branch.selector})).collect::<Vec<_>>()).unwrap_or_default();
         json!({"guideId":guide.guide_id,"origins":guide.allowed_origins,"authenticated":guide.authenticated_selector,
             "states":guide.states,"branches":branches})
     }).collect::<Vec<_>>();
-    if descriptors.is_empty() { return Ok(None); }
+    if descriptors.is_empty() {
+        return Ok(None);
+    }
     let binding = task_context(task_id)?;
     // Only installed descriptors enter the script. Website strings are never
     // parsed as instructions, guide metadata or credential-use authority.
-    let script = format!(r#"(() => {{
+    let script = format!(
+        r#"(() => {{
         const guides={}; const origin=location.origin;
         const visible=selector=>{{try{{return [...document.querySelectorAll(selector)].some(element=>element.getClientRects().length>0 && getComputedStyle(element).visibility!=='hidden');}}catch{{return false;}}}};
         const matches=[];
@@ -123,18 +166,40 @@ fn observe(task_id: &str, session: &str) -> Result<Option<Value>, JsonRpcError> 
             matches.push({{guideId:guide.guideId,state:state.state,branches:guide.branches.map(branch=>({{branchId:branch.branchId,observed:branch.startingOrigin===origin && visible(branch.selector)}}))}});
         }}
         return {{origin,matches}};
-    }})()"#, serde_json::to_string(&descriptors).map_err(|_|fault("siteguide_metadata_invalid"))?);
-    let observed = super::super::workflow::execute(json!({"id":uuid::Uuid::new_v4().to_string(),"action":"evaluate",
-        "script":script,"sessionName":binding["sessionName"],"sessionId":task_id}), session)?;
-    if task_context(task_id)? != binding { return Err(fault("login_guidance_task_changed")); }
+    }})()"#,
+        serde_json::to_string(&descriptors).map_err(|_| fault("siteguide_metadata_invalid"))?
+    );
+    let observed = super::super::workflow::execute(
+        json!({"id":uuid::Uuid::new_v4().to_string(),"action":"evaluate",
+        "script":script,"sessionName":binding["sessionName"],"sessionId":task_id}),
+        session,
+    )?;
+    if task_context(task_id)? != binding {
+        return Err(fault("login_guidance_task_changed"));
+    }
     let evidence = &observed["result"];
-    let origin = evidence["origin"].as_str().ok_or_else(||fault("login_guidance_observation_invalid"))?;
-    let matches = evidence["matches"].as_array().ok_or_else(||fault("login_guidance_observation_invalid"))?;
-    if matches.is_empty() { return Ok(None); }
+    let origin = evidence["origin"]
+        .as_str()
+        .ok_or_else(|| fault("login_guidance_observation_invalid"))?;
+    let matches = evidence["matches"]
+        .as_array()
+        .ok_or_else(|| fault("login_guidance_observation_invalid"))?;
+    if matches.is_empty() {
+        return Ok(None);
+    }
     let mut candidates = Vec::new();
     for observed in matches.iter().take(4) {
-        let Some(guide) = guides.iter().find(|guide|observed["guideId"] == guide.guide_id && guide.allowed_origins.iter().any(|allowed|allowed==origin)) else { continue; };
+        let Some(guide) = guides.iter().find(|guide| {
+            observed["guideId"] == guide.guide_id
+                && guide
+                    .allowed_origins
+                    .iter()
+                    .any(|allowed| allowed == origin)
+        }) else {
+            continue;
+        };
         let mut candidate = summary(guide);
+        candidate["allowedOrigins"] = json!([origin]);
         candidate["observedState"] = observed["state"].clone();
         candidate["providerBranches"] = json!(guide.login_guidance.as_ref().map(|metadata|metadata.provider_branches.iter().map(|branch|json!({
             "branchId":branch.branch_id,"startingOrigin":branch.starting_origin,"providerOrigin":branch.provider_origin,"returnOrigin":branch.return_origin,
@@ -143,11 +208,15 @@ fn observe(task_id: &str, session: &str) -> Result<Option<Value>, JsonRpcError> 
         candidate["nextOperation"] = json!({"tool":"browser_command","taskId":task_id,"action":"playbook","params":{"operation":"inspect_guide","guideId":guide.guide_id}});
         candidates.push(candidate);
     }
-    if candidates.is_empty() { return Ok(None); }
-    Ok(Some(json!({"status":if candidates.len()>1 {"ambiguous"} else {"available"},
+    if candidates.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(
+        json!({"status":if candidates.len()>1 {"ambiguous"} else {"available"},
         "taskId":task_id,"profileId":binding["profileId"],"browserId":binding["browserId"],"tabId":binding["tabId"],
         "origin":origin,"evidence":"current_installed_selector_observation","credentialUseAuthorized":false,
         "candidates":candidates,"truncated":matches.len()>4,
         "pathwayOrder":["browser_saved_credentials","lastpass_if_applicable","auth_receipts"],
-        "next":"Inspect applicable guidance. Use Native capture/input for browser selectors and LastPass; verify intended website identity independently. Multiple matches require context, never first-match account selection."})))
+        "next":"Inspect applicable guidance. Use Native capture/input for browser selectors and LastPass; verify intended website identity independently. Multiple matches require context, never first-match account selection."}),
+    ))
 }
