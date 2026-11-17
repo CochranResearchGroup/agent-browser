@@ -563,6 +563,16 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
             Self::Remote(effects) => effects.begin_operation(expected),
         }
     }
+    fn begin_browser_operation(
+        &mut self,
+        expected: &BrowserSessionState,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<(), String> {
+        match self {
+            Self::Local(effects) => effects.begin_browser_operation(expected, browser),
+            Self::Remote(effects) => effects.begin_browser_operation(expected, browser),
+        }
+    }
     fn begin_retained_observation(
         &mut self,
         expected: &BrowserSessionState,
@@ -1036,6 +1046,21 @@ mod tests {
                 .attach_app_browser(&request, &profile, &desktop)
                 .unwrap_err(),
             "remote_view_session_operation_baseline_missing"
+        );
+        let unknown = ManagedBrowserInstance {
+            id: "unknown-browser".into(),
+            profile_id: "profile".into(),
+            pid: 0,
+            cdp_endpoint: String::new(),
+            desktop: None,
+            active_session_ids: vec![],
+        };
+        assert_eq!(
+            effects
+                .begin_browser_operation(&BrowserSessionState::default(), &unknown)
+                .unwrap_err(),
+            "browser_session_operation_target_changed",
+            "the concrete wrapper must forward selected-browser admission",
         );
         effects
             .begin_operation(&BrowserSessionState::default())
