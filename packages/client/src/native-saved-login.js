@@ -162,6 +162,7 @@ export function describeNativeLoginPathways(context) {
  ]);
  let nextStep={pathway:'browser_saved',operation:'native_capture',reason:'inspect_browser_saved_credentials_first'};
  if(uncertainInput)nextStep={pathway:'original_attempt',operation:'task_operation',reason:'reconcile_original_input_before_fallback'};
+ else if(nativeInputState==='unknown')nextStep={pathway:'browser_saved',operation:'native_ready',reason:'observe_same_task_native_readiness_before_fallback'};
  else if(nativeInputState!=='ready')nextStep={pathway:'auth_receipts',operation:'auth_capabilities',reason:nativeInputState==='disabled'?'native_input_disabled_not_missing_credentials':'native_input_readiness_unverified'};
  else if(savedCredentialState==='available')nextStep=accountSelection==='resolved'
   ?{pathway:'browser_saved',operation:savedLoginRoutine==='applicable'?'createNativeSavedLoginClient.resolve':'native_capture',reason:savedLoginRoutine==='applicable'?'reuse_saved_login_original_episode':'inspect_selector_for_semantic_native_selection'}

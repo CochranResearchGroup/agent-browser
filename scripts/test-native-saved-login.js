@@ -230,3 +230,11 @@ test('guidance excludes unrelated caller properties and URL secrets',()=>{
  assert(!JSON.stringify(advice).includes('synthetic-private-value'));
  for(const origin of ['https://app.example.test/login?token=private','https://user:password@app.example.test','file:///tmp/private','https://'+'a'.repeat(4096)+'.test'])assert.throws(()=>describeNativeLoginPathways({...guidanceContext,origin}),/native_login_guidance_origin_required/);
 });
+test('unknown Native readiness observes the same profile before considering Auth fallback',()=>{
+ const advice=describeNativeLoginPathways({binding:guidanceContext.binding,origin:guidanceContext.origin});
+ assert.equal(advice.nextStep.pathway,'browser_saved');
+ assert.equal(advice.nextStep.operation,'native_ready');
+ assert.equal(advice.taskId,'task');assert.equal(advice.profileId,'profile');
+ assert.equal(advice.browserEffects,'none');
+ assert.equal(describeNativeLoginPathways({...guidanceContext,nativeInputState:'unknown',uncertainInput:true}).nextStep.operation,'task_operation');
+});
