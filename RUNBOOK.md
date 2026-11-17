@@ -1,3 +1,5 @@
+[P305 semantic-worker logins](docs/dev/plans/0305-2026-11-17-semantic-worker-logins-723.md), spec723 / draft PR733: all four source slices are integrated on recipes/spec723-integration;728 and729 are source-validated/CLOSED.726 and730 need candidate-backed GREEN and Rust gates;731/732 remain blocked, with actual task/account selection pending. JS/types/docs and task-owned guidance-copy readback pass. No production replacement or live authentication; final review/remediation remain0.
+
 ## Contacts task recovery deployed | 2026-11-16
 
 [718](https://github.com/CochranResearchGroup/agent-browser/pull/718),
