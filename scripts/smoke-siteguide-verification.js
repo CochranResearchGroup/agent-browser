@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {createPlaybookClient} from '../packages/client/src/playbooks.js';
 import {createServer} from 'node:http';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawn} from 'node:child_process';
 import {existsSync,mkdirSync,readFileSync,readlinkSync,readdirSync,realpathSync,writeFileSync} from 'node:fs';
 import {isAbsolute,join} from 'node:path';
 import {createMcpStdioClient,createSmokeContext,rootDir} from './smoke-utils.js';
@@ -38,10 +38,14 @@ writeFileSync(join(directory,guideId+'.json'),JSON.stringify({schemaVersion:'age
  states:[{state:'password_required',selector:controls.password},{state:'identifier_required',selector:controls.identifier},{state:'mfa_required',selector:'input[autocomplete=one-time-code]'}]}));
 const client=createMcpStdioClient({context,args:['mcp','serve'],onFatal:()=>{}});
 const tasks=[];
+let fixtureBrowser,fixtureBrowserExit;
 async function call(name,args){const result=await client.send('tools/call',{name,arguments:args});const payload=JSON.parse(result.content.find(item=>item.type==='text').text);assert.equal(payload.success,true,JSON.stringify(payload));return payload.data;}
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function cleanup(){
  client.close();await wait(150);
+ // This exact child belongs to the fixture; public adopted-task close preserves its owner.
+ if(fixtureBrowser&&fixtureBrowser.exitCode===null&&fixtureBrowser.signalCode===null)fixtureBrowser.kill('SIGTERM');
+ if(fixtureBrowserExit)await fixtureBrowserExit;
  const file=join(context.socketDir,'runtime-host.pid');if(existsSync(file)){
   const pid=Number(readFileSync(file));try{const env=readFileSync(`/proc/${pid}/environ`,'utf8').split('\0');assert(env.includes(`HOME=${context.tempHome}`)&&env.includes(`AGENT_BROWSER_HOME=${context.agentHome}`));assert.equal(readlinkSync(`/proc/${pid}/exe`),realpathSync(binary));process.kill(pid,'SIGTERM');}catch(error){if(error.code!=='ENOENT')throw error;}
  }
@@ -53,7 +57,22 @@ try {
  await client.send('initialize',{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'siteguide-verification',version:'1'}});client.notify('notifications/initialized');
  const discovery=await call('browser_discover',{category:'playbooks'});assert(discovery.operations.includes('verify_login'));
  console.log('Public SiteGuide routine discovery passed');
- const alice=await call('browser_open',{serviceName:'siteguide-verification-fixture',agentName:'synthetic-software-client',taskName:'Verify intended synthetic account and company',profile:'siteguide-fixture',profileMode:'persistent',taskKey:'alice',url:origin});tasks.push(alice.taskId);
+ // Exercise the supported adoption path: Local fresh launch has no Native custody ledger.
+ // The owner independently observes this actual profile/process through normal browser_open.
+ const created=JSON.parse(execFileSync(binary,['--json','runtime','create','siteguide-fixture'],{env:context.env,encoding:'utf8'}));
+ assert.equal(created.created,true);const profile=realpathSync(created.userDataDir);
+ assert(profile.startsWith(realpathSync(context.tempHome)+'/'),'Only the disposable fixture profile may be launched');
+ fixtureBrowser=spawn(realpathSync(chrome),['--headless=new','--no-sandbox','--disable-dev-shm-usage','--no-first-run','--no-default-browser-check','--remote-debugging-port=0',`--user-data-dir=${profile}`,origin],{env:context.env,stdio:['ignore','ignore','pipe']});
+ fixtureBrowserExit=new Promise(resolve=>fixtureBrowser.once('close',resolve));
+ await new Promise((resolve,reject)=>{
+  let output='';
+  fixtureBrowser.once('error',reject);
+  fixtureBrowser.once('exit',()=>reject(Error('Owned fixture browser exited before readiness')));
+  fixtureBrowser.stderr.on('data',chunk=>{output=(output+chunk).slice(-8192);if(output.includes('DevTools listening on ws://'))resolve();});
+ });
+ assert.equal(readlinkSync(join(profile,'SingletonLock')).endsWith(`-${fixtureBrowser.pid}`),true,'Chrome owns its real profile lock');
+ console.log('Fixture precondition: one owned external Chrome adopted through the public profile path');
+ const alice=await call('browser_open',{serviceName:'siteguide-verification-fixture',agentName:'synthetic-software-client',taskName:'Verify intended synthetic account and company',profile:'siteguide-fixture',profileMode:'existing',taskKey:'alice',url:origin});tasks.push(alice.taskId);
  const guide=await call('browser_command',{taskId:alice.taskId,action:'playbook',params:{operation:'inspect_guide',guideId}});assert.equal(guide.guideId,guideId);
  const bob=await call('browser_open',{serviceName:'siteguide-verification-fixture',agentName:'synthetic-peer',taskName:'Preserve unrelated synthetic peer work',profile:'siteguide-fixture',profileMode:'existing',taskKey:'bob',url:'data:text/html,<p>Peer work preserved</p>'});tasks.push(bob.taskId);
  const identity={accountRef,...(personal?{}:{organizationRef})};
