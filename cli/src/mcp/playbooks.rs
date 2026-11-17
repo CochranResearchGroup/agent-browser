@@ -4,6 +4,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use super::JsonRpcError;
+pub(super) mod guidance;
 mod retrieval;
 mod teaching;
 
@@ -121,6 +122,9 @@ struct SiteGuide {
     states: Vec<PageState>,
     controls: Option<LoginControls>,
     retrieval: Option<retrieval::RetrievalGuide>,
+    /// Optional source-declared login knowledge; import is not execution proof.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    login_guidance: Option<guidance::LoginGuidance>,
     /// Inert agent-prepared teaching knowledge; inspection is not execution approval.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     teaching: Option<teaching::TeachingDraft>,
@@ -208,6 +212,9 @@ fn validate_guide(guide: &SiteGuide, guide_id: &str) -> Result<(), JsonRpcError>
         || guide.name.len() > 256
     {
         return Err(fault("siteguide_contract_invalid"));
+    }
+    if let Some(metadata) = &guide.login_guidance {
+        metadata.validate(guide)?;
     }
     for origin in &guide.allowed_origins {
         let url = url::Url::parse(origin).map_err(|_| fault("siteguide_origin_invalid"))?;
@@ -359,7 +366,7 @@ pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, 
         task_context(task_id)?;
     }
     if operation == "siteguides" {
-        let data = json!({"guides":guide_names()?});
+        let data = json!({"guides":guide_names()?,"guideSummaries":guidance::summaries()?});
         return Ok(super::tool_response_from_payload(
             "browser_command",
             transport_session,

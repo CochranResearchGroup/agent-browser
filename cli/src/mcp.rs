@@ -5508,7 +5508,21 @@ fn call_service_mcp_tool(
     configured_service_state: &ServiceState,
 ) -> Result<Value, JsonRpcError> {
     task_operations::with_context(params, || {
-        call_service_mcp_tool_inner(params, session, configured_service_state)
+        let mut result = call_service_mcp_tool_inner(params, session, configured_service_state)
+            .map_err(|mut error| {
+                if let Some(params) = params.filter(|value| value["name"] == "browser_snapshot") {
+                    if let Some(task_id) = params["arguments"]["taskId"].as_str() {
+                        playbooks::guidance::observation_recovery(task_id, &mut error);
+                    }
+                }
+                error
+            })?;
+        if let Some(params) = params.filter(|value| value["name"] == "browser_snapshot") {
+            if let Some(task_id) = params["arguments"]["taskId"].as_str() {
+                playbooks::guidance::enrich_snapshot(task_id, session, &mut result);
+            }
+        }
+        Ok(result)
     })
 }
 
