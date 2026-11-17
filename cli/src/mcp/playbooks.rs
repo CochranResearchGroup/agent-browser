@@ -41,8 +41,8 @@ pub(super) fn schema(operation: &str) -> Result<Value, JsonRpcError> {
         "inspect_guide" => json!(["guideId"]),
         "validate_teaching_candidate" => json!(["guide"]),
         "collect_posts" => json!(["guideId"]),
-        "validate_plan" => json!(["guideId", "accountRef", "organizationRef", "plan"]),
-        _ => json!(["guideId", "accountRef", "organizationRef"]),
+        "validate_plan" => json!(["guideId", "accountRef", "plan"]),
+        _ => json!(["guideId", "accountRef"]),
     };
     Ok(json!({"type":"object","additionalProperties":false,
         "properties":properties,"required":required}))
@@ -97,6 +97,14 @@ struct LoginControls {
     identifier_submit: Option<String>,
 }
 
+/// Login verification scope. Omission on existing guides retains organization checks.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum IdentityScope {
+    Personal,
+    Organization,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SiteGuide {
@@ -107,6 +115,9 @@ struct SiteGuide {
     authenticated_selector: Option<String>,
     account: Option<IdentityField>,
     organization: Option<IdentityField>,
+    /// Explicit personal scope needs account proof only; legacy guides remain organization scoped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    identity_scope: Option<IdentityScope>,
     states: Vec<PageState>,
     controls: Option<LoginControls>,
     retrieval: Option<retrieval::RetrievalGuide>,
@@ -210,9 +221,13 @@ fn validate_guide(guide: &SiteGuide, guide_id: &str) -> Result<(), JsonRpcError>
         && guide.teaching.is_none()
         && (guide.authenticated_selector.is_none()
             || guide.account.is_none()
-            || guide.organization.is_none())
+            || (guide.identity_scope != Some(IdentityScope::Personal)
+                && guide.organization.is_none()))
     {
         return Err(fault("siteguide_contract_invalid"));
+    }
+    if guide.identity_scope == Some(IdentityScope::Personal) && guide.organization.is_some() {
+        return Err(fault("siteguide_personal_organization_conflict"));
     }
     if let Some(teaching) = &guide.teaching {
         teaching.validate()?;
@@ -405,12 +420,23 @@ pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, 
         .account
         .as_ref()
         .ok_or_else(|| fault("siteguide_login_contract_missing"))?;
-    let organization_field = guide
-        .organization
-        .as_ref()
-        .ok_or_else(|| fault("siteguide_login_contract_missing"))?;
+    let identity_scope = guide.identity_scope.unwrap_or(IdentityScope::Organization);
     let account = required_reference(params, "accountRef")?;
-    let organization = required_reference(params, "organizationRef")?;
+    // A supplied organization is a requested obligation, never silently discarded.
+    let organization = if identity_scope == IdentityScope::Organization {
+        Some(required_reference(params, "organizationRef")?)
+    } else {
+        if params.get("organizationRef").is_some() {
+            return Err(fault("personal_organization_not_applicable"));
+        }
+        None
+    };
+    let organization_descriptor = match (&guide.organization, &organization) {
+        (Some(field), Some(expected)) => json!({"selector":field.selector,
+            "attribute":field.attribute,"expected":expected}),
+        (None, None) => Value::Null,
+        _ => return Err(fault("siteguide_login_contract_missing")),
+    };
     let maximum_age = match params.get("maxObservationAgeMs") {
         Some(value) => value
             .as_u64()
@@ -423,7 +449,7 @@ pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, 
     let binding_digest = digest(&json!([binding, account, organization]))?;
     let descriptor = json!({"origins":guide.allowed_origins,"authenticated":authenticated,
         "account":{"selector":account_field.selector,"attribute":account_field.attribute,"expected":account},
-        "organization":{"selector":organization_field.selector,"attribute":organization_field.attribute,"expected":organization},
+        "organization":organization_descriptor,
         "states":guide.states.iter().map(|state|json!({"state":state.state,"selector":state.selector})).collect::<Vec<_>>(),
         "controls":guide.controls});
     let script = format!(
@@ -448,7 +474,7 @@ pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, 
         }});
         return {{origin,originAllowed:true,authenticated,
             accountMatched:authenticated && matchIdentity(guide.account),
-            organizationMatched:authenticated && matchIdentity(guide.organization),
+            organizationMatched:authenticated && guide.organization !== null && matchIdentity(guide.organization),
             state:state ? state.state : 'site_changed',controlState}};
     }})()"#
     );
@@ -471,7 +497,10 @@ pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, 
         ("failed", "origin_mismatch")
     } else if evidence["authenticated"] == true && evidence["accountMatched"] != true {
         ("failed", "account_mismatch")
-    } else if evidence["authenticated"] == true && evidence["organizationMatched"] != true {
+    } else if evidence["authenticated"] == true
+        && identity_scope == IdentityScope::Organization
+        && evidence["organizationMatched"] != true
+    {
         ("failed", "organization_mismatch")
     } else if evidence["authenticated"] == true {
         ("completed", "authenticated")
@@ -591,7 +620,9 @@ pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, 
     let data = json!({"schemaVersion":"agent-browser.routine-result.v1","guideId":guide.guide_id,
         "routine":operation,"status":status,"reasonCode":reason,"effectState":"no_effect",
         "taskId":task_id,"profileId":binding["profileId"],"browserId":binding["browserId"],"tabId":binding["tabId"],
-        "accountVerified":reason=="authenticated","organizationVerified":reason=="authenticated",
+        "accountVerified":reason=="authenticated",
+        "identityScope":identity_scope,
+        "organizationVerified":reason=="authenticated" && identity_scope==IdentityScope::Organization,
         "guideDigest":guide_digest,"plan":prepared,
         "observationElapsedMs":started.elapsed().as_millis()});
     Ok(super::tool_response_from_payload(
