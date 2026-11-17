@@ -29,7 +29,7 @@ Four independent source slices run within four agent slots; root integrates seri
 | #728 | Browser autofill/LastPass pathway guidance | none | login_pathways / recipes/spec723-pathways | saved-login client, focused tests, all shared help/README/skill/docs-site guidance | validated; CLOSED |
 | #729 | Auth recovery diagnostics | none | auth_continuation / recipes/spec723-auth | owner-login composition/types and public recovery tests | validated; CLOSED |
 | #730 | Contextual guide discovery | none | root / recipes/spec723-integration | MCP observation enrichment and guide guidance module; parent playbooks edits only after726 freezes | validated; CLOSED |
-| #731 | Integrated fresh-worker acceptance | #726, #728, #729, #730 | root after source integration | existing public workflow and installed/development guidance qualification | pending |
+| #731 | Integrated fresh-worker acceptance | #726, #728, #729, #730 | root after source integration | existing public workflow and installed/development guidance qualification | validated; CLOSED |
 | #732 | Actual installed paths and factors | #731 | root; exact acceptance inputs required | private runtime receipts outside Git and public bounded disposition | pending |
 
 Shared writer: #726 initially owns playbooks.rs; root supplies an isolated child module and applies the narrow parent integration after freeze. #728 owns shared user-facing docs; other workers supply bullets. Root owns package scripts, CONTEXT, plan/catalog and integration. All worker bases are the integration base above; results and validation are appended on integration.
@@ -72,7 +72,7 @@ All three owned worker auxiliaries are cleanly removed after exact remote SHA an
 
 ## Resumed source qualification, 2026-11-17
 
-This checkpoint supersedes the earlier resource and fixture blockers above. Main48174c314 is merged as32c8f1a41. Worker adoption and identity guards are integrated as9298c65d6 and8db1dbbfe. #726 and #730 are CLOSED. #728 and #729 remain CLOSED. Root owns #731; #732 remains awaiting an actual selected signed-out task/profile/site/account and applicable unlock authority. No other ticket is independently executable.
+This checkpoint supersedes the earlier resource and fixture blockers above. Main48174c314 is merged as32c8f1a41. Worker adoption and identity guards are integrated as9298c65d6 and8db1dbbfe. #726 and #730 are CLOSED. #728 and #729 remain CLOSED. Root completed #731 (CLOSED); #732 remains awaiting an actual selected signed-out task/profile/site/account and applicable unlock authority. No other ticket is independently executable.
 
 The candidate compiled from32c8f1a41 passes cargo-safe build, full format and strict workspace Clippy. Candidate SHA256:73305ab87bb2a384873814b1266dc70a129ddf36fa4c6703672ad70ebcaa7742. Later changes are JavaScript and evidence only. The public fixture now adopts its own real Chrome child using the public existing-profile path; it does not manufacture process identity or weaken admission. Personal, organization, changed-account, changed-control, evidence and real-expiry guards pass. Contextual guidance passes observed-provider, authored-qualification and ordinary-fallback checks. Every browser fixture reports zero owned process residue.
 
