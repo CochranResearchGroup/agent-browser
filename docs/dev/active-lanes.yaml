@@ -9,13 +9,13 @@ lanes:
     branch: recipes/spec723-integration
     target: main
     accountable_owner: ecochran76
-    work_items: [CochranResearchGroup/agent-browser#723, CochranResearchGroup/agent-browser#726, CochranResearchGroup/agent-browser#728, CochranResearchGroup/agent-browser#729, CochranResearchGroup/agent-browser#730, CochranResearchGroup/agent-browser#731, CochranResearchGroup/agent-browser#732]
+    work_items: [CochranResearchGroup/agent-browser#723, CochranResearchGroup/agent-browser#726, CochranResearchGroup/agent-browser#728, CochranResearchGroup/agent-browser#729, CochranResearchGroup/agent-browser#730, CochranResearchGroup/agent-browser#731, CochranResearchGroup/agent-browser#732, CochranResearchGroup/agent-browser#737, CochranResearchGroup/agent-browser#738]
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
     dependencies: []
     overlaps: [AUTH-CHANNEL-DISCOVERY-667, NATIVE-SAVED-LOGIN-596, P300]
     reconciled_overlaps: ["Root owns contextual observation; identity worker owns playbooks until freeze; pathway worker owns shared docs; preserve all foreign work and candidates; no runtime mutation"]
-    validation_status: 726,728,729,730 CLOSED; candidate build, format, strict Clippy and public source journey pass;731 CLOSED;732 needs actual target; final review0 remediation0
+    validation_status: 726,728,729,730 CLOSED; candidate build, format, strict Clippy and public source journey pass;731 CLOSED;732 actual attempt held by Native operator control and Auth receiving bridge;737 root;738 worker; final review0 remediation0
     limitations: ["Actual installed autofill, LastPass and individual Auth factors require separate bounded evidence", "Initial inventory retains11 present checkouts and7 missing registrations; no foreign cleanup"]
     updated_at: 2026-11-17
   - id: INSTALL-DOCTOR-HOME-734

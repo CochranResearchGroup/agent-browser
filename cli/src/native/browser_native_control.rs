@@ -467,6 +467,15 @@ pub fn execute(
                 &json!({"desktopId":target.viewing_desktop_id,
                 "expectedGeneration":target.viewing_generation,"operation":"status"}),
             )?;
+            // Cooperative browser control does not release Native human control.
+            // Preserve the owner and request explicit return on the same handoff.
+            if control["desktopId"] == target.viewing_desktop_id
+                && control["generation"] == target.viewing_generation
+                && control["owner"] == "operator"
+                && control["epoch"].as_u64().is_some()
+            {
+                return Err("browser_native_operator_control:explicit Native return required on the existing handoff; no input dispatched".into());
+            }
             if control["desktopId"] != target.viewing_desktop_id
                 || control["generation"] != target.viewing_generation
                 || control["owner"] != "agent"

@@ -143,6 +143,61 @@ fn native_task_capture_is_fenced_to_the_browser_window_without_input() {
 }
 
 #[test]
+fn native_login_capture_reports_operator_control_without_capture_or_input() {
+    struct OperatorOwner(NativeFixture);
+    impl browser_native_control::NativeOwner for OperatorOwner {
+        fn request(
+            &mut self,
+            operation: &str,
+            body: &serde_json::Value,
+        ) -> Result<serde_json::Value, String> {
+            if operation == "control" {
+                self.0.calls.push((operation.into(), body.clone()));
+                return Ok(
+                    serde_json::json!({"desktopId":"viewing","generation":9,"owner":"operator","epoch":1}),
+                );
+            }
+            assert_eq!(
+                operation, "observe",
+                "Operator control must never dispatch capture or input"
+            );
+            self.0.request(operation, body)
+        }
+    }
+    let original = agent_browser_service_model::RecordedProcessIdentity {
+        pid: 42,
+        start_token: "linux:boot:11".into(),
+        executable_path: Some("/synthetic/chrome".into()),
+        browser_family: Some("chrome".into()),
+    };
+    let target = agent_browser_service_model::RemoteViewApplicationTarget {
+        assignment_id: "assignment".into(),
+        registration_id: "registration".into(),
+        desktop_id: "lifecycle".into(),
+        lifecycle_generation: 2,
+        viewing_desktop_id: "viewing".into(),
+        viewing_generation: 9,
+    };
+    let mut owner = OperatorOwner(NativeFixture { calls: vec![] });
+    let error = browser_native_control::execute(&original, &target,
+        &serde_json::json!({"action":"native_capture","loginControls":{"profile":"english-chrome-v1"}}), &mut owner).unwrap_err();
+    assert!(
+        error.starts_with("browser_native_operator_control:"),
+        "{error}"
+    );
+    assert!(error.contains("existing handoff"));
+    assert_eq!(
+        owner
+            .0
+            .calls
+            .iter()
+            .map(|(operation, _)| operation.as_str())
+            .collect::<Vec<_>>(),
+        vec!["observe", "control"]
+    );
+}
+
+#[test]
 fn native_task_window_remediation_uses_only_the_verified_window() {
     struct RemediationOwner(NativeFixture);
     impl browser_native_control::NativeOwner for RemediationOwner {

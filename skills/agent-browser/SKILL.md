@@ -177,3 +177,5 @@ outcomes remain retained; this never permits replay or private/native input.
 
 
 If the task has no tab (`mode_operation_tab_missing`), create one through `browser_tab` with `operation: "new"` and a stable `tabKey`, using `about:blank` or an explicitly requested read-only URL. This rejoins the verified browser without removing profile data. Then prepare the restart with the same operation ID. A recovery tab is a new action; it does not resolve or replay the original uncertain action.
+
+Native login capture can report `browser_native_operator_control`: use the existing ready handoff for explicit desktop return. Cooperative task ownership does not release Native operator control.

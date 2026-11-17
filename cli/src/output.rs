@@ -7511,6 +7511,7 @@ Commands:
   host-control      Reconcile terminal uncertainty on the exact owned task; never replay.
   Completed DOM clicks may use exact owner-terminal producer provenance with a live shared supervisor; native/private input keeps its dispatcher-exit guard.
   Native saved login uses journaled MCP browser_command; convenience CLI refuses login controls/targets.
+  Native operator control requires explicit return through the existing handoff; cooperative browser ownership is separate.
   host-reconnect TASK OP [options-json] Status/disconnect/reconnect/rebind/configure/reopen
   host-policy JSON  App/task rules and scoped override
 
