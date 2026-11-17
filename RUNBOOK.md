@@ -681,14 +681,26 @@ managed browser identities survive. Retained SIGPIPE fixture flake, stale client
 transport and corrected snapshot oracle are explicit in the acceptance note.
 No LinkedIn latency, all-source UI or historical error attribution claim.
 
-### Contacts LinkedIn command scope — source validated
+### Contacts command scope installed and UI job verified (2026-11-17)
 
-[Selected-browser maintenance](docs/dev/maintenance/contacts-browser-command-scope.md)
-on fix/contacts-browser-command-scope reproduces3peer original-process observations
-for one page read, then passes with0peer observations and selected-profile checks
-retained. The concrete runtime now forwards existing selected-browser scope.
-All27selected consumer/wrapper tests and strict production-binary Clippy pass.
-Changes remain local and uncommitted; installed binaryabdbd60b73db is unchanged.
-Stable Time-qualified installed baseline passes initial profile readiness within
-32.127seconds; full source acquisition upper76.833seconds. The patch's installed
-speedup is unverified and awaits release comparison.
+[Selected-browser correction](docs/dev/maintenance/contacts-browser-command-scope.md),
+PR727, and [doctor isolation correction](docs/dev/maintenance/install-doctor-home-isolation.md),
+PR735, are merged and installed as sealed binary408821d0c76f. The preserving
+transaction is accepted; standalone doctor passes with one supervised host.
+All14 original managed browser identities survive. Original service-probe failure,
+forward replacement, obsolete-daemon retirement and passing guarded resume are
+retained. Exact installer fixture passed on an unchanged-assertion diagnostic
+repeat after an unresolved null-retirement result; no first-pass clean claim.
+Local formatting and strict workspace Clippy pass; hosted CI omitted by policy.
+
+A native LinkedIn-only Enrich click completes all four stages, applies five
+updates and leaves one conflicting detail for review. Profile/career data and
+10connections are captured; the network remains partial. Spinner activity and
+completion are observed, with an intermittent reconnecting gap retained.
+
+Latency is not solved: the final quiet installed profile upper58.250seconds
+passes60seconds, but full acquisition upper129.289seconds exceeds the earlier
+76.833second observation. A trivial page read still costs upper9.940seconds.
+Next PL-BUGFIX diagnostic boundary is browser-command overhead; do not claim a
+speedup from zero peer observations or suppress source features. Native viewer
+journey remains an advisory doctor warning, separate from the Contacts workflow.

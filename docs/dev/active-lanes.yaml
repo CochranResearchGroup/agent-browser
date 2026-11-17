@@ -18,6 +18,21 @@ lanes:
     validation_status: All four source slices integrated through efe5388a1;728and729 CLOSED; JS/types/docs and task-owned guidance copy pass; Rust admission and public GREEN pending; final review0 remediation0
     limitations: ["Actual installed autofill, LastPass and individual Auth factors require separate bounded evidence", "Initial inventory retains11 present checkouts and7 missing registrations; no foreign cleanup"]
     updated_at: 2026-11-17
+  - id: INSTALL-DOCTOR-HOME-734
+    product_lane: PL-BUGFIX
+    objective: Isolate no-launch readiness probe from production Service State
+    plan: docs/dev/maintenance/install-doctor-home-isolation.md
+    branch: docs/contacts-linkedin-installed
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#734]
+    plan_state: CLOSED
+    custody_state: MERGED_RETAINED
+    dependencies: []
+    overlaps: []
+    reconciled_overlaps: ["Reuse canonical primary after727 merge; sole install.rs writer; preserve sealed727 candidate and existing forward recovery transaction; no additional checkout"]
+    validation_status: PR735 merged6ccb45df4; sealed408821d0c76f installed; guarded resume accepted revision17; standalone doctor passes with one host;14 browsers preserved; exact fixture passes repeat with retained null-retirement flake; LinkedIn UI job completes; no latency speedup
+    updated_at: 2026-11-17
   - id: ACTIVITY-METADATA-ADMISSION
     product_lane: PL-BUGFIX
     objective: Admit valid browser work despite unrelated stale metadata
