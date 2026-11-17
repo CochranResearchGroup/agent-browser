@@ -189,3 +189,44 @@ test('saved login resume never creates a fresh episode or extends a fully spent 
  const fresh=fixture();assert.equal((await createNativeSavedLoginClient({...fresh,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode',allowAcknowledgedResume:true})).reason,'native_saved_login_acknowledged_resume_unverified');assert.equal(fresh.episodes.size,0);
  const spent=fixture(),client=createNativeSavedLoginClient({...spent,expectedAccount:'configured@example.test'});await client.resolve({taskId:'task',episodeId:'episode'});const old=structuredClone(spent.episodes.get('episode'));assert.equal((await client.resolve({taskId:'task',episodeId:'episode',allowAcknowledgedResume:true})).reason,'native_saved_login_acknowledged_resume_unverified');assert.equal(spent.inputs.length,3);assert.deepEqual(spent.episodes.get('episode'),old);
 });
+
+// The public saved-login module also guides semantic workers without issuing
+// browser input or treating browser-owned UI as website DOM.
+const {describeNativeLoginPathways}=await import('../packages/client/src/native-saved-login.js');
+const guidanceContext={binding:{taskId:'task',profileId:'profile',browserId:'browser',tabId:'tab',targetId:'target'},origin:'https://app.example.test',accountSelection:'resolved',nativeInputState:'ready'};
+test('semantic login guidance checks this profile browser autofill first',()=>{
+ const advice=describeNativeLoginPathways(guidanceContext);
+ assert.equal(advice.taskId,'task');assert.equal(advice.profileId,'profile');
+ assert.equal(advice.origin,'https://app.example.test');
+ assert.equal(advice.nextStep.operation,'native_capture');
+ assert.equal(advice.nextStep.pathway,'browser_saved');
+ assert.deepEqual(advice.pathways.map(path=>path.id),['browser_saved','lastpass','auth_receipts']);
+ assert.equal(advice.pathways[0].interaction,'native_capture/native_input');
+ assert.equal(advice.browserEffects,'none');
+ assert.equal(advice.credentialPermission,'not_granted');
+});
+test('semantic fallback preserves uncertainty and distinguishes unavailable desktop from absent credentials',()=>{
+ const held=describeNativeLoginPathways({...guidanceContext,uncertainInput:true,savedCredentialState:'not_found',lastPassState:'active'});
+ assert.equal(held.nextStep.operation,'task_operation');
+ const disabled=describeNativeLoginPathways({...guidanceContext,nativeInputState:'disabled'});
+ assert.equal(disabled.nextStep.operation,'auth_capabilities');
+ assert.equal(disabled.nextStep.reason,'native_input_disabled_not_missing_credentials');
+ const matching=describeNativeLoginPathways({...guidanceContext,savedCredentialState:'available',savedLoginRoutine:'applicable'});
+ assert.equal(matching.nextStep.operation,'createNativeSavedLoginClient.resolve');
+ const unclear=describeNativeLoginPathways({...guidanceContext,savedCredentialState:'available',accountSelection:'ambiguous'});
+ assert.equal(unclear.nextStep.operation,'task_briefing');
+});
+test('LastPass guidance inspects the extension and tries Auth before an operator unblock',()=>{
+ const available=describeNativeLoginPathways({...guidanceContext,savedCredentialState:'not_found',lastPassState:'active'});
+ assert.equal(available.nextStep.pathway,'lastpass');assert.equal(available.nextStep.operation,'native_capture');
+ const locked=describeNativeLoginPathways({...guidanceContext,savedCredentialState:'not_found',lastPassState:'authentication_required',authState:'available'});
+ assert.equal(locked.nextStep.pathway,'auth_receipts');assert.equal(locked.nextStep.operation,'auth_capabilities');
+ const unblock=describeNativeLoginPathways({...guidanceContext,savedCredentialState:'not_found',lastPassState:'authentication_required',authState:'unavailable'});
+ assert.equal(unblock.nextStep.operation,'browser_handoff');
+ assert.equal(available.contextEvidence,'caller_supplied_requires_current_task_observation');
+});
+test('guidance excludes unrelated caller properties and URL secrets',()=>{
+ const advice=describeNativeLoginPathways({...guidanceContext,binding:{...guidanceContext.binding,password:'synthetic-private-value'}});
+ assert(!JSON.stringify(advice).includes('synthetic-private-value'));
+ for(const origin of ['https://app.example.test/login?token=private','https://user:password@app.example.test','file:///tmp/private','https://'+'a'.repeat(4096)+'.test'])assert.throws(()=>describeNativeLoginPathways({...guidanceContext,origin}),/native_login_guidance_origin_required/);
+});

@@ -7456,6 +7456,16 @@ Commands:
   Native login episode: same task/episode; at most3 ordered inputs; unknown input never replays
   Saved-login allowance: configurable invocation timeout(default300s); explicit verified ACK-prefix resume
   Native login proof: no password/OCR/image export; independent account verification required
+  Semantic logons: inspect signed-out guidance; this profile browser-saved credentials first
+  Snapshot loginGuidance: bounded guide/version/provenance and observed provider branches; inspect summaries
+  Autofill chooser: Native vision/input, never CDP/DOM or challenge desktop_interact
+  Saved-login describeNativeLoginPathways: bounded advisory context; no browser/Auth effects
+  LastPass: inspect red icon/three white dots plus actual UI/account; Native credentials/passkeys
+  Non-red LastPass: try suitable Auth fallback before same-task operator unblock
+  Auth factors: passwords/passkeys/TOTP/mail MFA/im MFA qualify separately; diagnose false blockers
+  Login identity: resolve account ambiguity; personal SiteGuides omit organization, legacy requires it
+  Login completion: verify website account/required organization and continue original work
+  Auth recovery: bounded classifications/nextOperations; unknown input blocks fallback, never retry
   browser-native TASK ACTION JSON Input/capture <=1Mpx
   browser-build JSON Inspect/select/open profile build
   Workspace Open browser: compact toolbar; disposable CDP-free is the default.
