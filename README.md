@@ -7882,3 +7882,5 @@ Convenience `mcp browser-native` loginControls/loginTarget calls are refused bef
 Discover browser operation `task_retirement`, then use `browser_command` with the original `taskId` and `params.choice`: `inspect` freezes an opaque `ownerBindingRef`; `retire` requires that ref as `expectedBindingRef` and a stable `operationId`; `status` reads the same operation ID after task removal. On an uncertain reply, inspect status before taking any further action.
 
 This Linux operation retires only exact original local metadata after the owning service verifies cross-boot process loss, profile vacancy, original launch custody and clear agent control. Missing proof, PID reuse, a changed generation or unresolved input keeps the task held. It sends no process signal and proves neither provider cleanup nor authentication. Historical routes without a previously frozen ref require qualified recovery rather than invented proof.
+
+A positively acknowledged Native capture refusal remains a terminal failure with no effect, never a successful capture or permission to retry. Older records without that proof and uncertain input remain held.

@@ -44,6 +44,8 @@ Follow explicit user instructions and service-specific login guidance. Use an av
 
 Preserve an already authenticated session. On a signed-out observation, inspect applicable login guidance early and check this browser/profile&apos;s saved credentials first. Focus the website login field, capture the browser-owned autofill selector, inspect its choices and select the intended account through Native desktop vision/input. CDP/DOM cannot operate that selector. Reuse the existing saved-login routine when applicable; otherwise supported semantic Native interaction can adapt to the layout without deterministic recognition as a prerequisite.
 
+A positively acknowledged Native capture refusal remains a terminal failure with no effect, never a successful capture or permission to retry. Older records without that proof and uncertain input remain held.
+
 <code>browser_native_operator_control</code> means Native desktop control remains with the operator. Request explicit return through the existing ready handoff; cooperative browser ownership cannot release it. This does not prove a missing credential or rejected login.
 
 Use <code>browser_discover</code> to inspect <code>browser_command</code> <code>native_capture</code>/<code>native_input</code> arguments. The restricted <code>desktop_interact</code> challenge recipes are not a general credential interface. Observe the same task with <code>native_capture</code> and respect current owner readiness/control checks. Disabled or unavailable input reports an integration limitation rather than proving credentials absent; never bypass provider policy.
