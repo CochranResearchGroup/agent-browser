@@ -81,6 +81,50 @@ try {
  const completed=await software.verifyLogin({taskId:alice.taskId,guideId,...identity});assert.equal(completed.status,'completed');assert.equal(completed.taskId,alice.taskId);assert.equal(completed.effectState,'no_effect');
  if(personal){assert.equal(completed.accountVerified,true);assert.equal(completed.organizationVerified,false,'Personal authentication must not claim organization proof');assert.equal(completed.identityScope,'personal');}
  const replay=await verify();assert.equal(replay.taskId,alice.taskId);assert.equal(replay.tabId,completed.tabId);
+ if(!personal){
+  await assert.rejects(()=>software.verifyLogin({taskId:alice.taskId,guideId,accountRef}));
+  assert.equal((await verify({organizationRef:'different-fixture-organization'})).reasonCode,'organization_mismatch');
+  writeFileSync(join(directory,guideId+'.json'),JSON.stringify({...guide,identityScope:'organization'}));
+  const explicitOrganization=await verify();
+  assert.equal(explicitOrganization.status,'completed');assert.equal(explicitOrganization.identityScope,'organization');
+  assert.equal(explicitOrganization.organizationVerified,true);
+  await assert.rejects(()=>software.verifyLogin({taskId:alice.taskId,guideId,accountRef}));
+  await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:`document.querySelector(${JSON.stringify('#'+appId)}).removeAttribute(${JSON.stringify(companyAttribute)})`}});
+  assert.equal((await verify()).reasonCode,'organization_mismatch');
+  await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:`document.querySelector(${JSON.stringify('#'+appId)}).setAttribute(${JSON.stringify(companyAttribute)},${JSON.stringify(organizationRef)})`}});
+ }
+ if(personal){
+  const wrongAccount=await verify({accountRef:'different-fixture-account'});
+  assert.equal(wrongAccount.reasonCode,'account_mismatch');assert.equal(wrongAccount.status,'failed');
+  assert.equal(wrongAccount.accountVerified,false);
+  const loginHtml='<form data-auth-account><input id=username><input id=password type=password><button id=submit>Sign in</button></form>';
+  await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:`document.body.innerHTML=${JSON.stringify(loginHtml)}`}});
+  const signedOut=await verify();
+  assert.equal(signedOut.reasonCode,'password_required');assert.equal(signedOut.status,'waiting');
+  assert.equal(signedOut.accountVerified,false);assert.equal(signedOut.organizationVerified,false);
+  const prepared=await software.prepareLogin({taskId:alice.taskId,guideId,...identity});
+  assert.equal(prepared.reasonCode,'plan_prepared');assert(prepared.plan);
+  const validated=await software.validatePlan({taskId:alice.taskId,guideId,...identity,plan:prepared.plan});
+  assert.equal(validated.reasonCode,'plan_current');assert.equal(validated.taskId,alice.taskId);
+  assert.equal(validated.effectState,'no_effect');
+  const retargeted=await software.validatePlan({taskId:alice.taskId,guideId,accountRef:'different-fixture-account',plan:prepared.plan});
+  assert.equal(retargeted.status,'adaptation_required');assert.equal(retargeted.reasonCode,'task_target_changed');
+  await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:"document.querySelector('#password').type='text'"}});
+  const changed=await software.validatePlan({taskId:alice.taskId,guideId,...identity,plan:prepared.plan});
+  assert.equal(changed.status,'adaptation_required');assert.equal(changed.reasonCode,'prepared_controls_changed');
+  await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:"document.querySelector('#password').type='password'"}});
+  if(process.env.AGENT_BROWSER_SMOKE_EXPIRED_PLAN_GATE==='1'){
+   console.log(JSON.stringify({expiryGate:{maximumAgeMs:prepared.plan.maximumAgeMs,planId:prepared.plan.planId}}));
+   await new Promise((resolve,reject)=>{
+    process.stdin.once('end',()=>reject(Error('Qualified Stable Time expiry release required')));
+    process.stdin.once('data',data=>data.toString().trim()==='continue'?resolve():reject(Error('Expected explicit expiry release')));
+   });process.stdin.pause();
+   const expired=await software.validatePlan({taskId:alice.taskId,guideId,...identity,plan:prepared.plan});
+   assert.equal(expired.status,'adaptation_required');assert.equal(expired.reasonCode,'plan_stale');
+   assert.equal(expired.effectState,'no_effect');console.log('Untouched original personal plan expiry refused: plan_stale');
+  }
+  console.log('Public personal account/authentication evidence, prepare and original-plan identity/control checks passed');
+ }
  if(process.env.AGENT_BROWSER_SMOKE_RETRIEVAL==='1')await runRetrievalFixture({call,software,taskId:alice.taskId,directory,origin});
  if(process.env.AGENT_BROWSER_SMOKE_GUIDE_AUTHORING==='1') {
   const {runAuthoringFixture}=await import('./siteguide-authoring-fixture.js');
