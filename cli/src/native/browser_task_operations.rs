@@ -1112,6 +1112,27 @@ fn screenshot_produced(response: &crate::connection::Response) -> bool {
         || length >= 12 && &header[..4] == b"RIFF" && &header[8..12] == b"WEBP"
 }
 
+/// A terminal, acknowledged refusal is distinct from unknown capture/input delivery.
+/// Only this reviewed Native producer code is emitted before capture or input.
+const NATIVE_CAPTURE_REFUSAL: &str = "browser_native_operator_control";
+
+pub(crate) fn native_capture_refusal(operation: &BrowserTaskOperation) -> Option<&'static str> {
+    (operation.action == "native_capture"
+        && operation.state == BrowserTaskOperationState::OwnerAcknowledged
+        && operation.completed_at_ms.is_some()
+        && operation
+            .evidence_references
+            .get("nativeCaptureOutcome")
+            .map(String::as_str)
+            == Some("refused_no_effect")
+        && operation
+            .evidence_references
+            .get("nativeCaptureFailureCode")
+            .map(String::as_str)
+            == Some(NATIVE_CAPTURE_REFUSAL))
+    .then_some(NATIVE_CAPTURE_REFUSAL)
+}
+
 /// Merge completion into the current owner document, tolerating unrelated task
 /// activity while preserving the original immutable dispatch identity.
 pub(crate) fn finish(
@@ -1126,6 +1147,29 @@ pub(crate) fn finish(
                 }))
     });
     let mut references = original.evidence_references.clone();
+    // A transport error or an unattributed/generic producer failure proves nothing.
+    // Do not backfill historical rows that never retained this acknowledged reply.
+    if original.action == "native_capture"
+        && response.is_some_and(|reply| {
+            !reply.success
+                && reply
+                    .id
+                    .as_deref()
+                    .is_none_or(|id| id == original.request_id)
+                && reply
+                    .error
+                    .as_deref()
+                    .and_then(|error| error.split(':').next())
+                    == Some(NATIVE_CAPTURE_REFUSAL)
+        })
+    {
+        acknowledged = true;
+        references.insert("nativeCaptureOutcome".into(), "refused_no_effect".into());
+        references.insert(
+            "nativeCaptureFailureCode".into(),
+            NATIVE_CAPTURE_REFUSAL.into(),
+        );
+    }
     if original.action == "native_input" && references.contains_key("nativeObservationRequestId") {
         let state = BrowserSessionSqliteStore::open_read_only(
             &BrowserSessionSqliteStore::default_sqlite_path()?,
