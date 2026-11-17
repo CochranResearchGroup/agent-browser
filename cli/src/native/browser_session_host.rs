@@ -956,7 +956,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         activity_at_ms: u64,
     ) -> Result<agent_browser_service_model::BrowserTabAcquisition, String> {
         let result = self
-            .manager()?
+            .session_manager(session_id)?
             .tab_for_navigation(session_id, activity_at_ms)?;
         self.commit_state()?;
         Ok(result)
@@ -968,9 +968,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         url: &str,
         visited_at_ms: u64,
     ) -> Result<agent_browser_service_model::BrowserNavigationRecord, String> {
-        let result = self
-            .manager()?
-            .record_navigation(session_id, url, visited_at_ms)?;
+        let result =
+            self.session_manager(session_id)?
+                .record_navigation(session_id, url, visited_at_ms)?;
         self.retain_handoff_destination(&result.tab_id, url);
         self.compact_navigation_history()?;
         self.commit_state()?;
@@ -2349,6 +2349,43 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         ))
     }
 
+    /// Selected-task work must not reconcile another profile's maintenance.
+    fn session_manager(
+        &mut self,
+        session_id: &str,
+    ) -> Result<BrowserSessionManager<'_, E>, String> {
+        self.refresh_before_ordinary_command()?;
+        let browser_id = self
+            .state
+            .sessions
+            .get(session_id)
+            .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?
+            .browser_id
+            .clone();
+        self.browser_manager(&browser_id)
+    }
+
+    fn browser_manager(
+        &mut self,
+        browser_id: &str,
+    ) -> Result<BrowserSessionManager<'_, E>, String> {
+        self.refresh_before_ordinary_command()?;
+        let browser = self
+            .state
+            .browsers
+            .get(browser_id)
+            .ok_or("browser_session_browser_missing")?
+            .clone();
+        self.effects
+            .begin_browser_operation(&self.persisted_state, &browser)?;
+        Ok(BrowserSessionManager::new(
+            &mut self.state,
+            &self.catalog,
+            &mut self.effects,
+            self.manager_config.clone(),
+        ))
+    }
+
     fn manager(&mut self) -> Result<BrowserSessionManager<'_, E>, String> {
         self.refresh_before_ordinary_command()?;
         self.effects.begin_operation(&self.persisted_state)?;
@@ -2413,7 +2450,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         }
         self.reconcile_pending_mode(browser_id)?;
         // Use the same publication and operation fence as manager recovery.
-        let _ = self.manager()?;
+        let _ = self.browser_manager(browser_id)?;
         let browser = self
             .state
             .browsers
@@ -2463,7 +2500,8 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             self.state = published.clone();
             self.persisted_state = published;
         }
-        self.manager()?.recover_retained_browser(browser_id)?;
+        self.browser_manager(browser_id)?
+            .recover_retained_browser(browser_id)?;
         self.commit_state()
     }
 
@@ -3523,7 +3561,8 @@ where
             self.effects
                 .begin_retained_observation(&self.persisted_state, &browser)?;
         } else {
-            self.effects.begin_operation(&self.persisted_state)?;
+            self.effects
+                .begin_browser_operation(&self.persisted_state, &browser)?;
         }
         let mut response =
             self.effects
