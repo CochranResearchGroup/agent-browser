@@ -6,16 +6,16 @@ lanes:
     product_lane: PL-BUGFIX
     objective: Isolate no-launch readiness probe from production Service State
     plan: docs/dev/maintenance/install-doctor-home-isolation.md
-    branch: fix/install-doctor-home-isolation
+    branch: docs/contacts-linkedin-installed
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#734]
-    plan_state: OPEN
-    custody_state: ACTIVE
+    plan_state: CLOSED
+    custody_state: MERGED_RETAINED
     dependencies: []
     overlaps: []
     reconciled_overlaps: ["Reuse canonical primary after727 merge; sole install.rs writer; preserve sealed727 candidate and existing forward recovery transaction; no additional checkout"]
-    validation_status: strict workspace Clippy passed; formatting and exact production installer validation pending
+    validation_status: PR735 merged6ccb45df4; sealed408821d0c76f installed; guarded resume accepted revision17; standalone doctor passes with one host;14 browsers preserved; exact fixture passes repeat with retained null-retirement flake; LinkedIn UI job completes; no latency speedup
     updated_at: 2026-11-17
   - id: ACTIVITY-METADATA-ADMISSION
     product_lane: PL-BUGFIX

@@ -679,20 +679,26 @@ managed browser identities survive. Retained SIGPIPE fixture flake, stale client
 transport and corrected snapshot oracle are explicit in the acceptance note.
 No LinkedIn latency, all-source UI or historical error attribution claim.
 
-### Contacts command scope selected; final readiness pending (2026-11-17)
+### Contacts command scope installed and UI job verified (2026-11-17)
 
-[Selected-browser correction](docs/dev/maintenance/contacts-browser-command-scope.md)
-merged through PR727, sourceb05d4f859 and target ed62bb3a3 have identical trees.
-Sealed production binary64edfce51b7b is selected and all14 original managed
-browser processes survived transfer. Exact installer fixture passed. Preserving
-transaction committed generation selection but failed final doctor status timeout.
-[Doctor home isolation](docs/dev/maintenance/install-doctor-home-isolation.md),
-issue734, owns the bounded repair in the reused canonical checkout. Production
-Service State ignored the probe's AGENT_BROWSER_HOME override. Direct status
-upper25.181seconds falls to9.626seconds with an actual private operating-system
-home. Strict workspace Clippy passes; sealed installer and recovery remain open.
+[Selected-browser correction](docs/dev/maintenance/contacts-browser-command-scope.md),
+PR727, and [doctor isolation correction](docs/dev/maintenance/install-doctor-home-isolation.md),
+PR735, are merged and installed as sealed binary408821d0c76f. The preserving
+transaction is accepted; standalone doctor passes with one supervised host.
+All14 original managed browser identities survive. Original service-probe failure,
+forward replacement, obsolete-daemon retirement and passing guarded resume are
+retained. Exact installer fixture passed on an unchanged-assertion diagnostic
+repeat after an unresolved null-retirement result; no first-pass clean claim.
+Local formatting and strict workspace Clippy pass; hosted CI omitted by policy.
 
-New installed LinkedIn acquisition upper98.042seconds is slower than baseline
-76.833seconds; no speedup is claimed. Initial profile upper40.311seconds passes
-60seconds. Four profile categories and10connections observed; network remains
-partial. Original UI Enrich submission and completed source job remain pending.
+A native LinkedIn-only Enrich click completes all four stages, applies five
+updates and leaves one conflicting detail for review. Profile/career data and
+10connections are captured; the network remains partial. Spinner activity and
+completion are observed, with an intermittent reconnecting gap retained.
+
+Latency is not solved: the final quiet installed profile upper58.250seconds
+passes60seconds, but full acquisition upper129.289seconds exceeds the earlier
+76.833second observation. A trivial page read still costs upper9.940seconds.
+Next PL-BUGFIX diagnostic boundary is browser-command overhead; do not claim a
+speedup from zero peer observations or suppress source features. Native viewer
+journey remains an advisory doctor warning, separate from the Contacts workflow.
