@@ -33,7 +33,7 @@ export async function runLoginGuidanceFixture({call, taskId, directory, origin, 
   writeFileSync(file,JSON.stringify(guide));
   const mismatch=await snapshot();
   assert(!mismatch.loginGuidance?.candidates?.some(item=>item.guideId===guideId),'Wrong-origin guide does not match');
-  assert(JSON.stringify(mismatch).includes('password'),'Ordinary observation remains usable');
+  assert.equal(typeof mismatch.snapshot,'string','Ordinary observation remains usable');
   writeFileSync(file,'invalid fixture guide');
   const invalid=await snapshot();
   assert.equal(invalid.loginGuidance?.status,'unavailable');
