@@ -209,6 +209,10 @@ agent, or a combination of both can choose the next routine.
 **Automation skill**: Guidance for choosing routines and adapting to unexpected
 website states using the same SiteGuide and routine contracts as software.
 
+**Semantic worker**: An agent that interprets current browser state and chooses supported actions, independent of its model or orchestration framework.
+
+**Verified website login**: Independently established access as the intended website account and any required organization, with the original requested work able to continue. Filled credentials, provider sign-in and a dismissed login dialog are intermediate observations rather than completion.
+
 **Hosted caller identity**: The ordinary attested work/thread requesting an
 existing hosted authentication helper operation. It is distinct from the
 receiving browser task and requires no Bots roster enrollment.
