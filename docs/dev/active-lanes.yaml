@@ -2,6 +2,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: SEMANTIC-WORKER-LOGIN-723
+    product_lane: PL-RECIPES
+    objective: Complete profile-aware semantic-worker logins with contextual guidance and honest recovery
+    plan: docs/dev/plans/0305-2026-11-17-semantic-worker-logins-723.md
+    branch: recipes/spec723-integration
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#723, CochranResearchGroup/agent-browser#726, CochranResearchGroup/agent-browser#728, CochranResearchGroup/agent-browser#729, CochranResearchGroup/agent-browser#730, CochranResearchGroup/agent-browser#731, CochranResearchGroup/agent-browser#732]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [AUTH-CHANNEL-DISCOVERY-667, NATIVE-SAVED-LOGIN-596, P300]
+    reconciled_overlaps: ["Root owns contextual observation; identity worker owns playbooks until freeze; pathway worker owns shared docs; preserve all foreign work and candidates; no runtime mutation"]
+    validation_status: Four unblocked source tickets assigned; cumulative gates pending; one final review and remediation remain unused
+    limitations: ["Actual installed autofill, LastPass and individual Auth factors require separate bounded evidence", "Initial inventory retains12 present checkouts and7 missing registrations; no foreign cleanup"]
+    updated_at: 2026-11-17
   - id: ACTIVITY-METADATA-ADMISSION
     product_lane: PL-BUGFIX
     objective: Admit valid browser work despite unrelated stale metadata
