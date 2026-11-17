@@ -5,7 +5,8 @@ export interface VerifyLoginOptions {
   taskId: string;
   guideId: string;
   accountRef: string;
-  organizationRef: string;
+  /** Required by legacy and organization-scoped guides; omit for explicit personal scope. */
+  organizationRef?: string;
   maxObservationAgeMs?: number;
 }
 export interface RoutineResult {
@@ -20,7 +21,9 @@ export interface RoutineResult {
   browserId: string;
   tabId: string;
   accountVerified: boolean;
+  /** Personal scope never claims organization evidence. */
   organizationVerified: boolean;
+  identityScope?: 'personal' | 'organization';
   observationElapsedMs: number;
   guideDigest?:string;
   plan?:Record<string, unknown>|null;
