@@ -54,6 +54,30 @@ console.log('Denial, no match, ambiguity, unavailable source/capability and rece
 
 for(const [field,value] of Object.entries(unavailable.binding))assert.equal(result[field],value,'Original receiving binding survives pre-request Auth failure');
 
+// A refusal while reading an already-pending approval is not an owner denial.
+{
+ const f=fixture();let requests=0;
+ const request={requestId:'pending-request',taskId:'caller',sourceId:'vault',recordId:'record',origin:f.options.origin,targetId:f.options.targetId,expiresAt:f.options.expiresAt,mode:'private',operation:'login',state:'pending',decisionPending:true,decisionExpiresAt:null};
+ f.auth.helper=async(operation,args)=>{
+  f.calls.push({operation,args});
+  if(operation==='discover_credentials')return {state:'unique',selected:{sourceId:'vault',recordId:'record',origin:f.options.origin}};
+  if(operation==='inspect_credential_request')return structuredClone(request);
+  if(operation==='receive_credential_approval')throw Object.assign(Error('Synthetic approval channel incompatibility'),{code:'auth_not_authorized'});
+  throw Error('Unexpected Auth operation');
+ };
+ f.auth.requestLogin=async()=>{requests++;return structuredClone(request);};
+ const held=await f.playbook.advance(f.options);
+ assert.equal(held.reasonCode,'auth_not_authorized');
+ assert.equal(held.effectState,'no_effect');
+ assert.equal(held.requestId,'pending-request');
+ assert.equal(held.recovery.classification,'integration_failure');
+ assert.equal(held.recovery.fallbackEligible,false);
+ assert(held.recovery.nextOperations.some(item=>item.operation==='inspect_credential_request'&&item.arguments.requestId==='pending-request'));
+ assert.equal(requests,1);
+ console.log('Pending approval channel refusal retains the request without inventing an owner denial');
+}
+
+for(const lostReplyCode of ['auth_unavailable','auth_not_authorized']){
 const uncertain=fixture();
 let inputs=0,requests=0;
 let request={requestId:'original-request',taskId:'caller',sourceId:'vault',recordId:'record',origin:uncertain.options.origin,targetId:uncertain.options.targetId,expiresAt:uncertain.options.expiresAt,mode:'private',operation:'login',state:'approved'};
@@ -64,9 +88,9 @@ uncertain.auth.helper=async(operation,args)=>{
  throw Error('Unexpected operation');
 };
 uncertain.auth.requestLogin=async()=>{requests++;return structuredClone(request);};
-uncertain.auth.advanceLogin=async()=>{inputs++;request={...request,state:'unknown',attemptId:'original-attempt'};throw Object.assign(Error('SYNTHETIC-PRIVATE-DETAIL'),{code:'auth_unavailable'});};
+uncertain.auth.advanceLogin=async()=>{inputs++;request={...request,state:'unknown',attemptId:'original-attempt'};throw Object.assign(Error('SYNTHETIC-PRIVATE-DETAIL'),{code:lostReplyCode});};
 const unknown=await uncertain.playbook.advance(uncertain.options);
-assert.equal(unknown.reasonCode,'auth_unavailable');
+assert.equal(unknown.reasonCode,lostReplyCode);
 assert.equal(unknown.effectState,'unknown');
 assert.equal(unknown.recovery.classification,'unknown_outcome');
 assert.equal(unknown.recovery.fallbackEligible,false);
@@ -81,3 +105,5 @@ assert.equal(resumed.recovery.fallbackEligible,false);
 assert.equal(inputs,1,'Read-only recovery never repeats unknown input');
 assert.equal(requests,1,'Read-only recovery never creates replacement approval');
 console.log('Unknown use retains the original receiving request and requires reconciliation before fallback');
+
+}

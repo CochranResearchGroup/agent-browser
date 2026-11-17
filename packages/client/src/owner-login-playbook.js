@@ -13,14 +13,17 @@ const errorCode=error=>error&&typeof error==='object'&&'code' in error&&typeof e
 
 /** Recovery suggestions are read-only diagnostics, never credential-use authority.
  * @param {string} status @param {string} reasonCode @param {string} effectState
- * @param {string|undefined} requestId
+ * @param {string|undefined} requestId @param {string|undefined} requestState
  * @returns {import('./owner-login-playbook.d.ts').OwnerLoginRecovery} */
-function loginRecovery(status,reasonCode,effectState,requestId){
+function loginRecovery(status,reasonCode,effectState,requestId,requestState){
  const observe=/** @type {const} */ ({target:'browser',operation:'verifyLogin'});
  const capabilities=/** @type {const} */ ({target:'auth',operation:'auth_capabilities'});
  if(status==='completed')return {classification:'authenticated',fallbackEligible:false,nextOperations:[]};
- if(['auth_not_authorized','auth_denied','auth_revoked','auth_cancelled','auth_expired'].includes(reasonCode))return {classification:'authorization_denied',fallbackEligible:false,nextOperations:[observe,...(requestId?[{target:/** @type {const} */ ('auth'),operation:/** @type {const} */ ('inspect_credential_request'),arguments:{requestId}}]:[])]};
  if(effectState==='unknown')return {classification:'unknown_outcome',fallbackEligible:false,nextOperations:[observe,...(requestId?[{target:/** @type {const} */ ('auth'),operation:/** @type {const} */ ('reconcile_credential_request'),arguments:{requestId}}]:[])]};
+ // A pending row plus a failed approval-channel read is not an owner decision.
+ // Keep the original refusal visible and inspect its request; never replace it.
+ if(reasonCode==='auth_not_authorized'&&requestState==='pending'&&effectState==='no_effect')return {classification:'integration_failure',fallbackEligible:false,repairOwner:'auth-receipts',nextOperations:[observe,...(requestId?[{target:/** @type {const} */ ('auth'),operation:/** @type {const} */ ('inspect_credential_request'),arguments:{requestId}}]:[])]};
+ if(['auth_not_authorized','auth_denied','auth_revoked','auth_cancelled','auth_expired'].includes(reasonCode))return {classification:'authorization_denied',fallbackEligible:false,nextOperations:[observe,...(requestId?[{target:/** @type {const} */ ('auth'),operation:/** @type {const} */ ('inspect_credential_request'),arguments:{requestId}}]:[])]};
  /** @type {Record<string,import('./owner-login-playbook.d.ts').OwnerLoginRecovery['classification']>} */
  const classifications={
   credential_not_found:'credential_not_found',account_ambiguous:'account_ambiguous',
@@ -63,7 +66,7 @@ export function createOwnerLoginPlaybook({browser,auth,checkpoints}){
    /** @type {Record<string,string>|undefined} */ let receiving;
    /** @type {Record<string,any>|undefined} */ let request;
    /** @param {string} status @param {string} reasonCode @param {string} effectState */
-   const result=(status,reasonCode,effectState)=>({schemaVersion:'agent-browser.routine-result.v1',routine:'login',taskId:options.taskId,guideId:options.guideId,...receiving,status,reasonCode,effectState,recovery:loginRecovery(status,reasonCode,checkpoint?.advanceIntent||checkpoint?.outcomeUnknown?'unknown':effectState,checkpoint?.requestId),...(request?.browserActionEvidence?{browserActionEvidence:request.browserActionEvidence}:{}),...(checkpoint?{requestId:checkpoint.requestId,actionId:checkpoint.requestId,...checkpoint.receiving}:{}),contract});
+   const result=(status,reasonCode,effectState)=>({schemaVersion:'agent-browser.routine-result.v1',routine:'login',taskId:options.taskId,guideId:options.guideId,...receiving,status,reasonCode,effectState,recovery:loginRecovery(status,reasonCode,checkpoint?.advanceIntent||checkpoint?.outcomeUnknown?'unknown':effectState,checkpoint?.requestId,request?.state),...(request?.browserActionEvidence?{browserActionEvidence:request.browserActionEvidence}:{}),...(checkpoint?{requestId:checkpoint.requestId,actionId:checkpoint.requestId,...checkpoint.receiving}:{}),contract});
    /** @param {Record<string,any>} value */
    const scopeBound=value=>{
     const e=value?.browserActionEvidence;

@@ -25,10 +25,10 @@ Four independent source slices run within four agent slots; root integrates seri
 
 | Ticket | Outcome | Blockers | Owner / branch | Owned scope | State |
 | --- | --- | --- | --- | --- | --- |
-| #726 | Personal-account prepare/verify | none | login_domain_facts / recipes/spec723-identity | playbooks identity contract, client types, existing verification smoke | integrated; GREEN blocked |
+| #726 | Personal-account prepare/verify | none | login_domain_facts / recipes/spec723-identity | playbooks identity contract, client types, existing verification smoke | validated; CLOSED |
 | #728 | Browser autofill/LastPass pathway guidance | none | login_pathways / recipes/spec723-pathways | saved-login client, focused tests, all shared help/README/skill/docs-site guidance | validated; CLOSED |
 | #729 | Auth recovery diagnostics | none | auth_continuation / recipes/spec723-auth | owner-login composition/types and public recovery tests | validated; CLOSED |
-| #730 | Contextual guide discovery | none | root / recipes/spec723-integration | MCP observation enrichment and guide guidance module; parent playbooks edits only after726 freezes | integrated; GREEN blocked |
+| #730 | Contextual guide discovery | none | root / recipes/spec723-integration | MCP observation enrichment and guide guidance module; parent playbooks edits only after726 freezes | validated; CLOSED |
 | #731 | Integrated fresh-worker acceptance | #726, #728, #729, #730 | root after source integration | existing public workflow and installed/development guidance qualification | pending |
 | #732 | Actual installed paths and factors | #731 | root; exact acceptance inputs required | private runtime receipts outside Git and public bounded disposition | pending |
 
@@ -69,3 +69,17 @@ Both operator questions remain pending: final review fixed point, and exact actu
 ### Checkout handoff
 
 All three owned worker auxiliaries are cleanly removed after exact remote SHA and integrated-source custody checks. Terminal governed operations: Auth78a65fa5-887d-401e-8636-a15c7b1e7296, pathways65eb1b1b-2564-4622-8545-b28ef665a880, identity8c4ecc58-1c79-4e78-8482-f03af41ab738. None had active or pinned candidates. Branches/results and outside-Git validation receipts remain retained; unresolved identity/public acceptance continues from the root integration checkout. The root-owned duplicate guidance fixture was verified equal to its committed canonical copy before removal from the identity auxiliary. No foreign worktree, candidate, registration or process was changed. Only the root checkout is retained for this task; no owned build/test waiter remains.
+
+## Resumed source qualification, 2026-11-17
+
+This checkpoint supersedes the earlier resource and fixture blockers above. Main48174c314 is merged as32c8f1a41. Worker adoption and identity guards are integrated as9298c65d6 and8db1dbbfe. #726 and #730 are CLOSED. #728 and #729 remain CLOSED. Root owns #731; #732 remains awaiting an actual selected signed-out task/profile/site/account and applicable unlock authority. No other ticket is independently executable.
+
+The candidate compiled from32c8f1a41 passes cargo-safe build, full format and strict workspace Clippy. Candidate SHA256:73305ab87bb2a384873814b1266dc70a129ddf36fa4c6703672ad70ebcaa7742. Later changes are JavaScript and evidence only. The public fixture now adopts its own real Chrome child using the public existing-profile path; it does not manufacture process identity or weaken admission. Personal, organization, changed-account, changed-control, evidence and real-expiry guards pass. Contextual guidance passes observed-provider, authored-qualification and ordinary-fallback checks. Every browser fixture reports zero owned process residue.
+
+The integrated HTTPS synthetic-site journey passes through public MCP discovery and actual Auth/source continuation, preserving one task/profile/browser/tab. It reports14 browser calls,7 Auth calls, one journey, one provider selection, one synthetic return, zero credential uses and zero approval prompts. Rendering unreadiness cannot pass website verification; wrong website account holds; corrected external return completes the original journey and independent SiteGuide verification. Provider transport is explicitly synthetic. Existing diagnostics cover unavailable sources, original-request recovery and unknown outcomes. These results do not qualify actual Native autofill, LastPass or live Auth factors.
+
+Source composition uses clean Auth/SDK57d6e5e301a0312f3c7cbe0da5e58efe3540c59a and qualified Receipts companion5783fea7495983c1b3947bdf0bd118da4aa71519. An older companion rejected nullable expiry before approval; the supported companion passes the actual source composition tests. Pending approval-channel refusal now retains its original request as an integration diagnostic; unknown effects take precedence over denial-shaped codes and prohibit fallback/replay. Public diagnostic RED/GREEN receipts are outside Git.
+
+Local evidence: /var/tmp/spec723-resume-build.log, /var/tmp/spec723-resume-fmt.log, /var/tmp/spec723-resume-clippy.log, /var/tmp/spec723-guidance-adoption-green.log, /var/tmp/spec723-identity-personal-first-green.log, /var/tmp/spec723-identity-personal-plan-guards-green.log, /var/tmp/spec723-identity-expiry-time-receipt.json, /var/tmp/spec723-owner-qualified-parent-green.log, /var/tmp/spec723-owner-recovery-qualified-parent.log and /var/tmp/spec723-composed-journey-first.log. The task-owned installed skill copy qualification above remains applicable because its source is unchanged. No hosted CI, production installation or live-provider claim.
+
+Final broad review count:0. Post-review remediation count:0. Both remain reserved after ticket closure. The code-review skill requires a user-selected fixed point; that question and #732 target selection remain pending. Stable Time qualification at this checkpoint:2026-11-17T18:25:43.273668082Z, NTS-verified finite bound. Memory disposition:forbidden, no explicit memory-write request.

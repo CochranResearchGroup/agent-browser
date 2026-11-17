@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import {createPlaybookClient} from '../packages/client/src/playbooks.js';
 import {createServer} from 'node:http';
+import {createServer as createSecureServer} from 'node:https';
 import {execFileSync,spawn} from 'node:child_process';
 import {existsSync,mkdirSync,readFileSync,readlinkSync,readdirSync,realpathSync,writeFileSync} from 'node:fs';
 import {isAbsolute,join} from 'node:path';
@@ -19,6 +20,7 @@ Object.assign(context.env,{AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD:binary,AGENT_BR
  AGENT_BROWSER_HOME:context.agentHome,AGENT_BROWSER_SOCKET_DIR:context.socketDir,AGENT_BROWSER_RUNTIME_HOST:'1',
  AGENT_BROWSER_SITEGUIDE_DIRECTORY:directory,XDG_RUNTIME_DIR:join(context.tempHome,'runtime'),XDG_CONFIG_HOME:join(context.tempHome,'config'),XDG_DATA_HOME:join(context.tempHome,'data')});
 mkdirSync(context.env.XDG_RUNTIME_DIR,{mode:0o700});
+const journey=process.env.AGENT_BROWSER_SMOKE_LOGIN_JOURNEY==='1';
 const qbo=process.env.AGENT_BROWSER_SMOKE_SITE==='qbo';
 const personal=process.env.AGENT_BROWSER_SMOKE_PERSONAL==='1';
 const guideId=qbo?'qbo-fixture':'bill-fixture';
@@ -30,8 +32,15 @@ const appHtml=qbo?`<main id="qbo-company" data-account="${accountRef}" data-real
  `<main id="application" data-account="${accountRef}"${personal?'':` data-company="${organizationRef}"`}>${accountRef}@example.invalid</main>`;
 const controls=qbo?{identifier:'input[name=userid]',password:'input[name=password]',submit:'#intuit-signin',accountScope:'[data-auth-account]',identifierSubmit:'#intuit-next'}:
  {identifier:'#username',password:'#password',submit:'#submit',accountScope:'[data-auth-account]'};
-const server=createServer((req,res)=>{res.setHeader('content-type','text/html');res.end(retrievalPage(req.url)||appHtml);});
-await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin=`http://127.0.0.1:${server.address().port}`;
+let tls;
+if(journey){
+ const key=join(context.tempHome,'fixture.key'),cert=join(context.tempHome,'fixture.crt');
+ execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',key,'-out',cert,'-days','1','-subj','/CN=127.0.0.1','-addext','subjectAltName=IP:127.0.0.1'],{stdio:'ignore'});
+ tls={key:readFileSync(key),cert:readFileSync(cert)};
+}
+const serve=(req,res)=>{res.setHeader('content-type','text/html');res.end(retrievalPage(req.url)||appHtml);};
+const server=journey?createSecureServer(tls,serve):createServer(serve);
+await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin=`${journey?'https':'http'}://127.0.0.1:${server.address().port}`;
 writeFileSync(join(directory,guideId+'.json'),JSON.stringify({schemaVersion:'agent-browser.siteguide.v1',guideId,name:qbo?'Synthetic QBO':'Synthetic BILL',allowedOrigins:[origin],
  authenticatedSelector:'#'+appId,account:{selector:qbo?'#qbo-user':'#application',attribute:qbo?'data-user':'data-account'},
  ...(personal?{identityScope:'personal'}:{organization:{selector:'#'+appId,attribute:companyAttribute}}),controls,
@@ -62,7 +71,7 @@ try {
  const created=JSON.parse(execFileSync(binary,['--json','runtime','create','siteguide-fixture'],{env:context.env,encoding:'utf8'}));
  assert.equal(created.created,true);const profile=realpathSync(created.userDataDir);
  assert(profile.startsWith(realpathSync(context.tempHome)+'/'),'Only the disposable fixture profile may be launched');
- fixtureBrowser=spawn(realpathSync(chrome),['--headless=new','--no-sandbox','--disable-dev-shm-usage','--no-first-run','--no-default-browser-check','--remote-debugging-port=0',`--user-data-dir=${profile}`,origin],{env:context.env,stdio:['ignore','ignore','pipe']});
+ fixtureBrowser=spawn(realpathSync(chrome),['--headless=new','--no-sandbox','--disable-dev-shm-usage','--no-first-run','--no-default-browser-check','--remote-debugging-port=0',...(journey?['--ignore-certificate-errors']:[]),`--user-data-dir=${profile}`,origin],{env:context.env,stdio:['ignore','ignore','pipe']});
  fixtureBrowserExit=new Promise(resolve=>fixtureBrowser.once('close',resolve));
  await new Promise((resolve,reject)=>{
   let output='';
@@ -166,6 +175,10 @@ print(json.dumps({'endpoint':state['browsers'][tab['browserId']]['cdpEndpoint'],
  if(process.env.AGENT_BROWSER_SMOKE_LOGIN_GUIDANCE==='1'){
   const {runLoginGuidanceFixture}=await import('./siteguide-login-guidance-fixture.js');
   await runLoginGuidanceFixture({call,software,taskId:alice.taskId,directory,origin,guideId,appHtml});
+ }
+ if(journey){
+  const {runLoginJourneyFixture}=await import('./siteguide-login-journey-fixture.js');
+  await runLoginJourneyFixture({call,software,taskId:alice.taskId,directory,origin,guideId,appHtml,accountRef,organizationRef});
  }
  assert(JSON.stringify(await call('browser_snapshot',{taskId:bob.taskId})).includes('Peer work preserved'));
  console.log('Public existing-session verification, wrong company, login-required and peer-preserving replay passed');

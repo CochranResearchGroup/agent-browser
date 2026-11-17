@@ -15,7 +15,7 @@ lanes:
     dependencies: []
     overlaps: [AUTH-CHANNEL-DISCOVERY-667, NATIVE-SAVED-LOGIN-596, P300]
     reconciled_overlaps: ["Root owns contextual observation; identity worker owns playbooks until freeze; pathway worker owns shared docs; preserve all foreign work and candidates; no runtime mutation"]
-    validation_status: All four source slices integrated through efe5388a1;728and729 CLOSED; JS/types/docs and task-owned guidance copy pass; Rust admission and public GREEN pending; final review0 remediation0
+    validation_status: 726,728,729,730 CLOSED; candidate build, format, strict Clippy and public source journey pass;731 closing;732 needs actual target; final review0 remediation0
     limitations: ["Actual installed autofill, LastPass and individual Auth factors require separate bounded evidence", "Initial inventory retains11 present checkouts and7 missing registrations; no foreign cleanup"]
     updated_at: 2026-11-17
   - id: INSTALL-DOCTOR-HOME-734
