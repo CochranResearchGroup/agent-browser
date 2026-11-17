@@ -12223,3 +12223,74 @@ fn pending_mode_replacement_assignment_fixture(explicit: bool, refresh_owner: bo
         );
     }
 }
+
+#[test]
+fn ordinary_page_read_does_not_observe_peer_profile_activity() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider, calls);
+    let alice = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let bob = consumer
+        .open(OpenBrowserSession::exact_profile("Bob", "profile-b", 101))
+        .unwrap();
+    let baseline = consumer.state().clone();
+    fixture
+        .store(false)
+        .admit_browser_activity(
+            &uuid::Uuid::new_v4().to_string(),
+            &baseline.browsers[&bob.browser_id],
+            &baseline,
+        )
+        .unwrap();
+    let peer_before = fixture.store(false).browser_activity_records().unwrap();
+    let count_path = fixture.root.join("activity-observation-count");
+    std::fs::write(&count_path, "0").unwrap();
+    let command =
+        serde_json::json!({"action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":102});
+    let result = consumer
+        .execute_managed_command("Alice", &command)
+        .unwrap()
+        .unwrap();
+    assert_eq!(result["success"], true, "{result}");
+    assert_eq!(
+        std::fs::read_to_string(&count_path).unwrap(),
+        "0",
+        "selected profile page reads must not reconcile a peer profile"
+    );
+    assert_eq!(
+        fixture.store(false).browser_activity_records().unwrap(),
+        peer_before
+    );
+    fixture
+        .store(false)
+        .admit_browser_activity(
+            &uuid::Uuid::new_v4().to_string(),
+            &baseline.browsers[&alice.browser_id],
+            &baseline,
+        )
+        .unwrap();
+    let result = consumer
+        .execute_managed_command("Alice", &command)
+        .unwrap()
+        .unwrap();
+    assert_eq!(result["success"], true, "{result}");
+    assert!(
+        std::fs::read_to_string(&count_path)
+            .unwrap()
+            .parse::<u32>()
+            .unwrap()
+            > 0,
+        "the selected profile's own original-process checks remain active"
+    );
+    let peer_after = fixture
+        .store(false)
+        .browser_activity_records()
+        .unwrap()
+        .into_iter()
+        .filter(|row| row.browser.profile_id == "profile-b")
+        .collect::<Vec<_>>();
+    assert_eq!(peer_after, peer_before);
+}

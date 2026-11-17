@@ -678,3 +678,15 @@ pass. Fresh installed MCP open/read/close succeeds, and all eight pre-install
 managed browser identities survive. Retained SIGPIPE fixture flake, stale client
 transport and corrected snapshot oracle are explicit in the acceptance note.
 No LinkedIn latency, all-source UI or historical error attribution claim.
+
+### Contacts LinkedIn command scope — source validated
+
+[Selected-browser maintenance](docs/dev/maintenance/contacts-browser-command-scope.md)
+on fix/contacts-browser-command-scope reproduces3peer original-process observations
+for one page read, then passes with0peer observations and selected-profile checks
+retained. The concrete runtime now forwards existing selected-browser scope.
+All27selected consumer/wrapper tests and strict production-binary Clippy pass.
+Changes remain local and uncommitted; installed binaryabdbd60b73db is unchanged.
+Stable Time-qualified installed baseline passes initial profile readiness within
+32.127seconds; full source acquisition upper76.833seconds. The patch's installed
+speedup is unverified and awaits release comparison.
