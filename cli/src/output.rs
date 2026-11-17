@@ -7432,7 +7432,7 @@ Commands:
   Teaching grilling: client teaching-grilling; source-linked questions, authenticated answers
   Native challenge: bounded passive wait or one registered checkbox attempt per task
   Native OCR: high-confidence hCaptcha variants require same-frame brand and registered pixels
-  Native readiness: native_ready separates owner authentication, consumer input policy and viewer delivery
+  Native readiness: owner checks separate authentication, consumer input policy and viewer delivery
   Native lifecycle: public ready and legacy local_ready require exact target and enabled policy; control stays separate
   Native setup: AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE and consumer selective_input; no borrowed desktop
   Native owner failures: observations report no input dispatched; only safe status/cause is retained

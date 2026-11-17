@@ -233,7 +233,7 @@ test('guidance excludes unrelated caller properties and URL secrets',()=>{
 test('unknown Native readiness observes the same profile before considering Auth fallback',()=>{
  const advice=describeNativeLoginPathways({binding:guidanceContext.binding,origin:guidanceContext.origin});
  assert.equal(advice.nextStep.pathway,'browser_saved');
- assert.equal(advice.nextStep.operation,'native_ready');
+ assert.equal(advice.nextStep.operation,'native_capture');
  assert.equal(advice.taskId,'task');assert.equal(advice.profileId,'profile');
  assert.equal(advice.browserEffects,'none');
  assert.equal(describeNativeLoginPathways({...guidanceContext,nativeInputState:'unknown',uncertainInput:true}).nextStep.operation,'task_operation');

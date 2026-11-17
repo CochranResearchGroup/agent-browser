@@ -162,7 +162,7 @@ export function describeNativeLoginPathways(context) {
  ]);
  let nextStep={pathway:'browser_saved',operation:'native_capture',reason:'inspect_browser_saved_credentials_first'};
  if(uncertainInput)nextStep={pathway:'original_attempt',operation:'task_operation',reason:'reconcile_original_input_before_fallback'};
- else if(nativeInputState==='unknown')nextStep={pathway:'browser_saved',operation:'native_ready',reason:'observe_same_task_native_readiness_before_fallback'};
+ else if(nativeInputState==='unknown')nextStep={pathway:'browser_saved',operation:'native_capture',reason:'observe_same_task_native_readiness_before_fallback'};
  else if(nativeInputState!=='ready')nextStep={pathway:'auth_receipts',operation:'auth_capabilities',reason:nativeInputState==='disabled'?'native_input_disabled_not_missing_credentials':'native_input_readiness_unverified'};
  else if(savedCredentialState==='available')nextStep=accountSelection==='resolved'
   ?{pathway:'browser_saved',operation:savedLoginRoutine==='applicable'?'createNativeSavedLoginClient.resolve':'native_capture',reason:savedLoginRoutine==='applicable'?'reuse_saved_login_original_episode':'inspect_selector_for_semantic_native_selection'}
@@ -179,7 +179,7 @@ export function describeNativeLoginPathways(context) {
   binding:/** @type {import('./native-saved-login.d.ts').SavedLoginBinding} */(Object.fromEntries(logical.map(key=>[key,binding[key]]))),contextEvidence:'caller_supplied_requires_current_task_observation',browserEffects:'none',credentialPermission:'not_granted',nextStep,pathways,
   requirements:[
    'Resolve intended-account ambiguity from explicit task context or established site/profile account mapping; a profile label or first-listed credential alone is insufficient.',
-   'Discover native_capture/native_input arguments with browser_discover. Check native_ready and current Native control; disabled or unavailable input is an integration limitation, not evidence of absent credentials. Never bypass the existing provider policy.',
+   'Discover native_capture/native_input arguments with browser_discover. Observe the current task with native_capture and inspect current Native control; disabled or unavailable input is an integration limitation, not evidence of absent credentials. Never bypass the existing provider policy.',
    'Preserve the addressed task/profile/browser/tab, existing Native owner, original operation and Auth journey. Observe after uncertain input; never replay it or switch paths until original uncertainty is reconciled.',
    'Verify authenticated access as the intended website account and required organization independently after provider return, then continue the original work. Filled credentials, SSO success and a dismissed dialog alone do not complete login.',
   ]};

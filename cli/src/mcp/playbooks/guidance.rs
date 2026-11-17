@@ -79,7 +79,7 @@ fn summary(guide: &SiteGuide) -> Value {
     let metadata = guide.login_guidance.as_ref();
     json!({"guideId":guide.guide_id,"version":metadata.map(|m|m.version.as_str()).unwrap_or(&guide.schema_version),
         "allowedOrigins":guide.allowed_origins,
-        "qualification":{"source":metadata.map(|m|m.source.as_str()).unwrap_or("installed_starter_template"),
+        "qualification":{"source":metadata.map(|m|m.source.as_str()).unwrap_or("installed_siteguide"),
             "declaredClass":metadata.map(|m|m.validation_class.as_str()).unwrap_or("authored"),
             "evidenceDate":metadata.and_then(|m|m.evidence_date.as_deref()),
             "liveExecutionProven":false,"freshness":"not_independently_verified",
@@ -132,7 +132,7 @@ pub(in crate::mcp) fn observation_recovery(task_id: &str, error: &mut JsonRpcErr
     }
     if let Some(data) = error.data.as_mut().and_then(Value::as_object_mut) {
         data.insert("loginRecovery".into(), json!({"taskId":task_id,"classification":"observation_unavailable",
-            "browserLost":false,"effectOutcome":"unchanged_by_hint","replayAllowed":false,
+            "browserState":"unverified","effectOutcome":"unchanged_by_hint","replayAllowed":false,
             "nextOperation":{"tool":"browser_continue","arguments":{"taskId":task_id}},
             "next":"Inspect this retained task and original operations. A transport/rendering failure is not an authentication denial; do not relaunch or repeat uncertain input."}));
     }

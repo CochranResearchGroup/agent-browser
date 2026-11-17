@@ -1232,7 +1232,7 @@ the complete agent, operator, reconnect, and troubleshooting workflows.
 
 Follow explicit user/service authentication instructions and use available authorized stored credentials through their supported private channels. Keep each username/password pair together. Auth Receipts supplies the generic discovery, approval and private-login workflow when a more specific authorized path is unavailable; it is not a prerequisite for every login. See [authentication paths](skills/agent-browser/references/authentication.md#choose-an-authentication-path).
 
-Semantic workers should inspect login guidance early on a signed-out observation, then check the selected profile's browser-saved credentials first. Focus the login field and inspect/select the browser-owned autofill chooser through Native desktop vision and interaction. CDP/DOM cannot operate that chooser. Reuse the existing saved-login routine where applicable; otherwise use supported semantic `browser_command` `native_capture`/`native_input`. `desktop_interact` remains challenge-only. Check `native_ready`: disabled input is a concrete integration limitation, not missing credentials.
+Semantic workers should inspect login guidance early on a signed-out observation, then check the selected profile's browser-saved credentials first. Focus the login field and inspect/select the browser-owned autofill chooser through Native desktop vision and interaction. CDP/DOM cannot operate that chooser. Reuse the existing saved-login routine where applicable; otherwise use supported semantic `browser_command` `native_capture`/`native_input`. `desktop_interact` remains challenge-only. Observe the same task with `native_capture`; the owner rechecks input readiness and current control before input. Disabled input is a concrete integration limitation, not missing credentials.
 
 For installed LastPass, a red toolbar icon with three white dots is the expected active cue; confirm the actual extension UI and intended site/account. Use Native interaction for its credentials/passkeys. Non-red indicates another authentication state. Try another suitable authorized path before interrupting the operator; a necessary LastPass unblock uses the same ready Native handoff and task. Auth Receipts is a fallback or factor source for passwords, passkeys, TOTP, email MFA and messaging MFA; these capabilities are still in testing and require separate qualification. Diagnose false blockers as possible defects while preserving explicit refusals, provider rejections and unknown outcomes.
 
@@ -7468,7 +7468,7 @@ input reports delivery separately from completed page effects. Observe after
 an uncertain reply before deciding another input is appropriate. These actions
 never attach CDP, acquire another task, or return explicit human takeover.
 An unavailable Native owner or changed process/window returns remediation.
-`native_ready` includes `inputReadiness` separately from its exact-window check.
+The owner's internal `native_ready` check includes `inputReadiness` separately from its exact-window check; it is not a public MCP action.
 It requires owner control authentication and inspects the exact lifecycle desktop's
 consumer input policy; viewer delivery and control ownership remain separate.
 Schema-1 public `ready` and legacy `local_ready` lifecycle states are accepted
