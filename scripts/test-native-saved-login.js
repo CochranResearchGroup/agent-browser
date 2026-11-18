@@ -194,6 +194,49 @@ test('saved login resume never creates a fresh episode or extends a fully spent 
 // browser input or treating browser-owned UI as website DOM.
 const {describeNativeLoginPathways}=await import('../packages/client/src/native-saved-login.js');
 const guidanceContext={binding:{taskId:'task',profileId:'profile',browserId:'browser',tabId:'tab',targetId:'target'},origin:'https://app.example.test',accountSelection:'resolved',nativeInputState:'ready'};
+test('browser-owned selector absent from website DOM selects the intended displayed account',async()=>{
+ const f=fixture(),base=f.callTool,selected=[];
+ // Only the external desktop owner is injected. The public saved-login client
+ // must select from these owner observations; website DOM has no chooser.
+ f.callTool=async(name,args)=>{
+  assert.equal(name,'browser_command');assert.equal(args.taskId,f.binding.taskId);
+  assert(!['evaluate','click','snapshot'].includes(args.action),'Browser-owned choices cannot use website DOM');
+  const reply=await base(name,args);
+  if(args.action==='native_capture'&&f.step===1){
+   const data=JSON.parse(reply.content[0].text).data;
+   data.loginControls.controls=[
+    {...data.loginControls.controls[0],targetRef:'first-wrong-account',configuredAccountMatch:false},
+    {...data.loginControls.controls[0],targetRef:'second-intended-account',configuredAccountMatch:true,bounds:{x:10,y:60,width:100,height:30}},
+   ];
+   return envelope(data);
+  }
+  if(args.action==='native_input')selected.push(args.params.loginTarget.targetRef);
+  return reply;
+ };
+ const result=await createNativeSavedLoginClient({...f,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode'});
+ assert.equal(result.status,'verified_access_after_native_saved_login');
+ assert.deepEqual(selected,['username','second-intended-account','submit']);
+ assert.equal(f.inputs.length,3);assert.deepEqual(f.episodes.get('episode').binding,f.binding);
+});
+test('wrong-only and stale browser-owned choices stop before credential selection',async()=>{
+ for(const condition of ['wrong_account','stale_frame']){
+  const f=fixture(),base=f.callTool;
+  f.callTool=async(name,args)=>{
+   const reply=await base(name,args);
+   if(args.action==='native_capture'&&f.step===1){
+    const data=JSON.parse(reply.content[0].text).data;
+    if(condition==='wrong_account')data.loginControls.controls[0].configuredAccountMatch=false;
+    else data.binding.observedAtMs=f.now()-10001;
+    return envelope(data);
+   }
+   return reply;
+  };
+  const result=await createNativeSavedLoginClient({...f,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode'});
+  assert.equal(result.status,'human_required');assert.equal(f.inputs.length,1);
+  assert.equal(f.inputs[0].params.loginTarget.targetRef,'username');
+  assert.equal(result.reason,condition==='wrong_account'?'native_saved_login_target_ambiguous':'native_saved_login_frame_unverified');
+ }
+});
 test('semantic login guidance checks this profile browser autofill first',()=>{
  const advice=describeNativeLoginPathways(guidanceContext);
  assert.equal(advice.taskId,'task');assert.equal(advice.profileId,'profile');

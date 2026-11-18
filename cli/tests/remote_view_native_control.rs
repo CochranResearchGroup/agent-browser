@@ -20,6 +20,203 @@ mod test_utils;
 struct NativeFixture {
     calls: Vec<(String, serde_json::Value)>,
 }
+
+#[test]
+fn semantic_lastpass_credentials_and_passkeys_use_native_capture_and_input_without_a_recipe() {
+    use base64::Engine;
+    use serde_json::json;
+    // The provider and semantic model are external boundaries. In particular,
+    // this does not add a deterministic LastPass icon or account recognizer.
+    struct ToolbarOwner {
+        fixture: NativeFixture,
+        frame: String,
+        epoch: u64,
+        operator: bool,
+    }
+    impl browser_native_control::NativeOwner for ToolbarOwner {
+        fn request(
+            &mut self,
+            operation: &str,
+            body: &serde_json::Value,
+        ) -> Result<serde_json::Value, String> {
+            if operation == "capture_region" {
+                self.fixture.calls.push((operation.into(), body.clone()));
+                return Ok(json!({"image":{"mimeType":"image/png","data":self.frame}}));
+            }
+            if operation == "input" {
+                if self.operator || body["controlEpoch"] != self.epoch {
+                    return Err("fixture_native_control_changed".into());
+                }
+                // The first displayed account occupies y=100; the intended
+                // account occupies y=200. Only the latter may receive input.
+                assert_eq!(body["actions"][0]["y"], 200);
+            }
+            self.fixture.request(operation, body)
+        }
+    }
+    let original = agent_browser_service_model::RecordedProcessIdentity {
+        pid: 42,
+        start_token: "linux:boot:11".into(),
+        executable_path: Some("/synthetic/chrome".into()),
+        browser_family: Some("chrome".into()),
+    };
+    let target = agent_browser_service_model::RemoteViewApplicationTarget {
+        assignment_id: "same-task-assignment".into(),
+        registration_id: "registration".into(),
+        desktop_id: "lifecycle".into(),
+        lifecycle_generation: 2,
+        viewing_desktop_id: "viewing".into(),
+        viewing_generation: 9,
+    };
+    for (state, model_selects_account) in [
+        ("active_credential", true),
+        ("active_passkey", true),
+        ("wrong_extension_account", false),
+        ("non_red", false),
+        ("locked", false),
+        ("absent", false),
+        ("ambiguous", false),
+    ] {
+        let mut pixels = image::RgbImage::from_pixel(1024, 768, image::Rgb([240, 240, 240]));
+        // Synthetic toolbar, never a captured real vault. Active state includes
+        // the red icon and three white dots, with two account rows underneath.
+        if state != "absent" {
+            let color = if model_selects_account || state == "wrong_extension_account" {
+                [220, 0, 0]
+            } else {
+                [90, 90, 90]
+            };
+            for x in 900..930 {
+                for y in 10..40 {
+                    pixels.put_pixel(x, y, image::Rgb(color));
+                }
+            }
+            for x in [905, 914, 923] {
+                pixels.put_pixel(x, 25, image::Rgb([255, 255, 255]));
+            }
+        }
+        if state == "wrong_extension_account" {
+            for x in 100..300 {
+                for y in 80..120 {
+                    pixels.put_pixel(x, y, image::Rgb([100, 100, 100]));
+                }
+            }
+        }
+        if model_selects_account {
+            for (top, color) in [(80, [100, 100, 100]), (180, [0, 80, 160])] {
+                for x in 100..300 {
+                    for y in top..top + 40 {
+                        pixels.put_pixel(x, y, image::Rgb(color));
+                    }
+                }
+            }
+            // Distinct synthetic credential/passkey glyph; its interpretation
+            // belongs to the injected semantic model, not this product API.
+            let glyph = if state == "active_passkey" {
+                [0, 160, 0]
+            } else {
+                [160, 120, 0]
+            };
+            for x in 110..120 {
+                for y in 190..210 {
+                    pixels.put_pixel(x, y, image::Rgb(glyph));
+                }
+            }
+        }
+        let mut png = std::io::Cursor::new(Vec::new());
+        pixels.write_to(&mut png, image::ImageFormat::Png).unwrap();
+        let mut owner = ToolbarOwner {
+            fixture: NativeFixture { calls: vec![] },
+            frame: base64::engine::general_purpose::STANDARD.encode(png.into_inner()),
+            epoch: 4,
+            operator: false,
+        };
+        let capture = browser_native_control::execute(
+            &original,
+            &target,
+            &json!({"action":"native_capture"}),
+            &mut owner,
+        )
+        .unwrap();
+        assert_eq!(capture["capture"]["image"]["data"], owner.frame);
+        assert!(
+            capture.get("loginControls").is_none(),
+            "Semantic work needs no deterministic login recipe"
+        );
+        // Inject only the semantic model's interpretation of the current frame.
+        // Ambiguous/non-red/absent cues never assert usable vault/account proof.
+        if model_selects_account {
+            let result = browser_native_control::execute(&original, &target,
+                &json!({"action":"native_input","controlEpoch":4,"actions":[{"kind":"click","x":150,"y":200,"button":1,"count":1}]}), &mut owner).unwrap();
+            assert_eq!(result["delivery"], "dispatched");
+            assert_eq!(
+                result["taskCompleted"], false,
+                "Vault selection cannot verify website access"
+            );
+        }
+        let inputs: Vec<_> = owner
+            .fixture
+            .calls
+            .iter()
+            .filter(|(operation, _)| operation == "input")
+            .collect();
+        assert_eq!(inputs.len(), usize::from(model_selects_account));
+        for (_, body) in &owner.fixture.calls {
+            assert_eq!(body["desktopId"], "viewing");
+            assert_eq!(body["expectedGeneration"], 9);
+            if body.get("windowId").is_some() {
+                assert_eq!(body["windowId"], 7);
+            }
+        }
+        if state == "locked" {
+            // The Native owner independently changes its epoch on operator
+            // return. Reuse the original task assignment and process/window.
+            owner.operator = true;
+            assert!(browser_native_control::execute(&original, &target,
+                &json!({"action":"native_input","controlEpoch":4,"actions":[{"kind":"click","x":150,"y":200,"button":1,"count":1}]}), &mut owner).is_err());
+            owner.operator = false;
+            owner.epoch = 6;
+            assert!(browser_native_control::execute(&original, &target,
+                &json!({"action":"native_input","controlEpoch":4,"actions":[{"kind":"click","x":150,"y":200,"button":1,"count":1}]}), &mut owner).is_err());
+            for x in 900..930 {
+                for y in 10..40 {
+                    pixels.put_pixel(x, y, image::Rgb([220, 0, 0]));
+                }
+            }
+            for x in [905, 914, 923] {
+                pixels.put_pixel(x, 25, image::Rgb([255, 255, 255]));
+            }
+            for x in 100..300 {
+                for y in 180..220 {
+                    pixels.put_pixel(x, y, image::Rgb([0, 80, 160]));
+                }
+            }
+            let mut png = std::io::Cursor::new(Vec::new());
+            pixels.write_to(&mut png, image::ImageFormat::Png).unwrap();
+            owner.frame = base64::engine::general_purpose::STANDARD.encode(png.into_inner());
+            let returned = browser_native_control::execute(
+                &original,
+                &target,
+                &json!({"action":"native_capture"}),
+                &mut owner,
+            )
+            .unwrap();
+            assert_eq!(returned["source"], "remote_view_native");
+            browser_native_control::execute(&original, &target,
+                &json!({"action":"native_input","controlEpoch":6,"actions":[{"kind":"click","x":150,"y":200,"button":1,"count":1}]}), &mut owner).unwrap();
+            assert_eq!(
+                owner
+                    .fixture
+                    .calls
+                    .iter()
+                    .filter(|(operation, _)| operation == "input")
+                    .count(),
+                1
+            );
+            assert_eq!(target.assignment_id, "same-task-assignment");
+        }
+    }
+}
 impl browser_native_control::NativeOwner for NativeFixture {
     fn request(
         &mut self,
