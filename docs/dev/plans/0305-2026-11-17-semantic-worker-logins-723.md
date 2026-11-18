@@ -1,13 +1,13 @@
 # P305: Dependable semantic-worker logins
 
 Product lane: PL-RECIPES
-Status: OPEN
+Status: CLOSED
 Consolidation: required
 Spec: https://github.com/CochranResearchGroup/agent-browser/issues/723
 Accountable human: ecochran76
 Integration branch: recipes/spec723-integration
 Integration base: bbbcc97e35edf48e5864c75b3dc49725e7c58485
-Review fixed point: proposed integration base; operator question pending.
+Review fixed point: operator-accepted bbbcc97e35edf48e5864c75b3dc49725e7c58485.
 
 ## Current State
 
@@ -19,7 +19,7 @@ Deliver personal-account login verification, browser-first/LastPass guidance, ho
 
 ## Delivery sequence and budget
 
-Four independent source slices run within four agent slots; root integrates serially. #731 depends on validated #726, #728, #729 and #730. #732 depends on #731 and actual selected-runtime/account/unlock authority. Source tests cannot close installed/provider acceptance. Each substantive slice uses meaningful public red/green checks. Cumulative touched-surface gates run locally, never hosted CI. After tickets close, run exactly one broad review on separate Standards and Spec axes, adjudicate findings, then exactly one bounded TDD remediation pass and focused verification. Broad review count: 0. Post-review remediation count: 0.
+Four independent source slices run within four agent slots; root integrates serially. #731 depends on validated #726, #728, #729 and #730. #732 depends on #731 and actual selected-runtime/account/unlock authority. Source tests cannot close installed/provider acceptance. Each substantive slice uses meaningful public red/green checks. Cumulative touched-surface gates run locally, never hosted CI. After tickets close, run exactly one broad review on separate Standards and Spec axes, adjudicate findings, then exactly one bounded TDD remediation pass and focused verification. Broad review count: 1. Post-review remediation count: 1.
 
 ## Worker assignments
 
@@ -30,7 +30,7 @@ Four independent source slices run within four agent slots; root integrates seri
 | #729 | Auth recovery diagnostics | none | auth_continuation / recipes/spec723-auth | owner-login composition/types and public recovery tests | validated; CLOSED |
 | #730 | Contextual guide discovery | none | root / recipes/spec723-integration | MCP observation enrichment and guide guidance module; parent playbooks edits only after726 freezes | validated; CLOSED |
 | #731 | Integrated fresh-worker acceptance | #726, #728, #729, #730 | root after source integration | existing public workflow and installed/development guidance qualification | validated; CLOSED |
-| #732 | Actual installed paths and factors | #731 | root; exact acceptance inputs required | private runtime receipts outside Git and public bounded disposition | pending |
+| #732 | Actual installed paths and factors | #731 | root; exact acceptance inputs required | private runtime receipts outside Git and public bounded disposition | classification complete; CLOSED; live access unqualified |
 
 Shared writer: #726 initially owns playbooks.rs; root supplies an isolated child module and applies the narrow parent integration after freeze. #728 owns shared user-facing docs; other workers supply bullets. Root owns package scripts, CONTEXT, plan/catalog and integration. All worker bases are the integration base above; results and validation are appended on integration.
 
@@ -163,3 +163,26 @@ Read-only exact-runtime observation shows the provider's technical-error alert a
 Installed qualification732 is CLOSED as evidence/classification, not login success. Browser autofill credential use remains unqualified because its Native chooser was not observed; LastPass password/passkey use remains unavailable in the observed signed-out extension state. Auth password private attempt is proven, outcome unknown and provider technical error observed. Actual Auth passkey, TOTP, mail MFA and messaging MFA remain separately unqualified; an earlier text-code option was not triggered, and unknown original input prohibits duplicating fallback. No accounting writes or browser/profile replacement. Full bounded classification: https://github.com/CochranResearchGroup/agent-browser/issues/732#issuecomment-6986040829 . Auth428/429 source repairs remain closed; Auth423 and external capability qualification remain explicitly open.
 
 The original event wake was consumed; its unneeded maintenance wake is explicitly cancelled after the decision, preventing stale re-entry. Private account, attempt and native event evidence remains outside Git. Stable Time2026-11-18T17:19:26.236833275Z, NTS-verified finite bound. All implementation/qualification tickets are closed; the one-time two-axis source review and subsequent one-time TDD remediation are now due. Their counters are0 before this frozen review starts. Parent723 remains open until that closeout. Memory disposition:forbidden.
+
+
+## Standards
+
+The one final review compares bbbcc97e35edf48e5864c75b3dc49725e7c58485...36b4395680b9493edce6ad4da21531580fe805f8 and reads the originating spec, standards and complete commit list. Standards and Spec axes run independently, with primary adjudication. Already-landed main Contacts/install-doctor changes are inherited custody. The bounded Auth dependency diff is also examined at installed sourcef295bbe.
+
+Standards accepted findings:0. No demonstrated blocking documented-rule violation. The proposed duplicated Auth delivery classifier smell is rejected as unnecessary coupling: a client must derive honest metadata when interacting with an older independently deployed producer. It is a judgement suggestion, not evidence of a defect. All-five documentation, privacy and Native ownership rules remain satisfied.
+
+## Spec
+
+Two source-coverage findings are accepted and addressed in one bounded remediation, sourcea67940b8ca1cf311e2ba8466a36807c494ccaf60. Finding1: pure pathway advice was insufficient evidence for AcceptanceI/J. Existing saved-login tests now select the intended second desktop entry, forbid DOM operations for the chooser and stop on wrong/stale evidence. Existing Native integration tests exercise synthetic LastPass credential/passkey frames and semantic input, wrong account and non-red/locked/absent/ambiguous states, stale control refusal and fresh return using the original assignment/process/window. Existing service-client tests independently qualify durable handoff links and retained resume identity. Pixel/model recognition and live vault behavior remain external qualification; the Native fixture does not pretend to own the durable URL registry.
+
+Finding2 is narrowed after primary inspection: existing public source composition already covers passwords and TOTP, including continuation after a password attempt. Missing passkey/email/messaging source composition now uses the same real Auth SDK, authority and parent fixture with synthetic external authenticator/mail/IM ports. The added cases verify one private passkey effect, private email/SMS arm-before-send and input, no password retrieval for a preexisting factor screen, no repeated completed effects, unavailable message sources and unqualified/invisible passkeys. Prior browser/LastPass labels describe the injected receiving entry context, not an additional proven live UI prefix. Source, installed and live factor claims remain distinct.
+
+One TDD remediation assessment is complete. Public seams were stated before testing; existing harnesses were reused. New coverage was GREEN on first execution because those product operations already existed. No product failure, manufactured RED, controller or parallel fixture framework is claimed. The accepted defects were missing evidence, addressed by observable calls/effect counts and negative cases. No second broad review or additional remediation cycle ran.
+
+Final local gates PASS: full touched Native integration64/64; selected CLI integration10/10 across4binaries; native saved-login13 and typecheck; seven real source-composition scenarios including independent factors; Auth composition preflight5; standalone bootstrap with explicit reviewed source; handoff/service-request client; full cargo-safe format and strict workspace Clippy; policy wiring, changed links and patch hygiene. Earlier unchanged MDX/client gates remain valid within their recorded source scope. Native and Clippy use the existing owned target/cache-off8GiB admission; format uses1GiB. Auth/SDK sourcef295bbe and Receipts parent5783fea remain clean, explicit companions. No hosted CI or new production publication.
+
+Retained logs: /var/tmp/spec723-review-{native-final,cli-integration,clippy,fmt-final,owner-composition,auth-preflight,auth-bootstrap-qualified,handoff-client,policy,links}.log and /var/tmp/spec723-r1-native.log. Initial format check found whitespace in the new test; wrapper formatting then check pass. An initial bootstrap invocation lacked source environment and correctly refused; the qualified explicit-source rerun passes. The changed-surface selector reports broad/unresolved coverage for the saved-login script; its actual public test/type command was run explicitly, alongside selected integration and composition gates.
+
+All child tickets are closed after the two source tickets' review-driven reopening and requalification. Parent723 closes only the evidenced source and bounded installed classification. Actual QBO access remains unverified after the single approved unknown attempt/provider technical error, retained under Auth423. Actual autofill/LastPass/passkey/TOTP/mail/IM qualification limits above remain explicit. SourcePR733 and AuthPR430 remain unmerged; no formal release or production Agent Browser replacement. Root integration and owned source/candidate checkouts are retained for PR/installed custody; foreign work remains untouched. Final broad review count1; post-review remediation count1. Memory disposition:forbidden, no explicit memory-write request.
+
+Closeout observation: Stable Time2026-11-18T17:41:46.101818539Z, NTS-verified finite bound. Fresh OS readback retains the original browser and installed Auth service. Exact private process/attempt evidence remains outside Git. No owned build/test command remains active.

@@ -1,4 +1,4 @@
-[P305 semantic-worker logins](0305-2026-11-17-semantic-worker-logins-723.md), spec723: four source slices run; integrated and actual installed-path acceptance remain separate.
+[P305 semantic-worker logins](0305-2026-11-17-semantic-worker-logins-723.md), spec723: CLOSED for bounded source and installed classification; review1/remediation1, PR733 unmerged. Actual account access and remaining factor qualification stay explicit under owning issues.
 
 # Active plan index
 

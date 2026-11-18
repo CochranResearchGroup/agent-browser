@@ -1,4 +1,4 @@
-[P305 semantic-worker logins](docs/dev/plans/0305-2026-11-17-semantic-worker-logins-723.md), PL-RECIPES with PL-AUTH: deliver browser-first autofill/LastPass guidance, contextual SiteGuides, personal-account verification and honest Auth recovery. Source and actual installed-factor qualification remain separate; RUNBOOK owns current evidence.
+[P305 semantic-worker logins](docs/dev/plans/0305-2026-11-17-semantic-worker-logins-723.md), PL-RECIPES with PL-AUTH: bounded source implementation/qualification closed, review1/remediation1. Browser-first guidance, contextual SiteGuides, personal-account verification and honest Auth recovery are source-qualified. RUNBOOK retains exact installed evidence and external factor/account limitations; live login success is not claimed.
 
 [Terminal request619](docs/dev/maintenance/terminal-request619.md) qualifies completed DOM-click reconciliation from producer provenance; candidate-backed original-consumer acceptance remains separate.
 
