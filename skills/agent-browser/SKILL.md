@@ -181,3 +181,5 @@ If the task has no tab (`mode_operation_tab_missing`), create one through `brows
 Native login capture can report `browser_native_operator_control`. This is control metadata, not proof of human activity. Inspect and reconcile the exact route/epoch through supported owner controls when authorized; preserve the browser and use human handoff only for a genuine authentication need.
 
 A positively acknowledged Native capture refusal remains a terminal failure with no effect, never a successful capture or permission to retry. Older records without that proof and uncertain input remain held.
+
+Before asking a person to unlock LastPass, discover and use Auth's supported LastPass sign-in or enrolled session recovery. Auth keeps the master credential inside its protected private channel. Its CLI/source session and the browser extension are separate sessions: verify the requested one; an incomplete mirror or restricted health endpoint does not prove recovery absent. Preserve the original login and report observed capability failures as repairs.

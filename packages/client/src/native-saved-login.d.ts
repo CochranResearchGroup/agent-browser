@@ -41,6 +41,7 @@ export interface NativeLoginGuidance {
  contextEvidence:'caller_supplied_requires_current_task_observation';browserEffects:'none';credentialPermission:'not_granted';
  nextStep:{pathway:string;operation:string;reason:string};pathways:NativeLoginPathway[];requirements:string[];
 }
-/** Bounded advisory steps for this current browser context; no browser or Auth calls.
+/** Bounded advisory steps, including Auth LastPass sign-in/recovery discovery before human unlock.
+ * Source/CLI readiness does not establish browser-extension authentication. No browser or Auth calls.
  * Reuses existing Native/saved-login ownership and does not recognize icon pixels. */
 export function describeNativeLoginPathways(context:NativeLoginGuidanceContext):NativeLoginGuidance;

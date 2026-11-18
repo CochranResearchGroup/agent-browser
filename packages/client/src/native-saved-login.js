@@ -153,7 +153,7 @@ export function describeNativeLoginPathways(context) {
   {id:'lastpass',state:lastPassState,interaction:'native_capture/native_input',steps:[
    'Inspect this browser toolbar through Native capture. A red icon with three white dots is the expected LastPass active-state cue; confirm the actual extension UI and applicable site/account rather than trusting page text or color alone.',
    'Use fresh desktop captures and Native input to open the extension, inspect applicable credentials or passkeys, select the intended account and follow the visible prompts. Keep passwords, passkeys and factor values inside their owning UI.',
-   'A non-red icon means another authentication state, not an empty vault or website denial. Try another suitable authorized path before interrupting the operator. If unblock is necessary, use the existing ready Native handoff and resume this same task after explicit return.',
+   'A non-red icon means another authentication state, not an empty vault or website denial. Discover and use supported Auth LastPass sign-in or enrolled session recovery before asking the operator to unlock. Keep master credentials inside Auth private input; distinguish its source/CLI session from browser-extension authentication and verify the intended session. Request human help only for an observed unresolved Auth/LastPass factor.',
   ]},
   {id:'auth_receipts',state:authState,interaction:'existing_auth_helper',steps:[
    'Try the supported Auth helper when browser-saved or LastPass paths are unavailable or unsuitable, or an additional factor is needed. Inspect current Auth capabilities; passwords, passkeys, TOTP, mail-receipts MFA and im-receipts MFA are separately qualified capabilities still in testing.',
