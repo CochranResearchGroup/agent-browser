@@ -190,7 +190,7 @@ impl BrowserSessionSqliteStore {
             &agent_browser_service_model::ManagedBrowserInstance,
         ) -> serde_json::Value,
     ) -> Result<serde_json::Value, String> {
-        let state = self.load_session_state()?;
+        let state = self.load_mode_state()?;
         let task = state
             .sessions
             .get(task_id)
@@ -201,7 +201,7 @@ impl BrowserSessionSqliteStore {
             .filter(|browser| browser.profile_id == task.profile_id)
             .ok_or("browser_task_owner_unavailable:refresh inventory")?;
         let mut inspection = inspect(&state, browser);
-        let current = self.load_session_state()?;
+        let current = self.load_mode_state()?;
         if !current.sessions.get(task_id).is_some_and(|current_task| {
             current_task.id == task.id
                 && current_task.created_at_ms == task.created_at_ms
@@ -281,7 +281,7 @@ impl BrowserSessionSqliteStore {
             crate::process_identity::observe_process,
         );
         if self
-            .load_session_state()
+            .load_mode_state()
             .ok()
             .and_then(|current| current.browsers.get(&browser.id).cloned())
             .as_ref()
@@ -548,6 +548,32 @@ impl BrowserSessionSqliteStore {
         Ok(BrowserRuntimeMigrationReceipt {
             imported_source_count,
             archive_directory,
+        })
+    }
+
+    /// Fresh ownership projection for mode inspection. History is retained in
+    /// storage but is not an input to physical process or owner comparisons.
+    /// Keep every other field so new live ownership metadata is not dropped.
+    fn load_mode_state(&self) -> Result<BrowserSessionState, String> {
+        let (schema, json): (String, String) = self
+            .connection
+            .query_row(
+                "SELECT schema_version, json_remove(json, '$.navigationHistory',
+             '$.taskOperations', '$.remoteViewTabHandoffs', '$.sessionHistory',
+             '$.tabHistory') FROM state_documents WHERE kind = ?1",
+                params![SESSION_STATE_DOCUMENT],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .map_err(|error| {
+                format!("browser_runtime_document_read_failed:{SESSION_STATE_DOCUMENT}:{error}")
+            })?;
+        if schema != BROWSER_SESSION_STATE_SCHEMA_V1 {
+            return Err(format!(
+                "browser_runtime_document_schema_unsupported:{SESSION_STATE_DOCUMENT}:{schema}"
+            ));
+        }
+        serde_json::from_str(&json).map_err(|error| {
+            format!("browser_runtime_document_invalid:{SESSION_STATE_DOCUMENT}:{error}")
         })
     }
 
@@ -1901,6 +1927,7 @@ mod tests {
         let reader = BrowserSessionSqliteStore {
             connection: Connection::open(&path).unwrap(),
         };
+        let reads_before = session_snapshot_read_count();
         let result = reader.inspect_task_mode_with("task", |_, _| {
             // An actual process replacement must invalidate the observation.
             state.browsers.get_mut("browser").unwrap().pid += 1;
@@ -1910,6 +1937,11 @@ mod tests {
         assert!(result
             .unwrap_err()
             .starts_with("browser_task_changed_during_observation"));
+        assert_eq!(
+            session_snapshot_read_count() - reads_before,
+            0,
+            "Mode inspection must not deserialize global operation/navigation history"
+        );
     }
 
     #[test]

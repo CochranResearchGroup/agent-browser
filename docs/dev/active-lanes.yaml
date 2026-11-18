@@ -2,6 +2,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: LINKEDIN-COMMAND-STATE
+    product_lane: PL-BUGFIX
+    objective: Reduce aggregate history deserialization during retained-task inspection
+    plan: docs/dev/maintenance/linkedin-command-state-latency.md
+    branch: fix/linkedin-command-state
+    target: main
+    accountable_owner: ecochran76
+    work_items: [docs/dev/maintenance/linkedin-command-state-latency.md]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: []
+    reconciled_overlaps: ["Reuse clean Contacts recovery checkout; canonical authentication lane remains untouched; primary writer owns mode inspection store and regression only"]
+    validation_status: RED2aggregate reads expected0; GREEN20store tests; strict workspace Clippy, workspace formatting and patch hygiene pass; uncommitted source candidate, not installed
+    updated_at: 2026-11-18
   - id: LOGIN-PROGRESS-739
     product_lane: PL-AUTH
     objective: Evidence-backed login blockers and verified workflow completion
