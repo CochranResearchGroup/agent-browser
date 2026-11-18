@@ -111,9 +111,9 @@ test('an interrupted running batch remains incomplete and read-only assessment r
  const child=spawn(process.execPath,[commands['run-validation.js'],'--plan',f.planPath,'--output-dir',f.output],{cwd:f.repo,env:f.env,detached:true,stdio:'ignore'});
  const kill=()=>{try{process.kill(-child.pid,'SIGKILL');}catch{}};t.after(kill);
  const terminal=new Promise(resolve=>child.once('exit',(code,signal)=>resolve({code,signal})));
- const deadline=Date.now()+5000;let running=false;
- while(Date.now()<deadline){try{running=existsSync(join(f.output,'receipt.json'))&&f.receipt().checks.some(check=>check.command==='pnpm'&&check.state==='running');}catch{}if(running)break;await new Promise(resolve=>setTimeout(resolve,20));}
- assert.equal(running,true,'persisted check-running state is the readiness signal');kill();await terminal;
+ let running=false;let elapsed=false;const watchdog=setTimeout(()=>{elapsed=true},5000);
+ while(!elapsed){try{running=existsSync(join(f.output,'receipt.json'))&&f.receipt().checks.some(check=>check.command==='pnpm'&&check.state==='running');}catch{}if(running)break;await new Promise(resolve=>setTimeout(resolve,20));}
+ clearTimeout(watchdog);assert.equal(running,true,'persisted check-running state is the readiness signal');kill();await terminal;
  assert.equal(f.receipt().state,'running');const original=readFileSync(join(f.output,'receipt.json'),'utf8');
  assert.equal(f.run('assess-validation.mjs',['--plan',f.planPath,'--receipt',join(f.output,'receipt.json'),'--json']).status,1);assert.equal(readFileSync(join(f.output,'receipt.json'),'utf8'),original);
 });

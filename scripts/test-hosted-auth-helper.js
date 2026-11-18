@@ -17,12 +17,17 @@ try{
   await mkdir(join(candidate,'scripts'),{recursive:true});await mkdir(join(candidate,'src'));
   const metadata={product:scenario==='wrong-producer'?'codex-bots':'auth-receipts',contractVersion:1,identity:'synthetic-identity',sourceRevision:'synthetic-source'};
   await writeFile(join(candidate,'scripts/verify-installation-candidate.mjs'),scenario==='unsafe'?`export async function verifyCandidate(){throw Object.assign(Error('invalid'),{code:'auth_sdk_invalid'});}`:`export async function verifyCandidate(){return ${JSON.stringify(metadata)};}`);
-  await writeFile(join(candidate,'src/auth-client.mjs'),`import {writeFile} from 'node:fs/promises';await writeFile(${JSON.stringify(marker)},'imported');${scenario==='missing-export'?'':`export function createHostedAuthClient({threadId}){return {async call(operation){if(operation==='denied')throw Object.assign(Error('denied'),{code:'auth_not_authorized'});return {operation,caller:threadId()};}};}`}`);
+  await writeFile(join(candidate,'src/auth-client.mjs'),`import {writeFile} from 'node:fs/promises';await writeFile(${JSON.stringify(marker)},'imported');${scenario==='missing-export'?'':`export function createHostedAuthClient({threadId}){return {async call(operation,args){if(operation.startsWith('inspect_credential_'))return {...args,state:'owner_review'};if(operation==='denied')throw Object.assign(Error('denied'),{code:'auth_not_authorized'});return {operation,caller:threadId()};}};}`}`);
   if(scenario==='unsafe-verifier')await chmod(join(candidate,'scripts/verify-installation-candidate.mjs'),0o666);
   if(scenario==='verified'){
    const client=await connectHostedAuthHelper({installationRoot:candidate});assert.equal(client.installation.product,'auth-receipts');
    assert.deepEqual(await client.helper('inspect',{}),{operation:'inspect',caller:'synthetic-caller'});
    await assert.rejects(client.helper('denied',{}),{code:'auth_not_authorized'});
+   await assert.rejects(client.inspectLoginProgress({}),{code:'auth_invalid_request'});
+   const progress=await client.inspectLoginProgress({loginId:'synthetic-login'});
+   assert.equal(progress.category,'credential_selection_required');
+   assert.equal(progress.waitingForUser,false);
+   assert.equal(progress.nextAction.operation,'inspect_credential_login');
   }else{
    await assert.rejects(connectHostedAuthHelper({installationRoot:candidate}),{code:['unsafe','unsafe-verifier'].includes(scenario)?'auth_sdk_invalid':'auth_sdk_incompatible'});
    if(scenario!=='missing-export')await assert.rejects(access(marker),{code:'ENOENT'},'Refused producer cannot execute SDK');

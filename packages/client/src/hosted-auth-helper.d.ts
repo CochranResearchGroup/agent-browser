@@ -4,6 +4,11 @@ export type AuthOperationContext={
   binding:{taskId:string;browserId:string;profileId:string;tabId:string;origin:string;controlGeneration:string};
 };
 export interface OwnerAuthHelper {
+  resumeLoginContinuation(options:{episodeId:string;store:import('./login-continuation.js').LoginContinuationOptions['store'];verifyAccess:import('./login-verification.js').LoginVerifierOptions['verifyAccess'];readWake?:import('./login-continuation.js').LoginContinuationOptions['readWake'];onUpdate?:import('./login-continuation.js').LoginContinuationOptions['onUpdate']}):Promise<import('./login-continuation.js').LoginContinuationResult>;
+  discoverLoginReadiness(intent:import('./login-discovery.js').LoginDiscoveryIntent):Promise<import('./login-discovery.js').LoginDiscoveryResult>;
+  verifyLoginAccess(options:import('./login-verification.js').LoginVerificationInput & {verifyAccess:import('./login-verification.js').LoginVerifierOptions['verifyAccess']}):Promise<import('./login-verification.js').LoginVerificationResult>;
+  loginRecovery:import('./login-recovery.js').LoginRecovery;
+  inspectLoginProgress(options:{loginId:string}|{requestId:string}):Promise<import('./login-progress.js').LoginProgress>;
   /** Destination proposals only; no credential-use authority or live binding. */
   discoverLoginChannels(options:{tenant:string;smsSuffix?:string;emailHint?:string;im?:{callTool(request:{name:string;arguments:Record<string,unknown>}):Promise<unknown>};mail?:{callTool(request:{name:string;arguments:Record<string,unknown>}):Promise<unknown>}}):Promise<Record<string,unknown>>;
   callerTaskId:string;
@@ -21,6 +26,8 @@ export interface OwnerAuthHelper {
   }>;
   helper(operation:string,args:Record<string,unknown>):Promise<Record<string,any>>;
 }
+export {summarizeLoginProgress} from './login-progress.js';
+export {createLoginDiscovery} from './login-discovery.js';
 /** Connect the genuine current Codex caller to the verified standalone Auth SDK. */
 export function connectHostedAuthHelper(options?:{installationRoot?:string;discoveryFile?:string}):Promise<OwnerAuthHelper>;
 /** Connect an explicitly enrolled service consumer. Auth validates its exact

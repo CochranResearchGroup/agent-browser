@@ -5337,6 +5337,21 @@ agent-browser auth - Manage authentication profiles
 
 Standalone website login helpers consume the verified Auth Receipts client SDK.
 Bots is not required; private discovery stays inside Auth Receipts.
+SDK discoverLoginReadiness checks Auth recovery before manual unlock; permission visibility is not authority.
+Extension sign-in and private-source readiness remain distinct.
+SDK verifyLoginAccess requires independent account and required organization proof.
+Auth completion bookkeeping is separate; source ticket closure never proves access.
+Local login workflow publication checks use the existing selector and worktree-local pre-push hook.
+The focused gate never substitutes for full validation or private-site acceptance.
+SDK resumeLoginContinuation extends an existing private record, preserving unknown attempts.
+Callback acknowledgement is not human delivery; Wake readiness and cancellation stay separate.
+SDK inspectLoginProgress reads an original loginId or requestId without private use.
+SDK loginRecovery reconciles the original; failed-business completion preserves unknown input.
+Distinct fresh preparation still requires Auth target/permission checks; no credential replay.
+Selection, submission, confirmed actionable approval delivery and unknown input remain distinct.
+Operator ownership is metadata, not proof of human activity; a review URL alone is not delivery.
+Native progress points to the addressed task briefing or reports its missing binding.
+Continuation preserves incomplete verifier evidence; broad executable changes retain login checks.
 SDK: genuine Codex callers use connectHostedAuthHelper; enrolled applications use connectEnrolledAuthHelper with explicit discovery and operation context.
 Current owner login uses discover_credentials with service/account intent.
 Empty legacy scopes do not mean missing saved credentials. Missing authority,

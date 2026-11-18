@@ -3,6 +3,13 @@ import {realpath,lstat} from 'node:fs/promises';
 import {homedir} from 'node:os';
 import {join,isAbsolute} from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {summarizeLoginProgress} from './login-progress.js';
+import {createLoginRecovery} from './login-recovery.js';
+import {createLoginVerifier} from './login-verification.js';
+import {createLoginDiscovery} from './login-discovery.js';
+import {createLoginContinuation} from './login-continuation.js';
+export {createLoginDiscovery} from './login-discovery.js';
+export {summarizeLoginProgress} from './login-progress.js';
 
 /** Admit producer code within the owner-only installation trust boundary before
  * executing its verifier. Same-user unrestricted processes are not sandboxed.
@@ -79,9 +86,38 @@ function ownerAuthHelper(client,installation,callerTaskId,followCredentialLogin,
   const bound=(request,requestId)=>{if(!request||request.requestId!==requestId||request.mode!=='private'||request.operation!=='login')throw invalid();return request;};
   return {
     callerTaskId,installation,
+    /** Existing owner recovery operations; no private credential use or replay. */
+    loginRecovery:createLoginRecovery({client}),
+    /** Read source readiness through Auth; extension state is separate and
+     * an unavailable permission view never establishes absent permission.
+     * @param {import('./login-discovery.d.ts').LoginDiscoveryIntent} intent */
+    async discoverLoginReadiness(intent){return createLoginDiscovery({client}).inspect(intent);},
+    /** Resume only an existing private continuation namespace. Update and Wake
+     * callbacks report observations; neither creates credential authority.
+     * @param {{episodeId:string,store:import('./login-continuation.d.ts').LoginContinuationOptions['store'],verifyAccess:import('./login-verification.d.ts').LoginVerifierOptions['verifyAccess'],readWake?:import('./login-continuation.d.ts').LoginContinuationOptions['readWake'],onUpdate?:import('./login-continuation.d.ts').LoginContinuationOptions['onUpdate']}} options */
+    async resumeLoginContinuation({episodeId,store,verifyAccess,readWake,onUpdate}){
+      const verifier=createLoginVerifier({client,verifyAccess,callerTaskId});
+      return createLoginContinuation({store,callerTaskId,inspectRequest:args=>client.call('inspect_credential_request',args),verify:input=>verifier.verify(input),readWake,onUpdate}).resume({episodeId});
+    },
+    /** Verify receiving-application access independently of owner completion.
+     * @param {import('./login-verification.d.ts').LoginVerificationInput & {verifyAccess:import('./login-verification.d.ts').LoginVerifierOptions['verifyAccess']}} options */
+    async verifyLoginAccess({verifyAccess,...input}){
+      return createLoginVerifier({client,verifyAccess,callerTaskId}).verify(input);
+    },
+    /** Inspect the original Auth login/request and return bounded progress.
+     * This read never polls an approval or uses a credential.
+     * @param {{loginId?:string,requestId?:string}} options */
+    async inspectLoginProgress(options){
+      const keys=Object.keys(options??{});
+      if(keys.length!==1||!['loginId','requestId'].includes(keys[0])||typeof options[keys[0]]!=='string'||!options[keys[0]])throw invalid();
+      const operation=keys[0]==='loginId'?'inspect_credential_login':'inspect_credential_request';
+      const observation=await client.call(operation,options);
+      if(observation?.[keys[0]]!==options[keys[0]])throw invalid();
+      return summarizeLoginProgress(observation);
+    },
     /** Read-only IM/Mail proposals through the verified Auth SDK. This neither
      * grants authority nor invokes Auth credential use or a private receiver.
-     * @param {{tenant:string,smsSuffix?:string,emailHint?:string,im?:{callTool:(request:any)=>Promise<any>},mail?:{callTool:(request:any)=>Promise<any>}} options */
+     * @param {{tenant:string,smsSuffix?:string,emailHint?:string,im?:{callTool:(request:any)=>Promise<any>},mail?:{callTool:(request:any)=>Promise<any>}}} options */
     async discoverLoginChannels(options){
       if(typeof discoverLoginChannels!=='function')throw Object.assign(Error('Installed Auth SDK lacks channel discovery; use auth-receipts://guides/login-orchestration and repair the verified SDK installation'),{code:'auth_channel_discovery_unavailable'});
       return discoverLoginChannels(options);
