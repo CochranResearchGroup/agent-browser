@@ -4,6 +4,7 @@ import {homedir} from 'node:os';
 import {join,isAbsolute} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {summarizeLoginProgress} from './login-progress.js';
+import {createLoginRecovery} from './login-recovery.js';
 export {summarizeLoginProgress} from './login-progress.js';
 
 /** Admit producer code within the owner-only installation trust boundary before
@@ -81,6 +82,8 @@ function ownerAuthHelper(client,installation,callerTaskId,followCredentialLogin,
   const bound=(request,requestId)=>{if(!request||request.requestId!==requestId||request.mode!=='private'||request.operation!=='login')throw invalid();return request;};
   return {
     callerTaskId,installation,
+    /** Existing owner recovery operations; no private credential use or replay. */
+    loginRecovery:createLoginRecovery({client}),
     /** Inspect the original Auth login/request and return bounded progress.
      * This read never polls an approval or uses a credential.
      * @param {{loginId?:string,requestId?:string}} options */

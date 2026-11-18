@@ -4,6 +4,7 @@ export type AuthOperationContext={
   binding:{taskId:string;browserId:string;profileId:string;tabId:string;origin:string;controlGeneration:string};
 };
 export interface OwnerAuthHelper {
+  loginRecovery:import('./login-recovery.js').LoginRecovery;
   inspectLoginProgress(options:{loginId:string}|{requestId:string}):Promise<import('./login-progress.js').LoginProgress>;
   /** Destination proposals only; no credential-use authority or live binding. */
   discoverLoginChannels(options:{tenant:string;smsSuffix?:string;emailHint?:string;im?:{callTool(request:{name:string;arguments:Record<string,unknown>}):Promise<unknown>};mail?:{callTool(request:{name:string;arguments:Record<string,unknown>}):Promise<unknown>}}):Promise<Record<string,unknown>>;

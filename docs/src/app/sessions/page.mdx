@@ -657,3 +657,6 @@ not recreate a lost draft by replaying navigation or previous input.
 
 Native input keeps its existing Native owner and cooperative journal; it does not
 obtain a CDP task-operation receipt or an invented provider receipt ID.
+
+
+`helper.loginRecovery.reconcile({requestId})` observes and reconciles the same original owner attempt without dispatching credentials. `recordFailure` forwards qualified caller observations to Auth completion and independently reads the settlement; it preserves unknown input history and never grants retry permission. `prepareFresh` may ask Auth to prepare a distinct challenge only after a settled business failure, with the same explicit account and receiving scope; Auth still owns current target readiness, permission and any subsequent private use. A running or changed original remains held. No clock is synthesized by this helper.
