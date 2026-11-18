@@ -50,7 +50,9 @@ export function createLoginRecovery({client}) {
         !intent||typeof account!=='string'||!account||intent.accountHint!==account||intent.origin!==original.origin||intent.targetId!==original.targetId||typeof intent.idempotencyKey!=='string'||!intent.idempotencyKey)throw invalid();
       const prepared=await client.call('prepare_credential_login',intent);
       const request=prepared?.request;
-      if(!request?.requestId||request.requestId===previousRequestId||request.origin!==original.origin||request.targetId!==original.targetId||request.state!=='approved'||request.attemptId||request.running||request.releasedAt!==undefined)throw invalid();
+      if(typeof request?.requestId!=='string'||!/^[A-Za-z0-9][A-Za-z0-9:._-]{0,199}$/.test(request.requestId)||request.requestId===previousRequestId||request.origin!==original.origin||request.targetId!==original.targetId||(request.recipientAccount??request.account)!==account)throw invalid();
+      // Preparation may produce review, denial, or an already attempted original
+      // for this idempotency key. Preserve that owner's result, never repeat use.
       return {...summarizeLoginProgress(prepared),previousRequestId};
     },
   };

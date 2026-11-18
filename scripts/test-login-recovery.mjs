@@ -28,7 +28,7 @@ test('fresh preparation is separately owner-authorized and never reuses old inpu
   const client={async call(operation,args){operations.push(operation);
     if(operation==='inspect_credential_request')return original;
     if(operation==='inspect_authentication_completion')return {requestId:'request-1',state:'completed',completion:{outcome:'failed'},receivingSettlement:{status:'settled'}};
-    if(operation==='prepare_credential_login')return {loginId:'login-2',request:{requestId:'request-2',state:'approved',origin:args.origin,targetId:args.targetId}};
+    if(operation==='prepare_credential_login')return {loginId:'login-2',request:{requestId:'request-2',state:'approved',origin:args.origin,targetId:args.targetId,recipientAccount:args.accountHint}};
     throw Error('Unexpected private effect');
   }};
   const recovery=createLoginRecovery({client});
@@ -39,6 +39,20 @@ test('fresh preparation is separately owner-authorized and never reuses old inpu
   assert.equal(operations.includes('use_credential'),false);
   await assert.rejects(recovery.prepareFresh({previousRequestId:'request-1',intent:{...intent,targetId:'other'}}),{code:'login_recovery_unverified'});
   assert.equal(operations.filter(op=>op==='prepare_credential_login').length,1);
+});
+
+test('a fresh owner review is surfaced under its distinct request instead of discarded',async()=>{
+  const original={requestId:'old',state:'completed',running:false,origin:'https://identity.example',targetId:'target',recipientAccount:'configured@example.test'};
+  const client={async call(operation,args){
+    if(operation==='inspect_credential_request')return original;
+    if(operation==='inspect_authentication_completion')return {requestId:'old',state:'completed',completion:{outcome:'failed'},receivingSettlement:{status:'settled'}};
+    if(operation==='prepare_credential_login')return {loginId:'new-login',request:{requestId:'new-request',state:'pending',origin:args.origin,targetId:args.targetId,recipientAccount:args.accountHint,approvalSubmission:'accepted'}};
+    throw Error('Unexpected input');
+  }};
+  const result=await createLoginRecovery({client}).prepareFresh({previousRequestId:'old',intent:{idempotencyKey:'new',origin:original.origin,targetId:original.targetId,accountHint:original.recipientAccount,expiresAt:2000}});
+  assert.equal(result.requestId,'new-request');
+  assert.equal(result.category,'approval_submitted');
+  assert.equal(result.waitingForUser,false);
 });
 
 test('business failure settlement retains unknown history and is not retry permission',async()=>{
