@@ -35,6 +35,9 @@ test('invalid input, mismatched request and malformed source response cannot pro
   const mismatch=await createLoginDiscovery({client:mismatched.client}).inspect({...intent,requestId:'original-request'});
   assert.equal(mismatch.category,'request_binding_mismatch');
   assert.equal(mismatch.requestId,'original-request');
+  const wrongScope=fixture();const scopedCall=wrongScope.client.call;
+  wrongScope.client.call=async(operation,args)=>operation==='inspect_credential_request'?{requestId:args.requestId,state:'expired',origin:'https://foreign.example.test',recipientAccount:intent.accountHint}:scopedCall(operation,args);
+  assert.equal((await createLoginDiscovery({client:wrongScope.client}).inspect({...intent,requestId:'original-request'})).category,'request_binding_mismatch');
   const malformed=fixture(null);
   assert.equal((await createLoginDiscovery({client:malformed.client}).inspect(intent)).category,'capability_unavailable');
   const malformedCollections=fixture({state:'unique',sources:{},candidates:{},selected:candidate});
@@ -84,7 +87,7 @@ test('an owner-scoped standing permission survives an expired individual request
   f.client.call=async(operation,args)=>{
     if(operation==='inspect_credential_request') {
       f.operations.push({operation,args});
-      return {requestId:args.requestId,state:'expired'};
+      return {requestId:args.requestId,state:'expired',origin:intent.origin,recipientAccount:intent.accountHint,sourceId:'lastpass',recordId:'record-1'};
     }
     return original(operation,args);
   };

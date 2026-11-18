@@ -26,7 +26,9 @@ export function createLoginDiscovery({client,readPermission}) {
         if(capabilities?.contractVersion!==1 || capabilities.credentialOperations!==true || capabilities.sharedOwnerAuthority!==true || capabilities.legacyCredentialEffects!==false)return {...base(),category:'capability_unavailable'};
         if(intent.requestId) {
           request=await client.call('inspect_credential_request',{requestId:intent.requestId});
-          if(request?.requestId!==intent.requestId){request={requestId:intent.requestId};return {...base(),category:'request_binding_mismatch'};}
+          if(request?.requestId!==intent.requestId || request.origin!==intent.origin || typeof (request.recipientAccount??request.account)!=='string' || (request.recipientAccount??request.account).trim().toLowerCase()!==intent.accountHint.trim().toLowerCase()) {
+            request={requestId:intent.requestId};return {...base(),category:'request_binding_mismatch'};
+          }
           if(['denied','revoked','cancelled'].includes(request.state))return base();
         }
         discovery=await client.call('discover_credentials',{origin:intent.origin,accountHint:intent.accountHint,credentialType:'password'});
@@ -41,6 +43,7 @@ export function createLoginDiscovery({client,readPermission}) {
         && discovery.selected.account.trim().toLowerCase()===intent.accountHint.trim().toLowerCase()
         && discovery.candidates.some(candidate=>candidate?.sourceId===discovery.selected.sourceId && candidate.recordId===discovery.selected.recordId && candidate.origin===discovery.selected.origin && candidate.account===discovery.selected.account)
         ? {sourceId:discovery.selected.sourceId,recordId:discovery.selected.recordId}:undefined;
+      if(selected && request && (request.sourceId!==selected.sourceId || request.recordId!==selected.recordId))return {...base(),category:'request_binding_mismatch'};
       const sourceAvailability=discovery.sources?.length
         ? discovery.sources.some(source=>reference(source?.sourceId) && !discovery.unavailable?.includes(source.sourceId))?'available':'unavailable'
         : 'unknown';
