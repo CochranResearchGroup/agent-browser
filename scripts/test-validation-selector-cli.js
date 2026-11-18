@@ -87,6 +87,16 @@ try {
       '--base', before, '--head', 'HEAD', '--ci', '--json',
     ], { cwd: fixtureRepo, encoding: 'utf8' }));
   }
+  for (const file of ['packages/client/src/login-progress.js', 'scripts/test-login-continuation.mjs', 'scripts/test-login-workflow.mjs']) {
+    const login = reportForChangedPaths([file]);
+    assert.equal(login.coverage.complete, true);
+    assert.ok(login.recommendations.some(check => check.command === 'pnpm test:login-workflow'));
+  }
+  for (const file of ['scripts/dev/check-login-workflow.mjs', '.husky/pre-push']) {
+    const gate = reportForChangedPaths([file]);
+    assert.equal(gate.coverage.complete, true);
+    assert.ok(gate.recommendations.some(check => check.command === 'pnpm test:login-workflow-gate'));
+  }
   const authFixture = reportForChangedPaths(['scripts/test-owner-staged-factor.js']);
   assert.ok(authFixture.recommendations.some(check => check.command === 'pnpm test:owner-auth-source'),
     'staged-factor fixture must select its public Auth composition');

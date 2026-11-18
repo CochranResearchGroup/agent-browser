@@ -242,6 +242,14 @@ function selectRecommendations(files, base) {
     add(`pnpm test:documentation-links -- --base ${base}`, 'changed documentation link targets');
   }
 
+  const broadLoginInputs = classifyValidationSelection(files).tier === 'broad';
+  if (broadLoginInputs || files.some(file => /^(?:packages\/client\/src\/login-(?:progress|discovery|recovery|verification|continuation|workflow)\.(?:js|d\.ts)|scripts\/test-login-(?:progress|discovery|recovery|verification|continuation|workflow)\.mjs)$/.test(file) || file === 'packages/client/src/hosted-auth-helper.js' || file === 'packages/client/src/hosted-auth-helper.d.ts')) {
+    add('pnpm test:login-workflow', 'public login workflow contract changed');
+  }
+  if (broadLoginInputs || files.some(file => ['scripts/dev/check-login-workflow.mjs', 'scripts/test-login-validation.mjs', '.husky/pre-push'].includes(file))) {
+    add('pnpm test:login-workflow-gate', 'local login publication gate changed');
+  }
+
   if (files.some(isServiceClientSurface)) {
     add('pnpm test:service-client', 'service client package, examples, or generated helpers changed');
   }
@@ -513,6 +521,7 @@ function isServiceClientSurface(file) {
 }
 
 function isRepositoryToolingSurface(file) {
+  if (['scripts/dev/check-login-workflow.mjs', 'scripts/test-login-validation.mjs', '.husky/pre-push'].includes(file)) return true;
   return (
     file === 'scripts/dev/run-validation.js' || file === 'scripts/dev/validation-plan.mjs' || file === 'scripts/dev/assess-validation.mjs' || file === 'scripts/lib/local-validation.mjs' || file === 'scripts/test-local-validation.mjs' ||
     file === 'scripts/test-validation-runner.js' ||

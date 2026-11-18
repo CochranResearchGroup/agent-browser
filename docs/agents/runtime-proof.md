@@ -7,3 +7,6 @@ Remote View owns native desktops and viewing. Legacy XRDP/Guacamole inventory an
 Use disposable isolated homes, profiles and socket namespaces for synthetic checks. Preserve production and peer work. Before/after browser stress or cleanup, read fresh OS process state and exact ownership; absence from Service State is not cleanup authority. Reboot and broad shutdown require their own user direction.
 
 Do not infer authentication continuity from profile preservation or tab existence. Report whether an acceptance requirement is proven, contradicted, incomplete or unverified. Required memory queue acceptance is not persistence or retrieval proof.
+
+
+For login objectives, keep the requested application/account/organization outcome in the existing private continuation record. Public login progress distinguishes selection, approval submission, confirmed actionable delivery, Native metadata and unknown input. Source ticket closure never completes a live workflow. Use the supported owner recovery and independent receiving-application verifier; retain uncertain originals and use a distinct request only under independently current owner authorization. Callback acknowledgement, armed Wake readiness and cancellation each require their own evidence.

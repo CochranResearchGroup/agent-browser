@@ -71,7 +71,7 @@ function surfacesFor(file) {
   const surfaces = [];
   if (isDocsOrGovernance(file)) surfaces.push('docs');
   if (file.startsWith('packages/dashboard/')) surfaces.push('dashboard');
-  if (isServiceClient(file) || isAuthCompositionSurface(file)) surfaces.push('service-client');
+  if (isServiceClient(file) || isAuthCompositionSurface(file) || /^scripts\/test-login-(?:progress|discovery|recovery|verification|continuation|workflow)\.mjs$/.test(file)) surfaces.push('service-client');
   if (isRepositoryTooling(file)) surfaces.push('repository-tooling');
   if (isWorkstationOrRelease(file)) surfaces.push('workstation');
   if (isRustSource(file)) surfaces.push('rust');
@@ -92,6 +92,7 @@ function isServiceClient(file) {
   return file.startsWith('packages/client/') || file.startsWith('examples/service-client/') || file.startsWith('scripts/generate-service-') || file.startsWith('scripts/test-service-') || file.startsWith('docs/dev/contracts/') || file === 'cli/src/native/service_contracts.rs' || file === 'cli/src/native/service_request.rs' || file === 'cli/src/native/service_model.rs' || file.startsWith('cli/src/native/mcp');
 }
 function isRepositoryTooling(file) {
+  if (['scripts/dev/check-login-workflow.mjs', 'scripts/test-login-validation.mjs', '.husky/pre-push'].includes(file)) return true;
   return file === 'scripts/dev/run-validation.js' || file === 'scripts/dev/validation-plan.mjs' || file === 'scripts/dev/assess-validation.mjs' || file === 'scripts/lib/local-validation.mjs' || file === 'scripts/test-local-validation.mjs' || file === 'scripts/test-validation-runner.js' || file === 'scripts/candidate-build.js' || file.startsWith('scripts/lib/candidate-build-') || file.startsWith('scripts/test-candidate-build-') || file === 'scripts/dev/worktree-closeout.js' || file.startsWith('scripts/lib/worktree-closeout') || file === 'scripts/test-worktree-closeout.js';
 }
 function isWorkstationOrRelease(file) {
