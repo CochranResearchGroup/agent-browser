@@ -7,6 +7,7 @@ import {summarizeLoginProgress} from './login-progress.js';
 import {createLoginRecovery} from './login-recovery.js';
 import {createLoginVerifier} from './login-verification.js';
 import {createLoginDiscovery} from './login-discovery.js';
+import {createLoginContinuation} from './login-continuation.js';
 export {createLoginDiscovery} from './login-discovery.js';
 export {summarizeLoginProgress} from './login-progress.js';
 
@@ -91,6 +92,13 @@ function ownerAuthHelper(client,installation,callerTaskId,followCredentialLogin,
      * an unavailable permission view never establishes absent permission.
      * @param {import('./login-discovery.d.ts').LoginDiscoveryIntent} intent */
     async discoverLoginReadiness(intent){return createLoginDiscovery({client}).inspect(intent);},
+    /** Resume only an existing private continuation namespace. Update and Wake
+     * callbacks report observations; neither creates credential authority.
+     * @param {{episodeId:string,store:import('./login-continuation.d.ts').LoginContinuationOptions['store'],verifyAccess:import('./login-verification.d.ts').LoginVerifierOptions['verifyAccess'],readWake?:import('./login-continuation.d.ts').LoginContinuationOptions['readWake'],onUpdate?:import('./login-continuation.d.ts').LoginContinuationOptions['onUpdate']}} options */
+    async resumeLoginContinuation({episodeId,store,verifyAccess,readWake,onUpdate}){
+      const verifier=createLoginVerifier({client,verifyAccess,callerTaskId});
+      return createLoginContinuation({store,callerTaskId,inspectRequest:args=>client.call('inspect_credential_request',args),verify:input=>verifier.verify(input),readWake,onUpdate}).resume({episodeId});
+    },
     /** Verify receiving-application access independently of owner completion.
      * @param {import('./login-verification.d.ts').LoginVerificationInput & {verifyAccess:import('./login-verification.d.ts').LoginVerifierOptions['verifyAccess']}} options */
     async verifyLoginAccess({verifyAccess,...input}){

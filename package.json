@@ -33,7 +33,7 @@
     "test:candidate-build-filesystem-adapter": "node scripts/test-candidate-build-filesystem-adapter.js",
     "test:candidate-build-command": "node scripts/test-candidate-build-command.js",
     "test:worktree-closeout": "node scripts/test-worktree-closeout.js",
-    "test:repository-tooling": "pnpm test:validation-runner && pnpm test:candidate-executable-input && pnpm test:candidate-build-executor && pnpm test:candidate-build-filesystem-adapter && pnpm test:candidate-build-command && node scripts/test-candidate-build-development-entrypoint.js && pnpm test:worktree-closeout && pnpm test:local-validation",
+    "test:repository-tooling": "pnpm test:validation-runner && pnpm test:candidate-executable-input && pnpm test:candidate-build-executor && pnpm test:candidate-build-filesystem-adapter && pnpm test:candidate-build-command && node scripts/test-candidate-build-development-entrypoint.js && pnpm test:worktree-closeout && pnpm test:local-validation && pnpm test:login-workflow-gate",
     "worktree:closeout": "node scripts/dev/worktree-closeout.js",
     "candidate:build": "node scripts/candidate-build.js",
     "test:lease-authority-crate-architecture": "node scripts/test-lease-authority-crate-architecture.js",
@@ -370,7 +370,10 @@
     "test:login-progress": "node --test scripts/test-login-progress.mjs && pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext ../packages/client/src/login-progress.js ../packages/client/src/hosted-auth-helper.js",
     "test:login-recovery": "node --test scripts/test-login-recovery.mjs && pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext ../packages/client/src/login-recovery.js",
     "test:login-verification": "node --test scripts/test-login-verification.mjs && pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext ../packages/client/src/login-verification.js",
-    "test:login-discovery": "node --test scripts/test-login-discovery.mjs && pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext ../packages/client/src/login-discovery.js"
+    "test:login-discovery": "node --test scripts/test-login-discovery.mjs && pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext ../packages/client/src/login-discovery.js",
+    "test:login-continuation": "node --test scripts/test-login-continuation.mjs && pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext ../packages/client/src/login-continuation.js",
+    "test:login-workflow": "node --test scripts/test-login-progress.mjs scripts/test-login-discovery.mjs scripts/test-login-recovery.mjs scripts/test-login-verification.mjs scripts/test-login-continuation.mjs scripts/test-login-workflow.mjs && pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext ../packages/client/src/hosted-auth-helper.js ../packages/client/src/login-progress.js ../packages/client/src/login-discovery.js ../packages/client/src/login-recovery.js ../packages/client/src/login-verification.js ../packages/client/src/login-continuation.js",
+    "test:login-workflow-gate": "node --test scripts/test-login-validation.mjs"
   },
   "keywords": [
     "browser",

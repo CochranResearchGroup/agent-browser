@@ -4,6 +4,7 @@ export type AuthOperationContext={
   binding:{taskId:string;browserId:string;profileId:string;tabId:string;origin:string;controlGeneration:string};
 };
 export interface OwnerAuthHelper {
+  resumeLoginContinuation(options:{episodeId:string;store:import('./login-continuation.js').LoginContinuationOptions['store'];verifyAccess:import('./login-verification.js').LoginVerifierOptions['verifyAccess'];readWake?:import('./login-continuation.js').LoginContinuationOptions['readWake'];onUpdate?:import('./login-continuation.js').LoginContinuationOptions['onUpdate']}):Promise<import('./login-continuation.js').LoginContinuationResult>;
   discoverLoginReadiness(intent:import('./login-discovery.js').LoginDiscoveryIntent):Promise<import('./login-discovery.js').LoginDiscoveryResult>;
   verifyLoginAccess(options:import('./login-verification.js').LoginVerificationInput & {verifyAccess:import('./login-verification.js').LoginVerifierOptions['verifyAccess']}):Promise<import('./login-verification.js').LoginVerificationResult>;
   loginRecovery:import('./login-recovery.js').LoginRecovery;

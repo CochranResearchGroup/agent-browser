@@ -465,3 +465,9 @@ attempts on their original requests; never replay private use.
 
 
 `discoverLoginReadiness` checks supported Auth capabilities and source metadata before manual unlock. A signed-out extension does not imply unavailable private-source recovery. Credential readiness means uniquely selected metadata, never private-use authority. A hidden owner permission view is visibility unavailable, not an absent grant. Trusted host compositions may use `createLoginDiscovery` with an already authorized scoped owner reader; this neither broadens access nor renews an expired request.
+
+
+`resumeLoginContinuation` extends only an existing private record’s `loginContinuation` namespace, through the existing store lock/load/save interface. Preserve its Native episode, exact caller and browser bindings, requested account/organization and unresolved attempts. Fresh Auth reads and independent verification decide the outcome; a stored success flag never does. Equivalent progress is coalesced across resumes. Notification intent is persisted before the optional callback, and callback acknowledgement is not human delivery; an unknown notification is not blindly resent. An injected trusted Wake reader normalizes its supported receipt: registered/held is not ready, readiness requires the exact armed intent and ready monitor, and cancellation remains a separate cleanup obligation.
+
+
+The local pre-push gate uses the existing validation selector to run the public login workflow checks for relevant committed changes. It requires clean current source and rejects unknown coverage or failed checks. Enable it for one checkout with `git config --local extensions.worktreeConfig true` and `git config --worktree core.hooksPath .husky`; peer checkout settings and hosted CI remain unchanged. This focused source check does not replace full required validation or grant merge/install authority.

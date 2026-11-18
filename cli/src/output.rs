@@ -5341,6 +5341,10 @@ SDK discoverLoginReadiness checks Auth recovery before manual unlock; permission
 Extension sign-in and private-source readiness remain distinct.
 SDK verifyLoginAccess requires independent account and required organization proof.
 Auth completion bookkeeping is separate; source ticket closure never proves access.
+Local login workflow publication checks use the existing selector and worktree-local pre-push hook.
+The focused gate never substitutes for full validation or private-site acceptance.
+SDK resumeLoginContinuation extends an existing private record, preserving unknown attempts.
+Callback acknowledgement is not human delivery; Wake readiness and cancellation stay separate.
 SDK inspectLoginProgress reads an original loginId or requestId without private use.
 SDK loginRecovery reconciles the original; failed-business completion preserves unknown input.
 Distinct fresh preparation still requires Auth target/permission checks; no credential replay.

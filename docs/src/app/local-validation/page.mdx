@@ -60,3 +60,12 @@ v1 runner retains its original environment behavior.
 Rust source and integration-test changes select cargo-safe quality and applicable
 behavior gates. Tooling selection retains the readiness suite through its
 repository-tooling aggregate rather than scheduling the same suite twice.
+
+
+## Login workflow publication gate
+
+The public selector includes `pnpm test:login-workflow` for login contract changes and `pnpm test:login-workflow-gate` for its local gate. The executable pre-push hook runs these focused checks only for the addressed committed changes, requiring a clean current checkout and complete known coverage. It rejects failed tests, dirty source and changes during checks. It does not qualify full merge readiness, installation, private access or other required checks.
+
+Enable the hooks for this checkout with `git config --local extensions.worktreeConfig true` followed by `git config --worktree core.hooksPath .husky`. This leaves peer worktree hook settings alone. The existing version-sync hook content is preserved; this change adds no hosted CI. New branches compare with the configured origin/main lineage; existing branches compare with the previous remote commit. Documentation-only changes keep their existing lane.
+
+The existing source-bound local plan, immutable receipt, assessment and justified reuse commands remain authoritative for full selected validation; the small hook never substitutes a caller-selected subset for that evidence.
