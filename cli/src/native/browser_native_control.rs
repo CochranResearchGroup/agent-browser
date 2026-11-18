@@ -474,7 +474,7 @@ pub fn execute(
                 && control["owner"] == "operator"
                 && control["epoch"].as_u64().is_some()
             {
-                return Err("browser_native_operator_control:explicit Native return required on the existing handoff; no input dispatched".into());
+                return Err("browser_native_operator_control:inspect exact Native route/epoch and reconcile through supported owner controls; existing handoff for actual human assistance; no input dispatched".into());
             }
             if control["desktopId"] != target.viewing_desktop_id
                 || control["generation"] != target.viewing_generation

@@ -178,6 +178,6 @@ outcomes remain retained; this never permits replay or private/native input.
 
 If the task has no tab (`mode_operation_tab_missing`), create one through `browser_tab` with `operation: "new"` and a stable `tabKey`, using `about:blank` or an explicitly requested read-only URL. This rejoins the verified browser without removing profile data. Then prepare the restart with the same operation ID. A recovery tab is a new action; it does not resolve or replay the original uncertain action.
 
-Native login capture can report `browser_native_operator_control`: use the existing ready handoff for explicit desktop return. Cooperative task ownership does not release Native operator control.
+Native login capture can report `browser_native_operator_control`. This is control metadata, not proof of human activity. Inspect and reconcile the exact route/epoch through supported owner controls when authorized; preserve the browser and use human handoff only for a genuine authentication need.
 
 A positively acknowledged Native capture refusal remains a terminal failure with no effect, never a successful capture or permission to retry. Older records without that proof and uncertain input remain held.

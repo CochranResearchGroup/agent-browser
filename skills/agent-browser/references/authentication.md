@@ -62,7 +62,7 @@ The existing `@agent-browser/client/native-saved-login` module exports `describe
 
 Login SiteGuides can declare `identityScope: "personal"` for authenticated application/account verification without inventing an organization. `identityScope: "organization"` and omitted legacy scope retain required organization verification. Personal mode cannot accept an organization reference or silently downgrade a requested organization; provider identity never substitutes for website identity.
 
-Native `browser_native_operator_control` means the desktop is held by the operator even when cooperative browser control says agent. Use the existing ready handoff for explicit Native return; never substitute the cooperative epoch or treat this as missing credentials.
+Native `browser_native_operator_control` reports an ownership record, not proof that a human is active. Inspect the exact Native route and epoch, reconcile stale control through the supported owner release when authorized, and preserve the current browser. Use the existing handoff only when human authentication is actually required; never substitute the cooperative epoch.
 
 ## Standalone Auth Receipts
 
