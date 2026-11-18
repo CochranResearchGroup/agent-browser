@@ -37,6 +37,8 @@ test('invalid input, mismatched request and malformed source response cannot pro
   assert.equal(mismatch.requestId,'original-request');
   const malformed=fixture(null);
   assert.equal((await createLoginDiscovery({client:malformed.client}).inspect(intent)).category,'capability_unavailable');
+  const malformedCollections=fixture({state:'unique',sources:{},candidates:{},selected:candidate});
+  assert.equal((await createLoginDiscovery({client:malformedCollections.client}).inspect(intent)).category,'capability_unavailable');
   const forged=fixture({state:'unique',sources:[],candidates:[{...candidate,sourceId:'SECRET RAW SOURCE'}],selected:{...candidate,sourceId:'SECRET RAW SOURCE'}});
   const held=await createLoginDiscovery({client:forged.client}).inspect(intent);
   assert.equal(held.selected,undefined);

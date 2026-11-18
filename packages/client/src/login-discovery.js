@@ -33,16 +33,16 @@ export function createLoginDiscovery({client,readPermission}) {
       } catch(error) {
         return {...base(),category:error?.code==='auth_not_authorized'?'authority_denied':'capability_unavailable'};
       }
-      if(!discovery || typeof discovery!=='object')return {...base(),category:'capability_unavailable'};
+      if(!discovery || !Array.isArray(discovery.candidates) || !Array.isArray(discovery.sources) || discovery.unavailable!==undefined && !Array.isArray(discovery.unavailable))return {...base(),category:'capability_unavailable'};
       const selected=discovery.state==='unique' && discovery.selected
         && reference(discovery.selected.sourceId) && reference(discovery.selected.recordId)
         && discovery.selected.origin===intent.origin
         && typeof discovery.selected.account==='string'
         && discovery.selected.account.trim().toLowerCase()===intent.accountHint.trim().toLowerCase()
-        && discovery.candidates?.some(candidate=>candidate.sourceId===discovery.selected.sourceId && candidate.recordId===discovery.selected.recordId && candidate.origin===discovery.selected.origin && candidate.account===discovery.selected.account)
+        && discovery.candidates.some(candidate=>candidate?.sourceId===discovery.selected.sourceId && candidate.recordId===discovery.selected.recordId && candidate.origin===discovery.selected.origin && candidate.account===discovery.selected.account)
         ? {sourceId:discovery.selected.sourceId,recordId:discovery.selected.recordId}:undefined;
       const sourceAvailability=discovery.sources?.length
-        ? discovery.sources.some(source=>!discovery.unavailable?.includes(source.sourceId))?'available':'unavailable'
+        ? discovery.sources.some(source=>reference(source?.sourceId) && !discovery.unavailable?.includes(source.sourceId))?'available':'unavailable'
         : 'unknown';
       let category=selected?'credential_ready':sourceAvailability==='unavailable'?'source_unavailable':discovery.state==='partial'?'discovery_incomplete':'credential_choice_required';
       /** @type {import('./login-discovery.d.ts').LoginDiscoveryResult['permission']} */
