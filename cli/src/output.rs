@@ -5337,6 +5337,8 @@ agent-browser auth - Manage authentication profiles
 
 Standalone website login helpers consume the verified Auth Receipts client SDK.
 Bots is not required; private discovery stays inside Auth Receipts.
+SDK discoverLoginReadiness checks Auth recovery before manual unlock; permission visibility is not authority.
+Extension sign-in and private-source readiness remain distinct.
 SDK verifyLoginAccess requires independent account and required organization proof.
 Auth completion bookkeeping is separate; source ticket closure never proves access.
 SDK inspectLoginProgress reads an original loginId or requestId without private use.

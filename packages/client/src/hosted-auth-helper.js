@@ -6,6 +6,8 @@ import {pathToFileURL} from 'node:url';
 import {summarizeLoginProgress} from './login-progress.js';
 import {createLoginRecovery} from './login-recovery.js';
 import {createLoginVerifier} from './login-verification.js';
+import {createLoginDiscovery} from './login-discovery.js';
+export {createLoginDiscovery} from './login-discovery.js';
 export {summarizeLoginProgress} from './login-progress.js';
 
 /** Admit producer code within the owner-only installation trust boundary before
@@ -85,6 +87,10 @@ function ownerAuthHelper(client,installation,callerTaskId,followCredentialLogin,
     callerTaskId,installation,
     /** Existing owner recovery operations; no private credential use or replay. */
     loginRecovery:createLoginRecovery({client}),
+    /** Read source readiness through Auth; extension state is separate and
+     * an unavailable permission view never establishes absent permission.
+     * @param {import('./login-discovery.d.ts').LoginDiscoveryIntent} intent */
+    async discoverLoginReadiness(intent){return createLoginDiscovery({client}).inspect(intent);},
     /** Verify receiving-application access independently of owner completion.
      * @param {import('./login-verification.d.ts').LoginVerificationInput & {verifyAccess:import('./login-verification.d.ts').LoginVerifierOptions['verifyAccess']}} options */
     async verifyLoginAccess({verifyAccess,...input}){
