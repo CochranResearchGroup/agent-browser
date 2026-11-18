@@ -2204,6 +2204,8 @@ agent-browser upgrade                 # Upgrade agent-browser to the latest vers
 
 ## Authentication
 
+The public Auth helper exposes `inspectLoginProgress({loginId})` or `inspectLoginProgress({requestId})` for read-only, evidence-backed progress. `summarizeLoginProgress` projects an existing public observation without effects. Selection, request submission, confirmed actionable delivery, expiry, denial and unknown input remain distinct; a review state or URL alone never means the operator received a request. Native operator ownership is metadata, not proof of human activity. Follow the returned read-only next operation; the summary grants no credential or Native input authority.
+
 agent-browser provides multiple ways to persist login sessions so you don't re-authenticate every run.
 
 ### Quick summary

@@ -4,6 +4,7 @@ export type AuthOperationContext={
   binding:{taskId:string;browserId:string;profileId:string;tabId:string;origin:string;controlGeneration:string};
 };
 export interface OwnerAuthHelper {
+  inspectLoginProgress(options:{loginId:string}|{requestId:string}):Promise<import('./login-progress.js').LoginProgress>;
   /** Destination proposals only; no credential-use authority or live binding. */
   discoverLoginChannels(options:{tenant:string;smsSuffix?:string;emailHint?:string;im?:{callTool(request:{name:string;arguments:Record<string,unknown>}):Promise<unknown>};mail?:{callTool(request:{name:string;arguments:Record<string,unknown>}):Promise<unknown>}}):Promise<Record<string,unknown>>;
   callerTaskId:string;
@@ -21,6 +22,7 @@ export interface OwnerAuthHelper {
   }>;
   helper(operation:string,args:Record<string,unknown>):Promise<Record<string,any>>;
 }
+export {summarizeLoginProgress} from './login-progress.js';
 /** Connect the genuine current Codex caller to the verified standalone Auth SDK. */
 export function connectHostedAuthHelper(options?:{installationRoot?:string;discoveryFile?:string}):Promise<OwnerAuthHelper>;
 /** Connect an explicitly enrolled service consumer. Auth validates its exact

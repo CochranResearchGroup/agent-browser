@@ -2,6 +2,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: LOGIN-PROGRESS-739
+    product_lane: PL-AUTH
+    objective: Evidence-backed login blockers and verified workflow completion
+    plan: docs/dev/plans/0306-2026-11-18-login-progress-739.md
+    branch: auth/spec739-integration
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#739, CochranResearchGroup/agent-browser#740, CochranResearchGroup/agent-browser#741, CochranResearchGroup/agent-browser#742, CochranResearchGroup/agent-browser#743, CochranResearchGroup/agent-browser#744, CochranResearchGroup/agent-browser#745]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: []
+    reconciled_overlaps: ["Reuse clean canonical checkout from48174c314; preserve prior branch, all foreign checkouts and candidates; coordinator owns public contract and shared docs; disjoint worker auxiliaries admitted only after740 validates"]
+    validation_status: Public request-without-delivery reproducer RED; implementation underway
+    updated_at: 2026-11-18
   - id: INSTALL-DOCTOR-HOME-734
     product_lane: PL-BUGFIX
     objective: Isolate no-launch readiness probe from production Service State

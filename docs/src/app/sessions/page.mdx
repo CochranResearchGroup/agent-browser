@@ -435,6 +435,8 @@ agent-browser state load ./backup.json
 
 ## Authenticated sessions
 
+The public Auth helper exposes `inspectLoginProgress({loginId})` or `inspectLoginProgress({requestId})` for read-only, evidence-backed progress. `summarizeLoginProgress` projects an existing public observation without effects. Selection, request submission, confirmed actionable delivery, expiry, denial and unknown input remain distinct; a review state or URL alone never means the operator received a request. Native operator ownership is metadata, not proof of human activity. Follow the returned read-only next operation; the summary grants no credential or Native input authority.
+
 Use `--headers` to set HTTP headers for a specific origin:
 
 ```bash

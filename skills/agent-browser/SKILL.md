@@ -170,3 +170,8 @@ outcomes remain retained; this never permits replay or private/native input.
 
 
 If the task has no tab (`mode_operation_tab_missing`), create one through `browser_tab` with `operation: "new"` and a stable `tabKey`, using `about:blank` or an explicitly requested read-only URL. This rejoins the verified browser without removing profile data. Then prepare the restart with the same operation ID. A recovery tab is a new action; it does not resolve or replay the original uncertain action.
+
+
+## Evidence-backed login progress
+
+The public Auth helper exposes `inspectLoginProgress({loginId})` or `inspectLoginProgress({requestId})` for read-only, evidence-backed progress. `summarizeLoginProgress` projects an existing public observation without effects. Selection, request submission, confirmed actionable delivery, expiry, denial and unknown input remain distinct; a review state or URL alone never means the operator received a request. Native operator ownership is metadata, not proof of human activity. Follow the returned read-only next operation; the summary grants no credential or Native input authority.

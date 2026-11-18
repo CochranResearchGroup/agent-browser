@@ -677,3 +677,6 @@ conversion can restore its previous mode after fresh exact-original exit proof,
 without launching the obsolete requested mode. Live or unverified originals,
 replacement uncertainty, profile custody and immutable request history remain
 separate guards.
+
+
+**Login progress**: A bounded read-only public projection of Auth-owned request evidence. Selection, submission, confirmed actionable delivery, control metadata and unknown input are distinct. The projection provides a supported next observation, never credential authority or proof of application access.
