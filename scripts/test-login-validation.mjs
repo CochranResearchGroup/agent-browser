@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,writeFileSync,rmSync,chmodSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,chmodSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';
@@ -54,4 +54,13 @@ test('installed worktree-local hook rejects a failing contract before a real loc
   assert.equal(push().status,0);
   writeFileSync(join(f.root,'scripts/test-login-progress.mjs'),contract(true));f.git(['add','.']);f.git(['commit','-m','red']);
   const result=push();assert.notEqual(result.status,0);assert.match(result.stderr,/login_workflow_check_failed/);
+});
+
+test('package-only workflow command changes cannot escape the publication gate',t=>{
+  const f=fixture(t),path=join(f.root,'package.json');
+  const pkg=JSON.parse(readFileSync(path,'utf8'));
+  pkg.scripts['test:login-workflow']='node -e "process.exit(7)"';
+  pkg.scripts['test:login-workflow-gate']='node -e "process.exit(0)"';
+  writeFileSync(path,JSON.stringify(pkg));f.git(['add','.']);f.git(['commit','-m','broken workflow command only']);
+  const result=f.run();assert.equal(result.status,1);assert.match(result.stderr,/login_workflow_check_failed/);
 });

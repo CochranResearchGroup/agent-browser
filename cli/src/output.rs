@@ -5350,6 +5350,8 @@ SDK loginRecovery reconciles the original; failed-business completion preserves 
 Distinct fresh preparation still requires Auth target/permission checks; no credential replay.
 Selection, submission, confirmed actionable approval delivery and unknown input remain distinct.
 Operator ownership is metadata, not proof of human activity; a review URL alone is not delivery.
+Native progress points to the addressed task briefing or reports its missing binding.
+Continuation preserves incomplete verifier evidence; broad executable changes retain login checks.
 SDK: genuine Codex callers use connectHostedAuthHelper; enrolled applications use connectEnrolledAuthHelper with explicit discovery and operation context.
 Current owner login uses discover_credentials with service/account intent.
 Empty legacy scopes do not mean missing saved credentials. Missing authority,

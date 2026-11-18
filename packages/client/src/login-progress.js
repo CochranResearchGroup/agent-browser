@@ -10,13 +10,16 @@ export function summarizeLoginProgress(observation) {
   const request = observation?.request ?? observation ?? {};
   const loginId = reference(observation?.loginId);
   const requestId = reference(request.requestId);
-  const nextAction = loginId
+  /** @type {import('./login-progress.d.ts').LoginProgress['nextAction']} */
+  let nextAction = loginId
     ? {operation:'inspect_credential_login',args:{loginId}}
     : requestId ? {operation:'inspect_credential_request',args:{requestId}} : null;
   let category='verification_incomplete';
   let waitingForUser=false;
   /** @type {'auth'|'remote-view'|'application'} */
   let component='auth';
+  /** @type {'addressed_browser_task_required'|undefined} */
+  let limitation;
   const evidenceReferences=[];
   const state=request.state ?? observation?.state;
   const delivery=observation?.approvalDelivery;
@@ -24,7 +27,12 @@ export function summarizeLoginProgress(observation) {
   else if (state==='expired') category='request_expired';
   else if (state==='unknown' || request.heldFor==='original_request_readback') category='input_outcome_unknown';
   else if (['receiving_target_unavailable','receiving_target_pending'].includes(request.heldFor ?? observation?.heldFor)) category='receiving_target_unavailable';
-  else if (observation?.control?.owner==='operator') {category='control_metadata';component='remote-view';}
+  else if (observation?.control?.owner==='operator') {
+    category='control_metadata';component='remote-view';
+    const taskId=reference(observation.taskId);
+    nextAction=taskId?{operation:'browser_command',args:{taskId,action:'task_briefing'}}:null;
+    if(!taskId)limitation='addressed_browser_task_required';
+  }
   else if (request.state==='pending') {
     if (['receiving_target_pending','receiving_target_unavailable'].includes(request.approvalSubmission)) category='receiving_target_unavailable';
     else if (request.approvalSubmission==='unknown') category='approval_submission_unknown';
@@ -35,6 +43,7 @@ export function summarizeLoginProgress(observation) {
   return {
     schemaVersion:1, outcome:'incomplete', category,
     component, waitingForUser, evidenceReferences, nextAction,
+    ...(limitation?{limitation}:{}),
     ...(loginId ? {loginId} : {}), ...(requestId ? {requestId} : {}),
   };
 }

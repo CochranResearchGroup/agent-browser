@@ -11,12 +11,15 @@ test('review without a request is selection work, not a delivered user decision'
 });
 
 test('operator metadata points to observation and never claims human activity', () => {
-  const result=summarizeLoginProgress({loginId:'login-1',control:{owner:'operator',epoch:1}});
+  const result=summarizeLoginProgress({taskId:'browser-task',control:{owner:'operator',epoch:1}});
   assert.equal(result.category,'control_metadata');
   assert.equal(result.component,'remote-view');
   assert.equal(result.waitingForUser,false);
-  assert.equal(result.nextAction.operation,'inspect_credential_login');
+  assert.deepEqual(result.nextAction,{operation:'browser_command',args:{taskId:'browser-task',action:'task_briefing'}});
   assert.equal('humanActivity' in result,false);
+  const unbound=summarizeLoginProgress({loginId:'auth-login',control:{owner:'operator'}});
+  assert.equal(unbound.nextAction,null);
+  assert.equal(unbound.limitation,'addressed_browser_task_required');
 });
 
 test('progress contains no raw private payload and input uncertainty stays incomplete', () => {

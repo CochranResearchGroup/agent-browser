@@ -56,6 +56,21 @@ test('source closure and forged stored success never replace fresh verification'
   assert.equal(forged.outcome,'incomplete');
 });
 
+test('resume retains the actual incomplete application-verifier evidence gap',async()=>{
+  const f=fixture();f.request.state='completed';
+  f.proof={...f.proof,state:'verified',accountMatched:true};
+  f.completion.completion=null;
+  const result=await createLoginContinuation(f.options).resume({episodeId:'episode-1'});
+  assert.equal(result.category,'completion_unverified');
+  assert.equal(result.component,'application');
+  assert.equal(result.qualification.applicationAccess,'verified');
+  assert.deepEqual(result.evidenceReferences,['app-proof-1']);
+  assert.equal(result.outcome,'incomplete');
+  const detailed=await createLoginContinuation({...f.options,verify:async input=>({...await f.options.verify(input),nextAction:{operation:'inspect_authentication_completion',args:{requestId:input.requestId}},privatePage:'PRIVATE'})}).resume({episodeId:'episode-1'});
+  assert.deepEqual(detailed.nextAction,{operation:'inspect_authentication_completion',args:{requestId:'request-1'}});
+  assert.equal(JSON.stringify(detailed).includes('PRIVATE'),false);
+});
+
 test('expired request stays expired even with a ready wake',async()=>{
   const f=fixture();f.request.state='expired';
   f.record={...f.record,loginContinuation:{...f.record.loginContinuation,wakeIntentId:'wake-1'}};

@@ -6,6 +6,7 @@ export interface LoginProgress {
   waitingForUser:boolean;
   evidenceReferences:string[];
   nextAction:{operation:string;args:Record<string,string>}|null;
+  limitation?:'addressed_browser_task_required';
   loginId?:string;
   requestId?:string;
 }

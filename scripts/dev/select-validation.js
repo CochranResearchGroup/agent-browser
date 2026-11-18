@@ -242,10 +242,11 @@ function selectRecommendations(files, base) {
     add(`pnpm test:documentation-links -- --base ${base}`, 'changed documentation link targets');
   }
 
-  if (files.some(file => /^(?:packages\/client\/src\/login-(?:progress|discovery|recovery|verification|continuation|workflow)\.(?:js|d\.ts)|scripts\/test-login-(?:progress|discovery|recovery|verification|continuation|workflow)\.mjs)$/.test(file) || file === 'packages/client/src/hosted-auth-helper.js' || file === 'packages/client/src/hosted-auth-helper.d.ts')) {
+  const broadLoginInputs = classifyValidationSelection(files).tier === 'broad';
+  if (broadLoginInputs || files.some(file => /^(?:packages\/client\/src\/login-(?:progress|discovery|recovery|verification|continuation|workflow)\.(?:js|d\.ts)|scripts\/test-login-(?:progress|discovery|recovery|verification|continuation|workflow)\.mjs)$/.test(file) || file === 'packages/client/src/hosted-auth-helper.js' || file === 'packages/client/src/hosted-auth-helper.d.ts')) {
     add('pnpm test:login-workflow', 'public login workflow contract changed');
   }
-  if (files.some(file => ['scripts/dev/check-login-workflow.mjs', 'scripts/test-login-validation.mjs', '.husky/pre-push'].includes(file))) {
+  if (broadLoginInputs || files.some(file => ['scripts/dev/check-login-workflow.mjs', 'scripts/test-login-validation.mjs', '.husky/pre-push'].includes(file))) {
     add('pnpm test:login-workflow-gate', 'local login publication gate changed');
   }
 

@@ -69,3 +69,6 @@ The public selector includes `pnpm test:login-workflow` for login contract chang
 Enable the hooks for this checkout with `git config --local extensions.worktreeConfig true` followed by `git config --worktree core.hooksPath .husky`. This leaves peer worktree hook settings alone. The existing version-sync hook content is preserved; this change adds no hosted CI. New branches compare with the configured origin/main lineage; existing branches compare with the previous remote commit. Documentation-only changes keep their existing lane.
 
 The existing source-bound local plan, immutable receipt, assessment and justified reuse commands remain authoritative for full selected validation; the small hook never substitutes a caller-selected subset for that evidence.
+
+
+Broad executable inputs, including package scripts, dependencies and selector changes, also retain the workflow and gate checks. A package-only change to a broken workflow command is a rejecting public regression case. Gate tests are selected explicitly rather than also nested in the repository-tooling aggregate.
