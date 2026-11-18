@@ -10,12 +10,12 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#739, CochranResearchGroup/agent-browser#740, CochranResearchGroup/agent-browser#741, CochranResearchGroup/agent-browser#742, CochranResearchGroup/agent-browser#743, CochranResearchGroup/agent-browser#744, CochranResearchGroup/agent-browser#745]
-    plan_state: OPEN
+    plan_state: CLOSED
     custody_state: ACTIVE_WORKTREE
     dependencies: []
     overlaps: []
     reconciled_overlaps: ["Reuse clean canonical checkout from48174c314; preserve prior branch, all foreign checkouts and candidates; coordinator owns public contract and shared docs; disjoint worker auxiliaries admitted only after740 validates"]
-    validation_status: Public request-without-delivery reproducer RED; implementation underway
+    validation_status: PR746 source validated;34 workflow and4 gate cases/types; format and strict Clippy; docs build and policy/link/selector checks pass; one review and one TDD remediation; unmerged, no installation
     updated_at: 2026-11-18
   - id: INSTALL-DOCTOR-HOME-734
     product_lane: PL-BUGFIX
