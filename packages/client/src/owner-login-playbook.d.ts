@@ -7,6 +7,17 @@ export interface BrowserActionEvidence {
  submission:'not_attempted'|'unknown'|'acknowledged';
 }
 
+/** Diagnostic suggestions only. Existing owner policy and effect uncertainty
+ * still govern every alternative path; these operations do not perform input. */
+export interface OwnerLoginRecovery {
+ classification:'authenticated'|'authorization_denied'|'credential_not_found'|'account_ambiguous'|'source_unavailable'|'capability_unavailable'|'integration_failure'|'receiving_unready'|'guidance_mismatch'|'approval_required'|'unknown_outcome'|'unclassified';
+ /** No unresolved input prevents consideration of an independently authorized
+  * alternative. This flag never grants credential use or retry authority. */
+ fallbackEligible:boolean;
+ repairOwner?:'auth-receipts'|'agent-browser';
+ nextOperations:Array<{target:'browser';operation:'verifyLogin'}|{target:'auth';operation:'auth_capabilities'|'inspect_credential_request'|'reconcile_credential_request';arguments?:{requestId:string}}>;
+}
+
 export interface OwnerLoginOptions {
  taskId:string;guideId:string;accountRef:string;organizationRef?:string;
  query:string;accountHint:string;origin:string;targetId:string;purpose:string;
@@ -42,5 +53,5 @@ export interface OwnerLoginDependencies {
  * unchanged SiteGuide plan, freshly validated and durably saved on the same request.
  * Attempted/unknown requests and missing or changed semantic proof never renew. */
 export function createOwnerLoginPlaybook(dependencies:OwnerLoginDependencies):{
- advance(options:OwnerLoginOptions):Promise<Record<string,any>>;
+ advance(options:OwnerLoginOptions):Promise<Record<string,any>&{recovery:OwnerLoginRecovery}>;
 };

@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict';
 import {createPlaybookClient} from '../packages/client/src/playbooks.js';
 import {createServer} from 'node:http';
-import {execFileSync} from 'node:child_process';
+import {createServer as createSecureServer} from 'node:https';
+import {execFileSync,spawn} from 'node:child_process';
 import {existsSync,mkdirSync,readFileSync,readlinkSync,readdirSync,realpathSync,writeFileSync} from 'node:fs';
 import {isAbsolute,join} from 'node:path';
 import {createMcpStdioClient,createSmokeContext,rootDir} from './smoke-utils.js';
@@ -19,28 +20,41 @@ Object.assign(context.env,{AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD:binary,AGENT_BR
  AGENT_BROWSER_HOME:context.agentHome,AGENT_BROWSER_SOCKET_DIR:context.socketDir,AGENT_BROWSER_RUNTIME_HOST:'1',
  AGENT_BROWSER_SITEGUIDE_DIRECTORY:directory,XDG_RUNTIME_DIR:join(context.tempHome,'runtime'),XDG_CONFIG_HOME:join(context.tempHome,'config'),XDG_DATA_HOME:join(context.tempHome,'data')});
 mkdirSync(context.env.XDG_RUNTIME_DIR,{mode:0o700});
+const journey=process.env.AGENT_BROWSER_SMOKE_LOGIN_JOURNEY==='1';
 const qbo=process.env.AGENT_BROWSER_SMOKE_SITE==='qbo';
+const personal=process.env.AGENT_BROWSER_SMOKE_PERSONAL==='1';
 const guideId=qbo?'qbo-fixture':'bill-fixture';
 const accountRef=qbo?'intuit-fixture-user':'demo-account';
 const organizationRef=qbo?'realm-fixture-42':'demo-company';
 const appId=qbo?'qbo-company':'application';
 const companyAttribute=qbo?'data-realm-id':'data-company';
 const appHtml=qbo?`<main id="qbo-company" data-account="${accountRef}" data-realm-id="${organizationRef}"><span id="qbo-user" data-user="${accountRef}">${accountRef}@example.invalid</span></main>`:
- `<main id="application" data-account="${accountRef}" data-company="${organizationRef}">${accountRef}@example.invalid</main>`;
+ `<main id="application" data-account="${accountRef}"${personal?'':` data-company="${organizationRef}"`}>${accountRef}@example.invalid</main>`;
 const controls=qbo?{identifier:'input[name=userid]',password:'input[name=password]',submit:'#intuit-signin',accountScope:'[data-auth-account]',identifierSubmit:'#intuit-next'}:
  {identifier:'#username',password:'#password',submit:'#submit',accountScope:'[data-auth-account]'};
-const server=createServer((req,res)=>{res.setHeader('content-type','text/html');res.end(retrievalPage(req.url)||appHtml);});
-await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin=`http://127.0.0.1:${server.address().port}`;
+let tls;
+if(journey){
+ const key=join(context.tempHome,'fixture.key'),cert=join(context.tempHome,'fixture.crt');
+ execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',key,'-out',cert,'-days','1','-subj','/CN=127.0.0.1','-addext','subjectAltName=IP:127.0.0.1'],{stdio:'ignore'});
+ tls={key:readFileSync(key),cert:readFileSync(cert)};
+}
+const serve=(req,res)=>{res.setHeader('content-type','text/html');res.end(retrievalPage(req.url)||appHtml);};
+const server=journey?createSecureServer(tls,serve):createServer(serve);
+await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin=`${journey?'https':'http'}://127.0.0.1:${server.address().port}`;
 writeFileSync(join(directory,guideId+'.json'),JSON.stringify({schemaVersion:'agent-browser.siteguide.v1',guideId,name:qbo?'Synthetic QBO':'Synthetic BILL',allowedOrigins:[origin],
  authenticatedSelector:'#'+appId,account:{selector:qbo?'#qbo-user':'#application',attribute:qbo?'data-user':'data-account'},
- organization:{selector:'#'+appId,attribute:companyAttribute},controls,
+ ...(personal?{identityScope:'personal'}:{organization:{selector:'#'+appId,attribute:companyAttribute}}),controls,
  states:[{state:'password_required',selector:controls.password},{state:'identifier_required',selector:controls.identifier},{state:'mfa_required',selector:'input[autocomplete=one-time-code]'}]}));
 const client=createMcpStdioClient({context,args:['mcp','serve'],onFatal:()=>{}});
 const tasks=[];
+let fixtureBrowser,fixtureBrowserExit;
 async function call(name,args){const result=await client.send('tools/call',{name,arguments:args});const payload=JSON.parse(result.content.find(item=>item.type==='text').text);assert.equal(payload.success,true,JSON.stringify(payload));return payload.data;}
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function cleanup(){
  client.close();await wait(150);
+ // This exact child belongs to the fixture; public adopted-task close preserves its owner.
+ if(fixtureBrowser&&fixtureBrowser.exitCode===null&&fixtureBrowser.signalCode===null)fixtureBrowser.kill('SIGTERM');
+ if(fixtureBrowserExit)await fixtureBrowserExit;
  const file=join(context.socketDir,'runtime-host.pid');if(existsSync(file)){
   const pid=Number(readFileSync(file));try{const env=readFileSync(`/proc/${pid}/environ`,'utf8').split('\0');assert(env.includes(`HOME=${context.tempHome}`)&&env.includes(`AGENT_BROWSER_HOME=${context.agentHome}`));assert.equal(readlinkSync(`/proc/${pid}/exe`),realpathSync(binary));process.kill(pid,'SIGTERM');}catch(error){if(error.code!=='ENOENT')throw error;}
  }
@@ -52,13 +66,74 @@ try {
  await client.send('initialize',{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'siteguide-verification',version:'1'}});client.notify('notifications/initialized');
  const discovery=await call('browser_discover',{category:'playbooks'});assert(discovery.operations.includes('verify_login'));
  console.log('Public SiteGuide routine discovery passed');
- const alice=await call('browser_open',{serviceName:'siteguide-verification-fixture',agentName:'synthetic-software-client',taskName:'Verify intended synthetic account and company',profile:'siteguide-fixture',profileMode:'persistent',taskKey:'alice',url:origin});tasks.push(alice.taskId);
+ // Exercise the supported adoption path: Local fresh launch has no Native custody ledger.
+ // The owner independently observes this actual profile/process through normal browser_open.
+ const created=JSON.parse(execFileSync(binary,['--json','runtime','create','siteguide-fixture'],{env:context.env,encoding:'utf8'}));
+ assert.equal(created.created,true);const profile=realpathSync(created.userDataDir);
+ assert(profile.startsWith(realpathSync(context.tempHome)+'/'),'Only the disposable fixture profile may be launched');
+ fixtureBrowser=spawn(realpathSync(chrome),['--headless=new','--no-sandbox','--disable-dev-shm-usage','--no-first-run','--no-default-browser-check','--remote-debugging-port=0',...(journey?['--ignore-certificate-errors']:[]),`--user-data-dir=${profile}`,origin],{env:context.env,stdio:['ignore','ignore','pipe']});
+ fixtureBrowserExit=new Promise(resolve=>fixtureBrowser.once('close',resolve));
+ await new Promise((resolve,reject)=>{
+  let output='';
+  fixtureBrowser.once('error',reject);
+  fixtureBrowser.once('exit',()=>reject(Error('Owned fixture browser exited before readiness')));
+  fixtureBrowser.stderr.on('data',chunk=>{output=(output+chunk).slice(-8192);if(output.includes('DevTools listening on ws://'))resolve();});
+ });
+ assert.equal(readlinkSync(join(profile,'SingletonLock')).endsWith(`-${fixtureBrowser.pid}`),true,'Chrome owns its real profile lock');
+ console.log('Fixture precondition: one owned external Chrome adopted through the public profile path');
+ const alice=await call('browser_open',{serviceName:'siteguide-verification-fixture',agentName:'synthetic-software-client',taskName:'Verify intended synthetic account and company',profile:'siteguide-fixture',profileMode:'existing',taskKey:'alice',url:origin});tasks.push(alice.taskId);
  const guide=await call('browser_command',{taskId:alice.taskId,action:'playbook',params:{operation:'inspect_guide',guideId}});assert.equal(guide.guideId,guideId);
  const bob=await call('browser_open',{serviceName:'siteguide-verification-fixture',agentName:'synthetic-peer',taskName:'Preserve unrelated synthetic peer work',profile:'siteguide-fixture',profileMode:'existing',taskKey:'bob',url:'data:text/html,<p>Peer work preserved</p>'});tasks.push(bob.taskId);
- const verify=params=>call('browser_command',{taskId:alice.taskId,action:'playbook',params:{operation:'verify_login',guideId,accountRef,organizationRef,...params}});
+ const identity={accountRef,...(personal?{}:{organizationRef})};
+ const verify=params=>call('browser_command',{taskId:alice.taskId,action:'playbook',params:{operation:'verify_login',guideId,...identity,...params}});
  const software=createPlaybookClient((name,args)=>client.send('tools/call',{name,arguments:args}));
- const completed=await software.verifyLogin({taskId:alice.taskId,guideId,accountRef,organizationRef});assert.equal(completed.status,'completed');assert.equal(completed.taskId,alice.taskId);assert.equal(completed.effectState,'no_effect');
+ const completed=await software.verifyLogin({taskId:alice.taskId,guideId,...identity});assert.equal(completed.status,'completed');assert.equal(completed.taskId,alice.taskId);assert.equal(completed.effectState,'no_effect');
+ if(personal){assert.equal(completed.accountVerified,true);assert.equal(completed.organizationVerified,false,'Personal authentication must not claim organization proof');assert.equal(completed.identityScope,'personal');}
  const replay=await verify();assert.equal(replay.taskId,alice.taskId);assert.equal(replay.tabId,completed.tabId);
+ if(!personal){
+  await assert.rejects(()=>software.verifyLogin({taskId:alice.taskId,guideId,accountRef}));
+  assert.equal((await verify({organizationRef:'different-fixture-organization'})).reasonCode,'organization_mismatch');
+  writeFileSync(join(directory,guideId+'.json'),JSON.stringify({...guide,identityScope:'organization'}));
+  const explicitOrganization=await verify();
+  assert.equal(explicitOrganization.status,'completed');assert.equal(explicitOrganization.identityScope,'organization');
+  assert.equal(explicitOrganization.organizationVerified,true);
+  await assert.rejects(()=>software.verifyLogin({taskId:alice.taskId,guideId,accountRef}));
+  await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:`document.querySelector(${JSON.stringify('#'+appId)}).removeAttribute(${JSON.stringify(companyAttribute)})`}});
+  assert.equal((await verify()).reasonCode,'organization_mismatch');
+  await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:`document.querySelector(${JSON.stringify('#'+appId)}).setAttribute(${JSON.stringify(companyAttribute)},${JSON.stringify(organizationRef)})`}});
+ }
+ if(personal){
+  const wrongAccount=await verify({accountRef:'different-fixture-account'});
+  assert.equal(wrongAccount.reasonCode,'account_mismatch');assert.equal(wrongAccount.status,'failed');
+  assert.equal(wrongAccount.accountVerified,false);
+  const loginHtml='<form data-auth-account><input id=username><input id=password type=password><button id=submit>Sign in</button></form>';
+  await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:`document.body.innerHTML=${JSON.stringify(loginHtml)}`}});
+  const signedOut=await verify();
+  assert.equal(signedOut.reasonCode,'password_required');assert.equal(signedOut.status,'waiting');
+  assert.equal(signedOut.accountVerified,false);assert.equal(signedOut.organizationVerified,false);
+  const prepared=await software.prepareLogin({taskId:alice.taskId,guideId,...identity});
+  assert.equal(prepared.reasonCode,'plan_prepared');assert(prepared.plan);
+  const validated=await software.validatePlan({taskId:alice.taskId,guideId,...identity,plan:prepared.plan});
+  assert.equal(validated.reasonCode,'plan_current');assert.equal(validated.taskId,alice.taskId);
+  assert.equal(validated.effectState,'no_effect');
+  const retargeted=await software.validatePlan({taskId:alice.taskId,guideId,accountRef:'different-fixture-account',plan:prepared.plan});
+  assert.equal(retargeted.status,'adaptation_required');assert.equal(retargeted.reasonCode,'task_target_changed');
+  await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:"document.querySelector('#password').type='text'"}});
+  const changed=await software.validatePlan({taskId:alice.taskId,guideId,...identity,plan:prepared.plan});
+  assert.equal(changed.status,'adaptation_required');assert.equal(changed.reasonCode,'prepared_controls_changed');
+  await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:"document.querySelector('#password').type='password'"}});
+  if(process.env.AGENT_BROWSER_SMOKE_EXPIRED_PLAN_GATE==='1'){
+   console.log(JSON.stringify({expiryGate:{maximumAgeMs:prepared.plan.maximumAgeMs,planId:prepared.plan.planId}}));
+   await new Promise((resolve,reject)=>{
+    process.stdin.once('end',()=>reject(Error('Qualified Stable Time expiry release required')));
+    process.stdin.once('data',data=>data.toString().trim()==='continue'?resolve():reject(Error('Expected explicit expiry release')));
+   });process.stdin.pause();
+   const expired=await software.validatePlan({taskId:alice.taskId,guideId,...identity,plan:prepared.plan});
+   assert.equal(expired.status,'adaptation_required');assert.equal(expired.reasonCode,'plan_stale');
+   assert.equal(expired.effectState,'no_effect');console.log('Untouched original personal plan expiry refused: plan_stale');
+  }
+  console.log('Public personal account/authentication evidence, prepare and original-plan identity/control checks passed');
+ }
  if(process.env.AGENT_BROWSER_SMOKE_RETRIEVAL==='1')await runRetrievalFixture({call,software,taskId:alice.taskId,directory,origin});
  if(process.env.AGENT_BROWSER_SMOKE_GUIDE_AUTHORING==='1') {
   const {runAuthoringFixture}=await import('./siteguide-authoring-fixture.js');
@@ -89,7 +164,7 @@ print(json.dumps({'endpoint':state['browsers'][tab['browserId']]['cdpEndpoint'],
   const {runAuthFixture}=await import('./siteguide-auth-fixture.js');
   negative=(await runAuthFixture({context,software,taskId:alice.taskId,origin,guideId,accountRef,organizationRef,appHtml,qbo}))?.negative===true;
  }
- if(!negative){
+ if(!negative&&!personal){
  await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:`document.querySelector(${JSON.stringify('#'+appId)}).setAttribute(${JSON.stringify(companyAttribute)},"wrong-company")`}});
  const wrong=await verify();assert.equal(wrong.status,'failed');assert.equal(wrong.reasonCode,'organization_mismatch');
  await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:'const select=document.querySelectorAll.bind(document); document.querySelectorAll=(...args)=>{const end=performance.now()+25;while(performance.now()<end){};return select(...args)}'}});
@@ -97,6 +172,14 @@ print(json.dumps({'endpoint':state['browsers'][tab['browserId']]['cdpEndpoint'],
 
  await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:`document.body.innerHTML=${JSON.stringify(qbo?'<input name=password type=password aria-label=Password>':'<input id=password type=password aria-label=Password>')}`}});
  const login=await verify();assert.equal(login.status,'waiting');assert.equal(login.reasonCode,'password_required');
+ if(process.env.AGENT_BROWSER_SMOKE_LOGIN_GUIDANCE==='1'){
+  const {runLoginGuidanceFixture}=await import('./siteguide-login-guidance-fixture.js');
+  await runLoginGuidanceFixture({call,software,taskId:alice.taskId,directory,origin,guideId,appHtml});
+ }
+ if(journey){
+  const {runLoginJourneyFixture}=await import('./siteguide-login-journey-fixture.js');
+  await runLoginJourneyFixture({call,software,taskId:alice.taskId,directory,origin,guideId,appHtml,accountRef,organizationRef});
+ }
  assert(JSON.stringify(await call('browser_snapshot',{taskId:bob.taskId})).includes('Peer work preserved'));
  console.log('Public existing-session verification, wrong company, login-required and peer-preserving replay passed');
  }

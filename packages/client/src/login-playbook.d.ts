@@ -36,7 +36,7 @@ export function createLoginPlaybook(dependencies:Dependencies): {
   advance(options:LoginOptions):Promise<Record<string, any>>;
 };
 export {createOwnerLoginPlaybook} from './owner-login-playbook.js';
-export type {OwnerLoginOptions,OwnerLoginDependencies,OwnerLoginCheckpoint} from './owner-login-playbook.js';
+export type {OwnerLoginOptions,OwnerLoginDependencies,OwnerLoginCheckpoint,OwnerLoginRecovery} from './owner-login-playbook.js';
 
 export {createOwnerTotpContinuation} from './owner-totp-continuation.js';
 export {createOwnerNumberMatchingContinuation} from './owner-number-matching.js';

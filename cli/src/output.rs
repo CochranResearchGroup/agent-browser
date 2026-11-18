@@ -7432,7 +7432,7 @@ Commands:
   Teaching grilling: client teaching-grilling; source-linked questions, authenticated answers
   Native challenge: bounded passive wait or one registered checkbox attempt per task
   Native OCR: high-confidence hCaptcha variants require same-frame brand and registered pixels
-  Native readiness: native_ready separates owner authentication, consumer input policy and viewer delivery
+  Native readiness: owner checks separate authentication, consumer input policy and viewer delivery
   Native lifecycle: public ready and legacy local_ready require exact target and enabled policy; control stays separate
   Native setup: AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE and consumer selective_input; no borrowed desktop
   Native owner failures: observations report no input dispatched; only safe status/cause is retained
@@ -7456,6 +7456,16 @@ Commands:
   Native login episode: same task/episode; at most3 ordered inputs; unknown input never replays
   Saved-login allowance: configurable invocation timeout(default300s); explicit verified ACK-prefix resume
   Native login proof: no password/OCR/image export; independent account verification required
+  Semantic logons: inspect signed-out guidance; this profile browser-saved credentials first
+  Snapshot loginGuidance: bounded guide/version/provenance and observed provider branches; inspect summaries
+  Autofill chooser: Native vision/input, never CDP/DOM or challenge desktop_interact
+  Saved-login describeNativeLoginPathways: bounded advisory context; no browser/Auth effects
+  LastPass: inspect red icon/three white dots plus actual UI/account; Native credentials/passkeys
+  Non-red LastPass: try suitable Auth fallback before same-task operator unblock
+  Auth factors: passwords/passkeys/TOTP/mail MFA/im MFA qualify separately; diagnose false blockers
+  Login identity: resolve account ambiguity; personal SiteGuides omit organization, legacy requires it
+  Login completion: verify website account/required organization and continue original work
+  Auth recovery: bounded classifications/nextOperations; unknown input blocks fallback, never retry
   browser-native TASK ACTION JSON Input/capture <=1Mpx
   browser-build JSON Inspect/select/open profile build
   Workspace Open browser: compact toolbar; disposable CDP-free is the default.
@@ -7501,6 +7511,10 @@ Commands:
   host-control      Reconcile terminal uncertainty on the exact owned task; never replay.
   Completed DOM clicks may use exact owner-terminal producer provenance with a live shared supervisor; native/private input keeps its dispatcher-exit guard.
   Native saved login uses journaled MCP browser_command; convenience CLI refuses login controls/targets.
+  LastPass signed out: discover Auth sign-in/session recovery before human unlock; CLI/source and extension sessions differ.
+  Auth review rows/URLs do not prove prompt delivery; diagnose missing requests or delivery before reporting a user wait.
+  Native operator state is metadata, not human activity proof; reconcile the exact route/epoch through supported owner controls.
+  Acknowledged Native capture refusal remains failed/no-effect; unproved records and uncertain input stay held.
   host-reconnect TASK OP [options-json] Status/disconnect/reconnect/rebind/configure/reopen
   host-policy JSON  App/task rules and scoped override
 

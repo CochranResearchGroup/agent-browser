@@ -306,3 +306,123 @@ fn native_login_perception_public_journal_legacy_capture_is_not_acknowledged_or_
     })
     .unwrap();
 }
+
+#[test]
+fn native_login_perception_public_capture_refusal_is_terminal_but_never_success_or_replay() {
+    let _fixture = fixture();
+    let params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_capture","requestId":"operator-refused-capture","params":{"loginControls":{"profile":"english-chrome-v1"}}}});
+    task_operations::with_context(Some(&params), || {
+        let reply = task_operations::transport(
+            json!({"action":"native_capture","loginControls":{"profile":"english-chrome-v1"}}),
+            |command| Ok(crate::connection::Response {
+                success: false,
+                id: command["id"].as_str().map(str::to_owned),
+                error: Some("browser_native_operator_control:explicit Native return required on the existing handoff; no input dispatched".into()),
+                ..Default::default()
+            }),
+        ).unwrap();
+        assert!(!reply.success);
+        assert_eq!(reply.data.as_ref().unwrap()["taskOperation"]["outcome"], "refused_no_effect");
+        Ok(Value::Null)
+    }).unwrap();
+    let original = task_operations::lookup("task", "operator-refused-capture").unwrap();
+    assert_eq!(original["operation"]["state"], "owner_acknowledged");
+    assert_eq!(original["operation"]["effectState"], "no_effect");
+    assert_eq!(
+        original["operation"]["failureCode"],
+        "browser_native_operator_control"
+    );
+    assert_eq!(original["operation"]["retryAllowed"], false);
+    let mut inputs = 0;
+    assert!(input(
+        "must-not-input",
+        "operator-refused-capture",
+        "refused-episode",
+        false,
+        &mut inputs
+    )
+    .is_err());
+    assert_eq!(inputs, 0);
+    assert!(
+        workflow::inspect_briefing("task").unwrap()["uncertainOperations"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    task_operations::with_context(Some(&params), || {
+        let reply = task_operations::transport(
+            json!({"action":"native_capture","loginControls":{"profile":"english-chrome-v1"}}),
+            |_| panic!("Terminal refused capture must not redispatch"),
+        )
+        .unwrap();
+        assert!(!reply.success);
+        assert!(reply
+            .error
+            .unwrap()
+            .starts_with("browser_native_operator_control:"));
+        assert_eq!(reply.data.as_ref().unwrap()["effectState"], "no_effect");
+        assert_eq!(reply.data.as_ref().unwrap()["dispatchAttempted"], false);
+        Ok(Value::Null)
+    })
+    .unwrap();
+}
+
+#[test]
+fn native_login_perception_public_unproven_capture_failures_remain_uncertain() {
+    let _fixture = fixture();
+    for (request, error, response_id) in [
+        ("unknown-capture", "unrecognized_owner_failure", None),
+        ("similar-prose", "owner says no input dispatched", None),
+        (
+            "wrong-response",
+            "browser_native_operator_control:explicit return required",
+            Some("another-request"),
+        ),
+        ("lost-capture", "transport lost", None),
+    ] {
+        let params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_capture","requestId":request,"params":{"loginControls":{"profile":"english-chrome-v1"}}}});
+        task_operations::with_context(Some(&params), || {
+            let _ = task_operations::transport(
+                json!({"action":"native_capture","loginControls":{"profile":"english-chrome-v1"}}),
+                |_| {
+                    if request == "lost-capture" {
+                        Err(error.into())
+                    } else {
+                        Ok(crate::connection::Response {
+                            success: false,
+                            id: response_id.map(str::to_owned),
+                            error: Some(error.into()),
+                            ..Default::default()
+                        })
+                    }
+                },
+            );
+            Ok(Value::Null)
+        })
+        .unwrap();
+        let original = task_operations::lookup("task", request).unwrap();
+        assert_eq!(original["operation"]["state"], "uncertain");
+        assert!(original["operation"].get("effectState").is_none());
+    }
+    capture("valid-before-input", "username");
+    let target = json!({"observationRequestId":"valid-before-input","episodeId":"input-refusal-episode","targetRef":format!("login:{}","a".repeat(64))});
+    let params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_input","requestId":"unproven-input","params":{"loginTarget":target}}});
+    task_operations::with_context(Some(&params), || {
+        let _ = task_operations::transport(
+            json!({"action":"native_input","loginTarget":target}),
+            |_| {
+                Ok(crate::connection::Response {
+                    success: false,
+                    error: Some("browser_native_operator_control:explicit return required".into()),
+                    ..Default::default()
+                })
+            },
+        );
+        Ok(Value::Null)
+    })
+    .unwrap();
+    assert_eq!(
+        task_operations::lookup("task", "unproven-input").unwrap()["operation"]["state"],
+        "uncertain"
+    );
+}

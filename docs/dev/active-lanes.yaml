@@ -2,6 +2,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: SEMANTIC-WORKER-LOGIN-723
+    product_lane: PL-RECIPES
+    objective: Complete profile-aware semantic-worker logins with contextual guidance and honest recovery
+    plan: docs/dev/plans/0305-2026-11-17-semantic-worker-logins-723.md
+    branch: recipes/spec723-integration
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#723, CochranResearchGroup/agent-browser#726, CochranResearchGroup/agent-browser#728, CochranResearchGroup/agent-browser#729, CochranResearchGroup/agent-browser#730, CochranResearchGroup/agent-browser#731, CochranResearchGroup/agent-browser#732, CochranResearchGroup/agent-browser#737, CochranResearchGroup/agent-browser#738]
+    plan_state: CLOSED
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [AUTH-CHANNEL-DISCOVERY-667, NATIVE-SAVED-LOGIN-596, P300]
+    reconciled_overlaps: ["Root integrated shared sources; retained source/candidate custody; bounded Auth428/429 effects were separately authorized; preserve foreign work and original unknown attempt"]
+    validation_status: sourcea67940b8c; children CLOSED; review1/remediation1; Native64, CLI integration10, saved-login13/types, seven Auth compositions, strict Rust and focused local gates PASS; Authf295 installed; actual private attempt unknown/provider technical error, Auth423 OPEN; PR733/430 unmerged
+    limitations: ["Actual installed autofill, LastPass and individual Auth factors require separate bounded evidence", "Initial inventory retains11 present checkouts and7 missing registrations; no foreign cleanup"]
+    updated_at: 2026-11-18
   - id: INSTALL-DOCTOR-HOME-734
     product_lane: PL-BUGFIX
     objective: Isolate no-launch readiness probe from production Service State

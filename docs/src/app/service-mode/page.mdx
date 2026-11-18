@@ -2072,7 +2072,7 @@ inspection does not relaunch the browser or attach a debugger. Mode conversion
 and agentic CDP-free desktop input are separate delivery work.
 
 
-`native_ready` returns separate `inputReadiness` evidence. A private
+The owner's internal `native_ready` check returns separate `inputReadiness` evidence; it is not a public MCP action. A private
 `AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE` supplies owner authentication;
 token presence alone does not prove acceptance. The exact lifecycle desktop's
 consumer input policy must be enabled, and the independently joined viewing

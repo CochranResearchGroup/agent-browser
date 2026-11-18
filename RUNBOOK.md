@@ -1,3 +1,5 @@
+[P305 semantic-worker logins](docs/dev/plans/0305-2026-11-17-semantic-worker-logins-723.md), spec723 / PR733: bounded source delivery and installed classification complete; all child tickets closed, final review1/remediation1. Remediation sourcea67940b8c passes Native64, CLI integration10, saved-login13/types, seven real Auth composition scenarios, strict Rust and focused local gates. Auth428/429 sourcef295bbe is installed. One approved actual private attempt remains unknown after a provider technical error; company access and other live factors are unqualified, retained under Auth423. PR733/430 remain unmerged; no production Agent Browser replacement.
+
 ## Contacts task recovery deployed | 2026-11-16
 
 [718](https://github.com/CochranResearchGroup/agent-browser/pull/718),

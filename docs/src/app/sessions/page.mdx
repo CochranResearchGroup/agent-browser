@@ -40,6 +40,26 @@ agent-browser session
 
 Follow explicit user instructions and service-specific login guidance. Use an available authorized stored credential through its supported private channel, keeping its username and password paired. Auth Receipts is the generic discovery, approval and login workflow when a more specific authorized path is unavailable. Existing authenticated sessions, authorized credential files, saved logins and user-directed SSO/manual flows do not require migration into Auth. Preserve browser ownership, account/realm checks and secret-safe input on every path.
 
+## Semantic-worker logons
+
+Preserve an already authenticated session. On a signed-out observation, inspect applicable login guidance early and check this browser/profile&apos;s saved credentials first. Focus the website login field, capture the browser-owned autofill selector, inspect its choices and select the intended account through Native desktop vision/input. CDP/DOM cannot operate that selector. Reuse the existing saved-login routine when applicable; otherwise supported semantic Native interaction can adapt to the layout without deterministic recognition as a prerequisite.
+
+A positively acknowledged Native capture refusal remains a terminal failure with no effect, never a successful capture or permission to retry. Older records without that proof and uncertain input remain held.
+
+<code>browser_native_operator_control</code> reports Native ownership metadata, not observed human activity. Inspect the exact route/epoch and use supported owner release for authorized stale-control recovery. Preserve the browser; human handoff is needed only for an actual authentication step. Cooperative browser ownership is a separate authority.
+
+Use <code>browser_discover</code> to inspect <code>browser_command</code> <code>native_capture</code>/<code>native_input</code> arguments. The restricted <code>desktop_interact</code> challenge recipes are not a general credential interface. Observe the same task with <code>native_capture</code> and respect current owner readiness/control checks. Disabled or unavailable input reports an integration limitation rather than proving credentials absent; never bypass provider policy.
+
+For installed LastPass, inspect its actual toolbar and extension UI. A red icon with three white dots is the expected active cue; confirm the site/account and visible UI rather than relying on color alone. Use Native capture/input for credentials and passkeys. A non-red icon means another authentication state. Try another suitable authorized path before interrupting the operator; when unblock is necessary, use the same ready Native handoff and resume this task after explicit return.
+
+Auth Receipts supplies a fallback or additional factor through its existing helper and original journey. Passwords, passkeys, TOTP, mail-receipts MFA and im-receipts MFA are separately qualified capabilities still in testing. Diagnose integration errors as possible defects while preserving explicit authority refusal, confirmed provider rejection and unknown input. Reconcile the original uncertain operation before another path; never infer no effect from a lost reply.
+
+The existing <code>@agent-browser/client/native-saved-login</code> export <code>describeNativeLoginPathways()</code> produces bounded advice for a current task/profile/browser/tab/target binding and exact HTTP(S) origin. It makes no browser or Auth calls, grants no credential permission and does not recognize LastPass pixels. Resolve account ambiguity using task context or an established mapping. Verify the intended website account, required organization and continuation of original work independently after return; provider sign-in alone does not complete login.
+
+Login SiteGuides may declare <code>identityScope: "personal"</code> to verify authenticated application/account access without an organization. Explicit <code>"organization"</code> and omitted legacy scope retain organization evidence. Personal mode rejects an organization reference and never downgrades a requested organization. Observation guidance exposes provenance and qualification limits; source, installed skill and actual provider evidence remain distinct.
+
+Owner-login <code>advance()</code> adds bounded <code>recovery</code> hints for real denials, no match, account ambiguity, source/capability failures, receiving unreadiness and unknown input. Follow returned existing <code>nextOperations</code>; hints perform no calls/input. <code>fallbackEligible</code> allows considering a separately authorized alternative and never grants retries. Preserve the original request and receiving binding; unknown input blocks fallback until reconciled. An Auth repair owner identifies an integration defect, not authority to repair the runtime.
+
 ## Guarded runtime host
 
 Set <code>AGENT_BROWSER_RUNTIME_HOST=1</code> for disposable validation of the
@@ -655,3 +675,7 @@ not recreate a lost draft by replaying navigation or previous input.
 
 Native input keeps its existing Native owner and cooperative journal; it does not
 obtain a CDP task-operation receipt or an invented provider receipt ID.
+
+Before asking a person to unlock LastPass, discover and use Auth's supported LastPass sign-in or enrolled session recovery. Auth keeps the master credential inside its protected private channel. Its CLI/source session and the browser extension are separate sessions: verify the requested one; an incomplete mirror or restricted health endpoint does not prove recovery absent. Preserve the original login and report observed capability failures as repairs.
+
+Treat Auth review state, request creation, parent submission, client delivery and owner decision as separate evidence. An owner_review row or review URL alone never proves an authorization request reached the user. If no request exists, follow supported selection/refinement or repair the missing proposal; if receiving preparation or delivery failed, diagnose that original failure. Report waiting for the user only with an actionable request and delivery evidence; never silently renew an expired intent.

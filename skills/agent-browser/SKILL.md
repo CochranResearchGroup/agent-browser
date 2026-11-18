@@ -49,6 +49,12 @@ Saved login: use [native login controls](references/cli-and-service.md#native-lo
 
 For an operator-requested stuck-browser restart, inspect `mode`, then use `mode_convert` with that same mode and one stable `operationId`: `prepare`, then `relaunch` with `ownerConfirmed: true`. Keep the profile and logical tasks; reconcile lost replies on that operation and verify the retained page with `browser_continue`. Browser-scope `browser_close` is not the shared-browser restart path.
 
+## Semantic-worker logons
+
+On a signed-out observation, inspect applicable login guidance early. First check this browser/profile's saved credentials. Focus the login field, capture the browser-owned autofill selector and select the intended account through Native vision/input; CDP cannot operate that selector. Reuse the [saved-login routine](references/cli-and-service.md#native-login-controls) when it fits; supported semantic Native interaction remains available for other layouts. Use `browser_command` `native_capture`/`native_input`, not challenge-only `desktop_interact`; observe the same task with `native_capture` and respect the owner's current readiness/control checks before input.
+
+For installed LastPass, inspect the toolbar and extension UI: red with three white dots is the expected active cue, requiring actual UI/account confirmation. Use Native interaction for credentials/passkeys. Non-red indicates another authentication state; try a suitable authorized Auth path before operator interruption, then use the same ready Native handoff if unblock is needed. Auth passwords, passkeys, TOTP and mail/im MFA remain separately qualified capabilities in testing. Diagnose possible integration bugs without overriding real denials. Preserve task/profile/account, original Auth journey and uncertain operations; reconcile before fallback. Verify website-account access and original-work continuation after return. Follow the [complete login sequence](references/authentication.md#semantic-worker-login-sequence); source guidance does not prove installed readiness.
+
 ## Standalone authentication
 
 Follow explicit user instructions and service-specific authentication guidance.
@@ -76,6 +82,7 @@ An explicitly enrolled unattended application uses `connectEnrolledAuthHelper`
 with its own discovery file and exact operation/recovery/browser context; never
 copy CODEX_THREAD_ID or fall back to Codex discovery. Auth owns enrollment and
 current authority; the adapter does not expose bearer or credential contents.
+Owner-login `advance()` returns bounded `recovery` hints and existing next operations. Preserve original request/binding/effect state; `fallbackEligible` never authorizes credentials or retries. Unknown input blocks fallback until reconciled. Source/SDK failures are integration diagnostics, not denial or an empty vault. Use the returned Auth repair owner for a redacted owning issue.
 Use current `discover_credentials`, not empty legacy scopes, to distinguish
 missing authority, unavailable/partial sources, no match and account choice.
 Before saved-password Native input, read [input and control ownership](references/authentication.md#native-input-and-control-ownership). Keep original unknown attempts; never replay private use.
@@ -170,3 +177,11 @@ outcomes remain retained; this never permits replay or private/native input.
 
 
 If the task has no tab (`mode_operation_tab_missing`), create one through `browser_tab` with `operation: "new"` and a stable `tabKey`, using `about:blank` or an explicitly requested read-only URL. This rejoins the verified browser without removing profile data. Then prepare the restart with the same operation ID. A recovery tab is a new action; it does not resolve or replay the original uncertain action.
+
+Native login capture can report `browser_native_operator_control`. This is control metadata, not proof of human activity. Inspect and reconcile the exact route/epoch through supported owner controls when authorized; preserve the browser and use human handoff only for a genuine authentication need.
+
+A positively acknowledged Native capture refusal remains a terminal failure with no effect, never a successful capture or permission to retry. Older records without that proof and uncertain input remain held.
+
+Before asking a person to unlock LastPass, discover and use Auth's supported LastPass sign-in or enrolled session recovery. Auth keeps the master credential inside its protected private channel. Its CLI/source session and the browser extension are separate sessions: verify the requested one; an incomplete mirror or restricted health endpoint does not prove recovery absent. Preserve the original login and report observed capability failures as repairs.
+
+Treat Auth review state, request creation, parent submission, client delivery and owner decision as separate evidence. An owner_review row or review URL alone never proves an authorization request reached the user. If no request exists, follow supported selection/refinement or repair the missing proposal; if receiving preparation or delivery failed, diagnose that original failure. Report waiting for the user only with an actionable request and delivery evidence; never silently renew an expired intent.

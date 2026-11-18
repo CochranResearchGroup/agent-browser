@@ -5,14 +5,20 @@ use agent_browser_service_model::BrowserTaskOperation;
 use serde_json::{json, Value};
 
 pub(super) fn projection(operation: &BrowserTaskOperation) -> Value {
-    json!({"requestId":operation.request_id,"taskId":operation.task_id,
+    let mut value = json!({"requestId":operation.request_id,"taskId":operation.task_id,
         "profileId":operation.profile_id,"browserId":operation.browser_id,
         "tabId":operation.tab_id,"targetId":operation.target_id,
         "processPid":operation.process_pid,"controlEpoch":operation.control_epoch,
         "action":operation.action,"state":operation.state,
         "createdAtMs":operation.created_at_ms,"completedAtMs":operation.completed_at_ms,
         "evidenceReferences":operation.evidence_references,"retryAllowed":false,
-        "siteOutcome":"unverified"})
+        "siteOutcome":"unverified"});
+    if let Some(code) = crate::native::browser_task_operations::native_capture_refusal(operation) {
+        value["outcome"] = json!("refused_no_effect");
+        value["effectState"] = json!("no_effect");
+        value["failureCode"] = json!(code);
+    }
+    value
 }
 
 pub(super) fn lookup(task_id: &str, request_id: &str) -> Result<Value, String> {
@@ -165,6 +171,9 @@ fn response_data(
     data.insert("taskOperation".into(), receipt);
     data.insert("replayed".into(), json!(replayed));
     data.insert("dispatchAttempted".into(), json!(!replayed));
+    if crate::native::browser_task_operations::native_capture_refusal(operation).is_some() {
+        data.insert("effectState".into(), json!("no_effect"));
+    }
     response.data = Some(Value::Object(data));
 }
 
@@ -299,13 +308,19 @@ pub(super) fn transport(
         };
     match admitted {
         Admission::Existing(original) => {
+            let refused = operations::native_capture_refusal(&original);
+            let acknowledged = original.state
+                == agent_browser_service_model::BrowserTaskOperationState::OwnerAcknowledged;
             let mut response = crate::connection::Response {
-                success: original.state
-                    == agent_browser_service_model::BrowserTaskOperationState::OwnerAcknowledged,
+                success: acknowledged && refused.is_none(),
                 id: Some(original.request_id.clone()),
-                error: (original.state
-                    != agent_browser_service_model::BrowserTaskOperationState::OwnerAcknowledged)
-                    .then(|| "browser_task_operation_uncertain: inspect original; no retry".into()),
+                error: if let Some(code) = refused {
+                    Some(format!("{code}:explicit Native return required on the existing handoff; no input dispatched"))
+                } else {
+                    (!acknowledged).then(|| {
+                        "browser_task_operation_uncertain: inspect original; no retry".into()
+                    })
+                },
                 ..Default::default()
             };
             response_data(&mut response, &original, true);

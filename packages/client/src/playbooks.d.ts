@@ -1,11 +1,20 @@
 export type CallTool = (name: string, args: Record<string, unknown>) => Promise<{
   content: Array<{type: string; text?: string}>;
 }>;
+/** Bounded installed-guide metadata; declarations are not live qualification. */
+export interface LoginGuideSummary {
+  guideId:string;
+  version:string;
+  allowedOrigins:string[];
+  credentialUseAuthorized:false;
+  qualification:{source:string;declaredClass:string;evidenceDate:string|null;liveExecutionProven:false;freshness:'not_independently_verified';limitations:string[]};
+}
 export interface VerifyLoginOptions {
   taskId: string;
   guideId: string;
   accountRef: string;
-  organizationRef: string;
+  /** Required by legacy and organization-scoped guides; omit for explicit personal scope. */
+  organizationRef?: string;
   maxObservationAgeMs?: number;
 }
 export interface RoutineResult {
@@ -20,7 +29,9 @@ export interface RoutineResult {
   browserId: string;
   tabId: string;
   accountVerified: boolean;
+  /** Personal scope never claims organization evidence. */
   organizationVerified: boolean;
+  identityScope?: 'personal' | 'organization';
   observationElapsedMs: number;
   guideDigest?:string;
   plan?:Record<string, unknown>|null;
@@ -41,7 +52,7 @@ export function createPlaybookClient(callTool: CallTool): {
   listTabs(taskId:string):Promise<{taskId:string;currentTabId:string;tabs:Array<{tabId:string}>}>;
   selectTab(taskId:string,tabId:string):Promise<unknown>;
   discover(operation?: 'siteguides' | 'inspect_guide' | 'verify_login' | 'prepare_login' | 'validate_plan'|'collect_posts'): Promise<unknown>;
-  listGuides(taskId: string): Promise<{guides: string[]}>;
+  listGuides(taskId: string): Promise<{guides: string[];guideSummaries:LoginGuideSummary[]}>;
   inspectGuide(taskId: string, guideId: string): Promise<unknown>;
   inspectTeachingDraft(taskId: string, guideId: string): Promise<import('./teaching-draft.js').TeachingSiteGuide>;
   validateTeachingCandidate(options: {taskId:string; guide:import('./teaching-draft.js').TeachingSiteGuide}):Promise<{valid:true;guideId:string;taskId:string;state:'draft';executionAllowed:false;operatorReviewQualified:false}>;

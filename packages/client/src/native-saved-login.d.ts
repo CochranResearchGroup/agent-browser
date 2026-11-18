@@ -17,3 +17,31 @@ export interface NativeSavedLoginClient {resolve(input:{taskId:string;episodeId:
  * At most three owner-guarded inputs. Explicit resume requires a publicly verified
  * acknowledged prefix and preserves original episode clocks; unknown input never replays. */
 export function createNativeSavedLoginClient(options:NativeSavedLoginOptions):NativeSavedLoginClient;
+
+/** Current browser/extension observations supplied by an authorized caller.
+ * This describes evidence; it cannot grant input, credential or retry authority. */
+export interface NativeLoginGuidanceContext {
+ binding:SavedLoginBinding;
+ /** Exact HTTP(S) origin only: no account, URL path, query, token or fragment. */
+ origin:string;
+ accountSelection?:'resolved'|'ambiguous'|'unknown';
+ nativeInputState?:'ready'|'disabled'|'unavailable'|'unknown';
+ savedCredentialState?:'unchecked'|'available'|'not_found'|'unsupported';
+ savedLoginRoutine?:'applicable'|'unsupported'|'unchecked';
+ lastPassState?:'not_observed'|'active'|'authentication_required'|'absent'|'ambiguous';
+ authState?:'available'|'unavailable'|'unqualified'|'unknown';
+ uncertainInput?:boolean;
+}
+export interface NativeLoginPathway {
+ id:'browser_saved'|'lastpass'|'auth_receipts';state:string;
+ interaction:'native_capture/native_input'|'existing_auth_helper';steps:string[];
+}
+export interface NativeLoginGuidance {
+ schemaVersion:'agent-browser.native-login-guidance.v1';taskId:string;profileId:string;origin:string;binding:SavedLoginBinding;
+ contextEvidence:'caller_supplied_requires_current_task_observation';browserEffects:'none';credentialPermission:'not_granted';
+ nextStep:{pathway:string;operation:string;reason:string};pathways:NativeLoginPathway[];requirements:string[];
+}
+/** Bounded advisory steps, including Auth LastPass sign-in/recovery discovery before human unlock.
+ * Source/CLI readiness does not establish browser-extension authentication. No browser or Auth calls.
+ * Reuses existing Native/saved-login ownership and does not recognize icon pixels. */
+export function describeNativeLoginPathways(context:NativeLoginGuidanceContext):NativeLoginGuidance;

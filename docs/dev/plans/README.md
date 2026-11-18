@@ -1,3 +1,5 @@
+[P305 semantic-worker logins](0305-2026-11-17-semantic-worker-logins-723.md), spec723: CLOSED for bounded source and installed classification; review1/remediation1, PR733 unmerged. Actual account access and remaining factor qualification stay explicit under owning issues.
+
 # Active plan index
 
 [P300 compact workspace, Profiles and SiteGuides](0300-2026-11-01-workspace-siteguides-523.md), spec523:524–528 CLOSED; workspace and PR543 cleanup repair are integrated/installed. Actual portability has 3 of 4 passing rows with exact cleanup;530 awaits human donor readiness for the final row.529 needs narrated context/principal mapping. Final review/remediation remain0. [Native control repair](../maintenance/native-control-proof-798.md) is installed accepted with eight same-browser cycles, reconnect, continued automation and cleanup.
