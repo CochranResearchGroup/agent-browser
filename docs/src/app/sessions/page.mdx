@@ -677,3 +677,5 @@ Native input keeps its existing Native owner and cooperative journal; it does no
 obtain a CDP task-operation receipt or an invented provider receipt ID.
 
 Before asking a person to unlock LastPass, discover and use Auth's supported LastPass sign-in or enrolled session recovery. Auth keeps the master credential inside its protected private channel. Its CLI/source session and the browser extension are separate sessions: verify the requested one; an incomplete mirror or restricted health endpoint does not prove recovery absent. Preserve the original login and report observed capability failures as repairs.
+
+Treat Auth review state, request creation, parent submission, client delivery and owner decision as separate evidence. An owner_review row or review URL alone never proves an authorization request reached the user. If no request exists, follow supported selection/refinement or repair the missing proposal; if receiving preparation or delivery failed, diagnose that original failure. Report waiting for the user only with an actionable request and delivery evidence; never silently renew an expired intent.

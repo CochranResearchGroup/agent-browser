@@ -158,6 +158,7 @@ export function describeNativeLoginPathways(context) {
   {id:'auth_receipts',state:authState,interaction:'existing_auth_helper',steps:[
    'Try the supported Auth helper when browser-saved or LastPass paths are unavailable or unsuitable, or an additional factor is needed. Inspect current Auth capabilities; passwords, passkeys, TOTP, mail-receipts MFA and im-receipts MFA are separately qualified capabilities still in testing.',
    'Reuse the service-resolved receiving context and original Auth journey. Diagnose capability/transport failures separately from explicit authority refusal and confirmed provider rejection; preserve a minimal redacted reproducer for the owning issue.',
+   'A backend owner_review state or review URL does not prove client delivery. Before waiting for the user, verify the original actionable request and delivery receipt. Missing selection, receiving-target failures and undelivered prompts require supported refinement or repair, never a silent expiry/renewal loop.',
   ]},
  ]);
  let nextStep={pathway:'browser_saved',operation:'native_capture',reason:'inspect_browser_saved_credentials_first'};
