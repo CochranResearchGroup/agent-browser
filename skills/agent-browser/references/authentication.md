@@ -459,3 +459,6 @@ attempts on their original requests; never replay private use.
 
 
 `helper.loginRecovery.reconcile({requestId})` observes and reconciles the same original owner attempt without dispatching credentials. `recordFailure` forwards qualified caller observations to Auth completion and independently reads the settlement; it preserves unknown input history and never grants retry permission. `prepareFresh` may ask Auth to prepare a distinct challenge only after a settled business failure, with the same explicit account and receiving scope; Auth still owns current target readiness, permission and any subsequent private use. A running or changed original remains held. No clock is synthesized by this helper.
+
+
+`verifyLoginAccess` composes the existing independent application readback with original Auth request and completion reads. The intended account and any required organization must match the exact addressed browser binding. Receiving-provider origin and application origin remain distinct. Auth completion is caller-observed bookkeeping, not independent identity proof; receiver settlement is reported separately. Closed source tickets, filled fields and provider sign-in cannot complete the workflow. No verification call writes credentials or completion.

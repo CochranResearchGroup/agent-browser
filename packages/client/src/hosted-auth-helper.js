@@ -5,6 +5,7 @@ import {join,isAbsolute} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {summarizeLoginProgress} from './login-progress.js';
 import {createLoginRecovery} from './login-recovery.js';
+import {createLoginVerifier} from './login-verification.js';
 export {summarizeLoginProgress} from './login-progress.js';
 
 /** Admit producer code within the owner-only installation trust boundary before
@@ -84,6 +85,11 @@ function ownerAuthHelper(client,installation,callerTaskId,followCredentialLogin,
     callerTaskId,installation,
     /** Existing owner recovery operations; no private credential use or replay. */
     loginRecovery:createLoginRecovery({client}),
+    /** Verify receiving-application access independently of owner completion.
+     * @param {import('./login-verification.d.ts').LoginVerificationInput & {verifyAccess:import('./login-verification.d.ts').LoginVerifierOptions['verifyAccess']}} options */
+    async verifyLoginAccess({verifyAccess,...input}){
+      return createLoginVerifier({client,verifyAccess,callerTaskId}).verify(input);
+    },
     /** Inspect the original Auth login/request and return bounded progress.
      * This read never polls an approval or uses a credential.
      * @param {{loginId?:string,requestId?:string}} options */
