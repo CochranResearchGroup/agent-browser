@@ -6,16 +6,16 @@ lanes:
     product_lane: PL-BUGFIX
     objective: Reduce aggregate history deserialization during retained-task inspection
     plan: docs/dev/maintenance/linkedin-command-state-latency.md
-    branch: fix/linkedin-command-state
+    branch: docs/linkedin747-installed
     target: main
     accountable_owner: ecochran76
-    work_items: [docs/dev/maintenance/linkedin-command-state-latency.md]
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#747]
+    plan_state: CLOSED
+    custody_state: MERGED_RETAINED
     dependencies: []
     overlaps: []
     reconciled_overlaps: ["Reuse clean Contacts recovery checkout; canonical authentication lane remains untouched; primary writer owns mode inspection store and regression only"]
-    validation_status: RED2aggregate reads expected0; GREEN20store tests; strict workspace Clippy, workspace formatting and patch hygiene pass; uncommitted source candidate, not installed
+    validation_status: PR747 merged;20 store tests, strict workspace lint and formatting; preserving deployment accepted revision13; doctor passes;24 browser identities retained; trivial median12.6s to7.0s, profile extraction16.3s to6.6s in one paired run; retain sealed candidate, review2026-11-19
     updated_at: 2026-11-18
   - id: LOGIN-PROGRESS-739
     product_lane: PL-AUTH
