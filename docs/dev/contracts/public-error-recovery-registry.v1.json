@@ -2574,6 +2574,70 @@
       },
       "resumeCondition": "The refreshed exact profile confirms the original name/kind and pending owner state. Only the same catalog update with current compare-and-swap expectations may continue; browser data and task identity remain retained.",
       "maximumAutomaticAttempts": 1
+    },
+    "runtime_reset_custody": {
+      "rationale": "The production runtime reset could not validate its explicit arguments, retained reset receipt, executor custody, exact owned process inventory, backup or service restoration.",
+      "requiredActor": "existing_explicit_production_reset_owner",
+      "evidenceRequirement": "Original reset ID/receipt path, current candidate coordination state, backup digest and positive exact process/service owner observations. A transport or timeout error does not prove reset completion or grant a new reset.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original reset receipt and existing candidate status. Repair the specifically named argument, trusted account-home configuration, receipt/backup custody, or systemd/process observation through its existing installation owner. An interrupted reset resumes only its retained ID using the already supported runtime reset --apply --resume path after explicit production maintenance authority; never start a replacement reset, alter profile bytes, or kill an unproven process.",
+          "precondition": "The existing production maintenance authority covers the original reset, exact receipt/backup and retained executor identity are known, and any uncertain effect is reconciled. This recipe does not authorize apply/reset.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "resumeCondition": "The original retained reset receipt and owner observations establish the current phase and unchanged backup/executor custody; only its supported same-ID continuation under existing explicit production authority may proceed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "runtime_host_installation": {
+      "rationale": "The runtime host or privileged desktop integration could not read or validate the configured listener, lane manifest, exact supervisor process or installation dependency.",
+      "requiredActor": "existing_installation_and_runtime_host_owner",
+      "evidenceRequirement": "Current installation doctor, exact configured host/lane manifest, original startup/replacement receipt and verified executable/process/socket identity. No live authority is inferred from a missing response.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "remediation": [
+        {
+          "instruction": "Run the existing installation doctor, preserve the original host/lane and replacement receipt, and have its installation owner repair the specifically named configuration, dependency, manifest permissions or exact supervisor/listener custody. Re-inspect the original before any supported owner-managed restart; do not adopt a foreign socket/process or replay an uncertain launch.",
+          "precondition": "Exact configured host/lane and original operation are known, and current installation/runtime owner authority covers the repair. A capacity refusal requires actual admitted-lane release or configured extension, never identity bypass.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "resumeCondition": "Doctor and actual owner readback confirm the same configured host/listener/lane identity and original startup outcome before continuation; no new browser effects are implied.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -17525,6 +17589,2118 @@
       "policySource": "cli/src/native/browser_session_runtime.rs",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "stale"
+    },
+    "browser_build_request_invalid": {
+      "recipe": "build_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/browser_build.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/browser_build.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_build_response_invalid": {
+      "recipe": "build_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/browser_build.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/browser_build.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_command_action_unsupported": {
+      "recipe": "runtime_connection",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_command_method_invalid": {
+      "recipe": "runtime_connection",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_command_owner_relay_failed": {
+      "recipe": "runtime_connection",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_command_owner_response_invalid": {
+      "recipe": "runtime_connection",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_command_owner_timeout": {
+      "recipe": "runtime_connection",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_command_owner_unavailable": {
+      "recipe": "runtime_connection",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_handoff_interaction_invalid": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_handoff_payload_invalid": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_handoff_payload_missing": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_host_watch_directory_missing": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/hosted.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/hosted.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_host_watch_metadata_unavailable": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/hosted.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/hosted.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_host_watch_output_failed": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/hosted.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/hosted.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_profile_catalog_unavailable": {
+      "recipe": "runtime_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_profile_directory_missing": {
+      "recipe": "runtime_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_profile_mode_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_profile_name_required": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_profile_selector_conflict": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_session_idle_custody_unavailable": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_tab_operation_invalid": {
+      "recipe": "invalid_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_task_control_read_failed": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_task_current_url_missing": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_task_identity_missing": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_task_retirement_clock_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/task_retirement.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/task_retirement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_task_retirement_parameters_invalid": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/task_retirement.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/task_retirement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_task_retirement_platform_unsupported": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/task_retirement.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/task_retirement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_task_retirement_receipt_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/task_retirement.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/task_retirement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_task_retirement_store_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/task_retirement.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/task_retirement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_lease_legacy_principal_unproven": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_handoff_url_invalid": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "remote_view_privileged_group_membership_missing": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/install.rs"
+        }
+      ],
+      "policySource": "cli/src/install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_privileged_group_missing": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/install.rs"
+        }
+      ],
+      "policySource": "cli/src/install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_privileged_helper_missing": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/install.rs"
+        }
+      ],
+      "policySource": "cli/src/install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_privileged_sudoers_missing": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/install.rs"
+        }
+      ],
+      "policySource": "cli/src/install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_additional_source_host_exit_timeout": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_additional_source_host_identity_invalid": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_cleanup_obligations_missing": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/install.rs"
+        }
+      ],
+      "policySource": "cli/src/install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_convergence_preservation_lane_state_invalid": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_cooperative_preparation_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_handoff_alternate_browser_conflict": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "runtime_handoff_prepare_descriptor_invalid": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_handoff_prepare_path_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_handoff_prepare_response_invalid": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_handoff_prepare_retry_invalid": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_handoff_prepare_retry_read_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_handoff_source_listener_inventory_unavailable": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_handoff_source_runtime_host_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_boot_epoch_missing": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host_ingress.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host_ingress.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_boot_epoch_unavailable": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host_ingress.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host_ingress.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_competing_lane_browser_health_unavailable": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_convergence_deadline_expired": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_adoption.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_adoption.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_convergence_deadline_invalid": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_adoption.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_adoption.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_host_convergence_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_convergence_required": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/session_supervisor.rs"
+        }
+      ],
+      "policySource": "cli/src/session_supervisor.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_host_executable_hash_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host_supervisor_takeover.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host_supervisor_takeover.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_identity_changed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_adoption.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_adoption.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_ingress_lock_timeout": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host_ingress.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host_ingress.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_ingress_old_generation_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_ingress_replacement_process_observation_failed": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host_ingress.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host_ingress.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_ingress_selected_identity_changed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_ingress_selected_process_observation_failed": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host_ingress.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host_ingress.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_ingress_selected_socket_root_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_lane_admission_failed": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/session_supervisor.rs"
+        }
+      ],
+      "policySource": "cli/src/session_supervisor.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_lane_owner_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_listener_fd_invalid": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host_supervisor_takeover.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host_supervisor_takeover.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_host_listener_fd_observation_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host_supervisor_takeover.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host_supervisor_takeover.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_listener_fd_target_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host_supervisor_takeover.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host_supervisor_takeover.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_quiesce_source_socket_changed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_service_state_revision_invalid": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_host_service_state_revision_read_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_service_state_revision_unavailable": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_start_timeout": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/session_supervisor.rs"
+        }
+      ],
+      "policySource": "cli/src/session_supervisor.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_supervisor_post_upgrade_verification_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host_supervisor_takeover.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host_supervisor_takeover.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_supervisor_takeover_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host_supervisor_takeover.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host_supervisor_takeover.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_supervisor_takeover_manifest_changed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host_supervisor_takeover.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host_supervisor_takeover.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_supervisor_takeover_plan_changed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host_supervisor_takeover.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host_supervisor_takeover.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_supervisor_takeover_resume_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host_supervisor_takeover.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host_supervisor_takeover.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_supervisor_takeover_revision_changed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host_supervisor_takeover.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host_supervisor_takeover.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lane_candidate_session_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_adoption.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_adoption.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lane_commit_receipt_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_adoption.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_adoption.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lane_observation_receipt_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_adoption.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_adoption.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lane_rollback_receipt_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_adoption.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_adoption.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lifecycle_registry_unavailable": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/install.rs"
+        }
+      ],
+      "policySource": "cli/src/install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_memory_high_invalid": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/session_supervisor.rs"
+        }
+      ],
+      "policySource": "cli/src/session_supervisor.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_observation_unavailable": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_orphan_source_session_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_authorization_invalid": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_replacement_authorization_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_authorization_serialize_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_authorization_time_invalid": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_replacement_browser_exit_timeout": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_browser_exit_unproven": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_browser_process_identity_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_close_command_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_close_command_timeout": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_close_output_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_close_response_invalid": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_replacement_close_session_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_close_wait_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_effect_receipt_invalid": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_replacement_effect_receipt_plan_changed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_effect_receipt_serialize_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_forward_recovery_required": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_replacement_forward_resume_effect_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_forward_resume_receipt_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_operator_authorization_required": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_replacement_plan_changed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_plan_serialize_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_selected_process_identity_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_service_state_invalid": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_replacement_service_state_migration_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_service_state_read_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_service_state_snapshot_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_service_state_stage_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_service_state_summary_serialize_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_service_state_utf8_invalid": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_replacement_source_executable_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_source_exit_timeout": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_source_exit_unproven": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_transaction_authorization_changed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_transaction_commit_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_transaction_directory_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_transaction_parent_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_transaction_permissions_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_transaction_plan_changed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_transaction_plan_invalid": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_replacement_transaction_serialize_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_transaction_stage_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_transaction_write_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_reset_account_home_invalid": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_reset_account_home_unavailable": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_reset_argument_invalid": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_reset_arguments_conflict": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "runtime_reset_backup_digest_changed": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_reset_cgroup_inventory_unavailable": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_reset_cgroup_pid_invalid": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_reset_clock_invalid": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_reset_custody_missing": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_reset_executor_identity_unavailable": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_reset_home_missing": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_reset_operation_conflict": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "runtime_reset_process_cgroup_unavailable": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_reset_process_exit_unproven": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_reset_process_identity_unavailable": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_reset_receipt_cgroup_invalid": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_reset_receipt_parent_missing": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_reset_receipt_unit_invalid": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_reset_resume_id_invalid": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_reset_resume_id_required": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_reset_resume_invalid": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_reset_systemd_failed": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_reset_systemd_timeout": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_resource_config_invalid": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/session_supervisor.rs"
+        }
+      ],
+      "policySource": "cli/src/session_supervisor.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_source_exit_deadline_expired": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_source_host_exit_timeout": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_source_host_identity_invalid": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_source_host_identity_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_source_prepare_descriptor_invalid": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_source_prepare_descriptor_remove_failed": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_source_prepare_expected_owner_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_source_prepare_owner_proposal_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_source_process_identity_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_stream_metadata_invalid": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/install.rs"
+        }
+      ],
+      "policySource": "cli/src/install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_transfer_candidate_session_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_transfer_receipt_invalid": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_transfer_receipt_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_transfer_source_browser_missing": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "workflow_cli_failed": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "workflow_cli_response_invalid": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "workflow_operation_failed": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "workflow_transport_failed": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "workflow_transport_start_failed": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_replacement_authorization_mismatch": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_replacement_authorization_plan_mismatch": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_replacement_close_refused": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_replacement_full_shutdown_plan_not_ready": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_replacement_source_reappeared_after_receipt": {
+      "recipe": "runtime_owner_transfer",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_replacement.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_replacement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_reset_executor_active": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_reset_owned_processes_remain": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_reset_process_unverified": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_reset_receipt_identity_mismatch": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_reset_requires_linux_user_systemd": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_reset_requires_production_home": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_reset_resume_read": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_reset_systemd": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_reset_unexpected_production_cgroup": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_reset_unit_transitioning": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_reset_writer_still_running": {
+      "recipe": "runtime_reset_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_reset.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_reset.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_handoff_presentation_pending": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_handoff_target_changed_before_pause": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_task_not_found_after_open": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/workflow.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/workflow.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -18164,6 +20340,36 @@
     {
       "path": "cli/src/native/browser_session_runtime.rs",
       "codePattern": "remote_view_desktop_runtime_[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/runtime_replacement.rs",
+      "codePattern": "runtime_replacement_[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/runtime_reset.rs",
+      "codePattern": "runtime_reset_[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/mcp/workflow.rs",
+      "codePattern": "(?:workflow_|browser_profile_|browser_handoff_|browser_task_|browser_tab_operation_|remote_view_handoff_url_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/mcp/task_retirement.rs",
+      "codePattern": "browser_task_retirement_[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/mcp/browser_build.rs",
+      "codePattern": "browser_build_[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/stream/dashboard.rs",
+      "codePattern": "browser_command_[a-z0-9_]+",
       "beforeNamedTestModule": true
     }
   ],
