@@ -109,7 +109,9 @@ try{
  const expression='document.body.firstElementChild.textContent';
  const direct=()=>new Promise((resolve,reject)=>{const id=++nextId;pending.set(id,{resolve,reject});socket.send(JSON.stringify({id,method:'Runtime.evaluate',params:{expression,returnByValue:true,awaitPromise:true,timeout:24750}}));});
  const expected='synthetic latency sample';
- const evaluate=()=>({taskId:task.taskId,requestId:`latency-${randomUUID()}`,action:'evaluate',params:{script:expression,timeoutMs:25000}});
+ // Public page arguments contain only script. The owned browser's default
+ // 25,000ms caller budget maps to the same 24,750ms renderer budget above.
+ const evaluate=()=>({taskId:task.taskId,requestId:`latency-${randomUUID()}`,action:'evaluate',params:{script:expression}});
  const verify=value=>{assert.equal(value.result,expected);assert.deepEqual(browserIdentity(),originalIdentity);for(const sample of value.latencyPhases??[])if(sample.phase===receipt.selectedPhase)receipt.phaseMeasurements.push(sample);return value;};
  // Diagnostics are response-only. A changed sample must not change request identity.
  const replayRequest=evaluate();
