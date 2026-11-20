@@ -265,7 +265,7 @@ pub(crate) async fn run_native_handoff_http_fixture(listener: TcpListener) {
 /// authenticated dashboard can browse recent records; the service port can
 /// only resolve a caller-provided occurrence ID from its own refusal response.
 pub(super) async fn write_failure_journal_response(
-    stream: &mut TcpStream,
+    stream: &mut tokio::net::TcpStream,
     query: Option<&str>,
     allow_recent: bool,
 ) {
