@@ -1,3 +1,4 @@
+import { clientArgumentError } from './client-argument-error.js';
 // @ts-check
 /** @typedef {import('./owner-number-matching.d.ts').OwnerNumberMatchingOptions} Options */
 /** @typedef {import('./owner-number-matching.d.ts').OwnerNumberMatchingDependencies} Dependencies */
@@ -22,7 +23,7 @@ function publicChallenge(challenge){
  * @param {Dependencies} dependencies
  */
 export function createOwnerNumberMatchingContinuation({auth,browser,checkpoints}){
- if(!text(auth?.callerTaskId)||typeof auth.helper!=='function'||typeof auth.followLogin!=='function'||typeof browser?.verifyLogin!=='function'||typeof checkpoints?.load!=='function'||typeof checkpoints.save!=='function')throw new TypeError('owner_number_matching_dependencies_required');
+ if(!text(auth?.callerTaskId)||typeof auth.helper!=='function'||typeof auth.followLogin!=='function'||typeof browser?.verifyLogin!=='function'||typeof checkpoints?.load!=='function'||typeof checkpoints.save!=='function')throw clientArgumentError('owner_number_matching_dependencies_required', "packages/client/src/owner-number-matching.js", "createOwnerNumberMatchingContinuation", ["auth", "browser", "checkpoints"]);
  const busy=new Set();
  return {
   /** Observe and reconcile once. Neither refresh nor timeout authorizes private

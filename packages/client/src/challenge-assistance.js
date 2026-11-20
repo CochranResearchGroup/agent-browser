@@ -1,3 +1,4 @@
+import { clientArgumentError } from './client-argument-error.js';
 import { isResponseFailure, responseFailureError } from './response-failure.js';
 import {isDeepStrictEqual} from 'node:util';
 /** Compose existing task, Native capture/handoff and cooperative control APIs.
@@ -6,7 +7,7 @@ import {isDeepStrictEqual} from 'node:util';
  * owner-minted registered observation. No viewer or credential authority is added.
  */
 export function createChallengeAssistanceClient({callTool,verifyClearance,verifyAccess,resolvePolicy,now=Date.now,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))}) {
-  if([callTool,verifyClearance,verifyAccess].some(port=>typeof port!=='function'))throw new TypeError('challenge_assistance_ports_required');
+  if([callTool,verifyClearance,verifyAccess].some(port=>typeof port!=='function'))throw clientArgumentError('challenge_assistance_ports_required', "packages/client/src/challenge-assistance.js", "createChallengeAssistanceClient", ["callTool", "verifyClearance", "verifyAccess"]);
   const fields=['taskId','profileId','browserId','tabId','targetId'];
   const fail=code=>{throw new Error(code);};
   const identity=value=>Object.fromEntries(fields.map(key=>[key,value[key]]));

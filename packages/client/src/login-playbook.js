@@ -1,3 +1,4 @@
+import { clientArgumentError } from './client-argument-error.js';
 // @ts-check
 export {createOwnerLoginPlaybook} from './owner-login-playbook.js';
 /** @typedef {import('./login-playbook.d.ts').LoginOptions} LoginOptions */
@@ -14,7 +15,7 @@ export {createOwnerLoginPlaybook} from './owner-login-playbook.js';
  */
 export function createLoginPlaybook({browser,helper,checkpoints}) {
   if (!browser || typeof browser.prepareLogin !== 'function' || typeof browser.validatePlan !== 'function' || typeof helper !== 'function' || !checkpoints?.load || !checkpoints?.save) {
-    throw new TypeError('login_playbook_dependencies_required');
+    throw clientArgumentError('login_playbook_dependencies_required', "packages/client/src/login-playbook.js", "createLoginPlaybook", ["browser", "helper", "checkpoints"]);
   }
   const busy=new Set();
   return {

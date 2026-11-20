@@ -1,3 +1,4 @@
+import { clientArgumentError } from './client-argument-error.js';
 import { isResponseFailure, responseFailureError } from './response-failure.js';
 // @ts-check
 /** Read one exact retained task. No browser actions, fallback or retries.
@@ -5,7 +6,7 @@ import { isResponseFailure, responseFailureError } from './response-failure.js';
  * @returns {Promise<import('./task-briefing.js').TaskBriefing>}
  */
 export async function getTaskBriefing({ baseUrl, taskId, headers, signal, fetch = globalThis.fetch }) {
-  if (typeof taskId !== 'string' || taskId.trim() === '') throw new TypeError('taskId is required');
+  if (typeof taskId !== 'string' || taskId.trim() === '') throw clientArgumentError('taskId is required', "packages/client/src/task-briefing.js", "getTaskBriefing", ["taskId"]);
   const url = new URL(`/api/browser/tasks/${encodeURIComponent(taskId)}/briefing`, baseUrl);
   const response = await fetch(url, { method: 'GET', headers, signal, redirect: 'error' });
   const payload = await response.json();
@@ -23,7 +24,7 @@ export async function getTaskBriefing({ baseUrl, taskId, headers, signal, fetch 
  */
 export async function getTaskOperation({ baseUrl, taskId, requestId, headers, signal, fetch = globalThis.fetch }) {
   if (typeof taskId !== 'string' || taskId.trim() === '' ||
-      typeof requestId !== 'string' || requestId.trim() === '') throw new TypeError('taskId and requestId are required');
+      typeof requestId !== 'string' || requestId.trim() === '') throw clientArgumentError('taskId and requestId are required', "packages/client/src/task-briefing.js", "getTaskOperation", ["taskId", "requestId"]);
   const url = new URL(`/api/browser/tasks/${encodeURIComponent(taskId)}/operations/${encodeURIComponent(requestId)}`, baseUrl);
   const response = await fetch(url, { method: 'GET', headers, signal, redirect: 'error' });
   const payload = await response.json();

@@ -1,3 +1,4 @@
+import { clientArgumentError } from './client-argument-error.js';
 import { isResponseFailure, responseFailureError } from './response-failure.js';
 // @ts-check
 /** @typedef {import('./playbooks.d.ts').CallTool} CallTool */
@@ -25,7 +26,7 @@ async function invoke(callTool, name, args) {
  * @param {CallTool} callTool
  */
 export function createPlaybookClient(callTool) {
-  if (typeof callTool !== 'function') throw new TypeError('playbook_transport_required');
+  if (typeof callTool !== 'function') throw clientArgumentError('playbook_transport_required', "packages/client/src/playbooks.js", "createPlaybookClient", ["callTool"]);
   /** @param {string} taskId @param {string} operation @param {Record<string, unknown>} [params] */
   const run = (taskId, operation, params = {}) => invoke(callTool, 'browser_command', {
     taskId, action: 'playbook', params: {operation, ...params},

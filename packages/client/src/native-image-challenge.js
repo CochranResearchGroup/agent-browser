@@ -1,3 +1,4 @@
+import { clientArgumentError } from './client-argument-error.js';
 import { isResponseFailure, responseFailureError } from './response-failure.js';
 import {createHash} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
@@ -20,8 +21,8 @@ export function createNativeImageRoundsChallengeClient(options) { return createI
  * @returns {import('./native-image-challenge.d.ts').NativeImageClient} */
 function createImageClient({callTool,selectCandidates,resolvePolicy,verifyClearance,verifyAccess,captureRegion,now=Date.now,steadyNow=()=>performance.now()}, rounds) {
   const PROFILE=rounds?'hcaptcha-image-grid-3x3-two-round-v1':'hcaptcha-image-grid-3x3-v1',CONFIG=rounds?'agent-browser:remote-view-native-image-static-3x3-two-round:v1':'agent-browser:remote-view-native-image-static-3x3:v1';
-  if([callTool,selectCandidates,resolvePolicy,verifyClearance,verifyAccess].some(port=>typeof port!=='function'))throw TypeError('native_image_ports_required');
-  if(captureRegion && (!['x','y','width','height'].every(key=>Number.isSafeInteger(captureRegion[key])) || captureRegion.width<=0 || captureRegion.height<=0 || captureRegion.x<0 || captureRegion.y<0))throw TypeError('native_image_capture_region_invalid');
+  if([callTool,selectCandidates,resolvePolicy,verifyClearance,verifyAccess].some(port=>typeof port!=='function'))throw clientArgumentError('native_image_ports_required', "packages/client/src/native-image-challenge.js", "createImageClient", ["callTool", "selectCandidates", "resolvePolicy", "verifyClearance", "verifyAccess"]);
+  if(captureRegion && (!['x','y','width','height'].every(key=>Number.isSafeInteger(captureRegion[key])) || captureRegion.width<=0 || captureRegion.height<=0 || captureRegion.x<0 || captureRegion.y<0))throw clientArgumentError('native_image_capture_region_invalid', "packages/client/src/native-image-challenge.js", "createImageClient", ["captureRegion"]);
   const regionRequest=captureRegion?structuredClone(captureRegion):null;
   const human=createChallengeAssistanceClient({callTool,resolvePolicy,verifyClearance,verifyAccess,now});
   const fail=code=>{throw Error(code)};

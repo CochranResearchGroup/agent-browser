@@ -1,3 +1,4 @@
+import { clientArgumentError } from './client-argument-error.js';
 import { isResponseFailure, responseFailureError } from './response-failure.js';
 // @ts-check
 import {createHash} from 'node:crypto';
@@ -8,12 +9,16 @@ const same=(a,b,keys)=>keys.every(k=>a?.[k]!==undefined&&a[k]===b?.[k]);
 /** @param {import('./native-saved-login.d.ts').NativeSavedLoginOptions} options
  * @returns {import('./native-saved-login.d.ts').NativeSavedLoginClient} */
 export function createNativeSavedLoginClient({callTool,store,verifyAccess,expectedAccount,now=Date.now,timeoutMs=300000}){
- if(typeof callTool!=='function'||typeof verifyAccess!=='function'||!store||['load','save','withEpisode'].some(k=>typeof store[k]!=='function')||typeof expectedAccount!=='string'||!expectedAccount||expectedAccount.length>254||!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>2147483647)throw TypeError('native_saved_login_configuration_required');
+ if(typeof callTool!=='function'||typeof verifyAccess!=='function'||!store||['load','save','withEpisode'].some(k=>typeof store[k]!=='function')||typeof expectedAccount!=='string'||!expectedAccount||expectedAccount.length>254||!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>2147483647)throw clientArgumentError('native_saved_login_configuration_required', "packages/client/src/native-saved-login.js", "createNativeSavedLoginClient", ["callTool", "store", "verifyAccess", "expectedAccount", "timeoutMs"]);
  const accountDigest=createHash('sha256').update(expectedAccount).digest('hex');
  return {async resolve({taskId,episodeId,allowAcknowledgedResume=false,steps:requestedSteps}){
-  if(typeof taskId!=='string'||!taskId||typeof episodeId!=='string'||!/^[-A-Za-z0-9_.:]{1,96}$/.test(episodeId)||typeof allowAcknowledgedResume!=='boolean'||requestedSteps!==undefined&&(!Array.isArray(requestedSteps)||!requestedSteps.length||requestedSteps.some(kind=>!kinds.includes(kind))))throw TypeError('native_saved_login_stable_identity_required');
-  const invocationStartedAtMs=now(),invocationDeadlineAtMs=invocationStartedAtMs+timeoutMs;
-  return store.withEpisode(episodeId,async()=>{
+  if(typeof taskId!=='string'||!taskId||typeof episodeId!=='string'||!/^[-A-Za-z0-9_.:]{1,96}$/.test(episodeId)||typeof allowAcknowledgedResume!=='boolean'||requestedSteps!==undefined&&(!Array.isArray(requestedSteps)||!requestedSteps.length||requestedSteps.some(kind=>!kinds.includes(kind))))throw clientArgumentError('native_saved_login_stable_identity_required', "packages/client/src/native-saved-login.js", "createNativeSavedLoginClient.resolve", ["taskId", "episodeId", "allowAcknowledgedResume", "steps"]);
+  // This is an ordinary caller wait budget, not trusted evidence expiry.
+  // Guest wall/monotonic values cannot qualify owner observation age on WSL.
+  const invocationController=new AbortController();let invocationBudgetExceeded=false,finishBudget;
+  const invocationBudgetEnded=new Promise(resolve=>{finishBudget=resolve});
+  const invocationTimer=setTimeout(()=>{invocationBudgetExceeded=true;invocationController.abort();finishBudget();},timeoutMs);
+  try {return await store.withEpisode(episodeId,async()=>{
    /** @type {import('./native-saved-login.d.ts').SavedLoginResult} */
    const result={taskId,episodeId,status:'human_required',reason:'native_saved_login_unverified',retryAllowed:false};
    let episode=await store.load(episodeId);const fresh=episode===null;
@@ -32,8 +37,8 @@ export function createNativeSavedLoginClient({callTool,store,verifyAccess,expect
    if(allowAcknowledgedResume&&(checkpoint.inputs.length<1||checkpoint.inputs.length>=steps.length||checkpoint.inputs.some((input,index)=>input.requestId!==episodeId+':input'+(index+1)||input.kind!==steps[index]||typeof input.targetRef!=='string'||!input.targetRef||typeof input.observationRequestId!=='string'||!input.observationRequestId)||!logical.every(k=>typeof checkpoint.binding?.[k]==='string'&&checkpoint.binding[k])||!Number.isSafeInteger(checkpoint.controlEpoch)||!same(checkpoint.physical,checkpoint.physical,physical)))return {...result,reason:'native_saved_login_acknowledged_resume_unverified'};
    let resumeVerified=false;
    const fail=reason=>{throw Error(reason)};
-   function remaining(){const time=now(),deadline=allowAcknowledgedResume?invocationDeadlineAtMs:Math.min(checkpoint.deadlineAtMs,invocationDeadlineAtMs);if(time<checkpoint.createdAtMs||time<invocationStartedAtMs||time>=deadline)fail('native_saved_login_budget_exhausted');return deadline-time;}
-   async function bounded(work){const timeoutMs=remaining(),controller=new AbortController();let timer;try{return await Promise.race([work({signal:controller.signal,timeoutMs}),new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(Error('native_saved_login_transport_unknown'))},timeoutMs)})]);}finally{clearTimeout(timer)}}
+   function remaining(){if(invocationBudgetExceeded)fail('native_saved_login_invocation_budget_exhausted');return timeoutMs;}
+   async function bounded(work){const timeoutMs=remaining();try{return await Promise.race([work({signal:invocationController.signal,timeoutMs}),invocationBudgetEnded.then(()=>fail('native_saved_login_invocation_budget_exhausted'))]);}catch(error){if(invocationBudgetExceeded)fail('native_saved_login_invocation_budget_exhausted');throw error}}
    const missing=value=>value?.code==='browser_task_operation_not_found'||value?.message==='browser_task_operation_not_found'||value?.data?.message==='browser_task_operation_not_found';
    function missingError(error){if(missing(error))return true;const message=error?.message;if(typeof message!=='string'||message.length>8192)return false;const start=message.indexOf('{'),end=message.lastIndexOf('}');if(start<0||end<start)return false;try{return missing(JSON.parse(message.slice(start,end+1)))}catch{return false}}
    async function call(action,args={}){
@@ -69,7 +74,7 @@ export function createNativeSavedLoginClient({callTool,store,verifyAccess,expect
       const observationRequestId=episodeId+':observation'+(index+1)+':'+checkpoint.captureSequence;
       const frame=await call('native_capture',{requestId:observationRequestId,params:{loginControls:{profile:'english-chrome-v1',expectedAccount},...(region?{region}:{})}});
       const controls=frame?.loginControls,binding=frame?.binding;
-      if(frame?.source!=='remote_view_native'||controls?.schemaVersion!=='agent-browser.native-login-controls.v1'||!['observed','not_found'].includes(controls.status)||!Array.isArray(controls.controls)||!same(binding,binding,physical)||typeof binding.desktopId!=='string'||!binding.desktopId||!['generation','windowId','nativeControlEpoch'].every(k=>Number.isSafeInteger(binding[k])&&binding[k]>=0)||!/^[a-f0-9]{64}$/.test(controls.frameSha256??'')||!Number.isSafeInteger(binding.observedAtMs)||now()-binding.observedAtMs>10000||binding.observedAtMs>now())fail('native_saved_login_frame_unverified');
+      if(frame?.source!=='remote_view_native'||controls?.schemaVersion!=='agent-browser.native-login-controls.v1'||!['observed','not_found'].includes(controls.status)||!Array.isArray(controls.controls)||!same(binding,binding,physical)||typeof binding.desktopId!=='string'||!binding.desktopId||!['generation','windowId','nativeControlEpoch'].every(k=>Number.isSafeInteger(binding[k])&&binding[k]>=0)||!/^[a-f0-9]{64}$/.test(controls.frameSha256??''))fail('native_saved_login_frame_unverified');
       if(checkpoint.physical&&!same(binding,checkpoint.physical,physical))fail('native_saved_login_native_binding_changed');
       if(!checkpoint.physical){checkpoint.physical=Object.fromEntries(physical.map(k=>[k,binding[k]]));await store.save(checkpoint);}
       return {controls,binding,observationRequestId};
@@ -123,13 +128,13 @@ export function createNativeSavedLoginClient({callTool,store,verifyAccess,expect
       const input=await call('native_input',{requestId,params:{loginTarget:{observationRequestId,targetRef:candidates[0].targetRef,episodeId}}});
       if(input?.source!=='remote_view_native'||input.delivery!=='dispatched')fail('native_saved_login_input_unknown');
       if(!await original(proposed))fail('native_saved_login_original_uncertain');proposed.state='acknowledged';await store.save(checkpoint);
-     }catch{proposed.state='unknown';await store.save(checkpoint);return {...result,status:'uncertain',reason:'native_saved_login_input_requires_reconciliation'};}
+     }catch(error){proposed.state='unknown';await store.save(checkpoint);return {...result,status:'uncertain',reason:'native_saved_login_input_requires_reconciliation',recovery:{inspect:{interface:'@agent-browser/client/task-briefing#getTaskOperation',arguments:{taskId,requestId:proposed.requestId}},resumeCondition:'Keep this original request ID. Resume the same episode only after owner readback resolves the input; unknown input never replays.'},...(error?.failure?{failure:error.failure,occurrenceId:error.occurrenceId}:{})};}
     }
     const after=await briefing();
     const proof=await bounded(({signal})=>verifyAccess({taskId,episodeId,binding:checkpoint.binding,expectedAccount,signal}));
     if(proof?.state!=='verified'||proof.accountMatched!==true||!same(proof,after,logical)||typeof proof.evidenceRef!=='string'||!proof.evidenceRef||proof.evidenceRef.length>256)fail('native_saved_login_access_unverified');
     return {...result,status:'verified_access_after_native_saved_login',reason:'independent_account_access_verified',evidenceRef:proof.evidenceRef};
-   }catch(error){const reason=error instanceof Error&&/^native_saved_login_[a-z_]+$/.test(error.message)?error.message:'native_saved_login_observation_unavailable';const unsettled=checkpoint.inputs.some(input=>input.state!=='acknowledged');return {...result,status:reason.includes('uncertain')||unsettled||error?.failure?.effectState==='effect_uncertain'?'uncertain':'human_required',reason,...(error?.failure?{failure:error.failure,occurrenceId:error.occurrenceId}:{}),...(!unsettled&&checkpoint.inputs.length===steps.length?{continuation:{method:'resolve',arguments:{taskId,episodeId,allowAcknowledgedResume:true,steps:[...steps]},instruction:'Observe the next page and append its supported control kinds to steps before resolving; acknowledged originals will not replay.'}}:{})};}
-  });
+   }catch(error){const reason=error instanceof Error&&/^native_saved_login_[a-z_]+$/.test(error.message)?error.message:'native_saved_login_observation_unavailable';const unsettled=checkpoint.inputs.some(input=>input.state!=='acknowledged');return {...result,status:reason.includes('uncertain')||unsettled||error?.failure?.effectState==='effect_uncertain'?'uncertain':'human_required',reason,...(reason==='native_saved_login_invocation_budget_exhausted'&&!unsettled?{continuation:{method:'resolve',arguments:{taskId,episodeId,allowAcknowledgedResume:checkpoint.inputs.length>0,steps:[...steps]},instruction:'The caller wait allowance ended; this does not establish trusted evidence expiry. Inspect original operations and resume the same episode with a new invocation allowance. Acknowledged inputs will not replay.'}}:{}),...(error?.failure?{failure:error.failure,occurrenceId:error.occurrenceId}:{}),...(!unsettled&&checkpoint.inputs.length===steps.length?{continuation:{method:'resolve',arguments:{taskId,episodeId,allowAcknowledgedResume:true,steps:[...steps]},instruction:'Observe the next page and append its supported control kinds to steps before resolving; acknowledged originals will not replay.'}}:{})};}
+  });}finally{clearTimeout(invocationTimer)}
  }};
 }

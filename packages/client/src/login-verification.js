@@ -1,3 +1,4 @@
+import { clientArgumentError } from './client-argument-error.js';
 // @ts-check
 
 /** Verify application access through the same independent readback seam used by
@@ -6,9 +7,9 @@
  * @returns {import('./login-verification.d.ts').LoginVerifier}
  */
 export function createLoginVerifier({client,verifyAccess,callerTaskId}) {
-  if(typeof client?.call!=='function'||typeof verifyAccess!=='function'||!reference(callerTaskId))throw TypeError('login_verifier_configuration_required');
+  if(typeof client?.call!=='function'||typeof verifyAccess!=='function'||!reference(callerTaskId))throw clientArgumentError('login_verifier_configuration_required', "packages/client/src/login-verification.js", "createLoginVerifier", ["client", "verifyAccess", "callerTaskId"]);
   return {async verify(input) {
-    if(!reference(input?.requestId)||!reference(input.attemptId)||!bindingFields.every(key=>reference(input.binding?.[key]))||!origin(input.binding?.origin)||!origin(input.applicationOrigin)||!identity(input.expectedAccount)||input.expectedOrganization!==undefined&&!identity(input.expectedOrganization))throw TypeError('login_verification_binding_required');
+    if(!reference(input?.requestId)||!reference(input.attemptId)||!bindingFields.every(key=>reference(input.binding?.[key]))||!origin(input.binding?.origin)||!origin(input.applicationOrigin)||!identity(input.expectedAccount)||input.expectedOrganization!==undefined&&!identity(input.expectedOrganization))throw clientArgumentError('login_verification_binding_required', "packages/client/src/login-verification.js", "createLoginVerifier.verify", ["requestId", "attemptId", "binding", "applicationOrigin", "expectedAccount", "expectedOrganization"]);
     const context=Object.freeze({requestId:input.requestId,attemptId:input.attemptId,binding:Object.freeze({...input.binding}),applicationOrigin:input.applicationOrigin,expectedAccount:input.expectedAccount,...(input.expectedOrganization===undefined?{}:{expectedOrganization:input.expectedOrganization})});
     /** @type {import('./login-verification.d.ts').LoginVerificationResult} */
     const result={

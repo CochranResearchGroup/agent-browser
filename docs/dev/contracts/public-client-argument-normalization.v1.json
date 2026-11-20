@@ -1355,6 +1355,209 @@
       "expression": "`${label} must be an object`",
       "classification": "pre_dispatch_caller_input_or_configuration",
       "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/challenge-assistance.js",
+      "owningFunction": "createChallengeAssistanceClient",
+      "expression": "'challenge_assistance_ports_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "callTool",
+        "verifyClearance",
+        "verifyAccess"
+      ]
+    },
+    {
+      "path": "packages/client/src/hosted-login-receiver.js",
+      "owningFunction": "createHostedLoginReceiver",
+      "expression": "'hosted_receiver_configuration_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "binding",
+        "scope",
+        "expectedUsername",
+        "browser",
+        "readPrincipal",
+        "readCaptureSafety",
+        "readReconciliationSafety",
+        "awaitMfa",
+        "authenticatedOrigins",
+        "maxTransitions"
+      ]
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook",
+      "expression": "'login_playbook_dependencies_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "browser",
+        "helper",
+        "checkpoints"
+      ]
+    },
+    {
+      "path": "packages/client/src/login-verification.js",
+      "owningFunction": "createLoginVerifier",
+      "expression": "'login_verifier_configuration_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "client",
+        "verifyAccess",
+        "callerTaskId"
+      ]
+    },
+    {
+      "path": "packages/client/src/login-verification.js",
+      "owningFunction": "createLoginVerifier.verify",
+      "expression": "'login_verification_binding_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "requestId",
+        "attemptId",
+        "binding",
+        "applicationOrigin",
+        "expectedAccount",
+        "expectedOrganization"
+      ]
+    },
+    {
+      "path": "packages/client/src/native-image-challenge.js",
+      "owningFunction": "createImageClient",
+      "expression": "'native_image_ports_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "callTool",
+        "selectCandidates",
+        "resolvePolicy",
+        "verifyClearance",
+        "verifyAccess"
+      ]
+    },
+    {
+      "path": "packages/client/src/native-image-challenge.js",
+      "owningFunction": "createImageClient",
+      "expression": "'native_image_capture_region_invalid'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "captureRegion"
+      ]
+    },
+    {
+      "path": "packages/client/src/native-receiving-browser.js",
+      "owningFunction": "createNativeReceivingBrowser",
+      "expression": "'native_receiving_configuration_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "readObservation",
+        "inputMatches",
+        "remote",
+        "desktop",
+        "guards",
+        "timeoutMs"
+      ]
+    },
+    {
+      "path": "packages/client/src/native-saved-login.js",
+      "owningFunction": "createNativeSavedLoginClient",
+      "expression": "'native_saved_login_configuration_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "callTool",
+        "store",
+        "verifyAccess",
+        "expectedAccount",
+        "timeoutMs"
+      ]
+    },
+    {
+      "path": "packages/client/src/native-saved-login.js",
+      "owningFunction": "createNativeSavedLoginClient.resolve",
+      "expression": "'native_saved_login_stable_identity_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "taskId",
+        "episodeId",
+        "allowAcknowledgedResume",
+        "steps"
+      ]
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook",
+      "expression": "'owner_login_dependencies_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "browser",
+        "auth",
+        "checkpoints"
+      ]
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation",
+      "expression": "'owner_number_matching_dependencies_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "auth",
+        "browser",
+        "checkpoints"
+      ]
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation",
+      "expression": "'owner_totp_dependencies_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "auth",
+        "browser",
+        "checkpoints"
+      ]
+    },
+    {
+      "path": "packages/client/src/playbooks.js",
+      "owningFunction": "createPlaybookClient",
+      "expression": "'playbook_transport_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "callTool"
+      ]
+    },
+    {
+      "path": "packages/client/src/task-briefing.js",
+      "owningFunction": "getTaskBriefing",
+      "expression": "'taskId is required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "taskId"
+      ]
+    },
+    {
+      "path": "packages/client/src/task-briefing.js",
+      "owningFunction": "getTaskOperation",
+      "expression": "'taskId and requestId are required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "taskId",
+        "requestId"
+      ]
     }
   ],
   "excludedChecks": [

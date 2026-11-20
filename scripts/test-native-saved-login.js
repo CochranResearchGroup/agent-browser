@@ -51,9 +51,9 @@ const unknownClient=createNativeSavedLoginClient({...unknown,expectedAccount:'co
 assert.equal((await unknownClient.resolve({taskId:'task',episodeId:'episode'})).status,'uncertain');
 assert.equal((await unknownClient.resolve({taskId:'task',episodeId:'episode'})).status,'uncertain');
 assert.equal(unknown.inputs.length,1);
-// The original deadline survives reopen; neither transport uncertainty nor time rollback renews it.
+// Guest clock movement neither expires evidence nor authorizes uncertain replay.
 unknown.clock=61000;
-assert.equal((await unknownClient.resolve({taskId:'task',episodeId:'episode'})).reason,'native_saved_login_budget_exhausted');
+assert.equal((await unknownClient.resolve({taskId:'task',episodeId:'episode'})).reason,'native_saved_login_original_uncertain');
 assert.equal(unknown.inputs.length,1);
 const wrong=fixture();wrong.verifyAccess=async()=>({...wrong.binding,state:'verified',accountMatched:false,evidenceRef:'wrong-account-proof'});
 assert.equal((await createNativeSavedLoginClient({...wrong,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode'})).status,'human_required');
@@ -148,9 +148,9 @@ import {test} from 'node:test';
 test('saved login new invocation allowance is configurable and defaults to five minutes',async()=>{
  const f=fixture();await createNativeSavedLoginClient({...f,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode'});
  const e=f.episodes.get('episode');assert.equal(e.deadlineAtMs-e.createdAtMs,300000);
- const short=fixture(),base=short.callTool;short.callTool=async(...args)=>{short.clock=6001;return base(...args)};
- const result=await createNativeSavedLoginClient({...short,expectedAccount:'configured@example.test',timeoutMs:5000}).resolve({taskId:'task',episodeId:'episode'});
- assert.equal(result.reason,'native_saved_login_budget_exhausted');assert.equal(short.inputs.length,0);
+ const short=fixture();short.callTool=async()=>new Promise(()=>{});
+ const result=await createNativeSavedLoginClient({...short,expectedAccount:'configured@example.test',timeoutMs:20}).resolve({taskId:'task',episodeId:'episode'});
+ assert.equal(result.reason,'native_saved_login_invocation_budget_exhausted');assert.equal(short.inputs.length,0);assert.equal(result.continuation.arguments.episodeId,'episode');assert.equal(result.continuation.arguments.allowAcknowledgedResume,false);
  for(const timeoutMs of [0,-1,NaN,Infinity,2147483648])assert.throws(()=>createNativeSavedLoginClient({...fixture(),expectedAccount:'configured@example.test',timeoutMs}),/configuration/);
 });
 async function acknowledgedPrefix(){
@@ -164,7 +164,6 @@ async function acknowledgedPrefix(){
 test('saved login explicit acknowledged resume preserves old clocks and never replays the prefix',async()=>{
  const f=await acknowledgedPrefix(),old=structuredClone(f.episodes.get('episode'));
  const client=createNativeSavedLoginClient({...f,expectedAccount:'configured@example.test',timeoutMs:300000});
- assert.equal((await client.resolve({taskId:'task',episodeId:'episode'})).reason,'native_saved_login_budget_exhausted');assert.equal(f.inputs.length,2);
  const result=await client.resolve({taskId:'task',episodeId:'episode',allowAcknowledgedResume:true});
  assert.equal(result.status,'verified_access_after_native_saved_login');assert.equal(f.inputs.length,3);
  assert.deepEqual(f.inputs.map(i=>i.requestId),['episode:input1','episode:input2','episode:input3']);
@@ -177,8 +176,8 @@ test('saved login explicit resume refuses intent or unknown prefix without proof
 test('saved login acknowledged resume refuses foreign context and bounds read-only proof work',async()=>{
  const foreign=await acknowledgedPrefix(),base=foreign.callTool;foreign.callTool=async(...a)=>a[1].action==='task_briefing'?envelope({...foreign.binding,tabId:'foreign',control:{owner:'agent',epoch:0}}):base(...a);
  const changed=await createNativeSavedLoginClient({...foreign,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode',allowAcknowledgedResume:true});assert.notEqual(changed.status,'verified_access_after_native_saved_login');assert.equal(foreign.inputs.length,2);
- const slow=await acknowledgedPrefix(),slowBase=slow.callTool;const start=slow.episodes.get('episode').createdAtMs+7200000;slow.callTool=async(...a)=>{slow.clock=start+5001;return slowBase(...a)};
- const expired=await createNativeSavedLoginClient({...slow,expectedAccount:'configured@example.test',timeoutMs:5000}).resolve({taskId:'task',episodeId:'episode',allowAcknowledgedResume:true});assert.equal(expired.reason,'native_saved_login_budget_exhausted');assert.equal(slow.inputs.length,2);
+ const slow=await acknowledgedPrefix();slow.callTool=async()=>new Promise(()=>{});
+ const stopped=await createNativeSavedLoginClient({...slow,expectedAccount:'configured@example.test',timeoutMs:20}).resolve({taskId:'task',episodeId:'episode',allowAcknowledgedResume:true});assert.equal(stopped.reason,'native_saved_login_invocation_budget_exhausted');assert.equal(slow.inputs.length,2);
 });
 
 test('saved login acknowledged resume requires positive absence of the next original input',async()=>{
@@ -210,3 +209,29 @@ const nextPage=await extendedClient.resolve({taskId:'task',episodeId:'episode',a
 assert.equal(nextPage.status,'verified_access_after_native_saved_login');
 assert.equal(extended.inputs.length,4,'Acknowledged first-page inputs must not replay');
 console.log('native saved login: runtime extension continues an acknowledged multi-page plan');
+
+
+test('saved login guest wall jumps cannot expire owner evidence or bypass unknown originals',async()=>{
+ for(const jump of [-7200000,7200000]){
+  const f=fixture(),base=f.callTool;let calls=0;
+  f.callTool=async(...args)=>{f.clock=1000+(++calls%2?jump:-jump);const reply=await base(...args);if(args[1].action==='native_capture'){const data=JSON.parse(reply.content[0].text).data;data.binding.observedAtMs=Number.MAX_SAFE_INTEGER;return envelope(data);}return reply;};
+  const result=await createNativeSavedLoginClient({...f,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode'});
+  assert.equal(result.status,'verified_access_after_native_saved_login');assert.equal(f.inputs.length,3);
+ }
+ const f=await acknowledgedPrefix();const result=await createNativeSavedLoginClient({...f,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode'});
+ assert.equal(result.status,'verified_access_after_native_saved_login');assert.equal(f.inputs.length,3);
+});
+
+test('saved login preserves actual owner time refusal and never dispatches through it',async()=>{
+ const f=fixture(),base=f.callTool;const failure={code:'browser_native_time_recapture_required',occurrenceId:'time-owner-760',effectState:'not_dispatched',retryDisposition:'inspect_before_retry'};
+ f.callTool=async(...args)=>args[1].action==='native_input'?{isError:true,content:[{type:'text',text:JSON.stringify({success:false,failure})}]}:base(...args);
+ const result=await createNativeSavedLoginClient({...f,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode'});
+ assert.equal(result.failure.code,failure.code);assert.equal(result.occurrenceId,failure.occurrenceId);assert.equal(f.inputs.length,0);
+});
+
+test('public owner continuation constructor errors expose caller-only field correction without ports',async()=>{
+ for(const [module,name] of [['owner-login-playbook','createOwnerLoginPlaybook'],['owner-number-matching','createOwnerNumberMatchingContinuation'],['owner-totp-continuation','createOwnerTotpContinuation']]){
+  const exported=await import('../packages/client/src/'+module+'.js');
+  assert.throws(()=>exported[name]({}),error=>error instanceof TypeError&&error.code==='client_argument_invalid'&&error.owningFunction===name&&error.recovery.checkedFields.includes('auth')&&error.logging.ownerOccurrenceId===null);
+ }
+});

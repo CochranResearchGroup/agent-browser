@@ -1,3 +1,4 @@
+import { clientArgumentError } from './client-argument-error.js';
 // @ts-check
 /** @typedef {import('./owner-login-playbook.d.ts').OwnerLoginOptions} OwnerLoginOptions */
 /** @typedef {import('./owner-login-playbook.d.ts').OwnerLoginDependencies} OwnerLoginDependencies */
@@ -20,7 +21,7 @@ const errorCode=error=>error&&typeof error==='object'&&'code' in error&&typeof e
  * @param {OwnerLoginDependencies} dependencies
  */
 export function createOwnerLoginPlaybook({browser,auth,checkpoints}){
- if(!browser||(/** @type {const} */ (['verifyLogin','prepareLogin','validatePlan'])).some(method=>typeof browser[method]!=='function')||!auth||(/** @type {const} */ (['requestLogin','advanceLogin','helper'])).some(method=>typeof auth[method]!=='function')||!nonempty(auth.callerTaskId)||!checkpoints?.load||!checkpoints?.save)throw new TypeError('owner_login_dependencies_required');
+ if(!browser||(/** @type {const} */ (['verifyLogin','prepareLogin','validatePlan'])).some(method=>typeof browser[method]!=='function')||!auth||(/** @type {const} */ (['requestLogin','advanceLogin','helper'])).some(method=>typeof auth[method]!=='function')||!nonempty(auth.callerTaskId)||!checkpoints?.load||!checkpoints?.save)throw clientArgumentError('owner_login_dependencies_required', "packages/client/src/owner-login-playbook.js", "createOwnerLoginPlaybook", ["browser", "auth", "checkpoints"]);
  const busy=new Set();
  return {
   /** Advance the original owner request once. Returned request IDs can be used

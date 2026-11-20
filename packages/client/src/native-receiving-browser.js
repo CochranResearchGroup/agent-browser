@@ -1,3 +1,4 @@
+import { clientArgumentError } from './client-argument-error.js';
 // @ts-check
 /** @typedef {import('./native-receiving-browser.js').NativeOptions} NativeOptions */
 /** @typedef {import('./native-receiving-browser.js').NativeAction} NativeAction */
@@ -18,7 +19,7 @@ const digest=value=>createHash('sha256').update(JSON.stringify(value)).digest('h
  * @param {NativeOptions} options
  */
 export function createNativeReceivingBrowser({readObservation,inputMatches,remote,desktop,guards,timeoutMs=30000}){
- if(typeof readObservation!=='function'||typeof inputMatches!=='function'||!remote||!desktop||!guards||!Number.isInteger(timeoutMs)||timeoutMs<1||timeoutMs>45000)throw TypeError('native_receiving_configuration_required');
+ if(typeof readObservation!=='function'||typeof inputMatches!=='function'||!remote||!desktop||!guards||!Number.isInteger(timeoutMs)||timeoutMs<1||timeoutMs>45000)throw clientArgumentError('native_receiving_configuration_required', "packages/client/src/native-receiving-browser.js", "createNativeReceivingBrowser", ["readObservation", "inputMatches", "remote", "desktop", "guards", "timeoutMs"]);
  desktop=structuredClone(desktop);guards=structuredClone(guards);
  const dispatched=new Set();
  const owner=async()=>{

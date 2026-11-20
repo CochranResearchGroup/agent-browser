@@ -1,3 +1,4 @@
+import { clientArgumentError } from './client-argument-error.js';
 // @ts-check
 /** @typedef {import('./hosted-login-receiver.d.ts').ReceiverOptions} ReceiverOptions */
 /** @typedef {import('./hosted-login-receiver.d.ts').Scope} Scope */
@@ -18,7 +19,7 @@ const canonicalOrigin=value=>{try{const url=new URL(value);return ['http:','http
  * @param {ReceiverOptions} options
  */
 export function createHostedLoginReceiver({binding,scope,expectedUsername,browser,readPrincipal,readCaptureSafety,readReconciliationSafety,awaitMfa,authenticatedOrigins=[],maxTransitions=8}) {
- if(!binding||binding.provider!=='agent-browser'||targetKeys.some(key=>typeof binding[key]!=='string'||!binding[key])||!scope||scopeKeys.some(key=>typeof scope[key]!=='string'||!scope[key])||!canonicalOrigin(scope.origin)||!Array.isArray(authenticatedOrigins)||authenticatedOrigins.length>8||authenticatedOrigins.some(origin=>!canonicalOrigin(origin))||!expectedUsername||!Number.isInteger(maxTransitions)||maxTransitions<1||maxTransitions>16||[browser?.observe,browser?.fill,browser?.activate,browser?.waitForChange,readPrincipal,readCaptureSafety].some(fn=>typeof fn!=='function'))throw TypeError('hosted_receiver_configuration_required');
+ if(!binding||binding.provider!=='agent-browser'||targetKeys.some(key=>typeof binding[key]!=='string'||!binding[key])||!scope||scopeKeys.some(key=>typeof scope[key]!=='string'||!scope[key])||!canonicalOrigin(scope.origin)||!Array.isArray(authenticatedOrigins)||authenticatedOrigins.length>8||authenticatedOrigins.some(origin=>!canonicalOrigin(origin))||!expectedUsername||!Number.isInteger(maxTransitions)||maxTransitions<1||maxTransitions>16||[browser?.observe,browser?.fill,browser?.activate,browser?.waitForChange,readPrincipal,readCaptureSafety].some(fn=>typeof fn!=='function'))throw clientArgumentError('hosted_receiver_configuration_required', "packages/client/src/hosted-login-receiver.js", "createHostedLoginReceiver", ["binding", "scope", "expectedUsername", "browser", "readPrincipal", "readCaptureSafety", "readReconciliationSafety", "awaitMfa", "authenticatedOrigins", "maxTransitions"]);
  binding=Object.freeze(structuredClone(binding));scope=structuredClone(scope);
  const authenticatedOriginSet=new Set([scope.origin,...authenticatedOrigins]);
  let attempted=false,submitted=false,verified=false;

@@ -1,3 +1,4 @@
+import { clientArgumentError } from './client-argument-error.js';
 // @ts-check
 /** @typedef {import('./owner-totp-continuation.d.ts').OwnerTotpOptions} OwnerTotpOptions */
 /** @typedef {import('./owner-totp-continuation.d.ts').OwnerTotpDependencies} OwnerTotpDependencies */
@@ -18,7 +19,7 @@ const errorCode=error=>error&&typeof error==='object'&&'code' in error&&typeof e
  * @param {OwnerTotpDependencies} dependencies
  */
 export function createOwnerTotpContinuation({auth,browser,checkpoints}){
- if(!auth||typeof auth.helper!=='function'||!nonempty(auth.callerTaskId)||!browser||(/** @type {const} */ (['verifyLogin','prepareLogin','validatePlan'])).some(method=>typeof browser[method]!=='function')||!checkpoints?.load||!checkpoints?.save)throw new TypeError('owner_totp_dependencies_required');
+ if(!auth||typeof auth.helper!=='function'||!nonempty(auth.callerTaskId)||!browser||(/** @type {const} */ (['verifyLogin','prepareLogin','validatePlan'])).some(method=>typeof browser[method]!=='function')||!checkpoints?.load||!checkpoints?.save)throw clientArgumentError('owner_totp_dependencies_required', "packages/client/src/owner-totp-continuation.js", "createOwnerTotpContinuation", ["auth", "browser", "checkpoints"]);
  const busy=new Set();
  return {
   /** Request no password and expose no factor value. The optional recordId must
