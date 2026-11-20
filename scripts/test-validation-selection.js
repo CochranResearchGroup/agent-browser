@@ -12,6 +12,7 @@ function selection(files, options) {
 
 for (const [file, job] of [
   ['scripts/test-native-checkbox-assistance.js', 'serviceClient'],
+  ['scripts/test-native-saved-login.js', 'serviceClient'],
   ['scripts/smoke-service-incident-summary-http.js', 'serviceClient'],
   ['scripts/measure-command-latency.mjs', 'repositoryTooling'],
 ]) {
