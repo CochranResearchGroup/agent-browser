@@ -775,3 +775,191 @@ fn native_image_completion_clock_diagnostics_are_exact_and_content_free() {
         assert!(task_operations::completion_failure_clock(&bad).is_none());
     }
 }
+
+#[test]
+fn public_task_capacity_can_change_without_transport_or_losing_pending_history() {
+    use crate::native::browser_session_store::BrowserSessionSqliteStore;
+    let directory =
+        std::env::temp_dir().join(format!("task-capacity-public-{}", uuid::Uuid::new_v4()));
+    let guard = crate::test_utils::EnvGuard::new(&[
+        "HOME",
+        "AGENT_BROWSER_HOME",
+        "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+        "AGENT_BROWSER_SOCKET_DIR",
+    ]);
+    guard.set("HOME", directory.to_str().unwrap());
+    guard.set("AGENT_BROWSER_HOME", directory.to_str().unwrap());
+    guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+    guard.set(
+        "AGENT_BROWSER_SOCKET_DIR",
+        directory.join("never-started").to_str().unwrap(),
+    );
+    let store = BrowserSessionSqliteStore::default_sqlite().unwrap();
+    let mut value =
+        serde_json::to_value(agent_browser_service_model::BrowserSessionState::default()).unwrap();
+    value["sessions"] = json!({"task":{"id":"task","name":"capacity","profileId":"profile","browserId":"browser","createdAtMs":1,"lastActivityAtMs":1,"expiresAtMs":0,"currentTabId":null}});
+    value["taskOperations"] = json!({"task":{"pending":{"requestId":"pending","taskId":"task","profileId":"profile","browserId":"browser","tabId":"tab","targetId":"target","processPid":42,"controlEpoch":3,"action":"fill","fingerprint":"private-mac","state":"pending","createdAtMs":10,"completedAtMs":null,"evidenceReferences":{}}}});
+    let state = serde_json::from_value(value).unwrap();
+    store.save_session_state(&state).unwrap();
+    let invoke = |params: Value| {
+        let request = json!({"jsonrpc":"2.0","id":751,"method":"tools/call","params":{"name":"browser_command","arguments":{"taskId":"task","action":"task_operation","params":params}}});
+        let response = handle_jsonrpc_line(&request.to_string(), "unused").unwrap();
+        assert!(response.get("error").is_none(), "{response}");
+        let payload: Value =
+            serde_json::from_str(response["result"]["content"][0]["text"].as_str().unwrap())
+                .unwrap();
+        payload["data"].clone()
+    };
+    let initial = invoke(json!({"operation":"capacity"}));
+    assert_eq!(initial["policy"]["initialCapacity"], 256);
+    assert_eq!(initial["activeCount"], 1);
+    let updated = invoke(
+        json!({"operation":"capacity","policy":{"initialCapacity":512,"extensionIncrement":128,"maximumCapacity":1024}}),
+    );
+    assert_eq!(updated["policySource"], "task_override");
+    assert_eq!(updated["capacity"], 512);
+    drop(store);
+    let reopened = invoke(json!({"operation":"capacity"}));
+    assert_eq!(reopened["policy"]["maximumCapacity"], 1024);
+    let original = invoke(json!({"requestId":"pending"}));
+    assert_eq!(original["operation"]["state"], "pending");
+    assert!(!directory.join("never-started").exists());
+    let defaults = invoke(
+        json!({"operation":"capacity","scope":"defaults","policy":{"initialCapacity":128,"extensionIncrement":64,"maximumCapacity":2048}}),
+    );
+    assert_eq!(
+        defaults["policy"]["initialCapacity"], 512,
+        "Existing task override survives a defaults change"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn public_task_history_archives_and_originals_still_replay_after_restart() {
+    use crate::native::browser_session_store::BrowserSessionSqliteStore;
+    use agent_browser_service_model::BrowserSessionState;
+    struct OwnedProcess(std::process::Child);
+    impl Drop for OwnedProcess {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let directory =
+        std::env::temp_dir().join(format!("task-history-capacity-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let chrome = directory.join("chrome");
+    std::fs::copy("/bin/sleep", &chrome).unwrap();
+    let child = OwnedProcess(
+        std::process::Command::new(&chrome)
+            .arg("120")
+            .spawn()
+            .unwrap(),
+    );
+    let crate::process_identity::ProcessObservation::Observed(process) =
+        crate::process_identity::observe_process(child.0.id())
+    else {
+        panic!("Owned process unavailable")
+    };
+    let guard = crate::test_utils::EnvGuard::new(&[
+        "HOME",
+        "AGENT_BROWSER_HOME",
+        "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+    ]);
+    guard.set("HOME", directory.to_str().unwrap());
+    guard.set("AGENT_BROWSER_HOME", directory.to_str().unwrap());
+    guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+    let mut value = serde_json::to_value(BrowserSessionState::default()).unwrap();
+    value["sessions"] = json!({"task":{"id":"task","name":"capacity-lane","profileId":"profile","browserId":"browser","createdAtMs":1,"lastActivityAtMs":1,"expiresAtMs":0,"currentTabId":"tab"}});
+    value["browsers"] = json!({"browser":{"id":"browser","profileId":"profile","pid":child.0.id(),"cdpEndpoint":"","desktop":null,"activeSessionIds":["task"]}});
+    value["tabs"] = json!({"tab":{"id":"tab","targetId":"target","browserId":"browser","sessionId":"task","createdAtMs":1,"lastActivityAtMs":1}});
+    value["sharedBrowserIds"] = json!(["browser"]);
+    value["adoptedBrowserProcessIdentities"] = json!({"browser":{"profileId":"profile","cdpEndpoint":"","process":{"pid":process.pid,"startToken":process.start_token,"executablePath":process.executable_path,"browserFamily":process.browser_family}}});
+    let store = BrowserSessionSqliteStore::default_sqlite().unwrap();
+    store
+        .save_session_state(&serde_json::from_value(value).unwrap())
+        .unwrap();
+    drop(store);
+    for index in 0..260 {
+        let params = json!({"name":"browser_click","arguments":{"taskId":"task","requestId":format!("step-{index}"),"selector":"#next"}});
+        task_operations::with_context(Some(&params), || {
+            let reply =
+                task_operations::transport(json!({"action":"click","selector":"#next"}), |_| {
+                    Ok(crate::connection::Response {
+                        success: true,
+                        ..Default::default()
+                    })
+                })
+                .unwrap();
+            assert!(reply.success);
+            Ok(Value::Null)
+        })
+        .unwrap();
+    }
+    task_operations::call(&json!({"taskId":"task","params":{"operation":"capacity","policy":{"initialCapacity":2,"extensionIncrement":2,"maximumCapacity":4}}}), "unused").unwrap();
+    for index in 0..4 {
+        let params = json!({"name":"browser_click","arguments":{"taskId":"task","requestId":format!("unresolved-{index}"),"selector":"#next"}});
+        task_operations::with_context(Some(&params), || {
+            let outcome =
+                task_operations::transport(json!({"action":"click","selector":"#next"}), |_| {
+                    Err("transport lost".into())
+                });
+            assert!(outcome.err().unwrap().contains("uncertain"));
+            Ok(Value::Null)
+        })
+        .unwrap();
+    }
+    let full = json!({"name":"browser_click","arguments":{"taskId":"task","requestId":"after-ceiling","selector":"#next"}});
+    task_operations::with_context(Some(&full), || {
+        let outcome =
+            task_operations::transport(json!({"action":"click","selector":"#next"}), |_| {
+                panic!("Capacity exhaustion dispatched an effect")
+            });
+        let message = outcome.err().unwrap();
+        assert!(message.contains("capacity_reached"));
+        assert!(message.contains("maximumCapacity"));
+        Ok(Value::Null)
+    })
+    .unwrap();
+    task_operations::call(&json!({"taskId":"task","params":{"operation":"capacity","policy":{"initialCapacity":2,"extensionIncrement":2,"maximumCapacity":6}}}), "unused").unwrap();
+    task_operations::with_context(Some(&full), || {
+        let outcome =
+            task_operations::transport(json!({"action":"click","selector":"#next"}), |_| {
+                Ok(crate::connection::Response {
+                    success: true,
+                    ..Default::default()
+                })
+            })
+            .unwrap();
+        assert!(outcome.success);
+        Ok(Value::Null)
+    })
+    .unwrap();
+    let first = task_operations::lookup("task", "step-0").unwrap();
+    assert_eq!(first["operation"]["state"], "owner_acknowledged");
+    let capacity = task_operations::call(
+        &json!({"taskId":"task","params":{"operation":"capacity"}}),
+        "unused",
+    )
+    .unwrap();
+    let payload: Value =
+        serde_json::from_str(capacity["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert!(payload["data"]["archivedCount"].as_u64().unwrap() > 0);
+    let params = json!({"name":"browser_click","arguments":{"taskId":"task","requestId":"step-0","selector":"#next"}});
+    task_operations::with_context(Some(&params), || {
+        let reply =
+            task_operations::transport(json!({"action":"click","selector":"#next"}), |_| {
+                panic!("Archived original redispatched")
+            })
+            .unwrap();
+        assert!(reply.success);
+        assert_eq!(reply.data.unwrap()["dispatchAttempted"], false);
+        let conflict =
+            task_operations::transport(json!({"action":"click","selector":"#changed"}), |_| {
+                panic!("Conflicting original redispatched")
+            });
+        assert!(conflict.err().unwrap().contains("request_conflict"));
+        Ok(Value::Null)
+    })
+    .unwrap();
+}

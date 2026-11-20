@@ -16,7 +16,26 @@ use sha2::{Digest, Sha256};
 
 use super::browser_session_store::BrowserSessionSqliteStore;
 
-const MAXIMUM_TASK_OPERATIONS: usize = 256;
+/// Native budgets include archived originals, while ordinary task reads keep a
+/// bounded active working set. Archival never renews an attempt or login budget.
+fn operation_history(
+    state: &BrowserSessionState,
+    task: &str,
+) -> Result<BTreeMap<String, BrowserTaskOperation>, String> {
+    let store = BrowserSessionSqliteStore::open_read_only(
+        &BrowserSessionSqliteStore::default_sqlite_path()?,
+    )?;
+    let mut rows = store.archived_task_operation_history(task)?;
+    rows.extend(
+        state
+            .task_operations
+            .get(task)
+            .into_iter()
+            .flat_map(|rows| rows.iter())
+            .map(|(id, row)| (id.clone(), row.clone())),
+    );
+    Ok(rows)
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -357,16 +376,19 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
     let path = BrowserSessionSqliteStore::default_sqlite_path()?;
     let reader = BrowserSessionSqliteStore::open_read_only(&path)?;
     let state = reader.load_session_state()?;
-    let has_history = state.task_operations.values().any(|rows| !rows.is_empty());
+    let has_history = state.task_operations.values().any(|rows| !rows.is_empty())
+        || reader.has_archived_task_operations()?;
     if let Some(original) = state
         .task_operations
         .get(task_id)
         .and_then(|rows| rows.get(&request_id))
+        .cloned()
+        .or(reader.archived_task_operation(task_id, &request_id)?)
     {
         if original.task_id != task_id || original.request_id != request_id {
             return Err("browser_task_operation_identity_conflict".into());
         }
-        same_request(&key(true)?, command, original)?;
+        same_request(&key(true)?, command, &original)?;
         return Ok(Admission::Existing(original.clone()));
     }
     // Resolve an original capture before transport or process recovery. Missing
@@ -462,13 +484,21 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
         },
     };
     let mut writer = BrowserSessionSqliteStore::default_sqlite()?;
-    let admitted = writer.mutate_session_state(|state| {
+    let admitted = writer.mutate_session_state_with_connection(|state, connection| {
         if let Some(prior) = state
             .task_operations
             .get(task_id)
             .and_then(|rows| rows.get(&request_id))
+            .cloned()
+            .or(
+                super::browser_session_store::task_operation_archive::archived(
+                    connection,
+                    task_id,
+                    &request_id,
+                )?,
+            )
         {
-            same_request(&key, command, prior)?;
+            same_request(&key, command, &prior)?;
             return Ok(Admission::Existing(prior.clone()));
         }
         if context(state, task_id)? != expected {
@@ -501,12 +531,10 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
                 image_attempt_budget(state, task_id, command)?;
             }
         }
+        super::browser_session_store::task_operation_archive::make_room(
+            connection, state, task_id,
+        )?;
         let rows = state.task_operations.entry(task_id.into()).or_default();
-        if rows.len() >= MAXIMUM_TASK_OPERATIONS {
-            return Err(
-                "browser_task_operation_capacity_reached: original history retained".into(),
-            );
-        }
         rows.insert(request_id.clone(), admitted.clone());
         Ok(Admission::Dispatch(admitted))
     })?;
@@ -539,14 +567,12 @@ fn native_kernel_admit(
         .as_str()
         .ok_or("browser_native_site_policy_provider_missing")?
         .to_owned();
-    let prior = state.task_operations.get(task_id).is_some_and(|rows| {
-        rows.values().any(|row| {
-            row.request_id != command["id"]
-                && row.action == "native_input"
-                && row
-                    .evidence_references
-                    .contains_key("nativeObservationRequestId")
-        })
+    let prior = operation_history(state, task_id)?.values().any(|row| {
+        row.request_id != command["id"]
+            && row.action == "native_input"
+            && row
+                .evidence_references
+                .contains_key("nativeObservationRequestId")
     });
     let policy = ChallengePolicy {
         policy_digest: binding["digest"]
@@ -603,10 +629,9 @@ fn original_native_observation(
         .as_str()
         .filter(|id| valid_request_id(id))
         .ok_or("browser_native_original_observation_request_invalid")?;
-    let capture = state
-        .task_operations
-        .get(task_id)
-        .and_then(|rows| rows.get(request))
+    let history = operation_history(state, task_id)?;
+    let capture = history
+        .get(request)
         .ok_or("browser_native_original_observation_missing")?;
     let encoded = capture
         .evidence_references
@@ -1341,10 +1366,9 @@ fn original_native_image_observation(
     let request = command["imageAttempt"]["observationRequestId"]
         .as_str()
         .ok_or("browser_native_original_observation_request_invalid")?;
-    let capture = state
-        .task_operations
-        .get(task)
-        .and_then(|rows| rows.get(request))
+    let history = operation_history(state, task)?;
+    let capture = history
+        .get(request)
         .ok_or("browser_native_original_observation_missing")?;
     let encoded = capture
         .evidence_references
@@ -1434,15 +1458,14 @@ fn native_image_kernel_plan(
     let observation = original_native_image_observation(state, task, command)?;
     let selected = image_attempt_selection(command)?;
     if let Some(prior) = image_attempt_budget(state, task, command)? {
-        let old_capture = state
-            .task_operations
-            .get(task)
-            .and_then(|rows| rows.get(&prior.evidence_references["nativeObservationRequestId"]))
+        let history = operation_history(state, task)?;
+        let old_capture = history
+            .get(&prior.evidence_references["nativeObservationRequestId"])
             .filter(|capture| {
                 capture.action == "native_capture"
                     && capture.state == BrowserTaskOperationState::OwnerAcknowledged
                     && RetainedContext::from_operation(capture)
-                        == RetainedContext::from_operation(prior)
+                        == RetainedContext::from_operation(&prior)
             })
             .ok_or("browser_native_original_observation_missing")?;
         let encoded = old_capture
@@ -1491,16 +1514,15 @@ fn native_image_kernel_plan(
 }
 
 /// Admit at most one continuation of the immutable acknowledged first image row.
-fn image_attempt_budget<'a>(
-    state: &'a BrowserSessionState,
+fn image_attempt_budget(
+    state: &BrowserSessionState,
     task: &str,
     command: &Value,
-) -> Result<Option<&'a BrowserTaskOperation>, String> {
+) -> Result<Option<BrowserTaskOperation>, String> {
     let request = command["id"].as_str().unwrap_or_default();
-    let rows = state.task_operations.get(task);
+    let rows = operation_history(state, task)?;
     let prior = rows
-        .into_iter()
-        .flat_map(|rows| rows.values())
+        .values()
         .filter(|row| {
             row.request_id != request
                 && row.action == "native_input"
@@ -1530,7 +1552,7 @@ fn image_attempt_budget<'a>(
             && old.evidence_references.contains_key("nativeImageRound")
             && RetainedContext::from_operation(old) == context(state, task)?
         {
-            return Ok(Some(old));
+            return Ok(Some((**old).clone()));
         }
     }
     Err("browser_native_challenge_attempt_budget_exhausted:human assistance required".into())
@@ -1570,16 +1592,13 @@ fn original_login_observation(
     command: &Value,
 ) -> Result<Value, String> {
     login_target_request(command)?;
-    let capture = state
-        .task_operations
-        .get(task)
-        .and_then(|rows| {
-            rows.get(
-                command["loginTarget"]["observationRequestId"]
-                    .as_str()
-                    .unwrap(),
-            )
-        })
+    let history = operation_history(state, task)?;
+    let capture = history
+        .get(
+            command["loginTarget"]["observationRequestId"]
+                .as_str()
+                .unwrap(),
+        )
         .ok_or("browser_native_login_observation_missing")?;
     if capture.action != "native_capture"
         || capture.state != BrowserTaskOperationState::OwnerAcknowledged
@@ -1612,7 +1631,8 @@ fn login_episode_step(
     let episode = command["loginTarget"]["episodeId"]
         .as_str()
         .ok_or("browser_native_login_episode_invalid")?;
-    let rows = state.task_operations.get(task);
+    let history = operation_history(state, task)?;
+    let rows = Some(&history);
     let mut prior = vec![];
     if let Some(rows) = rows {
         for row in rows.values() {

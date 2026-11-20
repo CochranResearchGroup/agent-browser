@@ -33,6 +33,8 @@ pub(crate) mod mode_inspection;
 pub(crate) mod profile_build;
 #[path = "browser_runtime_reset_store.rs"]
 mod runtime_reset;
+#[path = "browser_task_operation_archive.rs"]
+pub(crate) mod task_operation_archive;
 #[path = "browser_terminal_history.rs"]
 mod terminal_history;
 #[path = "browser_workspace_observation.rs"]
@@ -698,6 +700,13 @@ impl BrowserSessionSqliteStore {
         &mut self,
         mutate: impl FnOnce(&mut BrowserSessionState) -> Result<T, String>,
     ) -> Result<T, String> {
+        self.mutate_session_state_with_connection(|state, _| mutate(state))
+    }
+
+    pub(crate) fn mutate_session_state_with_connection<T>(
+        &mut self,
+        mutate: impl FnOnce(&mut BrowserSessionState, &Connection) -> Result<T, String>,
+    ) -> Result<T, String> {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -708,7 +717,7 @@ impl BrowserSessionSqliteStore {
             BROWSER_SESSION_STATE_SCHEMA_V1,
         )?;
         let previous = state.clone();
-        let result = mutate(&mut state)?;
+        let result = mutate(&mut state, &transaction)?;
         super::browser_idle_retirement_store::reject_retirement_publication(
             &transaction,
             &previous,
@@ -1447,7 +1456,10 @@ pub(super) fn save_document(
     let json = serde_json::to_string(value)
         .map_err(|error| format!("browser_runtime_document_serialize_failed:{error}"))?;
     let json = if kind == SESSION_STATE_DOCUMENT {
-        terminal_history::prepare_json(connection, &json)?
+        task_operation_archive::strip_archived_json(
+            connection,
+            terminal_history::prepare_json(connection, &json)?,
+        )?
     } else {
         json
     };

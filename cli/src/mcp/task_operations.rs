@@ -23,6 +23,8 @@ pub(super) fn lookup(task_id: &str, request_id: &str) -> Result<Value, String> {
         .task_operations
         .get(task_id)
         .and_then(|rows| rows.get(request_id))
+        .cloned()
+        .or(store.archived_task_operation(task_id, request_id)?)
         .filter(|row| row.task_id == task_id && row.request_id == request_id)
         .ok_or("browser_task_operation_not_found")?;
     let current = state.sessions.get(task_id);
@@ -45,7 +47,7 @@ pub(super) fn lookup(task_id: &str, request_id: &str) -> Result<Value, String> {
         && crate::native::browser_host_control::read(&operation.browser_id)?.epoch
             == operation.control_epoch;
     Ok(
-        json!({"schemaVersion":"agent-browser.task-operation.v1","operation":projection(operation),
+        json!({"schemaVersion":"agent-browser.task-operation.v1","operation":projection(&operation),
         "currentContext":if unchanged {"retained_matches"} else {"changed_or_missing"},
         "liveObservation":"not_performed","nextAction":"inspect_current_task_do_not_replay_original"}),
     )
@@ -53,8 +55,22 @@ pub(super) fn lookup(task_id: &str, request_id: &str) -> Result<Value, String> {
 
 pub(super) fn call(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
     let task_id = required_string_argument(arguments, "taskId")?;
-    let request_id = required_string_argument(&arguments["params"], "requestId")?;
-    let data = lookup(task_id, request_id).map_err(|error| JsonRpcError::invalid_params(&error))?;
+    let data = if arguments["params"]["operation"] == "capacity" {
+        let policy = arguments["params"]
+            .get("policy")
+            .map(|value| serde_json::from_value(value.clone()))
+            .transpose()
+            .map_err(|_| {
+                JsonRpcError::invalid_params("browser_task_operation_capacity_policy_invalid")
+            })?;
+        let scope = arguments["params"]["scope"].as_str().unwrap_or("task");
+        BrowserSessionSqliteStore::default_sqlite()
+            .and_then(|mut store| store.task_operation_capacity(task_id, scope, policy))
+            .map_err(|error| JsonRpcError::invalid_params(&error))?
+    } else {
+        let request_id = required_string_argument(&arguments["params"], "requestId")?;
+        lookup(task_id, request_id).map_err(|error| JsonRpcError::invalid_params(&error))?
+    };
     Ok(super::tool_response_from_payload(
         "browser_command",
         session,
