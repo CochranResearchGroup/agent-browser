@@ -14,6 +14,8 @@ use std::time::{Duration, Instant};
 
 use crate::process_identity::{RecordedProcessIdentity, VerifiedProcessTermination};
 
+pub(crate) mod latency;
+
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 
@@ -1080,6 +1082,29 @@ fn reuse_existing_daemon(
 }
 
 pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {
+    ensure_daemon_with_latency(session, opts).0
+}
+
+/// Return optional phase evidence separately from the operation result, including
+/// failure paths. Consumers must retain its uncertainty and delivery semantics.
+pub(crate) fn ensure_daemon_with_latency(
+    session: &str,
+    opts: &DaemonOptions,
+) -> (Result<DaemonResult, String>, Vec<Value>) {
+    let readiness = latency::PhaseCapture::start("readiness");
+    let mut samples = Vec::new();
+    let result = ensure_daemon_inner(session, opts, &mut samples);
+    if let Some(sample) = readiness.finish() {
+        samples.push(sample);
+    }
+    (result, samples)
+}
+
+fn ensure_daemon_inner(
+    session: &str,
+    opts: &DaemonOptions,
+    samples: &mut Vec<Value>,
+) -> Result<DaemonResult, String> {
     cache_runtime_lane_config(session, opts);
     wait_for_runtime_host_publication(session, Duration::from_secs(5));
     if let Some(existing) = reuse_existing_daemon(session, opts)? {
@@ -1087,7 +1112,12 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
     }
     // Only new-host demand joins startup admission. Recheck after the lock:
     // another caller may have published a compatible owner while we waited.
-    let _startup_lock = acquire_runtime_host_startup_lock(session)?;
+    let admission = latency::PhaseCapture::start("startup_lock");
+    let lock = acquire_runtime_host_startup_lock(session);
+    if let Some(sample) = admission.finish() {
+        samples.push(sample);
+    }
+    let _startup_lock = lock?;
     if let Some(existing) = reuse_existing_daemon(session, opts)? {
         return Ok(existing);
     }

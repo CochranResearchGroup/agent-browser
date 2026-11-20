@@ -33,7 +33,7 @@ const cli=async args=>parseJsonOutput((await runCli(context,['--json','--session
 const clockContext={env:{...process.env,AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD:process.env.AGENT_BROWSER_LATENCY_STABLE_TIME_BINARY??'stable-time'}};
 const clock=createMcpStdioClient({context:clockContext,args:['mcp',clockConfig],onFatal:()=>{}});
 let socket,hostPid,opened=false;
-const receipt={schemaVersion:'agent-browser.command-latency.v1',binarySha256:createHash('sha256').update(readFileSync(binary)).digest('hex'),browser:realpathSync(browser),samples:[],clock:'StableTime service UTC intervals at measurement instant',limitation:'Includes clock-request round trips; short intervals may be unresolved. CLI process startup is included. Cold launch is reported separately. No installed-runtime or MCP-path speedup is implied.'};
+const receipt={schemaVersion:'agent-browser.command-latency.v1',binarySha256:createHash('sha256').update(readFileSync(binary)).digest('hex'),browser:realpathSync(browser),samples:[],selectedPhase:process.env.AGENT_BROWSER_LATENCY_PHASE??null,phaseMeasurements:[],clock:'StableTime service UTC intervals at measurement instant',limitation:'Service-to-service brackets include clock delivery/request overhead. Actual operation elapsed time has only an upper bound. CLI process startup is included. Cold launch is separate. No installed-runtime or MCP-path speedup is implied.'};
 const timestamp=value=>{
  const match=/^(.*\.)(\d{1,9})Z$/.exec(value);assert(match,'RFC3339 nanosecond UTC required');
  return BigInt(Date.parse(match[1]+'000Z'))*1_000_000n+BigInt(match[2].padEnd(9,'0'));
@@ -51,13 +51,13 @@ async function measure(operation,run){
  const lower=timestamp(after.estimate.earliest_utc)-timestamp(before.estimate.latest_utc);
  const upper=timestamp(after.estimate.latest_utc)-timestamp(before.estimate.earliest_utc);
  assert(upper>=0n,'StableTime intervals moved backwards; discard sample');
- const sample={operation,lowerMs:Number(lower>0n?lower:0n)/1e6,upperMs:Number(upper)/1e6,before:before.estimate,after:after.estimate};
+ const sample={operation,lowerMs:Number(lower>0n?lower:0n)/1e6,upperMs:Number(upper)/1e6,intervalAppliesTo:'service-observation span including delivery',operationElapsedIntervalMs:[0,Number(upper)/1e6],before:before.estimate,after:after.estimate};
  receipt.samples.push(sample);return value;
 }
 function summarize(operation){
  const rows=receipt.samples.filter(row=>row.operation===operation);
  const quantile=(key,p)=>[...rows].sort((a,b)=>a[key]-b[key])[Math.ceil(rows.length*p)-1]?.[key]??null;
- return {n:rows.length,medianIntervalMs:[quantile('lowerMs',.5),quantile('upperMs',.5)],p95IntervalMs:[quantile('lowerMs',.95),quantile('upperMs',.95)]};
+ return {n:rows.length,medianServiceBracketIntervalMs:[quantile('lowerMs',.5),quantile('upperMs',.5)],p95ServiceBracketIntervalMs:[quantile('lowerMs',.95),quantile('upperMs',.95)],medianOperationElapsedIntervalMs:[0,quantile('upperMs',.5)],p95OperationElapsedIntervalMs:[0,quantile('upperMs',.95)]};
 }
 try{
  await clock.send('initialize',{protocolVersion:'2024-11-05',capabilities:{},clientInfo:{name:'ab-latency',version:'1'}});
@@ -74,7 +74,7 @@ try{
  const expression='document.body.firstElementChild.textContent';
  const direct=()=>new Promise((resolve,reject)=>{const id=++nextId;pending.set(id,{resolve,reject});socket.send(JSON.stringify({id,method:'Runtime.evaluate',params:{expression,returnByValue:true,awaitPromise:true,timeout:29750}}));});
  const expected='synthetic latency sample';
- const agent=async()=>{const value=await cli(['eval',expression]);assert.equal(value.success,true);assert.equal(value.data.result,expected);return value;};
+ const agent=async()=>{const value=await cli(['eval',expression]);assert.equal(value.success,true);assert.equal(value.data.result,expected);for(const sample of value.data.latencyPhases??[])if(sample.phase===receipt.selectedPhase)receipt.phaseMeasurements.push(sample);return value;};
  const cdp=async()=>{const value=await direct();assert(!value.exceptionDetails);assert.equal(value.result.value,expected);return value;};
  await agent();await cdp();
  const startupLock=join(context.socketDir,'runtime-host.startup.lock');
@@ -100,6 +100,7 @@ try{
   unmeasuredPhases:['routing','state reads','readiness','CDP versus other action execution','persistence'],
  };
  receipt.summary=Object.fromEntries(['cold_launch','direct_cdp','agent_browser'].map(name=>[name,summarize(name)]));
+ if(receipt.selectedPhase)assert(receipt.phaseMeasurements.some(sample=>sample.status==='measured'),'Selected phase produced no qualified measurement; inspect response wiring and StableTime availability');
  receipt.measurementCompleted=true;
 }catch(error){receipt.measurementCompleted=false;receipt.error=error.message;process.exitCode=1;}
 finally{
