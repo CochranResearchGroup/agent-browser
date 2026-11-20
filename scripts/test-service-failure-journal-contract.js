@@ -244,6 +244,28 @@ function validateRecoveryCall(call) {
     }
   }
 }
+function validateComposedOwningCheck(code, check) {
+  const composition = check.codeComposition;
+  const pairs = {
+    lease_authority_: 'crates/agent-browser-lease-authority/src/authority.rs',
+    profile_acquisition_principal_: 'crates/agent-browser-lease-authority/src/principal.rs',
+    profile_recovery_principal_: 'crates/agent-browser-lease-authority/src/principal.rs',
+    profile_reset_principal_: 'crates/agent-browser-lease-authority/src/principal.rs',
+  };
+  assert.equal(pairs[composition.prefix], composition.source, 'Unreviewed composed producer source');
+  assert.equal(check.path, 'cli/src/native/service_profile_recovery.rs', 'Unreviewed producer composition wrapper');
+  assert.equal(code, composition.prefix + composition.suffix, 'Composed producer suffix does not match public code');
+  assert(/^[a-z][a-z0-9_]*$/.test(composition.suffix), 'Invalid finite producer suffix');
+  const expected = composition.prefix === 'lease_authority_'
+    ? `format!("${composition.prefix}{}", error.as_str())`
+    : `format!("${composition.prefix}{}", error.code.as_str())`;
+  assert.equal(composition.expression, expected, 'Unreviewed producer composition expression');
+  assert(readFileSync(check.path, 'utf8').includes(expected), 'Missing producer composition wrapper');
+  assert(composition.sourceEvidence.includes(`"${composition.suffix}"`) && /^Self::[A-Za-z0-9_]+\s*=>/.test(composition.sourceEvidence), 'Composition must identify a canonical enum arm');
+  assert(readFileSync(composition.source, 'utf8').includes(composition.sourceEvidence), 'Missing canonical finite producer arm');
+  return true;
+}
+
 function validateRecoveryInventory(registry, discovered) {
   const excluded = new Map((registry.exclusions ?? []).map(entry => [entry.code, entry]));
   for (const exclusion of excluded.values()) {
@@ -266,6 +288,7 @@ function validateRecoveryInventory(registry, discovered) {
     assert(['unknown','stale','denied','unavailable','invalid','uncertain','configured_budget','coordination_paused'].includes(entry.evidenceClass), `Missing evidence classification for ${code}`);
     assert.equal(entry.evidenceFreshness, 'not_observed_by_projection', 'Registry must not invent runtime freshness');
     assert(entry.owningChecks.some(check => {
+      if (check.codeComposition) return validateComposedOwningCheck(code, check);
       if (!check.revision) return readFileSync(check.path, 'utf8').includes(code);
       assert.equal(entry.legacy, true, 'Historical anchors are only for retained legacy failures');
       assert(/^[a-f0-9]{40}$/.test(check.revision) && /^(cli\/src|crates|packages)\//.test(check.path) && !check.path.includes('..'), 'Historical source anchor must be immutable and repository scoped');
@@ -324,3 +347,5 @@ if (process.argv.includes('--require-complete-recovery')) {
   assert.deepEqual(recoveryRegistry.knownCoverageGaps, []);
 }
 process.stdout.write(`Exact recovery contracts checked: ${Object.keys(recoveryRegistry.codes).length}; reviewed namespace code candidates checked: ${discoveredReviewedCodes.size}; full inventory: ${recoveryRegistry.inventoryStatus}\n`);
+
+assert.throws(() => validateComposedOwningCheck('unreviewed_anything', {path:'cli/src/native/service_profile_recovery.rs',codeComposition:{prefix:'unreviewed_',source:'fake.rs',suffix:'anything'}}), /Unreviewed composed producer source/);
