@@ -226,6 +226,15 @@ fn viewer_request(request: &str) -> Option<(&str, &str)> {
     .then_some((viewer, operation))
 }
 
+/// Ordinary public return cannot release independently authenticated Native
+/// viewers. The private viewer callback retires only its own recorded claim.
+pub(super) fn ordinary_return_allowed(control: &Control) -> Result<(), String> {
+    if !viewer_claims(control).is_empty() {
+        return Err("browser_control_active_native_viewers: return each active viewer to view-only using its retained Remote View handoff; for recent input wait for quiet and re-read browser_control status; an attributable override remains a separate explicit operation".into());
+    }
+    Ok(())
+}
+
 fn viewer_claims(control: &Control) -> BTreeMap<String, (String, String)> {
     let mut claims = BTreeMap::new();
     for event in &control.audit {

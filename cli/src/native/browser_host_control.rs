@@ -350,6 +350,7 @@ pub(crate) fn prepare_standalone_return(
         if control.epoch != expected {
             return Err("browser_control_epoch_changed".into());
         }
+        super::browser_human_handoff::ordinary_return_allowed(control)?;
         if !control.human || control.awaiting_observation || !flight_clear(control) {
             return Err("browser_control_return_observation_unavailable".into());
         }
@@ -370,6 +371,7 @@ pub(crate) fn eligible_return_observation(
     if control.epoch != expected {
         return Err("browser_control_epoch_changed".into());
     }
+    super::browser_human_handoff::ordinary_return_allowed(&control)?;
     Ok(control.human
         && !control.awaiting_observation
         && flight_clear(&control)
@@ -493,6 +495,7 @@ pub(crate) fn commit_observed_return(
         if control.epoch != expected {
             return Err("browser_control_epoch_changed".into());
         }
+        super::browser_human_handoff::ordinary_return_allowed(control)?;
         if !control.human || control.awaiting_observation || !flight_clear(control) {
             return Err("browser_control_return_observation_unavailable".into());
         }
@@ -557,6 +560,9 @@ pub(crate) fn change(
     transaction(&path(browser_id)?, |control| {
         if control.epoch != expected {
             return Err("browser_control_epoch_changed".into());
+        }
+        if operation == "return" {
+            super::browser_human_handoff::ordinary_return_allowed(control)?;
         }
         match operation {
             "takeover" => {
