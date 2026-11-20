@@ -323,7 +323,9 @@ async function sendDashboardFailureReceipt(observation:DashboardFailureObservati
     });
     const payload=await response.json().catch(()=>null) as Record<string,any>|null;
     const receipt=payload?.data;
-    const accepted=response.ok&&payload?.success===true&&!responseFailureMetadata(payload)&&receipt?.schemaVersion==="agent-browser.service-failure-record.v1"&&receipt.recorded===true&&typeof receipt.occurrenceId==="string"&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(receipt.occurrenceId);
+    const logs=[payload?.logging,receipt?.logging];
+    const explicitFailure=payload?.failure!=null||receipt?.failure!=null||logs.some(log=>log&&(log.success===false||log.recorded===false||["failed","unavailable","not_recorded"].includes(log.state)))||typeof payload?.error==="string"&&payload.error.trim().length>0;
+    const accepted=response.ok&&payload?.success===true&&!explicitFailure&&!responseFailureMetadata(payload)&&receipt?.schemaVersion==="agent-browser.service-failure-record.v1"&&receipt.recorded===true&&typeof receipt.occurrenceId==="string"&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(receipt.occurrenceId);
     return {accepted,transportAccepted:response.ok,receipt:accepted?payload:null,...(!accepted?{reason:"observer_receipt_unverified"}:{}),...(payload?.failure?{failure:payload.failure}:{})};
   } catch {return {accepted:false,transportAccepted:false,receipt:null,reason:"observer_transport_unavailable"};}
 }
