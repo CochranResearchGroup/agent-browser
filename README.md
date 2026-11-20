@@ -30,6 +30,18 @@ The first archive promotes the runtime database to schema 6; older binaries
 must not consume that database and silently forget archived duplicate protection.
 
 
+### Live teaching capacity
+
+Existing client teaching review, submission and workspace owners expose
+`capacity()` for effective policy and `capacity(partialPolicy)` for live updates.
+Pass initial `teachingCapacity` in client options or trusted installed host JSON:
+`{"maximumLineageRevisions":512,"maximumRetainedContexts":4096,"maximumCatalogEntries":4096}`.
+Defaults are 256 lineage revisions and 4096 working contexts/catalog entries.
+Values are positive safe integers. The host rereads private configuration each
+run. Increasing a limit preserves append-only history, duplicate detection and
+provenance. Lowering future admission does not truncate historical lookup or
+change task permissions. No restart, deletion or new approval interface is needed.
+
 ### Continue after a refusal
 
 Use the existing `browser_command` action `failure_recovery` with

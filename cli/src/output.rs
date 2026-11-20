@@ -7447,6 +7447,8 @@ Commands:
   Teaching evidence: client teaching-evidence / teaching-evidence-http; recheck Saved provenance before Speech ranges
   Teaching drafts: inspect_guide / client inspectTeachingDraft; inert until reviewed
   Teaching review: client teaching-review edits/reviews; MCP candidate validation stays inert
+  Teaching capacity(): live maximumLineageRevisions/maximumRetainedContexts/maximumCatalogEntries; defaults 256/4096/4096
+  Client options and trusted host JSON teachingCapacity preserve append-only originals and permissions
   Teaching repeat: recordFreshRepeat / promote; trusted review plus actual report proof
   Teaching grilling: client teaching-grilling; source-linked questions, authenticated answers
   Native challenge: bounded passive wait or one registered checkbox attempt per task
