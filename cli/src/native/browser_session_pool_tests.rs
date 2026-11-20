@@ -4612,6 +4612,14 @@ fn finite_handoff_lifetime_uses_service_origin_instead_of_guest_activity_time() 
             "Independent retained metadata remains inspectable"
         );
         assert_eq!(read["data"]["timeError"], "stable_time_client_start_failed");
+        assert_eq!(
+            read["data"]["timeRecovery"]["code"],
+            "stable_time_client_start_failed"
+        );
+        assert!(
+            read["data"]["timeRecovery"].get("occurrenceId").is_none(),
+            "Independent metadata inspection does not manufacture a refusal occurrence"
+        );
         let perpetual = consumer.handle_command(&serde_json::json!({"action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"set_link_lifetime","ttlMs":0}));
         assert_eq!(
             perpetual["success"], true,
@@ -4642,6 +4650,10 @@ fn finite_handoff_lifetime_uses_service_origin_instead_of_guest_activity_time() 
             .as_str()
             .unwrap()
             .starts_with("remote_view_handoff_legacy_time_unqualified"));
+        assert_eq!(
+            read["data"]["timeRecovery"]["code"],
+            "remote_view_handoff_legacy_time_unqualified"
+        );
     }
     {
         let _time = TimeFixture::set(Ok(fixture_stamp(6_000)));

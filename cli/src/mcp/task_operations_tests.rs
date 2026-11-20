@@ -603,6 +603,29 @@ fn native_image_public_completion_case(
                     .unwrap()
                     .evidence_references
                     .insert("nativeOwnerNoEffectSignature".into(), signature.clone());
+                if round_fault == Some("no_effect_bootstrap") {
+                    let mut retained: agent_browser_service_model::RemoteViewTabHandoff =
+                        serde_json::from_value(
+                            json!({"id":"schema8-retention","sessionId":"task","tabId":"tab"}),
+                        )
+                        .unwrap();
+                    retained
+                        .renew_link_lifetime(
+                            Some(
+                                agent_browser_service_model::ServiceTimeOrigin::new(
+                                    "service-epoch".into(),
+                                    100,
+                                    100,
+                                )
+                                .unwrap(),
+                            ),
+                            20,
+                        )
+                        .unwrap();
+                    state
+                        .remote_view_tab_handoffs
+                        .insert(retained.id.clone(), retained);
+                }
                 state.next_session_sequence += 1;
                 state.browsers.get_mut("browser").unwrap().pid = u32::MAX;
                 Ok(())
@@ -708,8 +731,8 @@ fn native_image_public_completion_case(
         assert_eq!(
             db.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
                 .unwrap(),
-            7,
-            "Archival cannot downgrade the failed-terminal reader guard"
+            if round_fault == Some("no_effect_bootstrap") { 8 } else { 7 },
+            "Original no-effect settlement and archival cannot downgrade a newer finite-retention reader guard"
         );
         assert_eq!(
             reopened

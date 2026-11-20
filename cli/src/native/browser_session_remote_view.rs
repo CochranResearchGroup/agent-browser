@@ -1715,3 +1715,29 @@ pub(crate) fn handoff_resume_intent(
         explicit_reopen,
     )
 }
+
+/// Preserve a timing refusal as typed recourse without creating a refusal
+/// occurrence or treating this independent metadata read as a failed mutation.
+pub(crate) fn handoff_time_recovery(error: &str, handoff_id: &str) -> serde_json::Value {
+    let mut failure = serde_json::to_value(super::service_failure::classify_service_failure(error))
+        .expect("service failure recourse serializes");
+    let code = error.split(':').next().unwrap_or_default();
+    if code.len() <= 128
+        && code
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+        && (code.starts_with("remote_view_handoff_")
+            || code.starts_with("stable_time_")
+            || code.starts_with("service_time_origin_"))
+    {
+        failure["code"] = serde_json::json!(code);
+    }
+    super::service_failure::enrich_recovery_contract(
+        &mut failure,
+        &serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":handoff_id,
+            "params":{"handoffId":handoff_id,"handoffOperation":"inspect"}
+        }),
+    );
+    failure
+}

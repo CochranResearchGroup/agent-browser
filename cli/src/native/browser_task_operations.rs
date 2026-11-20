@@ -512,9 +512,14 @@ pub(crate) fn reconcile_native_no_effect(
         if row.completed_at_ms.is_none() {
             row.completed_at_ms = Some(now_ms()?);
         }
-        connection
-            .pragma_update(None, "user_version", 7)
+        let schema: i64 = connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
             .map_err(|_| "browser_native_no_effect_publication_failed")?;
+        if schema < 7 {
+            connection
+                .pragma_update(None, "user_version", 7)
+                .map_err(|_| "browser_native_no_effect_publication_failed")?;
+        }
         Ok(row.clone())
     })
 }

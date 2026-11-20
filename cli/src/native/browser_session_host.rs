@@ -1844,6 +1844,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         .err()
                         .is_some_and(|error| error == "remote_view_handoff_expired");
                     let validity_error = validity.as_ref().err().cloned();
+                    let time_recovery = validity_error.as_ref().map(|error| {
+                        super::browser_session_remote_view::handoff_time_recovery(error, handoff_id)
+                    });
                     let tab_lifetime = self.state.tab_lifetimes.get(&link.tab_id).or_else(|| {
                         link.resume
                             .as_ref()
@@ -1863,7 +1866,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                             "retained":hold.expires_at_ms.is_none_or(|deadline| now_ms < deadline),
                         })),
                         "expired":if validity_error.is_none() || expired {serde_json::json!(expired)} else {serde_json::Value::Null},
-                        "retentionTime":link.retention_time,"timeError":validity_error,
+                        "retentionTime":link.retention_time,"timeError":validity_error,"timeRecovery":time_recovery,
                         "status":if expired {"expired"} else if validity.is_err() {"time_unqualified"} else {"active"}}));
                 }
                 if command["handoffOperation"] == "set_link_lifetime" {
