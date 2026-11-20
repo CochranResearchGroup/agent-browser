@@ -325,12 +325,43 @@ pub(crate) fn handle_service_challenge_task(command: &Value) -> Result<Value, St
     match action {
         "service_challenge_task_start" => {
             let intent = parse_start_intent(command)?;
-            let created_at = Utc::now().to_rfc3339();
+            let snapshot = repository.load_snapshot()?;
+            let input =
+                challenge_task_start_input(&snapshot, intent.clone(), "1970-01-01T00:00:00Z")?;
+            if let agent_browser_service_model::ServiceChallengeTaskStartDecision::Replayed(
+                record,
+            ) = agent_browser_service_model::prepare_service_challenge_task_start(
+                &snapshot.challenge_tasks,
+                input,
+            )
+            .map_err(|error| error.cli_message())?
+            {
+                return Ok(task_projection(&record, true));
+            }
+            let origin = crate::connection::stable_time::authority_now()?.service_origin()?;
+            let deadline = origin
+                .deadline_ms(intent.deadline_ms)
+                .map_err(str::to_owned)?;
+            let created_at = chrono::DateTime::from_timestamp_millis(origin.earliest_utc_ms as i64)
+                .ok_or("challenge_task_created_at_invalid")?
+                .to_rfc3339();
+            let deadline_at = chrono::DateTime::from_timestamp_millis(deadline as i64)
+                .ok_or("challenge_task_deadline_invalid")?
+                .to_rfc3339();
             let (record, replayed) = repository.mutate(|state| {
                 let input = challenge_task_start_input(state, intent.clone(), &created_at)?;
-                state
+                let (mut record, replayed) = state
                     .start_service_challenge_task(input)
-                    .map_err(|error| error.cli_message())
+                    .map_err(|error| error.cli_message())?;
+                if !replayed {
+                    record.deadline_origin = Some(origin.clone());
+                    record.relative_deadline_ms = Some(intent.deadline_ms);
+                    record.deadline_at = deadline_at.clone();
+                    state
+                        .challenge_tasks
+                        .insert(record.task_id.clone(), record.clone());
+                }
+                Ok((record, replayed))
             })?;
             Ok(task_projection(&record, replayed))
         }
@@ -347,8 +378,62 @@ pub(crate) fn handle_service_challenge_task(command: &Value) -> Result<Value, St
             let task_id = required_string(command, "challengeTaskId")?;
             let principal_id = caller_principal(command)?;
             let operation_id = required_string(command, "operationId")?;
-            let resumed_at = Utc::now().to_rfc3339();
+            let snapshot = repository.load_snapshot()?;
+            let original = snapshot
+                .status_service_challenge_task(&task_id, &principal_id)
+                .map_err(|error| error.cli_message())?;
+            if project_service_challenge_task(&original, false).effect_pending {
+                return Err("challenge_task_effect_outcome_unknown".into());
+            }
+            // Existing replay/terminal checks precede timing and current-tab work.
+            let probe = ServiceChallengeTaskResumeInput {
+                task_id: task_id.clone(),
+                principal_id: principal_id.clone(),
+                operation_id: operation_id.clone(),
+                resumed_at: original.created_at.clone(),
+            };
+            if let agent_browser_service_model::ServiceChallengeTaskResumeDecision::Replayed(
+                record,
+            ) = agent_browser_service_model::prepare_service_challenge_task_resume(
+                &snapshot.challenge_tasks,
+                probe,
+            )
+            .map_err(|error| error.cli_message())?
+            {
+                return Ok(task_projection(&record, true));
+            }
+            if original.deadline_origin.is_none() || original.relative_deadline_ms.is_none() {
+                return Err("challenge_task_deadline_origin_unqualified".into());
+            }
+            let now = crate::connection::stable_time::authority_now()?.service_origin()?;
+            original.require_qualified_deadline(&now)?;
+            let resumed_at = chrono::DateTime::from_timestamp_millis(now.latest_utc_ms as i64)
+                .ok_or("challenge_task_resumed_at_invalid")?
+                .to_rfc3339();
             let (record, replayed) = repository.mutate(|state| {
+                let current = state
+                    .status_service_challenge_task(&task_id, &principal_id)
+                    .map_err(|error| error.cli_message())?;
+                if project_service_challenge_task(&current, false).effect_pending {
+                    return Err("challenge_task_effect_outcome_unknown".into());
+                }
+                let input = ServiceChallengeTaskResumeInput {
+                    task_id: task_id.clone(),
+                    principal_id: principal_id.clone(),
+                    operation_id: operation_id.clone(),
+                    resumed_at: resumed_at.clone(),
+                };
+                if let agent_browser_service_model::ServiceChallengeTaskResumeDecision::Replayed(
+                    record,
+                ) = agent_browser_service_model::prepare_service_challenge_task_resume(
+                    &state.challenge_tasks,
+                    input.clone(),
+                )
+                .map_err(|error| error.cli_message())?
+                {
+                    return Ok((*record, true));
+                }
+                current.require_qualified_deadline(&now)?;
                 state
                     .resume_service_challenge_task(ServiceChallengeTaskResumeInput {
                         task_id: task_id.clone(),

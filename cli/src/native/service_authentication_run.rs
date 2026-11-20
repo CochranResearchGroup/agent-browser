@@ -18,7 +18,6 @@ use super::service_model::{LeaseState, ServiceState, ServiceTabHandle};
 use super::service_store::{
     JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository,
 };
-use super::service_trace::service_now_timestamp;
 use super::site_login_recipe::{
     classify_site_page, load_site_login_recipe, login_entry_fallback_url, site_login_recipe_digest,
     PasswordValueSource, SiteLoginRecipe, SitePageEvidence,
@@ -26,9 +25,9 @@ use super::site_login_recipe::{
 use super::{auth, interaction};
 use agent_browser_challenge_control::ChallengeConsumerKind;
 use agent_browser_service_model::{
-    project_service_authentication_run, require_live_authentication_run,
-    ServiceAuthenticationRunCompletion, ServiceAuthenticationRunRecord,
-    ServiceAuthenticationRunStartDecision, ServiceAuthenticationRunStartInput,
+    project_service_authentication_run, ServiceAuthenticationRunCompletion,
+    ServiceAuthenticationRunRecord, ServiceAuthenticationRunStartDecision,
+    ServiceAuthenticationRunStartInput,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -382,8 +381,32 @@ fn run_projection(record: &ServiceAuthenticationRunRecord, replayed: bool) -> Va
         .expect("service authentication projection must serialize")
 }
 
+fn qualified_run_time(
+    record: &ServiceAuthenticationRunRecord,
+) -> Result<agent_browser_service_model::ServiceTimeOrigin, String> {
+    // Pending original effects outrank time availability and remain non-replayable.
+    if project_service_authentication_run(record, false).effect_pending {
+        return Err("authentication_run_effect_outcome_unknown".into());
+    }
+    if record.deadline_origin.is_none() || record.relative_deadline_ms.is_none() {
+        return Err("authentication_run_deadline_origin_unqualified".into());
+    }
+    let now = crate::connection::stable_time::authority_now()?.service_origin()?;
+    record.require_qualified_deadline(&now)?;
+    Ok(now)
+}
+
+fn qualified_timestamp(
+    now: &agent_browser_service_model::ServiceTimeOrigin,
+) -> Result<String, String> {
+    chrono::DateTime::from_timestamp_millis(now.latest_utc_ms as i64)
+        .map(|time| time.to_rfc3339())
+        .ok_or_else(|| "authentication_run_observed_at_invalid".into())
+}
+
 fn require_live_run(record: &ServiceAuthenticationRunRecord) -> Result<(), String> {
-    require_live_authentication_run(record, &service_now_timestamp())
+    qualified_run_time(record)
+        .map(|_| ())
         .map_err(|error| error.cli_message())
 }
 
@@ -853,12 +876,19 @@ fn reserve_effect(
     action: AuthenticationActionKind,
     state_instance_id: &str,
 ) -> Result<(), String> {
-    let reserved_at = service_now_timestamp();
+    let snapshot = repository.load_snapshot()?;
+    let original = snapshot
+        .service_authentication_run(run_id)
+        .ok_or("authentication_run_not_found")?;
+    caller_owns_run(command, original)?;
+    let now = qualified_run_time(original)?;
+    let reserved_at = qualified_timestamp(&now)?;
     repository.mutate(|state| {
         let record = state
             .service_authentication_run(run_id)
             .ok_or_else(|| "authentication_run_not_found".to_string())?;
         caller_owns_run(command, record)?;
+        record.require_qualified_deadline(&now)?;
         state
             .reserve_service_authentication_effect(
                 run_id,
@@ -866,7 +896,7 @@ fn reserve_effect(
                 action,
                 state_instance_id,
                 &reserved_at,
-                &service_now_timestamp(),
+                &reserved_at,
             )
             .map(|_| ())
             .map_err(|error| error.cli_message(""))
@@ -886,6 +916,21 @@ async fn resume_authentication_run(
         .cloned()
         .ok_or_else(|| "authentication_run_not_found".to_string())?;
     caller_owns_run(command, &record)?;
+    if project_service_authentication_run(&record, false).effect_pending {
+        return Err("authentication_run_effect_outcome_unknown".into());
+    }
+    if record.run.used_operation_ids.contains(&operation_id)
+        || matches!(
+            record.run.state,
+            AuthenticationRunState::Authenticated
+                | AuthenticationRunState::OperatorInterventionRequired
+                | AuthenticationRunState::Blocked
+                | AuthenticationRunState::Failed
+                | AuthenticationRunState::Cancelled
+        )
+    {
+        return Ok(run_projection(&record, true));
+    }
     require_live_run(&record)?;
     let current_handle = exact_current_handle(&snapshot, &record)?;
     let recipe = load_site_login_recipe(&record.run.binding.site_recipe_id)?;
@@ -933,17 +978,20 @@ async fn resume_authentication_run(
                 exact_account_authenticated: classified.exact_organization_authenticated,
                 browser_chrome_semantics_used: false,
             };
+            let now = qualified_run_time(&record)?;
+            let observed_at = qualified_timestamp(&now)?;
             let updated = repository.mutate(|state| {
                 let current = state
                     .service_authentication_run(&run_id)
                     .ok_or_else(|| "authentication_run_not_found".to_string())?;
                 caller_owns_run(command, current)?;
+                current.require_qualified_deadline(&now)?;
                 state
                     .observe_service_authentication_run(
                         &run_id,
                         &operation_id,
                         receipt.clone(),
-                        &service_now_timestamp(),
+                        &observed_at,
                     )
                     .map_err(|error| error.cli_message("authentication_run_observe_failed"))
             })?;
@@ -1027,11 +1075,14 @@ async fn resume_authentication_run(
             }
             let watch = arm_im_receipts_watch(&record).await?;
             let challenge_id = format!("sms:{}", watch.watch_id);
+            let now = qualified_run_time(&record)?;
+            let observed_at = qualified_timestamp(&now)?;
             let updated = repository.mutate(|state| {
                 let current = state
                     .service_authentication_run(&run_id)
                     .ok_or_else(|| "authentication_run_not_found".to_string())?;
                 caller_owns_run(command, current)?;
+                current.require_qualified_deadline(&now)?;
                 state
                     .prepare_service_authentication_watch(
                         &run_id,
@@ -1039,7 +1090,7 @@ async fn resume_authentication_run(
                         &challenge_id,
                         AuthenticationChallengeChannel::SmsOtp,
                         watch.clone(),
-                        &service_now_timestamp(),
+                        &observed_at,
                     )
                     .map_err(|error| error.cli_message("authentication_run_watch_prepare_failed"))
             })?;
@@ -1361,9 +1412,31 @@ pub(crate) async fn handle_service_authentication_run(
     match action {
         "service_authentication_run_start" => {
             let intent = parse_start_intent(command)?;
-            let created_at = service_now_timestamp();
-            let (record, replayed) = repository
-                .mutate(|state| start_run_in_state(state, intent.clone(), &created_at))?;
+            let mut snapshot = repository.load_snapshot()?;
+            let (existing, replayed) =
+                start_run_in_state(&mut snapshot, intent.clone(), "1970-01-01T00:00:00Z")?;
+            if replayed {
+                return Ok(run_projection(&existing, true));
+            }
+            let origin = crate::connection::stable_time::authority_now()?.service_origin()?;
+            origin
+                .deadline_ms(intent.deadline_ms)
+                .map_err(str::to_owned)?;
+            let created_at = chrono::DateTime::from_timestamp_millis(origin.earliest_utc_ms as i64)
+                .ok_or("authentication_run_created_at_invalid")?
+                .to_rfc3339();
+            let (record, replayed) = repository.mutate(|state| {
+                let (mut record, replayed) =
+                    start_run_in_state(state, intent.clone(), &created_at)?;
+                if !replayed {
+                    record.deadline_origin = Some(origin.clone());
+                    record.relative_deadline_ms = Some(intent.deadline_ms);
+                    state
+                        .authentication_runs
+                        .insert(record.run.run_id.clone(), record.clone());
+                }
+                Ok((record, replayed))
+            })?;
             Ok(run_projection(&record, replayed))
         }
         "service_authentication_run_status" => {
