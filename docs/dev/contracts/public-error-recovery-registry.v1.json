@@ -348,6 +348,408 @@
       },
       "resumeCondition": "Current viewer/target/epoch match the intended request and required holder authority is present.",
       "maximumAutomaticAttempts": 1
+    },
+    "control_storage": {
+      "rationale": "The cooperative-control durable record or signing key cannot currently establish the retained control state.",
+      "requiredActor": "installation_owner",
+      "evidenceRequirement": "Exact original lookup outcome and durable store diagnostics; absence of a read result does not prove absence of the operation.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "failure_log",
+          "params": {
+            "limit": 100
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Preserve control records and the existing return key; repair only the identified filesystem availability, permissions or corrupted-state prerequisite under installation-owner authority. Do not erase viewer claims or rotate a retained key to bypass control.",
+          "precondition": "Caller retains original task and has authority for this supported operation.",
+          "interface": "installation_owner_storage_repair"
+        }
+      ],
+      "verification": {
+        "tool": "browser_control",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "resumeCondition": "The retained authoritative control record is readable and its existing viewer claims remain intact; then obtain fresh target observation before input.",
+      "maximumAutomaticAttempts": 1
+    },
+    "control_request": {
+      "rationale": "The named cooperative-control argument, actor attribution or expected epoch is required by the public control schema.",
+      "requiredActor": "caller",
+      "evidenceRequirement": "Original argument shape and current public browser_command schema.",
+      "inspect": {
+        "tool": "browser_control",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Use current status to supply a valid operation, expectedEpoch, real actor and reason. Correct pauseReads type or other named field without impersonating a viewer or replaying original input.",
+          "precondition": "Caller retains original task and has authority for this supported operation.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_control",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "resumeCondition": "The corrected control request matches current epoch and actual actor authority; original browser input is not replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "control_reconcile": {
+      "rationale": "Already dispatched, missing-owner or retained uncertain input cannot be assumed canceled by a control transition.",
+      "requiredActor": "caller",
+      "evidenceRequirement": "Original task-operation outcome and current physical browser/tab identity.",
+      "inspect": {
+        "tool": "browser_control",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the exact original task operation and current task. Reconcile only with the supported original request, current epoch and attributable actor; a dispatched live owner must settle first.",
+          "precondition": "Caller retains original task and has authority for this supported operation.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "taskId": "$taskId",
+              "action": "task_operation",
+              "params": {
+                "requestId": "$requestId"
+              }
+            }
+          }
+        },
+        {
+          "instruction": "After original-owner evidence qualifies, reconcile the retained request without dispatching input again.",
+          "precondition": "Current status supplies epoch; caller supplies real actor/reason and original requestId. The original process/target are still verified.",
+          "call": {
+            "tool": "browser_control",
+            "arguments": {
+              "taskId": "$taskId",
+              "operation": "reconcile",
+              "requestId": "$requestId",
+              "expectedEpoch": "$currentEpoch",
+              "actor": "$actor",
+              "reason": "$reason"
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_control",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "resumeCondition": "The original outcome is retained and reconciled without replay; current task target is freshly observed and no other unsettled input remains.",
+      "maximumAutomaticAttempts": 1
+    },
+    "control_observe": {
+      "rationale": "A control return requires a fresh observation of the same retained physical task; a stale target never authorizes relaunch or replacement.",
+      "requiredActor": "caller",
+      "evidenceRequirement": "Fresh mode proof and retained briefing from the exact task.",
+      "inspect": {
+        "tool": "browser_control",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Observe the retained task using browser_continue. If a human still owns it, finish that viewer return first. Failure to observe the original target requires original-task reconciliation, not reopening.",
+          "precondition": "Caller retains original task and has authority for this supported operation.",
+          "call": {
+            "tool": "browser_continue",
+            "arguments": {
+              "taskId": "$taskId"
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "The exact retained physical process and target are freshly observed and control status reports automation may resume.",
+      "maximumAutomaticAttempts": 1
+    },
+    "host_binding": {
+      "rationale": "The requested app-level takeover or policy operation requires an existing positively bound hosted task.",
+      "requiredActor": "app_owner",
+      "evidenceRequirement": "Fresh mode proof and retained briefing from the exact task.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Use ordinary supported status/view/return where applicable. For app-scoped takeover, override or artifact policy, ask the existing app owner to supply a valid host binding through its supported browser_open attachment flow; do not fabricate host identity or replace this task.",
+          "precondition": "Caller retains original task and has authority for this supported operation.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "tool": "browser_control",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "resumeCondition": "The requested operation is supported by the retained task binding and real app authority; independent ordinary task reads may continue.",
+      "maximumAutomaticAttempts": 1
+    },
+    "policy_request": {
+      "rationale": "Optional task-policy requests require the public policy schema and explicit actor attribution; status remains available.",
+      "requiredActor": "caller",
+      "evidenceRequirement": "Original argument shape and current public browser_command schema.",
+      "inspect": {
+        "tool": "browser_policy",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Correct the named field using current browser_policy status and its effective revision. Supply actor/reason for mutation and preserve original override IDs and scope.",
+          "precondition": "Caller retains original task and has authority for this supported operation.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_policy",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "resumeCondition": "The corrected request matches the current effective revision and original scope; any existing override outcome is inspected before mutation.",
+      "maximumAutomaticAttempts": 1
+    },
+    "policy_denied": {
+      "rationale": "The current optional app/task policy positively denies this action; capacity changes cannot broaden that permission.",
+      "requiredActor": "task_policy_owner",
+      "evidenceRequirement": "Original task-operation outcome and current physical browser/tab identity.",
+      "inspect": {
+        "tool": "browser_policy",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Review the effective policy and change only the intended task rule under existing policy-owner authority. A replacement policy must be explicitly reviewed; never clear policy merely to evade denial.",
+          "precondition": "Caller has policy authority and supplies current revision, real actor/reason and the complete reviewed task policy.",
+          "call": {
+            "tool": "browser_policy",
+            "arguments": {
+              "taskId": "$taskId",
+              "operation": "set_task",
+              "expectedRevision": "$currentRevision",
+              "actor": "$actor",
+              "reason": "$reason",
+              "policy": "$reviewedPolicy"
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_policy",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "resumeCondition": "The intended action is permitted by an explicit authorized policy change and any original request is reconciled; human control and identity fences still apply.",
+      "maximumAutomaticAttempts": 1
+    },
+    "policy_revision": {
+      "rationale": "Policy mutation is fenced against a changed effective revision so a concurrent owner update is not overwritten.",
+      "requiredActor": "task_policy_owner",
+      "evidenceRequirement": "Current control epoch, retained viewer claim and exact task briefing.",
+      "inspect": {
+        "tool": "browser_policy",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Read the new effective revision and policy. Reassess the intended change, then submit only the same authorized policy intent with the observed revision; revision exhaustion requires a sanitized owner escalation rather than wraparound.",
+          "precondition": "Caller retains original task and has authority for this supported operation.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_policy",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "resumeCondition": "The intended policy change is applied against the current revision and independently read back; do not infer permission from a failed update.",
+      "maximumAutomaticAttempts": 1
+    },
+    "policy_original": {
+      "rationale": "A scoped override ID must retain its original task/action/request authorization and cannot be overwritten or guessed.",
+      "requiredActor": "task_policy_owner",
+      "evidenceRequirement": "Original task-operation outcome and current physical browser/tab identity.",
+      "inspect": {
+        "tool": "browser_policy",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original grant with browser_policy override_lookup. If its identity conflicts or it is already spent, reconcile that original and request a separately attributable scoped override for the intended action only after authorization.",
+          "precondition": "Caller supplies the original overrideId from its retained outcome, not a guessed replacement.",
+          "call": {
+            "tool": "browser_policy",
+            "arguments": {
+              "taskId": "$taskId",
+              "operation": "override_lookup",
+              "overrideId": "$overrideId"
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_policy",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "resumeCondition": "The intended grant is readable, exact scoped authorization is verified and its original effect is reconciled before any further action.",
+      "maximumAutomaticAttempts": 1
+    },
+    "artifact_capacity": {
+      "rationale": "Pre-capture artifact-reference admission uses the effective task budget; acknowledged metadata must never be discarded after producing a file.",
+      "requiredActor": "task_policy_owner",
+      "evidenceRequirement": "Current capacity usage, eligible archive count and effective task/system policy.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_operation",
+          "params": {
+            "operation": "capacity"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Increase the existing task policy.maximumArtifactReferences using the capacity operation and a complete reviewed policy; preserve the same task and its original references.",
+          "precondition": "Caller has capacity-policy authority and supplies a complete policy preserving other intended limits.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "taskId": "$taskId",
+              "action": "task_operation",
+              "params": {
+                "operation": "capacity",
+                "scope": "task",
+                "policy": "$reviewedPolicy"
+              }
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_operation",
+          "params": {
+            "operation": "capacity"
+          }
+        }
+      },
+      "resumeCondition": "artifactReferenceCount is below artifactReferenceLimit after readback. Continue the originally refused no-effect capture, preserving prior artifact lookup.",
+      "maximumAutomaticAttempts": 1
+    },
+    "artifact_request": {
+      "rationale": "Artifact handles and filenames must identify one authorized canonical destination without overwriting an existing or symlinked file.",
+      "requiredActor": "caller",
+      "evidenceRequirement": "Original argument shape and current public browser_command schema.",
+      "inspect": {
+        "tool": "browser_policy",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect configured artifactDestinations, select an authorized handle and a new safe filename, then correct only the identified screenshot/download request field. Existing captured files are never overwritten as recovery.",
+          "precondition": "Caller retains original task and has authority for this supported operation.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "The intended destination is authorized and canonical with a fresh filename; any previously produced artifact is reconciled rather than captured again.",
+      "maximumAutomaticAttempts": 1
+    },
+    "artifact_completed": {
+      "rationale": "The file may already exist even when its completion-reference publication failed or physical context changed.",
+      "requiredActor": "app_owner",
+      "evidenceRequirement": "Original task-operation outcome and current physical browser/tab identity.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Retain the original artifact/request ID and inspect the authorized destination through the owning app. Reconcile the existing file and completion metadata; never repeat capture or download to repair a reference-publication failure.",
+          "precondition": "Caller retains original task and has authority for this supported operation.",
+          "interface": "existing_app_artifact_reconciliation"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "The original produced file and metadata have been reconciled under the same task; an unresolved publication remains a retained escalation and does not authorize another capture.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -384,6 +786,215 @@
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "stale"
     },
+    "browser_artifact_clock_invalid": {
+      "recipe": "clock",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_artifact_completed_reference_context_changed": {
+      "recipe": "artifact_completed",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_task_artifacts.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/browser_task_artifacts.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_artifact_completed_reference_pending": {
+      "recipe": "artifact_completed",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_artifact_destination_conflict": {
+      "recipe": "artifact_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_artifact_destination_not_canonical": {
+      "recipe": "artifact_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_artifact_destination_unavailable": {
+      "recipe": "artifact_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_artifact_exact_task_required": {
+      "recipe": "artifact_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_artifact_handle_not_authorized": {
+      "recipe": "policy_denied",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_artifact_handle_required": {
+      "recipe": "artifact_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_artifact_hosted_task_required": {
+      "recipe": "host_binding",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_artifact_kind_invalid": {
+      "recipe": "artifact_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_artifact_name_invalid": {
+      "recipe": "artifact_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_artifact_name_required": {
+      "recipe": "artifact_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_artifact_parent_unavailable": {
+      "recipe": "artifact_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_artifact_path_conflict": {
+      "recipe": "artifact_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_artifact_reference_capacity_reached": {
+      "recipe": "artifact_capacity",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "configured_budget"
+    },
+    "browser_artifact_reference_invalid": {
+      "recipe": "artifact_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_artifact_route_unsupported": {
+      "recipe": "artifact_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_artifact_task_missing": {
+      "recipe": "identity",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
     "browser_control_active_native_viewers": {
       "recipe": "human_activity",
       "owningChecks": [
@@ -394,6 +1005,424 @@
       "policySource": "cli/src/native/browser_human_handoff.rs",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "coordination_paused"
+    },
+    "browser_control_attribution_required": {
+      "recipe": "control_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_control_directory_missing": {
+      "recipe": "control_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_control_dispatch_owner_unknown": {
+      "recipe": "control_reconcile",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_control_dispatch_still_in_flight": {
+      "recipe": "control_reconcile",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_control_encode_failed": {
+      "recipe": "control_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_control_epoch_changed": {
+      "recipe": "control_observe",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_control_epoch_exhausted": {
+      "recipe": "control_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_control_epoch_invalid": {
+      "recipe": "control_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_control_expected_epoch_required": {
+      "recipe": "control_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_control_fresh_observation_cannot_recover_browser": {
+      "recipe": "control_observe",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_session_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_control_fresh_observation_required": {
+      "recipe": "control_observe",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_control_fresh_observation_target_stale": {
+      "recipe": "control_observe",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_inspection.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_inspection.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_control_fresh_target_observation_required": {
+      "recipe": "control_observe",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_control_hosted_task_required": {
+      "recipe": "host_binding",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_control_human": {
+      "recipe": "human_activity",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "coordination_paused"
+    },
+    "browser_control_in_flight_requires_reconciliation": {
+      "recipe": "control_reconcile",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_control_lock_unavailable": {
+      "recipe": "control_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_control_observation_paused": {
+      "recipe": "human_activity",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "coordination_paused"
+    },
+    "browser_control_observation_process_changed": {
+      "recipe": "identity",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_control_observation_target_changed": {
+      "recipe": "identity",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_control_operation_invalid": {
+      "recipe": "control_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_control_original_process_changed": {
+      "recipe": "identity",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_control_original_process_required": {
+      "recipe": "control_observe",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_control_original_target_required": {
+      "recipe": "control_observe",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_control_outcome_already_observed": {
+      "recipe": "control_reconcile",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_control_pause_reads_invalid": {
+      "recipe": "control_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_control_read_failed": {
+      "recipe": "control_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_control_request_already_dispatched": {
+      "recipe": "control_reconcile",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_control_request_missing": {
+      "recipe": "control_reconcile",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_control_response_invalid": {
+      "recipe": "control_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_control_return_key_unavailable": {
+      "recipe": "control_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_control_return_observation_scope_invalid": {
+      "recipe": "control_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_control_return_observation_unavailable": {
+      "recipe": "control_observe",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_control_state_invalid": {
+      "recipe": "control_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_control_store_unavailable": {
+      "recipe": "control_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_control_sync_failed": {
+      "recipe": "control_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_control_task_missing": {
+      "recipe": "identity",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_control_write_failed": {
+      "recipe": "control_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
     },
     "browser_handoff_control_already_held": {
       "recipe": "control_changed",
@@ -499,6 +1528,270 @@
       "policySource": "cli/src/native/browser_task_operations.rs",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "uncertain"
+    },
+    "browser_policy_action_denied": {
+      "recipe": "policy_denied",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_policy_action_invalid": {
+      "recipe": "policy_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_policy_artifact_destination_invalid": {
+      "recipe": "policy_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_policy_attribution_required": {
+      "recipe": "policy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_policy_hosted_task_required": {
+      "recipe": "host_binding",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_session_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_policy_invalid": {
+      "recipe": "policy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_session_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_policy_operation_invalid": {
+      "recipe": "policy_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_policy_override_action_required": {
+      "recipe": "policy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_policy_override_capacity_invalid": {
+      "recipe": "policy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_policy_override_capacity_scope_invalid": {
+      "recipe": "policy_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_policy_override_id_conflict": {
+      "recipe": "policy_original",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_policy_override_id_required": {
+      "recipe": "policy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_policy_override_invalid": {
+      "recipe": "policy_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_policy_override_not_found": {
+      "recipe": "policy_original",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_policy_override_request_required": {
+      "recipe": "policy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_policy_request_invalid": {
+      "recipe": "policy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_policy_required": {
+      "recipe": "policy_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_policy_response_invalid": {
+      "recipe": "policy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_policy_revision_changed": {
+      "recipe": "policy_revision",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_policy_revision_exhausted": {
+      "recipe": "policy_revision",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_policy_revision_required": {
+      "recipe": "policy_revision",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_policy_task_ambiguous": {
+      "recipe": "identity",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_policy_task_missing": {
+      "recipe": "identity",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_policy_task_required": {
+      "recipe": "policy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_policy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_host_policy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
     },
     "browser_task_operation_action_invalid": {
       "recipe": "invalid_request",
@@ -919,12 +2212,23 @@
     }
   },
   "enforcedProducerCodePrefixes": [
-    "browser_task_operation_"
+    "browser_task_operation_",
+    "browser_control_",
+    "browser_policy_",
+    "browser_artifact_"
   ],
   "sourceBaseline": "bf181f4ca",
   "knownCoverageGaps": [
     "Public named producer errors outside the enforced task-operation family require source-bound review and explicit registration.",
     "Client helper errors and dashboard-only failures are inventoried boundary locators, not registered runtime contracts.",
     "Dynamic untyped errors normalize to service_operation_failed and require a specific check contract before coverage is complete."
+  ],
+  "exclusions": [
+    {
+      "code": "browser_control_ready_template",
+      "source": "cli/src/remote_view_doctor.rs",
+      "reason": "Positive successful doctor state for a valid browser-control template, not a refusal or error.",
+      "sourceEvidence": "\"state\": if ready"
+    }
   ]
 }

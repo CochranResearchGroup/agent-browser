@@ -12,6 +12,10 @@ fn registry() -> &'static Value {
     })
 }
 
+pub(super) fn contains(code: &str) -> bool {
+    registry()["codes"].get(code).is_some()
+}
+
 fn bind(value: &Value, command: &Value) -> (Value, bool) {
     match value {
         Value::String(token) if token.starts_with('$') => {

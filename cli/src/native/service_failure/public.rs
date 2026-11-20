@@ -15,6 +15,28 @@ fn code_token(value: &str) -> Option<&str> {
     .then_some(value)
 }
 
+/// Known transparent transport wrappers must not mask an exact registered
+/// producer code. Unknown payloads keep the wrapper and its uncovered contract;
+/// arbitrary provider prose is never promoted into a journal classification.
+fn registered_producer_code(error: &str) -> Option<&str> {
+    let mut remaining = error;
+    for _ in 0..4 {
+        let (wrapper, rest) = remaining.split_once(':')?;
+        if !matches!(
+            wrapper,
+            "workflow_transport_failed" | "workflow_transport_start_failed" | "workflow_cli_failed"
+        ) {
+            return None;
+        }
+        let candidate = rest.split(':').next().unwrap_or_default();
+        if super::recovery_registry::contains(candidate) {
+            return Some(candidate);
+        }
+        remaining = rest;
+    }
+    None
+}
+
 /// Preserve existing typed evidence, add executable exact-task inspection and
 /// publish sanitized refusal metadata. Request payloads never enter the journal.
 pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, source: &str) {
@@ -45,7 +67,8 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
         .as_str()
         .unwrap_or("operation_failed")
         .to_owned();
-    let candidate = error.split(':').next().unwrap_or_default();
+    let candidate = registered_producer_code(&error)
+        .unwrap_or_else(|| error.split(':').next().unwrap_or_default());
     let code = code_token(candidate)
         .unwrap_or("service_operation_failed")
         .to_owned();
@@ -137,4 +160,31 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
         Ok(_) => json!({"state":"durable_pending","projection":"asynchronous"}),
         Err(_) => json!({"state":"failed","code":"failure_journal_custody_failed"}),
     };
+}
+
+#[cfg(test)]
+mod registry_projection_tests {
+    use super::*;
+    #[test]
+    fn transparent_wrapper_retains_registered_capacity_cause_only() {
+        assert_eq!(
+            registered_producer_code(
+                "workflow_transport_failed:browser_task_operation_capacity_reached:private details"
+            ),
+            Some("browser_task_operation_capacity_reached")
+        );
+        assert_eq!(registered_producer_code("workflow_transport_failed:workflow_transport_start_failed:browser_control_lock_unavailable:private details"), Some("browser_control_lock_unavailable"));
+        assert_eq!(
+            registered_producer_code(
+                "workflow_transport_failed:SELECT private_value FROM private_table"
+            ),
+            None
+        );
+        assert_eq!(
+            registered_producer_code(
+                "unregistered_wrapper:browser_task_operation_capacity_reached"
+            ),
+            None
+        );
+    }
 }

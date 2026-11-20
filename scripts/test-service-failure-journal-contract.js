@@ -104,19 +104,35 @@ const recoveryRegistry = JSON.parse(readFileSync('docs/dev/contracts/public-erro
 const mcpSource = readFileSync('cli/src/mcp.rs', 'utf8');
 const allowedActionsBlock = mcpSource.match(/const BROWSER_COMMAND_ALLOWED_ACTIONS:[\s\S]*?= &\[([\s\S]*?)\];/)[1];
 const allowedActions = new Set([...allowedActionsBlock.matchAll(/"([a-z_]+)"/g)].map(match => match[1]));
+const toolSchemas = {
+  browser_control: readFileSync('cli/src/mcp/host_control.rs', 'utf8'),
+  browser_policy: readFileSync('cli/src/mcp/host_policy.rs', 'utf8'),
+  browser_continue: readFileSync('cli/src/mcp/workflow.rs', 'utf8'),
+};
 function validateRecoveryCall(call) {
-  assert(['browser_command', 'browser_control'].includes(call.tool), `Unavailable recovery tool ${call.tool}`);
-  assert(mcpSource.includes(`name == "${call.tool}"`) || call.tool === 'browser_command', `Unrouted recovery tool ${call.tool}`);
+  assert(call.tool === 'browser_command' || Object.hasOwn(toolSchemas, call.tool), `Unavailable recovery tool ${call.tool}`);
   assert.equal(call.arguments.taskId, '$taskId', 'Recovery must retain exact task scope');
   if (call.tool === 'browser_command') {
     assert(allowedActions.has(call.arguments.action), `Unavailable recovery action ${call.arguments.action}`);
     if (call.arguments.action === 'task_operation') {
       assert(call.arguments.params?.operation === 'capacity' || call.arguments.params?.requestId === '$requestId', 'Original/capacity inspection must use supported arguments');
     }
-  } else assert.equal(call.arguments.operation, 'status');
+  } else {
+    const schema = toolSchemas[call.tool];
+    assert(schema.includes(`"name":"${call.tool}"`), `Unrouted recovery tool ${call.tool}`);
+    if (call.arguments.operation) {
+      const operations = schema.match(/"operation":\{[^}]*"enum":\[([^\]]+)\]/)?.[1];
+      assert(operations?.includes(`"${call.arguments.operation}"`), `Unavailable ${call.tool} operation ${call.arguments.operation}`);
+    }
+  }
 }
 function validateRecoveryInventory(registry, discovered) {
-  for (const code of discovered) assert(registry.codes[code], `Uncovered public code ${code}`);
+  const excluded = new Map((registry.exclusions ?? []).map(entry => [entry.code, entry]));
+  for (const exclusion of excluded.values()) {
+    const source = readFileSync(exclusion.source, 'utf8');
+    assert(source.includes(exclusion.code) && source.includes(exclusion.sourceEvidence) && exclusion.reason.length > 20, `Unproven exclusion ${exclusion.code}`);
+  }
+  for (const code of discovered) assert(registry.codes[code] || excluded.has(code), `Uncovered public code ${code}`);
   for (const [code, entry] of Object.entries(registry.codes)) {
     assert(/^[a-z][a-z0-9_]+$/.test(code));
     const recipe = registry.recipes[entry.recipe];
@@ -140,9 +156,10 @@ function rustFiles(root) {
   return readdirSync(root, {withFileTypes: true}).flatMap(entry => entry.isDirectory() ? rustFiles(join(root, entry.name)) : entry.name.endsWith('.rs') ? [join(root, entry.name)] : []);
 }
 const discoveredReviewedCodes = new Set();
-for (const path of rustFiles('cli/src')) {
+const producerPattern = new RegExp(`["']((?:${recoveryRegistry.enforcedProducerCodePrefixes.join('|')})[a-z0-9_]+)(?=[:"'])`, 'g');
+for (const path of [...rustFiles('cli/src'), ...rustFiles('crates/agent-browser-service-model/src')]) {
   const source = readFileSync(path, 'utf8');
-  for (const match of source.matchAll(/["'](browser_task_operation_[a-z0-9_]+)(?=[:"'])/g)) discoveredReviewedCodes.add(match[1]);
+  for (const match of source.matchAll(producerPattern)) discoveredReviewedCodes.add(match[1]);
 }
 validateRecoveryInventory(recoveryRegistry, discoveredReviewedCodes);
 assert.throws(() => validateRecoveryInventory(recoveryRegistry, new Set(['unregistered_public_error'])), /Uncovered public code/);
