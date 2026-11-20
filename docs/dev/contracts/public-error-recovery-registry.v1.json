@@ -17426,6 +17426,105 @@
       "policySource": "cli/src/native/browser_lost_task_retirement_store.rs",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "stale"
+    },
+    "desktop_evidence_capture_receipt_missing": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_action.rs"
+        }
+      ],
+      "policySource": "cli/src/native/desktop_evidence_action.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_evidence_response_failed": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_action.rs"
+        }
+      ],
+      "policySource": "cli/src/native/desktop_evidence_action.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_browser_external_trigger_development_only": {
+      "recipe": "native_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_action.rs"
+        }
+      ],
+      "policySource": "cli/src/native/desktop_evidence_action.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_task_retirement_commit_unverified": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_lost_task_retirement_store.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_lost_task_retirement_store.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_task_retirement_owner_unverified": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_lost_task_retirement_store.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_lost_task_retirement_store.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_managed_browser_unavailable": {
+      "recipe": "runtime_connection",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/actions.rs"
+        }
+      ],
+      "policySource": "cli/src/native/actions.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_desktop_runtime_context_invalid": {
+      "recipe": "reconnect_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_session_runtime.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_desktop_runtime_context_unavailable": {
+      "recipe": "reconnect_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_session_runtime.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_desktop_runtime_context_stale": {
+      "recipe": "reconnect_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_session_runtime.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -17759,6 +17858,30 @@
       "source": "cli/src/main.rs",
       "sourceEvidence": "\"cli_parse\"",
       "reason": "Local publication/journal action label, not an emitted refusal code. Typed parser and actual owner failure codes are qualified separately."
+    },
+    {
+      "code": "desktop_evidence_observe",
+      "source": "cli/src/native/desktop_evidence_action.rs",
+      "sourceEvidence": "\"desktop_evidence_observe\"",
+      "reason": "Public action routing label and diagnostic join text, not an independently emitted stable refusal code; the owning structured desktop evidence failure is separately classified."
+    },
+    {
+      "code": "desktop_not_found",
+      "source": "cli/src/native/remote_view_application_http.rs",
+      "sourceEvidence": "\"desktop_not_found\"",
+      "reason": "Remote View upstream cause is nested under the application transport Error::OwnerFailure and mapped to its separately classified Native owner error; this token is not independently published as an Agent Browser failure code."
+    },
+    {
+      "code": "desktop_generation_conflict",
+      "source": "cli/src/native/remote_view_application_http.rs",
+      "sourceEvidence": "\"desktop_generation_conflict\"",
+      "reason": "Remote View upstream cause is nested under the application transport Error::OwnerFailure and mapped to its separately classified Native owner error; this token is not independently published as an Agent Browser failure code."
+    },
+    {
+      "code": "native_use_missing",
+      "source": "cli/src/native/remote_view_application_http.rs",
+      "sourceEvidence": "\"native_use_missing\"",
+      "reason": "Upstream missing reservation is an internal release/reconciliation match; the public application transport returns the owning classified result rather than raising this cause as a standalone Agent Browser error."
     }
   ],
   "fragments": [
@@ -18026,6 +18149,21 @@
     {
       "path": "crates/agent-browser-desktop-services/src/transaction.rs",
       "codePattern": "(?:desktop_input_|desktop_interaction_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/desktop_evidence_action.rs",
+      "codePattern": "desktop_[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/browser_lost_task_retirement_store.rs",
+      "codePattern": "browser_task_retirement_[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/browser_session_runtime.rs",
+      "codePattern": "remote_view_desktop_runtime_[a-z0-9_]+",
       "beforeNamedTestModule": true
     }
   ],
