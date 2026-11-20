@@ -887,7 +887,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         {
             // Reuse only the owner reaper's established idle/expiry eligibility.
             // Existing task/profile continuation is never reclaimed here.
-            self.reap(request.activity_at_ms)?;
+            self.defer_unqualified_expiry();
         }
         let result = match self.manager()?.open(request.clone()) {
             Err(error)
@@ -1403,6 +1403,24 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         }
     }
 
+    // Persisted idle, tab and retention timestamps were minted from the guest
+    // clock. A current qualified UTC observation cannot qualify those starts.
+    // Keep scoped inspection and explicit close available, but never destroy
+    // browser/profile custody solely because that legacy clock jumped forward.
+    fn defer_unqualified_expiry(&self) -> ReapBrowserSessionsResult {
+        ReapBrowserSessionsResult {
+            deferred_browser_errors: self.state.browsers.keys().map(|id| (
+                id.clone(),
+                "browser_session_expiry_start_unqualified: automatic expiry deferred; inspect the scoped session and use explicit close only under current authority".to_string(),
+            )).collect(),
+            ..ReapBrowserSessionsResult::default()
+        }
+    }
+
+    // Explicit injected time remains available to deterministic owner tests;
+    // production entrypoints use defer_unqualified_expiry until starts carry
+    // supported time evidence. This function is not a public clock override.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn reap(&mut self, now_ms: u64) -> Result<ReapBrowserSessionsResult, String> {
         // Borrowed targets have no Native operation journal to recover. Publish
         // their qualified outcomes before unrelated Native/viewer/profile work.
@@ -1612,7 +1630,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
 
     pub(crate) fn reap_current(&mut self) -> Result<ReapBrowserSessionsResult, String> {
         self.refresh_before_ordinary_command()?;
-        self.reap(current_unix_ms())
+        Ok(self.defer_unqualified_expiry())
     }
 
     pub(crate) fn handle_command(&mut self, command: &serde_json::Value) -> serde_json::Value
@@ -2284,7 +2302,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 }))
             }
             "browser_session_reap" => {
-                let reaped = self.reap(now_ms)?;
+                let reaped = self.defer_unqualified_expiry();
                 Ok(serde_json::json!({
                     "expiredSessionIds": reaped.expired_session_ids,
                     "expiredTabIds": reaped.expired_tab_ids,
@@ -2292,6 +2310,13 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     "closedBrowserIds": reaped.closed_browser_ids,
                     "deletedDisposableProfileIds": reaped.deleted_disposable_profile_ids,
                     "deferredBrowserErrors": reaped.deferred_browser_errors,
+                    "maintenanceEvidence": {
+                        "state": "unqualified_legacy_start",
+                        "automaticExpiry": "deferred",
+                        "automaticProfileDeletion": "deferred",
+                        "inspectionAvailable": true,
+                        "explicitCloseRequiresCurrentAuthority": true
+                    },
                 }))
             }
             "browser_session_status" => {
@@ -5372,7 +5397,7 @@ mod tests {
     }
 
     #[test]
-    fn startup_reaper_loads_retained_sessions_without_a_client_request() {
+    fn startup_reaper_retains_unqualified_legacy_sessions_without_a_client_request() {
         let directory = TempDirectory::new();
         let legacy_path = directory.0.join("state.json");
         fs::write(&legacy_path, serde_json::json!({"profiles":{"work":{"id":"work","name":"Work","userDataDir":directory.0.join("work"),"profileClass":"durable_named"}}}).to_string()).unwrap();
@@ -5420,10 +5445,16 @@ mod tests {
         let host = restarted
             .as_ref()
             .expect("restart reaping must load retained ownership without a client request");
-        assert!(host
+        assert!(!host
             .state
             .idle_closed_browsers
             .contains_key(&opened.browser_id));
+        assert!(host.state.sessions.contains_key(&opened.session_id));
+        let deferred = host.defer_unqualified_expiry();
+        assert!(deferred.closed_browser_ids.is_empty());
+        assert!(deferred.deleted_disposable_profile_ids.is_empty());
+        assert!(deferred.deferred_browser_errors[&opened.browser_id]
+            .starts_with("browser_session_expiry_start_unqualified:"));
         assert!(
             agent_browser_service_model::resolve_remote_view_tab_handoff(
                 &host.state,
