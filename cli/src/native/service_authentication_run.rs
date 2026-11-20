@@ -75,7 +75,33 @@ fn required_string(command: &Value, field: &str) -> Result<String, String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-        .ok_or_else(|| format!("authentication_run_{field}_required"))
+        .ok_or_else(|| {
+            let code = match field {
+                "accountRef" => "authentication_run_account_ref_required",
+                "agentName" => "authentication_run_agent_name_required",
+                "authenticationRunId" => "authentication_run_authentication_run_id_required",
+                "browserId" => "authentication_run_browser_id_required",
+                "challengeProviderAccountRef" => {
+                    "authentication_run_challenge_provider_account_ref_required"
+                }
+                "challengeProviderId" => "authentication_run_challenge_provider_id_required",
+                "challengeProviderTenantRef" => {
+                    "authentication_run_challenge_provider_tenant_ref_required"
+                }
+                "idempotencyKey" => "authentication_run_idempotency_key_required",
+                "operationId" => "authentication_run_operation_id_required",
+                "organizationRef" => "authentication_run_organization_ref_required",
+                "policyDigest" => "authentication_run_policy_digest_required",
+                "profileId" => "authentication_run_profile_id_required",
+                "serviceName" => "authentication_run_service_name_required",
+                "sessionName" => "authentication_run_session_name_required",
+                "siteRecipeId" => "authentication_run_site_recipe_id_required",
+                "targetServiceId" => "authentication_run_target_service_id_required",
+                "taskName" => "authentication_run_task_name_required",
+                _ => "authentication_run_argument_required",
+            };
+            format!("{code}:field={field}")
+        })
 }
 
 fn optional_string(command: &Value, field: &str) -> Result<Option<String>, String> {
@@ -87,7 +113,14 @@ fn optional_string(command: &Value, field: &str) -> Result<Option<String>, Strin
             .filter(|value| !value.is_empty())
             .map(str::to_string)
             .map(Some)
-            .ok_or_else(|| format!("authentication_run_{field}_invalid")),
+            .ok_or_else(|| {
+                let code = match field {
+                    "challengeTaskId" => "authentication_run_challenge_task_id_invalid",
+                    "sitePolicyId" => "authentication_run_site_policy_id_invalid",
+                    _ => "authentication_run_argument_invalid",
+                };
+                format!("{code}:field={field}")
+            }),
     }
 }
 

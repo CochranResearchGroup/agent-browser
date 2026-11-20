@@ -49,7 +49,21 @@ fn required_string(command: &Value, field: &str) -> Result<String, String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-        .ok_or_else(|| format!("challenge_task_{field}_required"))
+        .ok_or_else(|| {
+            let code = match field {
+                "agentName" => "challenge_task_agent_name_required",
+                "challengeProfileId" => "challenge_task_challenge_profile_id_required",
+                "challengeTaskId" => "challenge_task_challenge_task_id_required",
+                "downstreamIntentId" => "challenge_task_downstream_intent_id_required",
+                "idempotencyKey" => "challenge_task_idempotency_key_required",
+                "operationId" => "challenge_task_operation_id_required",
+                "serviceName" => "challenge_task_service_name_required",
+                "sitePolicyDigest" => "challenge_task_site_policy_digest_required",
+                "taskName" => "challenge_task_task_name_required",
+                _ => "challenge_task_argument_required",
+            };
+            format!("{code}:field={field}")
+        })
 }
 
 fn caller_principal(command: &Value) -> Result<String, String> {
@@ -87,7 +101,7 @@ fn parse_start_intent(command: &Value) -> Result<ChallengeTaskStartIntent, Strin
         command
             .get("fixtureScenarioId")
             .cloned()
-            .ok_or_else(|| "challenge_task_fixtureScenarioId_required".to_string())?,
+            .ok_or_else(|| "challenge_task_fixture_scenario_id_required".to_string())?,
     )
     .map_err(|_| "challenge_task_fixture_not_registered".to_string())?;
     let site_policy_digest = required_string(command, "sitePolicyDigest")?;
