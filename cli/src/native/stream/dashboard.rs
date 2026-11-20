@@ -4070,8 +4070,41 @@ fn json_error_http_response(
         body["code"] = json!(code);
     }
     if let Some(details) = details {
+        // Preserve an existing owner failure/occurrence when the gateway has
+        // already received one. A gateway error itself never proves no effect.
+        if details["failure"].is_object() {
+            body["failure"] = details["failure"].clone();
+        }
         body["details"] = details;
     }
+    if !body["failure"].is_object() {
+        if let Some(code) = code {
+            body["failure"] = json!({"code":code,"effectState":"effect_uncertain"});
+        }
+    }
+    let request = body
+        .pointer("/details/requestId")
+        .and_then(Value::as_str)
+        .filter(|id| !id.is_empty() && id.len() <= 128)
+        .map(str::to_owned)
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let action = body
+        .pointer("/details/action")
+        .and_then(Value::as_str)
+        .filter(|value| {
+            !value.is_empty()
+                && value.len() <= 128
+                && value
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+        })
+        .unwrap_or("dashboard_http_gateway")
+        .to_owned();
+    crate::native::service_failure::attach_public_failure(
+        &mut body,
+        &json!({"action":action,"requestId":request}),
+        "http_dashboard_gateway",
+    );
     let body = body.to_string();
     let response = format!(
         "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n{CORS_HEADERS}\r\n",
@@ -7137,6 +7170,13 @@ mod tests {
 
     #[test]
     fn dashboard_gateway_json_error_response_includes_code_and_details() {
+        let directory = std::env::temp_dir().join(format!(
+            "dashboard-gateway-failure-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let guard = crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_HOME"]);
+        guard.set("HOME", directory.to_str().unwrap());
+        guard.set("AGENT_BROWSER_HOME", directory.to_str().unwrap());
         let response = json_error_http_response(
             "502 Bad Gateway",
             "Service API proxy failed: invalid JSON response",
@@ -7153,6 +7193,28 @@ mod tests {
         assert_eq!(value["success"], false);
         assert_eq!(value["code"], "invalid_backend_payload");
         assert_eq!(value["details"]["stage"], "response");
+        assert_eq!(
+            value["error"],
+            "Service API proxy failed: invalid JSON response"
+        );
+        assert_eq!(value["failure"]["code"], "invalid_backend_payload");
+        assert_eq!(value["failure"]["effectState"], "effect_uncertain");
+        assert!(value["failure"]["occurrenceId"].is_string(), "{value}");
+        let projected = json_error_http_response(
+            "502 Bad Gateway",
+            "Original owner failure",
+            Some("invalid_backend_payload"),
+            Some(json!({"failure":value["failure"]})),
+        );
+        let projected: Value =
+            serde_json::from_slice(http_response_body(&projected).unwrap()).unwrap();
+        assert_eq!(
+            projected["failure"]["occurrenceId"],
+            value["failure"]["occurrenceId"]
+        );
+        assert_eq!(projected["failure"]["effectState"], "effect_uncertain");
+        drop(guard);
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

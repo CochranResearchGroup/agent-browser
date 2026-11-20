@@ -1,0 +1,1364 @@
+{
+  "schemaVersion": "agent-browser.public-error-recovery-registry.v1",
+  "qualificationScope": {
+    "sourceBaseline": "96d938a6b",
+    "publications": [
+      "ServiceRequestIssue::code -> ServiceRequestRejection public wire response",
+      "DashboardReadinessError -> JSON gateway error response",
+      "failure_recovery::call and recovery_state persisted attempt accounting",
+      "flags::resolve_browser_build_manifest -> effective configuration readiness warnings"
+    ],
+    "effectAuthority": "Registry metadata never proves no effect, freshness, permission, or successful completion; preserve the original owner outcome."
+  },
+  "interfaces": {
+    "@agent-browser/client/service-observability#getServiceContracts": {
+      "source": "packages/client/src/service-observability.js",
+      "export": "getServiceContracts",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/service-observability#getServiceTrace": {
+      "source": "packages/client/src/service-observability.js",
+      "export": "getServiceTrace",
+      "kind": "client_export"
+    }
+  },
+  "recipes": {
+    "service_request_shape": {
+      "rationale": "Shared service admission rejects malformed or unsupported caller intent before service dispatch.",
+      "requiredActor": "original_request_caller",
+      "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceContracts",
+        "arguments": {},
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+      },
+      "remediation": [
+        {
+          "instruction": "Compare the original validation message and current service request contract. Correct only the named action, field type, enum, or required field; submit a new explicit intent only after proving the rejected original was not queued.",
+          "precondition": "The existing owner has authority for this exact scope; retain the original request and unresolved effect evidence.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceContracts",
+        "arguments": {},
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+      },
+      "resumeCondition": "The exact request conforms to the current contract and its original response confirms pre-dispatch rejection; no uncertain original is retried.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_request_authority": {
+      "rationale": "Authenticated service/profile authority is distinct from caller attribution and browser visibility.",
+      "requiredActor": "existing_service_owner",
+      "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
+        "arguments": {},
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+      },
+      "remediation": [
+        {
+          "instruction": "Use the existing authenticated principal and profile capability for the original profile; inspect the access decision and request a permitted existing operation. Obtain an actual policy-owner change when permission is denied; never impersonate another viewer or weaken policy.",
+          "precondition": "The existing owner has authority for this exact scope; retain the original request and unresolved effect evidence.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
+        "arguments": {},
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+      },
+      "resumeCondition": "A current scoped access decision permits the chosen original profile/action and current owner/target proofs match; any new input remains separately admitted.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_request_evidence": {
+      "rationale": "Monitor, bounded recipe, service handle and route evidence must match the actual current original service target.",
+      "requiredActor": "existing_service_owner",
+      "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceTabs",
+        "arguments": {},
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+      },
+      "remediation": [
+        {
+          "instruction": "Read the current service tab handle and original monitor evidence. Refresh the exact original handle using the supported refreshServiceTabHandle interface, or obtain a new bounded recipe from current observation; retain the original request and do not close a peer tab or create another browser.",
+          "precondition": "The existing owner has authority for this exact scope; retain the original request and unresolved effect evidence.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceTabs",
+        "arguments": {},
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+      },
+      "resumeCondition": "Current handle, profile, route, target and bounded recipe agree with the requested original; post-dispatch outcomes are reconciled before any new intent.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_request_native_route": {
+      "rationale": "Manual-only admission and CDP-free posture constrain the supported execution interface.",
+      "requiredActor": "existing_service_owner",
+      "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
+        "arguments": {},
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the selected browser build, control provider and access-plan action. Use that existing permitted Native/manual route for the same task or request an explicitly authorized mode conversion; do not bypass CDP-free restrictions or manufacture input authority.",
+          "precondition": "The existing owner has authority for this exact scope; retain the original request and unresolved effect evidence.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
+        "arguments": {},
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+      },
+      "resumeCondition": "The current access plan supports the selected route and permission; a fresh observation and separate admission gate any new input.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_gateway_transport": {
+      "rationale": "A gateway timeout or invalid backend payload cannot establish whether the original downstream operation ran.",
+      "requiredActor": "existing_service_owner",
+      "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceTrace",
+        "arguments": {},
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the exact original job/request and service/backend readiness before reconnecting the existing transport. Repair the configured owner endpoint under existing installation authority; preserve the original ID, and do not resend mutations or launch another browser from a timeout.",
+          "precondition": "The existing owner has authority for this exact scope; retain the original request and unresolved effect evidence.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceStatus",
+        "arguments": {},
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+      },
+      "resumeCondition": "Existing transport returns a valid response and exact original owner outcome is known; a successful gateway read alone is not permission to replay the original.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_gateway_handoff": {
+      "rationale": "Opaque durable handoff authority belongs to the retained original owner; provider URLs and stale viewer generations are not durable targets.",
+      "requiredActor": "existing_service_owner",
+      "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceRemoteViewRoutes",
+        "arguments": {},
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+      },
+      "remediation": [
+        {
+          "instruction": "Reopen the same durable authenticated handoff URL and inspect its retained original route/owner state. Correct a malformed claim only from the current owner response; never substitute raw provider URLs, mint another handoff, or reset viewer/controller authority.",
+          "precondition": "The existing owner has authority for this exact scope; retain the original request and unresolved effect evidence.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceRemoteViewRoutes",
+        "arguments": {},
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+      },
+      "resumeCondition": "The same durable handoff is owner-ready and its exact viewer generation is current; human control and any uncertain input remain separately fenced.",
+      "maximumAutomaticAttempts": 1
+    },
+    "recovery_request_shape": {
+      "rationale": "Recovery invocation fields and IDs are public request arguments, not permission or outcome evidence.",
+      "requiredActor": "original_request_caller",
+      "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--help"
+        ]
+      },
+      "remediation": [
+        {
+          "instruction": "Correct the named recovery argument against browser_command action=failure_recovery parameters: operation inspect/packet/history/configure/run/reconcile/record_resume, UUID occurrenceId/attemptId and explicit actor/reason for configure. Keep original IDs for readback; changed intent requires a new explicit attempt ID.",
+          "precondition": "The existing owner has authority for this exact scope; retain the original request and unresolved effect evidence.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "failure_recovery",
+          "params": {
+            "operation": "inspect",
+            "occurrenceId": "$occurrenceId"
+          }
+        }
+      },
+      "resumeCondition": "The request has the required current schema and exact retained identifiers; correcting syntax never repeats a remedy or original browser command.",
+      "maximumAutomaticAttempts": 1
+    },
+    "recovery_scope": {
+      "rationale": "A retained recovery attempt is bound to its original task, occurrence and immutable intent.",
+      "requiredActor": "existing_service_owner",
+      "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "failure_recovery",
+          "params": {
+            "operation": "history",
+            "occurrenceId": "$occurrenceId",
+            "attemptId": "$attemptId"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect history with the original task, occurrence and attempt ID. Restore that binding for readback; if intent truly changed, choose a new explicit attempt only after settling the previous in-flight attempt. Never relabel a retained attempt or infer a missing task binding.",
+          "precondition": "The existing owner has authority for this exact scope; retain the original request and unresolved effect evidence.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "failure_recovery",
+          "params": {
+            "operation": "history",
+            "occurrenceId": "$occurrenceId",
+            "attemptId": "$attemptId"
+          }
+        }
+      },
+      "resumeCondition": "The exact original binding is proven and no unresolved attempt is replayed; current context still gates new browser input.",
+      "maximumAutomaticAttempts": 1
+    },
+    "recovery_budget": {
+      "rationale": "Recovery limits are live configuration; extending them must preserve durable lifetime attempt history.",
+      "requiredActor": "existing_recovery_policy_owner",
+      "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "failure_recovery",
+          "params": {
+            "operation": "inspect",
+            "occurrenceId": "$occurrenceId"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect retained attempts and no-progress counters. Configure a reviewed complete policy on the same task using explicit actor/reason; maxAttempts may be increased, positive maxNoProgress retained, optional maxDurationMs changed or omitted. Never delete attempts or reset IDs to evade an in-flight fence.",
+          "precondition": "The existing owner has authority for this exact scope; retain the original request and unresolved effect evidence.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "taskId": "$taskId",
+              "action": "failure_recovery",
+              "params": {
+                "operation": "configure",
+                "scope": "task",
+                "policy": "$reviewedPolicy",
+                "actor": "$actor",
+                "reason": "$reason"
+              }
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "failure_recovery",
+          "params": {
+            "operation": "inspect",
+            "occurrenceId": "$occurrenceId"
+          }
+        }
+      },
+      "resumeCondition": "The configured budget admits the new explicit recovery intent and its prerequisite changed or is now proven; retained attempts and original failure remain inspectable.",
+      "maximumAutomaticAttempts": 1
+    },
+    "recovery_in_flight": {
+      "rationale": "An interrupted remedy may have progressed; absence of a final reply is not no-effect evidence.",
+      "requiredActor": "existing_service_owner",
+      "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "failure_recovery",
+          "params": {
+            "operation": "history",
+            "occurrenceId": "$occurrenceId",
+            "attemptId": "$attemptId"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Read the exact retained in-flight attempt, then reconcile that same attempt to observe its registered prerequisite without repeating the remedy. Keep the original operation and private input out of recovery; unproved progress stays unresolved.",
+          "precondition": "The existing owner has authority for this exact scope; retain the original request and unresolved effect evidence.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "taskId": "$taskId",
+              "action": "failure_recovery",
+              "params": {
+                "operation": "reconcile",
+                "occurrenceId": "$occurrenceId",
+                "attemptId": "$attemptId"
+              }
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "failure_recovery",
+          "params": {
+            "operation": "history",
+            "occurrenceId": "$occurrenceId",
+            "attemptId": "$attemptId"
+          }
+        }
+      },
+      "resumeCondition": "The original attempt is reconciled with actual current prerequisite evidence; a new explicit attempt may start only when the durable in-flight fence is settled.",
+      "maximumAutomaticAttempts": 1
+    },
+    "recovery_storage": {
+      "rationale": "Recovery accounting storage errors do not prove that an attempted remedy or browser input had no effect.",
+      "requiredActor": "installation_owner",
+      "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the no-launch installation doctor and original runtime database failure details. Repair only the diagnosed user-scoped storage/configuration condition through existing installation custody; retain all attempts and originals, then read history before any further mutation.",
+          "precondition": "The existing owner has authority for this exact scope; retain the original request and unresolved effect evidence.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "failure_recovery",
+          "params": {
+            "operation": "history",
+            "occurrenceId": "$occurrenceId",
+            "attemptId": "$attemptId"
+          }
+        }
+      },
+      "resumeCondition": "The original recovery documents are readable and any in-flight attempt is reconciled; never recreate the database or silently replay a missing response.",
+      "maximumAutomaticAttempts": 1
+    },
+    "recovery_observation": {
+      "rationale": "Recovery records or tool responses must be actual readable owner evidence before they can verify progress.",
+      "requiredActor": "existing_service_owner",
+      "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "failure_recovery",
+          "params": {
+            "operation": "history",
+            "occurrenceId": "$occurrenceId",
+            "attemptId": "$attemptId"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Read retained history independently of the failure journal. Recover the original occurrence from its public failure/logging receipt and inspect that exact ID; use the original tool readback when a response payload is invalid. Preserve missing/corrupt records for scoped storage repair instead of inventing a successful outcome.",
+          "precondition": "The existing owner has authority for this exact scope; retain the original request and unresolved effect evidence.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "failure_recovery",
+          "params": {
+            "operation": "inspect",
+            "occurrenceId": "$occurrenceId"
+          }
+        }
+      },
+      "resumeCondition": "The exact occurrence and prerequisite response are available and validated; missing evidence remains unknown and cannot authorize a replay.",
+      "maximumAutomaticAttempts": 1
+    },
+    "recovery_permissions": {
+      "rationale": "The recovery executor supports bounded observation/remedies and cannot dispatch arbitrary caller commands.",
+      "requiredActor": "existing_service_owner",
+      "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "failure_recovery",
+          "params": {
+            "operation": "packet",
+            "occurrenceId": "$occurrenceId"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the registered packet and use its named existing actor/interface. Submit only supported scoped diagnostic or approved remedy steps; physical input, caller-crafted permission overrides and replaying original private commands require their ordinary independent admission, never recovery execution.",
+          "precondition": "The existing owner has authority for this exact scope; retain the original request and unresolved effect evidence.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "failure_recovery",
+          "params": {
+            "operation": "inspect",
+            "occurrenceId": "$occurrenceId"
+          }
+        }
+      },
+      "resumeCondition": "The selected remedy is in the executor allowlist and its current preconditions are proven; unsupported steps remain external actions under existing authority.",
+      "maximumAutomaticAttempts": 1
+    },
+    "recovery_clock": {
+      "rationale": "Only optional reliable-time recovery budgets depend on qualified StableTime observations; inspection/history remain independent.",
+      "requiredActor": "existing_recovery_policy_owner",
+      "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "failure_recovery",
+          "params": {
+            "operation": "history",
+            "occurrenceId": "$occurrenceId",
+            "attemptId": "$attemptId"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Read the actual nested time cause. Repair a failed client/helper/configuration separately from a declared service outage via the supported StableTime interface. Alternatively the authorized policy owner may configure the same recovery policy without its optional maxDurationMs; retain counters and reconcile an in-flight attempt before choosing any new intent.",
+          "precondition": "The existing owner has authority for this exact scope; retain the original request and unresolved effect evidence.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "failure_recovery",
+          "params": {
+            "operation": "inspect",
+            "occurrenceId": "$occurrenceId"
+          }
+        }
+      },
+      "resumeCondition": "The optional time budget has current qualified service evidence or was explicitly removed under existing policy authority; original uncertainty and counters are preserved.",
+      "maximumAutomaticAttempts": 1
+    },
+    "recovery_resume_owner": {
+      "rationale": "A resume report records an actual exact owner acknowledgement; recovery readiness and no-effect refusal are not successful input.",
+      "requiredActor": "existing_service_owner",
+      "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_operation",
+          "params": {
+            "requestId": "$requestId"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the exact new explicit operation request ID. Report resume only when that original journal row is owner_acknowledged for the same task and retained attempt; a refused-no-effect row permits separately admitted new intent, while pending/uncertain rows require original reconciliation.",
+          "precondition": "The existing owner has authority for this exact scope; retain the original request and unresolved effect evidence.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "failure_recovery",
+          "params": {
+            "operation": "history",
+            "occurrenceId": "$occurrenceId",
+            "attemptId": "$attemptId"
+          }
+        }
+      },
+      "resumeCondition": "The referenced exact operation is actually owner acknowledged; the report remains caller-attributed association and does not prove the overall task completed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_build_manifest": {
+      "rationale": "Build-manifest readiness warnings describe configured artifact custody and cannot be repaired by silently choosing another browser build.",
+      "requiredActor": "installation_owner",
+      "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the configured browser build manifest path and its exact readiness warning. The installation owner must repair the missing/unreadable JSON, supported schema, executable artifact or governed smoke evidence at that reviewed manifest; preserve explicit build selection and do not synthesize a smoke pass or fall back to another build.",
+          "precondition": "The existing owner has authority for this exact scope; retain the original request and unresolved effect evidence.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceStatus",
+        "arguments": {},
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+      },
+      "resumeCondition": "The selected build manifest is valid, its executable exists, and current governed smoke evidence qualifies readiness; launching still follows ordinary task admission.",
+      "maximumAutomaticAttempts": 1
+    }
+  },
+  "codes": {
+    "invalid_request": {
+      "recipe": "service_request_shape",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs",
+          "owningFunction": "ServiceRequestIssue::code / normalize_service_request"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "missing_action": {
+      "recipe": "service_request_shape",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs",
+          "owningFunction": "ServiceRequestIssue::code / normalize_service_request"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "unsupported_action": {
+      "recipe": "service_request_shape",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs",
+          "owningFunction": "ServiceRequestIssue::code / normalize_service_request"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "unknown_field": {
+      "recipe": "service_request_shape",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs",
+          "owningFunction": "ServiceRequestIssue::code / normalize_service_request"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "invalid_field_type": {
+      "recipe": "service_request_shape",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs",
+          "owningFunction": "ServiceRequestIssue::code / normalize_service_request"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "invalid_field_value": {
+      "recipe": "service_request_shape",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs",
+          "owningFunction": "ServiceRequestIssue::code / normalize_service_request"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "profile_access_denied": {
+      "recipe": "service_request_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_tab_close_authority_required": {
+      "recipe": "service_request_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_tab_close_authority_unproven": {
+      "recipe": "service_request_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_tab_close_profile_policy_denied": {
+      "recipe": "service_request_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_authority_unproven": {
+      "recipe": "service_request_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "missing_accountable_principal": {
+      "recipe": "service_request_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "stale_monitor_evidence": {
+      "recipe": "service_request_evidence",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "invalid_service_tab_handle": {
+      "recipe": "service_request_evidence",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "invalid_bounded_recipe": {
+      "recipe": "service_request_evidence",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "service_access_plan_route_browser_conflict": {
+      "recipe": "service_request_evidence",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "service_access_plan_route_session_conflict": {
+      "recipe": "service_request_evidence",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "route_hint_failure": {
+      "recipe": "service_request_evidence",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "blocked_manual_action": {
+      "recipe": "service_request_native_route",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "forbidden_cdp_execution": {
+      "recipe": "service_request_native_route",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "failure_recovery_action_not_supported": {
+      "recipe": "recovery_permissions",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/failure_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/failure_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "failure_recovery_argument_required": {
+      "recipe": "recovery_request_shape",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/failure_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/failure_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "failure_recovery_attempt_conflict": {
+      "recipe": "recovery_scope",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/failure_recovery.rs"
+        },
+        {
+          "path": "cli/src/native/service_failure/recovery_state.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/failure_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "failure_recovery_attempt_id_invalid": {
+      "recipe": "recovery_request_shape",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/failure_recovery.rs"
+        },
+        {
+          "path": "cli/src/native/service_failure/recovery_state.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/failure_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "failure_recovery_attempt_unresolved": {
+      "recipe": "recovery_in_flight",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_failure/recovery_state.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_failure/recovery_state.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "failure_recovery_budget_exhausted": {
+      "recipe": "recovery_budget",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_failure/recovery_state.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_failure/recovery_state.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "configured_budget"
+    },
+    "failure_recovery_claim_unavailable": {
+      "recipe": "recovery_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_failure/recovery_state.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_failure/recovery_state.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "failure_recovery_cli_request_invalid": {
+      "recipe": "recovery_request_shape",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/failure_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/failure_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "failure_recovery_cli_response_invalid": {
+      "recipe": "recovery_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/failure_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/failure_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "failure_recovery_completion_unavailable": {
+      "recipe": "recovery_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_failure/recovery_state.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_failure/recovery_state.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "failure_recovery_configuration_unavailable": {
+      "recipe": "recovery_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_failure/recovery_state.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_failure/recovery_state.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "failure_recovery_no_progress": {
+      "recipe": "recovery_budget",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_failure/recovery_state.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_failure/recovery_state.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "configured_budget"
+    },
+    "failure_recovery_occurrence_missing": {
+      "recipe": "recovery_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/failure_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/failure_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "failure_recovery_operation_invalid": {
+      "recipe": "recovery_request_shape",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/failure_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/failure_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "failure_recovery_policy_invalid": {
+      "recipe": "recovery_request_shape",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/failure_recovery.rs"
+        },
+        {
+          "path": "cli/src/native/service_failure/recovery_state.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/failure_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "failure_recovery_record_invalid": {
+      "recipe": "recovery_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/failure_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/failure_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "failure_recovery_request_invalid": {
+      "recipe": "recovery_request_shape",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/failure_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/failure_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "failure_recovery_resume_unverified": {
+      "recipe": "recovery_resume_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/failure_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/failure_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "failure_recovery_scope_conflict": {
+      "recipe": "recovery_scope",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/failure_recovery.rs"
+        },
+        {
+          "path": "cli/src/native/service_failure/recovery_state.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/failure_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "failure_recovery_scope_invalid": {
+      "recipe": "recovery_request_shape",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/failure_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/failure_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "failure_recovery_time_budget_unqualified": {
+      "recipe": "recovery_clock",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/failure_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/failure_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "failure_recovery_time_unqualified": {
+      "recipe": "recovery_clock",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/failure_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/failure_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "failure_recovery_tool_response_invalid": {
+      "recipe": "recovery_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/failure_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/failure_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "backend_connect_timeout": {
+      "recipe": "service_gateway_transport",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "backend_read_timeout": {
+      "recipe": "service_gateway_transport",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "backend_write_timeout": {
+      "recipe": "service_gateway_transport",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "backend_unavailable": {
+      "recipe": "service_gateway_transport",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "backend_empty_response": {
+      "recipe": "service_gateway_transport",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "backend_invalid_http": {
+      "recipe": "service_gateway_transport",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "invalid_backend_payload": {
+      "recipe": "service_gateway_transport",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "stale_target": {
+      "recipe": "service_gateway_transport",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "screenshot_failed": {
+      "recipe": "service_gateway_transport",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "invalid_guacamole_primary_claim": {
+      "recipe": "service_gateway_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "invalid_guacamole_primary_recovery": {
+      "recipe": "service_gateway_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "guacamole_viewer_primary_retired": {
+      "recipe": "service_gateway_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "guacamole_primary_provider_closed": {
+      "recipe": "service_gateway_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "durable_handoff_owner_prepare_failed": {
+      "recipe": "service_gateway_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "durable_handoff_public_response_invalid": {
+      "recipe": "service_gateway_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "durable_handoff_owner_response_invalid": {
+      "recipe": "service_gateway_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "durable_handoff_owner_relay_failed": {
+      "recipe": "service_gateway_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "durable_handoff_owner_relay_timeout": {
+      "recipe": "service_gateway_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_handoff_path_invalid": {
+      "recipe": "service_gateway_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_build_manifest_path_missing": {
+      "recipe": "service_build_manifest",
+      "owningChecks": [
+        {
+          "path": "cli/src/flags.rs",
+          "owningFunction": "resolve_browser_build_manifest"
+        }
+      ],
+      "policySource": "cli/src/flags.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_manifest_missing": {
+      "recipe": "service_build_manifest",
+      "owningChecks": [
+        {
+          "path": "cli/src/flags.rs",
+          "owningFunction": "resolve_browser_build_manifest"
+        }
+      ],
+      "policySource": "cli/src/flags.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_manifest_unreadable": {
+      "recipe": "service_build_manifest",
+      "owningChecks": [
+        {
+          "path": "cli/src/flags.rs",
+          "owningFunction": "resolve_browser_build_manifest"
+        }
+      ],
+      "policySource": "cli/src/flags.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_manifest_invalid_json": {
+      "recipe": "service_build_manifest",
+      "owningChecks": [
+        {
+          "path": "cli/src/flags.rs",
+          "owningFunction": "resolve_browser_build_manifest"
+        }
+      ],
+      "policySource": "cli/src/flags.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_manifest_schema_unsupported": {
+      "recipe": "service_build_manifest",
+      "owningChecks": [
+        {
+          "path": "cli/src/flags.rs",
+          "owningFunction": "resolve_browser_build_manifest"
+        }
+      ],
+      "policySource": "cli/src/flags.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_manifest_executable_missing": {
+      "recipe": "service_build_manifest",
+      "owningChecks": [
+        {
+          "path": "cli/src/flags.rs",
+          "owningFunction": "resolve_browser_build_manifest"
+        }
+      ],
+      "policySource": "cli/src/flags.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_manifest_executable_not_found": {
+      "recipe": "service_build_manifest",
+      "owningChecks": [
+        {
+          "path": "cli/src/flags.rs",
+          "owningFunction": "resolve_browser_build_manifest"
+        }
+      ],
+      "policySource": "cli/src/flags.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_manifest_smoke_not_fresh": {
+      "recipe": "service_build_manifest",
+      "owningChecks": [
+        {
+          "path": "cli/src/flags.rs",
+          "owningFunction": "resolve_browser_build_manifest"
+        }
+      ],
+      "policySource": "cli/src/flags.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    }
+  },
+  "enforcedProducerCodePrefixes": [
+    "failure_recovery_",
+    "browser_build_manifest_"
+  ],
+  "exclusions": [
+    {
+      "code": "failure_recovery_policy",
+      "source": "cli/src/native/service_failure/recovery_state.rs",
+      "sourceEvidence": "\"failure_recovery_policy:defaults\".into()",
+      "reason": "Private runtime document-key namespace, never a public failure code or refusal."
+    },
+    {
+      "code": "failure_recovery_outcome",
+      "source": "cli/src/mcp/failure_recovery.rs",
+      "sourceEvidence": "\"failure_recovery_outcome\",",
+      "reason": "Journal event classification for bounded recovery progress, including ready outcomes; not a refusal producer."
+    }
+  ]
+}
