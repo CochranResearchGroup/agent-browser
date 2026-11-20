@@ -98,3 +98,8 @@ const budgeted760=createChallengeAssistanceClient({timeoutMs:20,callTool:async()
 const budgetResult760=await budgeted760.resolve({taskId:'task',requestId:'original-wait'});
 assert.equal(budgetResult760.reason,'challenge_invocation_budget_exhausted');
 assert.equal(budgetResult760.recovery.inspect.arguments.requestId,'original-wait');
+
+let settledCheckboxReads760=0;
+const settledCheckbox760=createChallengeAssistanceClient({callTool:async(_name,args)=>{settledCheckboxReads760++;return {content:[{type:'text',text:JSON.stringify({success:true,data:{operation:{taskId:'task',profileId:'profile',browserId:'browser',tabId:'tab',targetId:'target',requestId:args.params.requestId,action:'native_input',state:'owner_refused_no_effect'}}})}]};},verifyClearance:async()=>({}),verifyAccess:async()=>({})});
+const settledCheckboxResult760=await settledCheckbox760.resolve({taskId:'task',requestId:'settled-checkbox'});
+assert.equal(settledCheckboxResult760.status,'failed_no_effect');assert.equal(settledCheckboxResult760.originalOperation.requestId,'settled-checkbox');assert.equal(settledCheckboxReads760,1);assert.deepEqual(settledCheckboxResult760.recovery.newIntent.requiredArguments,['newRequestId']);

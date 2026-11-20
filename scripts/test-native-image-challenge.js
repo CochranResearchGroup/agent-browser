@@ -120,3 +120,8 @@ await roundsCase('clock-correction');
 for(const fault of ['clock-expired','clock-boot','clock-malformed','wait-budget'])await roundsCase(fault);
 for(const fault of ['partial','rejection','empty-policy','single-provider','stale-second','cancel-second','expired-second','lost-second','denied'])await roundsCase(fault);
 console.log('Two-round public image protocol PASS: fresh evidence, original deadline, stale/partial/rejected/cancelled/uncertain no-replay and independent protected access');
+
+let settledReadCalls760=0;
+const settledImage760=fixture({callTool:async(_name,args)=>{settledReadCalls760++;return {content:[{type:'text',text:JSON.stringify({success:true,data:{operation:{...identity,requestId:args.params.requestId,action:'native_input',state:'owner_refused_no_effect'}}})}]};}});
+const settledImageResult760=await settledImage760.client.resolve({taskId:'task',requestId:'settled-original'});
+assert.equal(settledImageResult760.status,'failed_no_effect');assert.equal(settledImageResult760.originalOperation.requestId,'settled-original');assert.equal(settledReadCalls760,1);assert.equal(settledImage760.inputs,0);assert.deepEqual(settledImageResult760.recovery.newIntent.requiredArguments,['newRequestId']);

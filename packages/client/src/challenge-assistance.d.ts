@@ -20,9 +20,9 @@ export interface NativeChallengePolicySource {
 }
 export interface BoundedNativeChallengeResult {
   failure?:Record<string,unknown>;occurrenceId?:string|null;
-  recovery?:{inspect:{interface:string;arguments:{taskId:string;requestId:string}};resumeCondition:string};
+  recovery?:{inspect:{interface:string;arguments:{taskId:string;requestId:string}};resumeCondition:string;newIntent?:{method:'resolve';requiredArguments:string[];instruction:string}};
   taskId: string;
-  status: 'awaiting_operator' | 'intervention' | 'verified_access_after_native' | 'verified_access_after_passive_wait';
+  status: 'awaiting_operator' | 'intervention' | 'verified_access_after_native' | 'verified_access_after_passive_wait' | 'failed_no_effect';
   retryAllowed: false; taskCompleted?: false; reason?: string; binding?: ChallengeBinding;
   originalOperation?: Record<string,unknown> | null;
   verification?: { clearance: string; access: string; frameSha256: string };

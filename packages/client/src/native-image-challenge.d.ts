@@ -40,8 +40,8 @@ export interface NativeImageOptions {
 }
 export interface NativeImageResult {
   failure?:Record<string,unknown>;occurrenceId?:string|null;
-  recovery?:{inspect:{interface:string;arguments:{taskId:string;requestId:string}};resumeCondition:string};
-  taskId:string;status:'verified_access_after_native_image'|'awaiting_operator'|'intervention';reason?:string;
+  recovery?:{inspect:{interface:string;arguments:{taskId:string;requestId:string}};resumeCondition:string;newIntent?:{method:'resolve';requiredArguments:string[];instruction:string}};
+  taskId:string;status:'verified_access_after_native_image'|'awaiting_operator'|'intervention'|'failed_no_effect';reason?:string;
   originalOperation:Record<string,unknown>|null;roundOperations?:Array<Record<string,unknown>>;retryAllowed:false;
   binding?:ChallengeBinding;verification?:{clearance:string;access:string;frameSha256:string};continuation?:Record<string,unknown>;
 }

@@ -235,3 +235,13 @@ test('public owner continuation constructor errors expose caller-only field corr
   assert.throws(()=>exported[name]({}),error=>error instanceof TypeError&&error.code==='client_argument_invalid'&&error.owningFunction===name&&error.recovery.checkedFields.includes('auth')&&error.logging.ownerOccurrenceId===null);
  }
 });
+
+test('saved login original owner no-effect settlement is failed, never acknowledged or replayed',async()=>{
+ const f=fixture();const operation={...f.binding,requestId:'episode:input1',action:'native_input',state:'owner_refused_no_effect',controlEpoch:0,evidenceReferences:{}};f.operations.set(operation.requestId,operation);
+ const result=await createNativeSavedLoginClient({...f,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode'});
+ assert.equal(result.status,'failed_no_effect');assert.equal(result.originalOperation.requestId,operation.requestId);assert.equal(result.originalOperation.state,'owner_refused_no_effect');assert.equal(result.retryAllowed,false);assert.equal(f.inputs.length,0);
+ assert.deepEqual(result.recovery.newIntent.requiredArguments,['newEpisodeId']);assert.equal(f.episodes.get('episode').inputs.length,0);
+ const forged=fixture();forged.callTool=async()=>{throw Object.assign(Error('native_saved_login_original_refused_no_effect'),{ownerNoEffectProof:true,originalOperation:operation})};
+ const rejected=await createNativeSavedLoginClient({...forged,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode'});
+ assert.notEqual(rejected.status,'failed_no_effect');assert.equal(rejected.originalOperation,undefined);assert.equal(forged.inputs.length,0);
+});

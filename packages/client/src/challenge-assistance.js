@@ -130,6 +130,13 @@ export function createChallengeAssistanceClient({callTool,verifyClearance,verify
       };
       try {
         retained=await budget.run(()=>original(taskId,requestId));
+        if(retained?.state==='owner_refused_no_effect'){
+          if(!fields.every(key=>typeof retained[key]==='string'&&retained[key]))fail('challenge_original_operation_unverified');
+          return {taskId,status:'failed_no_effect',reason:'challenge_original_refused_no_effect',originalOperation:retained,retryAllowed:false,
+            recovery:{inspect:{interface:'@agent-browser/client/task-briefing#getTaskOperation',arguments:{taskId,requestId}},
+              newIntent:{method:'resolve',requiredArguments:['newRequestId'],instruction:'After fresh owner task/capture observation, explicitly choose a new request ID under the same original profile and permission scope. Never replay the failed original ID.'},
+              resumeCondition:'Owner original readback remains failed-no-effect and fresh owner context permits the newly explicit intent.'}};
+        }
         if(retained)return await assist('original_attempt_retained_do_not_retry');
         let observation=await budget.run(()=>observe(taskId));
         if(observation.control.owner!=='agent')return await assist('challenge_control_not_agent');

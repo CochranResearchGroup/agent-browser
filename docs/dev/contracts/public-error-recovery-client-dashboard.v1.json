@@ -456,6 +456,102 @@
       },
       "resumeCondition": "The current original task/context is verified, any uncertain original input is resolved, and the actual owner permits the next explicit input. A local wait timeout is never rewritten as evidence expiry or no-effect proof.",
       "maximumAutomaticAttempts": 1
+    },
+    "savedLoginOwnerNoEffect": {
+      "rationale": "The original authenticated owner readback reports a terminal failed input with verified no effect. It remains failed and non-replayable; caller error strings and unverified no-effect claims do not establish settlement.",
+      "requiredActor": "agent_or_caller_with_existing_task_permission",
+      "evidenceRequirement": "Exact original operation context and owner_refused_no_effect state obtained from retained owner readback; fresh owner task/capture context before any new intent.",
+      "inspect": {
+        "interface": "@agent-browser/client/task-briefing#getTaskOperation",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "taskId": "$taskId",
+          "requestId": "$requestId"
+        },
+        "precondition": "Supply the exact original retained task/request identity and existing authenticated endpoint. Only an owner-refused-no-effect state obtained from this read is terminal proof."
+      },
+      "remediation": [
+        {
+          "instruction": "Keep the failed original ID and outcome. Obtain a fresh owner task/capture observation, then explicitly supply newEpisodeId to the existing client resolve workflow under the same profile/account and permission scope. Do not replay the original ID, mark it acknowledged, or infer broader permission. This local recovery requires no human approval.",
+          "precondition": "Actual owner settlement is verified and original context matches. The new intent ID is explicitly chosen by the authorized caller, never generated or substituted by the error adapter. Existing owner policy must permit the fresh intent.",
+          "interface": "@agent-browser/client/native-saved-login#createNativeSavedLoginClient"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/task-briefing#getTaskOperation",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "taskId": "$taskId",
+          "requestId": "$requestId"
+        },
+        "precondition": "Supply the exact original retained task/request identity and existing authenticated endpoint. Only an owner-refused-no-effect state obtained from this read is terminal proof."
+      },
+      "resumeCondition": "The original remains failed-no-effect and immutable. A separately explicit new intent uses fresh owner-qualified observation and current authorization; pending/uncertain originals remain unresolved.",
+      "maximumAutomaticAttempts": 1
+    },
+    "imageOwnerNoEffect": {
+      "rationale": "The original authenticated owner readback reports a terminal failed input with verified no effect. It remains failed and non-replayable; caller error strings and unverified no-effect claims do not establish settlement.",
+      "requiredActor": "agent_or_caller_with_existing_task_permission",
+      "evidenceRequirement": "Exact original operation context and owner_refused_no_effect state obtained from retained owner readback; fresh owner task/capture context before any new intent.",
+      "inspect": {
+        "interface": "@agent-browser/client/task-briefing#getTaskOperation",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "taskId": "$taskId",
+          "requestId": "$requestId"
+        },
+        "precondition": "Supply the exact original retained task/request identity and existing authenticated endpoint. Only an owner-refused-no-effect state obtained from this read is terminal proof."
+      },
+      "remediation": [
+        {
+          "instruction": "Keep the failed original ID and outcome. Obtain a fresh owner task/capture observation, then explicitly supply newRequestId to the existing client resolve workflow under the same profile/account and permission scope. Do not replay the original ID, mark it acknowledged, or infer broader permission. This local recovery requires no human approval.",
+          "precondition": "Actual owner settlement is verified and original context matches. The new intent ID is explicitly chosen by the authorized caller, never generated or substituted by the error adapter. Existing owner policy must permit the fresh intent.",
+          "interface": "@agent-browser/client/native-image-challenge#createNativeImageChallengeClient"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/task-briefing#getTaskOperation",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "taskId": "$taskId",
+          "requestId": "$requestId"
+        },
+        "precondition": "Supply the exact original retained task/request identity and existing authenticated endpoint. Only an owner-refused-no-effect state obtained from this read is terminal proof."
+      },
+      "resumeCondition": "The original remains failed-no-effect and immutable. A separately explicit new intent uses fresh owner-qualified observation and current authorization; pending/uncertain originals remain unresolved.",
+      "maximumAutomaticAttempts": 1
+    },
+    "checkboxOwnerNoEffect": {
+      "rationale": "The original authenticated owner readback reports a terminal failed input with verified no effect. It remains failed and non-replayable; caller error strings and unverified no-effect claims do not establish settlement.",
+      "requiredActor": "agent_or_caller_with_existing_task_permission",
+      "evidenceRequirement": "Exact original operation context and owner_refused_no_effect state obtained from retained owner readback; fresh owner task/capture context before any new intent.",
+      "inspect": {
+        "interface": "@agent-browser/client/task-briefing#getTaskOperation",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "taskId": "$taskId",
+          "requestId": "$requestId"
+        },
+        "precondition": "Supply the exact original retained task/request identity and existing authenticated endpoint. Only an owner-refused-no-effect state obtained from this read is terminal proof."
+      },
+      "remediation": [
+        {
+          "instruction": "Keep the failed original ID and outcome. Obtain a fresh owner task/capture observation, then explicitly supply newRequestId to the existing client resolve workflow under the same profile/account and permission scope. Do not replay the original ID, mark it acknowledged, or infer broader permission. This local recovery requires no human approval.",
+          "precondition": "Actual owner settlement is verified and original context matches. The new intent ID is explicitly chosen by the authorized caller, never generated or substituted by the error adapter. Existing owner policy must permit the fresh intent.",
+          "interface": "@agent-browser/client/challenge-assistance#createChallengeAssistanceClient"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/task-briefing#getTaskOperation",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "taskId": "$taskId",
+          "requestId": "$requestId"
+        },
+        "precondition": "Supply the exact original retained task/request identity and existing authenticated endpoint. Only an owner-refused-no-effect state obtained from this read is terminal proof."
+      },
+      "resumeCondition": "The original remains failed-no-effect and immutable. A separately explicit new intent uses fresh owner-qualified observation and current authorization; pending/uncertain originals remain unresolved.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -900,6 +996,39 @@
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "configured_budget"
+    },
+    "native_saved_login_original_refused_no_effect": {
+      "recipe": "savedLoginOwnerNoEffect",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "native_image_original_refused_no_effect": {
+      "recipe": "imageOwnerNoEffect",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "challenge_original_refused_no_effect": {
+      "recipe": "checkboxOwnerNoEffect",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
     }
   }
 }
