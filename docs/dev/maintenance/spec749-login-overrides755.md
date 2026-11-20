@@ -72,3 +72,26 @@ capacity-only update checks. No Rust compiler or browser launch was started by
 this worker. Coordinator acceptance must run these source cases and the public
 policy adapter before closing #755. Shared help, README, skill, CONTEXT and docs
 site changes remain coordinator-owned.
+
+## Public override-capacity adapter acceptance completion
+
+The existing `native_policy_override_public_mcp_preserves_exact_scope_and_refusal`
+case now exercises `browser_policy` capacity/status/lookup through the real MCP
+schema, workflow routing and authenticated owner socket. Its existing isolated
+endpoint calls the production owner policy implementation and reopens the real
+SQLite store for each policy request. No new harness is introduced.
+
+Assertions cover app defaults and task precedence; unchanged effective
+permissions during capacity-only updates; automatic archival; exact archived-ID
+lookup after store reopening; authorized use of an archived grant for its
+original request while a peer task is refused; and permanent revocation after a
+real policy change, equal-policy restoration and subsequent capacity extension.
+The preexisting Native effect-count and cross-adapter assertions remain intact.
+Only one additional synthetic capture is admitted; denied or revoked grants add
+no Native effect. This fixture substitutes only provider/process transport and
+uses no browser or private account.
+
+Source rustfmt and patch hygiene pass. This worker did not compile or execute
+the extended Rust case; the coordinator will run it in the final admitted Native
+validation. A source assertion is not an executed acceptance result.
+Memory disposition: forbidden by delegated worker boundary.
