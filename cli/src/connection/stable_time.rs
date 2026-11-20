@@ -410,7 +410,9 @@ pub(crate) fn authority_now() -> Result<Stamp, String> {
             earliest_utc_ns: utc_ns(&estimate.earliest_utc).map_err(str::to_owned)?,
             latest_utc_ns: utc_ns(&estimate.latest_utc).map_err(str::to_owned)?,
         };
-        stamp.validate().map_err(|_| "stable_time_evidence_invalid".to_string())?;
+        stamp
+            .validate()
+            .map_err(|_| "stable_time_evidence_invalid".to_string())?;
         Ok(stamp)
     }
 }
