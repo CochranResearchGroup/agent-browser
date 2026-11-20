@@ -6,7 +6,7 @@ allowed-tools: Bash(agent-browser:*)
 
 # Agent Browser
 
-For retained task capacity inspection and runtime changes, see [task operation capacity](references/cli-and-service.md#task-operation-capacity).
+Inspect or change operation and artifact budgets at runtime: [capacity guide](references/cli-and-service.md#task-operation-capacity).
 
 For public refusal occurrence IDs and no-launch task error-log readback, see [the CLI and service reference](references/cli-and-service.md#recover-a-public-refusal).
 
@@ -39,7 +39,7 @@ Clicks deliver pointer input; verify page state. [Profile rules](references/cli-
 
 Installed viewers: [qualification](references/cli-and-service.md#native-journey-qualification).
 
-Use `browser_handoff({ "taskId": "<task-id>" })` for human assistance. Interactive input alone does not pause automation; actual viewer activity does. Use `interaction:"view"` for passive viewing. The authorized recipient needs no administrator override; visibility alone does not prove input readiness. Require `operatorVisible.state=ready`; return the complete `data.handoffUrl` and keep the task ID. For `remote_view_public_origin_missing`, check reviewed `AGENT_BROWSER_PUBLIC_ORIGIN` in `~/.agent-browser/.env` or `AGENT_BROWSER_ENV_FILE`; process settings win. Reconnect MCP after configuration changes because its environment is pinned at startup. Preserve the task. Never assemble provider URLs.
+Use `browser_handoff({ "taskId": "<task-id>" })` for human assistance. Interactive capability alone does not pause; actual viewer activity does. Require `operatorVisible.state=ready`, return complete `data.handoffUrl`, retain the task ID and never assemble provider URLs. For `remote_view_public_origin_missing`, review `AGENT_BROWSER_PUBLIC_ORIGIN`; reconnect MCP after configuration changes. See [handoff recovery and configuration](references/cli-and-service.md#retained-handoff-recovery).
 
 Reuse the same handoff after a CDP-free exit; reconcile interrupted conversions explicitly.
 A confirmed mode change restarts the same profile, retains its tabs and session names, and updates every attached task to the replacement process. After exit, the old PID and desktop assignment are historical records, not reasons to refuse the replacement. The supported workspace chooser includes Chrome and Chromium; Chrome for Testing is identified separately and excluded.
@@ -128,6 +128,6 @@ If the task has no tab (`mode_operation_tab_missing`), create one through `brows
 
 Read [evidence-backed login progress](references/cli-and-service.md#evidence-backed-login-progress) for Auth progress, recovery, independent verification and continuation. Native ownership metadata never proves human activity.
 
-Latency diagnostics: [opt-in phases](references/cli-and-service.md#optional-command-latency-diagnostics).
+Latency: [phases](references/cli-and-service.md#optional-command-latency-diagnostics).
 
 [Login and grant continuation](references/cli-and-service.md#continued-login-and-scoped-override-capacity).
