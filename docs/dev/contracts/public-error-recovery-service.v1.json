@@ -543,6 +543,226 @@
       },
       "resumeCondition": "The selected build manifest is valid, its executable exists, and current governed smoke evidence qualifies readiness; launching still follows ordinary task admission.",
       "maximumAutomaticAttempts": 1
+    },
+    "service_revision": {
+      "rationale": "A stale Service State revision is a compare-and-swap conflict, not authority to overwrite intervening owner changes.",
+      "requiredActor": "existing_scoped_service_owner",
+      "evidenceRequirement": "The exact original job/request/target, current service trace, specific owner-check details, and actual configured profile permissions or limits. Projection does not observe freshness or grant permission.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceTrace",
+        "arguments": {},
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+      },
+      "remediation": [
+        {
+          "instruction": "Read current Service State/trace and original job. Recompute the same authorized mutation from the current revision; keep unrelated owner changes and obtain fresh exact target/profile evidence. Submit a new explicit intent only when the rejected original is proven pre-effect.",
+          "precondition": "Existing scoped owner authority applies; no uncertain original is replayed and foreign workloads are preserved.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceTrace",
+        "arguments": {},
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+      },
+      "resumeCondition": "Current revision and relevant owner fields match the newly reviewed intent; unresolved originals are reconciled before a new mutation.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_lock": {
+      "rationale": "A Service State lock wait protects an active transaction and must not be bypassed from stale holder evidence.",
+      "requiredActor": "existing_scoped_service_owner",
+      "evidenceRequirement": "The exact original job/request/target, current service trace, specific owner-check details, and actual configured profile permissions or limits. Projection does not observe freshness or grant permission.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceTrace",
+        "arguments": {},
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the reported holder operation and current service trace, retaining request/job IDs. Let a live holder finish; if ownership is stale, use the supported original owner recovery plan after a fresh process read. Never unlink a lock or kill an unknown process to force progress.",
+          "precondition": "Existing scoped owner authority applies; no uncertain original is replayed and foreign workloads are preserved.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceTrace",
+        "arguments": {},
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+      },
+      "resumeCondition": "The current lock owner is known and the specific original operation outcome is reconciled; current state is reloaded before a new intent.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_queue": {
+      "rationale": "Admission queue capacity and worker liveness are independent from browser correctness and original job completion.",
+      "requiredActor": "existing_scoped_service_owner",
+      "evidenceRequirement": "The exact original job/request/target, current service trace, specific owner-check details, and actual configured profile permissions or limits. Projection does not observe freshness or grant permission.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceStatus",
+        "arguments": {},
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+      },
+      "remediation": [
+        {
+          "instruction": "Read service status and the original job, checking queue pressure and worker identity. Wait using ordinary OS waits for active admitted work, or repair the diagnosed configured service worker via existing installation ownership. Change limits only through reviewed existing configuration; never resubmit a possibly queued job or clear another workload.",
+          "precondition": "Existing scoped owner authority applies; no uncertain original is replayed and foreign workloads are preserved.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceTrace",
+        "arguments": {},
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+      },
+      "resumeCondition": "Current worker and queue can admit the explicitly chosen new intent, with original queued/dispatched outcome first resolved.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_job_terminal": {
+      "rationale": "Cancellation or timeout reports a retained original job outcome; it does not prove that every downstream effect was rolled back.",
+      "requiredActor": "existing_scoped_service_owner",
+      "evidenceRequirement": "The exact original job/request/target, current service trace, specific owner-check details, and actual configured profile permissions or limits. Projection does not observe freshness or grant permission.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceJob",
+        "arguments": {
+          "id": "$jobId"
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+      },
+      "remediation": [
+        {
+          "instruction": "Read the exact original job and trace, retaining any cleanup/compensation obligations. Inspect actual target/process/artifact state using the original owner interface; reconcile uncertainty before choosing new intent. Do not revive a cancelled job, reset its budget, or repeat input because the wait ended.",
+          "precondition": "Existing scoped owner authority applies; no uncertain original is replayed and foreign workloads are preserved.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceTrace",
+        "arguments": {},
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+      },
+      "resumeCondition": "The exact original effects and cleanup are known; a separately authorized new intent may proceed under current task context.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_target_continuity": {
+      "rationale": "Service tab handles and retained browser lifecycle authority bind the original profile, process and target.",
+      "requiredActor": "existing_scoped_service_owner",
+      "evidenceRequirement": "The exact original job/request/target, current service trace, specific owner-check details, and actual configured profile permissions or limits. Projection does not observe freshness or grant permission.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceTabs",
+        "arguments": {},
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+      },
+      "remediation": [
+        {
+          "instruction": "Read current service tabs and the exact original job. Compare profile/session/target/process identity and use the supported refreshServiceTabHandle or original profile recovery plan for that same owner. A proven-dead or intentionally closed original cannot be replaced by implicit launch, peer-tab closure, lock deletion or stale adoption.",
+          "precondition": "Existing scoped owner authority applies; no uncertain original is replayed and foreign workloads are preserved.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceTrace",
+        "arguments": {},
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+      },
+      "resumeCondition": "Original continuity is proven by current owner evidence, or a supported explicit recovery transition is reviewed; every new effect is separately admitted.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_profile_authority": {
+      "rationale": "Child profile access, operator focus/close and lifecycle authority are authenticated owner decisions, not caller labels.",
+      "requiredActor": "existing_scoped_service_owner",
+      "evidenceRequirement": "The exact original job/request/target, current service trace, specific owner-check details, and actual configured profile permissions or limits. Projection does not observe freshness or grant permission.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
+        "arguments": {},
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the access decision and current profile lease/controller/target. Use the current authenticated original owner or wait for its explicit return; if permission is denied, the existing policy owner may grant the required exact permission through the supported profile policy interface. Never impersonate the subject, force a lease, or close a peer browser.",
+          "precondition": "Existing scoped owner authority applies; no uncertain original is replayed and foreign workloads are preserved.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceTrace",
+        "arguments": {},
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+      },
+      "resumeCondition": "Current authenticated access and exact target/lease proofs permit the chosen action; a granted policy change is verified before new admission.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_display_owner": {
+      "rationale": "Display access and route binding must be repaired by the actual desktop/provider owner without granting access to a foreign display.",
+      "requiredActor": "existing_scoped_service_owner",
+      "evidenceRequirement": "The exact original job/request/target, current service trace, specific owner-check details, and actual configured profile permissions or limits. Projection does not observe freshness or grant permission.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceRemoteViewRoutes",
+        "arguments": {},
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the exact route/display allocation and current owner process. Use the existing provider/installation repair process to restore the original display server or correct its configured binding, preserving an uncertain grant and cleanup obligation. Never grant broad X access, disable runtime isolation, or borrow another display.",
+          "precondition": "Existing scoped owner authority applies; no uncertain original is replayed and foreign workloads are preserved.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceTrace",
+        "arguments": {},
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+      },
+      "resumeCondition": "The exact display route and live owner match, grant state is known, and ordinary task/provider admission accepts any new operation.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_download_owner": {
+      "rationale": "Download click/event/artifact failures can occur after a physical click or completed download; prefix alone is never replay proof.",
+      "requiredActor": "existing_scoped_service_owner",
+      "evidenceRequirement": "The exact original job/request/target, current service trace, specific owner-check details, and actual configured profile permissions or limits. Projection does not observe freshness or grant permission.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceJob",
+        "arguments": {
+          "id": "$jobId"
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the exact original download job, source identity, captured event and governed artifact metadata. Reconcile existing file completion/delivery through the original file-transfer owner; correct a reviewed destination or byte limit only for a new explicit intent. Never re-click on missing events, overwrite a pre-existing file, expose private artifact bytes in logs, or treat capture absence as no effect.",
+          "precondition": "Existing scoped owner authority applies; no uncertain original is replayed and foreign workloads are preserved.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceTrace",
+        "arguments": {},
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+      },
+      "resumeCondition": "The original click/event/artifact/delivery outcome is proven and retained; only a separately chosen authorized new transfer may dispatch.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_profile_selector": {
+      "rationale": "A runtime/profile selector must remain explicit and preserve the existing profile owner/build constraints.",
+      "requiredActor": "existing_scoped_service_owner",
+      "evidenceRequirement": "The exact original job/request/target, current service trace, specific owner-check details, and actual configured profile permissions or limits. Projection does not observe freshness or grant permission.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
+        "arguments": {},
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+      },
+      "remediation": [
+        {
+          "instruction": "Correct the invalid selector or freshness request using the current profile/access-plan contract and exact profile identity. Read existing allocations before choosing a profile; do not substitute the default, use another owner profile, or lower requested freshness silently.",
+          "precondition": "Existing scoped owner authority applies; no uncertain original is replayed and foreign workloads are preserved.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceTrace",
+        "arguments": {},
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+      },
+      "resumeCondition": "The named original profile, selector and freshness policy agree with the current access plan and all current permissions remain satisfied.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -1336,6 +1556,966 @@
         {
           "path": "cli/src/flags.rs",
           "owningFunction": "resolve_browser_build_manifest"
+        }
+      ],
+      "policySource": "cli/src/flags.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_stale_revision": {
+      "recipe": "service_revision",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "service_state_lock_timeout": {
+      "recipe": "service_lock",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "coordination_paused"
+    },
+    "control_queue_full": {
+      "recipe": "service_queue",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "configured_budget"
+    },
+    "control_plane_worker_stopped": {
+      "recipe": "service_queue",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_job_cancelled": {
+      "recipe": "service_job_terminal",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "service_job_timed_out": {
+      "recipe": "service_job_terminal",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_terminal_close_unproven": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "retained_browser_close_identity_unproven": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "existing_session_profile_identity_inconsistent": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "existing_session_profile_identity_unproven": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "explicit_profile_conflicts_with_current_owner": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_handoff_orphan_browser_hint_mismatch": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_handoff_orphan_owner_present": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_existing_owner_requires_explicit_transition": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "lifecycle_owner_blocks_replacement": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "service_tab_profile_selector_conflict": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "service_tab_recovery_attach_failed": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "service_tab_recovery_endpoint_unproven": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "service_tab_recovery_identity_mismatch": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "service_tab_recovery_owner_missing": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "service_tab_recovery_process_unproven": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "service_tab_recovery_target_missing": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "service_tab_route_mismatch": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "service_tab_target_selector_conflict": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "service_tab_target_unproven": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "tab_cleanup_pending": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "tab_close_effect_uncertain": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "tab_close_invalid_selector": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "tab_close_preflight_failed": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "tab_close_selector_conflict": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "tab_close_target_missing": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "tab_close_target_unproven": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "display_access_grant_failed": {
+      "recipe": "service_display_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "display_access_grant_timeout": {
+      "recipe": "service_display_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "route_display_owner_mismatch": {
+      "recipe": "service_display_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "route_display_owner_unproven": {
+      "recipe": "service_display_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "route_display_server_ambiguous": {
+      "recipe": "service_display_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "route_display_server_unavailable": {
+      "recipe": "service_display_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_freshness_invalid": {
+      "recipe": "service_profile_selector",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "invalid_runtime_profile": {
+      "recipe": "service_profile_selector",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "download_artifact_delivery_failed": {
+      "recipe": "service_download_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "download_artifact_limit_exceeded": {
+      "recipe": "service_download_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "download_artifact_path_unsafe": {
+      "recipe": "service_download_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "download_canceled": {
+      "recipe": "service_download_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "download_click_uncertain": {
+      "recipe": "service_download_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "download_completion_path_missing": {
+      "recipe": "service_download_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "download_destination_exists": {
+      "recipe": "service_download_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "download_event_ambiguous": {
+      "recipe": "service_download_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "download_event_unproven": {
+      "recipe": "service_download_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "download_events_unavailable": {
+      "recipe": "service_download_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "download_launch_policy_unavailable": {
+      "recipe": "service_download_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "download_source_identity_unproven": {
+      "recipe": "service_download_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "download_subscription_cleanup_failed": {
+      "recipe": "service_download_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "download_subscription_failed": {
+      "recipe": "service_download_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "download_target_unproven": {
+      "recipe": "service_download_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_interaction_authority_required": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "foreign_principal_profile_lease": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_controller_authority_required": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_action_mismatch": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_authority_required": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_binding_changed": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_binding_required": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_browser_missing": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_controller_required": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_process_missing": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_profile_missing": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_profile_policy_denied": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_proof_encoding_failed": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_route_missing": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_tab_close_binding_changed": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_tab_close_process_changed": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_tab_close_target_ambiguous": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_tab_close_target_missing": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_child_access_record_missing": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_child_explicit_reconnect_required": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_child_owner_connection_still_active": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_child_permission_not_inherited": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_child_subject_mismatch": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "service_browser_close_authority_denied": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_service_failure exact owner classification"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_build_manifest_unavailable": {
+      "recipe": "service_build_manifest",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_host.rs",
+          "owningFunction": "explicit selected stealthcdp_chromium manifest lookup"
         }
       ],
       "policySource": "cli/src/flags.rs",
