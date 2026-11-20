@@ -19,6 +19,11 @@
       "source": "cli/src/native/service_profile_recovery.rs",
       "code": "profile_acquisition_preflight_unclassified",
       "meaning": "Known original plan-flow blockers use finite static codes. Future or unknown String blockers remain bounded diagnostic metadata only, never proof that the arbitrary unknown cause was qualified or safe to bypass."
+    },
+    "clientTransportBinding": {
+      "source": "packages/client/src/service-observability.js",
+      "owningFunction": "serviceGet / servicePost / traceQuery",
+      "requirement": "Each service-observability call supplies baseUrl from original reviewed authenticated configuration; it remains unresolved and nonexecutable in projection. Scoped trace filters use options.query with actual profile-id/limit keys, never top-level profileId or a guessed URL."
     }
   },
   "interfaces": {
@@ -80,8 +85,10 @@
       "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceContracts",
-        "arguments": {},
-        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -92,8 +99,10 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceContracts",
-        "arguments": {},
-        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "The exact request conforms to the current contract and its original response confirms pre-dispatch rejection; no uncertain original is retried.",
       "maximumAutomaticAttempts": 1
@@ -104,8 +113,10 @@
       "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
-        "arguments": {},
-        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -116,8 +127,10 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
-        "arguments": {},
-        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "A current scoped access decision permits the chosen original profile/action and current owner/target proofs match; any new input remains separately admitted.",
       "maximumAutomaticAttempts": 1
@@ -128,8 +141,10 @@
       "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceTabs",
-        "arguments": {},
-        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -140,8 +155,10 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceTabs",
-        "arguments": {},
-        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "Current handle, profile, route, target and bounded recipe agree with the requested original; post-dispatch outcomes are reconciled before any new intent.",
       "maximumAutomaticAttempts": 1
@@ -152,8 +169,10 @@
       "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
-        "arguments": {},
-        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -164,8 +183,10 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
-        "arguments": {},
-        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "The current access plan supports the selected route and permission; a fresh observation and separate admission gate any new input.",
       "maximumAutomaticAttempts": 1
@@ -176,8 +197,14 @@
       "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceTrace",
-        "arguments": {},
-        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -188,8 +215,10 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceStatus",
-        "arguments": {},
-        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "Existing transport returns a valid response and exact original owner outcome is known; a successful gateway read alone is not permission to replay the original.",
       "maximumAutomaticAttempts": 1
@@ -200,8 +229,10 @@
       "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceRemoteViewRoutes",
-        "arguments": {},
-        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -212,8 +243,10 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceRemoteViewRoutes",
-        "arguments": {},
-        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "The same durable handoff is owner-ready and its exact viewer generation is current; human control and any uncertain input remain separately fenced.",
       "maximumAutomaticAttempts": 1
@@ -589,8 +622,10 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceStatus",
-        "arguments": {},
-        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "The selected build manifest is valid, its executable exists, and current governed smoke evidence qualifies readiness; launching still follows ordinary task admission.",
       "maximumAutomaticAttempts": 1
@@ -601,8 +636,14 @@
       "evidenceRequirement": "The exact original job/request/target, current service trace, specific owner-check details, and actual configured profile permissions or limits. Projection does not observe freshness or grant permission.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceTrace",
-        "arguments": {},
-        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -613,8 +654,14 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceTrace",
-        "arguments": {},
-        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "Current revision and relevant owner fields match the newly reviewed intent; unresolved originals are reconciled before a new mutation.",
       "maximumAutomaticAttempts": 1
@@ -625,8 +672,14 @@
       "evidenceRequirement": "The exact original job/request/target, current service trace, specific owner-check details, and actual configured profile permissions or limits. Projection does not observe freshness or grant permission.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceTrace",
-        "arguments": {},
-        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -637,8 +690,14 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceTrace",
-        "arguments": {},
-        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "The current lock owner is known and the specific original operation outcome is reconciled; current state is reloaded before a new intent.",
       "maximumAutomaticAttempts": 1
@@ -649,8 +708,10 @@
       "evidenceRequirement": "The exact original job/request/target, current service trace, specific owner-check details, and actual configured profile permissions or limits. Projection does not observe freshness or grant permission.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceStatus",
-        "arguments": {},
-        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -661,8 +722,14 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceTrace",
-        "arguments": {},
-        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "Current worker and queue can admit the explicitly chosen new intent, with original queued/dispatched outcome first resolved.",
       "maximumAutomaticAttempts": 1
@@ -674,9 +741,10 @@
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceJob",
         "arguments": {
-          "id": "$jobId"
+          "id": "$jobId",
+          "baseUrl": "$configuredServiceBaseUrl"
         },
-        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -687,8 +755,14 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceTrace",
-        "arguments": {},
-        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "The exact original effects and cleanup are known; a separately authorized new intent may proceed under current task context.",
       "maximumAutomaticAttempts": 1
@@ -699,8 +773,10 @@
       "evidenceRequirement": "The exact original job/request/target, current service trace, specific owner-check details, and actual configured profile permissions or limits. Projection does not observe freshness or grant permission.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceTabs",
-        "arguments": {},
-        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -711,8 +787,14 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceTrace",
-        "arguments": {},
-        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "Original continuity is proven by current owner evidence, or a supported explicit recovery transition is reviewed; every new effect is separately admitted.",
       "maximumAutomaticAttempts": 1
@@ -723,8 +805,10 @@
       "evidenceRequirement": "The exact original job/request/target, current service trace, specific owner-check details, and actual configured profile permissions or limits. Projection does not observe freshness or grant permission.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
-        "arguments": {},
-        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -735,8 +819,14 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceTrace",
-        "arguments": {},
-        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "Current authenticated access and exact target/lease proofs permit the chosen action; a granted policy change is verified before new admission.",
       "maximumAutomaticAttempts": 1
@@ -747,8 +837,10 @@
       "evidenceRequirement": "The exact original job/request/target, current service trace, specific owner-check details, and actual configured profile permissions or limits. Projection does not observe freshness or grant permission.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceRemoteViewRoutes",
-        "arguments": {},
-        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -759,8 +851,14 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceTrace",
-        "arguments": {},
-        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "The exact display route and live owner match, grant state is known, and ordinary task/provider admission accepts any new operation.",
       "maximumAutomaticAttempts": 1
@@ -772,9 +870,10 @@
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceJob",
         "arguments": {
-          "id": "$jobId"
+          "id": "$jobId",
+          "baseUrl": "$configuredServiceBaseUrl"
         },
-        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -785,8 +884,14 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceTrace",
-        "arguments": {},
-        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "The original click/event/artifact/delivery outcome is proven and retained; only a separately chosen authorized new transfer may dispatch.",
       "maximumAutomaticAttempts": 1
@@ -797,8 +902,10 @@
       "evidenceRequirement": "The exact original job/request/target, current service trace, specific owner-check details, and actual configured profile permissions or limits. Projection does not observe freshness or grant permission.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
-        "arguments": {},
-        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -809,8 +916,14 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceTrace",
-        "arguments": {},
-        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "The named original profile, selector and freshness policy agree with the current access plan and all current permissions remain satisfied.",
       "maximumAutomaticAttempts": 1
@@ -822,9 +935,10 @@
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceProfileDiagnosis",
         "arguments": {
-          "id": "$profileId"
+          "id": "$profileId",
+          "baseUrl": "$configuredServiceBaseUrl"
         },
-        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile."
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -836,9 +950,10 @@
               "profileId": "$profileId",
               "profileCapability": "$profileCapability",
               "expiresAt": "$reviewedExpiresAt",
-              "idempotencyKey": "$idempotencyKey"
+              "idempotencyKey": "$idempotencyKey",
+              "baseUrl": "$configuredServiceBaseUrl"
             },
-            "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile."
+            "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
           }
         }
       ],
@@ -846,9 +961,10 @@
         "interface": "@agent-browser/client/service-observability#getServiceProfileRecoveryStatus",
         "arguments": {
           "recoveryId": "$recoveryId",
-          "profileCapability": "$profileCapability"
+          "profileCapability": "$profileCapability",
+          "baseUrl": "$configuredServiceBaseUrl"
         },
-        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile."
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "Current owner diagnosis and the exact retained recovery receipt prove the intended transition; every new browser operation uses fresh current context and permission.",
       "maximumAutomaticAttempts": 1
@@ -892,9 +1008,10 @@
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceProfileDiagnosis",
         "arguments": {
-          "id": "$profileId"
+          "id": "$profileId",
+          "baseUrl": "$configuredServiceBaseUrl"
         },
-        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile."
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -908,18 +1025,20 @@
               "scope": "$reviewedScope",
               "targetServiceId": "$targetServiceId",
               "expiresAt": "$reviewedExpiresAt",
-              "idempotencyKey": "$idempotencyKey"
+              "idempotencyKey": "$idempotencyKey",
+              "baseUrl": "$configuredServiceBaseUrl"
             },
-            "precondition": "Actual authenticated original profile owner explicitly authorizes this exact reset scope; plan generation is not reset application approval."
+            "precondition": "Actual authenticated original profile owner explicitly authorizes this exact reset scope; plan generation is not reset application approval. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
           }
         }
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceProfileDiagnosis",
         "arguments": {
-          "id": "$profileId"
+          "id": "$profileId",
+          "baseUrl": "$configuredServiceBaseUrl"
         },
-        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile."
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "The exact authorized reset receipt and current owner diagnosis prove the requested scope completed; unknown destructive effects remain unresolved and are never repeated automatically.",
       "maximumAutomaticAttempts": 1
@@ -930,8 +1049,10 @@
       "evidenceRequirement": "Original profile ID, current name/kind and original expectedName/expectedKind, authenticated dashboard authority and original mutation response.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceProfiles",
-        "arguments": {},
-        "precondition": "Read the original authenticated service profile inventory; profile identity comes from the original response, never a guessed name."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Read the original authenticated service profile inventory; profile identity comes from the original response, never a guessed name. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -942,8 +1063,10 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceProfiles",
-        "arguments": {},
-        "precondition": "Read the original authenticated service profile inventory; profile identity comes from the original response, never a guessed name."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Read the original authenticated service profile inventory; profile identity comes from the original response, never a guessed name. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "The exact intended profile properties are read back or the original rejection is proven pre-effect; an unknown worker result is not replayed.",
       "maximumAutomaticAttempts": 1
@@ -954,8 +1077,10 @@
       "evidenceRequirement": "Original scoped request, exact current physical/logical owner evidence and current permission/configuration. Registry projection has not observed runtime freshness or proven absence.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceProfileLeases",
-        "arguments": {},
-        "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -966,8 +1091,10 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceProfileLeases",
-        "arguments": {},
-        "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "Current original claim/capability/revision and signed scoped effect proof are valid, owner/physical occupancy is known, and any existing in-flight receipt is reconciled before new input.",
       "maximumAutomaticAttempts": 1
@@ -978,8 +1105,14 @@
       "evidenceRequirement": "Original scoped request, exact current physical/logical owner evidence and current permission/configuration. Registry projection has not observed runtime freshness or proven absence.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceTrace",
-        "arguments": {},
-        "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -990,8 +1123,14 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceTrace",
-        "arguments": {},
-        "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "The exact candidate and current ownership/census/reference proof satisfy its reviewed cleanup plan, and prior signals/removals are reconciled; no broader process/profile cleanup is inferred.",
       "maximumAutomaticAttempts": 1
@@ -1034,8 +1173,14 @@
       "evidenceRequirement": "Original scoped request, exact current physical/logical owner evidence and current permission/configuration. Registry projection has not observed runtime freshness or proven absence.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceTrace",
-        "arguments": {},
-        "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -1046,8 +1191,14 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceTrace",
-        "arguments": {},
-        "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "The exact inert original satisfies current plan CAS/schema/expiry and its receipt is reconciled; no physical process action or implicit replacement is authorized.",
       "maximumAutomaticAttempts": 1
@@ -1058,8 +1209,10 @@
       "evidenceRequirement": "Original scoped request, exact current physical/logical owner evidence and current permission/configuration. Registry projection has not observed runtime freshness or proven absence.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
-        "arguments": {},
-        "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "remediation": [
         {
@@ -1070,8 +1223,10 @@
       ],
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
-        "arguments": {},
-        "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement."
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
       "resumeCondition": "Current permission, policy fence, target and signed lifecycle authorization match; retained physical close/settlement outcome is known and any new input remains separately admitted.",
       "maximumAutomaticAttempts": 1
