@@ -289,6 +289,7 @@ pub(crate) mod action_commands {
         cmd: &Value,
         state: &mut DaemonState,
         explicit_service_handle: bool,
+        latency_samples: &mut Vec<Value>,
     ) -> Result<Value, String> {
         if explicit_service_handle {
             return handle_bounded_service_evaluate(cmd, state).await;
@@ -309,20 +310,12 @@ pub(crate) mod action_commands {
             .get("script")
             .and_then(Value::as_str)
             .ok_or("Missing 'script' parameter")?;
-        let mut samples = Vec::new();
         let timeout_ms = command_evaluation_timeout_ms(cmd).unwrap_or(manager.default_timeout_ms());
         let result = manager
-            .evaluate_with_latency(script, timeout_ms, &mut samples)
+            .evaluate_with_latency(script, timeout_ms, latency_samples)
             .await;
         let url = manager.active_page_url().unwrap_or_default().to_string();
-        match result {
-            Ok(result) => {
-                let mut data = json!({ "result": result, "origin": url });
-                crate::connection::latency::append(&mut data, samples);
-                Ok(data)
-            }
-            Err(error) => Err(error),
-        }
+        result.map(|result| json!({ "result": result, "origin": url }))
     }
 }
 pub(crate) use action_commands::*;

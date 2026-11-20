@@ -319,12 +319,6 @@ impl PhaseCapture {
         capture
     }
 
-    pub(crate) fn append_response(data: &mut Option<Value>, samples: Vec<Value>) {
-        if !samples.is_empty() {
-            append(data.get_or_insert(Value::Null), samples);
-        }
-    }
-
     pub(crate) fn finish(self) -> Option<Value> {
         let result = if let Some(reason) = self.configuration_error {
             Err(reason)
@@ -361,6 +355,12 @@ pub(crate) fn append(data: &mut Value, samples: impl IntoIterator<Item = Value>)
         if let Some(phases) = phases.as_array_mut() {
             phases.extend(samples);
         }
+    }
+}
+
+pub(crate) fn append_response(data: &mut Option<Value>, samples: Vec<Value>) {
+    if !samples.is_empty() {
+        append(data.get_or_insert(Value::Null), samples);
     }
 }
 
