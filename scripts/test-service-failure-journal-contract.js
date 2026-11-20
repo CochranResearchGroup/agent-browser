@@ -110,6 +110,12 @@ const toolSchemas = {
   browser_continue: readFileSync('cli/src/mcp/workflow.rs', 'utf8'),
 };
 function validateRecoveryCall(call) {
+  if (call.interface === 'cli') {
+    assert.equal(call.command, 'agent-browser', 'Recovery command must use the current Agent Browser executable');
+    assert(['["--help"]', '["--json","install","doctor"]'].includes(JSON.stringify(call.arguments)), `Unavailable recovery CLI arguments ${JSON.stringify(call.arguments)}`);
+    assert(readFileSync('cli/src/output.rs', 'utf8').includes('agent-browser install doctor'), 'Independent no-launch doctor must remain advertised');
+    return;
+  }
   assert(call.tool === 'browser_command' || Object.hasOwn(toolSchemas, call.tool), `Unavailable recovery tool ${call.tool}`);
   assert.equal(call.arguments.taskId, '$taskId', 'Recovery must retain exact task scope');
   if (call.tool === 'browser_command') {
@@ -164,6 +170,7 @@ for (const path of [...rustFiles('cli/src'), ...rustFiles('crates/agent-browser-
 validateRecoveryInventory(recoveryRegistry, discoveredReviewedCodes);
 assert.throws(() => validateRecoveryInventory(recoveryRegistry, new Set(['unregistered_public_error'])), /Uncovered public code/);
 assert.throws(() => validateRecoveryCall({tool:'browser_command',arguments:{taskId:'$taskId',action:'nonexistent_recovery_command'}}), /Unavailable recovery action/);
+assert.throws(() => validateRecoveryCall({interface:'cli',command:'agent-browser',arguments:['nonexistent-repair']}), /Unavailable recovery CLI arguments/);
 assert.throws(() => validateRecoveryCall({tool:'nonexistent_recovery_tool',arguments:{taskId:'$taskId'}}), /Unavailable recovery tool/);
 for (const boundary of recoveryRegistry.boundaries) assert(readFileSync(boundary.source, 'utf8').includes(boundary.publication), `Missing ${boundary.surface} publication seam`);
 if (process.argv.includes('--require-complete-recovery')) {

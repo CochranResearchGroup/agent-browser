@@ -106,12 +106,13 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
         failure["effectState"] = json!("no_effect");
         failure["phase"] = json!("child_admission");
         failure["recommendedAction"] = json!("inspect_task_operation_capacity");
-        if let Some(task) = task {
+        if let Some(task) = task.filter(|_| failure["executableNextAction"].is_null()) {
             failure["executableNextAction"] = json!({"tool":"browser_command","executable":true,
                 "arguments":{"taskId":task,"action":"task_operation","params":{"operation":"capacity"}},
                 "purpose":"Inspect capacity and unresolved originals before adjusting configured limits"});
         }
     }
+    super::recovery_registry::enrich(failure, command);
     if failure["executableNextAction"].is_null() {
         failure["executableNextAction"] = if let Some(task) = task {
             json!({"tool":"browser_command","executable":true,
@@ -123,7 +124,6 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
                 "purpose":"Discover available profiles and supported workflow operations"})
         };
     }
-    super::recovery_registry::enrich(failure, command);
     if failure["occurrenceId"].is_string() {
         return;
     }
@@ -153,7 +153,7 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
             "taskIdSha256":task.map(|id| format!("{:x}", Sha256::digest(id.as_bytes()))),
         "evidenceFreshness":failure["recoveryPlan"]["evidence"],
         "policySource":failure["recoveryPlan"]["policySource"],
-        "recoveryCoverage":failure["recoveryPlan"]["coverage"]
+        "recoveryCoverage":failure["recoveryRegistry"]["coverage"]
     }));
     failure["occurrenceId"] = json!(record.occurrence_id);
     failure["logging"] = match append_service_failure(&record) {

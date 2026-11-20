@@ -79,10 +79,13 @@ fn print_json_value(value: serde_json::Value) {
 }
 
 fn print_json_error(message: impl AsRef<str>) {
-    print_json_value(json!({
-        "success": false,
-        "error": message.as_ref(),
-    }));
+    let mut response = json!({"success":false,"error":message.as_ref()});
+    native::service_failure::attach_public_failure(
+        &mut response,
+        &json!({"action":"cli_failure"}),
+        "cli",
+    );
+    print_json_value(response);
 }
 
 fn format_service_watch_line(resp: &connection::Response) -> String {
@@ -347,11 +350,26 @@ fn apply_remote_headed_launch_env_hints(launch_cmd: &mut serde_json::Value) {
 }
 
 fn print_json_error_with_type(message: impl AsRef<str>, error_type: &str) {
-    print_json_value(json!({
-        "success": false,
-        "error": message.as_ref(),
-        "type": error_type,
-    }));
+    let mut response = json!({"success":false,"error":message.as_ref(),"type":error_type});
+    // These typed parser results are emitted before a browser command exists.
+    // Untyped CLI errors may follow an effect and retain conservative uncertainty.
+    let code = match error_type {
+        "unknown_command" => Some("cli_unknown_command"),
+        "unknown_subcommand" => Some("cli_unknown_subcommand"),
+        "missing_arguments" => Some("cli_missing_arguments"),
+        "invalid_value" => Some("cli_invalid_value"),
+        "invalid_session_name" => Some("cli_invalid_session_name"),
+        _ => None,
+    };
+    if let Some(code) = code {
+        response["failure"] = json!({"code":code,"axis":"request","phase":"ingress_validation","effectState":"no_effect"});
+    }
+    native::service_failure::attach_public_failure(
+        &mut response,
+        &json!({"action":"cli_parse"}),
+        "cli",
+    );
+    print_json_value(response);
 }
 
 struct ParsedProxy {

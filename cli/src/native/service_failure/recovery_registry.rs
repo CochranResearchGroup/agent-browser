@@ -76,15 +76,7 @@ pub(super) fn enrich(failure: &mut Value, command: &Value) {
         .to_owned();
     let source = registry();
     let Some(entry) = source["codes"].get(&code) else {
-        if failure["recoveryPlan"].is_object() {
-            // Existing typed owner recovery is more specific than the registry's
-            // unknown-defect escalation. Preserve its actions and evidence.
-            failure["recoveryPlan"]["coverage"] = json!("unregistered");
-            failure["recoveryPlan"]["registryReason"] =
-                json!("specific_check_contract_not_registered");
-            return;
-        }
-        failure["recoveryPlan"] = json!({
+        let plan = json!({
             "schemaVersion":"agent-browser.public-error-recovery.v1",
             "coverage":"unregistered", "code":code,
             "requiredActor":"maintainer", "maximumAutomaticAttempts":0,
@@ -94,6 +86,7 @@ pub(super) fn enrich(failure: &mut Value, command: &Value) {
                 "exclude":["credentials","cookies","pageContent","rawProviderErrors"]},
             "resumeCondition":"The specific defect or prerequisite is resolved, original effects are reconciled, and the same task is freshly observed; independent safe reads may continue"
         });
+        publish_plan(failure, plan);
         return;
     };
     let recipe = &source["recipes"][entry["recipe"].as_str().unwrap_or_default()];
@@ -108,7 +101,7 @@ pub(super) fn enrich(failure: &mut Value, command: &Value) {
         }
     }
     let diagnosis = &entry["evidenceClass"];
-    failure["recoveryPlan"] = json!({
+    let plan = json!({
         "schemaVersion":"agent-browser.public-error-recovery.v1",
         "coverage":"registered", "code":code, "diagnosis":diagnosis,
         "rationale":recipe["rationale"], "requiredActor":recipe["requiredActor"],
@@ -118,8 +111,16 @@ pub(super) fn enrich(failure: &mut Value, command: &Value) {
         "maximumAutomaticAttempts":recipe["maximumAutomaticAttempts"],
         "resumeCondition":recipe["resumeCondition"]
     });
-    if inspect["executable"] == true {
+    publish_plan(failure, plan);
+    if failure["executableNextAction"].is_null() && inspect["executable"] == true {
         failure["executableNextAction"] = inspect;
+    }
+}
+
+fn publish_plan(failure: &mut Value, plan: Value) {
+    failure["recoveryRegistry"] = plan.clone();
+    if !failure["recoveryPlan"].is_object() {
+        failure["recoveryPlan"] = plan;
     }
 }
 
@@ -147,6 +148,17 @@ mod tests {
             false
         );
         assert_eq!(failure["effectState"], "no_effect");
+    }
+    #[test]
+    fn registered_contract_preserves_authoritative_owner_plan_action_and_evidence() {
+        let owner_plan = json!({"requiredActor":"actual-owner","evidence":{"status":"fresh","observationId":"original"},"remediation":[{"call":{"tool":"owner-specific-recovery"}}]});
+        let owner_action =
+            json!({"tool":"owner-specific-inspection","arguments":{"original":"retained"}});
+        let mut failure = json!({"code":"browser_task_operation_capacity_reached","recoveryPlan":owner_plan,"executableNextAction":owner_action});
+        enrich(&mut failure, &json!({"taskId":"task"}));
+        assert_eq!(failure["recoveryPlan"], owner_plan);
+        assert_eq!(failure["executableNextAction"], owner_action);
+        assert_eq!(failure["recoveryRegistry"]["coverage"], "registered");
     }
     #[test]
     fn unbound_and_unknown_contracts_never_claim_executable_coverage() {
