@@ -191,6 +191,7 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
                 .remote_view_tab_handoffs
                 .get(&handoff)
                 .ok_or("remote_view_tab_handoff_missing")
+                .map_err(str::to_owned)
                 .and_then(crate::native::browser_session_remote_view::check_handoff_time)?;
         }
         if agent_browser_service_model::remote_view_native_target_digest(&handoff, &current_target)?

@@ -448,12 +448,12 @@ pub(crate) fn prepare_handoff(
             !link.id.starts_with("human-") && link.session_id == task_id && link.tab_id == tab_id
         })
         .ok_or("remote_view_tab_handoff_missing")?;
-    super::browser_session_remote_view::check_handoff_time(template)?;
+    crate::native::browser_session_remote_view::check_handoff_time(template)?;
     let retained = if interaction == "interactive" {
         let active = state.remote_view_tab_handoffs.values().find(|link| {
             link.session_id == task_id
                 && link.tab_id == tab_id
-                && super::browser_session_remote_view::check_handoff_time(link).is_ok()
+                && crate::native::browser_session_remote_view::check_handoff_time(link).is_ok()
                 && agent_browser_service_model::resolve_remote_view_tab_handoff(state, &link.id)
                     .and_then(|target| {
                         agent_browser_service_model::remote_view_native_target_digest(
@@ -524,7 +524,7 @@ pub(crate) fn reconcile_recovered_handoff(
     if !interactive && (before.human || before.pause_reads) {
         return Err("browser_handoff_control_changed".into());
     }
-    let retention_now = super::browser_session_remote_view::handoff_time(
+    let retention_now = crate::native::browser_session_remote_view::handoff_time(
         expected
             .remote_view_tab_handoffs
             .get(id)

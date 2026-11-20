@@ -1181,6 +1181,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .remote_view_tab_handoffs
             .get(id)
             .ok_or("remote_view_tab_handoff_missing")
+            .map_err(str::to_owned)
             .and_then(super::browser_session_remote_view::check_handoff_time)?;
         let target = agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, id)?;
         let digest = agent_browser_service_model::remote_view_native_target_digest(id, &target)?;
@@ -3829,6 +3830,7 @@ where
                     .remote_view_tab_handoffs
                     .get(handoff)
                     .ok_or("remote_view_tab_handoff_missing")
+                    .map_err(str::to_owned)
                     .and_then(super::browser_session_remote_view::check_handoff_time)?;
                 agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, handoff)
                     .map_err(|_| "browser_session_tab_request_target_closed")?;

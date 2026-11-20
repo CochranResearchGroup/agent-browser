@@ -1221,7 +1221,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
             .values()
             .find(|link| link.session_id == task.id)
         {
-            super::browser_session_remote_view::check_handoff_time(link)?;
+            crate::native::browser_session_remote_view::check_handoff_time(link)?;
             let handoff_id = link.id.clone();
             return self
                 .ready_receipt(task.id, task.browser_id, handoff_id)
