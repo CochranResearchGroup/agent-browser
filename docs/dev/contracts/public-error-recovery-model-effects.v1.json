@@ -3,7 +3,14 @@
   "qualificationScope": {
     "sourceRevision": "9d3958421084820cf0e6a01bc6f0c6ee2e1acf1a",
     "meaning": "Bounded original-census model-effects partition: all65 assigned literals are actual fallible model emitters. Full four-source gates additionally qualify21 related owner errors and exclude one nested cause token. Projection supplies recourse, not runtime acceptance or permission. Reconnect receipt capacity is now supplied by the existing live task/default capacity policy, preserving every original receipt.",
-    "effectUncertainty": "No listed error establishes zero physical effects or authorizes retry, browser replacement, receipt deletion, policy bypass or archive."
+    "effectUncertainty": "No listed error establishes zero physical effects or authorizes retry, browser replacement, receipt deletion, policy bypass or archive.",
+    "ownerSupplement": {
+      "sourceRevision": "2f22a9edd23d324df5ee4b4647f275967b145550",
+      "assignedOriginalCensusEntries": 14,
+      "qualifiedAdditionalCodes": 13,
+      "additionalExclusions": 1,
+      "meaning": "Bounded owner supplement only; no lease, retirement, host binding or runtime behavior changes. Protected-state absence remains an owner reconciliation requirement, not replacement or no-effect authority."
+    }
   },
   "recipes": {
     "model_effects_attachment_request": {
@@ -439,6 +446,190 @@
         }
       },
       "resumeCondition": "The original owner readback proves matching current custody and the named missing evidence/configuration is repaired; original uncertain effects remain fenced and are never automatically replayed. Where the supported mutation is absent, only independent inspection continues until that bounded repair is implemented.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_lifecycle_missing": {
+      "rationale": "The protected lifecycle transition cannot find the original owner or its exact durable lifecycle record.",
+      "requiredActor": "authenticated_original_profile_and_runtime_owner",
+      "evidenceRequirement": "Exact original profile/task, immutable owner generation, original operation/transfer receipt, actual current custody and authenticated existing authority. Missing or changed evidence does not prove no effect or grant replacement authority.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfileDiagnosis",
+        "arguments": {
+          "id": "$profileId",
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original authenticated profile diagnosis and lifecycle/owner readback. Have the current runtime owner reconcile its retained registry/sidecar and original transition receipt through its existing owner interface; missing data never permits registration of a replacement, copying another owner record, removing cleanup obligations or resetting generations.",
+          "precondition": "The original IDs and acting owner come from authenticated retained readback, not guesses; reconcile pending original effects and preserve existing lease, transfer and cleanup fences.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfileDiagnosis",
+        "arguments": {
+          "id": "$profileId",
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
+      },
+      "resumeCondition": "Current original owner readback confirms the named evidence or request repair and exact protected generation; all independent lease/process/control checks still apply. Uncertain original effects remain inspectable and fenced without automatic replay.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_lifecycle_launch_identity": {
+      "rationale": "Managed-lane or replacement admission lacks a valid immutable package launch identity digest.",
+      "requiredActor": "authenticated_original_profile_and_runtime_owner",
+      "evidenceRequirement": "Exact original profile/task, immutable owner generation, original operation/transfer receipt, actual current custody and authenticated existing authority. Missing or changed evidence does not prove no effect or grant replacement authority.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfileDiagnosis",
+        "arguments": {
+          "id": "$profileId",
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original profile and runtime installation identity. The actual runtime installation/launch owner must repair its published package launch evidence and revalidate the original admitted launch context before continuation. Never invent a SHA, accept an arbitrary executable, clear original custody or infer process exit from this validation error.",
+          "precondition": "The original IDs and acting owner come from authenticated retained readback, not guesses; reconcile pending original effects and preserve existing lease, transfer and cleanup fences.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfileDiagnosis",
+        "arguments": {
+          "id": "$profileId",
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
+      },
+      "resumeCondition": "Current original owner readback confirms the named evidence or request repair and exact protected generation; all independent lease/process/control checks still apply. Uncertain original effects remain inspectable and fenced without automatic replay.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_lifecycle_reverse": {
+      "rationale": "Reversed transfer produced an owner state outside the supported Ready/Orphaned lifecycle projection.",
+      "requiredActor": "authenticated_original_profile_and_runtime_owner",
+      "evidenceRequirement": "Exact original profile/task, immutable owner generation, original operation/transfer receipt, actual current custody and authenticated existing authority. Missing or changed evidence does not prove no effect or grant replacement authority.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfileDiagnosis",
+        "arguments": {
+          "id": "$profileId",
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original profile diagnosis, transfer nonce/receipt and current protected owner state. Have the existing transfer/runtime owner reconcile that exact transfer through its supported handoff status/resume path. Preserve a pending or ambiguous transfer and all generations; do not repeat reverse, force Ready, or adopt the browser based on this projection.",
+          "precondition": "The original IDs and acting owner come from authenticated retained readback, not guesses; reconcile pending original effects and preserve existing lease, transfer and cleanup fences.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfileDiagnosis",
+        "arguments": {
+          "id": "$profileId",
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
+      },
+      "resumeCondition": "Current original owner readback confirms the named evidence or request repair and exact protected generation; all independent lease/process/control checks still apply. Uncertain original effects remain inspectable and fenced without automatic replay.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_lifecycle_terminal": {
+      "rationale": "The lifecycle terminal transition lacks nonempty actual cleanup evidence.",
+      "requiredActor": "authenticated_original_profile_and_runtime_owner",
+      "evidenceRequirement": "Exact original profile/task, immutable owner generation, original operation/transfer receipt, actual current custody and authenticated existing authority. Missing or changed evidence does not prove no effect or grant replacement authority.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfileDiagnosis",
+        "arguments": {
+          "id": "$profileId",
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect original process/cleanup custody and the exact retirement/close receipt. Have the current lifecycle owner obtain actual recorded exit, profile-lock and cleanup evidence through its existing owner-managed lifecycle path before terminal publication. Never fabricate evidence strings, mark an unknown process absent, release a lease or replay shutdown from missing evidence.",
+          "precondition": "The original IDs and acting owner come from authenticated retained readback, not guesses; reconcile pending original effects and preserve existing lease, transfer and cleanup fences.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfileDiagnosis",
+        "arguments": {
+          "id": "$profileId",
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
+      },
+      "resumeCondition": "Current original owner readback confirms the named evidence or request repair and exact protected generation; all independent lease/process/control checks still apply. Uncertain original effects remain inspectable and fenced without automatic replay.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_host_binding_request": {
+      "rationale": "App context uses an unsupported binding version or invalid opaque host/participant/session identifiers.",
+      "requiredActor": "original_application_and_task_owner",
+      "evidenceRequirement": "Exact original profile/task, immutable owner generation, original operation/transfer receipt, actual current custody and authenticated existing authority. Missing or changed evidence does not prove no effect or grant replacement authority.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original caller app context. Correct the existing browser_open host binding to supported version1 and nonempty opaque hostId, participantId and sessionId of at most512characters without control characters. Preserve the original configured host and exact intended recipient; binding shape does not grant desktop or profile authority.",
+          "precondition": "The original IDs and acting owner come from authenticated retained readback, not guesses; reconcile pending original effects and preserve existing lease, transfer and cleanup fences.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "Current original owner readback confirms the named evidence or request repair and exact protected generation; all independent lease/process/control checks still apply. Uncertain original effects remain inspectable and fenced without automatic replay.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_lost_retirement_binding": {
+      "rationale": "Owner-derived lost-task retirement binding changed between inspection and transition.",
+      "requiredActor": "original_application_and_task_owner",
+      "evidenceRequirement": "Exact original profile/task, immutable owner generation, original operation/transfer receipt, actual current custody and authenticated existing authority. Missing or changed evidence does not prove no effect or grant replacement authority.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_retirement",
+          "params": {
+            "choice": "inspect"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Read the exact original retirement status/receipt before a new attempt, then obtain a fresh owner inspection of the SAME task using task_retirement choice inspect. The owning service must prove cross-boot original PID absence, unoccupied profile and current control epoch again. Use only its newly observed expectedBindingRef for a separately chosen explicit retirement intent; never reuse stale proof, signal a process or replay an uncertain original.",
+          "precondition": "The original IDs and acting owner come from authenticated retained readback, not guesses; reconcile pending original effects and preserve existing lease, transfer and cleanup fences.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_retirement",
+          "params": {
+            "choice": "inspect"
+          }
+        }
+      },
+      "resumeCondition": "Current original owner readback confirms the named evidence or request repair and exact protected generation; all independent lease/process/control checks still apply. Uncertain original effects remain inspectable and fenced without automatic replay.",
       "maximumAutomaticAttempts": 1
     }
   },
@@ -1560,6 +1751,175 @@
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_owner_missing": {
+      "recipe": "model_effects_lifecycle_missing",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-lease-authority/src/runtime_owner.rs",
+          "line": 805,
+          "sourceEvidence": "                    .owners\n                    .get_mut(&claim.profile_identity_digest)\n                    .ok_or_else(|| \"runtime_lifecycle_owner_missing\".to_string())?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lifecycle_package_launch_identity_invalid": {
+      "recipe": "model_effects_lifecycle_launch_identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-lease-authority/src/runtime_owner.rs",
+          "line": 591,
+          "sourceEvidence": "            } => {\n                if !is_digest(&package_launch_identity_digest) {\n                    return Err(\"runtime_lifecycle_package_launch_identity_invalid\".to_string());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_lifecycle_profile_migration_record_missing": {
+      "recipe": "model_effects_lifecycle_missing",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-lease-authority/src/runtime_owner.rs",
+          "line": 688,
+          "sourceEvidence": "                    .cloned()\n                    .ok_or_else(|| {\n                        \"runtime_lifecycle_profile_migration_record_missing\".to_string()"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lifecycle_record_invalid": {
+      "recipe": "model_effects_lifecycle_missing",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-lease-authority/src/runtime_owner.rs",
+          "line": 1865,
+          "sourceEvidence": "        || lifecycle.owner_generation == 0\n    {\n        return Err(\"runtime_lifecycle_record_invalid\".to_string());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_lifecycle_recovery_owner_missing": {
+      "recipe": "model_effects_lifecycle_missing",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-lease-authority/src/runtime_owner.rs",
+          "line": 924,
+          "sourceEvidence": "                    .owner(&claim.profile_identity_digest)\n                    .cloned()\n                    .ok_or_else(|| \"runtime_lifecycle_recovery_owner_missing\".to_string())?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lifecycle_recovery_record_missing": {
+      "recipe": "model_effects_lifecycle_missing",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-lease-authority/src/runtime_owner.rs",
+          "line": 933,
+          "sourceEvidence": "                    .lifecycle_records\n                    .get_mut(&claim.logical_browser_id)\n                    .ok_or_else(|| \"runtime_lifecycle_recovery_record_missing\".to_string())?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lifecycle_replacement_owner_missing": {
+      "recipe": "model_effects_lifecycle_missing",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-lease-authority/src/runtime_owner.rs",
+          "line": 619,
+          "sourceEvidence": "                    .owner(&owner.profile_identity_digest)\n                    .cloned()\n                    .ok_or_else(|| \"runtime_lifecycle_replacement_owner_missing\".to_string())?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lifecycle_replacement_record_missing": {
+      "recipe": "model_effects_lifecycle_missing",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-lease-authority/src/runtime_owner.rs",
+          "line": 624,
+          "sourceEvidence": "                    .get(&current.browser_id)\n                    .cloned()\n                    .ok_or_else(|| \"runtime_lifecycle_replacement_record_missing\".to_string())?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lifecycle_reverse_owner_state_invalid": {
+      "recipe": "model_effects_lifecycle_reverse",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-lease-authority/src/runtime_owner.rs",
+          "line": 885,
+          "sourceEvidence": "                    ProfileOwnerState::Ready => RuntimeLaneLifecycleState::Ready,\n                    ProfileOwnerState::Orphaned => RuntimeLaneLifecycleState::Retained,\n                    _ => return Err(\"runtime_lifecycle_reverse_owner_state_invalid\".to_string()),"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_lifecycle_terminal_evidence_missing": {
+      "recipe": "model_effects_lifecycle_terminal",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-lease-authority/src/runtime_owner.rs",
+          "line": 963,
+          "sourceEvidence": "                        .any(|evidence| evidence.trim().is_empty())\n                {\n                    return Err(\"runtime_lifecycle_terminal_evidence_missing\".to_string());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_host_binding_identity_invalid": {
+      "recipe": "model_effects_host_binding_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_host_binding.rs",
+          "line": 26,
+          "sourceEvidence": "        for value in [&self.host_id, &self.participant_id, &self.session_id] {\n            if value.is_empty() || value.len() > 512 || value.chars().any(char::is_control) {\n                return Err(\"browser_host_binding_identity_invalid\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_host_binding_version_unsupported": {
+      "recipe": "model_effects_host_binding_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_host_binding.rs",
+          "line": 22,
+          "sourceEvidence": "    pub fn validate(&self) -> Result<(), String> {\n        if self.version != 1 {\n            return Err(\"browser_host_binding_version_unsupported\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_task_retirement_binding_changed": {
+      "recipe": "model_effects_lost_retirement_binding",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/lost_task_retirement.rs",
+          "line": 157,
+          "sourceEvidence": "    )? != request.expected_binding_ref\n    {\n        return Err(\"browser_task_retirement_binding_changed\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
     }
   },
   "exclusions": [
@@ -1568,6 +1928,12 @@
       "source": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
       "sourceEvidence": "BrowserActivityAdmissionConflict::BrowserRetired => \"browser_retired\",",
       "reason": "Nested BrowserActivityAdmissionConflict cause token only; the actual public wrapper is browser_session_activity_admission_conflict and retains original uncertain effects."
+    },
+    {
+      "code": "browser_record_changed",
+      "source": "crates/agent-browser-service-model/src/abandoned_browser_retirement.rs",
+      "sourceEvidence": "            (\n                RetirementRecourse::BrowserRecordChanged,\n                \"browser_record_changed\",",
+      "reason": "Frozen serde tagged-enum detail in the existing wire roundtrip test, not a standalone public error token. RetirementRecourse::Display emits abandoned_browser_retirement:{self:?}; its actual owning service wrapper is separately qualified. This exclusion does not mark the enum outcome successful or authorize retirement."
     }
   ],
   "enforcedProducerSourceFamilies": [
@@ -1589,6 +1955,21 @@
     {
       "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
       "codePattern": "(?:browser_|remote_view_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "crates/agent-browser-lease-authority/src/runtime_owner.rs",
+      "codePattern": "(?:runtime_lifecycle_owner_missing|runtime_lifecycle_package_launch_identity_invalid|runtime_lifecycle_profile_migration_record_missing|runtime_lifecycle_record_invalid|runtime_lifecycle_recovery_owner_missing|runtime_lifecycle_recovery_record_missing|runtime_lifecycle_replacement_owner_missing|runtime_lifecycle_replacement_record_missing|runtime_lifecycle_reverse_owner_state_invalid|runtime_lifecycle_terminal_evidence_missing)",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "crates/agent-browser-service-model/src/browser_host_binding.rs",
+      "codePattern": "(?:browser_host_binding_identity_invalid|browser_host_binding_version_unsupported)",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "crates/agent-browser-service-model/src/lost_task_retirement.rs",
+      "codePattern": "(?:browser_task_retirement_binding_changed)",
       "beforeNamedTestModule": true
     }
   ]
