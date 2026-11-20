@@ -274,13 +274,14 @@ impl BrowserSessionSqliteStore {
         let capacity = config.capacity(task, policy);
         let active = state.task_operations.get(task).map_or(0, BTreeMap::len);
         let archived = if has_archive(&transaction)? {
-            transaction
+            let count = transaction
                 .query_row(
                     "SELECT COUNT(*) FROM task_operation_archive WHERE task_id=?1",
                     [task],
-                    |r| r.get::<_, u64>(0),
+                    |r| r.get::<_, i64>(0),
                 )
-                .map_err(|_| "browser_task_operation_archive_read_failed")?
+                .map_err(|_| "browser_task_operation_archive_read_failed")?;
+            u64::try_from(count).map_err(|_| "browser_task_operation_archive_count_invalid")?
         } else {
             0
         };
