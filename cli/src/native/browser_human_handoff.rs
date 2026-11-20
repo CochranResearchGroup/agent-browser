@@ -164,6 +164,32 @@ pub(crate) fn activity_handoff(
     })
 }
 
+pub(crate) fn return_activity(
+    browser: &str,
+    id: &str,
+    digest: &str,
+    request: &str,
+) -> Result<(), String> {
+    transaction(&path(browser)?, |control| {
+        let (viewer, _) = viewer_request(request).ok_or("browser_activity_viewer_required")?;
+        let latest = control
+            .audit
+            .iter()
+            .rev()
+            .find(|event| event["humanViewerId"] == viewer)
+            .ok_or("browser_activity_claim_missing")?;
+        if latest["humanViewerReturnRequestId"] == request {
+            return Ok(());
+        }
+        if latest["humanViewerOperation"] != "activity"
+            || latest["humanHandoffClaimRequestId"] != request
+        {
+            return Err("browser_activity_claim_promoted_or_changed".into());
+        }
+        relinquish(control, id, digest, request)
+    })
+}
+
 pub(super) fn coordination_metadata(control: &Control) -> Value {
     let mut modes = BTreeMap::new();
     for event in &control.audit {
@@ -236,6 +262,33 @@ fn claim(
     }
     if intent(control, id, digest) != "interactive" {
         return Err("browser_handoff_target_changed".into());
+    }
+    // A newly admitted real activity sample supersedes only the earlier soft
+    // activity pause. Explicit independent viewer claims are never discarded.
+    if !explicit {
+        let current_viewer = viewer_request(request).map(|(viewer, _)| viewer);
+        let mut latest = BTreeMap::new();
+        for event in &control.audit {
+            if let (Some(viewer), Some(mode)) = (
+                event["humanViewerId"].as_str(),
+                event["humanViewerOperation"].as_str(),
+            ) {
+                latest.insert(viewer.to_owned(), mode.to_owned());
+            }
+        }
+        if current_viewer
+            .is_some_and(|viewer| latest.get(viewer).is_some_and(|mode| mode == "takeover"))
+        {
+            return Ok(());
+        }
+        for (viewer, mode) in latest {
+            if mode == "activity" && current_viewer != Some(viewer.as_str()) {
+                control
+                    .audit
+                    .push(json!({"operation":"human_activity_superseded",
+                    "humanViewerId":viewer,"humanViewerOperation":"return"}));
+            }
+        }
     }
     let mut handoff = invitation(control, id).ok_or("browser_handoff_target_changed")?;
     if control.human && viewer_claims(control).is_empty() {
