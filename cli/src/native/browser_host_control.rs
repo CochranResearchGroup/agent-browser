@@ -911,7 +911,13 @@ pub(crate) fn guarded(
         {
             admission.undispatched()?;
         } else {
-            admission.finish(result.as_ref().is_ok_and(|value| value["success"] != false))?;
+            let actual_observation = admission.observation_epoch.is_none()
+                || result.as_ref().is_ok_and(|value| {
+                    value["urlObserved"] != false && value["data"]["urlObserved"] != false
+                });
+            admission.finish(
+                actual_observation && result.as_ref().is_ok_and(|value| value["success"] != false),
+            )?;
         }
     }
     result
