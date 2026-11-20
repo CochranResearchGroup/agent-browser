@@ -106,10 +106,34 @@ fn project_job_readback(response: &mut Value, command: &Value) {
     }
 }
 
+fn project_capture_time_recourse(response: &mut Value, command: &Value) {
+    if command["action"] != "native_capture" || response["success"] != true {
+        return;
+    }
+    let Some(error) = response
+        .pointer("/data/timeQualificationFailure")
+        .and_then(Value::as_str)
+    else {
+        return;
+    };
+    let code = error.split(':').next().unwrap_or_default();
+    if !super::recovery_registry::contains(code) {
+        return;
+    }
+    // The read remains acknowledged. This refusal applies only to the requested
+    // freshness qualification; it never changes the original capture outcome.
+    let mut qualification = json!({"success":false,"error":error,"failure":{"code":code,
+        "scope":"native_observation_time_qualification","effectState":"no_effect",
+        "readCustody":"acknowledged","inputEligibility":"not_granted"}});
+    attach_public_failure(&mut qualification, command, "native_time_qualification");
+    response["data"]["timeQualificationRecourse"] = qualification["failure"].clone();
+}
+
 /// Preserve existing typed evidence, add executable exact-task inspection and
 /// publish sanitized refusal metadata. Request payloads never enter the journal.
 pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, source: &str) {
     project_job_readback(response, command);
+    project_capture_time_recourse(response, command);
     if response["success"] != false {
         // Successful transport does not establish a successful operation. Only
         // the action envelope is inspected, never arbitrary evaluate result data.

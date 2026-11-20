@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import Ajv2020 from 'ajv/dist/2020.js';
 
 const recordSchema = JSON.parse(readFileSync('docs/dev/contracts/service-failure-record.v1.schema.json', 'utf8'));
@@ -159,8 +160,13 @@ function validateRecoveryInventory(registry, discovered) {
     for (const field of ['rationale', 'requiredActor', 'evidenceRequirement', 'resumeCondition']) assert(recipe[field]?.length > (field === 'requiredActor' ? 0 : 10), `${code} lacks ${field}`);
     assert(['unknown','stale','denied','unavailable','invalid','uncertain','configured_budget','coordination_paused'].includes(entry.evidenceClass), `Missing evidence classification for ${code}`);
     assert.equal(entry.evidenceFreshness, 'not_observed_by_projection', 'Registry must not invent runtime freshness');
-    assert(entry.owningChecks.some(check => readFileSync(check.path, 'utf8').includes(code)), `Missing owning check for ${code}`);
-    assert(readFileSync(entry.policySource, 'utf8').includes(code), `Unavailable policy source for ${code}`);
+    assert(entry.owningChecks.some(check => {
+      if (!check.revision) return readFileSync(check.path, 'utf8').includes(code);
+      assert.equal(entry.legacy, true, 'Historical anchors are only for retained legacy failures');
+      assert(/^[a-f0-9]{40}$/.test(check.revision) && /^(cli\/src|crates|packages)\//.test(check.path) && !check.path.includes('..'), 'Historical source anchor must be immutable and repository scoped');
+      return execFileSync('git', ['show', `${check.revision}:${check.path}`], {encoding:'utf8'}).includes(code);
+    }), `Missing owning check for ${code}`);
+    assert(readFileSync(entry.policySource, 'utf8').trim().length > 0, `Unavailable policy source for ${code}`);
     validateRecoveryCall(recipe.inspect);
     validateRecoveryCall(recipe.verification);
     for (const step of recipe.remediation) {

@@ -1137,6 +1137,53 @@
       },
       "resumeCondition": "The exact original inspect result establishes the relevant prerequisite/terminal phase and unchanged source/destination identity. Continue only the supported same-operation phase it reports; no unknown effect is replayed.",
       "maximumAutomaticAttempts": 1
+    },
+    "native_time": {
+      "rationale": "Only freshness-dependent registered Native input requires qualified StableTime observation bounds; a partial successful capture or guest-clock reading is not input authority.",
+      "requiredActor": "caller_and_time_client_operator",
+      "evidenceRequirement": "Specific static time failure domain plus a new qualified serviceTime bound to the current Native observation, epoch and physical target.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Diagnose the reported cause before repair: stable_time_client_* denotes the configured supported client/helper; stable_time_service_unqualified denotes unqualified service observations and does not alone prove an outage. Check AGENT_BROWSER_STABLE_TIME_CLIENT (absolute config; default ~/.local/share/stable-time/client.json) and AGENT_BROWSER_STABLE_TIME_BINARY (default stable-time). Keep token/CA contents private and do not add a counter bridge or substitute guest time.",
+          "interface": "supported_stable_time_service",
+          "precondition": "Repair only the actual client/configuration or service qualification cause under existing authority; independent status, raw capture and ordinary CDP work remain available."
+        },
+        {
+          "instruction": "Inspect the exact original input before continuing. A failed response stored as uncertain must reach the supported owner-proof reconciliation outcome before any new input; fresh capture alone cannot clear that uncertainty.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "taskId": "$taskId",
+              "action": "task_operation",
+              "params": {
+                "requestId": "$requestId"
+              }
+            }
+          },
+          "precondition": "Retain the original task/request IDs and do not use a new request ID as an uncertainty bypass."
+        },
+        {
+          "instruction": "After the prerequisite and any original uncertainty are resolved, obtain a fresh native_capture with the declared classification/login purpose and its corresponding public parameters. Raw capture may remain successful while timeQualificationFailure reports missing input eligibility.",
+          "interface": "original_public_request",
+          "precondition": "Use the current same task, physical target and purpose; a fresh read is not permission to replay input."
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "mode"
+        }
+      },
+      "resumeCondition": "The original input outcome is safely reconciled, and a newly captured observation for the declared checkbox/image/login purpose has qualified current serviceTime in the same epoch. Complete all target/control/site checks; no unresolved input is replayed.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -1883,15 +1930,18 @@
       "evidenceClass": "configured_budget"
     },
     "browser_native_login_clock_unqualified": {
-      "recipe": "clock",
+      "recipe": "native_time",
       "owningChecks": [
         {
-          "path": "cli/src/native/browser_task_operations.rs"
+          "path": "cli/src/native/browser_task_operations.rs",
+          "revision": "bf181f4ca3b54d4e0e7117b931e7e67337b7807e"
         }
       ],
-      "policySource": "cli/src/native/browser_task_operations.rs",
+      "policySource": "AGENTS.md",
       "evidenceFreshness": "not_observed_by_projection",
-      "evidenceClass": "unavailable"
+      "evidenceClass": "unavailable",
+      "legacy": true,
+      "replacementCode": "browser_native_time_unavailable"
     },
     "browser_native_login_context_changed": {
       "recipe": "identity",
@@ -1915,6 +1965,72 @@
       "policySource": "cli/src/native/browser_task_operations.rs",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "uncertain"
+    },
+    "browser_native_observation_expired": {
+      "recipe": "native_time",
+      "owningChecks": [
+        {
+          "path": "cli/src/connection/stable_time.rs"
+        }
+      ],
+      "policySource": "AGENTS.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_time_continuity_changed": {
+      "recipe": "native_time",
+      "owningChecks": [
+        {
+          "path": "cli/src/connection/stable_time.rs"
+        }
+      ],
+      "policySource": "AGENTS.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_time_evidence_invalid": {
+      "recipe": "native_time",
+      "owningChecks": [
+        {
+          "path": "cli/src/connection/stable_time.rs"
+        }
+      ],
+      "policySource": "AGENTS.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_time_recapture_required": {
+      "recipe": "native_time",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/native_login_perception.rs"
+        }
+      ],
+      "policySource": "AGENTS.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_time_unavailable": {
+      "recipe": "native_time",
+      "owningChecks": [
+        {
+          "path": "cli/src/connection/stable_time.rs"
+        }
+      ],
+      "policySource": "AGENTS.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_time_uncertain": {
+      "recipe": "native_time",
+      "owningChecks": [
+        {
+          "path": "cli/src/connection/stable_time.rs"
+        }
+      ],
+      "policySource": "AGENTS.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
     },
     "browser_policy_action_denied": {
       "recipe": "policy_denied",
@@ -5231,13 +5347,16 @@
     "cli_unknown_",
     "cli_missing_",
     "cli_invalid_",
-    "profile_duplicate_"
+    "profile_duplicate_",
+    "browser_native_time_",
+    "browser_native_observation_"
   ],
   "sourceBaseline": "bf181f4ca",
   "knownCoverageGaps": [
     "Public named producer errors outside the enforced task-operation family require source-bound review and explicit registration.",
     "Client helper errors and dashboard-only failures are inventoried boundary locators, not registered runtime contracts.",
-    "Dynamic untyped errors normalize to service_operation_failed and require a specific check contract before coverage is complete."
+    "Dynamic untyped errors normalize to service_operation_failed and require a specific check contract before coverage is complete.",
+    "Native pre-effect no_effect refusals whose original journal state remains uncertain require supported original owner-proof reconciliation before recapture can permit further input; #757 owns this continuation seam."
   ],
   "exclusions": [
     {
