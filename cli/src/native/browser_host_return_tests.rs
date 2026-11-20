@@ -424,7 +424,7 @@ fn human_handoff_standalone_dispatch_and_reconnect_share_durable_custody() {
 #[test]
 fn ordinary_return_preserves_each_native_viewer_claim_and_override_is_explicit() {
     fixture(|| {
-        use crate::native::browser_human_handoff as human;
+        use super::human_handoff as human;
         human::begin_handoff("browser", "same-link", "target").unwrap();
         human::take_handoff("browser", "same-link", "target", "viewer-a:take-a").unwrap();
         human::take_handoff("browser", "same-link", "target", "viewer-b:take-b").unwrap();
