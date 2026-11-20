@@ -7,6 +7,7 @@ struct LoginFixture {
     root: std::path::PathBuf,
     child: std::process::Child,
     _guard: crate::test_utils::EnvGuard<'static>,
+    _clock: crate::connection::stable_time::Fixture,
 }
 impl Drop for LoginFixture {
     fn drop(&mut self) {
@@ -51,14 +52,15 @@ fn fixture() -> LoginFixture {
         root,
         child,
         _guard: guard,
+        _clock: crate::connection::stable_time::Fixture::set(Ok(
+            crate::connection::stable_time::fixture_stamp(clock()),
+        )),
     }
 }
 fn clock() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u64
+    10_000_000
 }
+
 fn observed(kind: &str) -> Value {
     let reference = format!("login:{}", "a".repeat(64));
     let mut controls = vec![
@@ -68,7 +70,7 @@ fn observed(kind: &str) -> Value {
         controls.push(json!({"kind":"username","label":"Username","targetRef":format!("login:{}","c".repeat(64)),"bounds":{"x":100,"y":50,"width":300,"height":40},"configuredAccountMatch":true,"fieldValueState":"text_present"}));
         controls.push(json!({"kind":"password","label":"Password","targetRef":format!("login:{}","d".repeat(64)),"bounds":{"x":100,"y":100,"width":300,"height":40},"configuredAccountMatch":false,"fieldValueState":"masked"}));
     }
-    json!({"binding":{"desktopId":"desktop","generation":7,"windowId":11,"window":{"x":0,"y":0,"width":800,"height":600},"displayWidth":800,"displayHeight":600,"region":{"x":0,"y":0,"width":800,"height":600},"nativeControlEpoch":4,"observedAtMs":clock()},"controls":{"schemaVersion":"agent-browser.native-login-controls.v1","profile":"english-chrome-v1","status":"observed","controls":controls,"frameSha256":"b".repeat(64)}})
+    json!({"binding":{"desktopId":"desktop","generation":7,"windowId":11,"window":{"x":0,"y":0,"width":800,"height":600},"displayWidth":800,"displayHeight":600,"region":{"x":0,"y":0,"width":800,"height":600},"nativeControlEpoch":4,"observedAtMs":clock(),"serviceTime":crate::connection::stable_time::fixture_stamp(clock())},"controls":{"schemaVersion":"agent-browser.native-login-controls.v1","profile":"english-chrome-v1","status":"observed","controls":controls,"frameSha256":"b".repeat(64)}})
 }
 fn capture(id: &str, kind: &str) {
     let params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_capture","requestId":id,"params":{"loginControls":{"profile":"english-chrome-v1"}}}});
@@ -265,7 +267,7 @@ fn native_login_perception_public_journal_old_ack_prefix_uses_fresh_submit_witho
     );
 }
 #[test]
-fn native_login_perception_public_journal_old_ack_prefix_still_refuses_rollback_context_and_stale_frame(
+fn native_login_perception_public_journal_old_ack_prefix_ignores_guest_rollback_but_fences_context_and_stale_frame(
 ) {
     for scenario in ["rollback", "context", "stale"] {
         let _fixture = fixture();
@@ -304,18 +306,23 @@ fn native_login_perception_public_journal_old_ack_prefix_still_refuses_rollback_
                 .unwrap();
             let mut observation: Value =
                 serde_json::from_str(&row.evidence_references["nativeLoginObservation"]).unwrap();
-            observation["binding"]["observedAtMs"] = json!(clock() - 10_001);
+            observation["binding"]["serviceTime"] = json!(
+                crate::connection::stable_time::fixture_stamp(clock() - 10_001)
+            );
             row.evidence_references.insert(
                 "nativeLoginObservation".into(),
                 serde_json::to_string(&observation).unwrap(),
             );
             store.save_session_state(&state).unwrap();
         }
-        assert!(
-            input("input-2", "new-submit", "episode", false, &mut calls).is_err(),
-            "{scenario}"
-        );
-        assert_eq!(calls, 2);
+        let outcome = input("input-2", "new-submit", "episode", false, &mut calls);
+        if scenario == "rollback" {
+            outcome.expect("guest diagnostic timestamps cannot veto a fresh qualified step");
+            assert_eq!(calls, 3);
+        } else {
+            assert!(outcome.is_err(), "{scenario}");
+            assert_eq!(calls, 2);
+        }
     }
 }
 

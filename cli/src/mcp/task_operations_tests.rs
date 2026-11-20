@@ -480,12 +480,22 @@ fn native_image_public_completion_case(
             task_operations::lookup("task", "image-observation").unwrap()["operation"]["state"],
             "owner_acknowledged"
         );
-        let params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_input","requestId":"stale-image-input"}});
+        let stale_input = json!({"action":"native_input","imageAttempt":{"observationRequestId":"image-observation","selectedCandidateIds":[format!("tile:1:{}","a".repeat(16))]}});
+        let params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_input","requestId":"stale-image-input","params":stale_input}});
         task_operations::with_context(Some(&params), || {
-            let error = task_operations::transport(json!({"action":"native_input","imageAttempt":{"observationRequestId":"image-observation","selectedCandidateIds":[format!("tile:1:{}","a".repeat(16))]}}), |_| panic!("Unqualified age must never dispatch input")).err().expect("Input needs fresh reliable evidence");
-            assert!(error.contains("browser_native_time_") || error.contains("browser_native_observation_expired"), "{error}");
+            let error = task_operations::transport(stale_input.clone(), |_| {
+                panic!("Unqualified age must never dispatch input")
+            })
+            .err()
+            .expect("Input needs fresh reliable evidence");
+            assert!(
+                error.contains("browser_native_time_")
+                    || error.contains("browser_native_observation_expired"),
+                "{error}"
+            );
             Ok(Value::Null)
-        }).unwrap();
+        })
+        .unwrap();
         return;
     }
     task_operations::with_context(Some(&capture_params),||{
@@ -1261,6 +1271,36 @@ fn public_task_history_archives_and_originals_still_replay_after_restart() {
         .unwrap();
     }
     task_operations::call(&json!({"taskId":"task","params":{"operation":"capacity","policy":{"initialCapacity":2,"extensionIncrement":2,"maximumCapacity":4}}}), "unused").unwrap();
+    // A storage refusal must abort archival and admission together. Exercise
+    // the same public operation seam while the existing SQLite sink rejects it.
+    let archive_sink =
+        rusqlite::Connection::open(BrowserSessionSqliteStore::default_sqlite_path().unwrap())
+            .unwrap();
+    archive_sink.execute_batch("CREATE TRIGGER refuse_archive_fixture BEFORE INSERT ON task_operation_archive BEGIN SELECT RAISE(ABORT, 'synthetic storage refusal'); END;").unwrap();
+    let failed_archive = json!({"name":"browser_click","arguments":{"taskId":"task","requestId":"archive-refused","selector":"#next"}});
+    task_operations::with_context(Some(&failed_archive), || {
+        let failure =
+            task_operations::transport(json!({"action":"click","selector":"#next"}), |_| {
+                panic!("Failed archival must not dispatch an effect")
+            })
+            .err()
+            .unwrap();
+        assert!(
+            failure.contains("browser_task_operation_archive_write_failed"),
+            "{failure}"
+        );
+        Ok(Value::Null)
+    })
+    .unwrap();
+    assert_eq!(
+        task_operations::lookup("task", "step-259").unwrap()["operation"]["state"],
+        "owner_acknowledged"
+    );
+    assert!(task_operations::lookup("task", "archive-refused").is_err());
+    archive_sink
+        .execute_batch("DROP TRIGGER refuse_archive_fixture;")
+        .unwrap();
+    drop(archive_sink);
     for index in 0..4 {
         let params = json!({"name":"browser_click","arguments":{"taskId":"task","requestId":format!("unresolved-{index}"),"selector":"#next"}});
         task_operations::with_context(Some(&params), || {

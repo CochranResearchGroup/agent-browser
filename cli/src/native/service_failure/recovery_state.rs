@@ -335,9 +335,14 @@ mod tests {
     fn recovery_budget_extension_preserves_original_attempts_and_in_flight_fence() {
         let directory =
             std::env::temp_dir().join(format!("recovery-accounting-{}", uuid::Uuid::new_v4()));
-        let guard = crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_HOME"]);
+        let guard = crate::test_utils::EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+        ]);
         guard.set("HOME", directory.to_str().unwrap());
         guard.set("AGENT_BROWSER_HOME", directory.to_str().unwrap());
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
         let occurrence = uuid::Uuid::new_v4().to_string();
         let first = uuid::Uuid::new_v4().to_string();
         let second = uuid::Uuid::new_v4().to_string();

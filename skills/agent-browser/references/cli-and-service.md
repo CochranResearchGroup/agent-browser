@@ -38,6 +38,16 @@ run. Increasing a limit preserves append-only history, duplicate detection and
 provenance. Lowering future admission does not truncate historical lookup or
 change task permissions. No restart, deletion or new approval interface is needed.
 
+### Deferred legacy expiry
+
+Automatic task/tab expiry and disposable-profile deletion are deferred when their
+starting timestamps have only guest-clock evidence. A clock jump cannot authorize
+those destructive effects. `browser_session_reap` reports `maintenanceEvidence`
+with `unqualified_legacy_start`; this does not claim qualified automatic cleanup.
+Use retained task status/briefing for inspection and explicit scoped close under
+existing authority when work is finished. Browser work and explicit close remain
+independent of this maintenance timing qualification.
+
 ### Continue after a refusal
 
 Use the existing `browser_command` action `failure_recovery` with
