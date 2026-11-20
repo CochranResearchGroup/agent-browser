@@ -1473,19 +1473,18 @@ pub(super) fn save_document(
         } else {
             json
         };
-        if session {
-            let document: serde_json::Value = serde_json::from_str(&json)
-                .map_err(|error| format!("browser_runtime_document_serialize_failed:{error}"))?;
-            let has_retention_authority = document["remoteViewTabHandoffs"]
-                .as_object()
-                .is_some_and(|links| links.values().any(|link| !link["retentionTime"].is_null()));
-            if has_retention_authority {
-                let version: i64 = connection
-                    .query_row("PRAGMA user_version", [], |row| row.get(0))
-                    .map_err(|error| {
-                        format!("browser_runtime_database_schema_read_failed:{error}")
-                    })?;
-                if version < 8 {
+        // Most writes contain no retained origin, and an already guarded store
+        // needs no new document walk. Avoid a second whole-session Rust parse.
+        if session && json.contains("\"retentionTime\"") {
+            let version: i64 = connection
+                .query_row("PRAGMA user_version", [], |row| row.get(0))
+                .map_err(|error| format!("browser_runtime_database_schema_read_failed:{error}"))?;
+            if version < 8 {
+                let has_retention_authority: bool = connection.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM json_each(?1, '$.remoteViewTabHandoffs') AS link WHERE json_type(link.value, '$.retentionTime') = 'object')",
+                    params![json], |row| row.get(0),
+                ).map_err(|error| format!("browser_runtime_document_serialize_failed:{error}"))?;
+                if has_retention_authority {
                     connection
                         .pragma_update(None, "user_version", 8)
                         .map_err(|error| format!("browser_runtime_document_save_failed:{error}"))?;
