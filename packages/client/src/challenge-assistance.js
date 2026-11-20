@@ -1,3 +1,4 @@
+import { clientWaitBudget } from './client-wait-budget.js';
 import { clientArgumentError } from './client-argument-error.js';
 import { isResponseFailure, responseFailureError } from './response-failure.js';
 import {isDeepStrictEqual} from 'node:util';
@@ -6,8 +7,8 @@ import {isDeepStrictEqual} from 'node:util';
  * Optional automated input requires trusted receiving-app policy records and an
  * owner-minted registered observation. No viewer or credential authority is added.
  */
-export function createChallengeAssistanceClient({callTool,verifyClearance,verifyAccess,resolvePolicy,now=Date.now,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))}) {
-  if([callTool,verifyClearance,verifyAccess].some(port=>typeof port!=='function'))throw clientArgumentError('challenge_assistance_ports_required', "packages/client/src/challenge-assistance.js", "createChallengeAssistanceClient", ["callTool", "verifyClearance", "verifyAccess"]);
+export function createChallengeAssistanceClient({callTool,verifyClearance,verifyAccess,resolvePolicy,now=Date.now,timeoutMs=10000,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))}) {
+  if([callTool,verifyClearance,verifyAccess].some(port=>typeof port!=='function')||!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>2147483647)throw clientArgumentError('challenge_assistance_ports_required', "packages/client/src/challenge-assistance.js", "createChallengeAssistanceClient", ["callTool", "verifyClearance", "verifyAccess", "timeoutMs"]);
   const fields=['taskId','profileId','browserId','tabId','targetId'];
   const fail=code=>{throw new Error(code);};
   const identity=value=>Object.fromEntries(fields.map(key=>[key,value[key]]));
@@ -39,8 +40,7 @@ export function createChallengeAssistanceClient({callTool,verifyClearance,verify
       Array.isArray(frame.challenge.ruleIds)&&frame.challenge.ruleIds.length===1&&frame.challenge.ruleIds[0]==='registered_hcaptcha_joined_prompt_visual_v1';
     if(frame.source!=='remote_view_native'||!c||typeof c.desktopId!=='string'||!Number.isSafeInteger(c.generation)||
       !Number.isSafeInteger(c.windowId)||!c.processIdentity||!/^([a-f0-9]{64})$/.test(sha??'')||
-      frame.challenge?.frameSha256!==sha||frame.challenge?.corpusVersion!=='native-challenge-corpus.v1'&&!declaredVisual||
-      !Number.isFinite(frame.evidenceAgeMs)||frame.evidenceAgeMs<0||frame.evidenceAgeMs>10000)fail('challenge_native_evidence_unverified');
+      frame.challenge?.frameSha256!==sha||frame.challenge?.corpusVersion!=='native-challenge-corpus.v1'&&!declaredVisual)fail('challenge_native_evidence_unverified');
     return {binding:identity(after),physical:physical(frame),classification:frame.challenge,
       frameSha256:sha,observedAtMs:frame.observedAtMs??null,control:after.control,
       nativeControlEpoch:frame.nativeControlEpoch??frame.nativeObservation?.nativeControlEpoch,nativeObservation:frame.nativeObservation};
@@ -122,66 +122,65 @@ export function createChallengeAssistanceClient({callTool,verifyClearance,verify
      */
     async resolve({taskId,requestId}) {
       if(typeof requestId!=='string'||requestId.length>112||!/^[-A-Za-z0-9_.:]+$/.test(requestId))fail('challenge_stable_request_id_required');
+      const budget=clientWaitBudget(timeoutMs,'challenge_invocation_budget_exhausted');
       let retained=null;
       const assist=async reason=>{
-        try{return {...await api.prepare({taskId}),reason,originalOperation:retained,retryAllowed:false};}
+        try{return {...await budget.run(()=>api.prepare({taskId})),reason,originalOperation:retained,retryAllowed:false};}
         catch{return {taskId,status:'intervention',reason,originalOperation:retained,retryAllowed:false,nextAction:'existing_human_assistance'};}
       };
       try {
-        retained=await original(taskId,requestId);
-        if(retained)return assist('original_attempt_retained_do_not_retry');
-        let observation=await observe(taskId);
-        if(observation.control.owner!=='agent')return assist('challenge_control_not_agent');
+        retained=await budget.run(()=>original(taskId,requestId));
+        if(retained)return await assist('original_attempt_retained_do_not_retry');
+        let observation=await budget.run(()=>observe(taskId));
+        if(observation.control.owner!=='agent')return await assist('challenge_control_not_agent');
         if(observation.classification.kind==='passive_check') {
-          const admitted=await policy(observation,true),deadline=now()+10000,initial=observation;
-          for(let count=1;count<3&&observation.classification.kind==='passive_check'&&now()<deadline;count++) {
-            await wait(250);
-            observation=await observe(taskId,observation.binding);
+          const admitted=await budget.run(()=>policy(observation,true)),initial=observation;
+          for(let count=1;count<3&&observation.classification.kind==='passive_check';count++) {
+            await budget.run(()=>wait(250));
+            observation=await budget.run(()=>observe(taskId,observation.binding));
             if(!samePhysical(initial.physical,observation.physical)||initial.control.epoch!==observation.control.epoch||
-              initial.nativeControlEpoch!==observation.nativeControlEpoch)return assist('native_context_changed_during_passive_wait');
+              initial.nativeControlEpoch!==observation.nativeControlEpoch)return await assist('native_context_changed_during_passive_wait');
           }
-          if(observation.classification.kind==='passive_check'||now()>=deadline)return assist('passive_wait_budget_exhausted');
-          if(!isDeepStrictEqual(await policy(observation,true),admitted))return assist('challenge_policy_changed');
+          if(observation.classification.kind==='passive_check')return await assist('passive_wait_budget_exhausted');
+          if(!isDeepStrictEqual(await budget.run(()=>policy(observation,true)),admitted))return await assist('challenge_policy_changed');
           return {taskId,status:'verified_access_after_passive_wait',binding:observation.binding,
-            verification:await verifyCurrent(observation),taskCompleted:false,retryAllowed:false};
+            verification:await budget.run(()=>verifyCurrent(observation)),taskCompleted:false,retryAllowed:false};
         }
-        if(observation.classification.kind!=='checkbox')return assist('challenge_not_registered_checkbox');
-        const admitted=await policy(observation),initial=observation;
+        if(observation.classification.kind!=='checkbox')return await assist('challenge_not_registered_checkbox');
+        const admitted=await budget.run(()=>policy(observation)),initial=observation;
         const registeredActionId=observation.classification.registeredProfileId;
-        observation=await observe(taskId,initial.binding,{requestId:requestId+':observation',params:{registeredActionId}});
+        observation=await budget.run(()=>observe(taskId,initial.binding,{requestId:requestId+':observation',params:{registeredActionId}}));
         const evidence=observation.nativeObservation;
         if(!samePhysical(initial.physical,observation.physical)||initial.control.epoch!==observation.control.epoch||
           evidence?.registeredActionId!==registeredActionId||evidence.frameSha256!==observation.frameSha256||
           evidence.desktopId!==observation.physical.desktopId||evidence.generation!==observation.physical.generation||
-          evidence.windowId!==observation.physical.windowId||!Number.isSafeInteger(evidence.nativeControlEpoch)||
-          !Number.isSafeInteger(evidence.observedAtMs)||now()<evidence.observedAtMs||now()-evidence.observedAtMs>10000)return assist('registered_target_unqualified');
-        if(!isDeepStrictEqual(await policy(observation),admitted))return assist('challenge_policy_changed');
-        const latest=await briefing(taskId);
-        if(!same(latest,observation.binding)||latest.control?.owner!=='agent'||latest.control.epoch!==observation.control.epoch)return assist('challenge_control_changed');
+          evidence.windowId!==observation.physical.windowId||!Number.isSafeInteger(evidence.nativeControlEpoch))return await assist('registered_target_unqualified');
+        if(!isDeepStrictEqual(await budget.run(()=>policy(observation)),admitted))return await assist('challenge_policy_changed');
+        const latest=await budget.run(()=>briefing(taskId));
+        if(!same(latest,observation.binding)||latest.control?.owner!=='agent'||latest.control.epoch!==observation.control.epoch)return await assist('challenge_control_changed');
         let delivered;
-        try { delivered=await call('browser_command',{taskId,action:'native_input',requestId,
-          params:{nativeAttempt:{observationRequestId:requestId+':observation',registeredActionId}}}); }
-        catch(error) { retained=await original(taskId,requestId);return {...await assist('native_input_uncertain_or_refused'),...(error?.failure?{failure:error.failure,occurrenceId:error.occurrenceId}:{})}; }
+        try { delivered=await budget.run(()=>call('browser_command',{taskId,action:'native_input',requestId,
+          params:{nativeAttempt:{observationRequestId:requestId+':observation',registeredActionId}}})); }
+        catch(error) { retained=await budget.run(()=>original(taskId,requestId));return {...await assist('native_input_uncertain_or_refused'),...(error?.failure?{failure:error.failure,occurrenceId:error.occurrenceId}:{})}; }
         retained=delivered.taskOperation;
         if(retained?.requestId!==requestId||retained.taskId!==taskId||retained.action!=='native_input'||
-          retained.state!=='owner_acknowledged'||delivered.delivery!=='dispatched')return assist('native_input_not_acknowledged');
+          retained.state!=='owner_acknowledged'||delivered.delivery!=='dispatched')return await assist('native_input_not_acknowledged');
         let ownerPolicy;
-        try{const encoded=retained.evidenceReferences?.nativeSitePolicy;if(typeof encoded!=='string'||encoded.length>4096)throw Error();ownerPolicy=JSON.parse(encoded);}catch{return assist('native_owner_policy_unverified');}
+        try{const encoded=retained.evidenceReferences?.nativeSitePolicy;if(typeof encoded!=='string'||encoded.length>4096)throw Error();ownerPolicy=JSON.parse(encoded);}catch{return await assist('native_owner_policy_unverified');}
         if(ownerPolicy.providerId!==admitted.provider.id||ownerPolicy.sitePolicyId!==admitted.sitePolicy.id||
           ownerPolicy.registeredActionId!==registeredActionId||ownerPolicy.family!==observation.classification.family||
-          !/^[a-f0-9]{64}$/.test(ownerPolicy.digest??''))return assist('native_owner_policy_changed');
+          !/^[a-f0-9]{64}$/.test(ownerPolicy.digest??''))return await assist('native_owner_policy_changed');
         let current;
-        const verificationDeadline=now()+10000;
         for(let count=0;count<3;count++) {
-          current=await observe(taskId,observation.binding);
+          current=await budget.run(()=>observe(taskId,observation.binding));
           if(!samePhysical(current.physical,observation.physical)||current.control.epoch!==observation.control.epoch||
-            current.nativeControlEpoch!==observation.nativeObservation.nativeControlEpoch)return assist('native_context_changed_after_dispatch');
-          if(!['checkbox','passive_check','loading'].includes(current.classification.kind)||now()>=verificationDeadline)break;
-          if(count<2)await wait(250);
+            current.nativeControlEpoch!==observation.nativeObservation.nativeControlEpoch)return await assist('native_context_changed_after_dispatch');
+          if(!['checkbox','passive_check','loading'].includes(current.classification.kind))break;
+          if(count<2)await budget.run(()=>wait(250));
         }
         return {taskId,status:'verified_access_after_native',binding:current.binding,originalOperation:retained,
-          verification:await verifyCurrent(current),taskCompleted:false,retryAllowed:false};
-      } catch(error) { return {...await assist(error?.message??'challenge_intervention_required'),...(error?.failure?{failure:error.failure,occurrenceId:error.occurrenceId}:{})}; }
+          verification:await budget.run(()=>verifyCurrent(current)),taskCompleted:false,retryAllowed:false};
+      } catch(error) { return {...await assist(error?.message??'challenge_intervention_required'),...(error?.failure?{failure:error.failure,occurrenceId:error.occurrenceId}:{}),recovery:{inspect:{interface:'@agent-browser/client/task-briefing#getTaskOperation',arguments:{taskId,requestId}},resumeCondition:'Inspect the exact original operation before resuming. Caller wait expiry is not owner evidence expiry; unknown input never replays.'}}; }finally{budget.close()}
     },
     /** A ready link is preparation, never human use or successful assistance. */
     async prepare({taskId}) {

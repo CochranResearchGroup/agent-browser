@@ -37,6 +37,7 @@ async function scenario(condition,family=families[1]) {
       return payload(frame);
     }
     if(name==='browser_command'&&args.action==='native_input') {
+      if(condition==='stale')return {isError:true,content:[{type:'text',text:JSON.stringify({success:false,failure:{code:'browser_native_time_recapture_required',occurrenceId:'checkbox-time-owner',effectState:'not_dispatched'}})}]};
       inputs++;assert.equal(inputs,1,'No blind retry');
       assert.equal(args.params.actions,undefined,'Caller supplies no guessed point');
       assert.equal(args.params.nativeAttempt.registeredActionId,family);
@@ -66,6 +67,7 @@ async function scenario(condition,family=families[1]) {
     assert.equal(result.retryAllowed,false);
     assert.equal(inputs,['access_denied','clearance_denied','uncertain'].includes(condition)?1:0);
   }
+  if(condition==='stale')assert.equal(result.failure.occurrenceId,'checkbox-time-owner');
   if(condition==='uncertain') {
     const repeated=await client.resolve({taskId:'task',requestId:'original-attempt'});
     assert.equal(inputs,1);assert.equal(repeated.retryAllowed,false);
@@ -90,3 +92,9 @@ await assert.rejects(refused.prepare({taskId:'task'}), error => {
 for(const family of families)receipts.push(await scenario('success',family));
 for(const condition of ['visual_v2','unknown_v2_rule','rpc_not_found','passive','image','manual','requires_cdp_free','manual_mode','manual_login','profile_manual','provider_denied','provider_disabled','wrong_backend','missing_capability','policy_denied','policy_changed','stale','control_changed','access_denied','clearance_denied','uncertain'])receipts.push(await scenario(condition));
 console.log(JSON.stringify({passed:true,publicClient:true,receipts}));
+
+
+const budgeted760=createChallengeAssistanceClient({timeoutMs:20,callTool:async()=>new Promise(()=>{}),verifyClearance:async()=>({}),verifyAccess:async()=>({})});
+const budgetResult760=await budgeted760.resolve({taskId:'task',requestId:'original-wait'});
+assert.equal(budgetResult760.reason,'challenge_invocation_budget_exhausted');
+assert.equal(budgetResult760.recovery.inspect.arguments.requestId,'original-wait');

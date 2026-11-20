@@ -20,6 +20,7 @@ export interface NativeChallengePolicySource {
 }
 export interface BoundedNativeChallengeResult {
   failure?:Record<string,unknown>;occurrenceId?:string|null;
+  recovery?:{inspect:{interface:string;arguments:{taskId:string;requestId:string}};resumeCondition:string};
   taskId: string;
   status: 'awaiting_operator' | 'intervention' | 'verified_access_after_native' | 'verified_access_after_passive_wait';
   retryAllowed: false; taskCompleted?: false; reason?: string; binding?: ChallengeBinding;
@@ -38,8 +39,10 @@ export function createChallengeAssistanceClient(options: {
   verifyClearance: (context: ChallengeVerificationContext) => Promise<ChallengeVerification>;
   verifyAccess: (context: ChallengeVerificationContext) => Promise<ChallengeVerification>;
   resolvePolicy?: (context: ChallengeVerificationContext) => Promise<NativeChallengePolicySource>;
-  /** Clock/wait ports are backend boundaries for deterministic bounded-wait tests. */
+  /** Legacy diagnostic wall projection, never an observation freshness authority. */
   now?: () => number;
+  /** Ordinary per-invocation wait budget, default 10000 ms. */
+  timeoutMs?: number;
   wait?: (milliseconds: number) => Promise<void>;
 }): {
   observe(taskId: string): Promise<unknown>;

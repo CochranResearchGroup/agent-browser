@@ -1365,7 +1365,8 @@
       "checkedFields": [
         "callTool",
         "verifyClearance",
-        "verifyAccess"
+        "verifyAccess",
+        "timeoutMs"
       ]
     },
     {
@@ -1437,7 +1438,8 @@
         "selectCandidates",
         "resolvePolicy",
         "verifyClearance",
-        "verifyAccess"
+        "verifyAccess",
+        "timeoutMs"
       ]
     },
     {

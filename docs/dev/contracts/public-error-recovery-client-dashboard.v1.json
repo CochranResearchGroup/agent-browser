@@ -65,6 +65,21 @@
       "source": "packages/client/src/service-observability.js",
       "export": "getServiceJob",
       "kind": "client_export"
+    },
+    "@agent-browser/client/native-saved-login#createNativeSavedLoginClient": {
+      "source": "packages/client/src/native-saved-login.js",
+      "export": "createNativeSavedLoginClient",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/native-image-challenge#createNativeImageChallengeClient": {
+      "source": "packages/client/src/native-image-challenge.js",
+      "export": "createNativeImageChallengeClient",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/challenge-assistance#createChallengeAssistanceClient": {
+      "source": "packages/client/src/challenge-assistance.js",
+      "export": "createChallengeAssistanceClient",
+      "kind": "client_export"
     }
   },
   "recipes": {
@@ -350,6 +365,96 @@
         "precondition": "Supply the exact original Service job ID and original authenticated endpoint. Do not fabricate a job/task identifier or repeat launch to obtain one."
       },
       "resumeCondition": "The exact original owner result supplies capability evidence and summarizeServiceCdpFreeLaunchAvailability succeeds; requested action remains supported in the original mode.",
+      "maximumAutomaticAttempts": 1
+    },
+    "savedLoginInvocationWait": {
+      "rationale": "An ordinary SDK invocation wait allowance ended. This says nothing about trusted observation expiry or the outcome of an attempted input.",
+      "requiredActor": "caller_with_original_task_scope",
+      "evidenceRequirement": "Original task and episode/request identities, retained input checkpoints and current owner readback.",
+      "inspect": {
+        "interface": "@agent-browser/client/task-briefing#getTaskBriefing",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "taskId": "$taskId"
+        },
+        "precondition": "Supply the existing authenticated endpoint and exact original task identity. Missing context is not guessed."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect every original attempted operation through getTaskOperation before resuming. If no unsettled input exists, follow the returned same-identity continuation or explicitly configure the caller timeoutMs allowance and re-enter the supported client workflow. Keep existing store, task/profile/permission context. Owner evidence freshness is independently enforced and this allowance does not extend it. If an original attempt exists, never replay its ID; use the original owner continuation or existing human assistance as permitted.",
+          "precondition": "Original outcomes are positively reconciled; unchanged IDs cannot represent a new input. Increasing a wait allowance grants no browser/provider permission.",
+          "interface": "@agent-browser/client/native-saved-login#createNativeSavedLoginClient"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/task-briefing#getTaskBriefing",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "taskId": "$taskId"
+        },
+        "precondition": "Verify the same retained task after the supported continuation; owner operation readback remains required for every attempted input."
+      },
+      "resumeCondition": "The current original task/context is verified, any uncertain original input is resolved, and the actual owner permits the next explicit input. A local wait timeout is never rewritten as evidence expiry or no-effect proof.",
+      "maximumAutomaticAttempts": 1
+    },
+    "imageInvocationWait": {
+      "rationale": "An ordinary SDK invocation wait allowance ended. This says nothing about trusted observation expiry or the outcome of an attempted input.",
+      "requiredActor": "caller_with_original_task_scope",
+      "evidenceRequirement": "Original task and episode/request identities, retained input checkpoints and current owner readback.",
+      "inspect": {
+        "interface": "@agent-browser/client/task-briefing#getTaskBriefing",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "taskId": "$taskId"
+        },
+        "precondition": "Supply the existing authenticated endpoint and exact original task identity. Missing context is not guessed."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect every original attempted operation through getTaskOperation before resuming. If no unsettled input exists, follow the returned same-identity continuation or explicitly configure the caller timeoutMs allowance and re-enter the supported client workflow. Keep existing store, task/profile/permission context. Owner evidence freshness is independently enforced and this allowance does not extend it. If an original attempt exists, never replay its ID; use the original owner continuation or existing human assistance as permitted.",
+          "precondition": "Original outcomes are positively reconciled; unchanged IDs cannot represent a new input. Increasing a wait allowance grants no browser/provider permission.",
+          "interface": "@agent-browser/client/native-image-challenge#createNativeImageChallengeClient"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/task-briefing#getTaskBriefing",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "taskId": "$taskId"
+        },
+        "precondition": "Verify the same retained task after the supported continuation; owner operation readback remains required for every attempted input."
+      },
+      "resumeCondition": "The current original task/context is verified, any uncertain original input is resolved, and the actual owner permits the next explicit input. A local wait timeout is never rewritten as evidence expiry or no-effect proof.",
+      "maximumAutomaticAttempts": 1
+    },
+    "checkboxInvocationWait": {
+      "rationale": "An ordinary SDK invocation wait allowance ended. This says nothing about trusted observation expiry or the outcome of an attempted input.",
+      "requiredActor": "caller_with_original_task_scope",
+      "evidenceRequirement": "Original task and episode/request identities, retained input checkpoints and current owner readback.",
+      "inspect": {
+        "interface": "@agent-browser/client/task-briefing#getTaskBriefing",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "taskId": "$taskId"
+        },
+        "precondition": "Supply the existing authenticated endpoint and exact original task identity. Missing context is not guessed."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect every original attempted operation through getTaskOperation before resuming. If no unsettled input exists, follow the returned same-identity continuation or explicitly configure the caller timeoutMs allowance and re-enter the supported client workflow. Keep existing store, task/profile/permission context. Owner evidence freshness is independently enforced and this allowance does not extend it. If an original attempt exists, never replay its ID; use the original owner continuation or existing human assistance as permitted.",
+          "precondition": "Original outcomes are positively reconciled; unchanged IDs cannot represent a new input. Increasing a wait allowance grants no browser/provider permission.",
+          "interface": "@agent-browser/client/challenge-assistance#createChallengeAssistanceClient"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/task-briefing#getTaskBriefing",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "taskId": "$taskId"
+        },
+        "precondition": "Verify the same retained task after the supported continuation; owner operation readback remains required for every attempted input."
+      },
+      "resumeCondition": "The current original task/context is verified, any uncertain original input is resolved, and the actual owner permits the next explicit input. A local wait timeout is never rewritten as evidence expiry or no-effect proof.",
       "maximumAutomaticAttempts": 1
     }
   },
@@ -756,6 +861,45 @@
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "unknown"
+    },
+    "native_saved_login_invocation_budget_exhausted": {
+      "recipe": "savedLoginInvocationWait",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "configured_budget"
+    },
+    "native_image_invocation_budget_exhausted": {
+      "recipe": "imageInvocationWait",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js"
+        },
+        {
+          "path": "packages/client/src/client-wait-budget.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "configured_budget"
+    },
+    "challenge_invocation_budget_exhausted": {
+      "recipe": "checkboxInvocationWait",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js"
+        },
+        {
+          "path": "packages/client/src/client-wait-budget.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "configured_budget"
     }
   }
 }
