@@ -419,10 +419,11 @@ fn human_handoff_standalone_dispatch_and_reconnect_share_durable_custody() {
         assert_eq!(metadata("browser").unwrap()["owner"], "human");
         return_handoff("browser", "invitation", "exact-target", "viewer:return").unwrap();
         return_handoff("browser", "invitation", "exact-target", "viewer:return").unwrap();
-        assert_eq!(metadata("browser").unwrap()["owner"], "agent");
+        assert_eq!(metadata("browser").unwrap()["owner"], "awaiting_observation");
         let command = json!({"id":"after","action":"click","sessionId":"task"});
         assert!(admit_command(None, None, &command, false).is_err());
         observed("browser", read("browser").unwrap().epoch).unwrap();
+        assert_eq!(metadata("browser").unwrap()["owner"], "agent");
         admit_command(None, None, &command, false).unwrap().unwrap().finish(true).unwrap();
     });
 }
