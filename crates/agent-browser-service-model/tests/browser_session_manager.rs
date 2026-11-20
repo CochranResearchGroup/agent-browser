@@ -3572,7 +3572,31 @@ fn explicit_closed_handoff_keeps_link_valid_and_binds_reopen_to_one_request() {
         .unwrap();
     assert_eq!(
         remote_view_handoff_reopen_intent(&state, "same-link", 5001).unwrap_err(),
-        "remote_view_handoff_expired"
+        "remote_view_handoff_legacy_time_unqualified",
+        "A guest-minted lifetime cannot prove that the retained link expired"
+    );
+    let origin =
+        agent_browser_service_model::ServiceTimeOrigin::new("service-epoch".into(), 5000, 5000)
+            .unwrap();
+    state
+        .remote_view_tab_handoffs
+        .get_mut("same-link")
+        .unwrap()
+        .renew_link_lifetime(Some(origin), 1)
+        .unwrap();
+    let current =
+        agent_browser_service_model::ServiceTimeOrigin::new("service-epoch".into(), 5001, 5001)
+            .unwrap();
+    assert_eq!(
+        agent_browser_service_model::RemoteViewTabHandoff::qualified_resume_intent(
+            &state,
+            "same-link",
+            Some(&current),
+            true
+        )
+        .unwrap_err(),
+        "remote_view_handoff_expired",
+        "Qualified origin and current service bounds establish the actual expiry"
     );
     state.remote_view_tab_handoffs.remove("same-link");
     assert_eq!(
