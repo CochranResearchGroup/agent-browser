@@ -37,9 +37,79 @@ fn registered_producer_code(error: &str) -> Option<&str> {
     None
 }
 
+/// Job readback is not a new refusal. Enrich retained failure contracts without
+/// appending journal occurrences, changing outcomes, or guessing task identity
+/// from provenance.sessionId (legacy producers also stored a session name there).
+fn project_job_recovery(job: &mut Value) {
+    if job["state"] == "running" {
+        job["deadlineEvidence"] = json!({"state":"unqualified_legacy_start","automaticTerminalization":false,
+            "nextAction":{"interface":"cli","command":"agent-browser","arguments":["--json","service","jobs","--id",job["id"]]},
+            "resumeCondition":"Inspect current owner and original outcome; active-owner cancellation and positive process exit remain separate supported proofs"});
+    }
+    let mut command = json!({"action":job["action"],"jobId":job["id"]});
+    if let Some(request) = job
+        .pointer("/provenance/requestId")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty() && *value != "unknown")
+    {
+        command["requestId"] = json!(request);
+    }
+    if !job["failure"].is_object()
+        && matches!(
+            job["state"].as_str(),
+            Some("failed" | "cancelled" | "timed_out")
+        )
+    {
+        if let Some(error) = job["error"].as_str() {
+            let mut failure = serde_json::to_value(classify_service_failure(error))
+                .expect("failure recourse serializes");
+            if failure["code"] == "service_operation_failed" {
+                if let Some(code) = code_token(error.split(':').next().unwrap_or_default()) {
+                    failure["code"] = json!(code);
+                }
+            }
+            job["failure"] = failure;
+        }
+    }
+    for path in ["/failure", "/terminalOutcome/failure", "/result/failure"] {
+        if let Some(failure) = job.pointer_mut(path).filter(|value| value.is_object()) {
+            super::recovery_registry::enrich(failure, &command);
+            if failure["executableNextAction"].is_null() && command["jobId"].is_string() {
+                failure["executableNextAction"] = json!({"interface":"cli","command":"agent-browser",
+                    "arguments":["--json","service","jobs","--id",command["jobId"]],"executable":true,
+                    "purpose":"Inspect retained owner/original job; no task identity is inferred from a legacy session name"});
+            }
+        }
+    }
+}
+
+fn project_job_readback(response: &mut Value, command: &Value) {
+    if !matches!(
+        command["action"].as_str(),
+        Some("service_jobs" | "service_job_cancel" | "service_trace")
+    ) {
+        return;
+    }
+    if let Some(job) = response
+        .pointer_mut("/data/job")
+        .filter(|value| value.is_object())
+    {
+        project_job_recovery(job);
+    }
+    if let Some(jobs) = response
+        .pointer_mut("/data/jobs")
+        .and_then(Value::as_array_mut)
+    {
+        for job in jobs {
+            project_job_recovery(job);
+        }
+    }
+}
+
 /// Preserve existing typed evidence, add executable exact-task inspection and
 /// publish sanitized refusal metadata. Request payloads never enter the journal.
 pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, source: &str) {
+    project_job_readback(response, command);
     if response["success"] != false {
         // Successful transport does not establish a successful operation. Only
         // the action envelope is inspected, never arbitrary evaluate result data.
@@ -165,6 +235,43 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
 #[cfg(test)]
 mod registry_projection_tests {
     use super::*;
+    #[test]
+    fn running_job_exposes_unqualified_deadline_without_fabricating_failure() {
+        let mut job =
+            json!({"id":"retained-job","state":"running","startedAt":"2099-01-01T00:00:00Z"});
+        project_job_recovery(&mut job);
+        assert_eq!(job["state"], "running");
+        assert_eq!(job["deadlineEvidence"]["state"], "unqualified_legacy_start");
+        assert!(job.get("failure").is_none());
+        let mut completed = json!({"id":"complete","state":"succeeded"});
+        let original = completed.clone();
+        project_job_recovery(&mut completed);
+        assert_eq!(completed, original);
+    }
+
+    #[test]
+    fn successful_job_readback_preserves_outcome_without_guessing_task_or_logging() {
+        let mut response = json!({"success":true,"data":{"jobs":[{"id":"original-job","action":"native_input","state":"failed","provenance":{"requestId":"original-request","sessionId":"a-human-readable-lane"},"error":"browser_task_operation_capacity_reached","failure":{"code":"browser_task_operation_capacity_reached","effectState":"no_effect"}}]}});
+        project_job_readback(&mut response, &json!({"action":"service_jobs"}));
+        let job = &response["data"]["jobs"][0];
+        assert_eq!(response["success"], true);
+        assert_eq!(job["state"], "failed");
+        assert_eq!(job["failure"]["recoveryRegistry"]["coverage"], "registered");
+        assert_eq!(
+            job["failure"]["recoveryRegistry"]["inspect"]["executable"],
+            false
+        );
+        assert_eq!(
+            job["failure"]["executableNextAction"]["arguments"][4],
+            "original-job"
+        );
+        assert!(job["failure"].get("occurrenceId").is_none());
+        assert!(!job["failure"].to_string().contains("a-human-readable-lane"));
+        let before = response.clone();
+        project_job_readback(&mut response, &json!({"action":"evaluate"}));
+        assert_eq!(response, before);
+    }
+
     #[test]
     fn transparent_wrapper_retains_registered_capacity_cause_only() {
         assert_eq!(

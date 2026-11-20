@@ -76,6 +76,9 @@ pub struct ServiceFailureRecourse {
     pub holder_operation: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recovery_plan: Option<Value>,
+    /// Compiled exact-code classification complements authoritative owner recovery.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery_registry: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub job_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -944,6 +947,20 @@ mod tests {
     use super::*;
     use crate::{ProfileConnectionState, ProfileIdentityAssurance, ProfilePermission};
     use serde_json::json;
+
+    #[test]
+    fn registry_classification_survives_typed_job_failure_round_trip() {
+        let legacy = serde_json::to_value(classify_service_failure("fixture defect")).unwrap();
+        assert!(legacy.get("recoveryRegistry").is_none());
+        let mut source = legacy;
+        source["recoveryRegistry"] =
+            json!({"coverage":"registered","evidence":{"status":"not_observed_by_projection"}});
+        let typed: ServiceFailureRecourse = serde_json::from_value(source.clone()).unwrap();
+        assert_eq!(
+            serde_json::to_value(typed).unwrap()["recoveryRegistry"],
+            source["recoveryRegistry"]
+        );
+    }
 
     #[test]
     fn retired_upgrade_error_does_not_recreate_transaction_wait_recourse() {
