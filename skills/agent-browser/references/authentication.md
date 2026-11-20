@@ -474,3 +474,6 @@ The local pre-push gate uses the existing validation selector to run the public 
 
 
 For a Native control observation, pass the addressed browser task ID rather than the Auth caller ID: the progress summary returns a read-only `browser_command` / `task_briefing` action. Missing binding is explicit as `addressed_browser_task_required`. Continuation preserves sanitized incomplete verifier categories, evidence, qualification and supported next reads. Broad executable, dependency and selector changes select the workflow and gate checks as well; the gate is not duplicated inside the tooling aggregate.
+
+
+Approval transport failure (`auth_parent_unavailable`) is not an authorization denial. Inspect the original Auth request and its `approvalDelivery` cause through the existing authenticated helper. Repair its operator notification connection, then call `receive_credential_approval` with the same `requestId`. Auth retains idempotent notification delivery and the operator decision; valid current permission does not require reapproval because transport failed. Preserve pending and uncertain input without creating a replacement request.

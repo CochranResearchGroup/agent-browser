@@ -3947,3 +3947,13 @@ assert(frozenProjected instanceof TypeError);
 assert.equal(frozenProjected.message,'immutable original');
 assert.equal(frozenProjected.failure,actualOwnerFailure);
 assert.equal(frozenProjected.logging,actualOwnerLogging);
+
+// Auth446: transport failure retains the original request and actionable recourse.
+const parentUnavailable=withClientResultRecovery({status:'waiting',reasonCode:'auth_parent_unavailable',requestId:'original-auth-446'});
+assert.equal(parentUnavailable.reasonCode,'auth_parent_unavailable');
+assert.equal(parentUnavailable.clientRecovery.coverage,'registered');
+assert.equal(parentUnavailable.clientRecovery.evidenceClass,'unavailable');
+assert.deepEqual(parentUnavailable.clientRecovery.inspect.arguments,['inspect_credential_request',{requestId:'original-auth-446'}]);
+assert.deepEqual(parentUnavailable.clientRecovery.remediation[0].arguments,['receive_credential_approval',{requestId:'original-auth-446'}]);
+assert.equal(parentUnavailable.clientRecovery.automaticExecutionAllowed,false);
+assert.equal(clientRecoveryFor('auth_parent_unavailable').bindingState,'requires_caller_binding');

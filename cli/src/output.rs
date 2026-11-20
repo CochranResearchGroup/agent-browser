@@ -5339,6 +5339,8 @@ Standalone website login helpers consume the verified Auth Receipts client SDK.
 Bots is not required; private discovery stays inside Auth Receipts.
 SDK discoverLoginReadiness checks Auth recovery before manual unlock; permission visibility is not authority.
 Extension sign-in and private-source readiness remain distinct.
+auth_parent_unavailable is transport failure: inspect approvalDelivery, repair its notification connection,
+then receive_credential_approval for the same requestId; current permission needs no transport-driven reapproval.
 SDK verifyLoginAccess requires independent account and required organization proof.
 Auth completion bookkeeping is separate; source ticket closure never proves access.
 Local login workflow publication checks use the existing selector and worktree-local pre-push hook.
