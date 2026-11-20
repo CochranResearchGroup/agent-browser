@@ -20971,6 +20971,72 @@
       "policySource": "cli/src/runtime_host.rs",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "unavailable"
+    },
+    "native_capture_image_invalid": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "native_capture_image_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_selection_sequence_exhausted": {
+      "recipe": "desktop_input_contention",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-desktop-services/src/selection.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-desktop-services/src/selection.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_selection_wait_timeout": {
+      "recipe": "desktop_input_contention",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-desktop-services/src/selection.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-desktop-services/src/selection.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_prompt_operator_intervention_required": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-desktop-services/src/transaction.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-desktop-services/src/transaction.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "coordination_paused"
+    },
+    "service_request_failed": {
+      "recipe": "service_job_terminal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/control_plane.rs"
+        }
+      ],
+      "policySource": "cli/src/native/control_plane.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -21370,12 +21436,165 @@
       "source": "cli/src/native/service_monitors.rs",
       "sourceEvidence": "\"profile_readiness_missing\"",
       "reason": "Monitor result evidence verdict is nested in readiness, not independently raised as a public error. The reviewed preflight/profile owner contract consumes that verdict and retains its own failure scope."
+    },
+    {
+      "code": "auth_probe_cookie_missing",
+      "source": "cli/src/commands.rs",
+      "sourceEvidence": "\"auth_probe_cookie_missing\"",
+      "reason": "Parser/test supplied readiness evidence string is arbitrary caller evidence, not a stable owner-raised error. The actual seeding/readiness state and typed owner prerequisite remain independently qualified."
+    },
+    {
+      "code": "desktop_capture_ready_probe_unavailable",
+      "source": "cli/src/native/desktop_evidence.rs",
+      "sourceEvidence": "\"desktop_capture_ready_probe_unavailable\"",
+      "reason": "cfg(test) fake capture adapter injects this sentinel. Production configured providers emit their separately qualified actual capture/evidence errors."
+    },
+    {
+      "code": "desktop_input_failed",
+      "source": "cli/src/native/desktop_interaction.rs",
+      "sourceEvidence": "\"desktop_input_failed\"",
+      "reason": "cfg(test) synthetic input adapter injects this sentinel. Real input acknowledgements and the typed transaction outcomes have their own reviewed producer codes and retained effect uncertainty."
+    },
+    {
+      "code": "native_action_failed",
+      "source": "crates/agent-browser-authentication-control/src/lib.rs",
+      "sourceEvidence": "\"native_action_failed\"",
+      "reason": "Authentication transition history reason records failed external action custody; the public owner raises AuthenticationRunError::ActionFailed through the separately reviewed authentication owner classifier, not this history label."
+    },
+    {
+      "code": "challenge_action_failed",
+      "source": "crates/agent-browser-authentication-control/src/lib.rs",
+      "sourceEvidence": "\"challenge_action_failed\"",
+      "reason": "Authentication transition history reason records failed challenge action custody; the public owner raises its typed action failure with original scope rather than this history label."
+    },
+    {
+      "code": "challenge_waiting_for_human",
+      "source": "cli/src/native/service_access.rs",
+      "sourceEvidence": "\"challenge_waiting_for_human\"",
+      "reason": "Nested access-plan reason records requested human assistance. The public reviewed auth/access-plan contract preserves the current challenge and authorized human continuation; this reason is not an independent owner error."
+    },
+    {
+      "code": "service_operation_failed",
+      "source": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "sourceEvidence": "\"service_operation_failed\"",
+      "reason": "Unclassified runtime boundary fallback remains coverage=uncovered with sanitized escalation and original-outcome uncertainty. Known finite producer families are separately normalized and registered; this fallback never counts as their coverage."
+    },
+    {
+      "code": "browser_native_image_clock_unavailable",
+      "source": "cli/src/native/browser_native_image.rs",
+      "revision": "c606d3f2ca644490e09043ff900dc855cac558c3",
+      "retiredByRevision": "031e77200f7eee3ff55ad942893bd96a61182964",
+      "sourceEvidence": "\"browser_native_image_clock_unavailable",
+      "reason": "Historical literal candidate is retired by the pinned source change. Current production no longer emits this exact code; the replacement live capacity or supported owner-time/freshness contracts are separately qualified. It must be requalified if reintroduced."
+    },
+    {
+      "code": "browser_native_observation_clock_invalid",
+      "source": "cli/src/native/browser_native_control.rs",
+      "revision": "c606d3f2ca644490e09043ff900dc855cac558c3",
+      "retiredByRevision": "031e77200f7eee3ff55ad942893bd96a61182964",
+      "sourceEvidence": "\"browser_native_observation_clock_invalid",
+      "reason": "Historical literal candidate is retired by the pinned source change. Current production no longer emits this exact code; the replacement live capacity or supported owner-time/freshness contracts are separately qualified. It must be requalified if reintroduced."
+    },
+    {
+      "code": "browser_native_login_episode_changed",
+      "source": "cli/src/native/browser_task_operations.rs",
+      "revision": "6d5ab1afc90f166e64ce48f3d974df3d3fc876cb",
+      "retiredByRevision": "0809cdf279ae9b028c2e940418ef96ce62364eaf",
+      "sourceEvidence": "\"browser_native_login_episode_changed",
+      "reason": "Historical literal candidate is retired by the pinned source change. Current production no longer emits this exact code; the replacement live capacity or supported owner-time/freshness contracts are separately qualified. It must be requalified if reintroduced."
+    },
+    {
+      "code": "browser_policy_override_limit",
+      "source": "crates/agent-browser-service-model/src/browser_host_policy.rs",
+      "revision": "6d5ab1afc90f166e64ce48f3d974df3d3fc876cb",
+      "retiredByRevision": "0809cdf279ae9b028c2e940418ef96ce62364eaf",
+      "sourceEvidence": "\"browser_policy_override_limit",
+      "reason": "Historical literal candidate is retired by the pinned source change. Current production no longer emits this exact code; the replacement live capacity or supported owner-time/freshness contracts are separately qualified. It must be requalified if reintroduced."
+    },
+    {
+      "code": "browser_artifact_completed_reference_capacity_reached",
+      "source": "crates/agent-browser-service-model/src/browser_task_artifacts.rs",
+      "revision": "53e9fb67bac6313e87921704a07c9371bff5ad5d",
+      "retiredByRevision": "7cb17c56b085b9995f20a5e1a728e791f7babae5",
+      "sourceEvidence": "\"browser_artifact_completed_reference_capacity_reached",
+      "reason": "Historical literal candidate is retired by the pinned source change. Current production no longer emits this exact code; the replacement live capacity or supported owner-time/freshness contracts are separately qualified. It must be requalified if reintroduced."
+    },
+    {
+      "code": "native_saved_login_budget_exhausted",
+      "source": "packages/client/src/native-saved-login.js",
+      "revision": "5429855f1dd443420e548d590879904442973dd2",
+      "retiredByRevision": "58373633a3ffc0972ee4a13879dc78bc63ab7ea1",
+      "sourceEvidence": "'native_saved_login_budget_exhausted",
+      "reason": "Historical literal candidate is retired by the pinned source change. Current production no longer emits this exact code; the replacement live capacity or supported owner-time/freshness contracts are separately qualified. It must be requalified if reintroduced."
+    },
+    {
+      "code": "native_image_selection_expired",
+      "source": "packages/client/src/native-image-challenge.js",
+      "revision": "be5d23b751357f804e25ef7633b11347c68a14b2",
+      "retiredByRevision": "abdce0de6cb0cede4e9aae0423c561248d7b990c",
+      "sourceEvidence": "'native_image_selection_expired",
+      "reason": "Historical literal candidate is retired by the pinned source change. Current production no longer emits this exact code; the replacement live capacity or supported owner-time/freshness contracts are separately qualified. It must be requalified if reintroduced."
+    },
+    {
+      "code": "native_image_capture_region_invalid",
+      "source": "packages/client/src/native-image-challenge.js",
+      "sourceEvidence": "clientArgumentError('native_image_capture_region_invalid'",
+      "normalizesTo": "client_argument_invalid",
+      "reason": "Compatibility TypeError message is normalized by this exact reviewed caller-argument guard to public code client_argument_invalid with source/owningFunction/checkedFields. The 185-check argument normalization contract verifies its actual owner and caller correction; this old message token is not the emitted code."
+    },
+    {
+      "code": "native_image_ports_required",
+      "source": "packages/client/src/native-image-challenge.js",
+      "sourceEvidence": "clientArgumentError('native_image_ports_required'",
+      "normalizesTo": "client_argument_invalid",
+      "reason": "Compatibility TypeError message is normalized by this exact reviewed caller-argument guard to public code client_argument_invalid with source/owningFunction/checkedFields. The 185-check argument normalization contract verifies its actual owner and caller correction; this old message token is not the emitted code."
+    },
+    {
+      "code": "native_receiving_configuration_required",
+      "source": "packages/client/src/native-receiving-browser.js",
+      "sourceEvidence": "clientArgumentError('native_receiving_configuration_required'",
+      "normalizesTo": "client_argument_invalid",
+      "reason": "Compatibility TypeError message is normalized by this exact reviewed caller-argument guard to public code client_argument_invalid with source/owningFunction/checkedFields. The 185-check argument normalization contract verifies its actual owner and caller correction; this old message token is not the emitted code."
+    },
+    {
+      "code": "native_saved_login_configuration_required",
+      "source": "packages/client/src/native-saved-login.js",
+      "sourceEvidence": "clientArgumentError('native_saved_login_configuration_required'",
+      "normalizesTo": "client_argument_invalid",
+      "reason": "Compatibility TypeError message is normalized by this exact reviewed caller-argument guard to public code client_argument_invalid with source/owningFunction/checkedFields. The 185-check argument normalization contract verifies its actual owner and caller correction; this old message token is not the emitted code."
+    },
+    {
+      "code": "native_saved_login_stable_identity_required",
+      "source": "packages/client/src/native-saved-login.js",
+      "sourceEvidence": "clientArgumentError('native_saved_login_stable_identity_required'",
+      "normalizesTo": "client_argument_invalid",
+      "reason": "Compatibility TypeError message is normalized by this exact reviewed caller-argument guard to public code client_argument_invalid with source/owningFunction/checkedFields. The 185-check argument normalization contract verifies its actual owner and caller correction; this old message token is not the emitted code."
+    },
+    {
+      "code": "challenge_assistance_ports_required",
+      "source": "packages/client/src/challenge-assistance.js",
+      "sourceEvidence": "clientArgumentError('challenge_assistance_ports_required'",
+      "normalizesTo": "client_argument_invalid",
+      "reason": "Compatibility TypeError message is normalized by this exact reviewed caller-argument guard to public code client_argument_invalid with source/owningFunction/checkedFields. The 185-check argument normalization contract verifies its actual owner and caller correction; this old message token is not the emitted code."
+    },
+    {
+      "code": "auth_target_busy",
+      "source": "packages/client/src/owner-login-playbook.js",
+      "sourceEvidence": "['auth_capture_held','auth_target_busy','auth_not_authorized'].includes",
+      "reason": "This is a matcher preserving a returned external owner refusal and checkpoint uncertainty, not a local producer. The original owner code/recourse is preserved; unknown external codes receive sanitized escalation rather than a fabricated local owner contract."
+    },
+    {
+      "code": "browser_adoption_uncertain",
+      "source": "crates/agent-browser-lease-authority/src/authority/protocol/client.rs",
+      "sourceEvidence": "\"browser_adoption_uncertain\" => ProtectedBrowserAdoptionState::Uncertain",
+      "reason": "Protected lease-authority wire command/state encoding marks the original browser adoption uncertain. It is not an Agent Browser owner error code; protected original-adoption lookup and its typed owner failure remain distinct from this state label."
     }
   ],
   "fragments": [
     "docs/dev/contracts/public-error-recovery-client-dashboard.v1.json",
     "docs/dev/contracts/public-error-recovery-service.v1.json",
-    "docs/dev/contracts/public-error-recovery-legacy.v1.json"
+    "docs/dev/contracts/public-error-recovery-legacy.v1.json",
+    "docs/dev/contracts/public-error-recovery-model-effects.v1.json"
   ],
   "recipeBudgetScope": "single_recipe_cycle",
   "enforcedProducerSources": [
@@ -21738,5 +21957,11 @@
       "sourceEvidence": "AGENT_BROWSER_DAEMON",
       "reason": "Retired private per-session launch environment, not a public supported command. Existing message already names admitted runtime host recourse."
     }
-  ]
+  ],
+  "unknownRuntimePolicy": {
+    "coverage": "uncovered",
+    "automaticExecutionAllowed": false,
+    "publication": "Sanitized escalation packet plus original request/occurrence references when actually available; preserve original outcome uncertainty.",
+    "qualification": "Known finite human-readable and exact producer families must be registered separately. Runtime fallback is reserved for unreviewed future defects and never satisfies a known producer coverage gate."
+  }
 }

@@ -573,8 +573,19 @@ function validateComposedOwningCheck(code, check) {
 function validateRecoveryInventory(registry, discovered) {
   const excluded = new Map((registry.exclusions ?? []).map(entry => [entry.code, entry]));
   for (const exclusion of excluded.values()) {
-    const source = readFileSync(exclusion.source, 'utf8');
+    let source = readFileSync(exclusion.source, 'utf8');
+    if (exclusion.revision) {
+      assert(/^[0-9a-f]{40}$/.test(exclusion.revision) && /^[0-9a-f]{40}$/.test(exclusion.retiredByRevision),'Retired exclusion requires immutable source revisions');
+      assert(!source.includes(exclusion.code),`Retired producer reintroduced: ${exclusion.code}`);
+      source = execFileSync('git',['show',`${exclusion.revision}:${exclusion.source}`],{encoding:'utf8'});
+      const retired = execFileSync('git',['show',`${exclusion.retiredByRevision}:${exclusion.source}`],{encoding:'utf8'});
+      assert(!retired.includes(exclusion.code),'Pinned removal revision still emits retired code');
+    }
     assert(source.includes(exclusion.code) && source.includes(exclusion.sourceEvidence) && exclusion.reason.length > 20, `Unproven exclusion ${exclusion.code}`);
+    if(exclusion.normalizesTo) {
+      assert.equal(exclusion.normalizesTo,'client_argument_invalid');
+      assert(registry.codes[exclusion.normalizesTo] && exclusion.sourceEvidence.startsWith('clientArgumentError('),'Unproven caller-message normalization');
+    }
   }
   for (const code of discovered) assert(registry.codes[code] || excluded.has(code), `Uncovered public code ${code}`);
   for (const [code, entry] of Object.entries(registry.codes)) {
