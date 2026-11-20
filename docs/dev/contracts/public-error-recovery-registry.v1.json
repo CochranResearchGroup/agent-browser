@@ -9226,17 +9226,6 @@
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "uncertain"
     },
-    "browser_build_manifest_unavailable": {
-      "recipe": "runtime_custody",
-      "owningChecks": [
-        {
-          "path": "cli/src/native/browser_session_host.rs"
-        }
-      ],
-      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
-      "evidenceFreshness": "not_observed_by_projection",
-      "evidenceClass": "uncertain"
-    },
     "browser_build_process_identity_missing": {
       "recipe": "runtime_custody",
       "owningChecks": [
