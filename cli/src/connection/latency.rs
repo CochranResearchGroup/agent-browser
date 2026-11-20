@@ -319,6 +319,12 @@ impl PhaseCapture {
         capture
     }
 
+    pub(crate) fn append_response(data: &mut Option<Value>, samples: Vec<Value>) {
+        if !samples.is_empty() {
+            append(data.get_or_insert(Value::Null), samples);
+        }
+    }
+
     pub(crate) fn finish(self) -> Option<Value> {
         let result = if let Some(reason) = self.configuration_error {
             Err(reason)
@@ -341,8 +347,57 @@ impl PhaseCapture {
     }
 }
 
+/// Attach diagnostics only to the response envelope, never request identity.
+pub(crate) fn append(data: &mut Value, samples: impl IntoIterator<Item = Value>) {
+    let samples: Vec<_> = samples.into_iter().collect();
+    if samples.is_empty() {
+        return;
+    }
+    if data.is_null() {
+        *data = json!({});
+    }
+    if let Some(object) = data.as_object_mut() {
+        let phases = object.entry("latencyPhases").or_insert_with(|| json!([]));
+        if let Some(phases) = phases.as_array_mut() {
+            phases.extend(samples);
+        }
+    }
+}
+
+pub(crate) fn finish(capture: PhaseCapture, scope: &'static str, samples: &mut Vec<Value>) {
+    if let Some(mut sample) = capture.finish() {
+        sample["scope"] = json!(scope);
+        samples.push(sample);
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn empty_response_diagnostics_preserve_absence_and_selected_samples_are_response_only() {
+        let command = serde_json::json!({"id":"same-id","action":"evaluate","script":"1"});
+        let original = command.clone();
+        let mut data = None;
+        super::append_response(&mut data, Vec::new());
+        assert!(data.is_none());
+        super::append_response(
+            &mut data,
+            vec![serde_json::json!({"phase":"routing","measurement":1})],
+        );
+        super::append_response(
+            &mut data,
+            vec![serde_json::json!({"phase":"routing","measurement":2})],
+        );
+        assert_eq!(
+            data.as_ref().unwrap()["latencyPhases"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(command, original);
+    }
+
     use super::*;
 
     fn observation(counter: &str, utc: &str) -> Observation {

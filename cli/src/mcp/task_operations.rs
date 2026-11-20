@@ -281,41 +281,70 @@ fn bind_native_owner_allowance(command: &mut Value, admitted_at_ms: u64) {
 
 /// The marker is durable before this closure can ensure a transport or send.
 pub(super) fn transport(
-    mut command: Value,
+    command: Value,
     run: impl FnOnce(Value) -> Result<crate::connection::Response, String>,
 ) -> Result<crate::connection::Response, String> {
-    use crate::native::browser_task_operations::{self as operations, Admission};
-    let context = REQUEST_CONTEXT.with(|context| context.borrow().clone());
-    let Some(context) = context.filter(|_| {
-        operations::eligible_action(command["action"].as_str().unwrap_or_default())
-            || operations::eligible_native(command["action"].as_str().unwrap_or_default(), &command)
-    }) else {
-        if matches!(
-            command["action"].as_str(),
-            Some("native_input" | "native_capture")
-        ) && command.get("ownerTimeoutMs").is_some()
-        {
-            let admitted = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|_| "browser_native_owner_clock_invalid")?
-                .as_millis() as u64;
-            bind_native_owner_allowance(&mut command, admitted);
-        }
-        return run(command);
-    };
-    if let Some(request_id) = context.request_id {
-        command["id"] = json!(request_id);
+    let (mut result, samples) = transport_with_latency(command, run);
+    if let Ok(response) = &mut result {
+        crate::connection::latency::append_response(&mut response.data, samples);
     }
-    super::workflow::address_task_command(&mut command, &context.task_id)?;
-    let admitted =
-        if operations::eligible_native(command["action"].as_str().unwrap_or_default(), &command) {
+    result
+}
+
+pub(super) fn transport_with_latency(
+    mut command: Value,
+    run: impl FnOnce(Value) -> Result<crate::connection::Response, String>,
+) -> (Result<crate::connection::Response, String>, Vec<Value>) {
+    let mut samples = Vec::new();
+    let result = (|| {
+        use crate::native::browser_task_operations::{self as operations, Admission};
+        let context = REQUEST_CONTEXT.with(|context| context.borrow().clone());
+        let Some(context) = context.filter(|_| {
+            operations::eligible_action(command["action"].as_str().unwrap_or_default())
+                || operations::eligible_native(
+                    command["action"].as_str().unwrap_or_default(),
+                    &command,
+                )
+        }) else {
+            if matches!(
+                command["action"].as_str(),
+                Some("native_input" | "native_capture")
+            ) && command.get("ownerTimeoutMs").is_some()
+            {
+                let admitted = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_err(|_| "browser_native_owner_clock_invalid")?
+                    .as_millis() as u64;
+                bind_native_owner_allowance(&mut command, admitted);
+            }
+            return run(command);
+        };
+        if let Some(request_id) = context.request_id {
+            command["id"] = json!(request_id);
+        }
+        let routing = crate::connection::latency::PhaseCapture::start("routing");
+        let addressed = super::workflow::address_task_command_with_latency(
+            &mut command,
+            &context.task_id,
+            &mut samples,
+        );
+        crate::connection::latency::finish(
+            routing,
+            "task identity to transport lane join",
+            &mut samples,
+        );
+        addressed?;
+        let admitted = if operations::eligible_native(
+            command["action"].as_str().unwrap_or_default(),
+            &command,
+        ) {
             operations::begin_native(&context.task_id, &mut command)?
         } else {
             operations::begin(&context.task_id, &mut command)?
         };
-    match admitted {
-        Admission::Existing(original) => {
-            let mut response = crate::connection::Response {
+        match admitted {
+            Admission::Existing(original) => {
+                let mut response = crate::connection::Response {
                 success: original.state
                     == agent_browser_service_model::BrowserTaskOperationState::OwnerAcknowledged,
                 id: Some(original.request_id.clone()),
@@ -324,30 +353,40 @@ pub(super) fn transport(
                     .then(|| "browser_task_operation_uncertain: inspect original; no retry".into()),
                 ..Default::default()
             };
-            response_data(&mut response, &original, true);
-            Ok(response)
-        }
-        Admission::Dispatch(original) => {
-            bind_native_owner_allowance(&mut command, original.created_at_ms);
-            match run(command) {
-                Ok(mut response) => {
-                    let completed=operations::finish(&original,Some(&response)).map_err(|error| {
+                response_data(&mut response, &original, true);
+                Ok(response)
+            }
+            Admission::Dispatch(original) => {
+                bind_native_owner_allowance(&mut command, original.created_at_ms);
+                match run(command) {
+                    Ok(mut response) => {
+                        let persistence =
+                            crate::connection::latency::PhaseCapture::start("persistence");
+                        let completed = operations::finish(&original, Some(&response));
+                        crate::connection::latency::finish(
+                            persistence,
+                            "task operation completion store transaction",
+                            &mut samples,
+                        );
+                        let completed=completed.map_err(|error| {
                     let clock=completion_failure_clock(&error).map(|value|format!(";observationClock={value}")).unwrap_or_default();
                     format!("browser_task_operation_completion_unavailable:{}:inspect original; no retry;cause={}{}",original.request_id,completion_failure_cause(&error),clock)
                 })?;
-                    response_data(&mut response, &completed, false);
-                    Ok(response)
-                }
-                Err(_) => {
-                    let _ = operations::finish(&original, None);
-                    Err(format!(
-                        "browser_task_operation_uncertain:{}:inspect original; no retry",
-                        original.request_id
-                    ))
+                        response_data(&mut response, &completed, false);
+                        Ok(response)
+                    }
+                    Err(_) => {
+                        let _ = operations::finish(&original, None);
+                        Err(format!(
+                            "browser_task_operation_uncertain:{}:inspect original; no retry",
+                            original.request_id
+                        ))
+                    }
                 }
             }
         }
-    }
+    })();
+    (result, samples)
 }
 
 pub(super) fn send(mut command: Value, route: &str) -> Result<crate::connection::Response, String> {

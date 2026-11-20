@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use super::{optional_string_argument, required_string_argument, JsonRpcError};
-use crate::connection::{ensure_daemon, send_command, DaemonOptions};
+use crate::connection::{ensure_daemon_with_latency, send_command, DaemonOptions};
 use crate::native::browser_session_store::BrowserSessionSqliteStore;
 use crate::native::service_model::ServiceState;
 use crate::native::service_store::load_default_service_state_snapshot;
@@ -98,7 +98,7 @@ fn cli(args: &[&str]) -> Result<Value, JsonRpcError> {
     Ok(value)
 }
 
-fn ensure_transport(session: &str) -> Result<(), JsonRpcError> {
+fn ensure_transport(session: &str, samples: &mut Vec<Value>) -> Result<(), JsonRpcError> {
     let flags = crate::flags::parse_flags(&["--session".to_string(), session.to_string()]);
     let proxy = flags.proxy.as_deref().map(crate::parse_proxy);
     let keychain_password = std::env::var("AGENT_BROWSER_KEYCHAIN_PASSWORD").ok();
@@ -116,8 +116,9 @@ fn ensure_transport(session: &str) -> Result<(), JsonRpcError> {
         use_real_keychain,
         ..DaemonOptions::from_flags(&flags)
     };
-    ensure_daemon(session, &options)
-        .map_err(|error| issue(format!("workflow_transport_start_failed:{error}")))?;
+    let (result, readiness) = ensure_daemon_with_latency(session, &options);
+    samples.extend(readiness);
+    result.map_err(|error| issue(format!("workflow_transport_start_failed:{error}")))?;
     Ok(())
 }
 
@@ -129,11 +130,20 @@ pub(super) fn execute(command: Value, session: &str) -> Result<Value, JsonRpcErr
         .and_then(Value::as_str)
         .unwrap_or(session)
         .to_string();
-    let response = super::task_operations::transport(command, |command| {
-        ensure_transport(&session).map_err(|_| "workflow_transport_start_failed".to_string())?;
-        send_command(command, &session)
-    })
-    .map_err(|error| issue(format!("workflow_transport_failed:{error}")))?;
+    let mut readiness = Vec::new();
+    let (result, mut samples) =
+        super::task_operations::transport_with_latency(command, |command| {
+            ensure_transport(&session, &mut readiness)
+                .map_err(|_| "workflow_transport_start_failed".to_string())?;
+            send_command(command, &session)
+        });
+    samples.extend(readiness);
+    let mut response = result.map_err(|error| {
+        let mut error = issue(format!("workflow_transport_failed:{error}"));
+        crate::connection::latency::append_response(&mut error.data, samples.clone());
+        error
+    })?;
+    crate::connection::latency::append_response(&mut response.data, samples);
     if !response.success {
         return Err(super::JsonRpcError {
             code: -32603,
@@ -356,9 +366,37 @@ pub(super) fn procedure_metadata_session(task_id: &str) -> Result<String, JsonRp
 
 /// Join opaque task identity to its transport lane without name-based selection.
 pub(super) fn address_task_command(command: &mut Value, task_id: &str) -> Result<String, String> {
-    let path = BrowserSessionSqliteStore::default_sqlite_path()?;
-    let store = BrowserSessionSqliteStore::open_read_only(&path)?;
-    let state = store.load_session_state()?;
+    address_task_command_impl(command, task_id, None)
+}
+
+pub(super) fn address_task_command_with_latency(
+    command: &mut Value,
+    task_id: &str,
+    samples: &mut Vec<Value>,
+) -> Result<String, String> {
+    address_task_command_impl(command, task_id, Some(samples))
+}
+
+fn address_task_command_impl(
+    command: &mut Value,
+    task_id: &str,
+    samples: Option<&mut Vec<Value>>,
+) -> Result<String, String> {
+    let capture = samples
+        .as_ref()
+        .map(|_| crate::connection::latency::PhaseCapture::start("state_read"));
+    let state = (|| {
+        let path = BrowserSessionSqliteStore::default_sqlite_path()?;
+        BrowserSessionSqliteStore::open_read_only(&path)?.load_session_state()
+    })();
+    if let (Some(capture), Some(samples)) = (capture, samples) {
+        crate::connection::latency::finish(
+            capture,
+            "addressed task session snapshot read",
+            samples,
+        );
+    }
+    let state = state?;
     let task = state
         .sessions
         .get(task_id)

@@ -2910,7 +2910,9 @@ fn main() {
         ..DaemonOptions::from_flags(&flags)
     };
 
-    let daemon_result = match ensure_daemon(&flags.session, &daemon_opts) {
+    let (daemon_result, readiness_samples) =
+        connection::ensure_daemon_with_latency(&flags.session, &daemon_opts);
+    let daemon_result = match daemon_result {
         Ok(result) => result,
         Err(e) => {
             if flags.json {
@@ -3511,7 +3513,8 @@ fn main() {
     let output_opts = OutputOptions::from_flags(&flags);
 
     match send_command(cmd.clone(), &flags.session) {
-        Ok(resp) => {
+        Ok(mut resp) => {
+            connection::latency::append_response(&mut resp.data, readiness_samples);
             let success = resp.success;
             // Handle interactive confirmation
             if flags.confirm_interactive {

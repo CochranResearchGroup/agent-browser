@@ -611,17 +611,28 @@ pub(crate) mod action_commands {
         let started_at = OffsetDateTime::now_utc()
             .format(&Rfc3339)
             .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
+        let capture = crate::connection::latency::PhaseCapture::start("cdp");
         let evaluate_outcome = tokio::time::timeout(
             tokio::time::Duration::from_millis(timeout_ms),
             mgr.evaluate_with_timeout(script, timeout_ms),
         )
         .await;
+        let mut samples = Vec::new();
+        crate::connection::latency::finish(
+            capture,
+            "service-tab Runtime.evaluate await including timeout and result decoding",
+            &mut samples,
+        );
+        let decorate = |mut data: Value| {
+            crate::connection::latency::append(&mut data, samples.clone());
+            data
+        };
         let url = mgr.active_page_url().unwrap_or_default().to_string();
         let title = mgr.active_page_title().unwrap_or_default().to_string();
         let result = match evaluate_outcome {
             Ok(Ok(result)) => result,
             Ok(Err(error)) => {
-                return Ok(json!(
+                return Ok(decorate(json!(
                     { "ok" : false, "action" : "evaluate", "errorKind" : "exception",
                     "error" : error, "timeoutMs" : timeout_ms, "maxReturnBytes" :
                     max_return_bytes, "url" : url, "title" : title, "targetId" :
@@ -630,10 +641,10 @@ pub(crate) mod action_commands {
                     .cloned().unwrap_or(Value::Null), "serviceTabHandle" : cmd
                     .get("serviceTabHandle").cloned().unwrap_or(Value::Null),
                     "evaluatedAt" : started_at, }
-                ));
+                )));
             }
             Err(_) => {
-                return Ok(json!(
+                return Ok(decorate(json!(
                     { "ok" : false, "action" : "evaluate", "errorKind" : "timeout",
                     "error" : format!("evaluate timed out after {timeout_ms}ms"),
                     "timeoutMs" : timeout_ms, "maxReturnBytes" : max_return_bytes,
@@ -642,7 +653,7 @@ pub(crate) mod action_commands {
                     : handle.get("profileId").cloned().unwrap_or(Value::Null),
                     "serviceTabHandle" : cmd.get("serviceTabHandle").cloned()
                     .unwrap_or(Value::Null), "evaluatedAt" : started_at, }
-                ));
+                )));
             }
         };
         let serialized = serde_json::to_string(&result).unwrap_or_else(|_| "null".to_string());
@@ -653,7 +664,7 @@ pub(crate) mod action_commands {
         } else {
             result
         };
-        Ok(json!(
+        Ok(decorate(json!(
             { "ok" : true, "action" : "evaluate", "result" : returned,
             "resultTruncated" : truncated, "resultBytes" : serialized_len,
             "maxReturnBytes" : max_return_bytes, "timeoutMs" : timeout_ms,
@@ -662,7 +673,7 @@ pub(crate) mod action_commands {
             "profileId" : handle.get("profileId").cloned().unwrap_or(Value::Null),
             "serviceTabHandle" : cmd.get("serviceTabHandle").cloned()
             .unwrap_or(Value::Null), "evaluatedAt" : started_at, }
-        ))
+        )))
     }
 }
 pub(crate) use action_commands::*;

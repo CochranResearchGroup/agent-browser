@@ -1094,9 +1094,11 @@ pub(crate) fn ensure_daemon_with_latency(
     let readiness = latency::PhaseCapture::start("readiness");
     let mut samples = Vec::new();
     let result = ensure_daemon_inner(session, opts, &mut samples);
-    if let Some(sample) = readiness.finish() {
-        samples.push(sample);
-    }
+    latency::finish(
+        readiness,
+        "ensure runtime owner transport readiness including cold startup when required",
+        &mut samples,
+    );
     (result, samples)
 }
 
@@ -1114,9 +1116,7 @@ fn ensure_daemon_inner(
     // another caller may have published a compatible owner while we waited.
     let admission = latency::PhaseCapture::start("startup_lock");
     let lock = acquire_runtime_host_startup_lock(session);
-    if let Some(sample) = admission.finish() {
-        samples.push(sample);
-    }
+    latency::finish(admission, "runtime host startup lock acquisition", samples);
     let _startup_lock = lock?;
     if let Some(existing) = reuse_existing_daemon(session, opts)? {
         return Ok(existing);

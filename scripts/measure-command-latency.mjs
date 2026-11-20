@@ -111,6 +111,14 @@ try{
  const expected='synthetic latency sample';
  const evaluate=()=>({taskId:task.taskId,requestId:`latency-${randomUUID()}`,action:'evaluate',params:{script:expression,timeoutMs:25000}});
  const verify=value=>{assert.equal(value.result,expected);assert.deepEqual(browserIdentity(),originalIdentity);for(const sample of value.latencyPhases??[])if(sample.phase===receipt.selectedPhase)receipt.phaseMeasurements.push(sample);return value;};
+ // Diagnostics are response-only. A changed sample must not change request identity.
+ const replayRequest=evaluate();
+ const first=await call(workflow,'browser_command',replayRequest);
+ assert.equal(first.dispatchAttempted,true);
+ const replay=await call(workflow,'browser_command',replayRequest);
+ assert.equal(replay.replayed,true);
+ assert.equal(replay.dispatchAttempted,false);
+ receipt.sameRequestReplay={replayed:true,dispatchAttempted:false,selectedPhase:receipt.selectedPhase};
  const agent=async()=>verify(await call(workflow,'browser_command',evaluate()));
  const freshCli=async()=>{const client=createWorkflowClient();try{await initialize(client);return verify(await call(client,'browser_command',evaluate()));}finally{client.close();}};
  const cdp=async()=>{const value=await direct();assert(!value.exceptionDetails);assert.equal(value.result.value,expected);return value;};

@@ -119,6 +119,8 @@ pub struct ControlRequest {
     pub cancellation: RunningJobCancel,
     pub submitted_at_wall: String,
     pub submitted_at_mono: Instant,
+    latency_queue: Option<crate::connection::latency::PhaseCapture>,
+    latency_samples: Vec<Value>,
     pub profile_lease_wait_started_at: Option<Instant>,
     pub profile_lease_wait_profile_id: Option<String>,
     pub profile_lease_wait_conflict_session_ids: Vec<String>,
@@ -144,6 +146,8 @@ impl ControlRequest {
             cancellation: self.cancellation.clone(),
             submitted_at_wall: self.submitted_at_wall.clone(),
             submitted_at_mono: self.submitted_at_mono,
+            latency_queue: None,
+            latency_samples: self.latency_samples.clone(),
             profile_lease_wait_started_at: self.profile_lease_wait_started_at,
             profile_lease_wait_profile_id: self.profile_lease_wait_profile_id.clone(),
             profile_lease_wait_conflict_session_ids: self
@@ -487,7 +491,7 @@ impl ControlPlaneHandle {
             connection_instance_id,
             &self.runtime_lane_id,
         );
-        let request = ControlRequest {
+        let mut request = ControlRequest {
             id: id.clone(),
             job_id,
             action: action.clone(),
@@ -502,6 +506,8 @@ impl ControlPlaneHandle {
             cancellation: RunningJobCancel::new(),
             submitted_at_wall: current_timestamp(),
             submitted_at_mono: Instant::now(),
+            latency_queue: None,
+            latency_samples: Vec::new(),
             profile_lease_wait_started_at: None,
             profile_lease_wait_profile_id: None,
             profile_lease_wait_conflict_session_ids: Vec::new(),
@@ -512,6 +518,7 @@ impl ControlPlaneHandle {
 
         self.status.queue_depth.fetch_add(1, Ordering::Relaxed);
         persist_service_job_queued(&request);
+        request.latency_queue = Some(crate::connection::latency::PhaseCapture::start("queue"));
         match self.tx.try_send(WorkerMessage::Request(Box::new(request))) {
             Ok(()) => {}
             Err(mpsc::error::TrySendError::Full(WorkerMessage::Request(request))) => {
@@ -1263,6 +1270,9 @@ fn finalize_service_request(
     state: ServiceTerminalState,
     phase: ServiceTerminalPhase,
 ) -> Value {
+    if !request.latency_samples.is_empty() {
+        crate::connection::latency::append(&mut response["data"], request.latency_samples.clone());
+    }
     // Recipe execution can fail inside a successfully transported response.
     // Preserve its diagnostic payload while making job/event/trace outcomes
     // reflect the operation, rather than the outer transport envelope.
@@ -1532,6 +1542,8 @@ fn enqueue_due_monitor_run(
         cancellation: RunningJobCancel::new(),
         submitted_at_wall: current_timestamp(),
         submitted_at_mono: Instant::now(),
+        latency_queue: None,
+        latency_samples: Vec::new(),
         profile_lease_wait_started_at: None,
         profile_lease_wait_profile_id: None,
         profile_lease_wait_conflict_session_ids: Vec::new(),
@@ -1958,6 +1970,9 @@ async fn run_worker(
                 match message {
                     WorkerMessage::Request(request) => {
                         let mut request = *request;
+                        if let Some(capture) = request.latency_queue.take() {
+                            crate::connection::latency::finish(capture, "control queue enqueue attempt through first dequeue", &mut request.latency_samples);
+                        }
                         let queue_wait_ms = u64::try_from(
                             request.submitted_at_mono.elapsed().as_millis(),
                         )
@@ -3041,6 +3056,8 @@ mod tests {
             cancellation: RunningJobCancel::new(),
             submitted_at_wall: current_timestamp(),
             submitted_at_mono: Instant::now(),
+            latency_queue: None,
+            latency_samples: Vec::new(),
             profile_lease_wait_started_at: None,
             profile_lease_wait_profile_id: None,
             profile_lease_wait_conflict_session_ids: Vec::new(),

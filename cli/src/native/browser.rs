@@ -1398,9 +1398,30 @@ impl BrowserManager {
         script: &str,
         timeout_ms: u64,
     ) -> Result<Value, String> {
+        self.evaluate_impl(script, timeout_ms, None).await
+    }
+
+    /// Sample only the Runtime.evaluate transport round trip when selected.
+    pub(crate) async fn evaluate_with_latency(
+        &self,
+        script: &str,
+        timeout_ms: u64,
+        samples: &mut Vec<Value>,
+    ) -> Result<Value, String> {
+        self.evaluate_impl(script, timeout_ms, Some(samples)).await
+    }
+
+    async fn evaluate_impl(
+        &self,
+        script: &str,
+        timeout_ms: u64,
+        samples: Option<&mut Vec<Value>>,
+    ) -> Result<Value, String> {
         let session_id = self.active_session_id()?.to_string();
         let request = bounded_evaluation_request(script, timeout_ms);
-
+        let capture = samples
+            .as_ref()
+            .map(|_| crate::connection::latency::PhaseCapture::start("cdp"));
         let result = self
             .client
             .send_command_with_timeout(
@@ -1409,8 +1430,15 @@ impl BrowserManager {
                 Some(&session_id),
                 request.transport_timeout,
             )
-            .await
-            .map_err(|error| error.to_string())?;
+            .await;
+        if let (Some(capture), Some(samples)) = (capture, samples) {
+            crate::connection::latency::finish(
+                capture,
+                "Runtime.evaluate CDP command round trip",
+                samples,
+            );
+        }
+        let result = result.map_err(|error| error.to_string())?;
         let result: EvaluateResult = serde_json::from_value(result).map_err(|error| {
             format!("Failed to deserialize CDP response for Runtime.evaluate: {error}")
         })?;
