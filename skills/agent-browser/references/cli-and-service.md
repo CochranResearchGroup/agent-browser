@@ -37,6 +37,15 @@ Popup refresh admits a bounded batch and reports `deferredEligibleTargetCount`
 instead of refusing the original task. Raise its live policy and refresh the same
 task to admit remaining eligible targets; no input replay or permission change.
 
+Reconnect receipts use optional positive `maximumReconnectRequests` (default 128).
+Runtime lanes use `maximumRuntimeLanes` (default 64) from system defaults only;
+task overrides do not change host-wide capacity. Update these fields through the
+existing `task_operation` capacity interface. Readback reports
+`reconnectRequestLimit`, `runtimeLaneLimit` and `runtimeLanePolicySource`.
+Increasing a limit admits new work without removing original reconnect receipts
+or existing lanes. Lowering a limit never evicts an existing lane. The runtime
+manifest reports its startup snapshot, not current policy.
+
 ### Live teaching capacity
 
 Existing client teaching review, submission and workspace owners expose

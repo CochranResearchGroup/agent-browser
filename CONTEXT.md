@@ -10,6 +10,8 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 **Deferred legacy expiry**: Automatic maintenance cannot close tasks or delete disposable profiles using unqualified guest timestamps. Deferred maintenance evidence does not establish qualified lifetime or cleanup; explicit scoped close retains its existing authority.
 
+**Reconnect and runtime lane capacity**: Live reconnect admission preserves all original request receipts. Runtime lane admission uses system defaults before construction; task overrides never enlarge the host budget. Lowering policy does not evict retained lanes, discard constructed owners or rewrite a completed original. Manifest capacity is a startup snapshot.
+
 **Teaching capacity**: Live admission limits for append-only lineage revisions and retained working contexts/catalog entries. Existing owners inspect/update policy without truncating original history, duplicate detection or task permissions.
 
 **Recovery attempt**: One occurrence-bound inspection, supported remedy and verification cycle with a stable attempt ID. Live policy limits attempts and checks without progress; extension preserves originals. Interrupted attempts reconcile verification without remedy replay. A verified owner acknowledgement can support a caller-attributed resume report, separately from website success or task completion.

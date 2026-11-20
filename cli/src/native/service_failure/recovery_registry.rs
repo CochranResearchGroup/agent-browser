@@ -15,6 +15,7 @@ fn registry() -> &'static Value {
             ),
             include_str!("../../../../docs/dev/contracts/public-error-recovery-service.v1.json"),
             include_str!("../../../../docs/dev/contracts/public-error-recovery-legacy.v1.json"),
+            include_str!("../../../../docs/dev/contracts/public-error-recovery-model-effects.v1.json"),
         ] {
             let fragment: Value =
                 serde_json::from_str(source).expect("validated recovery fragment must parse");

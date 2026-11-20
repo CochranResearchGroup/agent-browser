@@ -217,7 +217,9 @@ fn operation_schema(category: &str, operation: &str) -> Result<Value, super::Jso
                         "maximumLoginSteps":{"type":"integer","minimum":1},
                         "maximumArtifactReferences":{"type":"integer","minimum":1},
                         "maximumRetentionClaims":{"type":"integer","minimum":1},
-                        "maximumPopupAdmissions":{"type":"integer","minimum":1}},
+                        "maximumPopupAdmissions":{"type":"integer","minimum":1},
+                        "maximumReconnectRequests":{"type":"integer","minimum":1},
+                        "maximumRuntimeLanes":{"type":"integer","minimum":1}},
                         "required":["initialCapacity","extensionIncrement","maximumCapacity"]}},
                 "anyOf":[{"required":["requestId"]},{"properties":{"operation":{"const":"capacity"}},"required":["operation"]}]})),
             "task_briefing" | "mode" | "back" | "forward" | "reload" | "service_resources" => {

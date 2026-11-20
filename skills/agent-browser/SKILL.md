@@ -6,7 +6,7 @@ allowed-tools: Bash(agent-browser:*)
 
 # Agent Browser
 
-Inspect or change operation and artifact budgets at runtime: [capacity guide](references/cli-and-service.md#task-operation-capacity).
+Change operation, artifact, reconnect and lane budgets live: [capacity guide](references/cli-and-service.md#task-operation-capacity).
 
 For recovery, capacity and owner continuation, see [continuation](references/cli-and-service.md#continue-after-a-refusal).
 
