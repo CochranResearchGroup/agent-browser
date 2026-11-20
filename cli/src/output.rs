@@ -7534,8 +7534,8 @@ Workflow tools (16):
   browser_continue      Observe task after human input
   browser_close         Close task; preserve peers/profile/borrowed process
   browser_control       Explicit takeover/return; view never pauses
-  browser_reconnect     Explicit continuity and opted-in loss recovery
-  browser_policy        App defaults, task replacement/clear and override
+  browser_reconnect     Exact-task status/reconnect; hosted explicit loss recovery
+  browser_policy        App/task rules; scoped override, override_capacity/lookup
   browser_artifact      Screenshot/download to local handle; no publication
   browser_command       Advanced task action with params
     task_retirement     Linux exact cross-boot inspect/retire/status; stable operationId; no input replay
@@ -8252,6 +8252,10 @@ Configuration:
   desktop_interaction_authority_required stops before input and reports profile_access, child_admission, and no_effect. Inspect the Service trace and compare the controller viewerId with the interaction agentName before any new attempt; never change identity labels to borrow controller authority.
   Retained-browser identity rejection (runtime_handoff_orphan_browser_hint_mismatch) fails resolution with no_effect and inspect_profile_recovery_plan recourse. Preserve the handoff identity; do not blindly retry or reopen a replacement. This does not establish permanent browser loss.
   Configure retained operation capacity with browser_command action task_operation, params.operation=capacity, scope=task|defaults, and optional policy {{initialCapacity,extensionIncrement,maximumCapacity}}. Defaults256/256/4096; omit policy to inspect. Completed operations archive before extension; uncertain records remain active. Archived original IDs still prevent redispatch. First archival requires runtime schema6; do not downgrade to an older binary that cannot read it.
+  Optional capacity policy maximumLoginSteps (default32) updates the existing task immediately; settled login episodes can renew, uncertain input must reconcile first.
+  browser_policy override_capacity uses scope app|task and capacity {{activeLimit:256}}, with expectedRevision, actor and reason. Archived grants preserve exact authorization; override_lookup with overrideId inspects originals. Capacity updates require no restart or permission expansion.
+  Ordinary browser_reconnect status returns exact-task continuity and a fresh-facade command; reconnect observes the retained page without reopening closed tasks or replaying uncertain requests.
+
   Public workflow refusals retain failure recourse and occurrenceId. logging.state distinguishes durable_pending custody from failed logging. Read recent task records using browser_command action failure_log with params.occurrenceId and optional limit1..1000. The task view filters before limiting and never starts a browser. A known occurrenceId permits lookup without taskId; HTTP accepts GET /api/service/failures?occurrenceId=ID. Follow executableNextAction for inspection; uncertain originals are not replay authority.
   Failure records enter private failure-journal.pending custody before asynchronous projection. Unix writes sync the file and directory; daemon startup replays pending occurrences without request resubmission. pendingRecordCount reports pending projection. custody_failed reports persistence failure. Journal reads wait up to 250 ms for a concurrent writer, then report lock contention if it persists.
   Profile ACL admission denials report profile_access_denied / profile_access / no_effect and preserve profileAccessDecision. Follow the policy-inspection action using the same credential; do not change labels or retry to bypass access. Join pre-dispatch request IDs to the failure journal; no job exists.

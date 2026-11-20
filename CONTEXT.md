@@ -686,3 +686,7 @@ separate guards.
 
 
 **Login progress**: A bounded read-only public projection of Auth-owned request evidence. Selection, submission, confirmed actionable delivery, control metadata and unknown input are distinct. The projection provides a supported next observation, never credential authority or proof of application access.
+
+**Login episode continuation**: An observed supported input sequence under one scoped episode. Acknowledged prefixes never replay; runtime step budgets can extend, settled episodes can renew, and unresolved input anywhere in the task requires original reconciliation before another episode.
+
+**Scoped override working set**: Configurable active grant count with archived original grants resolved under identical task/action/request/effective-policy checks. Archival and capacity updates do not expand permission. Effective permission changes revoke active and archived originals permanently. The archive remains in the policy document and does not promise smaller serialized state.

@@ -153,6 +153,9 @@ After a newly recorded retained-browser recovery, the original interactive hando
 The connected MCP catalog has 17 workflow tools. Discover actual schemas before
 use; the source guide does not prove installed support.
 
+
+Ordinary managed tasks support `browser_reconnect` operations `status` and `reconnect` without a hosted attachment. Status distinguishes retained metadata, an ended task (including `terminalReason: explicit_close`) and unavailable metadata, and returns a concrete fresh-facade command. Reconnect freshly observes the same retained task/page; it never opens a replacement browser, reopens a closed task or replays an uncertain request. Transport failures retain the sanitized cause and original request for inspection/reconciliation. Hosted lifecycle operations below keep their existing revision requirements.
+
 `browser_reconnect` accepts taskId and operation status, disconnect, reconnect,
 rebind, configure or reopen. All changes require requestId and expectedRevision
 from current status. configure requires lossPolicy report_only or reopen; rebind
@@ -192,6 +195,11 @@ Scoped overrideAction/requestId returns overrideId for policyOverrideId on that
 exact task/action/request/current policy, never to bypass human control or peers.
 Pass policyOverrideId and requestId at the top level of the supported page tool
 or browser_command; for example action fill with params selector/value.
+
+
+Login input budgets use optional `maximumLoginSteps` in the existing task-operation capacity policy (default 32). Update it at runtime with the other three required capacity fields. Settled episodes can renew; unresolved input in any prior episode must be reconciled first. Native Saved Login `resolve({allowAcknowledgedResume:true,steps:[...]})` can extend a settled plan after fresh observation while preserving its acknowledged prefix. Supported control kinds, account/frame/process checks and no-replay rules remain enforced.
+
+`browser_policy` also supports `override_capacity` with current `expectedRevision`, `actor`, `reason`, `scope: "app" | "task"` and `capacity: {activeLimit:256}`. Task settings override app defaults. Old grants archive automatically and resolve under identical exact task/action/request/current-policy checks. This is a working-set bound, not a permission ceiling or policy-document size optimization. Capacity updates preserve grants; effective permission-policy changes revoke both active and archived grants. Read `overrideCapacity` in status, or use `override_lookup` with `overrideId` to inspect an original without mutation attribution. Neither operation expands permission.
 
 `browser_artifact` takes taskId, kind screenshot/download, handle and relative
 name; download requires selector. Optional fullPage, requestId and policyOverrideId

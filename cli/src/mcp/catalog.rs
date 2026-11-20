@@ -212,7 +212,8 @@ fn operation_schema(category: &str, operation: &str) -> Result<Value, super::Jso
                     "policy":{"type":"object","additionalProperties":false,"properties":{
                         "initialCapacity":{"type":"integer","minimum":1},
                         "extensionIncrement":{"type":"integer","minimum":1},
-                        "maximumCapacity":{"type":"integer","minimum":1}},
+                        "maximumCapacity":{"type":"integer","minimum":1},
+                        "maximumLoginSteps":{"type":"integer","minimum":1}},
                         "required":["initialCapacity","extensionIncrement","maximumCapacity"]}},
                 "anyOf":[{"required":["requestId"]},{"required":["operation"]}]})),
             "task_briefing" | "mode" | "back" | "forward" | "reload" | "service_resources" => {

@@ -703,3 +703,13 @@ The local pre-push gate uses the existing validation selector to run the public 
 
 
 For a Native control observation, pass the addressed browser task ID rather than the Auth caller ID: the progress summary returns a read-only `browser_command` / `task_briefing` action. Missing binding is explicit as `addressed_browser_task_required`. Continuation preserves sanitized incomplete verifier categories, evidence, qualification and supported next reads. Broad executable, dependency and selector changes select the workflow and gate checks as well; the gate is not duplicated inside the tooling aggregate.
+
+## Continued login and override working sets
+
+Login input budgets use optional `maximumLoginSteps` in the existing task-operation capacity policy (default 32). Update it at runtime with the other three required capacity fields. Settled episodes can renew; unresolved input in any prior episode must be reconciled first. Native Saved Login `resolve({allowAcknowledgedResume:true,steps:[...]})` can extend a settled plan after fresh observation while preserving its acknowledged prefix. Supported control kinds, account/frame/process checks and no-replay rules remain enforced.
+
+`browser_policy` also supports `override_capacity` with current `expectedRevision`, `actor`, `reason`, `scope: "app" | "task"` and `capacity: {activeLimit:256}`. Task settings override app defaults. Old grants archive automatically and resolve under identical exact task/action/request/current-policy checks. This is a working-set bound, not a permission ceiling or policy-document size optimization. Capacity updates preserve grants; effective permission-policy changes revoke both active and archived grants. Read `overrideCapacity` in status, or use `override_lookup` with `overrideId` to inspect an original without mutation attribution. Neither operation expands permission.
+
+## Retained task transport recovery
+
+Ordinary managed tasks support `browser_reconnect` operations `status` and `reconnect` without a hosted attachment. Status distinguishes retained metadata, an ended task (including `terminalReason: explicit_close`) and unavailable metadata, and returns a concrete fresh-facade command. Reconnect freshly observes the same retained task/page; it never opens a replacement browser, reopens a closed task or replays an uncertain request. Transport failures retain the sanitized cause and original request for inspection/reconciliation. Hosted lifecycle operations below keep their existing revision requirements.
