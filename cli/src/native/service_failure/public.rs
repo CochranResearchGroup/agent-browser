@@ -356,6 +356,9 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
         Ok(_) => json!({"state":"durable_pending","projection":"asynchronous"}),
         Err(_) => json!({"state":"failed","code":"failure_journal_custody_failed"}),
     };
+    // The actual occurrence now exists. Pure projection may resolve its
+    // previously unbound recovery inspection without appending another record.
+    super::enrich_recovery_contract(failure, command);
 }
 
 #[cfg(test)]

@@ -46,6 +46,8 @@ fn bind(value: &Value, command: &Value) -> (Value, bool) {
             let replacement = match token.as_str() {
                 "$taskId" => command.get("taskId").or_else(|| command.get("sessionId")),
                 "$requestId" => command.get("requestId").or_else(|| command.get("id")),
+                "$occurrenceId" => command.get("occurrenceId"),
+                "$attemptId" => command.pointer("/params/attemptId"),
                 "$profileId" => command.get("profileId").or_else(|| {
                     command
                         .get("params")
@@ -113,6 +115,22 @@ pub(super) fn enrich(failure: &mut Value, command: &Value) {
         .as_str()
         .unwrap_or("service_operation_failed")
         .to_owned();
+    let mut context = if command.is_object() {
+        command.clone()
+    } else {
+        json!({})
+    };
+    // Recovery errors refer to the original journal occurrence, not the new
+    // refusal occurrence. Other failures bind only their published actual ID.
+    context["occurrenceId"] = if command["action"] == "failure_recovery" {
+        command
+            .pointer("/params/occurrenceId")
+            .cloned()
+            .unwrap_or_else(|| failure["occurrenceId"].clone())
+    } else {
+        failure["occurrenceId"].clone()
+    };
+    let command = &context;
     let source = registry();
     let Some(entry) = source["codes"].get(&code) else {
         let plan = json!({
@@ -125,7 +143,7 @@ pub(super) fn enrich(failure: &mut Value, command: &Value) {
                 "exclude":["credentials","cookies","pageContent","rawProviderErrors"]},
             "resumeCondition":"The specific defect or prerequisite is resolved, original effects are reconciled, and the same task is freshly observed; independent safe reads may continue"
         });
-        publish_plan(failure, plan);
+        publish_plan(failure, plan, command);
         return;
     };
     let recipe_name = command["action"]
@@ -168,15 +186,47 @@ pub(super) fn enrich(failure: &mut Value, command: &Value) {
         "maximumAutomaticAttempts":recipe["maximumAutomaticAttempts"],"budgetScope":"single_recipe_cycle",
         "resumeCondition":recipe["resumeCondition"]
     });
-    publish_plan(failure, plan);
+    publish_plan(failure, plan, command);
     if failure["executableNextAction"].is_null() && inspect["executable"] == true {
         failure["executableNextAction"] = inspect;
     }
 }
 
-fn publish_plan(failure: &mut Value, plan: Value) {
-    let existing = &failure["recoveryRegistry"];
-    if !(existing["coverage"] == "registered" && existing["code"] == plan["code"]) {
+fn upgrade_compiled_bindings(value: &Value, command: &Value) -> Value {
+    let (mut upgraded, _) = bind(value, command);
+    fn refresh_steps(value: &mut Value) {
+        match value {
+            Value::Object(fields) => {
+                for value in fields.values_mut() {
+                    refresh_steps(value);
+                }
+                if fields.contains_key("executable") {
+                    let (_, complete) = bind(&Value::Object(fields.clone()), &Value::Null);
+                    fields.insert(
+                        "executable".into(),
+                        json!(complete && fields.get("kind") != Some(&json!("source_reference"))),
+                    );
+                }
+            }
+            Value::Array(values) => values.iter_mut().for_each(refresh_steps),
+            _ => {}
+        }
+    }
+    refresh_steps(&mut upgraded);
+    upgraded
+}
+
+fn publish_plan(failure: &mut Value, plan: Value, command: &Value) {
+    let existing = failure["recoveryRegistry"].clone();
+    if existing["coverage"] == "registered" && existing["code"] == plan["code"] {
+        // Only fill unresolved tokens; already bound scope and owner evidence
+        // survive a facade which has missing or different current context.
+        let upgraded = upgrade_compiled_bindings(&existing, command);
+        if failure["recoveryPlan"] == existing {
+            failure["recoveryPlan"] = upgraded.clone();
+        }
+        failure["recoveryRegistry"] = upgraded;
+    } else {
         failure["recoveryRegistry"] = plan.clone();
     }
     if !failure["recoveryPlan"].is_object() {
@@ -187,6 +237,36 @@ fn publish_plan(failure: &mut Value, plan: Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn actual_occurrence_binds_after_publication_and_preserves_original_recovery_scope() {
+        let mut failure = json!({"code":"failure_recovery_budget_exhausted"});
+        enrich(&mut failure, &json!({"taskId":"original-task"}));
+        assert_eq!(failure["recoveryRegistry"]["inspect"]["executable"], false);
+        failure["occurrenceId"] = json!("published-occurrence");
+        enrich(&mut failure, &json!({"taskId":"different-facade-task"}));
+        assert_eq!(
+            failure["recoveryRegistry"]["inspect"]["arguments"]["params"]["occurrenceId"],
+            "published-occurrence"
+        );
+        assert_eq!(
+            failure["recoveryRegistry"]["inspect"]["arguments"]["taskId"],
+            "original-task"
+        );
+        assert_eq!(failure["recoveryRegistry"]["inspect"]["executable"], true);
+        let bound = failure.clone();
+        enrich(&mut failure, &Value::Null);
+        assert_eq!(failure, bound);
+        let mut recovery_error =
+            json!({"code":"failure_recovery_budget_exhausted", "occurrenceId":"new-refusal"});
+        enrich(
+            &mut recovery_error,
+            &json!({"action":"failure_recovery", "taskId":"task", "params":{"occurrenceId":"original-occurrence"}}),
+        );
+        assert_eq!(
+            recovery_error["recoveryRegistry"]["inspect"]["arguments"]["params"]["occurrenceId"],
+            "original-occurrence"
+        );
+    }
     #[test]
     fn transport_invalid_params_does_not_classify_runtime_failure_or_settle_original() {
         let mut runtime = json!({"code":"browser_runtime_database_open_failed", "effectState":"effect_uncertain", "rpcCompatibilityCode":-32602});
