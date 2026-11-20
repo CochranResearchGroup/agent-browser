@@ -1063,8 +1063,6 @@ fn classify_browser_compatibility_failure(error: &str) -> Option<ServiceFailureR
         "browser_action_transport_configuration_failed"
     } else if error.starts_with("Failed to start daemon: ") || error.starts_with("Daemon process exited during startup:") || error.starts_with("Daemon process exited during startup with no error output.") || error.starts_with("Daemon failed to start (") && error.ends_with(')') {
         "browser_action_transport_start_failed"
-    } else if error == "Timed out waiting for runtime-host startup admission" {
-        "browser_action_runtime_admission_wait"
     } else if error.starts_with("Failed to connect: ") {
         "browser_action_transport_connect_failed"
     } else if error.starts_with("Failed to send: ") || error.starts_with("Failed to read: ") {
@@ -1206,7 +1204,6 @@ mod tests {
             ("Unknown subaction: unreviewed", "browser_action_argument_invalid"),
             ("Failed to read daemon auth token: permission denied", "browser_action_transport_configuration_failed"),
             ("Failed to start daemon: missing executable", "browser_action_transport_start_failed"),
-            ("Timed out waiting for runtime-host startup admission", "browser_action_runtime_admission_wait"),
             ("workflow_transport_failed: Failed to read: original reply lost", "browser_action_transport_outcome_uncertain"),
             ("workflow_cli_failed: Evaluation error: Error: cancelled before dispatch", "browser_action_evaluation_exception"),
             ("Browser not launched", "browser_action_page_unavailable"),
@@ -1253,6 +1250,7 @@ mod tests {
             "unknown_wrapper: Element not found: #button",
             "arbitrary page output {\"error\":\"Browser not launched\"}",
             "arbitrary provider timeout text",
+            "Timed out waiting for runtime-host startup admission",
             "arbitrary provider cancelled before dispatch",
             "fake Control plane worker is stopped message",
             "Missing 'unreviewedField' parameter",

@@ -1567,7 +1567,7 @@
       },
       "remediation": [
         {
-          "instruction": "Inspect the original run/task/operation with its current authenticated owner before resume or cancellation. Missing/expired/terminal and uncertain outcomes are distinct. Reconcile a pending effect without replay; a new run is allowed only after prior effects settle and fresh owner admission, never as a request-ID reset. Guest timestamp-based expiry is an explicit unresolved timing qualification finding, not current reliable-time proof.",
+          "instruction": "Inspect the original run/task/operation with its current authenticated owner before resume or cancellation. Missing/expired/terminal and uncertain outcomes are distinct. Reconcile a pending effect without replay; a new run is allowed only after prior effects settle and fresh owner admission, never as a request-ID reset. Finite relative deadlines now require retained service-origin evidence and current qualified bounds. Legacy missing origins remain readable but cannot be backfilled or silently extended; status and supported cancellation remain independent, while pending effects still forbid replay.",
           "precondition": "Existing authority only. Retain original uncertain outcomes and independently verify readiness; no automatic credential entry, challenge request or replay.",
           "interface": "original_public_request"
         }

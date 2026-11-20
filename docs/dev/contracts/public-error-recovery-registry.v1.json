@@ -2240,33 +2240,53 @@
       "maximumAutomaticAttempts": 1
     },
     "handoff_legacy_time": {
-      "rationale": "Legacy finite handoff retention is evaluated with guest clock timestamps and cannot be treated as qualified UTC evidence.",
+      "rationale": "The exact finite handoff is legacy-unqualified, expired under qualified bounds, has inconsistent retained timing evidence, or has a current uncertain time observation.",
       "requiredActor": "existing_handoff_retention_owner",
-      "evidenceRequirement": "Exact task, durable handoff and current Remote View owner context; URL presence or viewer mode alone does not prove current human input or readiness.",
+      "evidenceRequirement": "Actual original handoffId, current authenticated retention owner, existing target/authentication binding, retained lifetime provenance and supported time qualification. An inspect response with expired=null/timeError is not proof of expiry.",
       "inspect": {
-        "tool": "browser_command",
-        "arguments": {
-          "taskId": "$taskId",
-          "action": "task_briefing",
-          "params": {}
-        }
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "remote-view",
+          "inspect",
+          "$handoffId"
+        ],
+        "precondition": "Use the exact retained handoffId from the original request/receipt. Do not guess an ID from a provider URL or create a replacement handoff. Inspection retains timeError rather than blocking independent readback."
       },
       "remediation": [
         {
-          "instruction": "Retain the exact task and durable handoff, inspect current owner state, and escalate the bounded legacy retention-time finding with sanitized original IDs. Independent perpetual-link/task inspections remain available. Do not bypass expiry or silently renew a legacy finite link.",
-          "precondition": "Legacy finite retention lacks qualified mint/check evidence; no automatic extension or fresh browser effect is authorized.",
-          "interface": "original_public_request"
+          "instruction": "Inspect this same durable handoff and reconcile any original renewal outcome. Repair the actual supported time client/helper/configuration or qualified service observation. The existing authenticated owner may explicitly review and set this same link lifetime with service_remote_view_handoff_resolve/set_link_lifetime; do not use extend to repair legacy timing. Keep its handoffId, authentication and target unchanged. Zero means an explicitly reviewed perpetual retention policy, never an automatic workaround for unavailable time.",
+          "call": {
+            "tool": "service_request",
+            "arguments": {
+              "action": "service_remote_view_handoff_resolve",
+              "serviceName": "$serviceName",
+              "agentName": "$agentName",
+              "taskName": "$taskName",
+              "params": {
+                "handoffId": "$handoffId",
+                "handoffOperation": "set_link_lifetime",
+                "ttlMs": "$reviewedLifetimeMs"
+              }
+            },
+            "precondition": "The existing authenticated retention owner explicitly reviewed the actual same-link lifetime. Resolve all original IDs and reviewed lifetime from that authority, not an error or URL. Reconcile uncertain prior renewal before any new mutation."
+          },
+          "precondition": "Exact original handoffId and existing authenticated retention-owner authority are retained. Explicit lifetime review does not broaden authentication, target or browser custody; no uncertain renewal/input is replayed."
         }
       ],
       "verification": {
-        "tool": "browser_command",
-        "arguments": {
-          "taskId": "$taskId",
-          "action": "task_briefing",
-          "params": {}
-        }
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "remote-view",
+          "inspect",
+          "$handoffId"
+        ],
+        "precondition": "Use the exact retained handoffId from the original request/receipt. Do not guess an ID from a provider URL or create a replacement handoff. Inspection retains timeError rather than blocking independent readback."
       },
-      "resumeCondition": "The existing owner qualifies link timing or explicitly repairs the same-link retention under current authority; preserve independent authentication and original browser custody. Source finding: docs/dev/maintenance/spec749-legacy-handoff-time.md.",
+      "resumeCondition": "Same-ID inspection confirms the explicitly authorized retention provenance/lifetime and unchanged original target/authentication; current resolution still performs its ordinary owner checks. Unknown time remains distinct from expired.",
       "maximumAutomaticAttempts": 1
     },
     "session_admission_capacity": {
@@ -2763,6 +2783,198 @@
         }
       },
       "resumeCondition": "The current owner confirms a fresh selection reservation is available and the original effect is reconciled. Independent reads remain usable throughout; maintenance does not grant physical-input authority.",
+      "maximumAutomaticAttempts": 1
+    },
+    "startup_kernel_owner": {
+      "rationale": "Cold startup cannot obtain the current kernel guard or qualify an actually present legacy marker; marker age never grants ownership.",
+      "requiredActor": "existing_installation_and_runtime_host_owner",
+      "evidenceRequirement": "Actual current kernel-lock or I/O result and bounded legacy owner observation, together with the selected-runtime installation transaction. A live PID is not proof of exact historical owner identity.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the existing installation and original selected-runtime preserve transaction. Let a current guarded startup finish, or have the installation owner repair the specifically reported guard filesystem/permissions/locking failure. A live or unqualified legacy marker requires original owner inspection and supported selected-runtime cutover; do not delete its bytes, kill an unproven process, change namespaces casually, or replay an uncertain launch. Verified compatible warm tasks remain available.",
+          "precondition": "The existing installation owner acts on the original retained transaction and actual current guard/legacy evidence. Unknown original effects stay unresolved; no age, PID reuse assumption, or helper outage grants replacement authority.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "resumeCondition": "The original startup outcome and current guard/legacy evidence permit a cold admission under the existing selected-runtime owner. Healthy exact warm reuse remains independent; uncontrolled mixed-generation cold writers are unsupported.",
+      "maximumAutomaticAttempts": 1
+    },
+    "authentication_run_qualified_deadline": {
+      "rationale": "The retained authentication/challenge deadline lacks qualified origin, has inconsistent durable evidence, or cannot currently be separated from service uncertainty.",
+      "requiredActor": "existing_authenticated_authentication_or_challenge_owner",
+      "evidenceRequirement": "Exact retained run/challenge ID, original principal and task/browser binding, pending effect receipt, immutable service-origin deadline and a fresh qualified supported time observation.",
+      "inspect": {
+        "tool": "service_request",
+        "arguments": {
+          "action": "service_authentication_run_status",
+          "authenticationRunId": "$authenticationRunId",
+          "clientSubjectId": "$clientSubjectId",
+          "serviceName": "$serviceName",
+          "agentName": "$agentName",
+          "taskName": "$taskName"
+        },
+        "precondition": "Use the original authenticated owner, retained run/challenge ID and actual principal/service context. Labels are not identity; missing scope remains nonexecutable. Status does not submit input or mint a new deadline."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original run/challenge first. Preserve pending or unknown effects without replay. For service uncertainty repair the specifically reported supported StableTime client/helper/configuration or service qualification, then retry only an undispatched admission. For inconsistent durable evidence, the retained-state owner must diagnose the original record; never edit/reset its deadline. A legacy missing origin cannot be backfilled from guest timestamps: cancel the original through its supported owner only after pending effects settle, then review any explicitly authorized new intent separately. Completed replay, status and supported cancellation remain independently available.",
+          "interface": "original_public_request",
+          "precondition": "Exact original IDs and authenticated owner authority are retained. Cancellation/replacement is not automatic, uncertain input is never replayed, and fresh time never extends an immutable existing deadline."
+        }
+      ],
+      "verification": {
+        "tool": "service_request",
+        "arguments": {
+          "action": "service_authentication_run_status",
+          "authenticationRunId": "$authenticationRunId",
+          "clientSubjectId": "$clientSubjectId",
+          "serviceName": "$serviceName",
+          "agentName": "$agentName",
+          "taskName": "$taskName"
+        },
+        "precondition": "Use the original authenticated owner, retained run/challenge ID and actual principal/service context. Labels are not identity; missing scope remains nonexecutable. Status does not submit input or mint a new deadline."
+      },
+      "resumeCondition": "Exact original status accounts for pending effects and current same-target owner admission qualifies the retained immutable deadline. A replacement requires explicit new owner intent after safe cancellation; readback remains available when time is unavailable.",
+      "maximumAutomaticAttempts": 1
+    },
+    "challenge_task_qualified_deadline": {
+      "rationale": "The retained authentication/challenge deadline lacks qualified origin, has inconsistent durable evidence, or cannot currently be separated from service uncertainty.",
+      "requiredActor": "existing_authenticated_authentication_or_challenge_owner",
+      "evidenceRequirement": "Exact retained run/challenge ID, original principal and task/browser binding, pending effect receipt, immutable service-origin deadline and a fresh qualified supported time observation.",
+      "inspect": {
+        "tool": "service_request",
+        "arguments": {
+          "action": "service_challenge_task_status",
+          "challengeTaskId": "$challengeTaskId",
+          "clientSubjectId": "$clientSubjectId"
+        },
+        "precondition": "Use the original authenticated owner, retained run/challenge ID and actual principal/service context. Labels are not identity; missing scope remains nonexecutable. Status does not submit input or mint a new deadline."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original run/challenge first. Preserve pending or unknown effects without replay. For service uncertainty repair the specifically reported supported StableTime client/helper/configuration or service qualification, then retry only an undispatched admission. For inconsistent durable evidence, the retained-state owner must diagnose the original record; never edit/reset its deadline. A legacy missing origin cannot be backfilled from guest timestamps: cancel the original through its supported owner only after pending effects settle, then review any explicitly authorized new intent separately. Completed replay, status and supported cancellation remain independently available.",
+          "interface": "original_public_request",
+          "precondition": "Exact original IDs and authenticated owner authority are retained. Cancellation/replacement is not automatic, uncertain input is never replayed, and fresh time never extends an immutable existing deadline."
+        }
+      ],
+      "verification": {
+        "tool": "service_request",
+        "arguments": {
+          "action": "service_challenge_task_status",
+          "challengeTaskId": "$challengeTaskId",
+          "clientSubjectId": "$clientSubjectId"
+        },
+        "precondition": "Use the original authenticated owner, retained run/challenge ID and actual principal/service context. Labels are not identity; missing scope remains nonexecutable. Status does not submit input or mint a new deadline."
+      },
+      "resumeCondition": "Exact original status accounts for pending effects and current same-target owner admission qualifies the retained immutable deadline. A replacement requires explicit new owner intent after safe cancellation; readback remains available when time is unavailable.",
+      "maximumAutomaticAttempts": 1
+    },
+    "profile_reset_qualified_time": {
+      "rationale": "Profile reset planning could not obtain supported qualified time; the actual helper/client/service cause is separate from permission or reset outcome.",
+      "requiredActor": "authenticated_original_profile_owner",
+      "evidenceRequirement": "Original profile/reset plan or receipt, actual configured supported-time failure cause and existing profile-owner authority; no new plan or expired apply is inferred safe.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfileDiagnosis",
+        "arguments": {
+          "id": "$profileId",
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original profile diagnosis and retained reset plan/receipt. Repair the actual supported StableTime client/helper/configuration or service qualification without treating a helper failure as a service outage. Retry only planning/admission that the original owner proves undispatched. If the owner explicitly requests a new plan, review its scope and new expiry separately; never replay an uncertain apply, fabricate time, renew an immutable plan in place, or treat this repair as deletion authority.",
+          "interface": "original_public_request",
+          "precondition": "The authenticated owner retains the exact original profile/reset IDs and capability in the existing client. Any prior reset effects are reconciled; time repair does not grant reset approval."
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfileDiagnosis",
+        "arguments": {
+          "id": "$profileId",
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
+      },
+      "resumeCondition": "Supported time is qualified and the exact original plan/receipt is understood; any new reset plan/apply independently satisfies existing owner, scope, integrity and expiry checks.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_origin_public_boundary": {
+      "rationale": "A supported-time origin or relative window failed its exact shared model contract at a public authentication/challenge boundary; these helper codes currently propagate as public errors.",
+      "requiredActor": "existing_authenticated_workflow_and_time_evidence_owner",
+      "evidenceRequirement": "Original workflow intent/run/challenge, immutable origin/window if already retained, actual supported time-client/service cause and a fresh qualified observation. No guest timestamp or fallback record may mint authority.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceStatus",
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the existing reviewed authenticated Service client configuration. This independent status read does not itself prove time qualification or settle the original operation; no base URL or credential is guessed."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original workflow and its actual owner status when an original run/challenge ID exists. For invalid origin or deadline arithmetic, have the retained-state/time-evidence owner diagnose the named record and supported client contract; do not edit an immutable origin or deadline. For a relative window narrower than current uncertainty, pause that admission until qualified evidence fits; the caller may review a distinct new intent/budget only after the prior intent is proven undispatched or safely settled. Repair the actual client/helper/configuration separately from service qualification. Never substitute guest time, stretch an existing window, or replay pending effects.",
+          "interface": "original_public_request",
+          "precondition": "Original intent/IDs and authenticated authority are retained. Independent status remains available, but it is not evidence of time recovery. New intent or cancellation is explicitly reviewed after original effects settle."
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceStatus",
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the existing reviewed authenticated Service client configuration. This independent status read does not itself prove time qualification or settle the original operation; no base URL or credential is guessed."
+      },
+      "resumeCondition": "The original owner requalifies the exact origin/window and original effect state at its normal admission boundary. A read-only status response is not time proof, and no immutable deadline is silently extended.",
+      "maximumAutomaticAttempts": 1
+    },
+    "challenge_task_original_effect": {
+      "rationale": "The original challenge task has an unresolved pending effect; time recovery or a fresh request ID cannot settle that original.",
+      "requiredActor": "existing_authenticated_authentication_or_challenge_owner",
+      "evidenceRequirement": "Exact original challengeTaskId/principal and pending operation/provider receipt. A new time observation, successful status read or stale local state is not effect proof.",
+      "inspect": {
+        "tool": "service_request",
+        "arguments": {
+          "action": "service_challenge_task_status",
+          "challengeTaskId": "$challengeTaskId",
+          "clientSubjectId": "$clientSubjectId"
+        },
+        "precondition": "Use the original authenticated owner, retained run/challenge ID and actual principal/service context. Labels are not identity; missing scope remains nonexecutable. Status does not submit input or mint a new deadline."
+      },
+      "remediation": [
+        {
+          "instruction": "Read the original challenge task and preserve the pending operation identity. Have its existing authenticated effect/provider owner inspect and reconcile the original receipt through the supported owner workflow; retain unknown outcome when no receipt proves settlement. Do not resume, cancel around the fence, submit replacement input, or mint a new task/request to evade uncertainty. Time repair cannot settle physical effects; independent status remains available.",
+          "interface": "original_public_request",
+          "precondition": "Exact original challenge and pending operation identity are retained with the existing authenticated owner. Only actual owner receipt evidence can resolve uncertainty; no message/code prefix or caller assertion is settlement authority."
+        }
+      ],
+      "verification": {
+        "tool": "service_request",
+        "arguments": {
+          "action": "service_challenge_task_status",
+          "challengeTaskId": "$challengeTaskId",
+          "clientSubjectId": "$clientSubjectId"
+        },
+        "precondition": "Use the original authenticated owner, retained run/challenge ID and actual principal/service context. Labels are not identity; missing scope remains nonexecutable. Status does not submit input or mint a new deadline."
+      },
+      "resumeCondition": "The original effect owner supplies trustworthy settlement and the normal task state transition admits continuation; current immutable deadline and same-target checks still apply without extension.",
       "maximumAutomaticAttempts": 1
     }
   },
@@ -12748,20 +12960,6 @@
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "unavailable"
     },
-    "remote_view_clock_invalid": {
-      "recipe": "handoff_legacy_time",
-      "owningChecks": [
-        {
-          "path": "cli/src/native/stream/remote_view_presentation.rs"
-        },
-        {
-          "path": "cli/src/native/stream/native_browser_mode.rs"
-        }
-      ],
-      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
-      "evidenceFreshness": "not_observed_by_projection",
-      "evidenceClass": "unknown"
-    },
     "remote_view_browser_recovery_response_invalid": {
       "recipe": "session_handoff",
       "owningChecks": [
@@ -21125,6 +21323,256 @@
       "policySource": "cli/src/runtime_host.rs",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "stale"
+    },
+    "runtime_host_startup_guard_unavailable": {
+      "recipe": "startup_kernel_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/connection.rs"
+        }
+      ],
+      "policySource": "cli/src/connection.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_startup_guard_busy": {
+      "recipe": "startup_kernel_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/connection.rs"
+        }
+      ],
+      "policySource": "cli/src/connection.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "coordination_paused"
+    },
+    "runtime_host_legacy_startup_owner_live": {
+      "recipe": "startup_kernel_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/connection.rs"
+        }
+      ],
+      "policySource": "cli/src/connection.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_host_legacy_startup_owner_unqualified": {
+      "recipe": "startup_kernel_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/connection.rs"
+        }
+      ],
+      "policySource": "cli/src/connection.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "authentication_run_deadline_origin_unqualified": {
+      "recipe": "authentication_run_qualified_deadline",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_authentication_run.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/service_authentication_run.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "authentication_run_deadline_evidence_invalid": {
+      "recipe": "authentication_run_qualified_deadline",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_authentication_run.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/service_authentication_run.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "authentication_run_deadline_time_uncertain": {
+      "recipe": "authentication_run_qualified_deadline",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_authentication_run.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/service_authentication_run.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "challenge_task_deadline_origin_unqualified": {
+      "recipe": "challenge_task_qualified_deadline",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_challenge_task.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/service_challenge_task.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "challenge_task_deadline_evidence_invalid": {
+      "recipe": "challenge_task_qualified_deadline",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_challenge_task.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/service_challenge_task.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "challenge_task_deadline_time_uncertain": {
+      "recipe": "challenge_task_qualified_deadline",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_challenge_task.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/service_challenge_task.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "challenge_task_effect_outcome_unknown": {
+      "recipe": "challenge_task_original_effect",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_challenge_task.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_challenge_task.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_handoff_legacy_time_unqualified": {
+      "recipe": "handoff_legacy_time",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_handoff_time_unqualified": {
+      "recipe": "handoff_legacy_time",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_handoff_time_evidence_invalid": {
+      "recipe": "handoff_legacy_time",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_handoff_time_uncertain": {
+      "recipe": "handoff_legacy_time",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_reset_time_unavailable": {
+      "recipe": "profile_reset_qualified_time",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_time_origin_invalid": {
+      "recipe": "service_origin_public_boundary",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_time_origin.rs"
+        }
+      ],
+      "publicBoundaryAnchors": [
+        {
+          "path": "cli/src/native/service_authentication_run.rs",
+          "sourceEvidence": ".deadline_ms(intent.deadline_ms)",
+          "meaning": "Public start validates the exact new relative intent and currently propagates shared origin/deadline errors."
+        },
+        {
+          "path": "cli/src/native/service_challenge_task.rs",
+          "sourceEvidence": ".deadline_ms(intent.deadline_ms)",
+          "meaning": "Public challenge start validates the exact new relative intent and currently propagates shared origin/deadline errors."
+        },
+        {
+          "path": "cli/src/connection/stable_time.rs",
+          "sourceEvidence": "pub(crate) fn service_origin(",
+          "meaning": "The supported observation origin adapter currently propagates the shared origin validation error to its public owner caller."
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/service_time_origin.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_time_origin_deadline_invalid": {
+      "recipe": "service_origin_public_boundary",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_time_origin.rs"
+        }
+      ],
+      "publicBoundaryAnchors": [
+        {
+          "path": "cli/src/native/service_authentication_run.rs",
+          "sourceEvidence": ".deadline_ms(intent.deadline_ms)",
+          "meaning": "Public start validates the exact new relative intent and currently propagates shared origin/deadline errors."
+        },
+        {
+          "path": "cli/src/native/service_challenge_task.rs",
+          "sourceEvidence": ".deadline_ms(intent.deadline_ms)",
+          "meaning": "Public challenge start validates the exact new relative intent and currently propagates shared origin/deadline errors."
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/service_time_origin.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_time_origin_window_uncertain": {
+      "recipe": "service_origin_public_boundary",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_time_origin.rs"
+        }
+      ],
+      "publicBoundaryAnchors": [
+        {
+          "path": "cli/src/native/service_authentication_run.rs",
+          "sourceEvidence": ".deadline_ms(intent.deadline_ms)",
+          "meaning": "Public start validates the exact new relative intent and currently propagates shared origin/deadline errors."
+        },
+        {
+          "path": "cli/src/native/service_challenge_task.rs",
+          "sourceEvidence": ".deadline_ms(intent.deadline_ms)",
+          "meaning": "Public challenge start validates the exact new relative intent and currently propagates shared origin/deadline errors."
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/service_time_origin.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -21679,6 +22127,14 @@
       "retiredByRevision": "107c84ae3a0fcd9e062ab50e448c7f3146e8dc8f",
       "sourceEvidence": "\"service_request_failed\"",
       "reason": "Historical queued-owner journal fallback was retired by the privacy repair. Current code preserves a registered typed owner code or explicitly unclassified service_operation_failed with sanitized metadata; this old fallback is no longer emitted."
+    },
+    {
+      "code": "remote_view_clock_invalid",
+      "source": "cli/src/native/stream/native_browser_mode.rs",
+      "revision": "750cad3f5ae232fc831c725d69c5bb3c17c1bfa9",
+      "retiredByRevision": "2148577fbca02f3f1f72ceb22b03f6dddcc80da2",
+      "sourceEvidence": "\"remote_view_clock_invalid\"",
+      "reason": "The accepted handoff timing repair removed this guest-clock failure producer. Qualified handoff timing and exact private viewer-release handling now have their own source-owned contracts; reintroduction requires fresh qualification."
     }
   ],
   "fragments": [
@@ -22014,6 +22470,26 @@
       "path": "cli/src/runtime_host.rs",
       "codePattern": "(?:runtime_host_|runtime_lane_)[a-z0-9_]+",
       "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/connection.rs",
+      "codePattern": "runtime_host_(?:startup_guard_|legacy_startup_owner_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "crates/agent-browser-service-model/src/service_authentication_run.rs",
+      "codePattern": "authentication_run_deadline_[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "crates/agent-browser-service-model/src/service_challenge_task.rs",
+      "codePattern": "challenge_task_deadline_[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "crates/agent-browser-service-model/src/service_time_origin.rs",
+      "codePattern": "service_time_origin_[a-z0-9_]+",
+      "beforeNamedTestModule": true
     }
   ],
   "cliPublicationChecks": [
@@ -22062,7 +22538,7 @@
     "qualification": "Known finite human-readable and exact producer families must be registered separately. Runtime fallback is reserved for unreviewed future defects and never satisfies a known producer coverage gate."
   },
   "qualificationEvidence": {
-    "sourceBaseline": "7aa782e8f92e75f31f6ba504f6aeb66f1f233512",
+    "sourceBaseline": "7a41e455bffc3c6cb9133a05f78d8e20c8824511",
     "originalCandidateCensus": "docs/dev/contracts/public-original-error-candidate-census.v1.json",
     "unknownRuntimeCoverage": "uncovered",
     "validation": "Existing test-service-failure-journal-contract.js --require-complete-recovery joins exact contracts, source-backed exclusions, original candidate census, current producer gates, legacy producer/negative anchors, client factory/literal qualification and full dashboard frontend AST inventories. Runtime acceptance is recorded separately."

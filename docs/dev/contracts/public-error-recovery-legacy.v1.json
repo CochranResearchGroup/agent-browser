@@ -505,34 +505,6 @@
       },
       "resumeCondition": "Current original owner/target and permitted observation support the explicitly selected continuation; the original request remains failed/uncertain unless separately settled by actual owner evidence, and it is never silently replayed.",
       "maximumAutomaticAttempts": 1
-    },
-    "legacy_admission_wait": {
-      "rationale": "A startup admission wait protects current owner publication; it is an ordinary wait, not authority to remove another lane or change task identity.",
-      "requiredActor": "original_task_owner",
-      "evidenceRequirement": "Exact original task/request and owner outcome, current process/target/mode and fresh permitted observation. The error pattern is cause provenance only, not current evidence, permission or physical-effect proof.",
-      "inspect": {
-        "tool": "browser_command",
-        "arguments": {
-          "taskId": "$taskId",
-          "action": "task_briefing"
-        }
-      },
-      "remediation": [
-        {
-          "instruction": "Read the original task/mode and current owner startup state. Let the actual admitted owner finish, or use its supported custody/reconnect procedure after fresh process/identity evidence if it exited. Warm existing tasks remain independently inspectable. Do not bypass the startup lock, infer stale ownership from elapsed guest time, kill foreign work or relaunch the original command blindly.",
-          "precondition": "Use only existing authority for the exact original task/profile and current mode. Retain original request/outcome; uncertain input must never be replayed or declared no-effect from this message.",
-          "interface": "original_public_request"
-        }
-      ],
-      "verification": {
-        "tool": "browser_command",
-        "arguments": {
-          "taskId": "$taskId",
-          "action": "task_briefing"
-        }
-      },
-      "resumeCondition": "Current original owner/target and permitted observation support the explicitly selected continuation; the original request remains failed/uncertain unless separately settled by actual owner evidence, and it is never silently replayed.",
-      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -946,18 +918,6 @@
     },
     "browser_action_transport_start_failed": {
       "recipe": "legacy_startup_reconcile",
-      "owningChecks": [
-        {
-          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
-          "owningFunction": "classify_browser_compatibility_failure"
-        }
-      ],
-      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
-      "evidenceFreshness": "not_observed_by_projection",
-      "evidenceClass": "uncertain"
-    },
-    "browser_action_runtime_admission_wait": {
-      "recipe": "legacy_admission_wait",
       "owningChecks": [
         {
           "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
@@ -1815,29 +1775,6 @@
       }
     },
     {
-      "code": "browser_action_runtime_admission_wait",
-      "producerChecks": [
-        {
-          "path": "cli/src/connection.rs",
-          "sourceEvidence": "\"Timed out waiting for runtime-host startup admission\""
-        }
-      ],
-      "classifierCheck": {
-        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
-        "owningFunction": "classify_browser_compatibility_failure",
-        "sourceEvidence": "\"browser_action_runtime_admission_wait\""
-      },
-      "positiveExample": {
-        "message": "Timed out waiting for runtime-host startup admission",
-        "expectedCode": "browser_action_runtime_admission_wait"
-      },
-      "testCheck": {
-        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
-        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
-        "sourceEvidence": "\"Timed out waiting for runtime-host startup admission\""
-      }
-    },
-    {
       "code": "browser_action_native_window_unavailable",
       "producerChecks": [
         {
@@ -1943,6 +1880,25 @@
       "owningFunction": "browser_compatibility_recognition_rejects_website_and_unknown_patterns",
       "sourceEvidence": "\"CDP error (not a method): timeout\"",
       "expectedCode": "service_operation_failed"
+    },
+    {
+      "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "owningFunction": "browser_compatibility_recognition_rejects_website_and_unknown_patterns",
+      "sourceEvidence": "\"Timed out waiting for runtime-host startup admission\"",
+      "expectedCode": "service_operation_failed"
+    }
+  ],
+  "legacyRetirements": [
+    {
+      "code": "browser_action_runtime_admission_wait",
+      "replacementCode": "runtime_host_startup_guard_busy",
+      "classifierPath": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "classifierBeforeRevision": "7a41e455bffc3c6cb9133a05f78d8e20c8824511",
+      "producerPath": "cli/src/connection.rs",
+      "producerBeforeRevision": "4d3131c3a03920cf77172fdbaf5f5263f1ce15bb",
+      "producerRemovalRevision": "62a1e561e97ce56d02886cf98fea7112df4f6cce",
+      "producerEvidence": "\"Timed out waiting for runtime-host startup admission\"",
+      "reason": "The accepted kernel-guard repair removed this human-readable producer. Its classifier branch and former positive example are explicitly retired; the actual typed guard code carries current owner recourse. Historical source remains pinned, rather than pretending a new typed producer feeds this obsolete classifier."
     }
   ]
 }

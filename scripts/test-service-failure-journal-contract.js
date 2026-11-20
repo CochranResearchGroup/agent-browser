@@ -123,7 +123,7 @@ for (const path of recoveryRegistry.fragments ?? []) {
       externalRecoveryTools[name] = declaration;
     }
   }
-  for (const key of ['exclusions', 'enforcedProducerCodePrefixes', 'enforcedProducerSources', 'enforcedProducerSourceFamilies', 'legacyProducerChecks', 'legacyNegativeChecks']) recoveryRegistry[key] = [...(recoveryRegistry[key] ?? []), ...(fragment[key] ?? [])];
+  for (const key of ['exclusions', 'enforcedProducerCodePrefixes', 'enforcedProducerSources', 'enforcedProducerSourceFamilies', 'legacyProducerChecks', 'legacyNegativeChecks', 'legacyRetirements']) recoveryRegistry[key] = [...(recoveryRegistry[key] ?? []), ...(fragment[key] ?? [])];
   for (const key of ['recipes', 'codes', 'interfaces']) {
     recoveryRegistry[key] ??= {};
     for (const [name, entry] of Object.entries(fragment[key] ?? {})) {
@@ -473,7 +473,13 @@ function validateRecoveryCall(call) {
   if (call.interface === 'cli') {
     assert.equal(call.command, 'agent-browser', 'Recovery command must use the current Agent Browser executable');
     const stateValidate = JSON.stringify(call.arguments) === '["--json","service","state","validate","--path","$statePath"]';
-    assert(stateValidate || ['["--help"]', '["--json","install","doctor"]', '["install","workstation","--dry-run","--runtime-replacement-policy","preserve","--json"]'].includes(JSON.stringify(call.arguments)), `Unavailable recovery CLI arguments ${JSON.stringify(call.arguments)}`);
+    const handoffInspect = JSON.stringify(call.arguments) === '["--json","remote-view","inspect","$handoffId"]';
+    if(handoffInspect) {
+      assert(call.precondition?.length>20,'Handoff inspection requires its actual retained ID');
+      const commands=readFileSync('cli/src/commands.rs','utf8');
+      assert(commands.includes('remote-view inspect <handoff-id>') && /"handoffId"\s*:\s*rest\[1\]\s*,\s*"handoffOperation"\s*:\s*operation/.test(commands),'Missing actual same-link read grammar');
+    }
+    assert(stateValidate || handoffInspect || ['["--help"]', '["--json","install","doctor"]', '["install","workstation","--dry-run","--runtime-replacement-policy","preserve","--json"]'].includes(JSON.stringify(call.arguments)), `Unavailable recovery CLI arguments ${JSON.stringify(call.arguments)}`);
     if(stateValidate) {
       assert(call.precondition?.length > 10,'State validation requires a reviewed original absolute path binding');
       const commands = readFileSync('cli/src/commands.rs','utf8');
@@ -483,6 +489,33 @@ function validateRecoveryCall(call) {
     }
     assert(readFileSync('cli/src/output.rs', 'utf8').includes('agent-browser install doctor'), 'Independent no-launch doctor must remain advertised');
     if (call.arguments[0] === 'install' && call.arguments[1] === 'workstation') assert(readFileSync('cli/src/connection.rs','utf8').includes(`agent-browser ${call.arguments.join(' ')}`), 'Preserve-mode read must match the existing advertised runtime recovery command');
+    return;
+  }
+  if (call.tool === 'service_request') {
+    const args = call.arguments;
+    const schema = JSON.parse(readFileSync('docs/dev/contracts/service-request.v1.schema.json','utf8'));
+    assert(schema.properties.action.enum.includes(args.action),'Unavailable Service recovery action');
+    assert(readFileSync('cli/src/native/service_contracts.rs','utf8').includes(`"${args.action}"`) && mcpSource.includes('"service_request"'),'Service recovery action must retain its actual public owner');
+    assert(call.precondition?.length>20,'Service recovery requires exact original authenticated scope');
+    const identity = {
+      service_authentication_run_status:'authenticationRunId',
+      service_challenge_task_status:'challengeTaskId',
+    }[args.action];
+    if(identity) {
+      assert.equal(args[identity],`$${identity}`,'Service recovery must retain its original run/challenge identity');
+      assert.equal(args.clientSubjectId,'$clientSubjectId','Service recovery must retain its original principal');
+      const fields = ['action',identity,'clientSubjectId',...(identity==='authenticationRunId'?['serviceName','agentName','taskName']:[])];
+      assert.deepEqual(Object.keys(args).sort(),fields.sort(),'Unreviewed Service status arguments');
+      for(const name of fields.filter(name=>!['action',identity,'clientSubjectId'].includes(name))) assert.equal(args[name],`$${name}`);
+      const owner = readFileSync(`cli/src/native/${identity==='authenticationRunId'?'service_authentication_run':'service_challenge_task'}.rs`,'utf8');
+      assert(owner.includes(`"${args.action}"`) && owner.includes(`"${identity}"`),'Missing actual original-status owner');
+    } else {
+      assert.equal(args.action,'service_remote_view_handoff_resolve','Unreviewed Service mutation in recovery contract');
+      assert.deepEqual(Object.keys(args).sort(),['action','agentName','params','serviceName','taskName'].sort());
+      for(const name of ['serviceName','agentName','taskName']) assert.equal(args[name],`$${name}`);
+      assert.deepEqual(args.params,{handoffId:'$handoffId',handoffOperation:'set_link_lifetime',ttlMs:'$reviewedLifetimeMs'},'Same-link repair requires an actual handoffId and separately reviewed lifetime');
+      assert(readFileSync('cli/src/native/browser_session_host.rs','utf8').includes('command["handoffOperation"] == "set_link_lifetime"'),'Same-link renewal must remain an actual owner action');
+    }
     return;
   }
   assert(call.tool === 'browser_command' || Object.hasOwn(toolSchemas, call.tool), `Unavailable recovery tool ${call.tool}`);
@@ -631,6 +664,7 @@ function validateRecoveryInventory(registry, discovered) {
       return execFileSync('git', ['show', `${check.revision}:${check.path}`], {encoding:'utf8'}).includes(code);
     }), `Missing owning check for ${code}`);
     assert(readFileSync(entry.policySource, 'utf8').trim().length > 0, `Unavailable policy source for ${code}`);
+    for(const anchor of entry.publicBoundaryAnchors ?? []) assert(readFileSync(anchor.path,'utf8').includes(anchor.sourceEvidence) && anchor.meaning.length>20,`Missing actual public propagation boundary ${code}`);
     validateRecoveryCall(recipe.inspect);
     validateRecoveryCall(recipe.verification);
     for (const step of recipe.remediation) {
@@ -719,6 +753,15 @@ for (const entry of recoveryRegistry.enforcedProducerSourceFamilies ?? []) {
 }
 function validateLegacyProducerContracts(registry) {
   const qualified = new Set();
+  for(const retired of registry.legacyRetirements ?? []) {
+    assert(!registry.codes[retired.code] && registry.codes[retired.replacementCode],'Retired legacy classifier must use its actual typed replacement contract');
+    assert(!readFileSync(retired.classifierPath,'utf8').includes(retired.code),'Obsolete legacy classifier remains active');
+    for(const revision of [retired.classifierBeforeRevision,retired.producerBeforeRevision,retired.producerRemovalRevision]) assert(/^[0-9a-f]{40}$/.test(revision),'Legacy retirement requires immutable source evidence');
+    assert(execFileSync('git',['show',`${retired.classifierBeforeRevision}:${retired.classifierPath}`],{encoding:'utf8'}).includes(retired.code),'Missing original classifier retirement evidence');
+    assert(execFileSync('git',['show',`${retired.producerBeforeRevision}:${retired.producerPath}`],{encoding:'utf8'}).includes(retired.producerEvidence),'Missing original producer retirement evidence');
+    assert(!execFileSync('git',['show',`${retired.producerRemovalRevision}:${retired.producerPath}`],{encoding:'utf8'}).includes(retired.producerEvidence),'Retired producer still emitted at removal revision');
+    assert(!readFileSync(retired.producerPath,'utf8').includes(retired.producerEvidence),'Retired human-readable producer reintroduced');
+  }
   for (const entry of registry.legacyProducerChecks ?? []) {
     assert(registry.codes[entry.code], `Uncovered known legacy producer ${entry.code}`);
     assert.equal(entry.positiveExample.expectedCode,entry.code);
@@ -769,6 +812,9 @@ assert.throws(() => validateRecoveryCall({tool:'browser_command',arguments:{task
 assert.throws(() => validateRecoveryCall({interface:'cli',command:'agent-browser',arguments:['nonexistent-repair']}), /Unavailable recovery CLI arguments/);
 assert.throws(() => validateRecoveryCall({interface:'@agent-browser/client/nonexistent#repair',arguments:{}}), /Unavailable recovery interface/);
 assert.throws(() => validateRecoveryCall({tool:'nonexistent_recovery_tool',arguments:{taskId:'$taskId'}}), /Unavailable recovery tool/);
+assert.throws(()=>validateRecoveryCall({tool:'service_request',arguments:{action:'service_remote_view_handoff_resolve',serviceName:'$serviceName',agentName:'$agentName',taskName:'$taskName',params:{handoffOperation:'set_link_lifetime',ttlMs:'$reviewedLifetimeMs'}},precondition:'Retain the exact original authenticated handoff owner'}),/actual handoffId/);
+assert.throws(()=>validateRecoveryCall({tool:'service_request',arguments:{action:'service_authentication_run_status',authenticationRunId:'$authenticationRunId',serviceName:'$serviceName',agentName:'$agentName',taskName:'$taskName'},precondition:'Retain the exact original authenticated run owner'}),/original principal/);
+
 for (const check of recoveryRegistry.cliPublicationChecks ?? []) assert(readFileSync(check.path,'utf8').includes(check.sourceEvidence) && check.meaning.length > 20, 'Missing public CLI publication boundary');
 for (const check of recoveryRegistry.privateCliExclusions ?? []) assert(readFileSync(check.path,'utf8').includes(check.sourceEvidence) && check.reason.length > 20, 'Unproven private CLI protocol exclusion');
 for (const boundary of recoveryRegistry.boundaries) assert(readFileSync(boundary.source, 'utf8').includes(boundary.publication), `Missing ${boundary.surface} publication seam`);
@@ -804,3 +850,6 @@ assert.throws(() => validateComposedOwningCheck('unreviewed_anything', {path:'cl
 assert.throws(() => validateRecoveryCall({tool:'remote_view_recording_pin',arguments:{recordingId:'$recordingId',pinned:true,override:true}}), /Unavailable external owner argument/);
 
 assert.throws(() => validateLegacyProducerContracts({...recoveryRegistry,legacyProducerChecks:recoveryRegistry.legacyProducerChecks.slice(1)}), /Missing source-specific legacy classification/);
+const falseLegacyRemoval=structuredClone(recoveryRegistry);
+falseLegacyRemoval.legacyRetirements[0].producerRemovalRevision=falseLegacyRemoval.legacyRetirements[0].producerBeforeRevision;
+assert.throws(()=>validateLegacyProducerContracts(falseLegacyRemoval),/Retired producer still emitted at removal revision/);
