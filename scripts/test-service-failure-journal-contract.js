@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { join, resolve, relative, dirname } from 'node:path';
+import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import Ajv2020 from 'ajv/dist/2020.js';
 
@@ -125,16 +126,36 @@ for (const path of recoveryRegistry.fragments ?? []) {
     }
   }
 }
+function hasExportedClientSymbol(path, symbol, visited = new Set()) {
+  assert(/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(symbol), 'Invalid recovery export symbol');
+  path = resolve(path);
+  assert(path.startsWith(resolve('packages/client/src') + '/'), 'Client re-export escaped source scope');
+  if (visited.has(path)) return false;
+  visited.add(path);
+  const source = readFileSync(path,'utf8');
+  if (new RegExp(`export\\s+(?:async\\s+)?function\\s+${symbol}\\s*\\(|export\\s+const\\s+${symbol}\\s*=`).test(source)) return true;
+  for (const match of source.matchAll(/export\s*\{([^}]+)\}\s*from\s*['"]([^'"]+)['"]/g)) {
+    for (const item of match[1].split(',')) {
+      const names = item.trim().match(/^([A-Za-z_$][A-Za-z0-9_$]*)(?:\s+as\s+([A-Za-z_$][A-Za-z0-9_$]*))?$/);
+      if (names && (names[2] ?? names[1]) === symbol && match[2].startsWith('.') && hasExportedClientSymbol(resolve(dirname(path),match[2]), names[1], visited)) return true;
+    }
+  }
+  return false;
+}
+
 function validateRecoveryInterface(name) {
   const entry = recoveryRegistry.interfaces?.[name];
   assert(entry, `Unavailable recovery interface ${name}`);
   const source = readFileSync(entry.source, 'utf8');
-  assert(source.includes(`function ${entry.export}(`) || source.includes(`const ${entry.export} `), `Missing recovery interface symbol ${name}`);
+  assert(source.includes(`function ${entry.export}(`) || source.includes(`const ${entry.export} `) || (entry.kind === 'client_export' && hasExportedClientSymbol(entry.source,entry.export)), `Missing recovery interface symbol ${name}`);
   if (entry.kind === 'client_export') {
-    assert(source.includes(`export function ${entry.export}(`) || source.includes(`export async function ${entry.export}(`) || source.includes(`export const ${entry.export} `), `Unexported recovery interface ${name}`);
+    assert(hasExportedClientSymbol(entry.source,entry.export), `Unexported recovery interface ${name}`);
     const publicModule = name.split('#')[0].replace('@agent-browser/client/', './');
     const exports = JSON.parse(readFileSync('packages/client/package.json', 'utf8')).exports;
     assert.equal(exports[publicModule]?.import, `./${entry.source.replace('packages/client/', '')}`, `Unavailable public module ${publicModule}`);
+  } else if (entry.kind === 'dashboard_export') {
+    assert(/^packages\/dashboard\/src\/lib\/[a-z0-9-]+\.ts$/.test(entry.source), 'Unreviewed dashboard recovery source');
+    assert(name.startsWith('dashboard:') && (source.includes(`export function ${entry.export}(`) || source.includes(`export async function ${entry.export}(`) || source.includes(`export const ${entry.export} `)), 'Missing dashboard source export');
   } else assert.equal(entry.kind, 'caller_correction', 'Unknown noncallable interface kind');
 }
 
@@ -149,8 +170,186 @@ const toolSchemas = {
   browser_handoff: readFileSync('cli/src/mcp/workflow.rs', 'utf8'),
   browser_discover: readFileSync('cli/src/mcp/catalog.rs', 'utf8'),
 };
+function validateClientFactoryInventory(contract, registry) {
+  const inventory = contract.reviewedFactoryInventory;
+  if (!inventory) return;
+  const require = createRequire(resolve('docs/package.json'));
+  const ts = require('typescript');
+  const root = process.cwd(), seen = new Set(), candidates = [];
+  function visitModule(path) {
+    path = resolve(path);
+    if (seen.has(path) || !existsSync(path) || !path.endsWith('.js')) return;
+    seen.add(path);
+    const source = readFileSync(path, 'utf8');
+    const parsed = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    function walk(node) {
+      if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text.startsWith('.')) visitModule(resolve(dirname(path), node.moduleSpecifier.text));
+      if ((ts.isCallExpression(node) || ts.isNewExpression(node)) && node.arguments?.[0]) {
+        const factory = node.expression.getText(parsed);
+        if (['Error','TypeError','RangeError','fail','error','invalid'].includes(factory)) {
+          let wrapper = node.parent;
+          while (wrapper && !((ts.isCallExpression(wrapper) || ts.isNewExpression(wrapper)) && ['withClientErrorRecovery','clientOwnerFailure'].includes(wrapper.expression.getText(parsed)))) wrapper = wrapper.parent;
+          candidates.push({path:relative(root,path),factory,expression:node.arguments[0].getText(parsed),wrapper:wrapper?.expression.getText(parsed)});
+        }
+      }
+      ts.forEachChild(node, walk);
+    }
+    walk(parsed);
+  }
+  const pkg = JSON.parse(readFileSync('packages/client/package.json', 'utf8'));
+  for (const entry of Object.values(pkg.exports)) if (entry.import) visitModule(resolve('packages/client', entry.import));
+  assert.deepEqual([...seen].map(path => relative(root,path)).sort(), [...inventory.modulePaths].sort(), 'Unreviewed exported client import closure');
+  const key = entry => JSON.stringify([entry.path,entry.factory,entry.expression]);
+  assert.equal(candidates.length, inventory.candidateCount, 'Unreviewed client failure factory count');
+  assert.deepEqual(candidates.map(key).sort(), inventory.entries.map(key).sort(), 'Unreviewed client failure factory source');
+  for (const entry of inventory.entries) {
+    assert(entry.qualification?.length > 0, 'Factory qualification missing');
+    const actual = candidates.find(candidate => key(candidate) === key(entry));
+    switch (entry.classification) {
+      case 'exact_registered_local_failure': assert(registry.recipes[entry.qualification], 'Unregistered client factory recipe'); break;
+      case 'reviewed_original_error_preserved_by_public_local_or_owner_normalizer': assert.equal(actual.wrapper,entry.qualification,'Missing original-error normalizer wrapper'); break;
+      case 'reviewed_shared_failure_factory': assert(/\/(?:client-recovery|response-failure|client-argument-error|client-wait-budget)\.js$/.test(entry.path), 'Unreviewed shared failure factory'); break;
+      case 'qualified_native_literal_or_conditional': assert(contract.checks.some(check => check.path === entry.path && (check.expression.includes(entry.expression) || entry.expression.includes(check.expression))), 'Unqualified Native conditional factory'); break;
+      case 'reviewed_original_owner_or_object_guard': assert(/\/service-(?:request|observability)\.js$/.test(entry.path), 'Unreviewed Service owner guard'); break;
+      case 'reviewed_caught_installation_configuration_sentinel': assert.equal(entry.path,'packages/client/src/hosted-auth-helper.js'); assert.equal(entry.expression,"'Absolute installation required'"); break;
+      case 'reviewed_caught_internal_or_nested_diagnostic': assert(contract.remainingLiteralChecks.some(check => check.path === entry.path && check.expression === entry.expression && check.classification.startsWith('reviewed_')), 'Unqualified nested diagnostic'); break;
+      default: assert.fail(`Unreviewed client factory classification ${entry.classification}`);
+    }
+  }
+}
+
+function validateClientLiteralInventory(contract) {
+  if (!contract.remainingLiteralChecks) return;
+  const ts = createRequire(resolve('docs/package.json'))('typescript');
+  const excluded = new Set(['client-recovery.js','client-recovery.generated.js','client-argument-error.js','client-owner-failure.js','client-wait-budget.js','response-failure.js','native-saved-login.js','native-image-challenge.js','challenge-assistance.js','service-request.js','service-observability.js']);
+  const found = [];
+  function strings(node, carrier = false) {
+    if (!node) return [];
+    if (ts.isStringLiteral(node) || (!carrier && ts.isNoSubstitutionTemplateLiteral(node))) return carrier || /^[a-z][a-z0-9_]{0,127}$/.test(node.text) ? [node.text] : [];
+    if (ts.isConditionalExpression(node)) return [...strings(node.whenTrue,carrier),...strings(node.whenFalse,carrier)];
+    if (!carrier && ts.isBinaryExpression(node) && ['??','||'].includes(node.operatorToken.getText())) return [...strings(node.left),...strings(node.right)];
+    return [];
+  }
+  for (const file of readdirSync('packages/client/src').filter(file => file.endsWith('.js') && !file.includes('.generated.') && !excluded.has(file))) {
+    const path = 'packages/client/src/' + file;
+    const parsed = ts.createSourceFile(path,readFileSync(path,'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
+    function walk(node) {
+      if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
+        const factory = node.expression.getText(parsed);
+        const arg = ['fail','error','Error','TypeError','clientFailureError'].includes(factory) ? node.arguments?.[0] : ['result','responseFailureError'].includes(factory) ? node.arguments?.[1] : null;
+        let codes = strings(arg);
+        if (['Error','TypeError'].includes(factory) && node.parent && ts.isCallExpression(node.parent) && node.parent.expression.getText(parsed) === 'Object.assign') {
+          const object = node.parent.arguments[1];
+          const code = object && ts.isObjectLiteralExpression(object) ? object.properties.find(property => ts.isPropertyAssignment(property) && property.name.getText(parsed) === 'code') : null;
+          if (code) codes = strings(code.initializer);
+        }
+        for (const code of codes) found.push({path,kind:'local_failure_call',factory,expression:arg?.getText(parsed) ?? node.getText(parsed),code});
+      }
+      if (ts.isPropertyAssignment(node) && ['reason','reasonCode','category'].includes(node.name.getText(parsed))) for (const code of strings(node.initializer)) found.push({path,kind:'explicit_result_reason',expression:node.initializer.getText(parsed),code});
+      if (['login-progress.js','login-discovery.js','owner-login-playbook.js'].includes(file)) {
+        let carrier;
+        if (ts.isVariableDeclaration(node) && ['category','reason'].includes(node.name.getText(parsed))) carrier = node.initializer;
+        if (ts.isBinaryExpression(node) && ['category','reason'].includes(node.left.getText(parsed)) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) carrier = node.right;
+        if (carrier) for (const code of strings(carrier,true)) found.push({path,kind:'reviewed_result_carrier_assignment',expression:carrier.getText(parsed),code});
+      }
+      ts.forEachChild(node,walk);
+    }
+    walk(parsed);
+  }
+  const key = entry => JSON.stringify([entry.path,entry.kind,entry.factory ?? null,entry.expression,entry.code]);
+  assert.deepEqual(found.map(key).sort(),contract.remainingLiteralChecks.map(key).sort(),'Unreviewed client literal/result-reason producer');
+}
+
+function validateDashboardBoundaryInventory(contract, registry) {
+  const inventory = contract.dashboardBoundaryInventory;
+  if (!inventory) return;
+  const ts = createRequire(resolve('docs/package.json'))('typescript');
+  const files = [], found = [];
+  function directory(path) {
+    for (const entry of readdirSync(path,{withFileTypes:true})) {
+      const item = join(path,entry.name);
+      if (entry.isDirectory()) directory(item);
+      else if (/\.(ts|tsx|js)$/.test(item)) files.push(item);
+    }
+  }
+  directory('packages/dashboard/src/lib');
+  for (const path of files) {
+    const parsed = ts.createSourceFile(path,readFileSync(path,'utf8'),ts.ScriptTarget.Latest,true);
+    function walk(node) {
+      const isReject = ts.isCallExpression(node) && node.expression.getText(parsed) === 'reject';
+      const constructor = (ts.isCallExpression(node) || ts.isNewExpression(node)) && ['Error','TypeError','RangeError','DOMException','DashboardReadPausedError','ManualBrowserLaunchRefusal'].includes(node.expression.getText(parsed));
+      if (ts.isThrowStatement(node) || isReject || constructor) {
+        const expression = ts.isThrowStatement(node) ? node.expression.getText(parsed) : node.getText(parsed);
+        let wrapper = node;
+        while (wrapper && !((ts.isCallExpression(wrapper) || ts.isNewExpression(wrapper)) && ['dashboardLocalFailure','dashboardResponseFailureError','foreignCdpFailure'].includes(wrapper.expression.getText(parsed)))) wrapper = wrapper.parent;
+        found.push({path,kind:ts.isThrowStatement(node)?'throw':isReject?'reject':'error_constructor',expression,wrapper:wrapper?.expression.getText(parsed)});
+      }
+      ts.forEachChild(node,walk);
+    }
+    walk(parsed);
+  }
+  assert.deepEqual(files.sort(),[...inventory.modulePaths].sort(),'Unreviewed dashboard boundary source module');
+  const key = entry => JSON.stringify([entry.path,entry.kind,entry.expression]);
+  assert.equal(found.length,inventory.candidateCount,'Unreviewed dashboard boundary count');
+  assert.deepEqual(found.map(key).sort(),inventory.entries.map(key).sort(),'Unreviewed dashboard throw/reject/error boundary');
+  for (const entry of inventory.entries) {
+    const actual = found.find(candidate => key(candidate) === key(entry));
+    assert(entry.recourse?.length > 5,'Missing dashboard boundary recourse');
+    switch (entry.classification) {
+      case 'shared_owner_failure_projection_preserves_whole_owner_recourse': assert(entry.path.endsWith('/response-failure.ts')); break;
+      case 'explicit_caller_abort_not_owner_failure_or_replay_authority': assert(entry.expression.includes('DOMException') && entry.expression.includes('AbortError'),'Non-abort error cannot inherit caller cancellation exclusion'); break;
+      case 'preserved_original_error_propagation': assert.equal(entry.expression,'error'); break;
+      case 'typed_owner_proven_no_effect_failure_preserved': assert(entry.expression.includes('ManualBrowserLaunchRefusal')); break;
+      case 'registered_intentional_read_suspension': assert(entry.expression.includes('DashboardReadPausedError') && registry.codes.dashboard_read_paused); break;
+      case 'registered_local_or_owner_normalization_boundary': assert(actual.wrapper || entry.expression.startsWith('dashboardLocalFailure(') || entry.expression.includes('dashboardResponseFailureError(') || entry.expression.includes('foreignCdpFailure('),'Missing actual dashboard normalization wrapper'); break;
+      default: assert.fail(`Unreviewed dashboard boundary classification ${entry.classification}`);
+    }
+  }
+  for (const check of contract.dashboardLocalChecks ?? []) {
+    assert(readFileSync(check.path,'utf8').includes(check.expression),`Missing dashboard local error ${check.path}`);
+    assert(registry.codes[check.code],`Uncovered dashboard local code ${check.code}`);
+  }
+}
+
 function validateClientQualification(contract, registry) {
   assert.equal(contract.schemaVersion, 'agent-browser.client-error-qualification.v1');
+  for (const check of contract.remainingLiteralChecks ?? []) {
+    assert(readFileSync(check.path,'utf8').includes(check.expression), `Missing client literal source ${check.path}#${check.owningFunction}`);
+    if (check.classification === 'exact_registered_local_failure') {
+      assert(registry.codes[check.code], `Uncovered client literal failure ${check.code}`);
+      assert.equal(registry.codes[check.code].recipe, check.recipe, 'Client literal recipe mismatch');
+    } else {
+      assert(['reviewed_nonfailure_success_or_retained_evidence_diagnostic','reviewed_nested_diagnostic_not_independent_error_code'].includes(check.classification), 'Unreviewed client literal exclusion');
+      assert(check.rationale?.length > 10, 'Client literal exclusion needs source-specific rationale');
+      if (check.classification === 'reviewed_nested_diagnostic_not_independent_error_code') assert(check.outerWorkflow?.length > 0, 'Nested diagnostic requires public owner workflow');
+    }
+  }
+  const partition = contract.remainingLiteralPartition;
+  if (partition) {
+    assert.equal(contract.remainingLiteralChecks.length, partition.total);
+    assert.equal(contract.remainingLiteralChecks.filter(check => check.classification === 'exact_registered_local_failure').length, partition.registeredFailureOccurrences);
+    assert.equal(contract.remainingLiteralChecks.filter(check => check.classification === 'reviewed_nonfailure_success_or_retained_evidence_diagnostic').length, partition.positiveOrHistoricalAnnotations);
+    assert.equal(contract.remainingLiteralChecks.filter(check => check.classification === 'reviewed_nested_diagnostic_not_independent_error_code').length, partition.nestedOrCaughtDiagnostics);
+  }
+  for (const section of ['authOwnerForwarding','authLocalErrorBoundaries','authResultBoundaries','teachingLocalErrorBoundaries','publicResultObjectBoundaries','authProgressBoundaries']) {
+    for (const check of contract[section] ?? []) {
+      assert(check.classification?.length > 10 && check.owningFunction?.length > 0 && readFileSync(check.path,'utf8').includes(check.expression), `Missing reviewed client boundary ${section}:${check.path}`);
+      for (const code of [check.code,check.normalizationCode].filter(Boolean)) {
+        if (code === '$localCode') {
+          assert.equal(section, 'teachingLocalErrorBoundaries');
+          assert(['packages/client/src/teaching-media.js','packages/client/src/teaching-grilling.js','packages/client/src/workspace-siteguides-host.js'].includes(check.path), 'Unreviewed dynamic local factory');
+        } else if (!registry.codes[code]) {
+          const nested = contract.remainingLiteralChecks?.some(entry => entry.path === check.path && entry.code === code && entry.classification === 'reviewed_nested_diagnostic_not_independent_error_code');
+          const wrapped = contract.reviewedFactoryInventory?.entries.some(entry => entry.path === check.path && check.expression.includes(entry.expression) && entry.classification === 'reviewed_original_error_preserved_by_public_local_or_owner_normalizer');
+          assert(nested || wrapped, `Uncovered boundary code ${code}`);
+        }
+      }
+    }
+  }
+  validateClientFactoryInventory(contract, registry);
+  validateClientLiteralInventory(contract);
+  validateDashboardBoundaryInventory(contract, registry);
+
   for (const check of contract.checks) {
     assert(['local_failure_call','explicit_result_reason','local_result_reason_fallback'].includes(check.kind), `Unreviewed client check kind ${check.kind}`);
     const source = readFileSync(check.path, 'utf8');
@@ -184,7 +383,7 @@ function validateRecoveryCall(call) {
   if (call.interface === 'caller_error') {
     assert.equal(call.kind, 'source_reference');
     assert.deepEqual(call.fields, ['code', 'source', 'owningFunction', 'message']);
-    assert(/(?:not a|no) file-read/.test(call.precondition));
+    assert(call.precondition?.length > 20, 'Source references require an explicit already-returned-error inspection precondition');
     if (validatedSourceReferences.has(call.contract)) return;
     const contract = JSON.parse(readFileSync(call.contract, 'utf8'));
     if (contract.schemaVersion === 'agent-browser.client-error-qualification.v1') {
@@ -217,8 +416,9 @@ function validateRecoveryCall(call) {
   }
   if (call.interface === 'cli') {
     assert.equal(call.command, 'agent-browser', 'Recovery command must use the current Agent Browser executable');
-    assert(['["--help"]', '["--json","install","doctor"]'].includes(JSON.stringify(call.arguments)), `Unavailable recovery CLI arguments ${JSON.stringify(call.arguments)}`);
+    assert(['["--help"]', '["--json","install","doctor"]', '["install","workstation","--dry-run","--runtime-replacement-policy","preserve","--json"]'].includes(JSON.stringify(call.arguments)), `Unavailable recovery CLI arguments ${JSON.stringify(call.arguments)}`);
     assert(readFileSync('cli/src/output.rs', 'utf8').includes('agent-browser install doctor'), 'Independent no-launch doctor must remain advertised');
+    if (call.arguments[0] === 'install' && call.arguments[1] === 'workstation') assert(readFileSync('cli/src/connection.rs','utf8').includes(`agent-browser ${call.arguments.join(' ')}`), 'Preserve-mode read must match the existing advertised runtime recovery command');
     return;
   }
   assert(call.tool === 'browser_command' || Object.hasOwn(toolSchemas, call.tool), `Unavailable recovery tool ${call.tool}`);
@@ -268,6 +468,36 @@ function validateRecoveryCall(call) {
     }
   }
 }
+function hasFiniteClientStateProducer(code, path) {
+  const prefixes = {
+    'packages/client/src/owner-login-playbook.js':'auth_',
+    'packages/client/src/owner-totp-continuation.js':'auth_',
+    'packages/client/src/login-playbook.js':'helper_',
+  };
+  const prefix = prefixes[path];
+  if (!prefix || !code.startsWith(prefix)) return false;
+  const suffix = code.slice(prefix.length);
+  const ts = createRequire(resolve('docs/package.json'))('typescript');
+  const parsed = ts.createSourceFile(path,readFileSync(path,'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
+  let found = false;
+  function walk(node) {
+    if (ts.isTemplateExpression(node) && node.head.text === prefix && node.templateSpans.length === 1 && node.templateSpans[0].literal.text === '') {
+      const state = node.templateSpans[0].expression.getText(parsed);
+      for (let parent = node.parent; parent; parent = parent.parent) {
+        if (!ts.isIfStatement(parent)) continue;
+        const guard = parent.expression;
+        if (ts.isCallExpression(guard) && ts.isPropertyAccessExpression(guard.expression) && guard.expression.name.text === 'includes' && ts.isArrayLiteralExpression(guard.expression.expression) && guard.arguments[0]?.getText(parsed) === state) {
+          const states = guard.expression.expression.elements;
+          if (states.every(value => ts.isStringLiteral(value)) && states.some(value => value.text === suffix)) found = true;
+        }
+      }
+    }
+    ts.forEachChild(node,walk);
+  }
+  walk(parsed);
+  return found;
+}
+
 function validateComposedOwningCheck(code, check) {
   const composition = check.codeComposition;
   const pairs = {
@@ -320,7 +550,7 @@ function validateRecoveryInventory(registry, discovered) {
     assert.equal(entry.evidenceFreshness, 'not_observed_by_projection', 'Registry must not invent runtime freshness');
     assert(entry.owningChecks.some(check => {
       if (check.codeComposition) return validateComposedOwningCheck(code, check);
-      if (!check.revision) return readFileSync(check.path, 'utf8').includes(code);
+      if (!check.revision) return readFileSync(check.path, 'utf8').includes(code) || hasFiniteClientStateProducer(code,check.path);
       assert.equal(entry.legacy, true, 'Historical anchors are only for retained legacy failures');
       assert(/^[a-f0-9]{40}$/.test(check.revision) && /^(cli\/src|crates|packages)\//.test(check.path) && !check.path.includes('..'), 'Historical source anchor must be immutable and repository scoped');
       return execFileSync('git', ['show', `${check.revision}:${check.path}`], {encoding:'utf8'}).includes(code);
@@ -415,6 +645,15 @@ for (const entry of recoveryRegistry.enforcedProducerSourceFamilies ?? []) {
 validateRecoveryInventory(recoveryRegistry, discoveredReviewedCodes);
 const clientQualification = JSON.parse(readFileSync('docs/dev/contracts/public-client-error-qualification.v1.json', 'utf8'));
 validateClientQualification(clientQualification, recoveryRegistry);
+const unknownClientLiteral = structuredClone(clientQualification);
+unknownClientLiteral.remainingLiteralChecks.find(check => check.classification === 'exact_registered_local_failure').code = 'unregistered_client_literal_failure';
+assert.throws(() => validateClientQualification(unknownClientLiteral,recoveryRegistry), /Uncovered client literal failure/);
+const missingClientFactory = structuredClone(clientQualification);
+missingClientFactory.reviewedFactoryInventory.candidateCount++;
+assert.throws(() => validateClientFactoryInventory(missingClientFactory,recoveryRegistry), /Unreviewed client failure factory count/);
+const missingDashboardBoundary = structuredClone(clientQualification);
+missingDashboardBoundary.dashboardBoundaryInventory.candidateCount++;
+assert.throws(() => validateDashboardBoundaryInventory(missingDashboardBoundary,recoveryRegistry), /Unreviewed dashboard boundary count/);
 const uncoveredClientQualification = structuredClone(clientQualification);
 uncoveredClientQualification.checks.find(check => check.classification === 'exact_registered_local_failure').code = 'unregistered_client_failure';
 assert.throws(() => validateClientQualification(uncoveredClientQualification, recoveryRegistry), /Uncovered client failure/);
