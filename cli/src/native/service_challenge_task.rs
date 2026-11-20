@@ -656,6 +656,106 @@ mod tests {
     }
 
     #[test]
+    fn public_challenge_origin_survives_reopen_and_completed_replay_without_time() {
+        use crate::connection::stable_time::{Fixture, Stamp};
+        let home =
+            std::env::temp_dir().join(format!("ab-challenge-origin-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&home).unwrap();
+        let environment =
+            crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        environment.set("HOME", home.to_str().unwrap());
+        environment.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        let repository =
+            super::super::service_store::LockedServiceStateRepository::default_json().unwrap();
+        let state = service_state();
+        let command = start_command(&state);
+        repository
+            .mutate(|retained| {
+                *retained = state.clone();
+                Ok(())
+            })
+            .unwrap();
+        // A deliberately historical qualified UTC instant proves guest UTC is
+        // not used to mint or admit this 120-second relative lifetime.
+        let stamp = Stamp {
+            epoch: "11111111-1111-4111-8111-111111111111".into(),
+            counter: 1,
+            frequency_hz: 1000,
+            earliest_utc_ns: 1767225600000000000,
+            latest_utc_ns: 1767225600000000000,
+        };
+        let _time = Fixture::set(Ok(stamp.clone()));
+        let started = handle_service_challenge_task(&command).unwrap();
+        let id = started["challengeTaskId"].as_str().unwrap();
+        assert_eq!(started["createdAt"], "2026-01-01T00:00:00+00:00");
+        let reopened =
+            super::super::service_store::LockedServiceStateRepository::default_json().unwrap();
+        let retained = reopened.load_snapshot().unwrap();
+        assert_eq!(
+            retained.challenge_tasks[id].relative_deadline_ms,
+            Some(120000)
+        );
+        assert_eq!(
+            retained.challenge_tasks[id]
+                .deadline_origin
+                .as_ref()
+                .unwrap(),
+            &stamp.service_origin().unwrap()
+        );
+        let resume = json!({"action":"service_challenge_task_resume", "challengeTaskId":id,
+            "clientSubjectId":"principal-1", "operationId":"qualified-completion"});
+        let _later = Fixture::set(Ok(Stamp {
+            counter: 1001,
+            earliest_utc_ns: stamp.earliest_utc_ns + 1_000_000_000,
+            latest_utc_ns: stamp.latest_utc_ns + 1_000_000_000,
+            ..stamp.clone()
+        }));
+        let completed = handle_service_challenge_task(&resume).unwrap();
+        assert_eq!(completed["state"], "completed");
+        let mut legacy_command = command.clone();
+        legacy_command["idempotencyKey"] = json!("retained-legacy-origin");
+        let legacy = handle_service_challenge_task(&legacy_command).unwrap();
+        let legacy_id = legacy["challengeTaskId"].as_str().unwrap();
+        let _outage = Fixture::set(Err("stable_time_client_start_failed".into()));
+        assert_eq!(
+            handle_service_challenge_task(&resume).unwrap()["replayed"],
+            true
+        );
+        assert_eq!(
+            handle_service_challenge_task(&command).unwrap()["replayed"],
+            true
+        );
+        // A legacy active original retains read/cancel, but cannot be silently
+        // qualified from its old guest-derived deadline or replay a new effect.
+        repository
+            .mutate(|state| {
+                let original = state.challenge_tasks.get_mut(legacy_id).unwrap();
+                original.deadline_origin = None;
+                original.relative_deadline_ms = None;
+                Ok(())
+            })
+            .unwrap();
+        let mut new_intent = resume.clone();
+        new_intent["challengeTaskId"] = json!(legacy_id);
+        new_intent["operationId"] = json!("new-legacy-effect");
+        assert_eq!(
+            handle_service_challenge_task(&new_intent).unwrap_err(),
+            "challenge_task_deadline_origin_unqualified"
+        );
+        let status = json!({"action":"service_challenge_task_status", "challengeTaskId":legacy_id,"clientSubjectId":"principal-1"});
+        assert_eq!(
+            handle_service_challenge_task(&status).unwrap()["challengeTaskId"],
+            legacy_id
+        );
+        let cancel = json!({"action":"service_challenge_task_cancel", "challengeTaskId":legacy_id,"clientSubjectId":"principal-1","operationId":"cancel-legacy"});
+        assert_eq!(
+            handle_service_challenge_task(&cancel).unwrap()["state"],
+            "cancelled"
+        );
+        std::fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
     fn start_is_exact_handle_bound_idempotent_and_secret_free() {
         let mut state = service_state();
         let command = start_command(&state);

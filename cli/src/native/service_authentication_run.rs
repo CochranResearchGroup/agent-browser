@@ -1602,6 +1602,151 @@ mod tests {
         })
     }
 
+    #[tokio::test]
+    async fn public_authentication_origin_preserves_legacy_reads_and_pending_fences() {
+        use crate::connection::stable_time::{Fixture, Stamp};
+        let home = std::env::temp_dir().join(format!("ab-auth-origin-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&home).unwrap();
+        let environment =
+            crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        environment.set("HOME", home.to_str().unwrap());
+        environment.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        let repository = LockedServiceStateRepository::default_json().unwrap();
+        let state = service_state();
+        let command = start_command(&state);
+        repository
+            .mutate(|retained| {
+                *retained = state.clone();
+                Ok(())
+            })
+            .unwrap();
+        let stamp = Stamp {
+            epoch: "11111111-1111-4111-8111-111111111111".into(),
+            counter: 1,
+            frequency_hz: 1000,
+            earliest_utc_ns: 1767225600000000000,
+            latest_utc_ns: 1767225600000000000,
+        };
+        let _time = Fixture::set(Ok(stamp.clone()));
+        let mut daemon = DaemonState::new();
+        let started = handle_service_authentication_run(&command, &mut daemon)
+            .await
+            .unwrap();
+        let id = started["runId"].as_str().unwrap();
+        assert_eq!(started["createdAt"], "2026-01-01T00:00:00+00:00");
+        let mut resume = command.clone();
+        resume["action"] = json!("service_authentication_run_resume");
+        resume["authenticationRunId"] = json!(id);
+        resume["operationId"] = json!("new-original-intent");
+        let retained = repository.load_snapshot().unwrap().authentication_runs[id].clone();
+        assert_eq!(retained.relative_deadline_ms, Some(120000));
+        let deadline = retained
+            .deadline_origin
+            .as_ref()
+            .unwrap()
+            .deadline_ms(120000)
+            .unwrap();
+        let _overlap = Fixture::set(Ok(Stamp {
+            counter: 2,
+            earliest_utc_ns: (deadline as i64 - 1) * 1_000_000,
+            latest_utc_ns: deadline as i64 * 1_000_000,
+            ..stamp.clone()
+        }));
+        assert_eq!(
+            handle_service_authentication_run(&resume, &mut daemon)
+                .await
+                .unwrap_err(),
+            "authentication_run_deadline_time_uncertain"
+        );
+        let _expired = Fixture::set(Ok(Stamp {
+            counter: 3,
+            earliest_utc_ns: deadline as i64 * 1_000_000,
+            latest_utc_ns: deadline as i64 * 1_000_000,
+            ..stamp.clone()
+        }));
+        assert_eq!(
+            handle_service_authentication_run(&resume, &mut daemon)
+                .await
+                .unwrap_err(),
+            "authentication_run_deadline_expired"
+        );
+        let _outage = Fixture::set(Err("stable_time_client_start_failed".into()));
+        assert_eq!(
+            handle_service_authentication_run(&command, &mut daemon)
+                .await
+                .unwrap()["replayed"],
+            true
+        );
+        repository
+            .mutate(|state| {
+                let record = state.authentication_runs.get_mut(id).unwrap();
+                record.deadline_origin = None;
+                record.relative_deadline_ms = None;
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            handle_service_authentication_run(&resume, &mut daemon)
+                .await
+                .unwrap_err(),
+            "authentication_run_deadline_origin_unqualified"
+        );
+        let mut status = resume.clone();
+        status["action"] = json!("service_authentication_run_status");
+        assert_eq!(
+            handle_service_authentication_run(&status, &mut daemon)
+                .await
+                .unwrap()["runId"],
+            id
+        );
+        // Retain an exact unresolved effect through the existing model seam.
+        // No network/browser/provider call is made by reservation.
+        repository
+            .mutate(|state| {
+                state
+                    .reserve_service_authentication_effect(
+                        id,
+                        "pending-original",
+                        AuthenticationActionKind::SubmitAccountIdentifier,
+                        "page-original",
+                        "2026-01-01T00:00:01Z",
+                        "2026-01-01T00:00:01Z",
+                    )
+                    .map_err(|error| error.cli_message(""))?;
+                Ok(())
+            })
+            .unwrap();
+        let pending = repository.load_snapshot().unwrap().authentication_runs[id].clone();
+        assert_eq!(
+            handle_service_authentication_run(&resume, &mut daemon)
+                .await
+                .unwrap_err(),
+            "authentication_run_effect_outcome_unknown"
+        );
+        assert_eq!(
+            repository.load_snapshot().unwrap().authentication_runs[id],
+            pending
+        );
+        let mut cancel = resume.clone();
+        cancel["action"] = json!("service_authentication_run_cancel");
+        cancel["operationId"] = json!("cancel-retained-intent");
+        assert_eq!(
+            handle_service_authentication_run(&cancel, &mut daemon)
+                .await
+                .unwrap()["state"],
+            "cancelled"
+        );
+        assert!(
+            project_service_authentication_run(
+                &repository.load_snapshot().unwrap().authentication_runs[id],
+                false
+            )
+            .effect_pending,
+            "cancellation must not erase an unresolved original effect"
+        );
+        std::fs::remove_dir_all(&home).unwrap();
+    }
+
     #[test]
     fn start_is_exact_handle_bound_idempotent_and_secret_free() {
         let mut state = service_state();
