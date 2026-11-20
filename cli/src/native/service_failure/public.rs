@@ -344,7 +344,7 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
         "effectState":failure["effectState"],
         "retryDisposition":failure["retryDisposition"],
             "recommendedAction":failure["recommendedAction"],
-            "blockingCheck":code,
+            "blockingCheck":journal_code,
             "taskIdSha256":task.map(|id| format!("{:x}", Sha256::digest(id.as_bytes()))),
         "evidenceFreshness":failure["recoveryPlan"]["evidence"],
         "policySource":failure["recoveryPlan"]["policySource"],
@@ -364,6 +364,17 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
 #[cfg(test)]
 mod registry_projection_tests {
     use super::*;
+    #[test]
+    fn successful_evaluate_website_failure_lookalikes_remain_page_data() {
+        let mut response = json!({"success":true,"data":{"result":{"ok":false,
+            "error":"Element not found: synthetic", "browser_action_selector_not_found":"page value"}}});
+        let before = response.clone();
+        attach_public_failure(&mut response, &json!({"action":"evaluate"}), "fixture");
+        assert_eq!(response, before);
+        assert!(response.get("failure").is_none());
+        assert!(response.get("occurrenceId").is_none());
+    }
+
     #[test]
     fn source_bound_copy_inspection_keeps_phase_actions_and_never_journals_history() {
         let mut response = json!({"success":true,"data":{"schemaVersion":"agent-browser.profile-duplication.v1","operationId":"original-copy","source":{"id":"source-profile"},"phase":"awaiting_graceful_close","failure":"profile_duplicate_close_readback_required","actions":[{"action":"reconcile","requiresConfirmation":false}]}});
