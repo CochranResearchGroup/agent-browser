@@ -890,19 +890,97 @@ fn daemon_auth_token_available(session: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// The kernel owns this admission for the lifetime of this non-inherited file
+/// handle. The permanent inode is never removed, including after owner death.
 struct DaemonStartupLock {
-    path: PathBuf,
-    token: String,
+    _file: fs::File,
 }
 
-impl Drop for DaemonStartupLock {
-    fn drop(&mut self) {
-        if fs::read_to_string(&self.path)
-            .ok()
-            .is_some_and(|value| value.trim() == self.token)
-        {
-            let _ = fs::remove_file(&self.path);
+/// Legacy markers are evidence only. A positively absent PID permits current
+/// v2 writers to proceed without changing legacy bytes. A live/unqualified
+/// marker defers only cold startup, not verified reuse or independent reads.
+/// Uncontrolled mixed-generation cold writers do not share this protocol.
+fn qualify_legacy_startup_marker(path: &Path) -> Result<(), String> {
+    let unqualified = |cause: &str| {
+        format!("runtime_host_legacy_startup_owner_unqualified:{cause}; retain the marker and inspect the selected-runtime preserve transaction before retrying cold startup")
+    };
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_file() => {}
+        Ok(_) => return Err(unqualified("legacy marker is not a regular file")),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(_) => return Err(unqualified("legacy marker metadata unavailable")),
+    }
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK);
+    }
+    let file = match options.open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(_) => {
+            return Err(unqualified(
+                "legacy marker cannot be read as a regular owner record",
+            ))
         }
+    };
+    let original = file
+        .metadata()
+        .map_err(|_| unqualified("legacy marker metadata unavailable"))?;
+    if !original.is_file() {
+        return Err(unqualified("legacy marker is not a regular file"));
+    }
+    let mut token = String::new();
+    (&file)
+        .take(129)
+        .read_to_string(&mut token)
+        .map_err(|_| unqualified("legacy marker is unreadable or malformed"))?;
+    if token.len() > 128 {
+        return Err(unqualified(
+            "legacy marker exceeds its bounded owner format",
+        ));
+    }
+    let (pid, stamp) = token
+        .trim()
+        .split_once(':')
+        .ok_or_else(|| unqualified("legacy marker has no original PID"))?;
+    let pid = pid
+        .parse::<u32>()
+        .ok()
+        .filter(|pid| *pid != 0)
+        .ok_or_else(|| unqualified("legacy marker PID is invalid"))?;
+    // The old timestamp is format only, never age or ownership evidence.
+    if stamp.is_empty() || !stamp.bytes().all(|value| value.is_ascii_digit()) {
+        return Err(unqualified("legacy marker format is unqualified"));
+    }
+    let observation = crate::process_identity::observe_process(pid);
+    // Observe the current name again: a concurrent legacy publication is not
+    // proof of the owner we just inspected. This does not claim exclusion of
+    // future old-version writers, which never participate in the v2 lock.
+    let current = match fs::symlink_metadata(path) {
+        Ok(current) => current,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(_) => return Err(unqualified("legacy marker name cannot be revalidated")),
+    };
+    if !current.is_file() {
+        return Err(unqualified("legacy marker name changed during inspection"));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if (original.dev(), original.ino()) != (current.dev(), current.ino()) {
+            return Err(unqualified(
+                "legacy marker identity changed during inspection",
+            ));
+        }
+    }
+    match observation {
+        crate::process_identity::ProcessObservation::Missing => Ok(()),
+        crate::process_identity::ProcessObservation::Observed(_) => Err("runtime_host_legacy_startup_owner_live:legacy marker names a currently live PID; retain the marker and inspect the selected-runtime preserve transaction before retrying cold startup".to_string()),
+        crate::process_identity::ProcessObservation::Failed { .. } =>
+            Err(unqualified("original legacy PID observation is unavailable")),
     }
 }
 
@@ -911,59 +989,65 @@ fn acquire_runtime_host_startup_lock(session: &str) -> Result<Option<DaemonStart
         return Ok(None);
     }
     let socket_dir = ensure_socket_dir_exists()?;
-    let path = socket_dir.join(format!(
-        "{}.startup.lock",
-        crate::runtime_host::endpoint_key(session)
-    ));
+    let endpoint = crate::runtime_host::endpoint_key(session);
+    let path = socket_dir.join(format!("{endpoint}.startup.v2.lock"));
+    let mut options = fs::OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+    }
+    let file = options.open(&path).map_err(|error| {
+        format!(
+            "runtime_host_startup_guard_unavailable:cannot open the private kernel guard: {error}"
+        )
+    })?;
+    if !file
+        .metadata()
+        .map_err(|error| {
+            format!(
+        "runtime_host_startup_guard_unavailable:cannot inspect the open kernel guard: {error}"
+    )
+        })?
+        .is_file()
+    {
+        return Err(
+            "runtime_host_startup_guard_unavailable:kernel guard is not a regular file".into(),
+        );
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        file.set_permissions(fs::Permissions::from_mode(0o600))
+            .map_err(|error| {
+                format!(
+            "runtime_host_startup_guard_unavailable:cannot secure the open kernel guard: {error}"
+        )
+            })?;
+    }
     let started = Instant::now();
-    let token = format!(
-        "{}:{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos()
-    );
     loop {
-        match fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-        {
-            Ok(mut file) => {
-                if let Err(error) = file.write_all(token.as_bytes()) {
-                    let _ = fs::remove_file(&path);
-                    return Err(format!(
-                        "Failed to write runtime-host startup lock: {error}"
-                    ));
-                }
-                if let Err(error) = set_private_file_permissions(&path) {
-                    let _ = fs::remove_file(&path);
-                    return Err(format!(
-                        "Failed to secure runtime-host startup lock: {error}"
-                    ));
-                }
-                return Ok(Some(DaemonStartupLock { path, token }));
+        match file.try_lock() {
+            Ok(()) => {
+                qualify_legacy_startup_marker(
+                    &socket_dir.join(format!("{endpoint}.startup.lock")),
+                )?;
+                return Ok(Some(DaemonStartupLock { _file: file }));
             }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                let stale = fs::metadata(&path)
-                    .and_then(|metadata| metadata.modified())
-                    .ok()
-                    .and_then(|modified| modified.elapsed().ok())
-                    .is_some_and(|elapsed| elapsed > Duration::from_secs(30));
-                if stale {
-                    let _ = fs::remove_file(&path);
-                    continue;
-                }
+            Err(std::fs::TryLockError::WouldBlock) => {
+                // This is an ordinary bounded OS wait, never ownership expiry.
                 if started.elapsed() >= DAEMON_START_TIMEOUT {
-                    return Err("Timed out waiting for runtime-host startup admission".to_string());
+                    return Err("runtime_host_startup_guard_busy:another current startup writer still holds kernel admission; inspect the original startup or selected-runtime preserve transaction; verified warm tasks remain independent".to_string());
                 }
                 thread::sleep(DAEMON_START_POLL_INTERVAL);
             }
-            Err(error) => {
+            Err(std::fs::TryLockError::Error(error)) => {
                 return Err(format!(
-                    "Failed to acquire runtime-host startup lock: {error}"
-                ));
+                    "runtime_host_startup_guard_unavailable:kernel locking failed: {error}"
+                ))
             }
         }
     }
@@ -1482,8 +1566,14 @@ mod tests {
         fs::write(get_pid_path(session), std::process::id().to_string()).unwrap();
         write_daemon_auth_token(session, "fixture-token").unwrap();
         fs::write(root.join(format!("{session}.stream")), "{}").unwrap();
-        let startup_lock = root.join("runtime-host.startup.lock");
-        fs::write(&startup_lock, "other-lane-starting").unwrap();
+        let startup_lock = root.join("runtime-host.startup.v2.lock");
+        let owner = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(&startup_lock)
+            .unwrap();
+        owner.try_lock().unwrap();
         let (finished, completion) = std::sync::mpsc::channel();
         let worker = thread::spawn(move || {
             let flags = crate::flags::parse_flags(&[]);
@@ -1494,11 +1584,18 @@ mod tests {
         });
         // This is a bounded deadlock check, not a performance measurement.
         let before_release = completion.recv_timeout(Duration::from_secs(1));
-        let preserved_lock = fs::read_to_string(&startup_lock).unwrap();
-        fs::remove_file(startup_lock).unwrap();
+        assert!(matches!(
+            fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&startup_lock)
+                .unwrap()
+                .try_lock(),
+            Err(std::fs::TryLockError::WouldBlock)
+        ));
+        drop(owner);
         worker.join().unwrap();
         fs::remove_dir_all(root).unwrap();
-        assert_eq!(preserved_lock, "other-lane-starting");
         assert!(
             matches!(before_release, Ok(Ok(true))),
             "ready owner reuse waited on unrelated startup admission: {before_release:?}"
