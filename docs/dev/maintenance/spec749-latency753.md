@@ -21,9 +21,9 @@ coordination blocking; it is not an elapsed-time performance claim.
 
 ## Measurement
 
-The small diagnostic uses the existing smoke context and stdio client, launches
-one disposable headless browser and evaluates the same synthetic page value
-through the CLI and exact-target CDP. Alternating pairs avoid always favoring one
+The initial diagnostic used the existing smoke context and stdio client,
+launched one disposable headless browser and evaluated the same synthetic page
+value through the CLI and exact-target CDP. Alternating pairs avoid favoring one
 order. It reports cold launch separately, binary digest, sample count, median
 and p95 service-bracket bounds. StableTime service UTC bounds at the measurement
 instant are used conservatively; guest time is not extrapolated. Clock round
@@ -67,6 +67,24 @@ Existing daemon timing output is exposed separately as unqualified guest-clock
 diagnostics. It does not supply reliable full phase attribution. Routing,
 individual state reads, readiness, CDP versus other action time and persistence
 remain unmeasured separately.
+
+The comparison now targets the actual addressed workflow MCP path. It reuses
+the existing public workflow smoke bootstrap: create a named Chrome profile in
+the disposable home, open it through browser_open in existing/automation mode,
+then evaluate through browser_command with the returned exact task ID and fresh
+request IDs. No private process is adopted and no owner metadata is fabricated.
+The same task briefing target is independently matched to the direct CDP page,
+and the actual browser executable, selected profile and process start identity
+are verified. All reads return the same fixed synthetic value with matching
+evaluation parameters.
+
+Persistent addressed MCP is the primary warm measurement. A fresh CLI MCP
+facade performs that same addressed evaluation as a separate startup diagnostic;
+it cannot substitute a shorter unscoped CLI path. Cold managed opening is
+reported separately. The earlier CLI-only baseline numbers above remain
+historical diagnostic evidence and do not claim workflow MCP latency. This
+updated path awaits the coordinator's exact-source candidate and is deliberately
+not rerun against an unchanged installed binary merely to collect more samples.
 
 ## Validation and remaining gate
 
