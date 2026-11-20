@@ -147,11 +147,21 @@ function hasExportedClientSymbol(path, symbol, visited = new Set()) {
   return false;
 }
 
+function hasDashboardSourceExport(path, symbol) {
+  const ts = createRequire(resolve('docs/package.json'))('typescript');
+  const parsed = ts.createSourceFile(path,readFileSync(path,'utf8'),ts.ScriptTarget.Latest,true);
+  return parsed.statements.some(statement => {
+    if (!statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) return false;
+    if (ts.isFunctionDeclaration(statement)) return statement.name?.text === symbol;
+    return ts.isVariableStatement(statement) && statement.declarationList.declarations.some(declaration => ts.isIdentifier(declaration.name) && declaration.name.text === symbol);
+  });
+}
+
 function validateRecoveryInterface(name) {
   const entry = recoveryRegistry.interfaces?.[name];
   assert(entry, `Unavailable recovery interface ${name}`);
   const source = readFileSync(entry.source, 'utf8');
-  assert(source.includes(`function ${entry.export}(`) || source.includes(`const ${entry.export} `) || (entry.kind === 'client_export' && hasExportedClientSymbol(entry.source,entry.export)), `Missing recovery interface symbol ${name}`);
+  assert((entry.kind === 'dashboard_export' && hasDashboardSourceExport(entry.source,entry.export)) || source.includes(`function ${entry.export}(`) || source.includes(`const ${entry.export} `) || (entry.kind === 'client_export' && hasExportedClientSymbol(entry.source,entry.export)), `Missing recovery interface symbol ${name}`);
   if (entry.kind === 'client_export') {
     assert(hasExportedClientSymbol(entry.source,entry.export), `Unexported recovery interface ${name}`);
     const publicModule = name.split('#')[0].replace('@agent-browser/client/', './');
@@ -159,7 +169,7 @@ function validateRecoveryInterface(name) {
     assert.equal(exports[publicModule]?.import, `./${entry.source.replace('packages/client/', '')}`, `Unavailable public module ${publicModule}`);
   } else if (entry.kind === 'dashboard_export') {
     assert(/^packages\/dashboard\/src\/lib\/[a-z0-9-]+\.ts$/.test(entry.source), 'Unreviewed dashboard recovery source');
-    assert(name.startsWith('dashboard:') && (source.includes(`export function ${entry.export}(`) || source.includes(`export async function ${entry.export}(`) || source.includes(`export const ${entry.export} `)), 'Missing dashboard source export');
+    assert(name.startsWith('dashboard:') && hasDashboardSourceExport(entry.source,entry.export), 'Missing dashboard source export');
   } else assert.equal(entry.kind, 'caller_correction', 'Unknown noncallable interface kind');
 }
 
@@ -689,6 +699,8 @@ assert.throws(() => validateRecoveryCall({tool:'browser_command',arguments:{task
 assert.throws(() => validateRecoveryCall({interface:'cli',command:'agent-browser',arguments:['nonexistent-repair']}), /Unavailable recovery CLI arguments/);
 assert.throws(() => validateRecoveryCall({interface:'@agent-browser/client/nonexistent#repair',arguments:{}}), /Unavailable recovery interface/);
 assert.throws(() => validateRecoveryCall({tool:'nonexistent_recovery_tool',arguments:{taskId:'$taskId'}}), /Unavailable recovery tool/);
+for (const check of recoveryRegistry.cliPublicationChecks ?? []) assert(readFileSync(check.path,'utf8').includes(check.sourceEvidence) && check.meaning.length > 20, 'Missing public CLI publication boundary');
+for (const check of recoveryRegistry.privateCliExclusions ?? []) assert(readFileSync(check.path,'utf8').includes(check.sourceEvidence) && check.reason.length > 20, 'Unproven private CLI protocol exclusion');
 for (const boundary of recoveryRegistry.boundaries) assert(readFileSync(boundary.source, 'utf8').includes(boundary.publication), `Missing ${boundary.surface} publication seam`);
 if (process.argv.includes('--require-complete-recovery')) {
   assert.equal(recoveryRegistry.inventoryStatus, 'complete', `Public recovery inventory incomplete: ${recoveryRegistry.knownCoverageGaps.join('; ')}`);

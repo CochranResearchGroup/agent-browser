@@ -2448,6 +2448,98 @@
       },
       "resumeCondition": "The original owner operation is inspected and safely settled or advanced through its advertised continuation; current physical identity is verified before the same intended work continues.",
       "maximumAutomaticAttempts": 1
+    },
+    "cli_local_dependency": {
+      "rationale": "A known local CLI input channel or profile source is unavailable; the error is independent of prior browser outcomes.",
+      "requiredActor": "caller_and_existing_installation_owner",
+      "evidenceRequirement": "Typed parse-error variant and the current executable help schema; no browser effect was dispatched.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "remediation": [
+        {
+          "instruction": "Repair the specifically reported existing stdin/profile source using the current installation and a private input channel. Password input must remain off argv and out of logs. A missing Chrome source is not authority to select another profile; inspect existing installation/profile configuration before retrying the intended lookup.",
+          "precondition": "Caller retains original operation/profile intent and existing authority; this local error does not settle any previous owner action.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "resumeCondition": "The named existing local source is available and caller inputs satisfy the command contract; reconcile any earlier operation independently before further browser effects.",
+      "maximumAutomaticAttempts": 1
+    },
+    "cli_close_outcome": {
+      "rationale": "The CLI could not confirm all requested close outcomes; completed peer closes and retained failed outcomes must stay visible.",
+      "requiredActor": "existing_runtime_close_owner",
+      "evidenceRequirement": "Original daemon source/candidate sessions and immutable transfer/owner receipts; this is executable custody transfer, separate from the Native Remote View viewer handoff.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the exact failed sessions and original close outcomes, retaining the reported successful/failed subset. Reconcile through each existing runtime owner before choosing any further close or preserve-mode recovery; do not retry the whole group, broaden task scope or kill a process from an old PID alone.",
+          "precondition": "Exact original session/process identity and earlier outcomes are known; only current verified owner authority permits another effect.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "resumeCondition": "The original preserve transaction and owner receipts establish exact current process/profile/owner custody. Only its supported next step may proceed; no browser effects are replayed from error text.",
+      "maximumAutomaticAttempts": 1
+    },
+    "cli_confirmation": {
+      "rationale": "The configured CLI confirmation gate did not receive an affirmative current owner decision; unavailable terminal input is distinct from an explicit denial.",
+      "requiredActor": "current_configured_confirmation_owner",
+      "evidenceRequirement": "Typed parse-error variant and the current executable help schema; no browser effect was dispatched.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--help"
+        ]
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original confirmation and operation outcome. Obtain a fresh explicit decision through the existing authorized confirmation flow, or have its policy owner deliberately correct the configured confirmation policy. Noninteractive stdin and viewer mode do not prove a human denial, activity or permission to bypass the gate.",
+          "precondition": "Actual current confirmation authority and original operation identity are preserved; no uncertain input is replayed and no approval value is manufactured.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--help"
+        ]
+      },
+      "resumeCondition": "The existing owner flow reports an actual current decision and original outcome; denied work requires its authorized policy correction before a separately intended continuation.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -16721,6 +16813,105 @@
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "uncertain"
+    },
+    "cli_profile_sources_unavailable": {
+      "recipe": "cli_local_dependency",
+      "owningChecks": [
+        {
+          "path": "cli/src/main.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "cli_private_input_unavailable": {
+      "recipe": "cli_local_dependency",
+      "owningChecks": [
+        {
+          "path": "cli/src/main.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "cli_private_input_empty": {
+      "recipe": "cli_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/main.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "cli_batch_input_unavailable": {
+      "recipe": "cli_local_dependency",
+      "owningChecks": [
+        {
+          "path": "cli/src/main.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "cli_batch_input_invalid": {
+      "recipe": "cli_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/main.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "cli_close_failed": {
+      "recipe": "cli_close_outcome",
+      "owningChecks": [
+        {
+          "path": "cli/src/main.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "cli_action_confirmation_denied": {
+      "recipe": "cli_confirmation",
+      "owningChecks": [
+        {
+          "path": "cli/src/main.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "cli_action_confirmation_unavailable": {
+      "recipe": "cli_confirmation",
+      "owningChecks": [
+        {
+          "path": "cli/src/main.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "explicit_session_with_global_close": {
+      "recipe": "cli_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/main.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -17036,6 +17227,24 @@
       "source": "cli/src/native/browser_mode_operation.rs",
       "sourceEvidence": "\"mode_operation_native_\"",
       "reason": "Internal prefix recognizer or wrapper namespace, not a complete emitted failure code. Specific replacement and Native failure suffixes are source-qualified separately."
+    },
+    {
+      "code": "cli_failure",
+      "source": "cli/src/main.rs",
+      "sourceEvidence": "\"cli_failure\"",
+      "reason": "Local publication/journal action label, not an emitted refusal code. Typed parser and actual owner failure codes are qualified separately."
+    },
+    {
+      "code": "cli_batch_entry",
+      "source": "cli/src/main.rs",
+      "sourceEvidence": "\"cli_batch_entry\"",
+      "reason": "Local publication/journal action label, not an emitted refusal code. Typed parser and actual owner failure codes are qualified separately."
+    },
+    {
+      "code": "cli_parse",
+      "source": "cli/src/main.rs",
+      "sourceEvidence": "\"cli_parse\"",
+      "reason": "Local publication/journal action label, not an emitted refusal code. Typed parser and actual owner failure codes are qualified separately."
     }
   ],
   "fragments": [
@@ -17259,6 +17468,50 @@
       "path": "cli/src/native/browser_mode_operation.rs",
       "codePattern": "(?:mode_operation_|browser_)[a-z0-9_]+",
       "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/main.rs",
+      "codePattern": "cli_[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    }
+  ],
+  "cliPublicationChecks": [
+    {
+      "path": "cli/src/main.rs",
+      "sourceEvidence": "fn print_public_cli_failure",
+      "meaning": "Public JSON/plain refusal formatter enriches before output; generic print_json_value remains unchanged for private protocols and success."
+    },
+    {
+      "path": "cli/src/main.rs",
+      "sourceEvidence": "fn enrich_public_cli_failure",
+      "meaning": "Actual response ID and action only; no argv or inferred task identity is sent to journal."
+    },
+    {
+      "path": "cli/src/main.rs",
+      "sourceEvidence": "current_batch_entry_validation",
+      "meaning": "A batch entry parse failure does not settle earlier entries or prior original effects."
+    }
+  ],
+  "privateCliExclusions": [
+    {
+      "path": "cli/src/main.rs",
+      "sourceEvidence": "process_identity::run_namespace_observer_entry",
+      "reason": "Private namespace observer subprocess protocol exits before public CLI command parsing; retain its existing wire/stderr contract."
+    },
+    {
+      "path": "cli/src/main.rs",
+      "sourceEvidence": "lease_authority_bootstrap_process_marker_invalid",
+      "reason": "Private lease-authority bootstrap process identity protocol, not a public task command; its public owner adapter reports the typed refusal."
+    },
+    {
+      "path": "cli/src/main.rs",
+      "sourceEvidence": "lease_authority_service_process_marker_invalid",
+      "reason": "Private protected service process bootstrap, before public CLI dispatch; its public owner adapter owns refusal publication."
+    },
+    {
+      "path": "cli/src/main.rs",
+      "sourceEvidence": "AGENT_BROWSER_DAEMON",
+      "reason": "Retired private per-session launch environment, not a public supported command. Existing message already names admitted runtime host recourse."
     }
   ]
 }
