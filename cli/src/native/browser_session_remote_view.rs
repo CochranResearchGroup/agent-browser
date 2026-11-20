@@ -1165,7 +1165,13 @@ mod tests {
 /// Remote View owns viewer authentication and lifetime; this read only joins
 /// the retained handoff to its current external desktop assignment.
 pub(crate) fn resolve_handoff_desktop_route(id: &str) -> Result<String, String> {
-    read_handoff_desktop_presentation(id, false).map(|presentation| presentation.route)
+    read_handoff_desktop_presentation(id, false, true).map(|presentation| presentation.route)
+}
+
+/// Release-only route lookup for the already authenticated exact-viewer
+/// callback. It grants no viewing/content access or new input capability.
+pub(crate) fn release_handoff_desktop_route(id: &str) -> Result<String, String> {
+    read_handoff_desktop_presentation(id, false, false).map(|presentation| presentation.route)
 }
 
 /// Read the owned route and current private observation together. This does not
@@ -1173,7 +1179,7 @@ pub(crate) fn resolve_handoff_desktop_route(id: &str) -> Result<String, String> 
 pub(crate) fn resolve_handoff_desktop_presentation(
     id: &str,
 ) -> Result<(String, Option<String>), String> {
-    read_handoff_desktop_presentation(id, true)
+    read_handoff_desktop_presentation(id, true, true)
         .map(|presentation| (presentation.route, presentation.correlation))
 }
 
@@ -1191,7 +1197,7 @@ struct HandoffDesktopPresentation {
 }
 
 pub(crate) fn resolve_native_handoff_journey(id: &str) -> Result<NativeHandoffJourney, String> {
-    read_handoff_desktop_presentation(id, true)?
+    read_handoff_desktop_presentation(id, true, true)?
         .journey
         .ok_or_else(|| "native_journey_use_pending".into())
 }
@@ -1199,14 +1205,18 @@ pub(crate) fn resolve_native_handoff_journey(id: &str) -> Result<NativeHandoffJo
 fn read_handoff_desktop_presentation(
     id: &str,
     include_native_context: bool,
+    qualify_retention: bool,
 ) -> Result<HandoffDesktopPresentation, String> {
     let store = BrowserSessionSqliteStore::default_sqlite()?;
     let state = store.load_session_state()?;
-    state
-        .remote_view_tab_handoffs
-        .get(id)
-        .ok_or("remote_view_tab_handoff_missing")?
-        .check_link_at(current_view_time_ms())?;
+    if qualify_retention {
+        check_handoff_time(
+            state
+                .remote_view_tab_handoffs
+                .get(id)
+                .ok_or("remote_view_tab_handoff_missing")?,
+        )?;
+    }
     let target = resolve_remote_view_tab_handoff(&state, id)?;
     // A persisted logical target can outlive its browser process. Public
     // navigation must reach native authentication before owner recovery;
@@ -1279,7 +1289,7 @@ fn read_handoff_desktop_presentation(
                 .remote_view_tab_handoffs
                 .get(id)
                 .ok_or("remote_view_tab_handoff_missing")?;
-            current_link.check_link_at(current_view_time_ms())?;
+            check_handoff_time(current_link)?;
             let current_target = resolve_remote_view_tab_handoff(&current, id)?;
             if remote_view_native_target_digest(id, &current_target)? != digest
                 || current_link.native_observation.as_ref() != Some(binding)
@@ -1666,4 +1676,42 @@ pub(crate) fn public_origin(value: &str) -> Result<url::Url, String> {
         return Err("remote_view_public_origin_invalid".into());
     }
     Ok(origin)
+}
+
+/// Qualify only finite retention through the existing supported service client.
+/// Perpetual links and legacy metadata inspection never acquire reliable time.
+pub(crate) fn handoff_time(
+    link: &agent_browser_service_model::RemoteViewTabHandoff,
+) -> Result<Option<agent_browser_service_model::ServiceTimeOrigin>, String> {
+    if link.expires_at_ms.is_none() {
+        return Ok(None);
+    }
+    if link.retention_time.is_none() {
+        return Err("remote_view_handoff_legacy_time_unqualified: inspect the same handoff; its current owner can explicitly set_link_lifetime to renew this same link without changing authentication or target".into());
+    }
+    let current = crate::connection::stable_time::authority_now()?.service_origin()?;
+    link.check_link_with_time(Some(&current))?;
+    Ok(Some(current))
+}
+pub(crate) fn check_handoff_time(
+    link: &agent_browser_service_model::RemoteViewTabHandoff,
+) -> Result<(), String> {
+    handoff_time(link).map(|_| ())
+}
+pub(crate) fn handoff_resume_intent(
+    state: &agent_browser_service_model::BrowserSessionState,
+    id: &str,
+    explicit_reopen: bool,
+) -> Result<agent_browser_service_model::RemoteViewTabHandoffResumeIntent, String> {
+    let link = state
+        .remote_view_tab_handoffs
+        .get(id)
+        .ok_or("remote_view_tab_handoff_missing")?;
+    let current = handoff_time(link)?;
+    agent_browser_service_model::RemoteViewTabHandoff::qualified_resume_intent(
+        state,
+        id,
+        current.as_ref(),
+        explicit_reopen,
+    )
 }

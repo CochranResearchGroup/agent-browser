@@ -179,11 +179,7 @@ pub(super) fn native_callback_operator(
 fn native_continuation_location(origin: &url::Url, id: &str) -> Result<String, String> {
     let state = crate::native::browser_session_store::BrowserSessionSqliteStore::default_sqlite()?
         .load_session_state()?;
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|_| "remote_view_clock_invalid")?
-        .as_millis() as u64;
-    agent_browser_service_model::remote_view_handoff_resume_intent(&state, id, now_ms)?;
+    crate::native::browser_session_remote_view::handoff_resume_intent(&state, id, false)?;
     origin
         .join(&format!("/handoff/agent-browser/{id}"))
         .map(|url| url.to_string())
@@ -319,23 +315,8 @@ pub(super) async fn resolve_location(
         let state =
             crate::native::browser_session_store::BrowserSessionSqliteStore::default_sqlite()?
                 .load_session_state()?;
-        state
-            .remote_view_tab_handoffs
-            .get(&handoff)
-            .ok_or("remote_view_tab_handoff_missing")?
-            .check_link_at(
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map_err(|_| "remote_view_clock_invalid")?
-                    .as_millis() as u64,
-            )?;
-        let intent = agent_browser_service_model::remote_view_handoff_resume_intent(
-            &state,
-            &handoff,
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|_| "remote_view_clock_invalid")?
-                .as_millis() as u64,
+        let intent = crate::native::browser_session_remote_view::handoff_resume_intent(
+            &state, &handoff, false,
         )?;
         Ok::<_, String>(intent.session_name)
     })

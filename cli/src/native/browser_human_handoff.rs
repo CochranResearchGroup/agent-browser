@@ -430,7 +430,7 @@ pub(crate) fn prepare_handoff(
     state: &BrowserSessionState,
     task_id: &str,
     interaction: &str,
-    now_ms: u64,
+    _now_ms: u64,
 ) -> Result<agent_browser_service_model::RemoteViewTabHandoff, String> {
     let task = state
         .sessions
@@ -445,17 +445,15 @@ pub(crate) fn prepare_handoff(
         .remote_view_tab_handoffs
         .values()
         .find(|link| {
-            !link.id.starts_with("human-")
-                && link.session_id == task_id
-                && link.tab_id == tab_id
-                && link.check_link_at(now_ms).is_ok()
+            !link.id.starts_with("human-") && link.session_id == task_id && link.tab_id == tab_id
         })
         .ok_or("remote_view_tab_handoff_missing")?;
+    super::browser_session_remote_view::check_handoff_time(template)?;
     let retained = if interaction == "interactive" {
         let active = state.remote_view_tab_handoffs.values().find(|link| {
             link.session_id == task_id
                 && link.tab_id == tab_id
-                && link.check_link_at(now_ms).is_ok()
+                && super::browser_session_remote_view::check_handoff_time(link).is_ok()
                 && agent_browser_service_model::resolve_remote_view_tab_handoff(state, &link.id)
                     .and_then(|target| {
                         agent_browser_service_model::remote_view_native_target_digest(
@@ -506,7 +504,7 @@ pub(crate) fn reconcile_recovered_handoff(
     database: &Path,
     expected: &BrowserSessionState,
     id: &str,
-    now_ms: u64,
+    _now_ms: u64,
 ) -> Result<(), String> {
     use crate::native::browser_session_store::{load_optional_document, SESSION_STATE_DOCUMENT};
     use agent_browser_service_model::{
@@ -526,6 +524,12 @@ pub(crate) fn reconcile_recovered_handoff(
     if !interactive && (before.human || before.pause_reads) {
         return Err("browser_handoff_control_changed".into());
     }
+    let retention_now = super::browser_session_remote_view::handoff_time(
+        expected
+            .remote_view_tab_handoffs
+            .get(id)
+            .ok_or("remote_view_tab_handoff_missing")?,
+    )?;
     let mut connection = rusqlite::Connection::open_with_flags(
         database,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE,
@@ -550,7 +554,7 @@ pub(crate) fn reconcile_recovered_handoff(
         .remote_view_tab_handoffs
         .get(id)
         .ok_or("remote_view_tab_handoff_missing")?
-        .check_link_at(now_ms)?;
+        .check_link_with_time(retention_now.as_ref())?;
     let mode_proof =
         crate::native::browser_session_host::browser_mode_host::completed_mode_handoff_proof(
             &transaction,

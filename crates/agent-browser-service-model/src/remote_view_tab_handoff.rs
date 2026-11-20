@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     BrowserSessionState, ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab,
+    ServiceTimeOrigin,
 };
 
 /// Persisted profile-aware retention. None means no automatic link expiry.
@@ -36,9 +37,17 @@ impl BrowserRetentionPolicy {
     }
 }
 
+/// Immutable owner-minted lifetime, independent of guest activity timestamps.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RemoteViewHandoffRetentionTime {
+    pub origin: ServiceTimeOrigin,
+    pub lifetime_ms: u64,
+}
+
 /// A durable handoff addresses one logical session and tab, never a desktop URL.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RemoteViewTabHandoff {
     pub id: String,
     pub session_id: String,
@@ -48,6 +57,9 @@ pub struct RemoteViewTabHandoff {
     pub created_at_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_at_ms: Option<u64>,
+    /// Qualified mint provenance; absent on legacy finite records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retention_time: Option<RemoteViewHandoffRetentionTime>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub view: Option<RemoteViewTabView>,
     /// Task intent survives automatic tab expiry and history compaction.
@@ -178,6 +190,7 @@ pub fn retain_remote_view_tab_handoff_at(
         view: None,
         created_at_ms: None,
         expires_at_ms: None,
+        retention_time: None,
         resume: None,
         recreation: None,
         reopen: None,
@@ -232,7 +245,7 @@ pub fn remote_view_handoff_resume_intent(
     handoff_id: &str,
     now_ms: u64,
 ) -> Result<RemoteViewTabHandoffResumeIntent, String> {
-    handoff_resume_intent(state, handoff_id, now_ms, false)
+    handoff_resume_intent(state, handoff_id, now_ms, false, None)
 }
 
 /// Read retained intent for an explicit authenticated reopen. This does not
@@ -242,14 +255,15 @@ pub fn remote_view_handoff_reopen_intent(
     handoff_id: &str,
     now_ms: u64,
 ) -> Result<RemoteViewTabHandoffResumeIntent, String> {
-    handoff_resume_intent(state, handoff_id, now_ms, true)
+    handoff_resume_intent(state, handoff_id, now_ms, true, None)
 }
 
 fn handoff_resume_intent(
     state: &BrowserSessionState,
     handoff_id: &str,
-    now_ms: u64,
+    _now_ms: u64,
     explicit_reopen: bool,
+    current: Option<&ServiceTimeOrigin>,
 ) -> Result<RemoteViewTabHandoffResumeIntent, String> {
     let link = state
         .remote_view_tab_handoffs
@@ -258,7 +272,7 @@ fn handoff_resume_intent(
     if link.id != handoff_id {
         return Err("remote_view_tab_handoff_record_conflict".into());
     }
-    link.check_link_at(now_ms)?;
+    link.check_link_with_time(current)?;
     let live = resolve_remote_view_tab_handoff(state, handoff_id);
     if let Ok(target) = live.as_ref() {
         return Ok(RemoteViewTabHandoffResumeIntent {
@@ -397,10 +411,98 @@ impl RemoteViewTabHandoff {
         Ok(())
     }
 
-    /// Reject an expired link before browser recovery or presentation effects.
-    pub fn check_link_at(&self, now_ms: u64) -> Result<(), String> {
-        if self.expires_at_ms.is_some_and(|expiry| now_ms >= expiry) {
+    /// Guest/legacy instants never establish finite link validity.
+    pub fn check_link_at(&self, _now_ms: u64) -> Result<(), String> {
+        self.check_link_with_time(None)
+    }
+
+    pub fn check_link_with_time(&self, current: Option<&ServiceTimeOrigin>) -> Result<(), String> {
+        let Some(expiry) = self.expires_at_ms else {
+            return Ok(());
+        };
+        let retained = self
+            .retention_time
+            .as_ref()
+            .ok_or("remote_view_handoff_legacy_time_unqualified")?;
+        let expected = retained
+            .origin
+            .deadline_ms(retained.lifetime_ms)
+            .map_err(|_| "remote_view_handoff_time_evidence_invalid")?;
+        if expiry != expected {
+            return Err("remote_view_handoff_time_evidence_invalid".into());
+        }
+        let current = current.ok_or("remote_view_handoff_time_unqualified")?;
+        current
+            .validate()
+            .map_err(|_| "remote_view_handoff_time_evidence_invalid")?;
+        if current.earliest_utc_ms >= expiry {
             return Err("remote_view_handoff_expired".into());
+        }
+        if current.latest_utc_ms >= expiry {
+            return Err("remote_view_handoff_time_uncertain".into());
+        }
+        Ok(())
+    }
+
+    /// Explicit authorized same-link renewal can replace a legacy or expired
+    /// lifetime. It does not renew authentication, target or input authority.
+    pub fn renew_link_lifetime(
+        &mut self,
+        origin: Option<ServiceTimeOrigin>,
+        lifetime_ms: u64,
+    ) -> Result<(), String> {
+        let retained = if lifetime_ms == 0 {
+            None
+        } else {
+            let origin = origin.ok_or("remote_view_handoff_time_unqualified")?;
+            origin
+                .deadline_ms(lifetime_ms)
+                .map_err(|cause| format!("remote_view_handoff_time_unqualified:cause={cause}"))?;
+            Some(RemoteViewHandoffRetentionTime {
+                origin,
+                lifetime_ms,
+            })
+        };
+        let expiry = retained
+            .as_ref()
+            .map(|time| time.origin.deadline_ms(time.lifetime_ms))
+            .transpose()
+            .map_err(str::to_owned)?;
+        if let Some(time) = &retained {
+            self.created_at_ms
+                .get_or_insert(time.origin.earliest_utc_ms);
+        }
+        self.expires_at_ms = expiry;
+        self.retention_time = retained;
+        Ok(())
+    }
+
+    pub fn qualified_resume_intent(
+        state: &BrowserSessionState,
+        id: &str,
+        current: Option<&ServiceTimeOrigin>,
+        explicit_reopen: bool,
+    ) -> Result<RemoteViewTabHandoffResumeIntent, String> {
+        handoff_resume_intent(state, id, 0, explicit_reopen, current)
+    }
+
+    /// Extend only a currently qualified valid finite link. The earlier
+    /// immutable origin is retained unless this explicitly requested extension
+    /// actually increases its deadline.
+    pub fn extend_qualified_retention(
+        &mut self,
+        current: ServiceTimeOrigin,
+        lifetime_ms: u64,
+    ) -> Result<(), String> {
+        self.check_link_with_time(Some(&current))?;
+        if self.created_at_ms.is_some() && self.expires_at_ms.is_none() {
+            return Ok(());
+        }
+        let proposed = current
+            .deadline_ms(lifetime_ms)
+            .map_err(|cause| format!("remote_view_handoff_time_unqualified:cause={cause}"))?;
+        if self.expires_at_ms.is_none_or(|prior| proposed > prior) {
+            self.renew_link_lifetime(Some(current), lifetime_ms)?;
         }
         Ok(())
     }
@@ -457,17 +559,32 @@ mod retention_tests {
             (link.created_at_ms, link.expires_at_ms),
             (Some(100), Some(110))
         );
-        link.extend_link_retention(105, 20).unwrap();
-        assert_eq!(link.expires_at_ms, Some(125));
-        link.extend_link_retention(106, 1).unwrap();
-        assert_eq!(link.expires_at_ms, Some(125));
-        assert!(link.check_link_at(124).is_ok());
         assert_eq!(
-            link.check_link_at(125).unwrap_err(),
+            link.check_link_at(100).unwrap_err(),
+            "remote_view_handoff_legacy_time_unqualified"
+        );
+        let origin = |ms| ServiceTimeOrigin::new("service-epoch".into(), ms, ms).unwrap();
+        link.renew_link_lifetime(Some(origin(100)), 10).unwrap();
+        link.extend_qualified_retention(origin(105), 20).unwrap();
+        assert_eq!(link.expires_at_ms, Some(125));
+        link.extend_qualified_retention(origin(106), 1).unwrap();
+        assert_eq!(link.expires_at_ms, Some(125));
+        assert!(link.check_link_with_time(Some(&origin(124))).is_ok());
+        let mut overlap = origin(124);
+        overlap.latest_utc_ms = 126;
+        assert_eq!(
+            link.check_link_with_time(Some(&overlap)).unwrap_err(),
+            "remote_view_handoff_time_uncertain"
+        );
+        let mut next_epoch = origin(124);
+        next_epoch.epoch = "new-qualified-service-epoch".into();
+        assert!(link.check_link_with_time(Some(&next_epoch)).is_ok());
+        assert_eq!(
+            link.check_link_with_time(Some(&origin(125))).unwrap_err(),
             "remote_view_handoff_expired"
         );
         let before = link.clone();
-        assert!(link.extend_link_retention(125, 20).is_err());
+        assert!(link.extend_qualified_retention(origin(125), 20).is_err());
         assert_eq!(link, before);
         assert_eq!((&*link.session_id, &*link.tab_id), ("session", "tab"));
         assert_eq!(

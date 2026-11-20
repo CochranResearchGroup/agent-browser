@@ -120,15 +120,21 @@ pub(super) fn retained_handoff_recovery_authorized(
             return Ok(false);
         }
     }
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|_| "remote_view_clock_invalid")?
-        .as_millis() as u64;
-    if !state.remote_view_tab_handoffs.values().any(|link| {
-        link.check_link_at(now).is_ok()
-            && agent_browser_service_model::resolve_remote_view_tab_handoff(&state, &link.id)
-                .is_ok_and(|target| target.browser == *browser)
+    let mut valid_link = false;
+    for link in state.remote_view_tab_handoffs.values().filter(|link| {
+        agent_browser_service_model::resolve_remote_view_tab_handoff(&state, &link.id)
+            .is_ok_and(|target| target.browser == *browser)
     }) {
+        match super::super::browser_session_remote_view::check_handoff_time(link) {
+            Ok(()) => {
+                valid_link = true;
+                break;
+            }
+            Err(error) if error == "remote_view_handoff_expired" => (),
+            Err(error) => return Err(error),
+        }
+    }
+    if !valid_link {
         return Ok(false);
     }
     Ok(matches!(

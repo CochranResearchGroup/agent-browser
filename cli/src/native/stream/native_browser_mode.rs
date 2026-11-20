@@ -143,6 +143,10 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
             | "return_activity"
     );
     let generation = request.generation;
+    let release_only = matches!(
+        request.choice.as_str(),
+        "return_handoff" | "return_activity"
+    );
     let returning_activity = (request.choice == "return_activity")
         .then(|| request.operation_id.clone())
         .flatten();
@@ -164,33 +168,31 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
             .remote_view_tab_handoffs
             .get(&handoff)
             .ok_or("remote_view_tab_handoff_missing")?;
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|_| "remote_view_clock_invalid")?
-            .as_millis() as u64;
-        link.check_link_at(now)?;
+        if !release_only {
+            crate::native::browser_session_remote_view::check_handoff_time(link)?;
+        }
         let target =
             agent_browser_service_model::resolve_remote_view_tab_handoff(&state, &handoff)?;
         let digest =
             agent_browser_service_model::remote_view_native_target_digest(&handoff, &target)?;
-        let route =
-            crate::native::browser_session_remote_view::resolve_handoff_desktop_route(&handoff)?;
+        let route = if release_only {
+            crate::native::browser_session_remote_view::release_handoff_desktop_route(&handoff)?
+        } else {
+            crate::native::browser_session_remote_view::resolve_handoff_desktop_route(&handoff)?
+        };
         if route != format!("/{slot}") {
             return Err("remote_view_native_mode_desktop_changed".to_string());
         }
         let current = store.load_session_state()?;
         let current_target =
             agent_browser_service_model::resolve_remote_view_tab_handoff(&current, &handoff)?;
-        current
-            .remote_view_tab_handoffs
-            .get(&handoff)
-            .ok_or("remote_view_tab_handoff_missing")?
-            .check_link_at(
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map_err(|_| "remote_view_clock_invalid")?
-                    .as_millis() as u64,
-            )?;
+        if !release_only {
+            current
+                .remote_view_tab_handoffs
+                .get(&handoff)
+                .ok_or("remote_view_tab_handoff_missing")
+                .and_then(crate::native::browser_session_remote_view::check_handoff_time)?;
+        }
         if agent_browser_service_model::remote_view_native_target_digest(&handoff, &current_target)?
             != digest
         {
@@ -211,12 +213,9 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
             .remote_view_tab_handoffs
             .get(&handoff)
             .ok_or("remote_view_tab_handoff_missing")?;
-        after_link.check_link_at(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|_| "remote_view_clock_invalid")?
-                .as_millis() as u64,
-        )?;
+        if !release_only {
+            crate::native::browser_session_remote_view::check_handoff_time(after_link)?;
+        }
         if agent_browser_service_model::remote_view_native_target_digest(&handoff, &after_target)?
             != digest
             || after_link.native_observation != link.native_observation
@@ -259,11 +258,17 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
             }
             proof["agentInteractionActive"] =
                 control::metadata(&target.browser.id)?["agentInteractionActive"].clone();
-            proof["handoffIntent"] = json!(control::handoff_intent(
-                &target.browser.id,
-                &handoff,
-                &digest
-            )?);
+            // This proof acknowledges only the authenticated exact claim's
+            // release. It never renews finite viewing or interactive capability.
+            proof["handoffIntent"] = if release_only {
+                json!("view")
+            } else {
+                json!(control::handoff_intent(
+                    &target.browser.id,
+                    &handoff,
+                    &digest
+                )?)
+            };
         } else if returning.is_some()
             || taking.is_some()
             || activity.is_some()
@@ -357,12 +362,7 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
                             .remote_view_tab_handoffs
                             .get(&handoff)
                             .ok_or("remote_view_tab_handoff_missing")?;
-                        link.check_link_at(
-                            std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .map_err(|_| "remote_view_clock_invalid")?
-                                .as_millis() as u64,
-                        )?;
+                        crate::native::browser_session_remote_view::check_handoff_time(link)?;
                         let original = store.original_browser_identity(&state, &target.browser);
                         let mode = store.inspect_task_mode(&target.session.id)?;
                         let current = store.load_session_state()?;
