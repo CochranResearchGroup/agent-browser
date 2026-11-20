@@ -5308,6 +5308,23 @@ mod tests {
                 "profile_reset_time_uncertain"
             );
         }
+        {
+            let _expired = crate::connection::stable_time::Fixture::set(Ok(
+                crate::connection::stable_time::fixture_stamp(1_767_225_960_000),
+            ));
+            assert_eq!(
+                apply_profile_reset_command(&apply).unwrap_err(),
+                "profile_reset_plan_expired"
+            );
+        }
+        {
+            let _outage = crate::connection::stable_time::Fixture::set(Err(
+                "stable_time_client_start_failed".into(),
+            ));
+            let error = apply_profile_reset_command(&apply).unwrap_err();
+            assert!(error.starts_with("profile_reset_time_unavailable:"));
+            assert!(error.contains("stable_time_client_start_failed"));
+        }
         let applied = apply_profile_reset_command(&apply);
         let replay = if applied.is_ok() {
             let _outage = crate::connection::stable_time::Fixture::set(Err(
