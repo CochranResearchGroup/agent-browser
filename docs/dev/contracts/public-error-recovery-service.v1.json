@@ -1139,6 +1139,39 @@
       },
       "resumeCondition": "The original capability publication and current private-file custody are known; capability issuance/rotation is never silently repeated and no secret is exposed.",
       "maximumAutomaticAttempts": 1
+    },
+    "service_failure_record": {
+      "rationale": "A failure-log lookup needs an actual retained occurrence UUID or exact task scope; failed logging custody is not missing-effect proof.",
+      "requiredActor": "existing_service_owner",
+      "evidenceRequirement": "Current original error details, exact task/request/job/occurrence binding where present, and the owning check specified by this code. Registry projection has not observed runtime evidence.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "remediation": [
+        {
+          "instruction": "Retain the complete original public refusal and its occurrenceId/logging state. Correct a malformed UUID from that original response, or read browser_command action=failure_log on the exact original task with params.limit=50. If logging custody/read storage failed, inspect the actual failure and repair only the diagnosed user-scoped journal/database path through the installation owner; do not invent an occurrence, delete originals, repeat the failed browser operation or describe logging failure as a provider outage.",
+          "precondition": "The existing owner has authority for this exact scope; retain the original request and unresolved effect evidence.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "failure_log",
+          "params": {
+            "limit": 50
+          }
+        }
+      },
+      "resumeCondition": "The exact original refusal is readable or its logging-custody failure is retained honestly; owner effect uncertainty is reconciled independently before any new intent.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -6895,6 +6928,105 @@
       "policySource": "cli/src/native/service_browser_retirement.rs",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "invalid"
+    },
+    "abandoned_browser_retirement": {
+      "recipe": "service_resource_cleanup",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/abandoned_browser_retirement.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/abandoned_browser_retirement.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_inventory_identity_conflict": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_inventory.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_inventory.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "protected_browser_owner_observation_invalid": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_health.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_health.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_task_context_required": {
+      "recipe": "service_request_shape",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "runtime_browser_record_missing": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "terminal_owner_evidence_incomplete": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "failure_occurrence_id_invalid": {
+      "recipe": "service_failure_record",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_failure_journal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_failure_journal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "failure_journal_custody_failed": {
+      "recipe": "service_failure_record",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_request.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_request.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "unknown_failure": {
+      "recipe": "service_failure_record",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_failure_journal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_failure_journal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -6919,6 +7051,108 @@
       "source": "crates/agent-browser-service-model/src/failure_recourse.rs",
       "sourceEvidence": ".then(|| \"tab_close_any\".into())",
       "reason": "Named missing permission on an operator close denial; not a failure code or independently callable operation."
+    },
+    {
+      "code": "service_reconcile_profile_lock_stale_pid_absent",
+      "source": "cli/src/native/service_health.rs",
+      "sourceEvidence": ".then(|| format!(\"service_reconcile_profile_lock_stale_pid_absent:{lock_pid}\"))",
+      "reason": "Positive process-absence evidence used by reconciliation; not a refusal or failed action code."
+    },
+    {
+      "code": "profile_repair_stale_lock_process_absent",
+      "source": "cli/src/native/service_profile_recovery.rs",
+      "sourceEvidence": ".then(|| format!(\"profile_repair_stale_lock_process_absent:{pid}\"))",
+      "reason": "Positive stale-lock process-absence evidence in a preserving repair plan, not a failed operation."
+    },
+    {
+      "code": "freshness_expired_by_monitor",
+      "source": "cli/src/native/service_monitors.rs",
+      "sourceEvidence": "row.evidence = format!(\"freshness_expired_by_monitor:{}\", result.monitor_id);",
+      "reason": "Readiness evidence provenance on a stale result, not an error code emitted by a failed public request."
+    },
+    {
+      "code": "observation_failed",
+      "source": "cli/src/native/service_profile_diagnosis.rs",
+      "sourceEvidence": "Err(_) => \"observation_failed\",",
+      "reason": "An explicit processState observation verdict used by diagnosis; not a refusal code or permission denial."
+    },
+    {
+      "code": "lane_not_ready_or_retained_owned",
+      "source": "cli/src/native/service_abandoned_browser_retirement.rs",
+      "sourceEvidence": "\"lane_not_ready_or_retained_owned\".to_string(),",
+      "reason": "Payload of typed RetirementRecourse::Ineligible; its actual public Display failure code is abandoned_browser_retirement."
+    },
+    {
+      "code": "lifecycle_record_missing",
+      "source": "cli/src/native/service_profile_recovery.rs",
+      "sourceEvidence": "code: \"lifecycle_record_missing\".to_string(),",
+      "reason": "Evidence item inside a blocked acquisition result; the public preflight refusal has a separate exact code."
+    },
+    {
+      "code": "stale_pending_acquisition_repair",
+      "source": "cli/src/native/service_retained_state.rs",
+      "sourceEvidence": "Some(format!(\"stale_pending_acquisition_repair: {reason}\"));",
+      "reason": "Retained provider-event history for an already performed acquisition repair, not a public refusal code."
+    },
+    {
+      "code": "production_scale_helper_release_timeout",
+      "source": "cli/src/native/service_store.rs",
+      "sourceEvidence": "#[cfg(test)]\nfn wait_for_production_scale_prepare_barrier",
+      "reason": "Test-only synchronization barrier failure inside a cfg(test) function; it is absent from ordinary installed binaries and cannot be a production public refusal."
+    },
+    {
+      "code": "production_scale_prepare_release_path_missing",
+      "source": "cli/src/native/service_store.rs",
+      "sourceEvidence": "#[cfg(test)]\nfn wait_for_production_scale_prepare_barrier",
+      "reason": "Test-only synchronization barrier failure inside a cfg(test) function; it is absent from ordinary installed binaries and cannot be a production public refusal."
+    },
+    {
+      "code": "production_scale_prepare_ready_write_failed",
+      "source": "cli/src/native/service_store.rs",
+      "sourceEvidence": "#[cfg(test)]\nfn wait_for_production_scale_prepare_barrier",
+      "reason": "Test-only synchronization barrier failure inside a cfg(test) function; it is absent from ordinary installed binaries and cannot be a production public refusal."
+    },
+    {
+      "code": "foreground_precommit_ready_write_failed",
+      "source": "cli/src/native/service_store.rs",
+      "sourceEvidence": "#[cfg(test)]\nfn wait_for_foreground_precommit_barrier",
+      "reason": "Test-only synchronization barrier failure inside a cfg(test) function; it is absent from ordinary installed binaries and cannot be a production public refusal."
+    },
+    {
+      "code": "foreground_precommit_release_timeout",
+      "source": "cli/src/native/service_store.rs",
+      "sourceEvidence": "#[cfg(test)]\nfn wait_for_foreground_precommit_barrier",
+      "reason": "Test-only synchronization barrier failure inside a cfg(test) function; it is absent from ordinary installed binaries and cannot be a production public refusal."
+    },
+    {
+      "code": "production_scale_load_current_release_path_missing",
+      "source": "cli/src/native/service_store.rs",
+      "sourceEvidence": "#[cfg(test)]\nfn wait_for_production_scale_load_current_barrier",
+      "reason": "Test-only synchronization barrier failure inside a cfg(test) function; it is absent from ordinary installed binaries and cannot be a production public refusal."
+    },
+    {
+      "code": "production_scale_load_current_ready_write_failed",
+      "source": "cli/src/native/service_store.rs",
+      "sourceEvidence": "#[cfg(test)]\nfn wait_for_production_scale_load_current_barrier",
+      "reason": "Test-only synchronization barrier failure inside a cfg(test) function; it is absent from ordinary installed binaries and cannot be a production public refusal."
+    },
+    {
+      "code": "production_scale_load_current_release_timeout",
+      "source": "cli/src/native/service_store.rs",
+      "sourceEvidence": "#[cfg(test)]\nfn wait_for_production_scale_load_current_barrier",
+      "reason": "Test-only synchronization barrier failure inside a cfg(test) function; it is absent from ordinary installed binaries and cannot be a production public refusal."
+    },
+    {
+      "code": "production_scale_load_current_ready_path_missing",
+      "source": "cli/src/native/service_store.rs",
+      "sourceEvidence": "#[cfg(test)]\nfn wait_for_production_scale_full_load_delay",
+      "reason": "Test-only synchronization barrier failure inside a cfg(test) function; it is absent from ordinary installed binaries and cannot be a production public refusal."
+    },
+    {
+      "code": "production_scale_full_load_delay_invalid",
+      "source": "cli/src/native/service_store.rs",
+      "sourceEvidence": "#[cfg(test)]\nfn wait_for_production_scale_full_load_delay",
+      "reason": "Test-only synchronization barrier failure inside a cfg(test) function; it is absent from ordinary installed binaries and cannot be a production public refusal."
     }
   ],
   "enforcedProducerSourceFamilies": [
@@ -6996,6 +7230,11 @@
       "path": "cli/src/native/service_resources.rs",
       "beforeNamedTestModule": true,
       "codePattern": "(?:abandoned_browser_retirement_|browser_disposable_cleanup_|browser_disposable_group_|browser_session_idle_activity_|review_token_|invalid_review_token_|missing_review_token_)[a-z0-9_]+"
+    },
+    {
+      "path": "cli/src/native/service_store.rs",
+      "beforeNamedTestModule": true,
+      "codePattern": "(?:foreground_precommit_|production_scale_)[a-z0-9_]+"
     }
   ]
 }
