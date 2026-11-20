@@ -42,7 +42,7 @@ async function time(){
  const reply=await clock.send('tools/call',{name:'get_time',arguments:{}});
  assert(!reply.isError,'StableTime client failure');
  const result=JSON.parse(reply.content.find(block=>block.type==='text').text);
- assert(result.status==='qualified_live'&&result.bound==='finite','Reliable StableTime unavailable');
+ assert(['qualified_live','qualified_holdover'].includes(result.status)&&result.bound==='finite','Reliable StableTime unavailable');
  return result;
 }
 async function measure(operation,run){
