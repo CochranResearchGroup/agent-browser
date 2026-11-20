@@ -21,7 +21,7 @@ use super::browser_session_store::BrowserSessionSqliteStore;
 #[path = "browser_human_handoff.rs"]
 mod human_handoff;
 pub(crate) use human_handoff::{
-    begin_handoff, begin_reopened_handoff, handoff_intent, prepare_handoff,
+    activity_handoff, begin_handoff, begin_reopened_handoff, handoff_intent, prepare_handoff,
     reconcile_recovered_handoff, recovery_rebind_pending, return_handoff, take_handoff,
 };
 
@@ -214,6 +214,7 @@ pub(crate) fn metadata(browser_id: &str) -> Result<Value, String> {
         json!({"epoch":control.epoch,"owner":if control.human {"human"} else if control.awaiting_observation {"awaiting_observation"} else {"agent"},
         "pauseReads":control.pause_reads,"cooperativeOnly":true,"actor":control.actor,
         "agentInteractionActive":!control.human && control.flights.values().any(|state| state == "dispatched"),
+        "humanCoordination":human_handoff::coordination_metadata(&control),
         "pendingOutcomeCount":pending.len(),"pendingOutcomes":pending.iter().take(32).map(|(id,state)|json!({"requestId":id,"state":state})).collect::<Vec<_>>(),"outcomesTruncated":pending.len()>32,"lastChange":control.audit.last()}),
     )
 }

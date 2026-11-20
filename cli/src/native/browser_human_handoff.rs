@@ -147,8 +147,36 @@ pub(crate) fn take_handoff(
     request: &str,
 ) -> Result<(), String> {
     transaction(&path(browser)?, |control| {
-        claim(control, id, digest, request)
+        claim(control, id, digest, request, true)
     })
+}
+
+/// A real Native viewer event pauses automation without asserting an explicit
+/// indefinite takeover. The provider owns the qualified quiet continuation.
+pub(crate) fn activity_handoff(
+    browser: &str,
+    id: &str,
+    digest: &str,
+    request: &str,
+) -> Result<(), String> {
+    transaction(&path(browser)?, |control| {
+        claim(control, id, digest, request, false)
+    })
+}
+
+pub(super) fn coordination_metadata(control: &Control) -> Value {
+    let mut modes = BTreeMap::new();
+    for event in &control.audit {
+        if let (Some(viewer), Some(operation)) = (
+            event["humanViewerId"].as_str(),
+            event["humanViewerOperation"].as_str(),
+        ) {
+            modes.insert(viewer, operation);
+        }
+    }
+    json!({"explicitViewerCount":modes.values().filter(|mode| **mode == "takeover").count(),
+        "activityViewerCount":modes.values().filter(|mode| **mode == "activity").count(),
+        "scope":"instrumented_native_viewer_input"})
 }
 
 fn viewer_request(request: &str) -> Option<(&str, &str)> {
@@ -169,7 +197,7 @@ fn viewer_claims(control: &Control) -> BTreeMap<String, (String, String)> {
             continue;
         };
         match event["humanViewerOperation"].as_str() {
-            Some("takeover") => {
+            Some("takeover" | "activity") => {
                 if let (Some(id), Some(digest)) =
                     (event["handoffId"].as_str(), event["targetDigest"].as_str())
                 {
@@ -185,7 +213,13 @@ fn viewer_claims(control: &Control) -> BTreeMap<String, (String, String)> {
     claims
 }
 
-fn claim(control: &mut Control, id: &str, digest: &str, request: &str) -> Result<(), String> {
+fn claim(
+    control: &mut Control,
+    id: &str,
+    digest: &str,
+    request: &str,
+    explicit: bool,
+) -> Result<(), String> {
     if request.is_empty() || request.len() > 128 {
         return Err("browser_handoff_takeover_request_invalid".into());
     }
@@ -226,7 +260,7 @@ fn claim(control: &mut Control, id: &str, digest: &str, request: &str) -> Result
         json!({"epoch":control.epoch,"operation":"human_handoff_takeover",
         "humanHandoffClaimRequestId":request,"humanHandoff":handoff,
         "humanViewerId":viewer_request(request).map(|(viewer, _)| viewer),
-        "humanViewerOperation":"takeover","handoffId":id,"targetDigest":digest}),
+        "humanViewerOperation":if explicit {"takeover"} else {"activity"},"handoffId":id,"targetDigest":digest}),
     );
     Ok(())
 }
@@ -549,8 +583,8 @@ mod tests {
     fn returning_one_viewer_preserves_another_viewers_explicit_claim() {
         let mut state = Control::default();
         begin(&mut state, "invitation", "target").unwrap();
-        claim(&mut state, "invitation", "target", "viewer-a:take-a").unwrap();
-        claim(&mut state, "invitation", "target", "viewer-b:take-b").unwrap();
+        claim(&mut state, "invitation", "target", "viewer-a:take-a", true).unwrap();
+        claim(&mut state, "invitation", "target", "viewer-b:take-b", true).unwrap();
         relinquish(&mut state, "invitation", "target", "viewer-a:return-a").unwrap();
         assert!(state.human);
         assert!(permits(&state, "click").is_err());
@@ -564,7 +598,7 @@ mod tests {
     fn explicit_reopen_rebinds_its_own_hold_without_taking_another_hold() {
         let mut state = Control::default();
         begin(&mut state, "same-link", "closed-target").unwrap();
-        claim(&mut state, "same-link", "closed-target", "takeover-1").unwrap();
+        claim(&mut state, "same-link", "closed-target", "takeover-1", true).unwrap();
         let epoch = state.epoch;
         begin_reopen(&mut state, "same-link", "reopened-target", "reopen-request").unwrap();
         assert_eq!(state.epoch, epoch + 1);
@@ -607,7 +641,7 @@ mod tests {
             .insert("pending-operation".into(), "dispatched".into());
         begin(&mut state, "invitation", "target").unwrap();
         assert_eq!(intent(&state, "invitation", "target"), "interactive");
-        claim(&mut state, "invitation", "target", "takeover-1").unwrap();
+        claim(&mut state, "invitation", "target", "takeover-1", true).unwrap();
         assert_eq!(state.flights["pending-operation"], "uncertain_in_flight");
         assert_eq!(intent(&state, "passive", "target"), "view");
         assert_eq!(intent(&state, "invitation", "replacement"), "view");
