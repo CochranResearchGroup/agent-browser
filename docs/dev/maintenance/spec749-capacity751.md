@@ -104,3 +104,9 @@ reports that no new effect was dispatched and names supported mode inspection,
 task briefing and explicit mode-conversion recovery. It reuses the already
 obtained observation rather than performing another process scan. Raw synthetic
 runtime receipts remain outside Git.
+
+## Public continuation acceptance
+
+The existing public disposable MCP workflow passed against source9a21df27f and binary SHA25606826cf94182444ac11990f739d3d03a263bdd4a48d0aaa96adb88d5d70c7304. The candidate built through cargo-safe, one job,3GiB claim/cap, unchanged16GiB host reserve. It completed260 page operations with a configured active capacity of2, archived originals automatically, reconnected the MCP facade, looked up the original request and returned its cached result without dispatch. Changed arguments under that request ID were refused. The page counter remained260. Two intentionally failed evaluations remained uncertain and exhausted capacity; changing the same task's ceiling from2 to3 immediately allowed further work without restart. Task/browser/tab identities remained unchanged. Final readback retained two unresolved rows and261 archived rows. Fresh cleanup census found no remaining owned process.
+
+The same run verified a pre-task public refusal's executable action and occurrence-ID lookup without logging its synthetic private input marker. Raw synthetic execution receipt remains outside Git at /tmp/spec749-continuation-headless-proof.json. This acceptance proves the public workflow; it does not claim the unexecuted Rust unit suite passed or that a production runtime was updated.

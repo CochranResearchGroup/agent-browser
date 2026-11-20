@@ -90,6 +90,9 @@ assert(dashboard.includes('FAILURE_OBSERVATION_ROUTE'));
 assert(viewport.includes('cdp_frame_never_received'));
 assert(viewport.includes('cdp_frame_stream_stalled'));
 assert(viewport.includes('guacamole_load'));
-assert(handoff.includes('handoff_unusable'));
+// The dashboard now delegates durable handoffs to the canonical presentation
+// endpoint; it no longer owns a separate handoff_unusable client flow.
+assert(handoff.includes('window.location.replace(`/api/remote-view/'));
+assert(handoff.includes('/presentation`);'));
 
 process.stdout.write('Service failure journal contract checks passed\n');

@@ -7,6 +7,7 @@ import {
   closeSession,
   createSmokeContext,
   httpJson,
+  httpJsonResult,
   incidentSummarySmokeFilterCases,
   parseJsonOutput,
   runCli,
@@ -68,6 +69,24 @@ function seedIncidentEvents() {
 try {
   await seedIncidentEvents();
   const port = await enableStream();
+  const beforeJobs = await httpJson(port, 'GET', '/api/service/jobs');
+  const refused = await httpJsonResult(port, 'POST', '/api/service/request', {
+    action: 'synthetic_unsupported_action',
+    serviceName, agentName, taskName,
+  });
+  assert(refused.statusCode === 400, `Expected pre-dispatch HTTP refusal: ${JSON.stringify(refused)}`);
+  const rejection = refused.body;
+  assert(rejection.success === false && !rejection.job, 'Refusal must not create a job');
+  assert(rejection.failure?.effectState === 'no_effect', JSON.stringify(rejection));
+  assert(rejection.failure?.code === 'unsupported_action', JSON.stringify(rejection));
+  assert(rejection.failure?.executableNextAction, 'Refusal lost executable recourse');
+  const occurrenceId = rejection.failure?.occurrenceId;
+  assert(typeof occurrenceId === 'string', 'Refusal lost occurrence correlation');
+  const logged = await httpJson(port, 'GET', `/api/service/failures?occurrenceId=${encodeURIComponent(occurrenceId)}`);
+  assert(logged.data.records.length === 1 && logged.data.records[0].occurrenceId === occurrenceId,
+    `HTTP failure lookup did not preserve the producer occurrence: ${JSON.stringify(logged)}`);
+  const afterJobs = await httpJson(port, 'GET', '/api/service/jobs');
+  assert(afterJobs.data.total === beforeJobs.data.total, 'Rejected request created a job');
   const incidents = await httpJson(
     port,
     'GET',
