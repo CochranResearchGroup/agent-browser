@@ -1,3 +1,5 @@
+import {clientFailureError} from './client-recovery.js';
+import {createTeachingCapacity} from './teaching-capacity.js';
 import {lstat,open,link,unlink,readFile,readdir} from 'node:fs/promises';
 import {isAbsolute,join} from 'node:path';
 import {randomUUID,createHash} from 'node:crypto';
@@ -33,9 +35,10 @@ export async function writeTeachingDraftCandidate({candidateDirectory,candidateO
  * directory. These sidecars are never guide heads, approvals or reuse authority.
  * An admitted operation cannot call a model again merely because its reply is
  * absent. The receiving adapter stores a resolved response before staging it.
- * @param {{candidateDirectory:string}} configuration
+ * @param {{candidateDirectory:string,teachingCapacity?:import('./teaching-capacity.js').TeachingCapacityPolicy|import('./teaching-capacity.js').TeachingCapacityControl}} configuration
  */
-export function createTeachingAgentSubmissionOwner({candidateDirectory}) {
+export function createTeachingAgentSubmissionOwner({candidateDirectory,teachingCapacity}) {
+ const capacity=createTeachingCapacity(teachingCapacity);
  const digest=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
  async function paths(scope) {
   if(!isAbsolute(candidateDirectory??'')||!['rootGuideId','operationId'].every(key=>typeof scope[key]==='string'&&/^[a-z0-9][a-z0-9-]{0,119}$/.test(scope[key]))||typeof scope.taskId!=='string'||!scope.taskId||scope.taskId.length>4000)throw Error('teaching_agent_scope_invalid');
@@ -72,6 +75,7 @@ export function createTeachingAgentSubmissionOwner({candidateDirectory}) {
   return {...result,status:'resolved',retryAuthority:'not_inferred'};
  }
  return {
+  capacity,
   async begin(scope) {
    if(!/^[a-f0-9]{64}$/.test(scope.inputSha256??''))throw Error('teaching_agent_input_digest_required');
    if(scope.context&&(scope.context.taskId!==scope.taskId||!['named','disposable'].includes(scope.context.profileKind)||['profileId','sitePolicyId'].some(key=>typeof scope.context[key]!=='string'||!scope.context[key]||scope.context[key].length>4000)||['account','organization'].some(key=>typeof scope.context[key]!=='string'||scope.context[key].length>4000)||!Array.isArray(scope.context.allowedOrigins)||!scope.context.allowedOrigins.length))throw Error('teaching_agent_context_invalid');
@@ -83,7 +87,7 @@ export function createTeachingAgentSubmissionOwner({candidateDirectory}) {
   async retainedContexts() {
    // Reuse the same private directory validation before enumerating provenance.
    await paths({taskId:'metadata',rootGuideId:'metadata',operationId:'metadata'});
-   const names=(await readdir(candidateDirectory)).filter(name=>/^\.teaching-agent-[a-f0-9]{64}\.intent$/.test(name));if(names.length>4096)throw Error('teaching_agent_history_limit');
+   const names=(await readdir(candidateDirectory)).filter(name=>/^\.teaching-agent-[a-f0-9]{64}\.intent$/.test(name));if(names.length>capacity().policy.maximumRetainedContexts)throw clientFailureError('teaching_agent_history_limit',{source:'packages/client/src/teaching-draft.js',owningFunction:'createTeachingAgentSubmissionOwner.retainedContexts'});
    const contexts=[];
    for(const name of names){const record=await read(join(candidateDirectory,name));if(record?.schemaVersion!=='agent-browser.teaching-agent-operation.v1'||record.rootGuideId!==record.operationId||!record.context)continue;checked(record,record);if(record.context.taskId!==record.taskId)throw Error('teaching_agent_context_invalid');contexts.push({taskId:record.taskId,rootGuideId:record.rootGuideId,context:record.context});}
    return contexts;

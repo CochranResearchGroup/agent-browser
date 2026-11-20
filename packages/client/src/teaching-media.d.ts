@@ -1,6 +1,7 @@
 import type {TeachingBundle, TeachingEvidenceClient} from './teaching-evidence.js';
 export interface TeachingMediaTranscript {operationId:string;artifactId:string;revision:string;startMs:number;endMs:number;text:string}
 export interface TeachingMediaPacket {
+ revision?:{guide:Record<string,any>;question:unknown;authenticatedAnswer:Record<string,unknown>&{answer:string}};
  schemaVersion:'agent-browser.teaching-agent-media.v1';operationId:string;taskId:string;profileId:string;sitePolicyId:string;allowedOrigins:string[];
  intendedIdentity:{account:string;organization:string};recordingId:string;videoSha256:string;narrationSha256:string;
  gaps:TeachingBundle['gaps'];alignment:TeachingBundle['alignment'];

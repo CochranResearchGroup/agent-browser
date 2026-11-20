@@ -60,6 +60,7 @@ export interface TeachingReviewView extends TeachingVersionReference {
 }
 /** Existing private candidate directory; receiver-owned authenticated ports stay outside model request data. */
 export interface TeachingReviewOptions {
+  teachingCapacity?:import('./teaching-capacity.js').TeachingCapacityPolicy|import('./teaching-capacity.js').TeachingCapacityControl;
   candidateDirectory:string;
   browser:Pick<ReturnType<typeof createPlaybookClient>,'inspectTeachingDraft'|'validateTeachingCandidate'>;
   acceptedVersion?:TeachingRetainedVersion;
@@ -72,6 +73,7 @@ export interface TeachingReviewOptions {
   readOperatorAnswer?:TeachingGrillingOptions['readOperatorAnswer'];
 }
 export interface TeachingReviewClient {
+  capacity:import('./teaching-capacity.js').TeachingCapacityControl;
   open(input:{taskId:string;guideId:string}):Promise<TeachingReviewView>;
   save(input:TeachingReviewInput & {guide:TeachingSiteGuide}):Promise<TeachingSaveResult>;
   recordDecision(input:TeachingReviewInput & {decisionRef:string}):Promise<TeachingSaveResult>;
