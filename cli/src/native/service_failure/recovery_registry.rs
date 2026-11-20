@@ -117,7 +117,7 @@ pub(super) fn enrich(failure: &mut Value, command: &Value) {
     let Some(entry) = source["codes"].get(&code) else {
         let plan = json!({
             "schemaVersion":"agent-browser.public-error-recovery.v1",
-            "coverage":"unregistered", "code":code,
+            "coverage":"unregistered", "code":code, "failureCategory":"unclassified_runtime_failure",
             "requiredActor":"maintainer", "maximumAutomaticAttempts":0,
             "evidence":{"status":"unavailable","reason":"specific_check_contract_not_registered"},
             "escalation":{"operation":"retain_sanitized_failure_packet",
@@ -145,9 +145,22 @@ pub(super) fn enrich(failure: &mut Value, command: &Value) {
         }
     }
     let diagnosis = &entry["evidenceClass"];
+    // JSON-RPC compatibility codes are transport vocabulary, not diagnosis or
+    // effect evidence. Categorize only the reviewed producer contract and keep
+    // the actual owner's axis, phase, plan and effect state unchanged.
+    let category = match diagnosis.as_str() {
+        Some("invalid") => "invalid_argument_or_contract",
+        Some("unavailable") => "runtime_dependency_unavailable",
+        Some("stale") => "evidence_or_binding_changed",
+        Some("denied") => "authority_required",
+        Some("uncertain") => "owner_or_original_outcome_unqualified",
+        Some("configured_budget") => "configured_operational_limit",
+        Some("coordination_paused") => "coordination_pending",
+        _ => "unclassified_runtime_failure",
+    };
     let plan = json!({
         "schemaVersion":"agent-browser.public-error-recovery.v1",
-        "coverage":"registered", "code":code, "diagnosis":diagnosis,
+        "coverage":"registered", "code":code, "diagnosis":diagnosis, "failureCategory":category,
         "rationale":recipe["rationale"], "requiredActor":recipe["requiredActor"],
         "policySource":{"kind":"owning_runtime_check","path":entry["policySource"],"effectiveConfiguration":"not_supplied"},
         "evidence":{"status":"not_observed_by_projection","required":recipe["evidenceRequirement"]},
@@ -174,6 +187,24 @@ fn publish_plan(failure: &mut Value, plan: Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn transport_invalid_params_does_not_classify_runtime_failure_or_settle_original() {
+        let mut runtime = json!({"code":"browser_runtime_database_open_failed", "effectState":"effect_uncertain", "rpcCompatibilityCode":-32602});
+        enrich(&mut runtime, &Value::Null);
+        assert_eq!(
+            runtime["recoveryRegistry"]["failureCategory"],
+            "runtime_dependency_unavailable"
+        );
+        assert_eq!(runtime["effectState"], "effect_uncertain");
+        assert_eq!(runtime["rpcCompatibilityCode"], -32602);
+        let mut caller = json!({"code":"browser_build_absolute_path_required", "effectState":"effect_uncertain"});
+        enrich(&mut caller, &Value::Null);
+        assert_eq!(
+            caller["recoveryRegistry"]["failureCategory"],
+            "invalid_argument_or_contract"
+        );
+        assert_eq!(caller["effectState"], "effect_uncertain");
+    }
     #[test]
     fn capacity_recovers_exact_task_without_inventing_policy_or_freshness() {
         let mut failure =
