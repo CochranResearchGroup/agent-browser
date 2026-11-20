@@ -13503,6 +13503,466 @@
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "configured_budget"
+    },
+    "browser_profile_catalog": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_launch_custody_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_headless_launch_identity_store_busy": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_launch_custody_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_release_cancellation_invalid": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_launch_custody_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_headless_launch_identity_publication_failed": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_launch_custody_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_release_custody_unavailable": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_launch_custody_store.rs"
+        },
+        {
+          "path": "cli/src/native/browser_session_pool_maintenance.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_headless_launch_identity_schema_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_launch_custody_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_launch_custody": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_launch_custody_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_headless_launch_identity_invalid": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_launch_custody_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_headless_launch_identity_conflict": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_launch_custody_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "remote_view_release_readback_required": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_launch_custody_store.rs"
+        },
+        {
+          "path": "cli/src/native/browser_session_pool_maintenance.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_build_readback_invalid": {
+      "recipe": "owner_operation_mode",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_mode_host.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_native_target_changed": {
+      "recipe": "owner_operation_mode",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_mode_host.rs"
+        },
+        {
+          "path": "cli/src/native/browser_native_host.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_build_readback_unavailable": {
+      "recipe": "owner_operation_mode",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_mode_host.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_readback_binding_changed": {
+      "recipe": "owner_operation_mode",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_mode_host.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_profile_operation_in_progress": {
+      "recipe": "owner_operation_mode",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_mode_host.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_build_loaded_path_mismatch": {
+      "recipe": "owner_operation_mode",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_mode_host.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_build_previous_unavailable": {
+      "recipe": "owner_operation_mode",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_mode_host.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_tab_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_host.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_native_task_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_host.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_native_browser_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_host.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_native_window_observation_unavailable": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_host.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_window_observation_only": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_host.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_native_exact_task_required": {
+      "recipe": "native_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_host.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_input_disabled": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_readiness.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_native_input_inspection_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_readiness.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "native_input_target_changed": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_readiness.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_input_unverified": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_readiness.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "native_input_policy_unverified": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_readiness.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_native_input_target_changed": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_readiness.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "remote_view_idle_evidence_invalid": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_pool_maintenance.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_pool_custody_unavailable": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_pool_maintenance.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_runtime_inventory_unavailable": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_pool_maintenance.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_runtime_pool_missing": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_pool_maintenance.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_profile_process_identity_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_profile_reuse.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_profile_lock_invalid": {
+      "recipe": "runtime_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_profile_reuse.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_profile_locked_on_another_host": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_profile_reuse.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_profile_lock_unavailable": {
+      "recipe": "runtime_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_profile_reuse.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_reconciliation_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_reconciliation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_reconciliation_invalid": {
+      "recipe": "runtime_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_reconciliation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_reconciliation_encode_failed": {
+      "recipe": "runtime_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_reconciliation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_reconciliation_receipt_failed": {
+      "recipe": "runtime_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_reconciliation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -13734,6 +14194,18 @@
       "source": "cli/src/native/stream/native_browser_mode.rs",
       "sourceEvidence": "\"browser_operation_\"",
       "reason": "Namespace recognizer or existing command dispatch selector, not an emitted failure code. Actual failure producer tokens are independently qualified."
+    },
+    {
+      "code": "browser_session_profile_claim_persistence_unavailable",
+      "source": "cli/src/native/browser_session_profile_reuse.rs",
+      "sourceEvidence": "acquisition continues",
+      "reason": "Nonblocking stderr diagnostic explicitly reports that acquisition continues; not a refused operation or custody terminalization. Storage/claim producer failures are separately qualified."
+    },
+    {
+      "code": "browser_mode_owner_bindings",
+      "source": "cli/src/native/browser_mode_host.rs",
+      "sourceEvidence": "name='browser_mode_owner_bindings'",
+      "reason": "Private SQLite table name in schema discovery, never an emitted public failure code. Readback/store errors have separate qualified producer codes."
     }
   ],
   "fragments": [
@@ -13845,6 +14317,41 @@
     {
       "path": "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs",
       "codePattern": "(?:browser_|remote_view_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/browser_launch_custody_store.rs",
+      "codePattern": "(?:browser_|remote_view_|native_input_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/browser_mode_host.rs",
+      "codePattern": "(?:browser_|remote_view_|native_input_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/browser_native_host.rs",
+      "codePattern": "(?:browser_|remote_view_|native_input_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/browser_native_readiness.rs",
+      "codePattern": "(?:browser_|remote_view_|native_input_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/browser_session_pool_maintenance.rs",
+      "codePattern": "(?:browser_|remote_view_|native_input_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/browser_session_profile_reuse.rs",
+      "codePattern": "(?:browser_|remote_view_|native_input_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/browser_session_reconciliation.rs",
+      "codePattern": "(?:browser_|remote_view_|native_input_)[a-z0-9_]+",
       "beforeNamedTestModule": true
     }
   ]
