@@ -22,6 +22,16 @@ fn bind(value: &Value, command: &Value) -> (Value, bool) {
             let replacement = match token.as_str() {
                 "$taskId" => command.get("taskId").or_else(|| command.get("sessionId")),
                 "$requestId" => command.get("requestId").or_else(|| command.get("id")),
+                "$sourceProfileId" => command.get("sourceProfileId").or_else(|| {
+                    command
+                        .get("params")
+                        .and_then(|params| params.get("sourceProfileId"))
+                }),
+                "$operationId" => command.get("operationId").or_else(|| {
+                    command
+                        .get("params")
+                        .and_then(|params| params.get("operationId"))
+                }),
                 // Reviewed policy is deliberately never inferred from a failed request.
                 _ => None,
             };

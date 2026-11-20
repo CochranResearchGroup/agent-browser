@@ -847,6 +847,296 @@
       },
       "resumeCondition": "The current same-task metadata/custody is reconciled and acknowledged original effects are retained. A pure metadata update may be republished by its owner; input/capture is never repeated as repair.",
       "maximumAutomaticAttempts": 1
+    },
+    "copy_request": {
+      "rationale": "The duplication request must preserve a named source and immutable operation identity; invalid or conflicting scope cannot be silently substituted.",
+      "requiredActor": "caller",
+      "evidenceRequirement": "Current inspect result for the original source profile and duplication operation, including its durable copy/close/launch/disposal phase and physical identity proof.",
+      "inspect": {
+        "tool": "browser_discover",
+        "arguments": {
+          "category": "browser",
+          "operation": "profile_duplicate"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the retained original operation using its sourceProfileId and operationId. Resolve missing scope from the retained task briefing or original receipt; never guess a profile or operation ID.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "action": "profile_duplicate",
+              "params": {
+                "choice": "inspect",
+                "sourceProfileId": "$sourceProfileId",
+                "operationId": "$operationId"
+              }
+            }
+          },
+          "precondition": "Exact source profile/operation scope is available from the existing request, task or retained receipt."
+        },
+        {
+          "instruction": "Read the public profile_duplicate schema and correct the identified argument. Existing operation IDs keep their original source/destination/build intent; changed intent requires resolving/canceling the old operation before a separately intended new copy.",
+          "precondition": "Caller retains the exact original source profile/operation IDs and has the existing profile-owner authority; no uncertain copy/launch/close/disposal is replayed.",
+          "interface": "existing_profile_copy_owner_reconciliation"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "action": "profile_duplicate",
+          "params": {
+            "choice": "inspect",
+            "sourceProfileId": "$sourceProfileId",
+            "operationId": "$operationId"
+          }
+        }
+      },
+      "resumeCondition": "The exact original inspect result establishes the relevant prerequisite/terminal phase and unchanged source/destination identity. Continue only the supported same-operation phase it reports; no unknown effect is replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "copy_storage": {
+      "rationale": "The named private copy journal, catalog, staging or filesystem prerequisite is unavailable, so copied/closed/launched state cannot be inferred.",
+      "requiredActor": "installation_owner",
+      "evidenceRequirement": "Current inspect result for the original source profile and duplication operation, including its durable copy/close/launch/disposal phase and physical identity proof.",
+      "inspect": {
+        "tool": "browser_discover",
+        "arguments": {
+          "category": "browser",
+          "operation": "profile_duplicate"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the retained original operation using its sourceProfileId and operationId. Resolve missing scope from the retained task briefing or original receipt; never guess a profile or operation ID.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "action": "profile_duplicate",
+              "params": {
+                "choice": "inspect",
+                "sourceProfileId": "$sourceProfileId",
+                "operationId": "$operationId"
+              }
+            }
+          },
+          "precondition": "Exact source profile/operation scope is available from the existing request, task or retained receipt."
+        },
+        {
+          "instruction": "Preserve source, staging/quarantine bytes and original operation journals. Repair the specific path/permission/storage/platform prerequisite under installation-owner authority, then inspect and reconcile the original copy. Unsupported atomic copy/publication remains a sanitized escalation, never a request for broad deletion.",
+          "precondition": "Caller retains the exact original source profile/operation IDs and has the existing profile-owner authority; no uncertain copy/launch/close/disposal is replayed.",
+          "interface": "existing_profile_copy_owner_reconciliation"
+        },
+        {
+          "instruction": "Reconcile the same original operation after the actual storage prerequisite is repaired and the source/destination lineage is verified.",
+          "precondition": "Caller retains the exact original source profile/operation IDs and has the existing profile-owner authority; no uncertain copy/launch/close/disposal is replayed.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "action": "profile_duplicate",
+              "params": {
+                "choice": "reconcile",
+                "sourceProfileId": "$sourceProfileId",
+                "operationId": "$operationId"
+              }
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "action": "profile_duplicate",
+          "params": {
+            "choice": "inspect",
+            "sourceProfileId": "$sourceProfileId",
+            "operationId": "$operationId"
+          }
+        }
+      },
+      "resumeCondition": "The exact original inspect result establishes the relevant prerequisite/terminal phase and unchanged source/destination identity. Continue only the supported same-operation phase it reports; no unknown effect is replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "copy_custody": {
+      "rationale": "Copying or reopening requires positive original process custody, source clean-close evidence and unchanged source/destination lineage.",
+      "requiredActor": "profile_owner",
+      "evidenceRequirement": "Current inspect result for the original source profile and duplication operation, including its durable copy/close/launch/disposal phase and physical identity proof.",
+      "inspect": {
+        "tool": "browser_discover",
+        "arguments": {
+          "category": "browser",
+          "operation": "profile_duplicate"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the retained original operation using its sourceProfileId and operationId. Resolve missing scope from the retained task briefing or original receipt; never guess a profile or operation ID.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "action": "profile_duplicate",
+              "params": {
+                "choice": "inspect",
+                "sourceProfileId": "$sourceProfileId",
+                "operationId": "$operationId"
+              }
+            }
+          },
+          "precondition": "Exact source profile/operation scope is available from the existing request, task or retained receipt."
+        },
+        {
+          "instruction": "Inspect the original operation and actual source owner. Resolve the active source or unsettled original through its existing owner; changed physical identity or a borrowed source never authorizes broad process cleanup.",
+          "precondition": "Caller retains the exact original source profile/operation IDs and has the existing profile-owner authority; no uncertain copy/launch/close/disposal is replayed.",
+          "interface": "existing_profile_copy_owner_reconciliation"
+        },
+        {
+          "instruction": "Reconcile current source/copy/launch evidence without issuing a replacement copy or replaying close.",
+          "precondition": "Caller retains the exact original source profile/operation IDs and has the existing profile-owner authority; no uncertain copy/launch/close/disposal is replayed.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "action": "profile_duplicate",
+              "params": {
+                "choice": "reconcile",
+                "sourceProfileId": "$sourceProfileId",
+                "operationId": "$operationId"
+              }
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "action": "profile_duplicate",
+          "params": {
+            "choice": "inspect",
+            "sourceProfileId": "$sourceProfileId",
+            "operationId": "$operationId"
+          }
+        }
+      },
+      "resumeCondition": "The exact original inspect result establishes the relevant prerequisite/terminal phase and unchanged source/destination identity. Continue only the supported same-operation phase it reports; no unknown effect is replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "copy_progress": {
+      "rationale": "A retained copy, close or launch is already in progress or lacks final readback; its original operation must be reconciled before another effect.",
+      "requiredActor": "profile_owner",
+      "evidenceRequirement": "Current inspect result for the original source profile and duplication operation, including its durable copy/close/launch/disposal phase and physical identity proof.",
+      "inspect": {
+        "tool": "browser_discover",
+        "arguments": {
+          "category": "browser",
+          "operation": "profile_duplicate"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the retained original operation using its sourceProfileId and operationId. Resolve missing scope from the retained task briefing or original receipt; never guess a profile or operation ID.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "action": "profile_duplicate",
+              "params": {
+                "choice": "inspect",
+                "sourceProfileId": "$sourceProfileId",
+                "operationId": "$operationId"
+              }
+            }
+          },
+          "precondition": "Exact source profile/operation scope is available from the existing request, task or retained receipt."
+        },
+        {
+          "instruction": "Inspect and reconcile the same operation; an existing copy/launch outcome is not permission to start another. If the inspected state supports finish_without_opening or retry_launch, choose only that reported continuation under the original operation ID.",
+          "precondition": "Caller retains the exact original source profile/operation IDs and has the existing profile-owner authority; no uncertain copy/launch/close/disposal is replayed.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "action": "profile_duplicate",
+              "params": {
+                "choice": "reconcile",
+                "sourceProfileId": "$sourceProfileId",
+                "operationId": "$operationId"
+              }
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "action": "profile_duplicate",
+          "params": {
+            "choice": "inspect",
+            "sourceProfileId": "$sourceProfileId",
+            "operationId": "$operationId"
+          }
+        }
+      },
+      "resumeCondition": "The exact original inspect result establishes the relevant prerequisite/terminal phase and unchanged source/destination identity. Continue only the supported same-operation phase it reports; no unknown effect is replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "copy_disposal": {
+      "rationale": "Disposal may remove only the positively identified completed copy after its own references, source lineage, payload and process custody qualify.",
+      "requiredActor": "profile_owner",
+      "evidenceRequirement": "Current inspect result for the original source profile and duplication operation, including its durable copy/close/launch/disposal phase and physical identity proof.",
+      "inspect": {
+        "tool": "browser_discover",
+        "arguments": {
+          "category": "browser",
+          "operation": "profile_duplicate"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the retained original operation using its sourceProfileId and operationId. Resolve missing scope from the retained task briefing or original receipt; never guess a profile or operation ID.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "action": "profile_duplicate",
+              "params": {
+                "choice": "inspect",
+                "sourceProfileId": "$sourceProfileId",
+                "operationId": "$operationId"
+              }
+            }
+          },
+          "precondition": "Exact source profile/operation scope is available from the existing request, task or retained receipt."
+        },
+        {
+          "instruction": "Inspect the retained completed-copy/disposal outcome. Release only references positively owned by this copy through their native owners; preserve unknown/foreign references, symlinks and changed payloads. A platform/identity defect selects a sanitized resumable escalation, not raw filesystem deletion.",
+          "precondition": "Caller retains the exact original source profile/operation IDs and has the existing profile-owner authority; no uncertain copy/launch/close/disposal is replayed.",
+          "interface": "existing_profile_copy_owner_reconciliation"
+        },
+        {
+          "instruction": "Reconcile the same original operation to verify completed-copy lineage and retained disposal phase before any separately confirmed disposal continuation.",
+          "precondition": "Caller retains the exact original source profile/operation IDs and has the existing profile-owner authority; no uncertain copy/launch/close/disposal is replayed.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "action": "profile_duplicate",
+              "params": {
+                "choice": "reconcile",
+                "sourceProfileId": "$sourceProfileId",
+                "operationId": "$operationId"
+              }
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "action": "profile_duplicate",
+          "params": {
+            "choice": "inspect",
+            "sourceProfileId": "$sourceProfileId",
+            "operationId": "$operationId"
+          }
+        }
+      },
+      "resumeCondition": "The exact original inspect result establishes the relevant prerequisite/terminal phase and unchanged source/destination identity. Continue only the supported same-operation phase it reports; no unknown effect is replayed.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -2977,6 +3267,1953 @@
       "policySource": "cli/src/main.rs",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "invalid"
+    },
+    "profile_duplicate_affected_tasks_changed": {
+      "recipe": "copy_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "profile_duplicate_atomic_publication_unsupported": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_binding_encode_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_binding_invalid": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_binding_read_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_binding_write_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_borrowed_anchor_changed": {
+      "recipe": "copy_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_borrowed_anchor_invalid": {
+      "recipe": "copy_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "profile_duplicate_borrowed_anchor_missing": {
+      "recipe": "copy_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "profile_duplicate_build_changed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_build_unavailable": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_catalog_busy": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_catalog_commit_readback_required": {
+      "recipe": "copy_progress",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_catalog_destination_exists": {
+      "recipe": "copy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_catalog_invalid": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_catalog_readback_required": {
+      "recipe": "copy_progress",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_catalog_write_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_choice_invalid": {
+      "recipe": "copy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "profile_duplicate_clean_close_evidence_required": {
+      "recipe": "copy_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "profile_duplicate_close_dispatch_unconfirmed": {
+      "recipe": "copy_progress",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_close_readback_required": {
+      "recipe": "copy_progress",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_copy_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_copy_phase_required": {
+      "recipe": "copy_progress",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_copy_readback_required": {
+      "recipe": "copy_progress",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_copy_record_conflict": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_copy_record_missing": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_copy_started": {
+      "recipe": "copy_progress",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_create_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_destination_browser_missing": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_destination_conflict": {
+      "recipe": "copy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_destination_exists": {
+      "recipe": "copy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_destination_invalid": {
+      "recipe": "copy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "profile_duplicate_destination_parent_unavailable": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_destination_present": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_destination_profile_missing": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_destination_publication_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_destination_tab_missing": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_destination_task_ambiguous": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_destination_task_missing": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_destination_unavailable": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_digest_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_disposal_catalog_alias": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_catalog_changed": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_commit_readback_required": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_completed_copy_required": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_delete_unacknowledged": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_encode_failed": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_foreign_fence": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_disposal_intent_changed": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_intent_missing": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_journal_unavailable": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_launch_history_invalid": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_launch_history_unavailable": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_launch_pending": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_lineage_changed": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_disposal_lineage_unavailable": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_native_reference_active": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_operation_active": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_operation_missing": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_operations_busy": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_operations_invalid": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_operations_unavailable": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_path_conflict": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_path_invalid": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_path_unavailable": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_payload_changed": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_disposal_payload_present": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_payload_unacknowledged": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_platform_unqualified": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_process_present": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_process_unverified": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_profile_locked": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_resources.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_resources.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_publication_failed": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_quarantine_unavailable": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_readback_busy": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_readback_required": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_readback_unavailable": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_receipt_conflict": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_receipt_invalid": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_receipt_missing": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_retirement_pending": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_runtime_busy": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_runtime_unavailable": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_schema_unqualified": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_service_projection_present": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_resources.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_resources.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_service_reference_active": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_resources.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_resources.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_size_overflow": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_source_restored": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_special_file_refused": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_disposal_symlink_refused": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_disposal_target_changed": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_disposal_tree_unavailable": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_disposal_write_failed": {
+      "recipe": "copy_disposal",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_encode_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_filename_unsupported": {
+      "recipe": "copy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "profile_duplicate_id_conflict": {
+      "recipe": "copy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_intent_conflict": {
+      "recipe": "copy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_intent_encode_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_intent_invalid": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_intent_missing": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_intent_read_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_intent_write_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_journal_unavailable": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_launch_absence_unverified": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_launch_ambiguous": {
+      "recipe": "copy_progress",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_launch_custody_invalid": {
+      "recipe": "copy_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "profile_duplicate_launch_custody_unresolved": {
+      "recipe": "copy_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "profile_duplicate_launch_readback_required": {
+      "recipe": "copy_progress",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_lineage_conflict": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_lineage_unavailable": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_lineage_write_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_loaded_build_changed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_named_source_required": {
+      "recipe": "copy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "profile_duplicate_native_readiness_unverified": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_not_found": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_operation_busy": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_operation_id_conflict": {
+      "recipe": "copy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_operation_id_invalid": {
+      "recipe": "copy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "profile_duplicate_operation_lock_unavailable": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_operation_lock_unsupported": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_original_exit_readback_required": {
+      "recipe": "copy_progress",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_original_identity_changed": {
+      "recipe": "copy_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_original_identity_missing": {
+      "recipe": "copy_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "profile_duplicate_original_identity_unavailable": {
+      "recipe": "copy_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "profile_duplicate_owner_confirmation_required": {
+      "recipe": "copy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_path_invalid": {
+      "recipe": "copy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "profile_duplicate_paths_overlap": {
+      "recipe": "copy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_permissions_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_permissions_unsupported": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_publication_intent_changed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_read_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_readback_required": {
+      "recipe": "copy_progress",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_request_invalid": {
+      "recipe": "copy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/profile_duplicate.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/profile_duplicate.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "profile_duplicate_response_invalid": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/profile_duplicate.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/profile_duplicate.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_runtime_directory_missing": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_disposal.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_disposal.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_runtime_directory_unavailable": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_runtime_document_invalid": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_runtime_document_schema_unsupported": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_runtime_document_unavailable": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_runtime_permissions_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_runtime_schema_unsupported": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_runtime_unavailable": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_source_binding_changed": {
+      "recipe": "copy_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_source_boot_changed": {
+      "recipe": "copy_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "profile_duplicate_source_browser_missing": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_source_build_missing": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_source_busy": {
+      "recipe": "copy_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "profile_duplicate_source_changed": {
+      "recipe": "copy_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_source_custody_released": {
+      "recipe": "copy_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "profile_duplicate_source_custody_required": {
+      "recipe": "copy_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "profile_duplicate_source_focus_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_source_identity_changed": {
+      "recipe": "copy_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_source_launch_unresolved": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_source_operation_busy": {
+      "recipe": "copy_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "profile_duplicate_source_profile_missing": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_source_readback_required": {
+      "recipe": "copy_progress",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_source_state_requires_reconciliation": {
+      "recipe": "copy_progress",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_duplicate_source_tab_missing": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_source_task_missing": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_source_unavailable": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_staging_cleanup_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_staging_conflict": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_staging_create_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_staging_invalid": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_staging_read_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_staging_unavailable": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_staging_write_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_state_encode_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_state_invalid": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_state_write_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_custody.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_custody.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_store_unavailable": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_sync_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_task_missing": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_session_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_task_profile_conflict": {
+      "recipe": "copy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/profile_duplicate.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/profile_duplicate.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_task_profile_missing": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/profile_duplicate.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/profile_duplicate.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_duplicate_unsupported_file": {
+      "recipe": "copy_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_duplicate_write_failed": {
+      "recipe": "copy_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/profile_duplicate_copy.rs"
+        }
+      ],
+      "policySource": "cli/src/native/profile_duplicate_copy.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -2993,7 +5230,8 @@
     "browser_session_publication_",
     "cli_unknown_",
     "cli_missing_",
-    "cli_invalid_"
+    "cli_invalid_",
+    "profile_duplicate_"
   ],
   "sourceBaseline": "bf181f4ca",
   "knownCoverageGaps": [
@@ -3007,6 +5245,30 @@
       "source": "cli/src/remote_view_doctor.rs",
       "reason": "Positive successful doctor state for a valid browser-control template, not a refusal or error.",
       "sourceEvidence": "\"state\": if ready"
+    },
+    {
+      "code": "profile_duplicate_host_intents",
+      "source": "cli/src/native/browser_operation_lookup.rs",
+      "reason": "SQLite table name used by metadata lookup, not an error or refusal.",
+      "sourceEvidence": "table(&connection, \"profile_duplicate_host_intents\")"
+    },
+    {
+      "code": "profile_duplicate_operations",
+      "source": "cli/src/native/browser_operation_lookup.rs",
+      "reason": "SQLite table name used by metadata lookup, not an error or refusal.",
+      "sourceEvidence": "table(&connection, \"profile_duplicate_operations\")"
+    },
+    {
+      "code": "profile_duplicate_owner_bindings",
+      "source": "cli/src/native/browser_operation_lookup.rs",
+      "reason": "SQLite table name used by metadata lookup, not an error or refusal.",
+      "sourceEvidence": "table(&connection, \"profile_duplicate_owner_bindings\")"
+    },
+    {
+      "code": "profile_duplicate_disposal_fixture_interrupted",
+      "source": "cli/src/native/profile_duplicate_disposal.rs",
+      "reason": "Fault injection compiled only under cfg(test); unavailable in the public production binary.",
+      "sourceEvidence": "directory.join(\"fixture-disposal-stop-after\")"
     }
   ]
 }

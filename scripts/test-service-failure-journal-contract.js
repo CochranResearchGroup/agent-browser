@@ -108,6 +108,7 @@ const toolSchemas = {
   browser_control: readFileSync('cli/src/mcp/host_control.rs', 'utf8'),
   browser_policy: readFileSync('cli/src/mcp/host_policy.rs', 'utf8'),
   browser_continue: readFileSync('cli/src/mcp/workflow.rs', 'utf8'),
+  browser_discover: readFileSync('cli/src/mcp/catalog.rs', 'utf8'),
 };
 function validateRecoveryCall(call) {
   if (call.interface === 'cli') {
@@ -117,6 +118,18 @@ function validateRecoveryCall(call) {
     return;
   }
   assert(call.tool === 'browser_command' || Object.hasOwn(toolSchemas, call.tool), `Unavailable recovery tool ${call.tool}`);
+  if (call.tool === 'browser_discover') {
+    assert.equal(call.arguments.category, 'browser');
+    assert(allowedActions.has(call.arguments.operation), `Unavailable discovery operation ${call.arguments.operation}`);
+    return;
+  }
+  if (call.tool === 'browser_command' && call.arguments.action === 'profile_duplicate') {
+    assert.equal(call.arguments.params.sourceProfileId, '$sourceProfileId');
+    assert.equal(call.arguments.params.operationId, '$operationId');
+    const duplicateSchema = readFileSync('cli/src/mcp/catalog.rs', 'utf8').match(/"profile_duplicate" => Some\(json!\(([\s\S]*?)"native_capture" =>/)[1];
+    assert(duplicateSchema.includes(`"${call.arguments.params.choice}"`), `Unavailable profile duplicate choice ${call.arguments.params.choice}`);
+    return;
+  }
   assert.equal(call.arguments.taskId, '$taskId', 'Recovery must retain exact task scope');
   if (call.tool === 'browser_command') {
     assert(allowedActions.has(call.arguments.action), `Unavailable recovery action ${call.arguments.action}`);
