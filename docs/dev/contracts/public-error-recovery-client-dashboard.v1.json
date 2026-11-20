@@ -1492,7 +1492,8 @@
           "baseUrl": "$baseUrl",
           "targetServiceId": "$targetServiceId",
           "readinessProfileId": "$profileId"
-        }
+        },
+        "precondition": "Use the existing configured authenticated Service base URL and exact original targetServiceId/readinessProfileId binding from the retained access-plan request. Supply missing scope only from trusted original caller/owner context; no constructor invocation, replacement profile or new authority is inferred."
       },
       "remediation": [
         {
@@ -1507,7 +1508,8 @@
           "baseUrl": "$baseUrl",
           "targetServiceId": "$targetServiceId",
           "readinessProfileId": "$profileId"
-        }
+        },
+        "precondition": "Use the existing configured authenticated Service base URL and exact original targetServiceId/readinessProfileId binding from the retained access-plan request. Supply missing scope only from trusted original caller/owner context; no constructor invocation, replacement profile or new authority is inferred."
       },
       "resumeCondition": "The current same-scope owner plan explicitly offers the intended supported launch action.",
       "maximumAutomaticAttempts": 1
