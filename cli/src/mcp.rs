@@ -6580,6 +6580,58 @@ fn call_service_job_cancel(arguments: &Value, session: &str) -> Result<Value, Js
     ))
 }
 
+fn native_allowance_issue(code: &str, message: &str) -> JsonRpcError {
+    let mut error = if matches!(
+        code,
+        "browser_native_owner_allowance_invalid" | "browser_native_owner_deadline_expired"
+    ) {
+        JsonRpcError::invalid_params(message)
+    } else {
+        JsonRpcError {
+            code: -32603,
+            message: "Native owner allowance unavailable",
+            data: Some(json!({"message":message})),
+        }
+    };
+    error.data.as_mut().expect("allowance failure carries data")["failure"] = json!({
+        "code":code,"axis":"request","phase":"ingress_validation","effectState":"no_effect",
+        "scope":"current_invocation_validation","originalOutcome":"not_inferred"
+    });
+    error
+}
+
+/// Assess only the supported service measurement instant. Never extrapolate
+/// with a guest clock or extend the caller's unchanged absolute deadline.
+fn check_native_deadline_at_observation(
+    deadline_ms: u64,
+    stamp: &crate::connection::stable_time::Stamp,
+) -> Result<(), JsonRpcError> {
+    stamp.validate().map_err(|error| {
+        native_allowance_issue("browser_native_owner_deadline_evidence_invalid", &error)
+    })?;
+    let observed_issue = |code: &str, message: &str| {
+        let mut error = native_allowance_issue(code, message);
+        error.data.as_mut().expect("allowance failure data")["failure"]["recoveryPlan"] = json!({
+            "requiredActor":"caller","check":"caller_absolute_native_deadline",
+            "evidence":{"status":"qualified_service_observation","measurementInstant":"StableTime service observation",
+                "epoch":stamp.epoch,"earliestUtcNs":stamp.earliest_utc_ns.to_string(),"latestUtcNs":stamp.latest_utc_ns.to_string(),
+                "callerDeadlineAtMs":deadline_ms,"guestClockSubstituted":false,"deliveryDelayExtrapolated":false}
+        });
+        error
+    };
+    let deadline_ns = i128::from(deadline_ms) * 1_000_000;
+    if i128::from(stamp.earliest_utc_ns) >= deadline_ns {
+        return Err(observed_issue(
+            "browser_native_owner_deadline_expired",
+            "Native owner deadline expired at the StableTime measurement instant",
+        ));
+    }
+    if i128::from(stamp.latest_utc_ns) >= deadline_ns {
+        return Err(observed_issue("browser_native_owner_deadline_uncertain", "StableTime uncertainty overlaps the caller's absolute Native owner deadline; preserve that deadline and inspect original outcomes before continuing"));
+    }
+    Ok(())
+}
+
 fn validate_browser_command_action(arguments: &Value) -> Result<&str, JsonRpcError> {
     let action = required_string_argument(arguments, "action")?;
     if !BROWSER_COMMAND_ALLOWED_ACTIONS.contains(&action) {
@@ -6640,20 +6692,26 @@ fn validate_browser_command_action(arguments: &Value) -> Result<&str, JsonRpcErr
                 )
                 .is_err()
             {
-                return Err(JsonRpcError::invalid_params(
-                    "Native owner allowance requires ownerTimeoutMs100..300000 and optional positive safe-integer ownerDeadlineAtMs",
-                ));
+                return Err(native_allowance_issue("browser_native_owner_allowance_invalid",
+                    "Native owner allowance requires ownerTimeoutMs100..300000 and optional positive safe-integer ownerDeadlineAtMs"));
             }
             if key == "ownerDeadlineAtMs" && matches!(action, "native_capture" | "native_input") {
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map_err(|_| JsonRpcError::invalid_params("Native owner clock unavailable"))?
-                    .as_millis() as u64;
-                if params[key].as_u64().is_some_and(|deadline| deadline <= now) {
-                    return Err(JsonRpcError::invalid_params(
-                        "Native owner deadline expired before admission",
-                    ));
-                }
+                let stamp = crate::connection::stable_time::native_now().map_err(|error| {
+                    let candidate = error.split(':').next().unwrap_or_default();
+                    let code = if matches!(
+                        candidate,
+                        "browser_native_time_unavailable" | "browser_native_time_evidence_invalid"
+                    ) {
+                        candidate
+                    } else {
+                        "browser_native_owner_deadline_time_unavailable"
+                    };
+                    native_allowance_issue(code, &error)
+                })?;
+                let deadline = params[key]
+                    .as_u64()
+                    .expect("allowance shape validated above");
+                check_native_deadline_at_observation(deadline, &stamp)?;
             }
             if !page_arguments.contains_key(key) {
                 return Err(JsonRpcError::invalid_params(&format!(
@@ -11773,6 +11831,61 @@ fn profile_lease_resource(uri: &str) -> Option<(String, bool)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_absolute_deadline_uses_one_qualified_interval_without_guest_time() {
+        use crate::connection::stable_time::{fixture_stamp, Fixture};
+        let stamp = fixture_stamp(1_000);
+        assert!(check_native_deadline_at_observation(1_001, &stamp).is_ok());
+        let expired = check_native_deadline_at_observation(1_000, &stamp).unwrap_err();
+        assert_eq!(
+            expired.data.unwrap()["failure"]["code"],
+            "browser_native_owner_deadline_expired"
+        );
+        let mut uncertain = stamp.clone();
+        uncertain.earliest_utc_ns = 999_000_000;
+        uncertain.latest_utc_ns = 1_001_000_000;
+        assert_eq!(
+            check_native_deadline_at_observation(1_000, &uncertain)
+                .unwrap_err()
+                .data
+                .unwrap()["failure"]["code"],
+            "browser_native_owner_deadline_uncertain"
+        );
+        let mut invalid = stamp;
+        invalid.epoch = "unqualified-domain".into();
+        assert_eq!(
+            check_native_deadline_at_observation(2_000, &invalid)
+                .unwrap_err()
+                .data
+                .unwrap()["failure"]["code"],
+            "browser_native_owner_deadline_evidence_invalid"
+        );
+        let _clock = Fixture::set(Err(
+            "browser_native_time_unavailable:cause=stable_time_client_start_failed".into(),
+        ));
+        let ordinary =
+            json!({"taskId":"task","action":"native_capture","params":{"ownerTimeoutMs":1000}});
+        assert!(
+            validate_browser_command_action(&ordinary).is_ok(),
+            "relative allowance must not require StableTime"
+        );
+        let mut absolute = ordinary;
+        absolute["params"]["ownerDeadlineAtMs"] = json!(2_000);
+        let error = validate_browser_command_action(&absolute).unwrap_err();
+        assert_eq!(
+            error.data.as_ref().unwrap()["failure"]["code"],
+            "browser_native_time_unavailable"
+        );
+        assert_eq!(
+            error.data.as_ref().unwrap()["failure"]["effectState"],
+            "no_effect"
+        );
+        assert!(error.data.unwrap()["message"]
+            .as_str()
+            .unwrap()
+            .contains("stable_time_client_start_failed"));
+    }
 
     #[test]
     fn profile_capability_arguments_use_the_service_state_authority_boundary() {

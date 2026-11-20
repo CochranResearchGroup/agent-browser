@@ -1472,6 +1472,45 @@
       },
       "resumeCondition": "The actual service-owner policy read and runtime-protocol origin positively qualify current admission, original uncertain inputs are reconciled and a fresh observation succeeds; otherwise continue through authorized human assistance.",
       "maximumAutomaticAttempts": 1
+    },
+    "native_owner_allowance": {
+      "rationale": "The caller-declared Native RPC allowance is malformed, already expired or cannot be qualified; this does not grant permission to change a previous original outcome.",
+      "requiredActor": "caller",
+      "evidenceRequirement": "Exact declared ownerTimeoutMs/ownerDeadlineAtMs and the supported service observation interval at its measurement instant, with actual client/domain uncertainty.",
+      "inspect": {
+        "tool": "browser_discover",
+        "arguments": {
+          "category": "browser",
+          "operation": "native_input"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "For malformed allowance fields, use ownerTimeoutMs100..300000 and only an explicitly intended positive safe-integer ownerDeadlineAtMs. A certainly expired deadline requires the caller to decide whether a new bounded invocation is still authorized; never silently extend or remove an effectful caller deadline.",
+          "interface": "original_public_request",
+          "precondition": "No uncertainty bypass: a no-effect ingress rejection applies only to this invocation, not an earlier original with the same request ID."
+        },
+        {
+          "instruction": "If time bounds overlap the deadline or the supported time client/domain is unavailable, preserve the declared absolute deadline and repair that specific qualification cause. Continue independent task/status reads without an input allowance. The service measurement instant is not a promise that delivery or completion met the deadline.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "taskId": "$taskId",
+              "action": "task_briefing"
+            }
+          },
+          "precondition": "No guest-clock extrapolation, new host-counter bridge, or assumption that a helper failure means StableTime or Native provider outage."
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "The caller has a valid still-authorized allowance, current qualified service bounds assess it at the documented instant, and any earlier original uncertainty is reconciled. The unchanged absolute deadline remains enforceable by the owner; no input is replayed.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -2979,6 +3018,138 @@
       "policySource": "cli/src/native/browser_native_control.rs",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "uncertain"
+    },
+    "browser_native_owner_access_denied": {
+      "recipe": "native_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_readiness.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_readiness.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_owner_allowance_invalid": {
+      "recipe": "native_owner_allowance",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp.rs"
+        }
+      ],
+      "policySource": "AGENTS.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_owner_authentication_missing": {
+      "recipe": "native_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_readiness.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_readiness.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_owner_authentication_rejected": {
+      "recipe": "native_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_readiness.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_readiness.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_owner_clock_invalid": {
+      "recipe": "native_time",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/task_operations.rs"
+        }
+      ],
+      "policySource": "AGENTS.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_owner_configuration_invalid": {
+      "recipe": "native_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_host_image.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_host_image.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_owner_deadline_evidence_invalid": {
+      "recipe": "native_owner_allowance",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp.rs"
+        }
+      ],
+      "policySource": "AGENTS.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_owner_deadline_expired": {
+      "recipe": "native_owner_allowance",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp.rs"
+        }
+      ],
+      "policySource": "AGENTS.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_owner_deadline_time_unavailable": {
+      "recipe": "native_owner_allowance",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp.rs"
+        }
+      ],
+      "policySource": "AGENTS.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_owner_deadline_uncertain": {
+      "recipe": "native_owner_allowance",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp.rs"
+        }
+      ],
+      "policySource": "AGENTS.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_owner_request": {
+      "recipe": "native_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/remote_view_application_http.rs"
+        }
+      ],
+      "policySource": "cli/src/native/remote_view_application_http.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_owner_unconfigured": {
+      "recipe": "native_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_host_image.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_host_image.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
     },
     "browser_native_params_invalid": {
       "recipe": "native_request",
@@ -6856,7 +7027,8 @@
     "browser_native_registered_",
     "browser_native_site_",
     "browser_native_challenge_",
-    "browser_native_params_"
+    "browser_native_params_",
+    "browser_native_owner_"
   ],
   "sourceBaseline": "bf181f4ca",
   "knownCoverageGaps": [
