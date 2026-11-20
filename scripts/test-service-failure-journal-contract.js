@@ -344,6 +344,55 @@ function validateRecoveryInventory(registry, discovered) {
     assert(recipe.maximumAutomaticAttempts <= 1, 'Recovery cannot create an unbounded retry loop');
   }
 }
+// Rust files may resume production helpers after an inline test module. Remove
+// only the actual module, respecting literals/comments, rather than truncating
+// the rest of the file and silently losing later producer checks.
+function withoutRustTestModules(source) {
+  const marker = /^#\[cfg\(test\)\]\s*(?:#\[[^\n]*\]\s*)*(?:pub(?:\(crate\))?\s+)?mod\s+\w+\s*\{/gm;
+  let match;
+  while ((match = marker.exec(source))) {
+    let index = marker.lastIndex, depth = 1;
+    while (index < source.length && depth) {
+      if (source.startsWith('//', index)) {
+        const end = source.indexOf('\n', index + 2); index = end < 0 ? source.length : end + 1; continue;
+      }
+      if (source.startsWith('/*', index)) {
+        index += 2; let comments = 1;
+        while (index < source.length && comments) {
+          if (source.startsWith('/*', index)) { comments++; index += 2; }
+          else if (source.startsWith('*/', index)) { comments--; index += 2; }
+          else index++;
+        }
+        continue;
+      }
+      const raw = source.slice(index).match(/^(?:br|r)(#*)"/);
+      if (raw) {
+        const end = source.indexOf('"' + raw[1], index + raw[0].length);
+        assert(end >= 0, 'Unterminated raw literal in Rust test module');
+        index = end + 1 + raw[1].length; continue;
+      }
+      if (source[index] === '"') {
+        index++;
+        while (index < source.length) {
+          if (source.charCodeAt(index) === 92) index += 2;
+          else if (source[index++] === '"') break;
+        }
+        continue;
+      }
+      const character = source.slice(index).match(/^'(?:\\.|[^'\\])'/u);
+      if (character) { index += character[0].length; continue; }
+      if (source[index] === '{') depth++;
+      else if (source[index] === '}') depth--;
+      index++;
+    }
+    assert.equal(depth, 0, 'Unterminated Rust test module');
+    source = source.slice(0, match.index) + source.slice(index);
+    marker.lastIndex = match.index;
+  }
+  return source;
+}
+assert.equal(withoutRustTestModules('#[cfg(test)]\nmod tests { fn sample() { let x = r###"}"###; /* { /* } */ } */ } }\nfn live() { "later_producer"; }'), '\nfn live() { "later_producer"; }');
+
 function rustFiles(root) {
   return readdirSync(root, {withFileTypes: true}).flatMap(entry => entry.isDirectory() ? rustFiles(join(root, entry.name)) : entry.name.endsWith('.rs') ? [join(root, entry.name)] : []);
 }
@@ -359,8 +408,7 @@ for (const path of recoveryRegistry.enforcedProducerSources ?? []) {
 }
 for (const entry of recoveryRegistry.enforcedProducerSourceFamilies ?? []) {
   let source = readFileSync(entry.path, 'utf8');
-  if (entry.beforeTestModule) source = source.split(/^#\[cfg\(test\)\]/m)[0];
-  if (entry.beforeNamedTestModule) source = source.split(/^#\[cfg\(test\)\]\s*\nmod tests/m)[0];
+  if (entry.beforeTestModule || entry.beforeNamedTestModule) source = withoutRustTestModules(source);
   const pattern = new RegExp(`["'](${entry.codePattern})(?=[:"'])`, 'g');
   for (const match of source.matchAll(pattern)) discoveredReviewedCodes.add(match[1]);
 }
