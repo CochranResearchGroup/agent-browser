@@ -10,12 +10,12 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#771]
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    plan_state: CLOSED
+    custody_state: MERGED_RETAINED
     dependencies: [CochranResearchGroup/auth-receipts#446]
     overlaps: []
     reconciled_overlaps: ["Primary owns the one-code client contract and guidance; Auth446 owns the upstream broker and credential service; completed749 remains closed"]
-    validation_status: Exact owner-code projection reproduced unknown before registration; validation in progress
+    validation_status: PR772 and Auth449 merged;2924 exact contracts;2038 Auth plus80 combined checks; strict local client/docs/lint; production source dd2ad701e installed;260-operation continuation and durable Native workflow pass; finite-time qualification pending;773 separate backlog
     updated_at: 2026-11-20
   - id: RECOVERABLE-WORK-749
     product_lane: PL-PLATFORM
@@ -30,7 +30,7 @@ lanes:
     dependencies: []
     overlaps: [LINKEDIN-COMMAND-STATE-LATENCY]
     reconciled_overlaps: ["Root owns shared time/profile expiry, help/docs/CONTEXT, catalog and integration; capacity owns Auth/challenge; coordination owns finite handoff/schema8; latency owns startup/registry; a bounded provider worker delivered769 and capacity now qualifies that clean source. Shared writes serialized via named commits; foreign Contacts worktree and unknown artifacts preserved."]
-    validation_status: PR759 source acceptance;177 distinct Native/CLI and430 model tests;2923 contracts/all1526 originals; strict lint/docs/client/dashboard; final260-operation continuation and kernel-v2 budget pass; provider989 merged; one review/one remediation; uninstalled
+    validation_status: PR759 source acceptance;177 distinct Native/CLI and430 model tests;2923 contracts/all1526 originals; strict lint/docs/client/dashboard; final260-operation continuation and kernel-v2 budget pass; provider989 merged; one review/one remediation; subsequent authorized production adoption and durable Native workflow pass; finite-time qualification pending
     updated_at: 2026-11-20
   - id: LINKEDIN-COMMAND-STATE
     product_lane: PL-BUGFIX
