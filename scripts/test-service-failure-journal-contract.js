@@ -136,22 +136,46 @@ const toolSchemas = {
   browser_handoff: readFileSync('cli/src/mcp/workflow.rs', 'utf8'),
   browser_discover: readFileSync('cli/src/mcp/catalog.rs', 'utf8'),
 };
+function validateClientQualification(contract, registry) {
+  assert.equal(contract.schemaVersion, 'agent-browser.client-error-qualification.v1');
+  for (const check of contract.checks) {
+    assert(['local_failure_call','explicit_result_reason','local_result_reason_fallback'].includes(check.kind), `Unreviewed client check kind ${check.kind}`);
+    const source = readFileSync(check.path, 'utf8');
+    assert(source.includes(check.expression), `Missing client check anchor ${check.path}#${check.owningFunction}`);
+    assert(check.owningFunction?.length > 0);
+    if (check.classification === 'exact_registered_local_failure') {
+      assert(registry.codes[check.code], `Uncovered client failure ${check.code}`);
+      assert.equal(registry.codes[check.code].recipe, check.recipe);
+    } else assert.equal(check.classification, 'verified_success_reason_not_failure');
+  }
+  for (const boundary of contract.dynamicBoundaries) {
+    assert.equal(boundary.automaticExecutionAllowed, false, 'Unknown dynamic client failures cannot authorize automatic effects');
+    assert(readFileSync(boundary.path, 'utf8').includes(boundary.owningFunction), 'Missing dynamic failure boundary');
+  }
+}
+const validatedSourceReferences = new Set();
 function validateRecoveryCall(call) {
   if (call.interface === 'caller_error') {
     assert.equal(call.kind, 'source_reference');
     assert.deepEqual(call.fields, ['code', 'source', 'owningFunction', 'message']);
-    assert(call.precondition.includes('not a file-read command'));
-    const normalization = JSON.parse(readFileSync(call.contract, 'utf8'));
-    assert.equal(normalization.schemaVersion, 'agent-browser.client-argument-normalization.v1');
-    for (const path of new Set(normalization.reviewedChecks.map(check => check.path))) {
-      const reviewed = normalization.reviewedChecks.filter(check => check.path === path).length;
-      const emitted = [...readFileSync(path, 'utf8').matchAll(/\bclientArgumentError\(/g)].length;
-      assert.equal(emitted, reviewed, `Unreviewed caller normalization added or removed in ${path}`);
+    assert(/(?:not a|no) file-read/.test(call.precondition));
+    if (validatedSourceReferences.has(call.contract)) return;
+    const contract = JSON.parse(readFileSync(call.contract, 'utf8'));
+    if (contract.schemaVersion === 'agent-browser.client-error-qualification.v1') {
+      validateClientQualification(contract, recoveryRegistry);
+    } else {
+      assert.equal(contract.schemaVersion, 'agent-browser.client-argument-normalization.v1');
+      for (const path of new Set(contract.reviewedChecks.map(check => check.path))) {
+        const reviewed = contract.reviewedChecks.filter(check => check.path === path).length;
+        const emitted = [...readFileSync(path, 'utf8').matchAll(/\bclientArgumentError\(/g)].length;
+        assert.equal(emitted, reviewed, `Unreviewed caller normalization added or removed in ${path}`);
+      }
+      for (const check of contract.reviewedChecks) {
+        const source = readFileSync(check.path, 'utf8');
+        assert(source.includes(check.expression) && source.includes(`"${check.owningFunction}"`), `Missing normalized caller check ${check.path}#${check.owningFunction}`);
+      }
     }
-    for (const check of normalization.reviewedChecks) {
-      const source = readFileSync(check.path, 'utf8');
-      assert(source.includes(check.expression) && source.includes(`"${check.owningFunction}"`), `Missing normalized caller check ${check.path}#${check.owningFunction}`);
-    }
+    validatedSourceReferences.add(call.contract);
     return;
   }
   if (call.interface && call.interface !== 'cli') {
@@ -250,6 +274,12 @@ for (const path of [...rustFiles('cli/src'), ...rustFiles('crates/agent-browser-
   for (const match of source.matchAll(producerPattern)) discoveredReviewedCodes.add(match[1]);
 }
 validateRecoveryInventory(recoveryRegistry, discoveredReviewedCodes);
+const clientQualification = JSON.parse(readFileSync('docs/dev/contracts/public-client-error-qualification.v1.json', 'utf8'));
+validateClientQualification(clientQualification, recoveryRegistry);
+const uncoveredClientQualification = structuredClone(clientQualification);
+uncoveredClientQualification.checks.find(check => check.classification === 'exact_registered_local_failure').code = 'unregistered_client_failure';
+assert.throws(() => validateClientQualification(uncoveredClientQualification, recoveryRegistry), /Uncovered client failure/);
+
 assert.throws(() => validateRecoveryInventory(recoveryRegistry, new Set(['unregistered_public_error'])), /Uncovered public code/);
 assert.throws(() => validateRecoveryCall({tool:'browser_command',arguments:{taskId:'$taskId',action:'nonexistent_recovery_command'}}), /Unavailable recovery action/);
 assert.throws(() => validateRecoveryCall({interface:'cli',command:'agent-browser',arguments:['nonexistent-repair']}), /Unavailable recovery CLI arguments/);
