@@ -2208,6 +2208,66 @@
       },
       "resumeCondition": "Exact-task status and actual owner readback confirm current continuity and original outcome. Explicit reconnect/rebind/reopen remains separately admitted and never replays website effects.",
       "maximumAutomaticAttempts": 1
+    },
+    "handoff_callback_owner": {
+      "rationale": "The existing authenticated Native callback or configured public-origin binding is missing, invalid or rejected.",
+      "requiredActor": "existing_remote_view_integration_and_authentication_owner",
+      "evidenceRequirement": "Exact task, durable handoff and current Remote View owner context; URL presence or viewer mode alone does not prove current human input or readiness.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the existing task and durable handoff. Have the authenticated Remote View integration owner repair its callback identity/configuration or public-origin binding; retain the same handoff and current authenticated audience. Do not expose tokens, substitute another realm, or weaken callback validation.",
+          "precondition": "Exact original handoff and integration ownership are known; a read-token holder cannot grant themselves mutation authority.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "Current owner readback confirms the same durable handoff and exact task route; physical input still independently checks activity, focus and original outcome.",
+      "maximumAutomaticAttempts": 1
+    },
+    "handoff_legacy_time": {
+      "rationale": "Legacy finite handoff retention is evaluated with guest clock timestamps and cannot be treated as qualified UTC evidence.",
+      "requiredActor": "existing_handoff_retention_owner",
+      "evidenceRequirement": "Exact task, durable handoff and current Remote View owner context; URL presence or viewer mode alone does not prove current human input or readiness.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Retain the exact task and durable handoff, inspect current owner state, and escalate the bounded legacy retention-time finding with sanitized original IDs. Independent perpetual-link/task inspections remain available. Do not bypass expiry or silently renew a legacy finite link.",
+          "precondition": "Legacy finite retention lacks qualified mint/check evidence; no automatic extension or fresh browser effect is authorized.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "The existing owner qualifies link timing or explicitly repairs the same-link retention under current authority; preserve independent authentication and original browser custody. Source finding: docs/dev/maintenance/spec749-legacy-handoff-time.md.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -12114,6 +12174,474 @@
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "invalid"
+    },
+    "remote_view_handoff_expired": {
+      "recipe": "handoff_legacy_time",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/remote_view_presentation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "remote_view_tab_handoff_session_unavailable": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/remote_view_presentation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_tab_handoff_browser_unavailable": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/remote_view_presentation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_tab_handoff_tab_unavailable": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/remote_view_presentation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_presentation_path_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/remote_view_presentation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "remote_view_presentation_unavailable": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/remote_view_presentation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_browser_recovery_timeout": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/remote_view_presentation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_clock_invalid": {
+      "recipe": "handoff_legacy_time",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/remote_view_presentation.rs"
+        },
+        {
+          "path": "cli/src/native/stream/native_browser_mode.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "remote_view_browser_recovery_response_invalid": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/remote_view_presentation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_handoff_reopen_required": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/remote_view_presentation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_native_registration_failed": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/remote_view_presentation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_native_callback_denied": {
+      "recipe": "handoff_callback_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/remote_view_presentation.rs"
+        },
+        {
+          "path": "cli/src/native/stream/native_browser_mode.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "remote_view_native_registration_response_invalid": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/remote_view_presentation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_browser_recovery_pending": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/remote_view_presentation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_native_registration_timeout": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/remote_view_presentation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_native_callback_unconfigured": {
+      "recipe": "handoff_callback_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/remote_view_presentation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_presentation_join_failed": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/remote_view_presentation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_handoff_not_found": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/remote_view_presentation.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_native_mode_target_changed": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/native_browser_mode.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "remote_view_native_mode_result_unknown": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/native_browser_mode.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_native_mode_desktop_changed": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/native_browser_mode.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_handoff_target_unconfirmed": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/native_browser_mode.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_native_mode_refused": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/native_browser_mode.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_native_callback_invalid": {
+      "recipe": "handoff_callback_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/native_browser_mode.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_native_mode_read_unavailable": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/native_browser_mode.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_native_mode_reply_invalid": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/native_browser_mode.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_native_mode_request_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/native_browser_mode.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "remote_view_runtime_desktop_count_invalid": {
+      "recipe": "handoff_callback_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_remote_view.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_runtime_application_invalid": {
+      "recipe": "handoff_callback_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_remote_view.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_runtime_origin_invalid": {
+      "recipe": "handoff_callback_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_remote_view.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_session_custody_unavailable": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_remote_view.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_runtime_config_invalid": {
+      "recipe": "handoff_callback_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_remote_view.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_runtime_config_incomplete": {
+      "recipe": "handoff_callback_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_remote_view.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_runtime_directory_missing": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_human_handoff.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_handoff_reopen_request_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_human_handoff.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_handoff_takeover_request_stale": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_human_handoff.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_task_not_found_after_handoff": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_human_handoff.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_handoff_takeover_request_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_human_handoff.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_handoff_recovery_store_unavailable": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_human_handoff.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_handoff_reopen_request_conflict": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_human_handoff.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_task_current_tab_missing": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_human_handoff.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_handoff_recovery_state_missing": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_human_handoff.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -12339,6 +12867,12 @@
       "source": "cli/src/native/desktop_evidence_configured.rs",
       "sourceEvidence": "\"desktop_frame_capture\"",
       "reason": "Coordinate-space, command selector or adapter phase vocabulary; the actual failure is emitted separately from this descriptive token."
+    },
+    {
+      "code": "browser_operation_",
+      "source": "cli/src/native/stream/native_browser_mode.rs",
+      "sourceEvidence": "\"browser_operation_\"",
+      "reason": "Namespace recognizer or existing command dispatch selector, not an emitted failure code. Actual failure producer tokens are independently qualified."
     }
   ],
   "fragments": [
@@ -12420,6 +12954,26 @@
     {
       "path": "cli/src/mcp/host_reconnect.rs",
       "codePattern": "browser_reconnect_[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/stream/remote_view_presentation.rs",
+      "codePattern": "(?:browser_|remote_view_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/stream/native_browser_mode.rs",
+      "codePattern": "(?:browser_|remote_view_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/browser_session_remote_view.rs",
+      "codePattern": "(?:browser_|remote_view_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/browser_human_handoff.rs",
+      "codePattern": "(?:browser_|remote_view_)[a-z0-9_]+",
       "beforeNamedTestModule": true
     }
   ]
