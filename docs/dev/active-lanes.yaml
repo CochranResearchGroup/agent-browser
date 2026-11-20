@@ -2,6 +2,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: AUTH-APPROVAL-RECOURSE-771
+    product_lane: PL-BUGFIX
+    objective: Preserve approval transport failure as operational recourse on the original request
+    plan: docs/dev/maintenance/auth-approval-recourse771.md
+    branch: fix/auth-approval-recourse
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#771]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: [CochranResearchGroup/auth-receipts#446]
+    overlaps: []
+    reconciled_overlaps: ["Primary owns the one-code client contract and guidance; Auth446 owns the upstream broker and credential service; completed749 remains closed"]
+    validation_status: Exact owner-code projection reproduced unknown before registration; validation in progress
+    updated_at: 2026-11-20
   - id: RECOVERABLE-WORK-749
     product_lane: PL-PLATFORM
     objective: Recoverable task capacity, executable refusal recourse, Native coordination and measured latency

@@ -93,7 +93,7 @@ Discover `category:"playbooks"` and use `browser_command` in the existing task. 
 
 Preserve peers and original task IDs during recovery. Discover advanced
 operations with `browser_discover`. Read [commands](references/commands.md),
-[authentication](references/authentication.md), [sessions](references/session-management.md)
+[auth and delivery recourse](references/authentication.md), [sessions](references/session-management.md)
 and [diagnostics](references/cli-and-service.md#dashboard-summary-diagnostics).
 
 ## Additional operations

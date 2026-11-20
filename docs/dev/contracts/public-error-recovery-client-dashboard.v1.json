@@ -1829,6 +1829,49 @@
       },
       "resumeCondition": "The original agent owner result is verified; unknown remains non-replayable and a separate explicit new interpretation must preserve source/authorization boundaries.",
       "maximumAutomaticAttempts": 1
+    },
+    "clientAuthApprovalDelivery": {
+      "rationale": "Approval transport failure is not a permission decision. Inspect the original request and its approvalDelivery cause. Restore its configured operator notification connection, then receive the original request; never create a replacement approval or infer that valid permission was revoked.",
+      "requiredActor": "original_authenticated_auth_owner_client",
+      "evidenceRequirement": "Exact original scope/identifiers and current owner evidence; no absent record or guest timestamp establishes permission, no-effect or replay authority.",
+      "inspect": {
+        "interface": "@agent-browser/client/hosted-auth-helper#connectHostedAuthHelper",
+        "method": "helper",
+        "arguments": [
+          "inspect_credential_request",
+          {
+            "requestId": "$requestId"
+          }
+        ],
+        "precondition": "Use the already connected authenticated original owner helper instance. Constructor invocation or new scope is not authorized by this recipe; original request ID must come from retained owner history."
+      },
+      "remediation": [
+        {
+          "instruction": "After repairing the recorded parent connection, receive the original request. Auth owns idempotent delivery and operator response through its existing notification flow. An unobserved response remains pending; valid current permission does not need reapproval solely because delivery failed.",
+          "precondition": "Use the already connected original authenticated helper and retained requestId; inspect current owner state first. Do not replay uncertain private input or create a new request.",
+          "interface": "@agent-browser/client/hosted-auth-helper#connectHostedAuthHelper",
+          "method": "helper",
+          "arguments": [
+            "receive_credential_approval",
+            {
+              "requestId": "$requestId"
+            }
+          ]
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/hosted-auth-helper#connectHostedAuthHelper",
+        "method": "helper",
+        "arguments": [
+          "inspect_credential_request",
+          {
+            "requestId": "$requestId"
+          }
+        ],
+        "precondition": "Use the already connected authenticated original owner helper instance. Constructor invocation or new scope is not authorized by this recipe; original request ID must come from retained owner history."
+      },
+      "resumeCondition": "The original owner request has a verified disposition and its actual nextAction permits the intended continuation.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -7540,6 +7583,18 @@
         {
           "path": "packages/client/src/service-request.js",
           "owningFunction": "classifyServiceControlPlaneAuthority"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "auth_parent_unavailable": {
+      "recipe": "clientAuthApprovalDelivery",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",

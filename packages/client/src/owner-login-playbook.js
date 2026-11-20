@@ -19,6 +19,8 @@ const errorCode=error=>error&&typeof error==='object'&&'code' in error&&typeof e
  * before dispatch and independently verifies the intended receiving account.
  * Discovery keeps source outages, incomplete searches, no match and account
  * choice distinct; none can create a request or infer an empty vault.
+ * Auth forwards auth_parent_unavailable for approval transport failure, distinct
+ * from denied permission; recovery retains the original request and operator flow.
  * Legacy callback checkpoints are never translated into owner requests.
  * @param {OwnerLoginDependencies} dependencies
  */
