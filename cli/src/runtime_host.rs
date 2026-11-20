@@ -325,6 +325,20 @@ impl<T: Clone> RuntimeLaneRegistry<T> {
         })
     }
 
+    /// Reconfiguring an existing lane does not consume new lane capacity.
+    pub(crate) fn admit_existing_lane(&self, lane: &str) -> Result<RuntimeLaneAdmission, String> {
+        let lanes = self
+            .lanes
+            .read()
+            .map_err(|_| "runtime_host_lane_registry_poisoned".to_string())?;
+        if !lanes.contains_key(lane) {
+            return Err("runtime_host_bootstrap_lane_disappeared".to_string());
+        }
+        Ok(RuntimeLaneAdmission {
+            lane: lane.to_owned(),
+        })
+    }
+
     /// Consume an admitted snapshot, without a post-construction policy veto.
     pub(crate) fn insert_admitted(
         &self,

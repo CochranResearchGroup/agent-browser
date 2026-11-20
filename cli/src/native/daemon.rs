@@ -545,7 +545,7 @@ impl RuntimeHostRouter {
         if let Some(lane) = self.lanes.get(session) {
             if !lane.configuration_committed {
                 if let Some(config) = config.as_ref() {
-                    let admission = self.lanes.admit_new_lane(session, 0, "existing_lane")?;
+                    let admission = self.lanes.admit_existing_lane(session)?;
                     let old = self
                         .lanes
                         .remove(session)
