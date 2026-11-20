@@ -391,16 +391,41 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
         same_request(&key(true)?, command, &original)?;
         return Ok(Admission::Existing(original.clone()));
     }
+    // Observe once before acquiring any writer lock. This is admission evidence,
+    // never a substitute for the Native owner's later physical-input check.
+    let native_time = if native && action == "native_input" {
+        Some(crate::connection::stable_time::native_now()?)
+    } else {
+        None
+    };
     // Resolve an original capture before transport or process recovery. Missing
     // evidence is never replaced by a caller timestamp or guessed coordinates.
     let observation = if native && action == "native_input" {
         if command.get("loginTarget").is_some() {
             original_login_observation(&state, task_id, command)?;
-            login_episode_step(&state, task_id, command, None)?;
+            login_episode_step(&state, task_id, command, None, native_time.as_ref())?;
         } else if command.get("imageAttempt").is_some() {
-            original_native_image_observation(&state, task_id, command)?;
+            let observed = original_native_image_observation(&state, task_id, command)?;
+            let current = native_time
+                .as_ref()
+                .ok_or("browser_native_time_evidence_invalid")?;
+            observed.validate_at(&super::browser_native_image::NativeImageClockReading {
+                wall_time_ms: current.earliest_ms(),
+                elapsed: None,
+                service_time: Some(current.clone()),
+            })?;
         } else {
-            original_native_observation(&state, task_id, command)?;
+            let observed = original_native_observation(&state, task_id, command)?;
+            observed
+                .service_time
+                .as_ref()
+                .ok_or("browser_native_time_recapture_required: obtain a fresh native_capture")?
+                .fresh_at(
+                    native_time
+                        .as_ref()
+                        .ok_or("browser_native_time_evidence_invalid")?,
+                    10_000,
+                )?;
         }
         Some(())
     } else {
@@ -446,7 +471,9 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
             let login_observation = original_login_observation(&state, task_id, command)?;
             let qualified_now = super::native_login_perception::qualified_time(
                 &login_observation,
-                &crate::connection::stable_time::native_now()?,
+                native_time
+                    .as_ref()
+                    .ok_or("browser_native_time_evidence_invalid")?,
             )?;
             let selected = super::native_login_perception::select_target(
                 &login_observation,
@@ -533,7 +560,7 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
         if observation.is_some() {
             if command.get("loginTarget").is_some() {
                 original_login_observation(state, task_id, command)?;
-                let step = login_episode_step(state, task_id, command, None)?;
+                let step = login_episode_step(state, task_id, command, None, native_time.as_ref())?;
                 admitted
                     .evidence_references
                     .insert("nativeLoginStep".into(), step.to_string());
@@ -573,6 +600,7 @@ fn native_kernel_admit(
     command: &Value,
     observation: &super::browser_native_control::NativeChallengeObservation,
     binding: &Value,
+    current_time: &crate::connection::stable_time::Stamp,
 ) -> Result<agent_browser_challenge_control::ChallengePolicy, String> {
     use agent_browser_challenge_control::{
         decide, ChallengeDecision, ChallengeEvent, ChallengePolicy, ChallengeSnapshot,
@@ -590,12 +618,11 @@ fn native_kernel_admit(
                 .evidence_references
                 .contains_key("nativeObservationRequestId")
     });
-    let current_time = crate::connection::stable_time::native_now()?;
     let capture_time = observation
         .service_time
         .as_ref()
         .ok_or("browser_native_time_recapture_required: obtain a fresh native_capture")?;
-    capture_time.fresh_at(&current_time, 10_000)?;
+    capture_time.fresh_at(current_time, 10_000)?;
     let policy = ChallengePolicy {
         policy_digest: binding["digest"]
             .as_str()
@@ -968,6 +995,9 @@ pub(crate) fn retain_native_site_policy_for_owner(
     let request = command["id"]
         .as_str()
         .ok_or("browser_native_original_operation_invalid")?;
+    // The supported client may wait on I/O; unrelated tasks must never wait
+    // behind that I/O while this process owns the SQLite writer transaction.
+    let qualified_time = crate::connection::stable_time::native_now()?;
     let after = store.mutate_session_state(|state| {
         if state != expected {
             return Err("browser_native_policy_publication_conflict".into());
@@ -988,7 +1018,13 @@ pub(crate) fn retain_native_site_policy_for_owner(
             return Err("browser_native_original_observation_context_changed".into());
         }
         let image_plan = if command.get("imageAttempt").is_some() {
-            Some(native_image_kernel_plan(state, task, command, binding)?)
+            Some(native_image_kernel_plan(
+                state,
+                task,
+                command,
+                binding,
+                &qualified_time,
+            )?)
         } else {
             None
         };
@@ -1021,7 +1057,8 @@ pub(crate) fn retain_native_site_policy_for_owner(
             let observation = observation
                 .as_ref()
                 .ok_or("browser_native_original_observation_unqualified")?;
-            let policy = native_kernel_admit(state, task, command, observation, binding)?;
+            let policy =
+                native_kernel_admit(state, task, command, observation, binding, &qualified_time)?;
             (
                 observation.family.clone(),
                 policy.policy_digest,
@@ -1456,7 +1493,8 @@ pub(crate) fn native_image_attempt_observation(
     if let Some(binding) = original.evidence_references.get("nativeSitePolicy") {
         let binding: Value =
             serde_json::from_str(binding).map_err(|_| "browser_native_site_policy_invalid")?;
-        let plan = native_image_kernel_plan(&state, task, command, &binding)?;
+        let current = crate::connection::stable_time::native_now()?;
+        let plan = native_image_kernel_plan(&state, task, command, &binding, &current)?;
         let retained = original
             .evidence_references
             .get("nativeImageRound")
@@ -1471,6 +1509,7 @@ fn native_image_kernel_plan(
     task: &str,
     command: &Value,
     binding: &Value,
+    qualified_time: &crate::connection::stable_time::Stamp,
 ) -> Result<super::browser_native_image::NativeImagePlan, String> {
     super::browser_host_policy::check_state(state, task, command)?;
     if binding["registeredActionId"] != super::browser_native_image::command_profile(command)
@@ -1480,6 +1519,11 @@ fn native_image_kernel_plan(
     }
     image_attempt_budget(state, task, command)?;
     let observation = original_native_image_observation(state, task, command)?;
+    observation.validate_at(&super::browser_native_image::NativeImageClockReading {
+        wall_time_ms: qualified_time.earliest_ms(),
+        elapsed: None,
+        service_time: Some(qualified_time.clone()),
+    })?;
     let selected = image_attempt_selection(command)?;
     if let Some(prior) = image_attempt_budget(state, task, command)? {
         let history = operation_history(state, task)?;
@@ -1521,7 +1565,7 @@ fn native_image_kernel_plan(
             &observation,
             &selected,
             binding,
-            observation.current_time_ms()?,
+            qualified_time.latest_ms(),
             (&prior.evidence_references["nativeImageRound"], &old),
         );
     }
@@ -1533,7 +1577,7 @@ fn native_image_kernel_plan(
         &observation,
         &selected,
         binding,
-        observation.current_time_ms()?,
+        qualified_time.latest_ms(),
     )
 }
 
@@ -1662,6 +1706,7 @@ fn login_episode_step(
     task: &str,
     command: &Value,
     current: Option<&str>,
+    qualified_time: Option<&crate::connection::stable_time::Stamp>,
 ) -> Result<usize, String> {
     let episode = command["loginTarget"]["episodeId"]
         .as_str()
@@ -1712,17 +1757,16 @@ fn login_episode_step(
         return Err(format!("browser_native_login_budget_exhausted: completedSteps={};maximumLoginSteps={maximum}; inspect browser_command action=task_operation params={{\"operation\":\"capacity\"}} and increase policy.maximumLoginSteps for this task before continuing the same episode; acknowledged originals are retained", prior.len()));
     }
     let observed = original_login_observation(state, task, command)?;
-    let now = super::native_login_perception::qualified_time(
-        &observed,
-        &crate::connection::stable_time::native_now()?,
-    )?;
-    // select_target retains account matching, submit/form and fresh-frame guards;
-    // a hardcoded username/credential/submit order is not a page-state proof.
-    super::native_login_perception::select_target(
-        &observed,
-        command["loginTarget"]["targetRef"].as_str().unwrap(),
-        now,
-    )?;
+    if let Some(current) = qualified_time {
+        let now = super::native_login_perception::qualified_time(&observed, current)?;
+        // Shape/order checks above remain under the original custody boundary;
+        // the caller supplies a single service observation acquired outside it.
+        super::native_login_perception::select_target(
+            &observed,
+            command["loginTarget"]["targetRef"].as_str().unwrap(),
+            now,
+        )?;
+    }
     Ok(prior.len())
 }
 pub(crate) fn native_login_attempt_observation(command: &Value) -> Result<Value, String> {
@@ -1763,7 +1807,7 @@ pub(crate) fn native_login_attempt_observation(command: &Value) -> Result<Value,
     {
         return Err("browser_native_login_original_context_changed".into());
     }
-    let step = login_episode_step(&state, task, command, Some(request))?;
+    let step = login_episode_step(&state, task, command, Some(request), None)?;
     if original.evidence_references.get("nativeLoginStep") != Some(&step.to_string()) {
         return Err("browser_native_login_step_invalid".into());
     }

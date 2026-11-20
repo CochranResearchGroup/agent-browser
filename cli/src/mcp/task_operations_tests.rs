@@ -380,9 +380,13 @@ fn native_image_public_completion_case(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64;
-    let _service_time = crate::connection::stable_time::Fixture::set(Ok(
-        crate::connection::stable_time::fixture_stamp(now),
-    ));
+    let _service_time = crate::connection::stable_time::Fixture::observe_with(move || {
+        // This second connection must acquire the writer while time acquisition
+        // runs. Calling the clock inside the admission transaction deadlocks or
+        // fails here; no elapsed-time/sleep assertion or new fixture is needed.
+        BrowserSessionSqliteStore::default_sqlite()?.mutate_session_state(|_| Ok(()))?;
+        Ok(crate::connection::stable_time::fixture_stamp(now))
+    });
     let candidates=(0..9).map(|index|json!({"candidateId":format!("tile:{}:{}",index+1,"a".repeat(16)),"bounds":{"x":100+(index%3)*66,"y":200+(index/3)*66,"width":64,"height":64}})).collect::<Vec<_>>();
     let mut observation = json!({"desktopId":"viewing","generation":9,"windowId":7,"processDigest":"b".repeat(64),"window":{"x":0,"y":0,"width":640,"height":480},"displayWidth":640,"displayHeight":480,"region":{"x":0,"y":0,"width":640,"height":480},"frameSha256":"a".repeat(64),"nativeControlEpoch":4,"observedAtMs":now,"registeredActionId":profile,"puzzleSha256":"","candidates":candidates,"verify":{"x":100,"y":414,"width":80,"height":30}});
     if rounds {

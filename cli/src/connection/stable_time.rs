@@ -77,11 +77,32 @@ impl Client {
             .as_array()
             .and_then(|blocks| blocks.iter().find_map(|block| block["text"].as_str()))
             .ok_or("stable_time_client_response_invalid")?;
-        let observation: Observation =
-            serde_json::from_str(text).map_err(|_| "stable_time_client_response_invalid")?;
-        observation.validate()?;
-        Ok(observation)
+        parse_observation(text)
     }
+}
+
+/// Contract2.0 explicitly permits unbounded records with estimate=null; those
+/// are service qualification failures, not malformed qualified-client payloads.
+fn parse_observation(text: &str) -> Result<Observation, &'static str> {
+    let value: Value =
+        serde_json::from_str(text).map_err(|_| "stable_time_client_response_invalid")?;
+    if value["contract_version"] != "2.0" {
+        return Err("stable_time_client_response_invalid");
+    }
+    if value["status"] == "unbounded" && value["bound"] == "unbounded" {
+        return Err("stable_time_service_unqualified");
+    }
+    if !matches!(
+        value["status"].as_str(),
+        Some("qualified_live" | "qualified_holdover")
+    ) || value["bound"] != "finite"
+    {
+        return Err("stable_time_client_response_invalid");
+    }
+    let observation: Observation =
+        serde_json::from_value(value).map_err(|_| "stable_time_client_response_invalid")?;
+    observation.validate()?;
+    Ok(observation)
 }
 
 /// Own only the helper spawned for this observation. Never signal a discovered
@@ -346,12 +367,12 @@ impl Stamp {
 /// Called only for Native freshness-dependent operations, never ordinary CDP.
 pub(crate) fn native_now() -> Result<Stamp, String> {
     #[cfg(test)]
-    return NATIVE_FIXTURE.with(|source| {
-        source
-            .borrow()
-            .clone()
-            .unwrap_or_else(|| Err("stable_time_client_fixture_missing".into()))
-    });
+    {
+        let observer = NATIVE_FIXTURE
+            .with(|source| source.borrow().clone())
+            .ok_or_else(|| "stable_time_client_fixture_missing".to_string())?;
+        observer()
+    }
     #[cfg(not(test))]
     {
         let observed = Client::native_configured().and_then(|client| client.observe())
@@ -380,13 +401,18 @@ pub(crate) fn native_now() -> Result<Stamp, String> {
     }
 }
 #[cfg(test)]
-thread_local! { static NATIVE_FIXTURE: std::cell::RefCell<Option<Result<Stamp,String>>> = const { std::cell::RefCell::new(None) }; }
+type FixtureObserver = std::rc::Rc<dyn Fn() -> Result<Stamp, String>>;
 #[cfg(test)]
-pub(crate) struct Fixture(Option<Result<Stamp, String>>);
+thread_local! { static NATIVE_FIXTURE: std::cell::RefCell<Option<FixtureObserver>> = const { std::cell::RefCell::new(None) }; }
+#[cfg(test)]
+pub(crate) struct Fixture(Option<FixtureObserver>);
 #[cfg(test)]
 impl Fixture {
     pub(crate) fn set(reading: Result<Stamp, String>) -> Self {
-        Self(NATIVE_FIXTURE.with(|source| source.replace(Some(reading))))
+        Self::observe_with(move || reading.clone())
+    }
+    pub(crate) fn observe_with(observer: impl Fn() -> Result<Stamp, String> + 'static) -> Self {
+        Self(NATIVE_FIXTURE.with(|source| source.replace(Some(std::rc::Rc::new(observer)))))
     }
 }
 #[cfg(test)]
@@ -447,11 +473,8 @@ mod tests {
             client.observe().unwrap_err(),
             "stable_time_client_start_failed"
         );
-        let observation: Observation = serde_json::from_value(json!({"contract_version":"2.0","epoch":"11111111-1111-4111-8111-111111111111","status":"unavailable","bound":"unbounded","authentication":"NTS-verified","measurement":{"counter":"1","frequency_hz":"1000"},"estimate":null})).unwrap();
-        assert_eq!(
-            observation.validate().unwrap_err(),
-            "stable_time_service_unqualified"
-        );
+        assert_eq!(parse_observation(r#"{"contract_version":"2.0","status":"unbounded","bound":"unbounded","estimate":null,"best_effort":null}"#).unwrap_err(), "stable_time_service_unqualified");
+        assert_eq!(parse_observation(r#"{"contract_version":"2.0","status":"qualified_live","bound":"finite","estimate":null}"#).unwrap_err(), "stable_time_client_response_invalid");
         let _unavailable = Fixture::set(Err(
             "browser_native_time_unavailable:cause=stable_time_client_start_failed".into(),
         ));
