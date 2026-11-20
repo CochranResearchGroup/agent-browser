@@ -4,6 +4,7 @@ use serde_json::Value;
 
 mod public;
 mod recovery_registry;
+pub(crate) mod recovery_state;
 pub(crate) use public::attach_public_failure;
 
 pub(crate) use agent_browser_service_model::{

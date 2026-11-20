@@ -6,6 +6,7 @@ mod browser_build;
 #[cfg(test)]
 mod browser_build_tests;
 mod catalog;
+mod failure_recovery;
 mod host_control;
 mod host_policy;
 mod host_reconnect;
@@ -110,6 +111,7 @@ const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
 // Advanced commands address one task. Explicit profile duplication also
 // supports a source profile without acquiring a task.
 const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = &[
+    "failure_recovery",
     "failure_log",
     "task_operation",
     "task_retirement",
@@ -229,16 +231,16 @@ pub fn run_mcp_command(
                     serde_json::to_string_pretty(&value).unwrap_or_default()
                 );
             }
-            0
+            if value["success"] == false { 1 } else { 0 }
         }
         Err(err) => {
+            let mut response = json!({"success":false,"error":err});
+            crate::native::service_failure::attach_public_failure(
+                &mut response, &json!({"action":"mcp_cli"}), "mcp_cli");
             if json_output {
                 println!(
                     "{}",
-                    serde_json::to_string(&json!({
-                        "success": false,
-                        "error": err,
-                    }))
+                    serde_json::to_string(&response)
                     .unwrap_or_default()
                 );
             } else {
@@ -246,6 +248,19 @@ pub fn run_mcp_command(
             }
             1
         }
+    }
+}
+
+fn cli_public_tool_response(params: &Value, configured: &ServiceState) -> Result<Value, String> {
+    match call_service_mcp_tool(Some(params), "default", configured) {
+        Ok(reply) => reply["content"].as_array()
+            .and_then(|blocks|blocks.iter().find_map(|block|block["text"].as_str()))
+            .and_then(|text|serde_json::from_str(text).ok())
+            .ok_or_else(||"mcp_cli_tool_response_invalid".into()),
+        Err(error) => Ok(json!({"success":false,
+            "error":error.data.as_ref().and_then(|data|data["message"].as_str()).unwrap_or(error.message),
+            "failure":error.data.as_ref().and_then(|data|data.get("failure")),
+            "data":error.data})),
     }
 }
 
@@ -259,6 +274,7 @@ fn mcp_command_response_with_config(
     configured_service_state: &ServiceState,
 ) -> Result<Value, String> {
     match args.get(1).map(|value| value.as_str()) {
+        Some("failure-recovery") => failure_recovery::cli(args, configured_service_state),
         Some("host-control") => host_control::cli(args),
         Some("host-reconnect") => host_reconnect::cli(args),
         Some("host-policy") => host_policy::cli(args),
@@ -328,10 +344,15 @@ fn mcp_command_response_with_config(
             )
         }
         Some("task-operation") => {
-            if args.len() != 4 || args[2].trim().is_empty() || args[3].trim().is_empty() {
+            if !(4..=5).contains(&args.len()) || args[2].trim().is_empty() || args[3].trim().is_empty()
+                || (args.len()==5 && args[4]!="reconcile") {
                 return Err(
-                    "Usage: agent-browser --json mcp task-operation <task-id> <request-id>".into(),
+                    "Usage: agent-browser --json mcp task-operation <task-id> <request-id> [reconcile]".into(),
                 );
+            }
+            if args.len()==5 {
+                return cli_public_tool_response(&json!({"name":"browser_command","arguments":{
+                    "taskId":args[2],"action":"task_operation","params":{"operation":"reconcile","requestId":args[3]}}}),configured_service_state);
             }
             Ok(json!({"success":true,"data":task_operations::lookup(&args[2], &args[3])?}))
         }
@@ -5595,7 +5616,7 @@ fn call_service_mcp_tool_inner(
         && !(name == "browser_command"
             && matches!(
                 arguments["action"].as_str(),
-                Some("profile_duplicate" | "browser_build" | "failure_log")
+                Some("profile_duplicate" | "browser_build" | "failure_log" | "failure_recovery")
             ))
     {
         required_string_argument(arguments, "taskId")?;
@@ -5666,6 +5687,9 @@ fn call_service_mcp_tool_inner(
             return playbooks::call(arguments, session);
         }
         validate_browser_command_action(arguments)?;
+        if arguments["action"] == "failure_recovery" {
+            return failure_recovery::call(arguments, session, configured_service_state);
+        }
         if matches!(
             arguments["action"].as_str(),
             Some("native_input" | "native_capture")

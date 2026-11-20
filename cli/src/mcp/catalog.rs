@@ -62,7 +62,7 @@ pub(super) fn tools() -> Vec<Value> {
             "description":"Run supported task operation. Discover names/arguments with browser_discover. Retired authority is unavailable.",
             "inputSchema":{"type":"object","additionalProperties":false,
                 "properties":{"taskId":{"type":"string"},"action":{"type":"string"},
-                    "params":{"type":"object"},"policyOverrideId":{"type":"string"},"requestId":{"type":"string"}},"required":["action"],"anyOf":[{"required":["taskId"]},{"properties":{"action":{"enum":["profile_duplicate","browser_build"]}},"required":["params"]},{"properties":{"action":{"const":"failure_log"},"params":{"required":["occurrenceId"]}},"required":["params"]}]}}),
+                    "params":{"type":"object"},"policyOverrideId":{"type":"string"},"requestId":{"type":"string"}},"required":["action"],"anyOf":[{"required":["taskId"]},{"properties":{"action":{"enum":["profile_duplicate","browser_build","failure_recovery"]}},"required":["params"]},{"properties":{"action":{"const":"failure_log"},"params":{"required":["occurrenceId"]}},"required":["params"]}]}}),
         json!({"name":"browser_discover","title":"Discover advanced operations",
             "description":"Discover operation schemas and CLI/API guidance for browser, diagnostics or administration.",
             "inputSchema":{"type":"object","additionalProperties":false,
@@ -204,11 +204,12 @@ fn operation_schema(category: &str, operation: &str) -> Result<Value, super::Jso
             "task_retirement" => Some(json!({"type":"object","additionalProperties":false,
                 "properties":{"choice":{"enum":["inspect","retire","status"]},"operationId":{"type":"string","minLength":1,"maxLength":160},"expectedBindingRef":{"type":"string","pattern":"^[a-fA-F0-9]{64}$"}},"required":["choice"],
                 "oneOf":[{"properties":{"choice":{"const":"inspect"}},"not":{"anyOf":[{"required":["operationId"]},{"required":["expectedBindingRef"]}]}},{"properties":{"choice":{"const":"status"}},"required":["operationId"],"not":{"required":["expectedBindingRef"]}},{"properties":{"choice":{"const":"retire"}},"required":["operationId","expectedBindingRef"]}]})),
+            "failure_recovery" => Some(super::failure_recovery::parameters_schema()),
             "failure_log" => Some(json!({"type":"object","additionalProperties":false,
                 "properties":{"occurrenceId":{"type":"string"},"limit":{"type":"integer","minimum":1,"maximum":1000}}})),
             "task_operation" => Some(json!({"type":"object","additionalProperties":false,
                 "properties":{"requestId":{"type":"string","minLength":1},
-                    "operation":{"enum":["capacity"]},"scope":{"enum":["task","defaults"]},
+                    "operation":{"enum":["capacity","reconcile"]},"scope":{"enum":["task","defaults"]},
                     "policy":{"type":"object","additionalProperties":false,"properties":{
                         "initialCapacity":{"type":"integer","minimum":1},
                         "extensionIncrement":{"type":"integer","minimum":1},
@@ -216,7 +217,7 @@ fn operation_schema(category: &str, operation: &str) -> Result<Value, super::Jso
                         "maximumLoginSteps":{"type":"integer","minimum":1},
                         "maximumArtifactReferences":{"type":"integer","minimum":1}},
                         "required":["initialCapacity","extensionIncrement","maximumCapacity"]}},
-                "anyOf":[{"required":["requestId"]},{"required":["operation"]}]})),
+                "anyOf":[{"required":["requestId"]},{"properties":{"operation":{"const":"capacity"}},"required":["operation"]}]})),
             "task_briefing" | "mode" | "back" | "forward" | "reload" | "service_resources" => {
                 Some(json!({"type":"object",
                 "additionalProperties":false,"properties":{},"required":[]}))

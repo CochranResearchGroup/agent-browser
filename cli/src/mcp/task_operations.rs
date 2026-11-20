@@ -222,6 +222,11 @@ fn existing_response(original: &BrowserTaskOperation) -> crate::connection::Resp
             }),
         ..Default::default()
     };
+    if let Some(error) = crate::native::browser_task_operations::original_no_effect_failure(original) {
+        response.failure = Some(json!({"code":error.split(':').next().unwrap_or("browser_task_operation_owner_refused"),
+            "effectState":"no_effect","originalRequestId":original.request_id,
+            "recommendedAction":"fresh_observation_and_new_explicit_intent_without_replaying_original"}));
+    }
     response_data(&mut response, original, true);
     response
 }
