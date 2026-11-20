@@ -370,7 +370,7 @@ fn relinquish(control: &mut Control, id: &str, digest: &str, request: &str) -> R
             .ok_or("browser_control_epoch_exhausted")?;
         control.human = !claims.is_empty();
         control.pause_reads = false;
-        control.awaiting_observation = false;
+        control.awaiting_observation = !control.human;
         handoff.epoch = control.epoch;
         handoff.returned_by =
             (!claims.values().any(|(claim, _)| claim == id)).then(|| request.into());
@@ -406,9 +406,8 @@ fn relinquish(control: &mut Control, id: &str, digest: &str, request: &str) -> R
         .ok_or("browser_control_epoch_exhausted")?;
     control.human = false;
     control.pause_reads = false;
-    // The private callback freshly rejoined the same process and target.
-    // Native input is relinquished before this cooperative resume.
-    control.awaiting_observation = false;
+    // Returning Native input proves ownership, not fresh page contents.
+    control.awaiting_observation = true;
     handoff.returned_by = Some(request.into());
     control.audit.push(
         json!({"epoch":control.epoch,"operation":"human_handoff_return","requestId":request,"humanHandoff":handoff}),
@@ -654,7 +653,8 @@ mod tests {
         assert_eq!(viewer_claims(&state).len(), 1);
         relinquish(&mut state, "invitation", "target", "viewer-b:return-b").unwrap();
         assert!(!state.human);
-        assert!(permits(&state, "click").is_ok());
+        assert!(state.awaiting_observation);
+        assert!(permits(&state, "click").is_err());
     }
 
     #[test]
@@ -755,7 +755,8 @@ mod tests {
         assert_eq!(intent(&state, "invitation", "target"), "view");
         assert!(!state.human);
         assert_eq!(state.flights["pending-operation"], "uncertain_in_flight");
-        assert!(permits(&state, "click").is_ok());
+        assert!(state.awaiting_observation);
+        assert!(permits(&state, "click").is_err());
         assert!(permits(&state, "url").is_ok());
         relinquish(&mut state, "invitation", "target", "return-1").unwrap();
         assert_eq!(state.epoch, epoch + 1);

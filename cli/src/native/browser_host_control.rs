@@ -294,7 +294,7 @@ fn permits(control: &Control, action: &str) -> Result<(), String> {
         return Err("browser_control_human: explicitly return control before automation".into());
     }
     if control.awaiting_observation {
-        return Err("browser_control_fresh_observation_required".into());
+        return Err("browser_control_fresh_observation_required: observe the retained task with browser_continue or Native capture, then continue; reconcile any original uncertain dispatch without replay".into());
     }
     Ok(())
 }
@@ -764,9 +764,13 @@ pub(crate) fn reconcile(
 pub(crate) struct Admission {
     path: PathBuf,
     id: String,
+    observation_epoch: Option<u64>,
 }
 impl Admission {
     pub(crate) fn undispatched(self) -> Result<(), String> {
+        if self.observation_epoch.is_some() {
+            return Ok(());
+        }
         transaction(&self.path, |control| {
             control.flights.remove(&self.id);
             control.owners.remove(&self.id);
@@ -775,6 +779,15 @@ impl Admission {
     }
     pub(crate) fn finish(self, success: bool) -> Result<(), String> {
         transaction(&self.path, |control| {
+            if let Some(expected) = self.observation_epoch {
+                if success && control.epoch == expected && !control.human && flight_clear(control) {
+                    control.awaiting_observation = false;
+                    control
+                        .audit
+                        .push(json!({"epoch":expected,"operation":"fresh_page_observation"}));
+                }
+                return Ok(());
+            }
             control.flights.insert(
                 self.id.clone(),
                 if success {
@@ -791,7 +804,29 @@ impl Admission {
 /// Each cooperating route calls this immediately before actual page dispatch.
 pub(crate) fn admit(browser_id: &str, action: &str, id: &str) -> Result<Option<Admission>, String> {
     if status(action) || observation(action) {
-        check(browser_id, action)?;
+        let control = read(browser_id)?;
+        permits(&control, action)?;
+        // Only an actual successful page/capture result may satisfy freshness;
+        // process/status proof and passive metadata never do.
+        if control.awaiting_observation
+            && !control.human
+            && matches!(
+                action,
+                "url"
+                    | "snapshot"
+                    | "screenshot"
+                    | "content"
+                    | "native_capture"
+                    | "desktop_capture"
+                    | "desktop_evidence_observe"
+            )
+        {
+            return Ok(Some(Admission {
+                path: path(browser_id)?,
+                id: String::new(),
+                observation_epoch: Some(control.epoch),
+            }));
+        }
         return Ok(None);
     }
     admit_mutation(browser_id, action, id, None)
@@ -851,7 +886,11 @@ fn admit_mutation(
             .insert(id.clone(), (std::process::id(), owner));
         Ok(())
     })?;
-    Ok(Some(Admission { path, id }))
+    Ok(Some(Admission {
+        path,
+        id,
+        observation_epoch: None,
+    }))
 }
 
 /// Last managed-runtime admission, before target activation or special operator
