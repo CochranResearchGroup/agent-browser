@@ -30,6 +30,18 @@ pub(crate) struct CapacityPolicy {
     pub(crate) maximum_retention_claims: usize,
     #[serde(default = "default_popup_admissions")]
     pub(crate) maximum_popup_admissions: usize,
+    /// Retained reconnect receipts are never evicted when this live limit changes.
+    #[serde(default = "default_reconnect_requests")]
+    pub(crate) maximum_reconnect_requests: usize,
+    /// Global host admission uses system defaults, never a task override.
+    #[serde(default = "default_runtime_lanes")]
+    pub(crate) maximum_runtime_lanes: usize,
+}
+fn default_reconnect_requests() -> usize {
+    128
+}
+fn default_runtime_lanes() -> usize {
+    64
 }
 fn default_retention_claims() -> usize {
     4096
@@ -55,6 +67,8 @@ impl Default for CapacityPolicy {
             maximum_artifact_references: default_artifact_references(),
             maximum_retention_claims: default_retention_claims(),
             maximum_popup_admissions: default_popup_admissions(),
+            maximum_reconnect_requests: default_reconnect_requests(),
+            maximum_runtime_lanes: default_runtime_lanes(),
         }
     }
 }
@@ -67,8 +81,10 @@ impl CapacityPolicy {
             || self.maximum_artifact_references == 0
             || self.maximum_retention_claims == 0
             || self.maximum_popup_admissions == 0
+            || self.maximum_reconnect_requests == 0
+            || self.maximum_runtime_lanes == 0
         {
-            return Err("browser_task_operation_capacity_policy_invalid: use positive initialCapacity and extensionIncrement with maximumCapacity at least initialCapacity; maximumLoginSteps, maximumArtifactReferences, maximumRetentionClaims and maximumPopupAdmissions must be positive".into());
+            return Err("browser_task_operation_capacity_policy_invalid: use positive initialCapacity and extensionIncrement with maximumCapacity at least initialCapacity; maximumLoginSteps, maximumArtifactReferences, maximumRetentionClaims maximumPopupAdmissions, maximumReconnectRequests and maximumRuntimeLanes must be positive".into());
         }
         Ok(())
     }
@@ -253,6 +269,18 @@ pub(super) fn strip_archived_json(
     serde_json::to_string(&value).map_err(|_| "browser_task_operation_document_invalid".into())
 }
 impl BrowserSessionSqliteStore {
+    pub(crate) fn runtime_lane_capacity_policy(&self) -> Result<(usize, &'static str), String> {
+        let config = configuration(&self.connection)?;
+        config.defaults.validate()?;
+        Ok((config.defaults.maximum_runtime_lanes, "system_default"))
+    }
+    pub(crate) fn reconnect_request_limit(&self, task: &str) -> Result<usize, String> {
+        let config = configuration(&self.connection)?;
+        let (policy, _) = config.effective(task);
+        policy.validate()?;
+        Ok(policy.maximum_reconnect_requests)
+    }
+
     pub(crate) fn session_admission_limits(
         &self,
         task: &str,
@@ -363,7 +391,7 @@ impl BrowserSessionSqliteStore {
             .values()
             .filter(|claim| claim.released)
             .count();
-        let result = json!({"retentionClaimActiveCount":retention_active,"retentionClaimReleasedHistoryCount":retention_released,"retentionClaimCountScope":"all_retained_sessions","retentionClaimLimit":policy.maximum_retention_claims,"popupAdmissionLimit":policy.maximum_popup_admissions,"artifactReferenceCount":artifact_count,"artifactReferenceLimit":policy.maximum_artifact_references,"schemaVersion":POLICY_SCHEMA,"taskId":task,"policy":policy,"policySource":source,"capacity":capacity,"activeCount":active,"archivedCount":archived,"unresolvedCount":unresolved,"automaticArchival":true,"automaticExtension":true,"requiresRestart":false,"nextAction":{"tool":"browser_command","arguments":{"taskId":task,"action":"task_operation","params":{"operation":"capacity"}}}});
+        let result = json!({"retentionClaimActiveCount":retention_active,"retentionClaimReleasedHistoryCount":retention_released,"retentionClaimCountScope":"all_retained_sessions","retentionClaimLimit":policy.maximum_retention_claims,"popupAdmissionLimit":policy.maximum_popup_admissions,"reconnectRequestLimit":policy.maximum_reconnect_requests,"runtimeLaneLimit":config.defaults.maximum_runtime_lanes,"runtimeLanePolicySource":"system_default","artifactReferenceCount":artifact_count,"artifactReferenceLimit":policy.maximum_artifact_references,"schemaVersion":POLICY_SCHEMA,"taskId":task,"policy":policy,"policySource":source,"capacity":capacity,"activeCount":active,"archivedCount":archived,"unresolvedCount":unresolved,"automaticArchival":true,"automaticExtension":true,"requiresRestart":false,"nextAction":{"tool":"browser_command","arguments":{"taskId":task,"action":"task_operation","params":{"operation":"capacity"}}}});
         transaction.commit().map_err(|_| {
             "browser_task_operation_capacity_commit_failed: inspect effective policy before retry"
         })?;
