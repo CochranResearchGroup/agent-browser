@@ -1282,6 +1282,196 @@
       },
       "resumeCondition": "The original owner operation is inspected and safely settled or advanced through its advertised continuation; current physical identity is verified before the same intended work continues.",
       "maximumAutomaticAttempts": 1
+    },
+    "native_request": {
+      "rationale": "The requested Native capture/input does not satisfy the declared owner schema or mutually exclusive purpose; caller coordinates or malformed evidence cannot grant input.",
+      "requiredActor": "caller",
+      "evidenceRequirement": "Original argument shape and current public browser_command schema.",
+      "inspect": {
+        "tool": "browser_discover",
+        "arguments": {
+          "category": "browser",
+          "operation": "native_input"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Use the public browser_command Native schema and the existing exact task/request context. Correct the named input, purpose, profile or exclusive-argument field; obtain a new scoped read when observation evidence is missing rather than manufacturing target refs, coordinates or identities. Direct CLI/HTTP paths must not bypass an MCP-only owner-journal contract.",
+          "interface": "original_public_request",
+          "precondition": "Current request dispatched no input or its original outcome is reconciled; preserve all earlier original identities."
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Correct the named Native parameters using the supported MCP task/request interface and declared capture purpose; independently reconcile any earlier input before continuing.",
+      "maximumAutomaticAttempts": 1
+    },
+    "native_fresh_observation": {
+      "rationale": "Missing, stale, mismatched or changed observation/control/visual evidence cannot authorize a registered Native input on the current target.",
+      "requiredActor": "caller",
+      "evidenceRequirement": "Exact task/original outcome, current target/control and a newly classified or login observation with qualified serviceTime; unsupported layout or account mismatch must remain explicit.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the same task briefing and all original uncertain operations. Reconcile the exact original input before creating any new input; observation/capture is independent read work.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "taskId": "$taskId",
+              "action": "task_briefing"
+            }
+          },
+          "precondition": "No replacement task, profile or request ID is an uncertainty bypass."
+        },
+        {
+          "instruction": "Obtain a fresh Native capture for the same declared checkbox/image/login purpose using the corresponding supported parameters. Re-select only owner-returned refs for current pixels/control/account. If the frame/layout/account remains unsupported, use the retained native viewer for human assistance instead of a blind click, fuzzy identity or capture retry loop.",
+          "interface": "original_public_request",
+          "precondition": "The same physical target and permission scope are retained; qualified time and original input readback are required before any renewed input."
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "mode"
+        }
+      },
+      "resumeCondition": "Original inputs are settled and the current declared target/account/control/visual observation is positively qualified. Continue the same intended task; stale or unmatched evidence never becomes permission.",
+      "maximumAutomaticAttempts": 1
+    },
+    "native_manual_assistance": {
+      "rationale": "The named Native profile, layout, account match, site-policy admission or bounded challenge capability does not permit this automatic input. Human assistance is a supported continuation, not a permission bypass.",
+      "requiredActor": "authorized_human_viewer",
+      "evidenceRequirement": "Current task briefing, exact site/account policy and original input outcomes; a passive viewer or interactive capability does not establish human activity.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Open the existing task native viewer in view-only mode and use only its durable handoff URL after operatorVisible.state=ready. An authorized human can take control and resolve this step. Do not raise operation-history capacity to bypass a challenge/credential/site permission boundary.",
+          "call": {
+            "tool": "browser_handoff",
+            "arguments": {
+              "taskId": "$taskId",
+              "interaction": "view"
+            }
+          },
+          "precondition": "Existing task/profile authority applies; no raw provider URL or extra viewer-grant ceremony. Viewing alone does not pause automation."
+        },
+        {
+          "instruction": "After the human finishes, every explicit holder returns that same viewer to view-only. Wait for actual human-input quiet, inspect current control, reconcile already-dispatched originals and acquire a fresh observation before subsequent agent input.",
+          "call": {
+            "tool": "browser_control",
+            "arguments": {
+              "taskId": "$taskId",
+              "operation": "status"
+            }
+          },
+          "precondition": "One viewer cannot release another viewer takeover and silence does not release an explicit claim."
+        }
+      ],
+      "verification": {
+        "tool": "browser_control",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "resumeCondition": "Authorized human work resolved the step, all explicit claims are released and recent input is quiet; original input outcomes and fresh target evidence qualify before automation resumes.",
+      "maximumAutomaticAttempts": 1
+    },
+    "native_capability": {
+      "rationale": "The specific owner OCR/producer/profile capability is unavailable or unsupported; absence of helper capability is not a positive access denial or proof the entire provider is down.",
+      "requiredActor": "owner_service_operator_or_authorized_human_viewer",
+      "evidenceRequirement": "Actual producer/helper capability or OCR failure and the existing task native-view readiness.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the named owner/helper contract and repair only the missing compatible installed capability or configuration under its installation owner. Preserve the same profile/task/originals. Continue independent read/view work; use human assistance if automatic perception remains unavailable.",
+          "interface": "installation_owner_storage_repair",
+          "precondition": "A helper/contract failure is not proof that Remote View, StableTime or the application is down."
+        },
+        {
+          "instruction": "Use the existing task native viewer for authorized human continuation while automatic classification is unavailable. Share only a ready durable handoff URL and reconcile original uncertain input before agent resumption.",
+          "call": {
+            "tool": "browser_handoff",
+            "arguments": {
+              "taskId": "$taskId",
+              "interaction": "view"
+            }
+          },
+          "precondition": "Existing profile/task authority applies and operatorVisible.state must be ready."
+        }
+      ],
+      "verification": {
+        "tool": "browser_control",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "resumeCondition": "Authorized human work resolved the step, all explicit claims are released and recent input is quiet; original input outcomes and fresh target evidence qualify before automation resumes.",
+      "maximumAutomaticAttempts": 1
+    },
+    "native_site_configuration": {
+      "rationale": "The exact retained profile/site-policy/provider binding or verified protocol origin is unavailable, ambiguous or changed; that is distinct from a positive policy denial.",
+      "requiredActor": "site_policy_owner_or_authorized_human_viewer",
+      "evidenceRequirement": "Current configured profile/site-policy sources and an actual runtime-protocol origin observation; a title, URL guess or absent broker read does not grant input.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the exact task/profile and current policy through its existing service owner. Repair only the reported missing, ambiguous or changed configuration/binding under the site-policy owner. Do not loosen permissions, select another origin/profile or substitute permissive defaults after an unavailable store read.",
+          "interface": "original_public_request",
+          "precondition": "Existing owner authority and actual configuration provenance must be verified; a task briefing alone does not prove site-policy admission."
+        },
+        {
+          "instruction": "Use the retained ready native viewer for authorized human assistance while automatic site admission is unavailable. Preserve original operation outcomes and re-observe current target/control before any later agent input.",
+          "call": {
+            "tool": "browser_handoff",
+            "arguments": {
+              "taskId": "$taskId",
+              "interaction": "view"
+            }
+          },
+          "precondition": "Human work stays within the intended existing profile/site. Share only a ready durable handoff URL; viewing is not human-input evidence."
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "The actual service-owner policy read and runtime-protocol origin positively qualify current admission, original uncertain inputs are reconciled and a fresh observation succeeds; otherwise continue through authorized human assistance.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -2015,6 +2205,270 @@
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "stale"
     },
+    "browser_native_challenge_admission_refused": {
+      "recipe": "native_manual_assistance",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_native_challenge_attempt_budget_exhausted": {
+      "recipe": "native_manual_assistance",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_classification_context_changed": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_classification_control_changed": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_classification_flag_invalid": {
+      "recipe": "native_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_classification_frame_changed": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_classification_image_invalid": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_classification_invalid": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_classification_ocr_invalid": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_classification_ocr_unavailable": {
+      "recipe": "native_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_classification_requires_capture": {
+      "recipe": "native_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_image_attempt_invalid": {
+      "recipe": "native_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_image_capture_scope_invalid": {
+      "recipe": "native_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_image_clock_domain_changed": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_image.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_image.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_image_observation_expired": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_image_observation_invalid": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_image_pixels_invalid": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_image.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_image.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_image_round_changed": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_image_round_invalid": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_image_round_missing": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_image_round_refused": {
+      "recipe": "native_manual_assistance",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_image.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_image.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_native_image_selection_invalid": {
+      "recipe": "native_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_image.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_image.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_login_account_invalid": {
+      "recipe": "native_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/native_login_perception.rs"
+        }
+      ],
+      "policySource": "cli/src/native/native_login_perception.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_login_account_unmatched": {
+      "recipe": "native_manual_assistance",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/native_login_perception.rs"
+        }
+      ],
+      "policySource": "cli/src/native/native_login_perception.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
     "browser_native_login_budget_exhausted": {
       "recipe": "login_budget",
       "owningChecks": [
@@ -2053,6 +2507,182 @@
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "denied"
     },
+    "browser_native_login_control_changed": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_login_episode_invalid": {
+      "recipe": "native_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_login_evidence_invalid": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_login_filled_form_unverified": {
+      "recipe": "native_manual_assistance",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/native_login_perception.rs"
+        }
+      ],
+      "policySource": "cli/src/native/native_login_perception.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_login_frame_changed": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/native_login_perception.rs"
+        }
+      ],
+      "policySource": "cli/src/native/native_login_perception.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_login_layout_unsupported": {
+      "recipe": "native_manual_assistance",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/native_login_perception.rs"
+        }
+      ],
+      "policySource": "cli/src/native/native_login_perception.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_login_observation_expired": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/native_login_perception.rs"
+        }
+      ],
+      "policySource": "cli/src/native/native_login_perception.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_login_observation_invalid": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_login_observation_missing": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_login_observation_unqualified": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/native_login_perception.rs"
+        }
+      ],
+      "policySource": "cli/src/native/native_login_perception.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_login_ocr_profile_unsupported": {
+      "recipe": "native_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/native_login_perception.rs"
+        }
+      ],
+      "policySource": "cli/src/native/native_login_perception.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_login_ocr_unavailable": {
+      "recipe": "native_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/native_login_perception.rs"
+        }
+      ],
+      "policySource": "cli/src/native/native_login_perception.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_login_original_context_changed": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_login_original_invalid": {
+      "recipe": "original",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_native_login_original_missing": {
+      "recipe": "original",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_native_login_original_unavailable": {
+      "recipe": "original",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
     "browser_native_login_previous_input_unsettled": {
       "recipe": "original",
       "owningChecks": [
@@ -2064,6 +2694,116 @@
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "uncertain"
     },
+    "browser_native_login_producer_contract_unavailable": {
+      "recipe": "native_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_login_profile_unsupported": {
+      "recipe": "native_manual_assistance",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/native_login_perception.rs"
+        }
+      ],
+      "policySource": "cli/src/native/native_login_perception.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_login_refinement_unavailable": {
+      "recipe": "native_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/native_login_ocr.rs"
+        }
+      ],
+      "policySource": "cli/src/native/native_login_ocr.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_login_request_invalid": {
+      "recipe": "native_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/native_login_perception.rs"
+        }
+      ],
+      "policySource": "cli/src/native/native_login_perception.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_login_requires_exclusive_capture": {
+      "recipe": "native_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_login_requires_mcp_stdio": {
+      "recipe": "native_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_login_step_invalid": {
+      "recipe": "native_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_login_target_invalid": {
+      "recipe": "native_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/native_login_perception.rs"
+        }
+      ],
+      "policySource": "cli/src/native/native_login_perception.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_login_target_requires_exclusive_input": {
+      "recipe": "native_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_login_target_unsupported": {
+      "recipe": "native_manual_assistance",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/native_login_perception.rs"
+        }
+      ],
+      "policySource": "cli/src/native/native_login_perception.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
     "browser_native_observation_expired": {
       "recipe": "native_time",
       "owningChecks": [
@@ -2074,6 +2814,413 @@
       "policySource": "AGENTS.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "stale"
+    },
+    "browser_native_original_identity_missing": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_original_identity_unavailable": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_session_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_original_observation_context_changed": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_original_observation_control_changed": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_host_image.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_host_image.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_original_observation_control_unverified": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/remote_view_application_http.rs"
+        }
+      ],
+      "policySource": "cli/src/native/remote_view_application_http.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_original_observation_expired": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_original_observation_invalid": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp/task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_original_observation_missing": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_original_observation_request_invalid": {
+      "recipe": "native_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_original_observation_unqualified": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_original_operation_completion_invalid": {
+      "recipe": "original",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_native_original_operation_context_changed": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_native_original_operation_invalid": {
+      "recipe": "native_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_original_operation_missing": {
+      "recipe": "original",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_native_original_operation_unavailable": {
+      "recipe": "original",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_native_params_invalid": {
+      "recipe": "native_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp.rs"
+        }
+      ],
+      "policySource": "cli/src/mcp.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_registered_action_invalid": {
+      "recipe": "native_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_locator.rs"
+        }
+      ],
+      "policySource": "cli/src/native/desktop_locator.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_native_registered_action_requires_classification": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_registered_frame_invalid": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_locator.rs"
+        }
+      ],
+      "policySource": "cli/src/native/desktop_locator.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_registered_locator_unavailable": {
+      "recipe": "native_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_registered_ocr_invalid": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_locator.rs"
+        }
+      ],
+      "policySource": "cli/src/native/desktop_locator.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_registered_ocr_unavailable": {
+      "recipe": "native_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_locator.rs"
+        }
+      ],
+      "policySource": "cli/src/native/desktop_locator.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_registered_region_invalid": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_locator.rs"
+        }
+      ],
+      "policySource": "cli/src/native/desktop_locator.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_registered_target_invalid": {
+      "recipe": "native_fresh_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_control.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_control.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_site_origin_unverified": {
+      "recipe": "native_site_configuration",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_site_policy_attempt_denied": {
+      "recipe": "native_manual_assistance",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_native_site_policy_binding_missing": {
+      "recipe": "native_site_configuration",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_site_policy_changed": {
+      "recipe": "native_site_configuration",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_site_policy_invalid": {
+      "recipe": "native_site_configuration",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_site_policy_missing_or_ambiguous": {
+      "recipe": "native_site_configuration",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_site_policy_origin_unverified": {
+      "recipe": "native_site_configuration",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_native_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_native_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_site_policy_profile_unbound": {
+      "recipe": "native_site_configuration",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_site_policy_provider_missing": {
+      "recipe": "native_site_configuration",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_site_policy_provider_missing_or_ambiguous": {
+      "recipe": "native_site_configuration",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_site_policy_requires_manual_assistance": {
+      "recipe": "native_manual_assistance",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_site_policy_requires_manual_or_cdp_free": {
+      "recipe": "native_manual_assistance",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_native_site_policy_task_missing": {
+      "recipe": "native_site_configuration",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_task_operations.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operations.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
     },
     "browser_native_time_continuity_changed": {
       "recipe": "native_time",
@@ -5701,7 +6848,15 @@
     "browser_native_time_",
     "browser_native_observation_",
     "browser_operation_",
-    "browser_session_target_"
+    "browser_session_target_",
+    "browser_native_login_",
+    "browser_native_original_",
+    "browser_native_image_",
+    "browser_native_classification_",
+    "browser_native_registered_",
+    "browser_native_site_",
+    "browser_native_challenge_",
+    "browser_native_params_"
   ],
   "sourceBaseline": "bf181f4ca",
   "knownCoverageGaps": [
@@ -5740,6 +6895,12 @@
       "source": "cli/src/native/profile_duplicate_disposal.rs",
       "reason": "Fault injection compiled only under cfg(test); unavailable in the public production binary.",
       "sourceEvidence": "directory.join(\"fixture-disposal-stop-after\")"
+    },
+    {
+      "code": "browser_native_original_identity_",
+      "source": "cli/src/native/profile_duplicate_host.rs",
+      "reason": "Test assertion starts_with prefix, not a complete emitted public error code.",
+      "sourceEvidence": "first_error.starts_with(\"browser_native_original_identity_\")"
     }
   ],
   "fragments": [

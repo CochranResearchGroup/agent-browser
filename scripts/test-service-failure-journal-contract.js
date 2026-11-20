@@ -133,6 +133,7 @@ const toolSchemas = {
   browser_control: readFileSync('cli/src/mcp/host_control.rs', 'utf8'),
   browser_policy: readFileSync('cli/src/mcp/host_policy.rs', 'utf8'),
   browser_continue: readFileSync('cli/src/mcp/workflow.rs', 'utf8'),
+  browser_handoff: readFileSync('cli/src/mcp/workflow.rs', 'utf8'),
   browser_discover: readFileSync('cli/src/mcp/catalog.rs', 'utf8'),
 };
 function validateRecoveryCall(call) {
@@ -259,4 +260,4 @@ if (process.argv.includes('--require-complete-recovery')) {
   assert.equal(recoveryRegistry.inventoryStatus, 'complete', `Public recovery inventory incomplete: ${recoveryRegistry.knownCoverageGaps.join('; ')}`);
   assert.deepEqual(recoveryRegistry.knownCoverageGaps, []);
 }
-process.stdout.write(`Exact recovery contracts checked: ${Object.keys(recoveryRegistry.codes).length}; reviewed producer emissions checked: ${discoveredReviewedCodes.size}; full inventory: ${recoveryRegistry.inventoryStatus}\n`);
+process.stdout.write(`Exact recovery contracts checked: ${Object.keys(recoveryRegistry.codes).length}; reviewed namespace code candidates checked: ${discoveredReviewedCodes.size}; full inventory: ${recoveryRegistry.inventoryStatus}\n`);
