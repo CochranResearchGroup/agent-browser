@@ -331,6 +331,18 @@ impl Stamp {
         }
         Ok(())
     }
+    /// Retain only qualified service provenance for an owner's relative window.
+    pub(crate) fn service_origin(
+        &self,
+    ) -> Result<agent_browser_service_model::ServiceTimeOrigin, String> {
+        self.validate()?;
+        agent_browser_service_model::ServiceTimeOrigin::new(
+            self.epoch.clone(),
+            self.earliest_ms(),
+            self.latest_ms(),
+        )
+        .map_err(str::to_owned)
+    }
     pub(crate) fn earliest_ms(&self) -> u64 {
         self.earliest_utc_ns as u64 / 1_000_000
     }
@@ -364,8 +376,9 @@ impl Stamp {
     }
 }
 
-/// Called only for Native freshness-dependent operations, never ordinary CDP.
-pub(crate) fn native_now() -> Result<Stamp, String> {
+/// Observe the supported authority at its service measurement instant. No guest
+/// extrapolation or claim about later delivery/effect completion is made.
+pub(crate) fn authority_now() -> Result<Stamp, String> {
     #[cfg(test)]
     {
         let observer = NATIVE_FIXTURE
@@ -375,29 +388,48 @@ pub(crate) fn native_now() -> Result<Stamp, String> {
     }
     #[cfg(not(test))]
     {
-        let observed = Client::native_configured().and_then(|client| client.observe())
-            .map_err(|error| format!("browser_native_time_unavailable:cause={error}; repair the supported StableTime client/service and obtain a fresh native_capture; independent status/readback remains available"))?;
+        let observed = Client::native_configured()
+            .and_then(|client| client.observe())
+            .map_err(str::to_owned)?;
         let estimate = observed
             .estimate
             .as_ref()
-            .ok_or("browser_native_time_evidence_invalid")?;
+            .ok_or("stable_time_evidence_invalid")?;
         let stamp = Stamp {
             epoch: observed.epoch.clone(),
             counter: observed
                 .measurement
                 .counter
                 .parse()
-                .map_err(|_| "browser_native_time_evidence_invalid")?,
+                .map_err(|_| "stable_time_evidence_invalid")?,
             frequency_hz: observed
                 .measurement
                 .frequency_hz
                 .parse()
-                .map_err(|_| "browser_native_time_evidence_invalid")?,
+                .map_err(|_| "stable_time_evidence_invalid")?,
             earliest_utc_ns: utc_ns(&estimate.earliest_utc).map_err(str::to_owned)?,
             latest_utc_ns: utc_ns(&estimate.latest_utc).map_err(str::to_owned)?,
         };
-        stamp.validate()?;
+        stamp.validate().map_err(|_| "stable_time_evidence_invalid".to_string())?;
         Ok(stamp)
+    }
+}
+/// Keep Native image recapture guidance at the Native adapter boundary. Other
+/// owners retain the same underlying client/service cause with their own recourse.
+pub(crate) fn native_now() -> Result<Stamp, String> {
+    #[cfg(test)]
+    {
+        authority_now()
+    }
+    #[cfg(not(test))]
+    {
+        authority_now().map_err(|cause| {
+            if cause == "stable_time_evidence_invalid" {
+                "browser_native_time_evidence_invalid: obtain a fresh native_capture".to_string()
+            } else {
+                format!("browser_native_time_unavailable:cause={cause}; repair the supported StableTime client/service and obtain a fresh native_capture; independent status/readback remains available")
+            }
+        })
     }
 }
 #[cfg(test)]

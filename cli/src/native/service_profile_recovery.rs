@@ -1878,7 +1878,10 @@ fn plan_profile_reset_command(command: &Value) -> Result<Value, String> {
             "trace": profile_lifecycle_trace(command, profile_id),
         }));
     }
-    let created_at = service_now_timestamp();
+    let time = crate::connection::stable_time::authority_now().map_err(|cause|
+        format!("profile_reset_time_unavailable: cause={cause}; inspect the original plan/receipt and repair the supported time client; independent diagnosis remains available"))?;
+    let created_at =
+        chrono::DateTime::<chrono::Utc>::from_timestamp_nanos(time.earliest_utc_ns).to_rfc3339();
     let expires_at = optional_command_string(command, "expiresAt")
         .map(Ok)
         .unwrap_or_else(|| profile_reset_default_expiry(&created_at))?;

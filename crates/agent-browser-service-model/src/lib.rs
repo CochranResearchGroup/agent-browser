@@ -73,6 +73,8 @@ pub use remote_view_tab_handoff::{
 };
 mod request_provenance;
 mod runtime_owner_projection;
+mod service_time_origin;
+pub use service_time_origin::{ServiceTimeOrigin, SERVICE_TIME_ORIGIN_SCHEMA_V1};
 mod service_authentication_run;
 mod service_challenge_task;
 mod service_state;
