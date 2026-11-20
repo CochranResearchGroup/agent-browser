@@ -30,6 +30,41 @@
       "source": "packages/client/src/client-argument-error.js",
       "export": "clientArgumentError",
       "kind": "caller_correction"
+    },
+    "@agent-browser/client/service-observability#getServiceAccessPlan": {
+      "source": "packages/client/src/service-observability.js",
+      "export": "getServiceAccessPlan",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/service-observability#getServiceTabs": {
+      "source": "packages/client/src/service-observability.js",
+      "export": "getServiceTabs",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/service-observability#getServiceRemoteViewRoutes": {
+      "source": "packages/client/src/service-observability.js",
+      "export": "getServiceRemoteViewRoutes",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/service-observability#getServiceMonitors": {
+      "source": "packages/client/src/service-observability.js",
+      "export": "getServiceMonitors",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/service-request#refreshServiceTabHandle": {
+      "source": "packages/client/src/service-request.js",
+      "export": "refreshServiceTabHandle",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/service-request#requestServiceManualSeedingAcquire": {
+      "source": "packages/client/src/service-request.js",
+      "export": "requestServiceManualSeedingAcquire",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/service-observability#getServiceJob": {
+      "source": "packages/client/src/service-observability.js",
+      "export": "getServiceJob",
+      "kind": "client_export"
     }
   },
   "recipes": {
@@ -125,6 +160,196 @@
         }
       },
       "resumeCondition": "The same owner endpoint is readable and original operation uncertainty is reconciled. Status alone is not proof that a mutation did not occur.",
+      "maximumAutomaticAttempts": 1
+    },
+    "serviceTabHandleReadback": {
+      "rationale": "Read the same retained browser/tab record. For a known stale handle, refreshServiceTabHandle with repairPolicy reject_only and the exact existing handle; do not open a replacement browser or replay the interrupted command. Missing handles require original context readback before renewal.",
+      "requiredActor": "caller_with_original_service_context",
+      "evidenceRequirement": "Original TypeError/Error source and owningFunction, exact original context and typed owner failure when present. Unknown outcomes remain unknown.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceTabs",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "query": {
+            "browserId": "$browserId"
+          }
+        },
+        "precondition": "Supply the original authenticated endpoint and original browser identity; do not adopt another browser."
+      },
+      "remediation": [
+        {
+          "instruction": "Read the same retained browser/tab record. For a known stale handle, refreshServiceTabHandle with repairPolicy reject_only and the exact existing handle; do not open a replacement browser or replay the interrupted command. Missing handles require original context readback before renewal.",
+          "precondition": "Existing original handle and authenticated scope must be supplied. Refresh may validate or reject; it must not be changed to open_if_missing or replace_duplicates by this recipe.",
+          "interface": "@agent-browser/client/service-request#refreshServiceTabHandle"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceTabs",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "query": {
+            "browserId": "$browserId"
+          }
+        },
+        "precondition": "Supply the original authenticated endpoint and original browser identity; do not adopt another browser."
+      },
+      "resumeCondition": "The returned handle passes requireServiceTabHandle and original operation uncertainty is reconciled before any further command.",
+      "maximumAutomaticAttempts": 1
+    },
+    "serviceDurableHandoffReadback": {
+      "rationale": "Inspect current route readiness for the original browser and re-open the same retained durable handoff URL. Missing URL/readiness is not permission to create another handoff or publish a provider URL.",
+      "requiredActor": "caller_or_operator_with_existing_handoff",
+      "evidenceRequirement": "Original TypeError/Error source and owningFunction, exact original context and typed owner failure when present. Unknown outcomes remain unknown.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceRemoteViewRoutes",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "query": {
+            "browserId": "$browserId"
+          }
+        },
+        "precondition": "Supply the original authenticated endpoint and existing browser identity. Never create a new handoff merely to reconnect."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect current route readiness for the original browser and re-open the same retained durable handoff URL. Missing URL/readiness is not permission to create another handoff or publish a provider URL.",
+          "precondition": "Original browser/handoff identity and existing authentication are retained; inspect requires no new handoff effect. Native Remote View owner repairs remain under existing authority.",
+          "interface": "@agent-browser/client/service-observability#getServiceRemoteViewRoutes"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceRemoteViewRoutes",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "query": {
+            "browserId": "$browserId"
+          }
+        },
+        "precondition": "Supply the original authenticated endpoint and existing browser identity. Never create a new handoff merely to reconnect."
+      },
+      "resumeCondition": "The same durable handoff resolves and operatorVisible.state is ready; original browser identity is unchanged.",
+      "maximumAutomaticAttempts": 1
+    },
+    "serviceAccessPlanReadback": {
+      "rationale": "Re-read the current access plan with the same profile/target/account scope. Follow the current advertised CDP or CDP-free recipe. Repair missing/contradictory owner route evidence through current owner reads rather than editing the observed plan or loosening policy.",
+      "requiredActor": "caller_with_original_profile_target_scope",
+      "evidenceRequirement": "Original TypeError/Error source and owningFunction, exact original context and typed owner failure when present. Unknown outcomes remain unknown.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "readinessProfileId": "$profileId",
+          "targetServiceId": "$targetServiceId"
+        },
+        "precondition": "Supply the existing authenticated endpoint and exact original profile/target identity. Missing identity is not guessed; retain original query/account scope."
+      },
+      "remediation": [
+        {
+          "instruction": "Re-read the current access plan with the same profile/target/account scope. Follow the current advertised CDP or CDP-free recipe. Repair missing/contradictory owner route evidence through current owner reads rather than editing the observed plan or loosening policy.",
+          "precondition": "Preserve original profile, target, account and permission scope; do not substitute whichever profile the broker happened to select.",
+          "interface": "@agent-browser/client/service-observability#getServiceAccessPlan"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "readinessProfileId": "$profileId",
+          "targetServiceId": "$targetServiceId"
+        },
+        "precondition": "Supply the existing authenticated endpoint and exact original profile/target identity. Missing identity is not guessed; retain original query/account scope."
+      },
+      "resumeCondition": "A fresh plan supplies a complete compatible recipe for the exact intended identity and the local owner-readiness check passes.",
+      "maximumAutomaticAttempts": 1
+    },
+    "serviceAccessPlanSeedingReadback": {
+      "rationale": "Re-read the original access plan. If current policy still requires manual seeding, use the existing scoped manual-seeding acquisition and native handoff under its existing authority; then run the advertised bounded post-seeding verification. Do not execute a command string from an error or toggle allowManualAction just to bypass the refusal.",
+      "requiredActor": "authorized_operator_for_private_authentication",
+      "evidenceRequirement": "Original TypeError/Error source and owningFunction, exact original context and typed owner failure when present. Unknown outcomes remain unknown.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "readinessProfileId": "$profileId",
+          "targetServiceId": "$targetServiceId"
+        },
+        "precondition": "Supply the existing authenticated endpoint and exact original profile/target identity. Missing identity is not guessed; retain original query/account scope."
+      },
+      "remediation": [
+        {
+          "instruction": "Re-read the original access plan. If current policy still requires manual seeding, use the existing scoped manual-seeding acquisition and native handoff under its existing authority; then run the advertised bounded post-seeding verification. Do not execute a command string from an error or toggle allowManualAction just to bypass the refusal.",
+          "precondition": "The current plan still requires seeding; exact original profile, authorized operator and current supported acquisition arguments are independently available. No private credential or provider access is inferred.",
+          "interface": "@agent-browser/client/service-request#requestServiceManualSeedingAcquire"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "readinessProfileId": "$profileId",
+          "targetServiceId": "$targetServiceId"
+        },
+        "precondition": "Supply the existing authenticated endpoint and exact original profile/target identity. Missing identity is not guessed; retain original query/account scope."
+      },
+      "resumeCondition": "Fresh owner plan/readiness evidence verifies the intended profile and target; the original interrupted operation remains unreplayed until reconciled.",
+      "maximumAutomaticAttempts": 1
+    },
+    "serviceMonitorFreshnessReadback": {
+      "rationale": "Read current original target/profile monitor results. Use the existing advertised monitor/probe workflow to refresh only that evidence, then re-read the access plan. Do not set allowMonitorFreshnessRisk or overwrite verification metadata to bypass missing or expired evidence.",
+      "requiredActor": "caller_with_original_monitor_scope",
+      "evidenceRequirement": "Original TypeError/Error source and owningFunction, exact original context and typed owner failure when present. Unknown outcomes remain unknown.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceMonitors",
+        "arguments": {
+          "baseUrl": "$baseUrl"
+        },
+        "precondition": "Use existing authenticated endpoint and retain original target/profile filters when inspecting the relevant monitor."
+      },
+      "remediation": [
+        {
+          "instruction": "Read current original target/profile monitor results. Use the existing advertised monitor/probe workflow to refresh only that evidence, then re-read the access plan. Do not set allowMonitorFreshnessRisk or overwrite verification metadata to bypass missing or expired evidence.",
+          "precondition": "Existing target/profile context and current owner-approved verification procedure are retained. No unknown or denied evidence becomes fresh merely through a read.",
+          "interface": "@agent-browser/client/service-observability#getServiceMonitors"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceMonitors",
+        "arguments": {
+          "baseUrl": "$baseUrl"
+        },
+        "precondition": "Use existing authenticated endpoint and retain original target/profile filters when inspecting the relevant monitor."
+      },
+      "resumeCondition": "Fresh owner evidence verifies the exact target/profile and the monitor safety check passes; failure or uncertainty remains visible.",
+      "maximumAutomaticAttempts": 1
+    },
+    "serviceCdpFreeOwnerReadback": {
+      "rationale": "A missing CDP-free capability response is an owner readback gap, not authorization to attach CDP or relaunch.",
+      "requiredActor": "caller_with_original_job_scope",
+      "evidenceRequirement": "Original retained launch job/receipt and exact browser identity when available.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceJob",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "id": "$jobId"
+        },
+        "precondition": "Supply the exact original Service job ID and original authenticated endpoint. Do not fabricate a job/task identifier or repeat launch to obtain one."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original launch job and retained browser mode. Restore the missing owner result through supported readback. Keep lifecycle-only restrictions; do not enable CDP attachment or launch another browser to reconstruct evidence.",
+          "precondition": "Original launch job and existing authenticated owner are known; unresolved launch outcomes remain non-replayable.",
+          "interface": "@agent-browser/client/service-observability#getServiceJob"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceJob",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "id": "$jobId"
+        },
+        "precondition": "Supply the exact original Service job ID and original authenticated endpoint. Do not fabricate a job/task identifier or repeat launch to obtain one."
+      },
+      "resumeCondition": "The exact original owner result supplies capability evidence and summarizeServiceCdpFreeLaunchAvailability succeeds; requested action remains supported in the original mode.",
       "maximumAutomaticAttempts": 1
     }
   },
@@ -231,6 +456,303 @@
           "path": "packages/client/src/service-observability.js"
         }
       ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_service_tab_handle_missing": {
+      "recipe": "serviceTabHandleReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js",
+          "owningFunction": "requireServiceTabHandle"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_service_tab_handle_stale": {
+      "recipe": "serviceTabHandleReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js",
+          "owningFunction": "requireServiceTabHandle"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "client_service_handoff_resume_incomplete": {
+      "recipe": "serviceTabHandleReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js",
+          "owningFunction": "deriveServiceRemoteViewHandoffResumeIntent"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_service_handoff_url_missing": {
+      "recipe": "serviceDurableHandoffReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js",
+          "owningFunction": "requireServiceRemoteViewHandoffUrl"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_service_operator_not_visible": {
+      "recipe": "serviceDurableHandoffReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js",
+          "owningFunction": "requireServiceRemoteViewOpenOperatorVisible"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "client_service_manual_seeding_required": {
+      "recipe": "serviceAccessPlanSeedingReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js",
+          "owningFunction": "accessPlanServiceTabRequest"
+        },
+        {
+          "path": "packages/client/src/service-request.js",
+          "owningFunction": "accessPlanServiceCdpFreeLaunchRequest"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_service_cdp_free_required": {
+      "recipe": "serviceAccessPlanReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js",
+          "owningFunction": "accessPlanServiceTabRequest"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_service_access_plan_unavailable": {
+      "recipe": "serviceAccessPlanReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js",
+          "owningFunction": "accessPlanServiceTabRequest"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_service_access_plan_action_mismatch": {
+      "recipe": "serviceAccessPlanReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js",
+          "owningFunction": "accessPlanServiceTabRequest"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_service_access_plan_reuse_unverified": {
+      "recipe": "serviceAccessPlanReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js",
+          "owningFunction": "accessPlanServiceTabRequest"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_service_access_plan_route_conflict": {
+      "recipe": "serviceAccessPlanReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js",
+          "owningFunction": "accessPlanServiceTabRequest"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_service_cdp_free_unexpected": {
+      "recipe": "serviceAccessPlanReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js",
+          "owningFunction": "accessPlanServiceCdpFreeLaunchRequest"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_monitor_profile_freshness_expired": {
+      "recipe": "serviceMonitorFreshnessReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js",
+          "owningFunction": "assertMonitorRunDueSummarySafe"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "client_monitor_profile_freshness_unverified": {
+      "recipe": "serviceMonitorFreshnessReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js",
+          "owningFunction": "assertMonitorRunDueSummarySafe"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "client_monitor_results_require_inspection": {
+      "recipe": "serviceMonitorFreshnessReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js",
+          "owningFunction": "assertMonitorRunDueSummarySafe"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_service_access_plan_recipe_unavailable": {
+      "recipe": "serviceAccessPlanReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-observability.js",
+          "owningFunction": "runServiceAccessPlanBrowserCapabilityPreflight"
+        },
+        {
+          "path": "packages/client/src/service-observability.js",
+          "owningFunction": "runServiceAccessPlanMonitorRunDue"
+        },
+        {
+          "path": "packages/client/src/service-observability.js",
+          "owningFunction": "runServiceAccessPlanPostSeedingProbe"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_service_access_plan_profile_missing": {
+      "recipe": "serviceAccessPlanReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-observability.js",
+          "owningFunction": "runServiceAccessPlanPostSeedingProbe"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_service_access_plan_target_missing": {
+      "recipe": "serviceAccessPlanReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-observability.js",
+          "owningFunction": "runServiceAccessPlanPostSeedingProbe"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_service_access_plan_url_missing": {
+      "recipe": "serviceAccessPlanReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-observability.js",
+          "owningFunction": "runServiceAccessPlanPostSeedingProbe"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_service_profile_identity_mismatch": {
+      "recipe": "serviceAccessPlanReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-observability.js",
+          "owningFunction": "runServiceAccessPlanPostSeedingProbe"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_service_cdp_free_response_invalid": {
+      "recipe": "serviceCdpFreeOwnerReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js"
+        },
+        {
+          "path": "packages/client/src/service-observability.js"
+        }
+      ],
+      "normalizationContract": "docs/dev/contracts/public-client-argument-normalization.v1.json",
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_monitor_response_invalid": {
+      "recipe": "serviceMonitorFreshnessReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js"
+        },
+        {
+          "path": "packages/client/src/service-observability.js"
+        }
+      ],
+      "normalizationContract": "docs/dev/contracts/public-client-argument-normalization.v1.json",
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_service_access_plan_response_invalid": {
+      "recipe": "serviceAccessPlanReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js"
+        },
+        {
+          "path": "packages/client/src/service-observability.js"
+        }
+      ],
+      "normalizationContract": "docs/dev/contracts/public-client-argument-normalization.v1.json",
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "unknown"

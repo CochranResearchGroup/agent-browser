@@ -3899,3 +3899,6 @@ assert.throws(()=>requireServiceRequestSuccess(nestedRefusal), error=>error.fail
 
 assert.throws(()=>createServiceRequest({action:'not-supported'}),error=>error instanceof TypeError&&error.message==='Unsupported service request action: not-supported'&&error.code==='client_argument_invalid'&&error.recovery.owningFunction==='createServiceRequest'&&error.recovery.effectState==='not_dispatched_by_this_validation'&&error.logging.state==='local_only');
 assert.throws(()=>requireServiceTabHandle({success:true,data:{}}),error=>error instanceof TypeError&&error.code!=='client_argument_invalid','owner response failure must not become invalid arguments');
+
+assert.throws(()=>requireServiceTabHandle({success:true,data:{},failure:nestedFailure760}),error=>error instanceof TypeError&&error.code===nestedFailure760.code&&error.failure===nestedFailure760&&error.occurrenceId==='failure-original-760'&&error.recovery.recipe==='serviceTabHandleReadback');
+assert.throws(()=>requireServiceRemoteViewHandoffUrl({success:true,data:{}}),error=>error.code==='client_service_handoff_url_missing'&&error.recovery.recipe==='serviceDurableHandoffReadback');

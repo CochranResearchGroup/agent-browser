@@ -1,3 +1,4 @@
+import { clientOwnerFailure } from './client-owner-failure.js';
 import { clientArgumentError } from './client-argument-error.js';
 import { isResponseFailure, responseFailureError } from './response-failure.js';
 // @ts-check
@@ -286,9 +287,9 @@ export function getServiceRemoteViewRoutePreflight(options) {
 export function runServiceAccessPlanBrowserCapabilityPreflight({ accessPlan, ...options }) {
   const recipe = accessPlanBrowserCapabilityPreflight(accessPlan);
   if (recipe.available !== true) {
-    throw new Error('access plan browserCapabilityPreflight is not available');
+    throw clientOwnerFailure(new Error('access plan browserCapabilityPreflight is not available'), 'client_service_access_plan_recipe_unavailable', accessPlan, 'packages/client/src/service-observability.js', 'runServiceAccessPlanBrowserCapabilityPreflight', 'serviceAccessPlanReadback');
   }
-  assertPlainObject(recipe.request, 'service access plan decision.browserCapabilityPreflight.request');
+  assertOwnerPlainObject(recipe.request, 'service access plan decision.browserCapabilityPreflight.request', "runServiceAccessPlanBrowserCapabilityPreflight");
   return getServiceBrowserCapabilityPreflight({
     ...options,
     ...recipe.request,
@@ -415,7 +416,7 @@ export function getServiceProfileAllocation({ id, ...options }) {
  * @returns {Promise<ServiceProfileAllocationResponse>}
  */
 export function getServiceProfileAllocationForAccessPlan({ accessPlan, ...options }) {
-  assertPlainObject(accessPlan, 'service access plan');
+  assertOwnerPlainObject(accessPlan, 'service access plan', "getServiceProfileAllocationForAccessPlan");
   const selectedProfileId =
     nestedString(accessPlan, ['selectedProfile', 'id']) ??
     nestedString(accessPlan, ['decision', 'profileId']) ??
@@ -1634,7 +1635,7 @@ export function createServiceIncidentHandoff(options = {}) {
 export function runServiceAccessPlanMonitorRunDue({ accessPlan, ...options }) {
   const recipe = accessPlanMonitorRunDue(accessPlan);
   if (recipe.available !== true) {
-    throw new Error('access plan monitorRunDue is not available');
+    throw clientOwnerFailure(new Error('access plan monitorRunDue is not available'), 'client_service_access_plan_recipe_unavailable', accessPlan, 'packages/client/src/service-observability.js', 'runServiceAccessPlanMonitorRunDue', 'serviceAccessPlanReadback');
   }
   return runDueServiceMonitors(options).then((monitorRunDue) => ({
     ...monitorRunDue,
@@ -1981,15 +1982,15 @@ export async function runServiceAccessPlanPostSeedingProbe({
 }) {
   const recipe = accessPlanPostSeedingProbe(accessPlan);
   if (recipe.available !== true) {
-    throw new Error('access plan postSeedingProbe is not available');
+    throw clientOwnerFailure(new Error('access plan postSeedingProbe is not available'), 'client_service_access_plan_recipe_unavailable', accessPlan, 'packages/client/src/service-observability.js', 'runServiceAccessPlanPostSeedingProbe', 'serviceAccessPlanReadback');
   }
   const profileId = recipe.profileId;
   const targetServiceId = recipe.targetServiceId ?? recipe.targetServiceIds?.[0];
   if (typeof profileId !== 'string' || profileId.length === 0) {
-    throw new Error('access plan postSeedingProbe is missing profileId');
+    throw clientOwnerFailure(new Error('access plan postSeedingProbe is missing profileId'), 'client_service_access_plan_profile_missing', accessPlan, 'packages/client/src/service-observability.js', 'runServiceAccessPlanPostSeedingProbe', 'serviceAccessPlanReadback');
   }
   if (typeof targetServiceId !== 'string' || targetServiceId.length === 0) {
-    throw new Error('access plan postSeedingProbe is missing targetServiceId');
+    throw clientOwnerFailure(new Error('access plan postSeedingProbe is missing targetServiceId'), 'client_service_access_plan_target_missing', accessPlan, 'packages/client/src/service-observability.js', 'runServiceAccessPlanPostSeedingProbe', 'serviceAccessPlanReadback');
   }
 
   const serviceName = stringOrUndefined(
@@ -2003,7 +2004,7 @@ export async function runServiceAccessPlanPostSeedingProbe({
   );
   const probeUrl = url ?? accessPlanProbeUrl(accessPlan);
   if (!probeUrl) {
-    throw new Error('runServiceAccessPlanPostSeedingProbe requires url or an access-plan site policy URL');
+    throw clientOwnerFailure(new Error('runServiceAccessPlanPostSeedingProbe requires url or an access-plan site policy URL'), 'client_service_access_plan_url_missing', accessPlan, 'packages/client/src/service-observability.js', 'runServiceAccessPlanPostSeedingProbe', 'serviceAccessPlanReadback');
   }
   const requestContext = optionalRequestContext({
     serviceName,
@@ -2021,9 +2022,9 @@ export async function runServiceAccessPlanPostSeedingProbe({
   });
   const selectedProfileId = lookup?.selectedProfile?.id;
   if (selectedProfileId !== profileId) {
-    throw new Error(
+    throw clientOwnerFailure(new Error(
       `Post-seeding probe refused to verify ${profileId}: broker selected ${selectedProfileId || 'no profile'}.`,
-    );
+    ), 'client_service_profile_identity_mismatch', accessPlan, 'packages/client/src/service-observability.js', 'runServiceAccessPlanPostSeedingProbe', 'serviceAccessPlanReadback');
   }
 
   const tab = await requestServiceTab({
@@ -2176,29 +2177,29 @@ function serviceLoginProfileSeedingSetupScopes(targetServiceId) {
 }
 
 function accessPlanPostSeedingProbe(accessPlan) {
-  assertPlainObject(accessPlan, 'service access plan');
+  assertOwnerPlainObject(accessPlan, 'service access plan', "accessPlanPostSeedingProbe");
   const decision = /** @type {Record<string, unknown>} */ (accessPlan).decision;
-  assertPlainObject(decision, 'service access plan decision');
+  assertOwnerPlainObject(decision, 'service access plan decision', "accessPlanPostSeedingProbe");
   const recipe = /** @type {Record<string, unknown>} */ (decision).postSeedingProbe;
-  assertPlainObject(recipe, 'service access plan decision.postSeedingProbe');
+  assertOwnerPlainObject(recipe, 'service access plan decision.postSeedingProbe', "accessPlanPostSeedingProbe");
   return /** @type {import('./service-observability.generated.js').ServiceAccessPlanPostSeedingProbe} */ (recipe);
 }
 
 function accessPlanMonitorRunDue(accessPlan) {
-  assertPlainObject(accessPlan, 'service access plan');
+  assertOwnerPlainObject(accessPlan, 'service access plan', "accessPlanMonitorRunDue");
   const decision = /** @type {Record<string, unknown>} */ (accessPlan).decision;
-  assertPlainObject(decision, 'service access plan decision');
+  assertOwnerPlainObject(decision, 'service access plan decision', "accessPlanMonitorRunDue");
   const recipe = /** @type {Record<string, unknown>} */ (decision).monitorRunDue;
-  assertPlainObject(recipe, 'service access plan decision.monitorRunDue');
+  assertOwnerPlainObject(recipe, 'service access plan decision.monitorRunDue', "accessPlanMonitorRunDue");
   return /** @type {import('./service-observability.generated.js').ServiceAccessPlanMonitorRunDue} */ (recipe);
 }
 
 function accessPlanBrowserCapabilityPreflight(accessPlan) {
-  assertPlainObject(accessPlan, 'service access plan');
+  assertOwnerPlainObject(accessPlan, 'service access plan', "accessPlanBrowserCapabilityPreflight");
   const decision = /** @type {Record<string, unknown>} */ (accessPlan).decision;
-  assertPlainObject(decision, 'service access plan decision');
+  assertOwnerPlainObject(decision, 'service access plan decision', "accessPlanBrowserCapabilityPreflight");
   const recipe = /** @type {Record<string, unknown>} */ (decision).browserCapabilityPreflight;
-  assertPlainObject(recipe, 'service access plan decision.browserCapabilityPreflight');
+  assertOwnerPlainObject(recipe, 'service access plan decision.browserCapabilityPreflight', "accessPlanBrowserCapabilityPreflight");
   return /** @type {import('./service-observability.generated.js').ServiceAccessPlanBrowserCapabilityPreflight} */ (recipe);
 }
 
@@ -3217,4 +3218,15 @@ function highestTraceAttentionSeverity(contexts) {
     return 'info';
   }
   return 'none';
+}
+
+/** @param {unknown} value @param {string} label @param {string} owningFunction */
+function assertOwnerPlainObject(value, label, owningFunction) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    const cdpFree = owningFunction === 'summarizeServiceCdpFreeLaunchAvailability';
+    const monitor = owningFunction === 'assertMonitorRunDueSummarySafe';
+    const code = cdpFree ? 'client_service_cdp_free_response_invalid' : monitor ? 'client_monitor_response_invalid' : 'client_service_access_plan_response_invalid';
+    const recipe = cdpFree ? 'serviceCdpFreeOwnerReadback' : monitor ? 'serviceMonitorFreshnessReadback' : 'serviceAccessPlanReadback';
+    throw clientOwnerFailure(new TypeError(`${label} must be an object`), code, value, "packages/client/src/service-observability.js", owningFunction, recipe);
+  }
 }

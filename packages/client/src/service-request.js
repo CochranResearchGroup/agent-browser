@@ -1,3 +1,4 @@
+import { clientOwnerFailure } from './client-owner-failure.js';
 import { clientArgumentError } from './client-argument-error.js';
 import { isResponseFailure } from './response-failure.js';
 // @ts-check
@@ -389,11 +390,11 @@ export function getServiceTabHandle(response) {
 export function requireServiceTabHandle(response) {
   const handle = getServiceTabHandle(response);
   if (!handle) {
-    throw new TypeError('service tab response did not include serviceTabHandle');
+    throw clientOwnerFailure(new TypeError('service tab response did not include serviceTabHandle'), "client_service_tab_handle_missing", response, "packages/client/src/service-request.js", "requireServiceTabHandle", "serviceTabHandleReadback");
   }
   if (handle.valid === false) {
     const reason = typeof handle.staleReason === 'string' ? `: ${handle.staleReason}` : '';
-    throw new TypeError(`service tab handle is stale${reason}`);
+    throw clientOwnerFailure(new TypeError(`service tab handle is stale${reason}`), "client_service_tab_handle_stale", response, "packages/client/src/service-request.js", "requireServiceTabHandle", "serviceTabHandleReadback");
   }
   return handle;
 }
@@ -431,7 +432,7 @@ export function deriveServiceRemoteViewHandoffResumeIntent(response) {
   };
   const missingField = Object.entries(required).find(([, value]) => value === null)?.[0];
   if (missingField) {
-    throw new TypeError(`durable handoff resume intent is missing ${missingField}`);
+    throw clientOwnerFailure(new TypeError(`durable handoff resume intent is missing ${missingField}`), "client_service_handoff_resume_incomplete", response, "packages/client/src/service-request.js", "deriveServiceRemoteViewHandoffResumeIntent", "serviceTabHandleReadback");
   }
   return {
     serviceName: /** @type {string} */ (required.serviceName),
@@ -2258,7 +2259,7 @@ export function getServiceRemoteViewHandoffUrl(response) {
 export function requireServiceRemoteViewHandoffUrl(response) {
   const handoffUrl = getServiceRemoteViewHandoffUrl(response);
   if (handoffUrl) return handoffUrl;
-  throw new TypeError('remote-view open response is missing a durable handoff URL');
+  throw clientOwnerFailure(new TypeError('remote-view open response is missing a durable handoff URL'), "client_service_handoff_url_missing", response, "packages/client/src/service-request.js", "requireServiceRemoteViewHandoffUrl", "serviceDurableHandoffReadback");
 }
 
 /**
@@ -2525,7 +2526,7 @@ export function requireServiceRemoteViewOpenOperatorVisible(response, options = 
     return data;
   }
   const summary = summarizeServiceRemoteViewOpenProof(response);
-  throw new TypeError(`remote-view open response is not operator-visible: ${summary.summary}`);
+  throw clientOwnerFailure(new TypeError(`remote-view open response is not operator-visible: ${summary.summary}`), "client_service_operator_not_visible", response, "packages/client/src/service-request.js", "requireServiceRemoteViewOpenOperatorVisible", "serviceDurableHandoffReadback");
 }
 
 /**
@@ -2690,7 +2691,7 @@ export async function takeoverServiceControllerLease({ baseUrl, fetch = globalTh
  * @returns {ServiceCdpFreeLaunchAvailability}
  */
 export function summarizeServiceCdpFreeLaunchAvailability(data) {
-  assertPlainObject(data, 'CDP-free launch data');
+  assertOwnerPlainObject(data, 'CDP-free launch data', "summarizeServiceCdpFreeLaunchAvailability");
   const record = /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (data));
   const hasUnsupportedCommandList = Array.isArray(record.unsupportedCommands);
   const unsupportedCommands = serviceRequestActionArray(record.unsupportedCommands);
@@ -2729,10 +2730,10 @@ export function isServiceCdpFreeActionAvailable(data, action) {
  * @returns {Record<string, unknown>}
  */
 function accessPlanServiceTabRequest(accessPlan, options = {}) {
-  assertPlainObject(accessPlan, 'service access plan');
+  assertOwnerPlainObject(accessPlan, 'service access plan', "accessPlanServiceTabRequest");
   const accessPlanRecord = /** @type {Record<string, unknown>} */ (accessPlan);
   const decision = accessPlanRecord.decision;
-  assertPlainObject(decision, 'service access plan decision');
+  assertOwnerPlainObject(decision, 'service access plan decision', "accessPlanServiceTabRequest");
   const decisionRecord = /** @type {Record<string, unknown>} */ (decision);
   if (!options.allowManualAction && accessPlanRequiresManualSeeding(accessPlanRecord, decisionRecord)) {
     const handoff = accessPlanRecord.seedingHandoff;
@@ -2740,17 +2741,17 @@ function accessPlanServiceTabRequest(accessPlan, options = {}) {
       handoff && typeof handoff === 'object' && !Array.isArray(handoff)
         ? /** @type {Record<string, unknown>} */ (handoff).command
         : undefined;
-    throw new Error(
+    throw clientOwnerFailure(new Error(
       `service access plan requires manual profile seeding before tab request${typeof command === 'string' ? `: ${command}` : ''}`,
-    );
+    ), "client_service_manual_seeding_required", accessPlan, "packages/client/src/service-request.js", "accessPlanServiceTabRequest", "serviceAccessPlanSeedingReadback");
   }
   if (accessPlanRequiresCdpFree(decisionRecord)) {
-    throw new Error(
+    throw clientOwnerFailure(new Error(
       'service access plan requires CDP-free browser operation; use createServiceCdpFreeLaunchRequest for lifecycle-only launch tracking',
-    );
+    ), "client_service_cdp_free_required", accessPlan, "packages/client/src/service-request.js", "accessPlanServiceTabRequest", "serviceAccessPlanReadback");
   }
   const serviceRequest = decisionRecord.serviceRequest;
-  assertPlainObject(serviceRequest, 'service access plan serviceRequest');
+  assertOwnerPlainObject(serviceRequest, 'service access plan serviceRequest', "accessPlanServiceTabRequest");
   const serviceRequestRecord = /** @type {Record<string, unknown>} */ (serviceRequest);
   const manualActionOverride =
     options.allowManualAction === true && serviceRequestRecord.blockedByManualAction === true;
@@ -2759,13 +2760,13 @@ function accessPlanServiceTabRequest(accessPlan, options = {}) {
       typeof serviceRequestRecord.acquisitionBlocker === 'string'
         ? `: ${serviceRequestRecord.acquisitionBlocker}`
         : '';
-    throw new Error(`service access plan service request is unavailable${blocker}`);
+    throw clientOwnerFailure(new Error(`service access plan service request is unavailable${blocker}`), "client_service_access_plan_unavailable", accessPlan, "packages/client/src/service-request.js", "accessPlanServiceTabRequest", "serviceAccessPlanReadback");
   }
   const request = serviceRequestRecord.request;
-  assertPlainObject(request, 'service access plan serviceRequest.request');
+  assertOwnerPlainObject(request, 'service access plan serviceRequest.request', "accessPlanServiceTabRequest");
   const requestRecord = /** @type {Record<string, unknown>} */ (request);
   if (requestRecord.action !== 'tab_new') {
-    throw new TypeError('service access plan serviceRequest.request action must be tab_new');
+    throw clientOwnerFailure(new TypeError('service access plan serviceRequest.request action must be tab_new'), "client_service_access_plan_action_mismatch", accessPlan, "packages/client/src/service-request.js", "accessPlanServiceTabRequest", "serviceAccessPlanReadback");
   }
 
   const { action: _action, ...tabRequest } = requestRecord;
@@ -2773,15 +2774,15 @@ function accessPlanServiceTabRequest(accessPlan, options = {}) {
   const profileReuse = recordFromUnknown(decisionRecord.profileReuse);
   if (profileReuse?.recommendedAction === 'reuse_existing_browser') {
     if (!sharedAcquisition) {
-      throw new TypeError(
+      throw clientOwnerFailure(new TypeError(
         'service access plan reuse requires complete browserId and sessionName route hints',
-      );
+      ), "client_service_access_plan_reuse_unverified", accessPlan, "packages/client/src/service-request.js", "accessPlanServiceTabRequest", "serviceAccessPlanReadback");
     }
     for (const routeField of ['browserId', 'sessionName']) {
       if (tabRequest[routeField] !== sharedAcquisition[routeField]) {
-        throw new TypeError(
+        throw clientOwnerFailure(new TypeError(
           `service access plan serviceRequest.request ${routeField} contradicts shared acquisition`,
-        );
+        ), "client_service_access_plan_route_conflict", accessPlan, "packages/client/src/service-request.js", "accessPlanServiceTabRequest", "serviceAccessPlanReadback");
       }
     }
   }
@@ -2823,10 +2824,10 @@ function accessPlanSharedTabAcquisition(decision) {
  * @returns {Record<string, unknown>}
  */
 function accessPlanServiceCdpFreeLaunchRequest(accessPlan, options = {}) {
-  assertPlainObject(accessPlan, 'service access plan');
+  assertOwnerPlainObject(accessPlan, 'service access plan', "accessPlanServiceCdpFreeLaunchRequest");
   const accessPlanRecord = /** @type {Record<string, unknown>} */ (accessPlan);
   const decision = accessPlanRecord.decision;
-  assertPlainObject(decision, 'service access plan decision');
+  assertOwnerPlainObject(decision, 'service access plan decision', "accessPlanServiceCdpFreeLaunchRequest");
   const decisionRecord = /** @type {Record<string, unknown>} */ (decision);
   if (!options.allowManualAction && accessPlanRequiresManualSeeding(accessPlanRecord, decisionRecord)) {
     const handoff = accessPlanRecord.seedingHandoff;
@@ -2834,18 +2835,18 @@ function accessPlanServiceCdpFreeLaunchRequest(accessPlan, options = {}) {
       handoff && typeof handoff === 'object' && !Array.isArray(handoff)
         ? /** @type {Record<string, unknown>} */ (handoff).command
         : undefined;
-    throw new Error(
+    throw clientOwnerFailure(new Error(
       `service access plan requires manual profile seeding before CDP-free launch${typeof command === 'string' ? `: ${command}` : ''}`,
-    );
+    ), "client_service_manual_seeding_required", accessPlan, "packages/client/src/service-request.js", "accessPlanServiceCdpFreeLaunchRequest", "serviceAccessPlanSeedingReadback");
   }
   if (!accessPlanRequiresCdpFree(decisionRecord)) {
-    throw new Error('service access plan does not require CDP-free browser operation');
+    throw clientOwnerFailure(new Error('service access plan does not require CDP-free browser operation'), "client_service_cdp_free_unexpected", accessPlan, "packages/client/src/service-request.js", "accessPlanServiceCdpFreeLaunchRequest", "serviceAccessPlanReadback");
   }
   const serviceRequest = decisionRecord.serviceRequest;
-  assertPlainObject(serviceRequest, 'service access plan serviceRequest');
+  assertOwnerPlainObject(serviceRequest, 'service access plan serviceRequest', "accessPlanServiceCdpFreeLaunchRequest");
   const serviceRequestRecord = /** @type {Record<string, unknown>} */ (serviceRequest);
   const request = serviceRequestRecord.request;
-  assertPlainObject(request, 'service access plan serviceRequest.request');
+  assertOwnerPlainObject(request, 'service access plan serviceRequest.request', "accessPlanServiceCdpFreeLaunchRequest");
   const requestRecord = /** @type {Record<string, unknown>} */ (request);
   const { action: _action, params: requestParams, ...launchRequest } = requestRecord;
   if (requestParams && typeof requestParams === 'object' && !Array.isArray(requestParams)) {
@@ -2900,7 +2901,7 @@ function assertMonitorRunDueSummarySafe(summary, options) {
   if (summary === undefined || summary === null || options.allowMonitorFreshnessRisk === true) {
     return;
   }
-  assertPlainObject(summary, 'monitor run-due summary');
+  assertOwnerPlainObject(summary, 'monitor run-due summary', "assertMonitorRunDueSummarySafe");
   const record = /** @type {Record<string, unknown>} */ (summary);
   const expiredTargetServiceIds = stringArray(record.expiredTargetServiceIds);
   const unverifiedTargetServiceIds = stringArray(record.unverifiedTargetServiceIds);
@@ -2909,19 +2910,19 @@ function assertMonitorRunDueSummarySafe(summary, options) {
   const matched = typeof record.matched === 'number' ? record.matched : 0;
   const failed = record.failed === true;
   if (expiredTargetServiceIds.length > 0) {
-    throw new Error(
+    throw clientOwnerFailure(new Error(
       `service monitor run-due found expired profile freshness before ${options.actionLabel}: ${expiredTargetServiceIds.join(',')}`,
-    );
+    ), "client_monitor_profile_freshness_expired", summary, "packages/client/src/service-request.js", "assertMonitorRunDueSummarySafe", "serviceMonitorFreshnessReadback");
   }
   if (unverifiedTargetServiceIds.length > 0) {
-    throw new Error(
+    throw clientOwnerFailure(new Error(
       `service monitor run-due could not verify profile freshness before ${options.actionLabel}: ${unverifiedTargetServiceIds.join(',')}`,
-    );
+    ), "client_monitor_profile_freshness_unverified", summary, "packages/client/src/service-request.js", "assertMonitorRunDueSummarySafe", "serviceMonitorFreshnessReadback");
   }
   if (matched === 0 || (failed && recommendedAction !== 'use_selected_profile')) {
-    throw new Error(
+    throw clientOwnerFailure(new Error(
       `service monitor run-due requires inspection before ${options.actionLabel}: ${recommendedAction}`,
-    );
+    ), "client_monitor_results_require_inspection", summary, "packages/client/src/service-request.js", "assertMonitorRunDueSummarySafe", "serviceMonitorFreshnessReadback");
   }
 }
 
@@ -3259,4 +3260,15 @@ function plainRecordOrEmpty(value) {
     return {};
   }
   return /** @type {Record<string, unknown>} */ (value);
+}
+
+/** @param {unknown} value @param {string} label @param {string} owningFunction */
+function assertOwnerPlainObject(value, label, owningFunction) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    const cdpFree = owningFunction === 'summarizeServiceCdpFreeLaunchAvailability';
+    const monitor = owningFunction === 'assertMonitorRunDueSummarySafe';
+    const code = cdpFree ? 'client_service_cdp_free_response_invalid' : monitor ? 'client_monitor_response_invalid' : 'client_service_access_plan_response_invalid';
+    const recipe = cdpFree ? 'serviceCdpFreeOwnerReadback' : monitor ? 'serviceMonitorFreshnessReadback' : 'serviceAccessPlanReadback';
+    throw clientOwnerFailure(new TypeError(`${label} must be an object`), code, value, "packages/client/src/service-request.js", owningFunction, recipe);
+  }
 }

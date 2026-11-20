@@ -1414,5 +1414,304 @@
       "expression": "`service access plan serviceRequest.request ${routeField} contradicts shared acquisition`",
       "classification": "owner_or_readiness_or_policy_derived_not_argument_normalized"
     }
+  ],
+  "excludedOwnerCallPaths": [
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "summarizeServiceCdpFreeLaunchAvailability",
+      "expression": "assertPlainObject(data, 'CDP-free launch data')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "assertPlainObject(accessPlan, 'service access plan')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "assertPlainObject(decision, 'service access plan decision')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "assertPlainObject(serviceRequest, 'service access plan serviceRequest')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "assertPlainObject(request, 'service access plan serviceRequest.request')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceCdpFreeLaunchRequest",
+      "expression": "assertPlainObject(accessPlan, 'service access plan')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceCdpFreeLaunchRequest",
+      "expression": "assertPlainObject(decision, 'service access plan decision')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceCdpFreeLaunchRequest",
+      "expression": "assertPlainObject(serviceRequest, 'service access plan serviceRequest')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceCdpFreeLaunchRequest",
+      "expression": "assertPlainObject(request, 'service access plan serviceRequest.request')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "assertMonitorRunDueSummarySafe",
+      "expression": "assertPlainObject(summary, 'monitor run-due summary')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "runServiceAccessPlanBrowserCapabilityPreflight",
+      "expression": "assertPlainObject(recipe.request, 'service access plan decision.browserCapabilityPreflight.request')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "getServiceProfileAllocationForAccessPlan",
+      "expression": "assertPlainObject(accessPlan, 'service access plan')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "accessPlanPostSeedingProbe",
+      "expression": "assertPlainObject(accessPlan, 'service access plan')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "accessPlanPostSeedingProbe",
+      "expression": "assertPlainObject(decision, 'service access plan decision')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "accessPlanPostSeedingProbe",
+      "expression": "assertPlainObject(recipe, 'service access plan decision.postSeedingProbe')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "accessPlanMonitorRunDue",
+      "expression": "assertPlainObject(accessPlan, 'service access plan')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "accessPlanMonitorRunDue",
+      "expression": "assertPlainObject(decision, 'service access plan decision')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "accessPlanMonitorRunDue",
+      "expression": "assertPlainObject(recipe, 'service access plan decision.monitorRunDue')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "accessPlanBrowserCapabilityPreflight",
+      "expression": "assertPlainObject(accessPlan, 'service access plan')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "accessPlanBrowserCapabilityPreflight",
+      "expression": "assertPlainObject(decision, 'service access plan decision')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "accessPlanBrowserCapabilityPreflight",
+      "expression": "assertPlainObject(recipe, 'service access plan decision.browserCapabilityPreflight')",
+      "classification": "owner_response_shape_not_caller_argument"
+    }
+  ],
+  "qualifiedOwnerChecks": [
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "requireServiceTabHandle",
+      "expression": "'service tab response did not include serviceTabHandle'",
+      "code": "client_service_tab_handle_missing",
+      "recipe": "serviceTabHandleReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "requireServiceTabHandle",
+      "expression": "`service tab handle is stale${reason}`",
+      "code": "client_service_tab_handle_stale",
+      "recipe": "serviceTabHandleReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "deriveServiceRemoteViewHandoffResumeIntent",
+      "expression": "`durable handoff resume intent is missing ${missingField}`",
+      "code": "client_service_handoff_resume_incomplete",
+      "recipe": "serviceTabHandleReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "requireServiceRemoteViewHandoffUrl",
+      "expression": "'remote-view open response is missing a durable handoff URL'",
+      "code": "client_service_handoff_url_missing",
+      "recipe": "serviceDurableHandoffReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "requireServiceRemoteViewOpenOperatorVisible",
+      "expression": "`remote-view open response is not operator-visible: ${summary.summary}`",
+      "code": "client_service_operator_not_visible",
+      "recipe": "serviceDurableHandoffReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "`service access plan requires manual profile seeding before tab request${typeof command === 'string' ? `: ${command}` : ''}`",
+      "code": "client_service_manual_seeding_required",
+      "recipe": "serviceAccessPlanSeedingReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "'service access plan requires CDP-free browser operation; use createServiceCdpFreeLaunchRequest for lifecycle-only launch tracking'",
+      "code": "client_service_cdp_free_required",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "`service access plan service request is unavailable${blocker}`",
+      "code": "client_service_access_plan_unavailable",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "'service access plan serviceRequest.request action must be tab_new'",
+      "code": "client_service_access_plan_action_mismatch",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "'service access plan reuse requires complete browserId and sessionName route hints'",
+      "code": "client_service_access_plan_reuse_unverified",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "`service access plan serviceRequest.request ${routeField} contradicts shared acquisition`",
+      "code": "client_service_access_plan_route_conflict",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceCdpFreeLaunchRequest",
+      "expression": "`service access plan requires manual profile seeding before CDP-free launch${typeof command === 'string' ? `: ${command}` : ''}`",
+      "code": "client_service_manual_seeding_required",
+      "recipe": "serviceAccessPlanSeedingReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceCdpFreeLaunchRequest",
+      "expression": "'service access plan does not require CDP-free browser operation'",
+      "code": "client_service_cdp_free_unexpected",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "assertMonitorRunDueSummarySafe",
+      "expression": "`service monitor run-due found expired profile freshness before ${options.actionLabel}: ${expiredTargetServiceIds.join(',')}`",
+      "code": "client_monitor_profile_freshness_expired",
+      "recipe": "serviceMonitorFreshnessReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "assertMonitorRunDueSummarySafe",
+      "expression": "`service monitor run-due could not verify profile freshness before ${options.actionLabel}: ${unverifiedTargetServiceIds.join(',')}`",
+      "code": "client_monitor_profile_freshness_unverified",
+      "recipe": "serviceMonitorFreshnessReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "assertMonitorRunDueSummarySafe",
+      "expression": "`service monitor run-due requires inspection before ${options.actionLabel}: ${recommendedAction}`",
+      "code": "client_monitor_results_require_inspection",
+      "recipe": "serviceMonitorFreshnessReadback"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "runServiceAccessPlanBrowserCapabilityPreflight",
+      "expression": "'access plan browserCapabilityPreflight is not available'",
+      "code": "client_service_access_plan_recipe_unavailable",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "runServiceAccessPlanMonitorRunDue",
+      "expression": "'access plan monitorRunDue is not available'",
+      "code": "client_service_access_plan_recipe_unavailable",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "runServiceAccessPlanPostSeedingProbe",
+      "expression": "'access plan postSeedingProbe is not available'",
+      "code": "client_service_access_plan_recipe_unavailable",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "runServiceAccessPlanPostSeedingProbe",
+      "expression": "'access plan postSeedingProbe is missing profileId'",
+      "code": "client_service_access_plan_profile_missing",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "runServiceAccessPlanPostSeedingProbe",
+      "expression": "'access plan postSeedingProbe is missing targetServiceId'",
+      "code": "client_service_access_plan_target_missing",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "runServiceAccessPlanPostSeedingProbe",
+      "expression": "'runServiceAccessPlanPostSeedingProbe requires url or an access-plan site policy URL'",
+      "code": "client_service_access_plan_url_missing",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "runServiceAccessPlanPostSeedingProbe",
+      "expression": "`Post-seeding probe refused to verify ${profileId}: broker selected ${selectedProfileId || 'no profile'}.`",
+      "code": "client_service_profile_identity_mismatch",
+      "recipe": "serviceAccessPlanReadback"
+    }
+  ],
+  "intentionalCancellations": [
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "waitForServicePoll",
+      "classification": "caller_abort_signal_or_reason",
+      "recovery": "A caller-requested cancellation ends this iterator. Start a new watch with a fresh non-aborted signal only when the caller wants observation to resume; no browser input or mutation is replayed."
+    }
   ]
 }

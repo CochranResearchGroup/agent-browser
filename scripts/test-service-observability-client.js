@@ -3286,3 +3286,5 @@ await assert.rejects(getServiceContracts({baseUrl:'https://owner.invalid',fetch:
 let invalidArgumentFetches760=0;
 await assert.rejects(getServiceStatus({baseUrl:'',fetch:async()=>{invalidArgumentFetches760++;return Response.json({success:true,data:{}});}}),error=>error instanceof TypeError&&error.code==='client_argument_invalid'&&error.recovery.owningFunction==='serviceGet'&&error.message==='service observability helpers require a baseUrl string');
 assert.equal(invalidArgumentFetches760,0,'local argument normalization never dispatches an owner request');
+
+assert.throws(()=>runServiceAccessPlanBrowserCapabilityPreflight({accessPlan:{decision:{browserCapabilityPreflight:{available:false}}},baseUrl:'https://owner.invalid'}),error=>error.code==='client_service_access_plan_recipe_unavailable'&&error.code!=='client_argument_invalid'&&error.recovery.recipe==='serviceAccessPlanReadback');
