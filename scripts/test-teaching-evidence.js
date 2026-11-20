@@ -96,7 +96,7 @@ await httpSpeech.transcript('original-op');
 assert.equal(calls[1].url,'https://speech.test/prefix/v1/recordings/original-op/transcript');
 assert.equal(calls[1].options.headers.Authorization,'Bearer speech-owner');
 const badReader=createTeachingRecordingReader({url:'http://127.0.0.1:9999',accessToken:'scoped-record',fetch:async()=>Response.json({private:'secret'}, {status:403})});
-await assert.rejects(badReader({recordingId}),error=>error.message==='teaching_owner_rejected_403'&&!JSON.stringify(error).includes('secret')); 
+await assert.rejects(badReader({recordingId}),error=>error.message==='teaching_owner_rejected_403'&&!JSON.stringify(error).includes('secret'));
 console.log('teaching evidence: concrete owner HTTP routes and credential separation pass');
 
 const second={...selection,recordingId:'b'.repeat(32)};
