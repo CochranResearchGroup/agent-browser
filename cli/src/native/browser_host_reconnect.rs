@@ -986,7 +986,7 @@ mod tests {
             },
         );
         run(state, catalog, &browser_id);
-        std::fs::remove_dir_all(directory).unwrap();
+        crate::test_utils::remove_owned_fixture_dir(&directory).unwrap();
     }
     fn command(operation: &str, revision: u64) -> Value {
         json!({"sessionId":"task","operation":operation,"requestId":format!("{operation}-{revision}"),"expectedRevision":revision})

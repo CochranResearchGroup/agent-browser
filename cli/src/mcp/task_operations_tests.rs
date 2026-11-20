@@ -127,24 +127,7 @@ fn public_original_task_operation_readback_does_not_start_transport() {
         "Failed ingress must not poison subsequent readback"
     );
     drop(store);
-    fn unseal_owned_directories(path: &std::path::Path) {
-        if !std::fs::symlink_metadata(path).unwrap().is_dir() {
-            return;
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
-        }
-        for entry in std::fs::read_dir(path).unwrap() {
-            let entry = entry.unwrap();
-            if entry.file_type().unwrap().is_dir() {
-                unseal_owned_directories(&entry.path());
-            }
-        }
-    }
-    unseal_owned_directories(&directory);
-    std::fs::remove_dir_all(directory).unwrap();
+    crate::test_utils::remove_owned_fixture_dir(&directory).unwrap();
 }
 
 #[cfg(target_os = "linux")]

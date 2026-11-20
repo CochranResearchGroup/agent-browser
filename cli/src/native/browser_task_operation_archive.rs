@@ -442,6 +442,6 @@ mod artifact_capacity_tests {
         );
         assert_eq!(store.load_session_state().unwrap(), state);
         drop(store);
-        std::fs::remove_dir_all(root).unwrap();
+        crate::test_utils::remove_owned_fixture_dir(&root).unwrap();
     }
 }
