@@ -164,6 +164,27 @@ pub(super) fn execute(command: Value, session: &str) -> Result<Value, JsonRpcErr
     Ok(response.data.unwrap_or(Value::Null))
 }
 
+/// Workflow projections retain already sampled response diagnostics without
+/// adding readiness checks or changing the browser operation itself.
+fn retain_phase_diagnostics(mut output: Value, sources: &[(&str, &Value)]) -> Value {
+    let phases = sources
+        .iter()
+        .filter_map(|(stage, source)| {
+            source["latencyPhases"]
+                .as_array()
+                .map(|samples| (stage, samples))
+        })
+        .flat_map(|(stage, samples)| {
+            samples.iter().cloned().map(move |mut sample| {
+                sample["workflowStage"] = json!(stage);
+                sample
+            })
+        })
+        .collect();
+    crate::connection::latency::append(&mut output, phases);
+    output
+}
+
 /// Read the existing owner store and OS only; do not create a transport or attach CDP.
 pub(super) fn inspect_mode(task_id: &str) -> Result<Value, String> {
     let path = BrowserSessionSqliteStore::default_sqlite_path()?;
@@ -613,13 +634,17 @@ pub(super) fn open(
         let current_url = observed["url"]
             .as_str()
             .ok_or_else(|| issue("browser_task_current_url_missing"))?;
-        json!({"sessionId":session_id,"profileId":current.profile_id,
-            "browserId":current.browser_id,"tabId":tab_id,"url":current_url})
+        retain_phase_diagnostics(
+            json!({"sessionId":session_id,"profileId":current.profile_id,
+            "browserId":current.browser_id,"tabId":tab_id,"url":current_url}),
+            &[("open_current_url", &observed)],
+        )
     } else {
         command["action"] = json!("browser_session_navigate");
         command["sessionId"] = json!(session_id);
         execute(command, transport_session)?
     };
+    data = retain_phase_diagnostics(data, &[("browser_session_open", &opened)]);
     if hosted.is_some() {
         // The read-only projection separates recorded inventory from Native readiness.
         // Initial navigation may have created the first tab since the open read.
@@ -716,8 +741,14 @@ fn open_attachment(arguments: &Value, transport_session: &str) -> Result<Value, 
         "browser_open",
         transport_session,
         json!({}),
-        json!({"taskId":task_id,
+        retain_phase_diagnostics(
+            json!({"taskId":task_id,
         "profileId":profile,"browserId":host["browserId"],"tabId":host["tabId"],"url":observed["url"],"host":host}),
+            &[
+                ("open_attachment", &opened),
+                ("attachment_current_url", &observed),
+            ],
+        ),
         false,
     ))
 }
@@ -849,12 +880,15 @@ pub(super) fn continue_task(
         "browser_continue",
         transport_session,
         json!({}),
-        json!({"taskId":task_id,"profileId":context["profileId"],"browserId":context["browserId"],
+        retain_phase_diagnostics(
+            json!({"taskId":task_id,"profileId":context["profileId"],"browserId":context["browserId"],
             "tabId":context["tabId"],"targetId":context["targetId"],"url":current_url,"urlObserved":url_observed,
             "mode":observed.get("mode").cloned().unwrap_or(json!("automation")),
             "status":if url_observed==true {"observed"}else{"retained_context"},
             "transientPageState":if url_observed==true {"existing_target_observed_not_reconstructed"}else{"unverified"},
             "briefing":current_briefing}),
+            &[("continue_current_url", &observed)],
+        ),
         false,
     ))
 }
@@ -1110,6 +1144,28 @@ pub(super) fn tab(arguments: &Value, transport_session: &str) -> Result<Value, J
 #[cfg(test)]
 mod context_tests {
     use super::*;
+
+    #[test]
+    fn workflow_projection_retains_actual_phase_sources_without_creating_samples() {
+        let identity = json!({"taskId":"same-task","url":"about:blank"});
+        assert_eq!(
+            retain_phase_diagnostics(identity.clone(), &[("empty", &json!({}))]),
+            identity
+        );
+        let opened = json!({"latencyPhases":[{"phase":"readiness","scope":"cold-open","status":"measured"}]});
+        let observed = json!({"latencyPhases":[{"phase":"readiness","scope":"retained-url","status":"unavailable"}]});
+        let result =
+            retain_phase_diagnostics(identity, &[("open", &opened), ("observe", &observed)]);
+        assert_eq!(result["taskId"], "same-task");
+        assert_eq!(result["latencyPhases"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            result["latencyPhases"][0]["scope"],
+            opened["latencyPhases"][0]["scope"]
+        );
+        assert_eq!(result["latencyPhases"][1]["status"], "unavailable");
+        assert_eq!(result["latencyPhases"][0]["workflowStage"], "open");
+        assert_eq!(result["latencyPhases"][1]["workflowStage"], "observe");
+    }
 
     #[test]
     fn handoff_interaction_is_explicit_and_defaults_to_human_assistance() {

@@ -55,6 +55,12 @@ const clockContext={env:{...process.env,AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD:pr
 const clock=createMcpStdioClient({context:clockContext,args:['mcp',clockConfig],onFatal:()=>{}});
 let socket,hostPid,task;
 const receipt={schemaVersion:'agent-browser.command-latency.v1',binarySha256:createHash('sha256').update(readFileSync(binary)).digest('hex'),browser:realpathSync(browser),samples:[],selectedPhase:process.env.AGENT_BROWSER_LATENCY_PHASE??null,phaseMeasurements:[],clock:'StableTime service UTC intervals at measurement instant',limitation:'Service-to-service brackets include clock delivery/request overhead. Actual operation elapsed time has only an upper bound. Persistent addressed workflow MCP is the primary comparison; fresh CLI MCP facade startup is a separate diagnostic. Cold managed open is separate. This fresh synthetic state does not reproduce historical retained-state size or private account load.'};
+// Keep operation provenance: warm addressed page tools send directly and do
+// not run ensure_daemon/readiness. Cold open and continue do run that phase.
+function collectPhases(value,operation){
+ for(const sample of value.latencyPhases??[])if(sample.phase===receipt.selectedPhase)
+  receipt.phaseMeasurements.push({...sample,operation});
+}
 const timestamp=value=>{
  const match=/^(.*\.)(\d{1,9})Z$/.exec(value);assert(match,'RFC3339 nanosecond UTC required');
  return BigInt(Date.parse(match[1]+'000Z'))*1_000_000n+BigInt(match[2].padEnd(9,'0'));
@@ -92,6 +98,7 @@ try{
   serviceName:'agent-browser-latency',agentName:'latency-acceptance',taskName:'Read synthetic page for paired command measurement',url,
  }));
  assert.equal(typeof task.taskId,'string');assert.equal(task.profileId,profileName);assert.equal(task.url,url);
+ collectPhases(task,'cold_workflow_open');
  const briefing=await call(workflow,'browser_command',{taskId:task.taskId,action:'task_briefing'});
  assert.equal(briefing.browserId,task.browserId);assert.equal(briefing.tabId,task.tabId);
  hostPid=Number(readFileSync(join(context.socketDir,'runtime-host.pid'),'utf8').trim());
@@ -100,6 +107,14 @@ try{
  const page=pages.find(page=>page.id===briefing.targetId&&page.type==='page'&&page.url===url);assert(page,'Exact managed synthetic target missing');
  const browserIdentity=()=>({executable:realpathSync(`/proc/${briefing.processPid}/exe`),startToken:readFileSync(`/proc/${briefing.processPid}/stat`,'utf8').split(')').at(-1).trim().split(/\s+/)[19]});
  const originalIdentity=browserIdentity();assert.equal(originalIdentity.executable,realpathSync(browser));
+ if(receipt.selectedPhase==='readiness'){
+  receipt.phaseCoverage={warmAddressedEvaluate:{status:'not_run',reason:'task_operations::send uses existing transport directly; no readiness phase runs on this path'},coldWorkflowOpen:{status:'collected_when_returned'},warmWorkflowContinue:{status:'diagnostic_requested'}};
+  const continued=await measure('warm_workflow_readiness_probe',()=>call(workflow,'browser_continue',{taskId:task.taskId}));
+  for(const [key,value] of Object.entries({taskId:task.taskId,browserId:task.browserId,tabId:task.tabId,targetId:briefing.targetId}))assert.equal(continued[key],value,'Readiness diagnostic changed retained task identity');
+  assert.equal(continued.url,url);assert.equal(continued.urlObserved,true);assert.deepEqual(browserIdentity(),originalIdentity);
+  collectPhases(continued,'warm_workflow_readiness_probe');
+ }
+
  assert(readFileSync(`/proc/${briefing.processPid}/cmdline`).toString().includes(created.userDataDir),'Current synthetic browser does not own the selected profile');
  receipt.target={taskId:task.taskId,browserId:task.browserId,tabId:task.tabId,targetId:page.id,processPid:briefing.processPid,...originalIdentity};
  socket=new WebSocket(page.webSocketDebuggerUrl);
@@ -112,7 +127,7 @@ try{
  // Public page arguments contain only script. The owned browser's default
  // 25,000ms caller budget maps to the same 24,750ms renderer budget above.
  const evaluate=()=>({taskId:task.taskId,requestId:`latency-${randomUUID()}`,action:'evaluate',params:{script:expression}});
- const verify=value=>{assert.equal(value.result,expected);assert.deepEqual(browserIdentity(),originalIdentity);for(const sample of value.latencyPhases??[])if(sample.phase===receipt.selectedPhase)receipt.phaseMeasurements.push(sample);return value;};
+ const verify=(value,operation='workflow_mcp')=>{assert.equal(value.result,expected);assert.deepEqual(browserIdentity(),originalIdentity);collectPhases(value,operation);return value;};
  // Diagnostics are response-only. A changed sample must not change request identity.
  const replayRequest=evaluate();
  const first=await call(workflow,'browser_command',replayRequest);
@@ -122,7 +137,7 @@ try{
  assert.equal(replay.dispatchAttempted,false);
  receipt.sameRequestReplay={replayed:true,dispatchAttempted:false,selectedPhase:receipt.selectedPhase};
  const agent=async()=>verify(await call(workflow,'browser_command',evaluate()));
- const freshCli=async()=>{const client=createWorkflowClient();try{await initialize(client);return verify(await call(client,'browser_command',evaluate()));}finally{client.close();}};
+ const freshCli=async()=>{const client=createWorkflowClient();try{await initialize(client);return verify(await call(client,'browser_command',evaluate()),'fresh_cli_mcp_facade');}finally{client.close();}};
  const cdp=async()=>{const value=await direct();assert(!value.exceptionDetails);assert.equal(value.result.value,expected);return value;};
  await agent();await cdp();
  const startupLock=join(context.socketDir,'runtime-host.startup.lock');
@@ -141,7 +156,7 @@ try{
   for(const [name,run] of order)await measure(name,run);
   await measure('fresh_cli_mcp_facade',freshCli);
  }
- receipt.summary=Object.fromEntries(['cold_workflow_open','direct_cdp','workflow_mcp','fresh_cli_mcp_facade'].map(name=>[name,summarize(name)]));
+ receipt.summary=Object.fromEntries(['cold_workflow_open','direct_cdp','workflow_mcp','fresh_cli_mcp_facade','warm_workflow_readiness_probe'].map(name=>[name,summarize(name)]));
  if(receipt.selectedPhase)assert(receipt.phaseMeasurements.some(sample=>sample.status==='measured'),'Selected phase produced no qualified measurement; inspect response wiring and StableTime availability');
  receipt.measurementCompleted=true;
 }catch(error){receipt.measurementCompleted=false;receipt.error=error.message;process.exitCode=1;}
