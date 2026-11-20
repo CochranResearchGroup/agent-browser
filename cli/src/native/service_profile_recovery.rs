@@ -5103,6 +5103,42 @@ mod tests {
     }
 
     #[test]
+    fn profile_reset_plan_requires_reliable_deadline_authority() {
+        use crate::native::service_principal::{
+            register_profile_capability, ServicePrincipalRegistrationRequest,
+        };
+        let mut initial = state();
+        let profile = initial.profiles.get_mut("last30days-facebook").unwrap();
+        profile.target_service_ids = vec!["qbo".into()];
+        profile.authenticated_service_ids = vec!["qbo".into()];
+        let capability = "synthetic-deadline-authority-capability-at-least-thirty-two-bytes";
+        register_profile_capability(
+            &mut initial.service_principals,
+            ServicePrincipalRegistrationRequest {
+                principal_id: "principal:last30days".into(),
+                display_name: None,
+                profile_id: "last30days-facebook".into(),
+                registered_at: Some("2026-09-10T12:00:00Z".into()),
+                registered_by: Some("test".into()),
+            },
+            capability,
+        )
+        .unwrap();
+        let _time = crate::connection::stable_time::Fixture::set(Err(
+            "stable_time_client_start_failed".into(),
+        ));
+        let result = plan_profile_reset_command(&json!({
+            "action":"service_profile_reset_plan", "serviceState":initial,
+            "profileId":"last30days-facebook", "profileCapability":capability,
+            "scope":"authentication", "targetServiceId":"qbo", "idempotencyKey":"time-qualified-reset",
+        }));
+        assert!(
+            matches!(&result, Err(error) if error.contains("stable_time_client_start_failed")),
+            "deadline planning must preserve the actual reliable-time client refusal"
+        );
+    }
+
+    #[test]
     fn authentication_reset_changes_only_selected_target_and_replays() {
         let mut initial = state();
         let profile = initial.profiles.get_mut("last30days-facebook").unwrap();

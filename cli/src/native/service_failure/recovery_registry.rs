@@ -15,8 +15,12 @@ fn registry() -> &'static Value {
             ),
             include_str!("../../../../docs/dev/contracts/public-error-recovery-service.v1.json"),
             include_str!("../../../../docs/dev/contracts/public-error-recovery-legacy.v1.json"),
-            include_str!("../../../../docs/dev/contracts/public-error-recovery-model-effects.v1.json"),
-            include_str!("../../../../docs/dev/contracts/public-error-recovery-service-model.v1.json"),
+            include_str!(
+                "../../../../docs/dev/contracts/public-error-recovery-model-effects.v1.json"
+            ),
+            include_str!(
+                "../../../../docs/dev/contracts/public-error-recovery-service-model.v1.json"
+            ),
         ] {
             let fragment: Value =
                 serde_json::from_str(source).expect("validated recovery fragment must parse");
@@ -72,8 +76,12 @@ fn bind(value: &Value, command: &Value) -> (Value, bool) {
                         .get("params")
                         .and_then(|params| params.get("operationId"))
                 }),
-                "$poolId" => command.get("poolId").or_else(|| command.pointer("/params/poolId")),
-                "$recordingId" => command.get("recordingId").or_else(|| command.pointer("/params/recordingId")),
+                "$poolId" => command
+                    .get("poolId")
+                    .or_else(|| command.pointer("/params/poolId")),
+                "$recordingId" => command
+                    .get("recordingId")
+                    .or_else(|| command.pointer("/params/recordingId")),
                 // Reviewed policy is deliberately never inferred from a failed request.
                 _ => None,
             };
@@ -286,18 +294,25 @@ mod tests {
     }
     #[test]
     fn original_owner_readback_arguments_bind_without_erasing_preconditions() {
-        let mut pool = json!({"code":"remote_view_pool_capacity_exhausted","effectState":"effect_uncertain"});
+        let mut pool =
+            json!({"code":"remote_view_pool_capacity_exhausted","effectState":"effect_uncertain"});
         enrich(&mut pool, &json!({"params":{"poolId":"original-pool"}}));
         let inspect = &pool["recoveryRegistry"]["inspect"];
         assert_eq!(inspect["arguments"]["poolId"], "original-pool");
         assert_eq!(inspect["executable"], true);
-        assert!(inspect["precondition"].as_str().unwrap().contains("A pool name is not a pool ID"));
+        assert!(inspect["precondition"]
+            .as_str()
+            .unwrap()
+            .contains("A pool name is not a pool ID"));
         assert_eq!(pool["effectState"], "effect_uncertain");
         let original = pool.clone();
         enrich(&mut pool, &json!({"poolId":"different-facade-pool"}));
         assert_eq!(pool, original);
         let mut missing = json!({"code":"remote_view_pool_capacity_exhausted"});
-        enrich(&mut missing, &json!({"taskId":"not-a-pool","params":{"poolId":42}}));
+        enrich(
+            &mut missing,
+            &json!({"taskId":"not-a-pool","params":{"poolId":42}}),
+        );
         let inspect = &missing["recoveryRegistry"]["inspect"];
         assert_eq!(inspect["executable"], false);
         let condition = inspect["precondition"].as_str().unwrap();
@@ -305,7 +320,10 @@ mod tests {
         assert!(condition.contains("do not guess scope"));
         let mut recording = json!({"code":"teaching_source_expiry_unqualified"});
         enrich(&mut recording, &json!({"recordingId":"original-recording"}));
-        assert_eq!(recording["recoveryRegistry"]["inspect"]["arguments"]["recordingId"], "original-recording");
+        assert_eq!(
+            recording["recoveryRegistry"]["inspect"]["arguments"]["recordingId"],
+            "original-recording"
+        );
         assert_eq!(recording["recoveryRegistry"]["inspect"]["executable"], true);
     }
 
