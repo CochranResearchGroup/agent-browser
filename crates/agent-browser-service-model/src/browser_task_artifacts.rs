@@ -109,9 +109,9 @@ impl BrowserSessionState {
         {
             return Ok(());
         }
-        if references.len() >= 256 {
-            return Err("browser_artifact_completed_reference_capacity_reached".into());
-        }
+        // The public owner adapter applies the live admission policy before
+        // producing a file. Completion custody must not discard acknowledged
+        // metadata after a concurrent admission or policy decrease.
         references.push(reference);
         Ok(())
     }

@@ -93,3 +93,28 @@ fn completed_capture_does_not_publish_under_a_replaced_target_or_process() {
         );
     }
 }
+
+#[test]
+fn acknowledged_artifact_metadata_is_retained_beyond_old_admission_default() {
+    let before = state();
+    let mut after = before.clone();
+    for index in 0..257 {
+        let reference = BrowserTaskArtifactReference {
+            artifact_id: format!("original-{index}"),
+            kind: "screenshot".into(),
+            handle: "reports".into(),
+            observed_at_ms: 20,
+        };
+        after
+            .retain_completed_task_artifact(&before, "task", reference.clone())
+            .unwrap();
+        after
+            .retain_completed_task_artifact(&before, "task", reference)
+            .unwrap();
+    }
+    assert_eq!(after.task_artifact_references["task"].len(), 257);
+    assert_eq!(
+        after.task_artifact_references["task"][0].artifact_id,
+        "original-0"
+    );
+}

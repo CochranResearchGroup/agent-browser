@@ -50,12 +50,13 @@ pub(super) fn artifact(arguments: &Value, transport: &str) -> Result<Value, Json
         .sessions
         .get(task_id)
         .ok_or_else(|| issue("browser_artifact_task_missing"))?;
+    let limit = store.artifact_reference_limit(task_id).map_err(issue)?;
     if state
         .task_artifact_references
         .get(task_id)
-        .is_some_and(|rows| rows.len() >= 256)
+        .is_some_and(|rows| rows.len() >= limit)
     {
-        return Err(issue("browser_artifact_reference_capacity_reached"));
+        return Err(issue(format!("browser_artifact_reference_capacity_reached:maximumArtifactReferences={limit}; inspect browser_command action=task_operation params={{\"operation\":\"capacity\"}} and increase this task's policy.maximumArtifactReferences before capture; retained originals are preserved")));
     }
     let id = arguments["requestId"]
         .as_str()
