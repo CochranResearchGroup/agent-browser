@@ -1039,7 +1039,43 @@ fn acquire_profile_claim_for_intent<R: ServiceStateRepository>(
                 .as_ref()
                 .map(|blocker| blocker.code.as_str())
                 .unwrap_or("not_admitted");
-            return Err(format!("profile_acquisition_preflight_{code}"));
+            let failure = match code {
+                "runtime_owner_lifecycle_missing" => {
+                    "profile_acquisition_preflight_runtime_owner_lifecycle_missing"
+                }
+                "live_foreign_principal_authority" => {
+                    "profile_acquisition_preflight_live_foreign_principal_authority"
+                }
+                "existing_session_profile_identity_inconsistent" => {
+                    "profile_acquisition_preflight_existing_session_profile_identity_inconsistent"
+                }
+                "existing_session_profile_identity_unproven" => {
+                    "profile_acquisition_preflight_existing_session_profile_identity_unproven"
+                }
+                "runtime_browser_record_missing" => {
+                    "profile_acquisition_preflight_runtime_browser_record_missing"
+                }
+                "terminal_owner_cleanup_satisfied" => {
+                    "profile_acquisition_preflight_terminal_owner_cleanup_satisfied"
+                }
+                "terminal_owner_evidence_incomplete" => {
+                    "profile_acquisition_preflight_terminal_owner_evidence_incomplete"
+                }
+                _ => "profile_acquisition_preflight_unclassified",
+            };
+            // This describes the existing refusal, never new authority. Retain
+            // an unknown blocker only as a bounded token, not private prose.
+            let blocker = if code.len() <= 128
+                && !code.is_empty()
+                && code
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+            {
+                code
+            } else {
+                "unclassified"
+            };
+            return Err(format!("{failure}: blocker={blocker}"));
         }
         state
             .acquire_lease_claim_with_receipt(request)
@@ -2459,7 +2495,12 @@ fn profile_capability_from_command(command: &Value) -> Result<String, String> {
 fn absolute_command_path(command: &Value, field: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(required_command_string(command, field)?);
     if !path.is_absolute() {
-        return Err(format!("profile_recovery_{field}_must_be_absolute"));
+        return Err(match field {
+            "planFile" => "profile_recovery_plan_file_must_be_absolute",
+            "profileCapabilityFile" => "profile_recovery_profile_capability_file_must_be_absolute",
+            _ => "profile_recovery_argument_must_be_absolute",
+        }
+        .to_string());
     }
     Ok(path)
 }
@@ -2470,7 +2511,20 @@ fn required_command_string<'a>(command: &'a Value, field: &str) -> Result<&'a st
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| format!("profile_recovery_{field}_required"))
+        .ok_or_else(|| {
+            match field {
+                "action" => "profile_recovery_action_required",
+                "id" => "profile_recovery_id_required",
+                "profileId" => "profile_recovery_profile_id_required",
+                "sessionName" => "profile_recovery_session_name_required",
+                "recoveryId" => "profile_recovery_recovery_id_required",
+                "scope" => "profile_recovery_scope_required",
+                "planFile" => "profile_recovery_plan_file_required",
+                "profileCapabilityFile" => "profile_recovery_profile_capability_file_required",
+                _ => "profile_recovery_argument_required",
+            }
+            .to_string()
+        })
 }
 
 fn optional_command_string(command: &Value, field: &str) -> Option<String> {
@@ -2486,9 +2540,13 @@ fn optional_command_string_array(command: &Value, field: &str) -> Result<Vec<Str
     let Some(values) = command.get(field) else {
         return Ok(Vec::new());
     };
-    let values = values
-        .as_array()
-        .ok_or_else(|| format!("profile_recovery_{field}_invalid"))?;
+    let values = values.as_array().ok_or_else(|| {
+        match field {
+            "targetServiceIds" => "profile_recovery_target_service_ids_invalid",
+            _ => "profile_recovery_argument_invalid",
+        }
+        .to_string()
+    })?;
     values
         .iter()
         .map(|value| {
@@ -2497,7 +2555,13 @@ fn optional_command_string_array(command: &Value, field: &str) -> Result<Vec<Str
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .map(str::to_string)
-                .ok_or_else(|| format!("profile_recovery_{field}_invalid"))
+                .ok_or_else(|| {
+                    match field {
+                        "targetServiceIds" => "profile_recovery_target_service_ids_invalid",
+                        _ => "profile_recovery_argument_invalid",
+                    }
+                    .to_string()
+                })
         })
         .collect()
 }
@@ -3336,6 +3400,42 @@ fn digest_json(value: &impl Serialize) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn recovery_field_refusals_have_public_snake_case_codes() {
+        assert_eq!(
+            super::required_command_string(&serde_json::json!({}), "profileId")
+                .err()
+                .unwrap(),
+            "profile_recovery_profile_id_required"
+        );
+        assert_eq!(
+            super::required_command_string(&serde_json::json!({}), "profileCapabilityFile")
+                .err()
+                .unwrap(),
+            "profile_recovery_profile_capability_file_required"
+        );
+        assert_eq!(
+            super::absolute_command_path(&serde_json::json!({"planFile":"relative"}), "planFile")
+                .err()
+                .unwrap(),
+            "profile_recovery_plan_file_must_be_absolute"
+        );
+        assert_eq!(
+            super::optional_command_string_array(
+                &serde_json::json!({"targetServiceIds":[1]}),
+                "targetServiceIds"
+            )
+            .err()
+            .unwrap(),
+            "profile_recovery_target_service_ids_invalid"
+        );
+        assert_eq!(
+            super::required_command_string(&serde_json::json!({}), "futureField")
+                .err()
+                .unwrap(),
+            "profile_recovery_argument_required"
+        );
+    }
     use std::collections::BTreeMap;
     use std::sync::{Arc, Mutex};
 

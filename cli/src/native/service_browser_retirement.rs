@@ -211,11 +211,39 @@ fn required_string<'a>(command: &'a Value, field: &str) -> Result<&'a str, Strin
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| format!("browser_retirement_{field}_required"))
+        .ok_or_else(|| {
+            match field {
+                "browserId" => "browser_retirement_browser_id_required",
+                "expiresAt" => "browser_retirement_expires_at_required",
+                _ => "browser_retirement_argument_required",
+            }
+            .to_string()
+        })
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn retirement_field_refusals_keep_public_codes_and_required_checks() {
+        assert_eq!(
+            super::required_string(&serde_json::json!({}), "browserId")
+                .err()
+                .unwrap(),
+            "browser_retirement_browser_id_required"
+        );
+        assert_eq!(
+            super::required_string(&serde_json::json!({"expiresAt":"  "}), "expiresAt")
+                .err()
+                .unwrap(),
+            "browser_retirement_expires_at_required"
+        );
+        assert_eq!(
+            super::required_string(&serde_json::json!({}), "futureField")
+                .err()
+                .unwrap(),
+            "browser_retirement_argument_required"
+        );
+    }
     use super::*;
     use std::collections::BTreeMap;
     use std::sync::{Arc, Mutex};
