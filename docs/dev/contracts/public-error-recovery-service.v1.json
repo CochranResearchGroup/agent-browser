@@ -33,7 +33,7 @@
         "crates/agent-browser-service-model/src/service_authentication_run.rs",
         "crates/agent-browser-service-model/src/service_challenge_task.rs"
       ],
-      "qualification": "Root reviewed exact current public codes and seven specific owner workflows. Forwarded site_login_recipe producer remains pending its own source qualification; arbitrary dependency messages are not treated as registered coverage."
+      "qualification": "Root reviewed exact current public codes, seven specific owner workflows and the forwarded closed site-login recipe producer. The same verified opaque task has a supported browser_handoff fallback under current authority; arbitrary dependency messages remain unknown rather than complete coverage."
     }
   },
   "interfaces": {
@@ -1626,6 +1626,51 @@
         "precondition": "Use only the original authenticated workflow and caller-supplied service/agent/task filter. Labels are not identity; unresolved bindings are not executable."
       },
       "resumeCondition": "The exact reported prerequisite is corrected, original effects are reconciled, current same-target owner admission succeeds, and application access is independently observed. A bookkeeping receipt is not task completion.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_auth_closed_site_fallback": {
+      "rationale": "This owner intentionally implements a closed reviewed site recipe; an unsupported recipe or changed page is not permission to widen its origins/selectors or repeat private input.",
+      "requiredActor": "existing_authenticated_workflow_owner_or_human_viewer",
+      "evidenceRequirement": "Original authentication run/effect records, actual current retained browser/tab/task binding, current policy and independently observed page/origin.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceTrace",
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "service-name": "$serviceName",
+            "agent-name": "$agentName",
+            "task-name": "$taskName",
+            "limit": 25
+          }
+        },
+        "precondition": "Use the original reviewed authenticated client and exact original workflow filters; never guess identity, a task or a service origin."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the exact original run and pending effects. For the supported recipe correct actual caller fields or have the owning maintainer repair its contract. To continue the browser task independently of this closed recipe, use the existing generic owner Auth workflow under current grants, or hand the SAME verified task to the authenticated Native viewer. Resolve uncertain effects before more private input; preserve the opaque handoff and verify application access independently.",
+          "call": {
+            "tool": "browser_handoff",
+            "arguments": {
+              "taskId": "$taskId"
+            }
+          },
+          "precondition": "The caller must already possess the exact original opaque task ID joined to its retained process/tab and current access authority. Human help uses existing authentication and explicit Take control; no new viewer grant or guessed task."
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceTrace",
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "service-name": "$serviceName",
+            "agent-name": "$agentName",
+            "task-name": "$taskName",
+            "limit": 25
+          }
+        },
+        "precondition": "Use the original reviewed authenticated client and exact original workflow filters; never guess identity, a task or a service origin."
+      },
+      "resumeCondition": "The same retained target is freshly observed, original effects are accounted for, existing owner policy permits the selected continuation, and application access is independently verified. The closed automated recipe is not falsely reported supported.",
       "maximumAutomaticAttempts": 1
     }
   },
@@ -9382,6 +9427,90 @@
       "policySource": "crates/agent-browser-service-model/src/service_challenge_task.rs",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "denied"
+    },
+    "site_login_recipe_unsupported": {
+      "recipe": "service_auth_closed_site_fallback",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/site_login_recipe.rs",
+          "line": 81
+        }
+      ],
+      "policySource": "cli/src/native/site_login_recipe.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "site_login_recipe_invalid": {
+      "recipe": "service_auth_closed_site_fallback",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/site_login_recipe.rs",
+          "line": 84
+        }
+      ],
+      "policySource": "cli/src/native/site_login_recipe.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "site_login_recipe_digest_failed": {
+      "recipe": "service_auth_closed_site_fallback",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/site_login_recipe.rs",
+          "line": 92
+        }
+      ],
+      "policySource": "cli/src/native/site_login_recipe.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "site_login_recipe_contract_mismatch": {
+      "recipe": "service_auth_closed_site_fallback",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/site_login_recipe.rs",
+          "line": 114
+        }
+      ],
+      "policySource": "cli/src/native/site_login_recipe.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "site_login_page_url_invalid": {
+      "recipe": "service_auth_closed_site_fallback",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/site_login_recipe.rs",
+          "line": 134
+        }
+      ],
+      "policySource": "cli/src/native/site_login_recipe.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "site_login_origin_not_allowed": {
+      "recipe": "service_auth_closed_site_fallback",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/site_login_recipe.rs",
+          "line": 138
+        }
+      ],
+      "policySource": "cli/src/native/site_login_recipe.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "site_login_state_digest_failed": {
+      "recipe": "service_auth_closed_site_fallback",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/site_login_recipe.rs",
+          "line": 183
+        }
+      ],
+      "policySource": "cli/src/native/site_login_recipe.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -9615,6 +9744,11 @@
     {
       "path": "crates/agent-browser-service-model/src/service_challenge_task.rs",
       "codePattern": "(?:authentication_run|challenge_task|challenge_consumer)_[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/site_login_recipe.rs",
+      "codePattern": "site_login_[a-z0-9_]+",
       "beforeNamedTestModule": true
     }
   ]
