@@ -40,7 +40,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         let configured = std::env::var("AGENT_BROWSER_REMOTE_VIEW_ORIGIN")
             .map_err(|_| "browser_native_owner_unconfigured")?;
         let mut http = crate::native::remote_view_application_http::RemoteViewApplicationHttp::for_native_command(&configured, command)
-        .map_err(|_| "browser_native_owner_configuration_invalid")?;
+        ?;
         let control=http.native_control_status(&json!({"desktopId":assignment.viewing_desktop_id,"expectedGeneration":assignment.viewing_generation,"operation":"status"}))?;
         if control["desktopId"] != observation.desktop_id
             || control["generation"] != observation.generation

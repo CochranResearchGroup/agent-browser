@@ -1509,7 +1509,7 @@
           "action": "task_briefing"
         }
       },
-      "resumeCondition": "The caller has a valid still-authorized allowance, current qualified service bounds assess it at the documented instant, and any earlier original uncertainty is reconciled. The unchanged absolute deadline remains enforceable by the owner; no input is replayed.",
+      "resumeCondition": "The caller has a valid still-authorized allowance, current qualified service bounds assess it at the documented measurement instant, and any earlier original uncertainty is reconciled. Consumer OS waits and a service observation do not prove delivery/completion before an absolute deadline; no input is replayed.",
       "maximumAutomaticAttempts": 1
     }
   },
@@ -3030,6 +3030,39 @@
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "unavailable"
     },
+    "browser_native_owner_allowance_domain_changed": {
+      "recipe": "native_owner_allowance",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/remote_view_application_http.rs"
+        }
+      ],
+      "policySource": "AGENTS.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_owner_allowance_evidence_invalid": {
+      "recipe": "native_owner_allowance",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/remote_view_application_http.rs"
+        }
+      ],
+      "policySource": "AGENTS.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_owner_allowance_expired": {
+      "recipe": "native_owner_allowance",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/remote_view_application_http.rs"
+        }
+      ],
+      "policySource": "AGENTS.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
     "browser_native_owner_allowance_invalid": {
       "recipe": "native_owner_allowance",
       "owningChecks": [
@@ -3040,6 +3073,28 @@
       "policySource": "AGENTS.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "invalid"
+    },
+    "browser_native_owner_allowance_uncertain": {
+      "recipe": "native_owner_allowance",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/remote_view_application_http.rs"
+        }
+      ],
+      "policySource": "AGENTS.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_native_owner_allowance_unqualified": {
+      "recipe": "native_owner_allowance",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/remote_view_application_http.rs"
+        }
+      ],
+      "policySource": "AGENTS.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
     },
     "browser_native_owner_authentication_missing": {
       "recipe": "native_capability",
@@ -3078,10 +3133,10 @@
       "recipe": "native_capability",
       "owningChecks": [
         {
-          "path": "cli/src/native/browser_native_host_image.rs"
+          "path": "cli/src/native/remote_view_application_http.rs"
         }
       ],
-      "policySource": "cli/src/native/browser_native_host_image.rs",
+      "policySource": "cli/src/native/remote_view_application_http.rs",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "unavailable"
     },

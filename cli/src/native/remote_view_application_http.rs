@@ -17,6 +17,7 @@ pub(crate) struct RemoteViewApplicationHttp {
     endpoint: reqwest::Url,
     timeout: Duration,
     deadline: Option<std::time::Instant>,
+    allowance_diagnostics: Option<Value>,
     authorization: Option<reqwest::header::HeaderValue>,
 }
 /// Public Native owner allowance, independent of image freshness or input count.
@@ -66,6 +67,7 @@ impl RemoteViewApplicationHttp {
             endpoint,
             timeout,
             deadline: None,
+            allowance_diagnostics: None,
             authorization: control_authorization()?,
         })
     }
@@ -73,29 +75,91 @@ impl RemoteViewApplicationHttp {
 impl RemoteViewApplicationHttp {
     /// Explicit Native allowance is shared by all owner subrequests. The MCP
     /// admission timestamp includes time waiting for the existing host.
-    pub(crate) fn for_native_command(origin: &str, command: &Value) -> Result<Self, Error> {
-        let milliseconds = native_owner_timeout_ms(command)?;
-        let mut http = Self::new(origin, Duration::from_millis(milliseconds))?;
-        if command.get("ownerTimeoutMs").is_some() {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|_| Error::Rejected)?
-                .as_millis() as u64;
-            let admitted = command
-                .get("_nativeOwnerAdmittedAtMs")
-                .map(|v| v.as_u64().ok_or(Error::Rejected))
-                .transpose()?
-                .unwrap_or(now);
-            let allowance_end = admitted.checked_add(milliseconds).ok_or(Error::Rejected)?;
-            let deadline = command
-                .get("ownerDeadlineAtMs")
-                .and_then(Value::as_u64)
-                .map_or(allowance_end, |end| end.min(allowance_end));
-            if now < admitted || now >= deadline {
-                return Err(Error::Rejected);
-            }
-            http.deadline = Some(std::time::Instant::now() + Duration::from_millis(deadline - now));
+    pub(crate) fn for_native_command(origin: &str, command: &Value) -> Result<Self, String> {
+        let milliseconds = native_owner_timeout_ms(command)
+            .map_err(|_| "browser_native_owner_allowance_invalid")?;
+        let mut http = Self::new(origin, Duration::from_millis(milliseconds))
+            .map_err(|_| "browser_native_owner_configuration_invalid")?;
+        if command.get("ownerTimeoutMs").is_none() {
+            return Ok(http);
         }
+        let input = command["action"] == "native_input";
+        let absolute = command.get("ownerDeadlineAtMs").and_then(Value::as_u64);
+        let mut remaining_ns = i128::from(milliseconds) * 1_000_000;
+        // An ordinary capture wait is independent read work. Without an absolute
+        // UTC condition, never turn its OS wait into a StableTime availability
+        // gate or interpret legacy guest admission as trustworthy queue elapsed.
+        if !input && absolute.is_none() {
+            http.allowance_diagnostics = Some(serde_json::json!({
+                "schemaVersion":"agent-browser.native-owner-allowance.v1",
+                "source":"agent_browser_transport","scope":"receiver_relative_os_wait",
+                "aggregateQualification":"unavailable","aggregateRemainingNs":null,
+                "reason":"cross_queue_elapsed_not_qualified_for_ordinary_capture_wait",
+                "requestedOwnerTimeoutMs":milliseconds,"guestClockSubstituted":false
+            }));
+        } else {
+            let admitted = if input {
+                let stamp: crate::connection::stable_time::Stamp = command.get("_nativeOwnerAdmittedServiceTime")
+                    .cloned().ok_or("browser_native_owner_allowance_unqualified: original admission has no qualified service observation; inspect original input; do not reset its budget")
+                    .and_then(|value| serde_json::from_value(value).map_err(|_| "browser_native_owner_allowance_evidence_invalid"))?;
+                stamp
+                    .validate()
+                    .map_err(|_| "browser_native_owner_allowance_evidence_invalid")?;
+                Some(stamp)
+            } else {
+                None
+            };
+            let now = crate::connection::stable_time::native_now().map_err(|error| {
+                if error.starts_with("browser_native_time_") { return error; }
+                let candidate = error.split(':').next().unwrap_or_default();
+                let cause = if candidate.starts_with("stable_time_") && candidate.len()<=128 && candidate.bytes().all(|byte|byte.is_ascii_lowercase()||byte.is_ascii_digit()||byte==b'_') { candidate } else { "stable_time_client_unclassified_failure" };
+                format!("browser_native_time_unavailable:cause={cause}; repair the actual supported time client/qualification prerequisite; no input dispatched by this allowance factory")
+            })?;
+            if let Some(admitted) = admitted {
+                now.validate()
+                    .map_err(|_| "browser_native_owner_allowance_evidence_invalid")?;
+                if admitted.epoch != now.epoch
+                    || admitted.frequency_hz != now.frequency_hz
+                    || now.counter < admitted.counter
+                {
+                    return Err("browser_native_owner_allowance_domain_changed: preserve the original allowance and inspect original input before any continuation".into());
+                }
+                let lower = i128::from(now.earliest_utc_ns) - i128::from(admitted.latest_utc_ns);
+                let upper = i128::from(now.latest_utc_ns) - i128::from(admitted.earliest_utc_ns);
+                if upper < 0 || lower > upper {
+                    return Err("browser_native_owner_allowance_domain_changed".into());
+                }
+                if lower >= remaining_ns {
+                    return Err("browser_native_owner_allowance_expired: qualified service observations establish the original aggregate allowance is exhausted; inspect original input before any new attempt".into());
+                }
+                if upper >= remaining_ns {
+                    return Err("browser_native_owner_allowance_uncertain: service bounds cannot qualify remaining original allowance; do not reset or replay input".into());
+                }
+                remaining_ns -= upper.max(0);
+            }
+            if let Some(absolute) = absolute {
+                let absolute_ns = i128::from(absolute) * 1_000_000;
+                if i128::from(now.earliest_utc_ns) >= absolute_ns {
+                    return Err("browser_native_owner_deadline_expired: caller deadline expired at the StableTime measurement instant".into());
+                }
+                if i128::from(now.latest_utc_ns) >= absolute_ns {
+                    return Err("browser_native_owner_deadline_uncertain: service bounds overlap the unchanged caller deadline".into());
+                }
+                remaining_ns = remaining_ns.min(absolute_ns - i128::from(now.latest_utc_ns));
+            }
+            http.allowance_diagnostics = Some(serde_json::json!({
+                "schemaVersion":"agent-browser.native-owner-allowance.v1","source":"agent_browser_transport",
+                "scope":"service_measurement_then_receiver_os_wait","aggregateQualification":if input {"qualified_at_measurement_instants"}else{"caller_absolute_assessed_at_measurement_instant"},
+                "receiverOsWaitBudgetNs":remaining_ns.to_string(),"guestClockSubstituted":false,
+                "deliveryDelayExtrapolated":false,"callerDeadlineAtMs":absolute
+            }));
+        }
+        let remaining = Duration::from_nanos(
+            u64::try_from(remaining_ns)
+                .map_err(|_| "browser_native_owner_allowance_evidence_invalid")?,
+        );
+        http.timeout = remaining;
+        http.deadline = Some(std::time::Instant::now() + remaining);
         Ok(http)
     }
 
@@ -161,34 +225,44 @@ impl RemoteViewApplicationHttp {
         operation: &str,
         body: &Value,
     ) -> Result<Value, String> {
-        self.native_request(operation, body).map_err(|error| {
-            let mutating = matches!(operation, "input" | "window" | "input_cancel");
-            let rejected = matches!(
-                error,
-                Error::Rejected
-                    | Error::Unavailable
-                    | Error::OwnerAuthenticationRequired
-                    | Error::OwnerAccessDenied
-                    | Error::OwnerInputDisabled
-            );
-            let effect = if !mutating {
-                "observation_failed; no input dispatched"
-            } else if rejected {
-                "rejected; no input dispatched"
-            } else {
-                "observe before retry; input may have been delivered"
-            };
-            let status = match error {
-                Error::OwnerAuthenticationRequired => Some(401),
-                Error::OwnerAccessDenied | Error::OwnerInputDisabled => Some(403),
-                Error::OwnerFailure { status, .. } => Some(status),
-                _ => None,
-            };
-            let status = status
-                .map(|value| format!(":httpStatus={value}"))
-                .unwrap_or_default();
-            format!("browser_native_owner_request:{operation}:{error:?}{status}:{effect}")
-        })
+        let diagnostics = self.allowance_diagnostics.clone();
+        self.native_request(operation, body)
+            .map(|mut result| {
+                if matches!(operation, "capture" | "capture_region") && result.is_object() {
+                    if let Some(diagnostics) = diagnostics {
+                        result["consumerOwnerAllowance"] = diagnostics;
+                    }
+                }
+                result
+            })
+            .map_err(|error| {
+                let mutating = matches!(operation, "input" | "window" | "input_cancel");
+                let rejected = matches!(
+                    error,
+                    Error::Rejected
+                        | Error::Unavailable
+                        | Error::OwnerAuthenticationRequired
+                        | Error::OwnerAccessDenied
+                        | Error::OwnerInputDisabled
+                );
+                let effect = if !mutating {
+                    "observation_failed; no input dispatched"
+                } else if rejected {
+                    "rejected; no input dispatched"
+                } else {
+                    "observe before retry; input may have been delivered"
+                };
+                let status = match error {
+                    Error::OwnerAuthenticationRequired => Some(401),
+                    Error::OwnerAccessDenied | Error::OwnerInputDisabled => Some(403),
+                    Error::OwnerFailure { status, .. } => Some(status),
+                    _ => None,
+                };
+                let status = status
+                    .map(|value| format!(":httpStatus={value}"))
+                    .unwrap_or_default();
+                format!("browser_native_owner_request:{operation}:{error:?}{status}:{effect}")
+            })
     }
 
     fn owner_http_request(
@@ -589,17 +663,95 @@ mod tests {
             )
             .is_err());
         }
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
+        let _clock = crate::connection::stable_time::Fixture::set(Ok(
+            crate::connection::stable_time::fixture_stamp(1_000),
+        ));
         for command in [
-            serde_json::json!({"ownerDeadlineAtMs":now+1000}),
-            serde_json::json!({"ownerTimeoutMs":30000,"ownerDeadlineAtMs":now-1}),
-            serde_json::json!({"ownerTimeoutMs":100,"_nativeOwnerAdmittedAtMs":now-101}),
-            serde_json::json!({"ownerTimeoutMs":30000,"_nativeOwnerAdmittedAtMs":now+10000}),
+            serde_json::json!({"ownerDeadlineAtMs":2_000}),
+            serde_json::json!({"ownerTimeoutMs":30000,"ownerDeadlineAtMs":999}),
         ] {
             assert!(RemoteViewApplicationHttp::for_native_command(origin, &command).is_err());
+        }
+        for guest_admitted in [1, u64::MAX] {
+            let command = serde_json::json!({"action":"native_input","ownerTimeoutMs":30000,"_nativeOwnerAdmittedAtMs":guest_admitted});
+            let error = RemoteViewApplicationHttp::for_native_command(origin, &command)
+                .err()
+                .unwrap();
+            assert!(error.starts_with("browser_native_owner_allowance_unqualified"));
+            assert!(!error.contains("expired"));
+        }
+    }
+
+    #[test]
+    fn native_input_allowance_uses_original_service_interval_and_capture_stays_independent() {
+        use crate::connection::stable_time::{fixture_stamp, Fixture};
+        let guard =
+            crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE"]);
+        guard.remove("AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE");
+        let origin = "http://127.0.0.1:1";
+        let command = serde_json::json!({"action":"native_input","ownerTimeoutMs":1000,"_nativeOwnerAdmittedServiceTime":fixture_stamp(1_000)});
+        {
+            let _clock = Fixture::set(Ok(fixture_stamp(1_500)));
+            let client = RemoteViewApplicationHttp::for_native_command(origin, &command).unwrap();
+            assert_eq!(client.timeout, Duration::from_millis(500));
+        }
+        {
+            let _clock = Fixture::set(Ok(fixture_stamp(2_000)));
+            assert!(
+                RemoteViewApplicationHttp::for_native_command(origin, &command)
+                    .err()
+                    .unwrap()
+                    .starts_with("browser_native_owner_allowance_expired")
+            );
+        }
+        {
+            let mut uncertain = fixture_stamp(2_000);
+            uncertain.earliest_utc_ns = 1_999_000_000;
+            uncertain.latest_utc_ns = 2_001_000_000;
+            let _clock = Fixture::set(Ok(uncertain));
+            assert!(
+                RemoteViewApplicationHttp::for_native_command(origin, &command)
+                    .err()
+                    .unwrap()
+                    .starts_with("browser_native_owner_allowance_uncertain")
+            );
+        }
+        {
+            let mut changed = fixture_stamp(1_500);
+            changed.epoch = "22222222-2222-4222-8222-222222222222".into();
+            let _clock = Fixture::set(Ok(changed));
+            assert!(
+                RemoteViewApplicationHttp::for_native_command(origin, &command)
+                    .err()
+                    .unwrap()
+                    .starts_with("browser_native_owner_allowance_domain_changed")
+            );
+        }
+        {
+            let _clock = Fixture::set(Err(
+                "browser_native_time_unavailable:cause=stable_time_client_start_failed".into(),
+            ));
+            let capture = serde_json::json!({"action":"native_capture","ownerTimeoutMs":1000,"_nativeOwnerAdmittedAtMs":u64::MAX});
+            let client = RemoteViewApplicationHttp::for_native_command(origin, &capture).unwrap();
+            assert_eq!(
+                client.allowance_diagnostics.as_ref().unwrap()["scope"],
+                "receiver_relative_os_wait"
+            );
+            assert_eq!(client.timeout, Duration::from_millis(1_000));
+            assert!(
+                RemoteViewApplicationHttp::for_native_command(origin, &command)
+                    .err()
+                    .unwrap()
+                    .contains("stable_time_client_start_failed")
+            );
+            let mut absolute = capture;
+            absolute["ownerDeadlineAtMs"] = serde_json::json!(2_000);
+            assert!(
+                RemoteViewApplicationHttp::for_native_command(origin, &absolute)
+                    .err()
+                    .unwrap()
+                    .contains("stable_time_client_start_failed")
+            );
         }
     }
 
