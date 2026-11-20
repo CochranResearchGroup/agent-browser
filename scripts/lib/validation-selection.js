@@ -89,9 +89,11 @@ function isDocsOrGovernance(file) {
   ) && !file.startsWith('docs/dev/contracts/');
 }
 function isServiceClient(file) {
+  if (file === 'scripts/test-native-checkbox-assistance.js') return true;
   return file.startsWith('packages/client/') || file.startsWith('examples/service-client/') || file.startsWith('scripts/generate-service-') || file.startsWith('scripts/test-service-') || file.startsWith('docs/dev/contracts/') || file === 'cli/src/native/service_contracts.rs' || file === 'cli/src/native/service_request.rs' || file === 'cli/src/native/service_model.rs' || file.startsWith('cli/src/native/mcp');
 }
 function isRepositoryTooling(file) {
+  if (file === 'scripts/measure-command-latency.mjs') return true;
   if (['scripts/dev/check-login-workflow.mjs', 'scripts/test-login-validation.mjs', '.husky/pre-push'].includes(file)) return true;
   return file === 'scripts/dev/run-validation.js' || file === 'scripts/dev/validation-plan.mjs' || file === 'scripts/dev/assess-validation.mjs' || file === 'scripts/lib/local-validation.mjs' || file === 'scripts/test-local-validation.mjs' || file === 'scripts/test-validation-runner.js' || file === 'scripts/candidate-build.js' || file.startsWith('scripts/lib/candidate-build-') || file.startsWith('scripts/test-candidate-build-') || file === 'scripts/dev/worktree-closeout.js' || file.startsWith('scripts/lib/worktree-closeout') || file === 'scripts/test-worktree-closeout.js';
 }
