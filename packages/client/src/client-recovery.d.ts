@@ -6,6 +6,7 @@ export interface ClientRecoveryRead {
 export interface ClientRecovery {
   schemaVersion:'agent-browser.client-recovery.v1';coverage:'registered'|'unknown';code:string;
   packet:{code:string;source?:string;owningFunction?:string;taskId?:string;requestId?:string;episodeId?:string;ownerCode?:string};
+  logging?:{state:string;scope?:string;ownerOccurrenceId?:string|null;reason?:string;ownerJournal?:{state:string;reason?:string};[key:string]:unknown};
   requiredActor:string;automaticExecutionAllowed:false;recipe?:string;registrySourceSha256?:string;
   normalization?:{ownerCode:string;ownerCodeCoverage:'not_asserted'};
   evidenceClass?:string;evidenceRequirement?:string;rationale?:string;

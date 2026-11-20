@@ -10,7 +10,7 @@ export function clientArgumentError(message, source, owningFunction, checkedFiel
     code: 'client_argument_invalid',
     clientRecovery: clientRecoveryFor('client_argument_invalid',{source,owningFunction}),
     source, owningFunction,
-    logging: { state: 'local_only', ownerOccurrenceId: null, reason: 'No owner request was dispatched by this validation. Use an existing caller observer if available; record only code, source and owningFunction, never arguments or credentials.' },
+    logging: { state: 'not_attempted', scope: 'local_validation', ownerOccurrenceId: null, ownerJournal: {state:'not_attempted',reason:'This validation dispatched no owner request.'}, reason: 'No owner request was dispatched by this validation. Use an existing caller observer if available; record only code, source and owningFunction, never arguments or credentials.' },
     recovery: {
       schemaVersion: 'agent-browser.client-argument-recovery.v1',
       requiredActor: 'caller',

@@ -3897,14 +3897,39 @@ const nestedRefusal = {success:true, data:{ok:false, failure:nestedFailure760}};
 assert.equal(getServiceFailureRecourse(nestedRefusal), nestedFailure760);
 assert.throws(()=>requireServiceRequestSuccess(nestedRefusal), error=>error.failure===nestedFailure760);
 
-assert.throws(()=>createServiceRequest({action:'not-supported'}),error=>error instanceof TypeError&&error.message==='Unsupported service request action: not-supported'&&error.code==='client_argument_invalid'&&error.recovery.owningFunction==='createServiceRequest'&&error.recovery.effectState==='not_dispatched_by_this_validation'&&error.logging.state==='local_only');
+assert.throws(()=>createServiceRequest({action:'not-supported'}),error=>error instanceof TypeError&&error.message==='Unsupported service request action: not-supported'&&error.code==='client_argument_invalid'&&error.recovery.owningFunction==='createServiceRequest'&&error.recovery.effectState==='not_dispatched_by_this_validation'&&error.logging.state==='not_attempted'&&error.logging.ownerJournal.state==='not_attempted'&&error.logging.ownerOccurrenceId===null);
 assert.throws(()=>requireServiceTabHandle({success:true,data:{}}),error=>error instanceof TypeError&&error.code!=='client_argument_invalid','owner response failure must not become invalid arguments');
 
 assert.throws(()=>requireServiceTabHandle({success:true,data:{},failure:nestedFailure760}),error=>error instanceof TypeError&&error.code===nestedFailure760.code&&error.failure===nestedFailure760&&error.occurrenceId==='failure-original-760'&&error.recovery.recipe==='serviceTabHandleReadback');
 assert.throws(()=>requireServiceRemoteViewHandoffUrl({success:true,data:{}}),error=>error.code==='client_service_handoff_url_missing'&&error.recovery.recipe==='serviceDurableHandoffReadback');
 
-const {clientRecoveryFor}=await import('../packages/client/src/client-recovery.js');
+const {clientRecoveryFor,clientFailureError,withClientErrorRecovery,withClientResultRecovery}=await import('../packages/client/src/client-recovery.js');
 const knownLocal760=clientRecoveryFor('client_argument_invalid',{source:'packages/client/src/service-request.js',owningFunction:'createServiceRequest'});
 assert.equal(knownLocal760.coverage,'registered');assert.equal(knownLocal760.inspect.interface,'caller_error');assert.equal(knownLocal760.automaticExecutionAllowed,false);
 const unknownLocal760=clientRecoveryFor('future_client_failure',{source:'client.js',owningFunction:'run',password:'private-canary-760',response:{secret:'private-canary-760'}});
 assert.equal(unknownLocal760.coverage,'unknown');assert.equal(unknownLocal760.automaticExecutionAllowed,false);assert.ok(!JSON.stringify(unknownLocal760).includes('private-canary-760'));assert.equal(unknownLocal760.packet.code,'future_client_failure');
+
+const localLoggingFailure=clientFailureError('client_argument_invalid');
+assert.equal(localLoggingFailure.logging.state,'not_attempted');
+assert.equal(localLoggingFailure.logging.ownerOccurrenceId,null);
+assert.equal(localLoggingFailure.clientRecovery.logging.ownerJournal.state,'unavailable');
+const unavailableLogging=withClientErrorRecovery(new TypeError('local'),{},'client_argument_invalid');
+assert.equal(unavailableLogging.logging.state,'unavailable');
+assert.equal(unavailableLogging.logging.ownerOccurrenceId,null);
+const actualOwnerLogging={state:'durable_pending',projection:'asynchronous'};
+const actualOwnerFailure={...nestedFailure760,occurrenceId:'actual-occurrence',logging:actualOwnerLogging};
+const withOwnerLogging=withClientErrorRecovery(Object.assign(new Error('original'),{failure:actualOwnerFailure}));
+assert.equal(withOwnerLogging.logging,actualOwnerLogging);
+assert.equal(withOwnerLogging.failure,actualOwnerFailure);
+const originalResult=withClientResultRecovery({status:'waiting',reason:'auth_unavailable',failure:actualOwnerFailure});
+assert.equal(originalResult.logging,actualOwnerLogging);
+assert.equal(originalResult.failure.effectState,'effect_uncertain');
+assert.throws(()=>requireServiceRequestSuccess({success:false,failure:actualOwnerFailure}),error=>error.failure===actualOwnerFailure&&error.failure.logging===actualOwnerLogging);
+
+assert.throws(()=>requireServiceTabHandle({success:false,failure:actualOwnerFailure}),error=>error.logging===actualOwnerLogging&&error.failure===actualOwnerFailure);
+const frozenOriginal=Object.freeze(Object.assign(new TypeError('immutable original'),{failure:actualOwnerFailure}));
+const frozenProjected=withClientErrorRecovery(frozenOriginal,{},'client_argument_invalid');
+assert(frozenProjected instanceof TypeError);
+assert.equal(frozenProjected.message,'immutable original');
+assert.equal(frozenProjected.failure,actualOwnerFailure);
+assert.equal(frozenProjected.logging,actualOwnerLogging);

@@ -14,7 +14,7 @@ export function clientOwnerFailure(error, code, response, source, owningFunction
     code: owner.code, failure: owner.failure, occurrenceId: owner.occurrenceId,
     source, owningFunction,
     clientRecovery: {...clientRecoveryFor(code,{source,owningFunction}),ownerRecoveryAvailable:owner.failure!==null},
-    logging: {state: owner.occurrenceId ? 'owner_occurrence_preserved' : 'local_only', ownerOccurrenceId: owner.occurrenceId},
+    logging: owner.logging,
     recovery: {
       schemaVersion: 'agent-browser.client-owner-recovery.v1', recipe,
       requiredActor: 'caller_with_existing_owner_scope',
