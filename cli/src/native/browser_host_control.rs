@@ -22,7 +22,7 @@ use super::browser_session_store::BrowserSessionSqliteStore;
 mod human_handoff;
 pub(crate) use human_handoff::{
     begin_handoff, begin_reopened_handoff, handoff_intent, prepare_handoff,
-    reconcile_recovered_handoff, recovery_rebind_pending, return_handoff,
+    reconcile_recovered_handoff, recovery_rebind_pending, return_handoff, take_handoff,
 };
 
 #[path = "browser_handoff_reopen_control.rs"]

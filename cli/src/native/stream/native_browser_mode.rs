@@ -21,7 +21,7 @@ impl ModeRequest {
             && self.generation > 0
             && if matches!(self.choice.as_str(), "inspect" | "inspect_control") {
                 self.operation_id.is_none() && self.mode.is_none() && self.owner_confirmed.is_none()
-            } else if self.choice == "return_handoff" {
+            } else if matches!(self.choice.as_str(), "return_handoff" | "take_handoff") {
                 self.operation_id
                     .as_ref()
                     .is_some_and(|id| !id.is_empty() && id.len() <= 128)
@@ -132,9 +132,12 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
     let slot = request.slot;
     let inspect = matches!(
         request.choice.as_str(),
-        "inspect" | "inspect_control" | "return_handoff"
+        "inspect" | "inspect_control" | "return_handoff" | "take_handoff"
     );
     let generation = request.generation;
+    let taking = (request.choice == "take_handoff")
+        .then(|| request.operation_id.clone())
+        .flatten();
     let returning = (request.choice == "return_handoff")
         .then(|| request.operation_id.clone())
         .flatten();
@@ -228,6 +231,9 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
         };
         if let Some(proof) = control_target.as_mut() {
             use crate::native::browser_host_control as control;
+            if let Some(request) = &taking {
+                control::take_handoff(&target.browser.id, &handoff, &digest, request)?;
+            }
             if let Some(request) = &returning {
                 control::return_handoff(&target.browser.id, &handoff, &digest, request)?;
             }
@@ -236,7 +242,7 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
                 &handoff,
                 &digest
             )?);
-        } else if returning.is_some() {
+        } else if returning.is_some() || taking.is_some() {
             return Err("browser_handoff_target_unconfirmed".into());
         }
         Ok::<_, String>((target, mode, control_target))
@@ -399,7 +405,10 @@ async fn finish_current_inspection(
     control_target: Option<Value>,
     continuation: impl std::future::Future<Output = Result<Value, String>>,
 ) -> Result<Value, String> {
-    if matches!(choice, "inspect_control" | "return_handoff") {
+    if matches!(
+        choice,
+        "inspect_control" | "return_handoff" | "take_handoff"
+    ) {
         return Ok(json!({"success":true,"data":{
             "schemaVersion":"agent-browser.handoff-mode.v1",
             "mode":mode,"operations":[],"nativeControlTarget":control_target
