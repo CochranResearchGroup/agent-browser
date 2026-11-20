@@ -4740,7 +4740,7 @@ a separate **Reopen with a new profile** choice that discloses lost sign-ins and
 unsaved state. Never silently replace a named profile or send a replacement link.
 Software uses `service_remote_view_handoff_resolve` with `handoffOperation=reopen`;
 use `reopen_with_new_profile` only after that explicit choice. The request and
-choice survive retries; renewed assistance pauses cooperative automation.
+choice survive retries; actual Native viewer input pauses cooperative automation.
 
 ## Handoff creator context
 
@@ -4795,7 +4795,7 @@ A valid retained CDP-free handoff also recovers an ordinary browser exit using t
 
 After exact original exit during a pending graceful conversion, the same link opens existing mode controls only. It neither starts a desktop stream nor takes input control. Explicitly reconcile the original operation to continue; navigation never launches its replacement.
 
-After human input, use Give control back in the viewer, then `browser_continue` with the same `taskId` reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff. A pending browser mode change does not block the same durable handoff while the exact original browser remains live. Reconnecting preserves the mode operation and does not close or replace that browser.
+Actual Native viewer input pauses automation until service-time-qualified quiet. Explicit Take control holds until that viewer selects view-only; other viewers retain their own claims. Then `browser_continue` with the same `taskId` freshly reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff. A pending browser mode change does not block the same durable handoff while the exact original browser remains live. Reconnecting preserves the mode operation and does not close or replace that browser.
 
 A retained handoff may finish its original settled browser-close publication before recovery; keep the same task and handoff, and preserve unresolved effect or identity failures for readback. An interactive invitation survives physical replacement only through its recorded exact recovery mapping; missing legacy mapping or changed targets stay fenced, with the human hold preserved.
 

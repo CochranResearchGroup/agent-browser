@@ -172,6 +172,14 @@ not transfer termination or relocation authority. Metadata reports
 `custody: "app_borrowed"`; capability presence is not readiness or account proof.
 
 
+### Viewer activity and continued automation
+
+Interactive mode enables input; opening or reconnecting a viewer does not prove human activity. Actual admitted Native viewer input temporarily pauses cooperative automation. Agent input never renews that pause. Remote View measures quiet using StableTime observations and `REMOTE_VIEW_HUMAN_INPUT_QUIET_MS` (default 1500 milliseconds). An unavailable or unqualified time observation keeps the affected return pending and reports the actual time failure.
+
+**Take control** creates an explicit hold for that authenticated viewer until it selects view-only. Returning one viewer does not release other viewers' holds or activity; status explains activity elsewhere and the remaining quiet interval. The viewer displays agent activity with a Take control option. This evidence covers instrumented Native viewer input, not independent physical OS controllers.
+
+After the last claim ends, Agent Browser requires a successful fresh observation of the retained page before another mutation. Process status alone is insufficient. Effects already dispatched retain their original uncertainty and must be reconciled without replay.
+
 ### Human takeover and return
 
 Viewing alone does not pause automation. Use `browser_control` with `taskId` and

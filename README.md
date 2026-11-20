@@ -132,11 +132,7 @@ Choose `profileMode: "existing"` to require an already registered profile. Choos
 
 Authenticated Native viewer use records operator-journey acceptance for the selected installation after the browser owner confirms the exact target. Opening a link or preparing a route alone does not qualify; inspect `operatorJourneyReady` and its generation-bound presentation receipt in workstation status.
 
-Human assistance defaults to `interaction: "interactive"`: cooperative automation
-pauses and the authorized recipient opens the same browser with input enabled.
-Use `interaction: "view"` for passive viewing. Give control back in the viewer
-before continuing automation; an interrupted return resumes its original request.
-Visibility (`operatorVisible`) and confirmed Native input readiness are separate.
+Human assistance defaults to `interaction: "interactive"`, which enables input without proving that a person is active. Actual Native viewer input temporarily pauses cooperative automation. Remote View returns control after a service-time-qualified quiet interval; explicit **Take control** instead holds control until that viewer selects view-only. Other viewers' activity or holds remain visible and continue to pause the agent. Agent input does not renew human activity. After return, automation requires a successful fresh observation of the retained page. Pending effects are reconciled without replay. Visibility (`operatorVisible`) and Native input readiness are separate.
 
 Call `browser_handoff` with `taskId` to focus the current page and obtain its durable authenticated HTTPS Remote View link. The MCP server completes the link using its configured `AGENT_BROWSER_PUBLIC_ORIGIN`, the public origin of this Agent Browser service. This differs from `AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN`, which locates the native desktop viewer. Set it in the process environment or the standard `~/.agent-browser/.env` (or `AGENT_BROWSER_ENV_FILE`). Explicit process settings take precedence. Restart existing MCP connections after changing startup configuration. A missing service origin reports `remote_view_public_origin_missing` with configuration guidance. Handoff preserves the task and current page.
 

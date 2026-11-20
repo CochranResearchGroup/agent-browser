@@ -39,13 +39,13 @@ Clicks deliver pointer input; verify page state. [Profile rules](references/cli-
 
 Installed viewers: [qualification](references/cli-and-service.md#native-journey-qualification).
 
-Use `browser_handoff({ "taskId": "<task-id>" })` for human assistance. It defaults to interactive input and pauses cooperative automation. Use `interaction:"view"` for passive viewing. The authorized recipient needs no administrator override; visibility alone does not prove input readiness. Require `operatorVisible.state=ready`; return the complete `data.handoffUrl` and keep the task ID. For `remote_view_public_origin_missing`, check reviewed `AGENT_BROWSER_PUBLIC_ORIGIN` in `~/.agent-browser/.env` or `AGENT_BROWSER_ENV_FILE`; process settings win. Reconnect MCP after configuration changes because its environment is pinned at startup. Preserve the task. Never assemble provider URLs.
+Use `browser_handoff({ "taskId": "<task-id>" })` for human assistance. Interactive input alone does not pause automation; actual viewer activity does. Use `interaction:"view"` for passive viewing. The authorized recipient needs no administrator override; visibility alone does not prove input readiness. Require `operatorVisible.state=ready`; return the complete `data.handoffUrl` and keep the task ID. For `remote_view_public_origin_missing`, check reviewed `AGENT_BROWSER_PUBLIC_ORIGIN` in `~/.agent-browser/.env` or `AGENT_BROWSER_ENV_FILE`; process settings win. Reconnect MCP after configuration changes because its environment is pinned at startup. Preserve the task. Never assemble provider URLs.
 
 Reuse the same handoff after a CDP-free exit; reconcile interrupted conversions explicitly.
 A confirmed mode change restarts the same profile, retains its tabs and session names, and updates every attached task to the replacement process. After exit, the old PID and desktop assignment are historical records, not reasons to refuse the replacement. The supported workspace chooser includes Chrome and Chromium; Chrome for Testing is identified separately and excluded.
 Retained handoff recovery: [guide](references/cli-and-service.md#retained-handoff-recovery).
 
-After human input, use Give control back or `browser_control`, then `browser_continue` with the same `taskId`. Preserve edits and the [pending-mode boundary](references/cli-and-service.md#retained-handoff-recovery).
+Actual input pauses until qualified quiet; explicit Take control holds until that viewer selects view-only. Other viewers may still hold control; inspect `browser_control` status. Use `browser_continue` for fresh observation with the same `taskId`. Preserve edits and the [pending-mode boundary](references/cli-and-service.md#retained-handoff-recovery).
 
 Nested login outlines require same-frame boundary or bounded connected-field proof; conflicting mask/value evidence stays unverified. Distinct controls retain ambiguity.
 

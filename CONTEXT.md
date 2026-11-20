@@ -173,9 +173,11 @@ Explicit sharing admits exact app participants to distinct logical tasks without
 changing the process owner.
 
 **Cooperative human control**: Durable browser-scoped ownership and epoch shared
-by supported dispatch routes. Viewing alone changes nothing. Explicit takeover
-blocks new mutations, optionally reads/capture; return freshly observes the same
-page. Dispatched uncertainty is retained without replay. Unmanaged controllers
+by supported dispatch routes. Interactive capability and viewing alone prove no
+human activity. Actual Native viewer input pauses until service-time-qualified
+quiet; explicit per-viewer takeover holds until that viewer returns to view-only.
+Other viewers retain their own claims. Agent input does not renew human activity.
+Return requires a successful current-epoch observation of the retained page. Dispatched uncertainty is retained without replay. Unmanaged controllers
 must cooperate; attribution is separate from operator authority.
 
 **Routine interlock output**: Bounded status/error projection for scheduled
