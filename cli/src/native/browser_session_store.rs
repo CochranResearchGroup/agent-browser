@@ -2617,6 +2617,7 @@ mod tests {
                 tab_id: "retained-target".into(),
                 created_at_ms: None,
                 expires_at_ms: None,
+                retention_time: None,
                 view: None,
                 resume: None,
                 recreation: None,

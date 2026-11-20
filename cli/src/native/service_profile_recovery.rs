@@ -5142,6 +5142,76 @@ mod tests {
     }
 
     #[test]
+    fn profile_reset_apply_uses_service_deadline_instead_of_guest_utc() {
+        use crate::native::service_principal::{
+            register_profile_capability, ServicePrincipalRegistrationRequest,
+        };
+        let env = crate::test_utils::EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_SOCKET_DIR",
+        ]);
+        let directory =
+            std::env::temp_dir().join(format!("ab-profile-time-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&directory).unwrap();
+        env.set("HOME", directory.to_str().unwrap());
+        env.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        env.set(
+            "AGENT_BROWSER_HOME",
+            directory.join("agent-home").to_str().unwrap(),
+        );
+        env.set(
+            "AGENT_BROWSER_SOCKET_DIR",
+            directory.join("s").to_str().unwrap(),
+        );
+        let mut initial = state();
+        let profile = initial.profiles.get_mut("last30days-facebook").unwrap();
+        profile.target_service_ids = vec!["qbo".into()];
+        profile.authenticated_service_ids = vec!["qbo".into()];
+        let capability = "synthetic-profile-apply-deadline-capability-at-least-thirty-two-bytes";
+        register_profile_capability(
+            &mut initial.service_principals,
+            ServicePrincipalRegistrationRequest {
+                principal_id: "principal:last30days".into(),
+                display_name: None,
+                profile_id: "last30days-facebook".into(),
+                registered_at: Some("2026-01-01T00:00:00Z".into()),
+                registered_by: Some("test".into()),
+            },
+            capability,
+        )
+        .unwrap();
+        let repository = LockedServiceStateRepository::default_json().unwrap();
+        repository
+            .mutate(|current| {
+                *current = initial.clone();
+                Ok(())
+            })
+            .unwrap();
+        let _time = crate::connection::stable_time::Fixture::set(Ok(
+            crate::connection::stable_time::fixture_stamp(1_767_225_600_000),
+        ));
+        let planned = plan_profile_reset_command(&json!({
+            "action":"service_profile_reset_plan", "profileId":"last30days-facebook",
+            "profileCapability":capability, "scope":"authentication", "targetServiceId":"qbo",
+            "expiresAt":"2026-01-01T00:05:00Z", "idempotencyKey":"qualified-apply",
+        }))
+        .unwrap();
+        let applied = apply_profile_reset_command(&json!({
+            "action":"service_profile_reset_apply", "profileId":"last30days-facebook",
+            "profileCapability":capability, "plan":planned["plan"],
+        }));
+        drop(repository);
+        crate::test_utils::remove_owned_fixture_dir(&directory).unwrap();
+        assert!(
+            applied.is_ok(),
+            "qualified admission is before expiry regardless of guest UTC: {:?}",
+            applied.as_ref().err()
+        );
+    }
+
+    #[test]
     fn authentication_reset_changes_only_selected_target_and_replays() {
         let mut initial = state();
         let profile = initial.profiles.get_mut("last30days-facebook").unwrap();
