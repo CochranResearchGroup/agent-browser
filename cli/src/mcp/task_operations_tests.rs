@@ -284,6 +284,13 @@ fn native_image_public_region_original_retains_scope_and_one_attempt() {
 }
 #[test]
 #[cfg(target_os = "linux")]
+fn native_owner_no_effect_reconciles_failed_original_and_preserves_archive_replay() {
+    native_image_public_completion_case(false, true, None, false, Some("no_effect"));
+    native_image_public_completion_case(false, true, None, false, Some("no_effect_bootstrap"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
 fn native_image_public_completion_and_input_survive_wall_clock_correction() {
     native_image_public_completion_case(true, true, Some("wall_correction"), false, None);
     native_image_public_completion_case(true, true, Some("wall_correction"), true, None);
@@ -359,7 +366,7 @@ fn native_image_public_completion_case(
     value["tabs"] = json!({"tab":{"id":"tab","targetId":"target","browserId":"browser","sessionId":"task","createdAtMs":1,"lastActivityAtMs":1}});
     value["sharedBrowserIds"] = json!(["browser"]);
     value["adoptedBrowserProcessIdentities"] = json!({"browser":{"profileId":"profile","cdpEndpoint":"","process":{"pid":process.pid,"startToken":process.start_token,"executablePath":process.executable_path,"browserFamily":process.browser_family}}});
-    let store = BrowserSessionSqliteStore::default_sqlite().unwrap();
+    let mut store = BrowserSessionSqliteStore::default_sqlite().unwrap();
     store
         .save_session_state(&serde_json::from_value(value).unwrap())
         .unwrap();
@@ -478,6 +485,25 @@ fn native_image_public_completion_case(
                 "https://owned.example.test",
             ).map_err(|error| {admission_detail=format!("policy:{} clock={:?}",error.split(':').next().unwrap_or("unknown"),task_operations::completion_failure_clock(&error));error})?;
             crate::native::browser_task_operations::retain_native_site_policy(&command, &binding).map_err(|error| {admission_detail=format!("publication:{} clock={:?}",error.split(':').next().unwrap_or("unknown"),task_operations::completion_failure_clock(&error));error})?;
+            if matches!(round_fault, Some("no_effect" | "no_effect_bootstrap")) {
+                struct RefusingOwner(&'static str);
+                impl crate::native::browser_native_control::NativeOwner for RefusingOwner {
+                    fn image_observation_clock(&mut self) -> Result<crate::native::browser_native_image::NativeImageClockReading, String> {
+                        Err(self.0.into())
+                    }
+                    fn request(&mut self, _: &str, _: &Value) -> Result<Value,String> { panic!("Refused before any physical attempt") }
+                    fn record_pre_input_refusal(&mut self, command: &Value, refusal: &crate::native::browser_native_control::PreInputRefusal) -> Result<(),String> {
+                        crate::native::browser_task_operations::record_native_no_effect(command, refusal)
+                    }
+                }
+                let original = agent_browser_service_model::RecordedProcessIdentity { pid:process.pid,
+                    start_token:process.start_token.clone().unwrap(), executable_path:process.executable_path.clone(), browser_family:process.browser_family.clone() };
+                let target = agent_browser_service_model::RemoteViewApplicationTarget { assignment_id:"fixture".into(),registration_id:"fixture".into(),
+                    desktop_id:"lifecycle".into(),lifecycle_generation:1,viewing_desktop_id:"viewing".into(),viewing_generation:9 };
+                let cause = if round_fault == Some("no_effect_bootstrap") { "browser_native_owner_unconfigured" } else { "browser_native_time_unavailable:cause=stable_time_client_start_failed" };
+                let error = crate::native::browser_native_control::execute(&original, &target, &command, &mut RefusingOwner(cause)).unwrap_err();
+                return Ok(crate::connection::Response { success:false, error:Some(error), ..Default::default() });
+            }
             Ok(crate::connection::Response {
                 success: acknowledged,
                 data: Some(json!({"source":"remote_view_native","delivery":"dispatched"})),
@@ -491,6 +517,214 @@ fn native_image_public_completion_case(
     })
     .unwrap();
     let readback = task_operations::lookup("task", "image-attempt").unwrap();
+    if matches!(round_fault, Some("no_effect" | "no_effect_bootstrap")) {
+        assert_eq!(readback["operation"]["state"], "uncertain");
+        let original_failure = if round_fault == Some("no_effect_bootstrap") {
+            "browser_native_owner_unconfigured"
+        } else {
+            "browser_native_time_unavailable:cause=stable_time_client_start_failed"
+        };
+        let signature = store.load_session_state().unwrap().task_operations["task"]
+            ["image-attempt"]
+            .evidence_references["nativeOwnerNoEffectSignature"]
+            .clone();
+        store
+            .mutate_session_state(|state| {
+                state
+                    .task_operations
+                    .get_mut("task")
+                    .unwrap()
+                    .get_mut("image-attempt")
+                    .unwrap()
+                    .evidence_references
+                    .insert("nativeOwnerNoEffectSignature".into(), "00".into());
+                Ok(())
+            })
+            .unwrap();
+        assert!(
+            crate::native::browser_task_operations::reconcile_native_no_effect(
+                "task",
+                "image-attempt"
+            )
+            .unwrap_err()
+            .contains("proof_invalid")
+        );
+        store
+            .mutate_session_state(|state| {
+                state
+                    .task_operations
+                    .get_mut("task")
+                    .unwrap()
+                    .get_mut("image-attempt")
+                    .unwrap()
+                    .evidence_references
+                    .insert("nativeOwnerNoEffectSignature".into(), signature.clone());
+                state.next_session_sequence += 1;
+                state.browsers.get_mut("browser").unwrap().pid = u32::MAX;
+                Ok(())
+            })
+            .unwrap();
+        let advanced = crate::native::browser_host_control::change(
+            "browser",
+            "takeover",
+            0,
+            "human",
+            "Fixture epoch advance after refusal",
+            false,
+        )
+        .unwrap();
+        let public = task_operations::call(&json!({"taskId":"task","params":{"operation":"reconcile","requestId":"image-attempt","claim":"no_effect"}}), "fixture").unwrap();
+        let settled: Value =
+            serde_json::from_str(public["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(
+            settled["data"]["operation"]["state"],
+            "owner_refused_no_effect"
+        );
+        assert_eq!(
+            settled["data"]["operation"]["originalResponse"]["success"],
+            false
+        );
+        assert_eq!(settled["data"]["operation"]["effectStatus"], "no_effect");
+        assert_eq!(settled["data"]["currentContext"], "changed_or_missing");
+        assert!(!settled.to_string().contains("fingerprint"));
+        task_operations::with_context(Some(&params), || {
+            let replay = task_operations::transport(input.clone(), |_| {
+                panic!("Settled failed original must never replay")
+            })
+            .unwrap();
+            assert!(!replay.success);
+            assert_eq!(replay.error.as_deref(), Some(original_failure));
+            assert_eq!(replay.data.unwrap()["dispatchAttempted"], false);
+            Ok(Value::Null)
+        })
+        .unwrap();
+        let mut changed = input.clone();
+        changed["imageAttempt"]["selectedCandidateIds"] = json!(["different-intent"]);
+        task_operations::with_context(Some(&params), || {
+            assert!(task_operations::transport(changed, |_| panic!(
+                "Changed original arguments cannot dispatch"
+            ))
+            .err()
+            .unwrap()
+            .contains("request_conflict"));
+            Ok(Value::Null)
+        })
+        .unwrap();
+        store
+            .mutate_session_state(|state| {
+                state.browsers.get_mut("browser").unwrap().pid = process.pid;
+                Ok(())
+            })
+            .unwrap();
+        let returned = crate::native::browser_host_control::change(
+            "browser",
+            "return",
+            advanced,
+            "human",
+            "Fixture viewer return",
+            false,
+        )
+        .unwrap();
+        let fresh_control = crate::native::browser_host_control::admit(
+            "browser",
+            "native_capture",
+            "fresh-after-no-effect",
+        )
+        .unwrap()
+        .unwrap();
+        let mut reopened = BrowserSessionSqliteStore::default_sqlite().unwrap();
+        reopened
+            .task_operation_capacity(
+                "task",
+                "task",
+                Some(
+                    serde_json::from_value(
+                        json!({"initialCapacity":1,"extensionIncrement":1,"maximumCapacity":1}),
+                    )
+                    .unwrap(),
+                ),
+            )
+            .unwrap();
+        let mut fresh_params = capture_params.clone();
+        fresh_params["arguments"]["requestId"] = json!("fresh-after-no-effect");
+        task_operations::with_context(Some(&fresh_params), || {
+            task_operations::transport(json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":profile}), |_| Ok(crate::connection::Response { success:true,
+                data:Some(json!({"nativeImageObservation":observation})), ..Default::default() })).unwrap(); Ok(Value::Null)
+        }).unwrap();
+        fresh_control.finish(true).unwrap();
+        assert_eq!(
+            crate::native::browser_host_control::read("browser")
+                .unwrap()
+                .epoch,
+            returned
+        );
+        let db =
+            rusqlite::Connection::open(BrowserSessionSqliteStore::default_sqlite_path().unwrap())
+                .unwrap();
+        assert_eq!(
+            db.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            7,
+            "Archival cannot downgrade the failed-terminal reader guard"
+        );
+        assert_eq!(
+            reopened
+                .archived_task_operation("task", "image-attempt")
+                .unwrap()
+                .unwrap()
+                .state,
+            agent_browser_service_model::BrowserTaskOperationState::OwnerRefusedNoEffect
+        );
+        let mut next = input.clone();
+        next["imageAttempt"]["observationRequestId"] = json!("fresh-after-no-effect");
+        let next_params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_input","requestId":"new-explicit-intent","params":next}});
+        task_operations::with_context(Some(&next_params), || {
+            let response = task_operations::transport(next.clone(), |command| {
+                let binding = crate::native::browser_task_operations::native_site_policy(
+                    &command,
+                    "https://owned.example.test",
+                )?;
+                crate::native::browser_task_operations::retain_native_site_policy(
+                    &command, &binding,
+                )?;
+                Ok(crate::connection::Response {
+                    success: true,
+                    data: Some(json!({"source":"remote_view_native","delivery":"dispatched"})),
+                    ..Default::default()
+                })
+            })
+            .unwrap();
+            assert!(response.success);
+            assert_eq!(
+                response.data.as_ref().unwrap()["taskOperation"]["state"],
+                "owner_acknowledged"
+            );
+            Ok(Value::Null)
+        })
+        .unwrap();
+        task_operations::with_context(Some(&params), || {
+            let replay = task_operations::transport(input.clone(), |_| {
+                panic!("Archived failed original must never replay")
+            })
+            .unwrap();
+            assert!(!replay.success);
+            assert_eq!(replay.error.as_deref(), Some(original_failure));
+            Ok(Value::Null)
+        })
+        .unwrap();
+        return;
+    }
+    if !acknowledged {
+        assert!(
+            crate::native::browser_task_operations::reconcile_native_no_effect(
+                "task",
+                "image-attempt"
+            )
+            .unwrap_err()
+            .contains("proof_missing"),
+            "Post-dispatch unknown input cannot be settled from a caller claim or error text"
+        );
+    }
     assert_eq!(
         readback["operation"]["state"],
         if acknowledged {

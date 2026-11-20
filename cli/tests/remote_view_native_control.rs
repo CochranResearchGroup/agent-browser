@@ -88,6 +88,63 @@ fn native_task_input_joins_original_process_and_current_viewing_generation() {
     );
     assert_eq!(owner.calls[1].1["expectedWidth"], 1024);
     assert_eq!(owner.calls[1].1["actions"][0]["chord"], "Tab");
+    struct FailedOwner {
+        fixture: NativeFixture,
+        before: bool,
+        attestations: usize,
+    }
+    impl browser_native_control::NativeOwner for FailedOwner {
+        fn request(
+            &mut self,
+            operation: &str,
+            body: &serde_json::Value,
+        ) -> Result<serde_json::Value, String> {
+            if operation == "observe" && self.before {
+                return Err("transport closed".into());
+            }
+            if operation == "input" {
+                self.fixture.calls.push((operation.into(), body.clone()));
+                return Err("transport closed".into());
+            }
+            self.fixture.request(operation, body)
+        }
+        fn record_pre_input_refusal(
+            &mut self,
+            _: &serde_json::Value,
+            _: &browser_native_control::PreInputRefusal,
+        ) -> Result<(), String> {
+            self.attestations += 1;
+            Ok(())
+        }
+    }
+    for before in [true, false] {
+        let mut failed = FailedOwner {
+            fixture: NativeFixture { calls: vec![] },
+            before,
+            attestations: 0,
+        };
+        assert!(browser_native_control::execute(
+            &original,
+            &target,
+            &serde_json::json!({"action":"native_input","actions":[{"kind":"key","chord":"Tab"}]}),
+            &mut failed
+        )
+        .is_err());
+        assert_eq!(
+            failed.attestations,
+            usize::from(before),
+            "Identical error text cannot prove effect status; the actual attempted boundary does"
+        );
+        assert_eq!(
+            failed
+                .fixture
+                .calls
+                .iter()
+                .filter(|(operation, _)| operation == "input")
+                .count(),
+            usize::from(!before)
+        );
+    }
 }
 
 #[test]

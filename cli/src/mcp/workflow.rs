@@ -282,10 +282,7 @@ pub(super) fn inspect_briefing(task_id: &str) -> Result<Value, String> {
         uncertain.extend(
             operations
                 .values()
-                .filter(|operation| {
-                    operation.state
-                        != agent_browser_service_model::BrowserTaskOperationState::OwnerAcknowledged
-                })
+                .filter(|operation| !operation.state.is_terminal())
                 .map(|operation| {
                     json!({"source":"task_operation","operationId":operation.request_id,
                 "state":operation.state,"retryAllowed":false})

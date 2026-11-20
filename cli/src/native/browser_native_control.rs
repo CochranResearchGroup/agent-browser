@@ -96,7 +96,58 @@ impl NativeChallengeObservation {
     }
 }
 
+/// Monotonic physical boundary. No caller field can reset or construct it.
+pub struct InputAttempt {
+    attempted: bool,
+}
+impl InputAttempt {
+    pub fn mark_attempted(&mut self) {
+        self.attempted = true;
+    }
+}
+/// Minted only by execute after a Native input returns before its physical boundary.
+/// It is deliberately neither deserializable nor constructible by adapters.
+pub struct PreInputRefusal {
+    code: String,
+    cause: Option<String>,
+    process: RecordedProcessIdentity,
+    target: RemoteViewApplicationTarget,
+}
+impl PreInputRefusal {
+    pub fn process(&self) -> &RecordedProcessIdentity {
+        &self.process
+    }
+    pub fn target(&self) -> &RemoteViewApplicationTarget {
+        &self.target
+    }
+    pub fn code(&self) -> &str {
+        &self.code
+    }
+    pub fn response_error(&self) -> String {
+        self.cause.as_ref().map_or_else(
+            || self.code.clone(),
+            |cause| format!("{}:cause={cause}", self.code),
+        )
+    }
+}
+
 pub trait NativeOwner {
+    fn dispatch_input(
+        &mut self,
+        body: &Value,
+        attempt: &mut InputAttempt,
+    ) -> Result<Value, String> {
+        // Unknown adapters are conservative: a failed call may have sent input.
+        attempt.mark_attempted();
+        self.request("input", body)
+    }
+    fn record_pre_input_refusal(
+        &mut self,
+        _command: &Value,
+        _refusal: &PreInputRefusal,
+    ) -> Result<(), String> {
+        Ok(())
+    }
     /// Time is an external boundary, independently of OCR and pixel fixtures.
     fn image_observation_clock(
         &mut self,
@@ -138,6 +189,74 @@ pub fn execute(
     target: &RemoteViewApplicationTarget,
     command: &Value,
     owner: &mut impl NativeOwner,
+) -> Result<Value, String> {
+    let mut attempt = InputAttempt { attempted: false };
+    let result = execute_inner(original, target, command, owner, &mut attempt);
+    if command["action"] == "native_input" && !attempt.attempted {
+        if let Err(error) = &result {
+            let code = error
+                .split(':')
+                .next()
+                .filter(|code| {
+                    !code.is_empty()
+                        && code.len() <= 128
+                        && code.bytes().all(|byte| {
+                            byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_'
+                        })
+                })
+                .unwrap_or("browser_native_input_refused")
+                .to_string();
+            let cause = error
+                .split("cause=")
+                .nth(1)
+                .and_then(|value| {
+                    value
+                        .split(|byte: char| !(byte.is_ascii_lowercase() || byte == '_'))
+                        .next()
+                })
+                .filter(|cause| {
+                    matches!(
+                        *cause,
+                        "stable_time_service_unqualified"
+                            | "stable_time_client_start_failed"
+                            | "stable_time_client_configuration_missing"
+                            | "stable_time_client_timeout"
+                            | "stable_time_client_request_failed"
+                            | "stable_time_client_response_invalid"
+                            | "stable_time_client_response_unavailable"
+                            | "stable_time_client_input_failed"
+                            | "stable_time_client_wait_failed"
+                            | "stable_time_client_response_too_large"
+                            | "stable_time_client_transport_unavailable"
+                            | "stable_time_client_input_unavailable"
+                            | "stable_time_client_bounded_transport_unsupported"
+                    )
+                })
+                .map(str::to_owned);
+            if owner
+                .record_pre_input_refusal(
+                    command,
+                    &PreInputRefusal {
+                        code,
+                        cause,
+                        process: original.clone(),
+                        target: target.clone(),
+                    },
+                )
+                .is_err()
+            {
+                return Err(format!("{error};ownerNoEffectEvidence=unavailable"));
+            }
+        }
+    }
+    result
+}
+fn execute_inner(
+    original: &RecordedProcessIdentity,
+    target: &RemoteViewApplicationTarget,
+    command: &Value,
+    owner: &mut impl NativeOwner,
+    input_attempt: &mut InputAttempt,
 ) -> Result<Value, String> {
     if !matches!(
         command["action"].as_str(),
@@ -818,7 +937,7 @@ pub fn execute(
             now,
         )?;
     }
-    let reply = owner.request("input", &body)?;
+    let reply = owner.dispatch_input(&body, input_attempt)?;
     Ok(
         json!({"source":"remote_view_native","delivery":reply["delivery"].as_str().unwrap_or("unknown"),"taskCompleted":false}),
     )

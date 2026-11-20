@@ -955,6 +955,15 @@ pub enum BrowserTaskOperationState {
     Pending,
     OwnerAcknowledged,
     Uncertain,
+    /// Owner-signed proof that this refused original attempted no physical input.
+    /// Replaying this ID returns its original failed outcome, never input success.
+    OwnerRefusedNoEffect,
+}
+
+impl BrowserTaskOperationState {
+    pub fn is_terminal(self) -> bool {
+        matches!(self, Self::OwnerAcknowledged | Self::OwnerRefusedNoEffect)
+    }
 }
 
 /// A completed local artifact operation, without its path or private contents.

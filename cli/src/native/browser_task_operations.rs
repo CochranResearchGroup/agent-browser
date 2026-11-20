@@ -34,6 +34,18 @@ fn operation_history(
             .flat_map(|rows| rows.iter())
             .map(|(id, row)| (id.clone(), row.clone())),
     );
+    if rows
+        .values()
+        .any(|row| row.state == BrowserTaskOperationState::OwnerRefusedNoEffect)
+    {
+        let secret = key(true)?;
+        for row in rows
+            .values()
+            .filter(|row| row.state == BrowserTaskOperationState::OwnerRefusedNoEffect)
+        {
+            verified_no_effect(row, &secret)?;
+        }
+    }
     Ok(rows)
 }
 
@@ -357,6 +369,178 @@ fn same_request(
     })
 }
 
+pub(crate) fn native_caller_fingerprint(task: &str, command: &Value) -> Result<String, String> {
+    Ok(hex::encode(mac(&key(true)?, &json!({"schemaVersion":"agent-browser.native-caller.v1","taskId":task,"command":command}))?.finalize().into_bytes()))
+}
+pub(crate) fn exact_original(
+    task: &str,
+    request: &str,
+) -> Result<Option<BrowserTaskOperation>, String> {
+    let store = BrowserSessionSqliteStore::open_read_only(
+        &BrowserSessionSqliteStore::default_sqlite_path()?,
+    )?;
+    let state = store.load_session_state()?;
+    Ok(state
+        .task_operations
+        .get(task)
+        .and_then(|rows| rows.get(request))
+        .cloned()
+        .or(store.archived_task_operation(task, request)?))
+}
+
+fn dispatch_scope(original: &BrowserTaskOperation) -> Value {
+    json!({"schemaVersion":"agent-browser.native-dispatch.v1","requestId":original.request_id,
+        "taskId":original.task_id,"fingerprint":original.fingerprint,"context":RetainedContext::from_operation(original)})
+}
+
+const NO_EFFECT_PROOF: &str = "nativeOwnerNoEffectProof";
+const NO_EFFECT_SIGNATURE: &str = "nativeOwnerNoEffectSignature";
+
+/// The unconstructible permit comes only from the actual Native effect boundary.
+/// It is not a public command argument or an interpretation of an error prefix.
+pub(crate) fn record_native_no_effect(
+    command: &Value,
+    refusal: &super::browser_native_control::PreInputRefusal,
+) -> Result<(), String> {
+    let secret = key(true)?;
+    let task = command["sessionId"]
+        .as_str()
+        .ok_or("browser_native_no_effect_scope_invalid")?;
+    let request = command["id"]
+        .as_str()
+        .ok_or("browser_native_no_effect_scope_invalid")?;
+    BrowserSessionSqliteStore::default_sqlite()?.mutate_session_state(|state| {
+        let original = state.task_operations.get_mut(task).and_then(|rows| rows.get_mut(request))
+            .filter(|row| row.action == "native_input" && matches!(row.state, BrowserTaskOperationState::Pending | BrowserTaskOperationState::Uncertain))
+            .ok_or("browser_native_no_effect_original_missing")?;
+        let scope = RetainedContext::from_operation(original);
+        let expected_scope: RetainedContext = serde_json::from_value(command["taskOperationExpected"]["context"].clone()).map_err(|_| "browser_native_no_effect_scope_invalid")?;
+        let seal = command["taskOperationExpected"]["dispatchSeal"].as_str().and_then(|seal| hex::decode(seal).ok()).ok_or("browser_native_no_effect_scope_invalid")?;
+        mac(&secret, &dispatch_scope(original))?.verify_slice(&seal).map_err(|_| "browser_native_no_effect_scope_invalid")?;
+        if scope != expected_scope || command["taskOperationExpected"]["requestId"] != request || command["action"] != original.action
+            || original.process_identity.as_ref() != Some(refusal.process()) { return Err("browser_native_no_effect_scope_invalid".into()); }
+        let proof = json!({"schemaVersion":"agent-browser.native-no-effect.v1","taskId":task,"requestId":request,
+            "fingerprint":original.fingerprint,"callerFingerprint":original.evidence_references.get("callerCommandFingerprint"),"context":scope,"nativeTarget":refusal.target(),"effectStatus":"no_effect",
+            "originalResponse":{"success":false,"code":refusal.code(),"error":refusal.response_error()}});
+        let encoded = serde_json::to_string(&proof).map_err(|_| "browser_native_no_effect_proof_invalid")?;
+        if let Some(prior) = original.evidence_references.get(NO_EFFECT_PROOF) {
+            return if prior == &encoded { Ok(()) } else { Err("browser_native_no_effect_proof_conflict".into()) };
+        }
+        let signature = hex::encode(mac(&secret, &proof)?.finalize().into_bytes());
+        original.evidence_references.insert(NO_EFFECT_PROOF.into(), encoded);
+        original.evidence_references.insert(NO_EFFECT_SIGNATURE.into(), signature);
+        Ok(())
+    })
+}
+
+fn verified_no_effect(original: &BrowserTaskOperation, secret: &[u8; 32]) -> Result<Value, String> {
+    let proof: Value = serde_json::from_str(original.evidence_references.get(NO_EFFECT_PROOF)
+        .ok_or("browser_native_no_effect_proof_missing: inspect the original operation; uncertain input cannot be declared no-effect by the caller")?)
+        .map_err(|_| "browser_native_no_effect_proof_invalid")?;
+    let signature = hex::decode(
+        original
+            .evidence_references
+            .get(NO_EFFECT_SIGNATURE)
+            .ok_or("browser_native_no_effect_proof_invalid")?,
+    )
+    .map_err(|_| "browser_native_no_effect_proof_invalid")?;
+    mac(secret, &proof)?
+        .verify_slice(&signature)
+        .map_err(|_| "browser_native_no_effect_proof_invalid")?;
+    if proof["schemaVersion"] != "agent-browser.native-no-effect.v1"
+        || proof["taskId"] != original.task_id
+        || proof["requestId"] != original.request_id
+        || proof["fingerprint"] != original.fingerprint
+        || proof["callerFingerprint"]
+            != serde_json::to_value(original.evidence_references.get("callerCommandFingerprint"))
+                .map_err(|_| "browser_native_no_effect_scope_invalid")?
+        || proof["context"]
+            != serde_json::to_value(RetainedContext::from_operation(original))
+                .map_err(|_| "browser_native_no_effect_scope_invalid")?
+        || proof["effectStatus"] != "no_effect"
+        || proof["originalResponse"]["success"] != false
+    {
+        return Err("browser_native_no_effect_scope_invalid".into());
+    }
+    Ok(proof)
+}
+
+/// Explicit read-first settlement. Only durable owner proof can resolve this
+/// original; no input is dispatched and changed current scope stays refused.
+pub(crate) fn reconcile_native_no_effect(
+    task: &str,
+    request: &str,
+) -> Result<BrowserTaskOperation, String> {
+    let secret = key(true)?;
+    let mut store = BrowserSessionSqliteStore::default_sqlite()?;
+    if let Some(row) = store.archived_task_operation(task, request)? {
+        if row.state == BrowserTaskOperationState::OwnerRefusedNoEffect {
+            verified_no_effect(&row, &secret)?;
+            return Ok(row);
+        }
+        return Err("browser_native_no_effect_original_not_eligible".into());
+    }
+    store.mutate_session_state_with_connection(|state, connection| {
+        let original = state
+            .task_operations
+            .get(task)
+            .and_then(|rows| rows.get(request))
+            .cloned()
+            .ok_or("browser_task_operation_not_found")?;
+        verified_no_effect(&original, &secret)?;
+        if original.state == BrowserTaskOperationState::OwnerRefusedNoEffect {
+            return Ok(original);
+        }
+        if original.action != "native_input"
+            || !matches!(
+                original.state,
+                BrowserTaskOperationState::Pending | BrowserTaskOperationState::Uncertain
+            )
+        {
+            return Err("browser_native_no_effect_original_not_eligible".into());
+        }
+        // Current identity/epoch may have advanced since this historical refusal.
+        // Its immutable signed original remains valid; only a NEW intent needs
+        // current context/freshness. No rollback/adoption is authorized here.
+        let row = state
+            .task_operations
+            .get_mut(task)
+            .unwrap()
+            .get_mut(request)
+            .unwrap();
+        row.state = BrowserTaskOperationState::OwnerRefusedNoEffect;
+        if row.completed_at_ms.is_none() {
+            row.completed_at_ms = Some(now_ms()?);
+        }
+        connection
+            .pragma_update(None, "user_version", 7)
+            .map_err(|_| "browser_native_no_effect_publication_failed")?;
+        Ok(row.clone())
+    })
+}
+
+pub(crate) fn validate_no_effect_outcome(original: &BrowserTaskOperation) -> Result<(), String> {
+    if original.state == BrowserTaskOperationState::OwnerRefusedNoEffect {
+        verified_no_effect(original, &key(true)?)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn original_no_effect_failure(original: &BrowserTaskOperation) -> Option<String> {
+    (original.state == BrowserTaskOperationState::OwnerRefusedNoEffect).then(|| {
+        original
+            .evidence_references
+            .get(NO_EFFECT_PROOF)
+            .and_then(|encoded| serde_json::from_str::<Value>(encoded).ok())
+            .and_then(|proof| {
+                proof["originalResponse"]["error"]
+                    .as_str()
+                    .map(str::to_owned)
+            })
+            .unwrap_or_else(|| "browser_native_input_refused".into())
+    })
+}
+
 /// Admit once against exact current logical/physical scope before daemon ensure.
 pub(crate) fn begin(task_id: &str, command: &mut Value) -> Result<Admission, String> {
     begin_inner(task_id, command, false)
@@ -388,7 +572,11 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
         if original.task_id != task_id || original.request_id != request_id {
             return Err("browser_task_operation_identity_conflict".into());
         }
-        same_request(&key(true)?, command, &original)?;
+        let secret = key(true)?;
+        same_request(&secret, command, &original)?;
+        if original.state == BrowserTaskOperationState::OwnerRefusedNoEffect {
+            verified_no_effect(&original, &secret)?;
+        }
         return Ok(Admission::Existing(original.clone()));
     }
     // Observe once before acquiring any writer lock. This is admission evidence,
@@ -452,7 +640,7 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
     }
     let key = key(has_history)?;
     let fingerprint = hex::encode(mac(&key, command)?.finalize().into_bytes());
-    let original = BrowserTaskOperation {
+    let mut original = BrowserTaskOperation {
         request_id: request_id.clone(),
         task_id: task_id.into(),
         profile_id: expected.profile_id.clone(),
@@ -542,6 +730,9 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
             )
         {
             same_request(&key, command, &prior)?;
+            if prior.state == BrowserTaskOperationState::OwnerRefusedNoEffect {
+                verified_no_effect(&prior, &key)?;
+            }
             return Ok(Admission::Existing(prior.clone()));
         }
         if context(state, task_id)? != expected {
@@ -582,8 +773,12 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
         Ok(Admission::Dispatch(admitted))
     })?;
     if let Admission::Dispatch(ref original) = admitted {
-        command["taskOperationExpected"] =
-            json!({"requestId":original.request_id,"context":expected});
+        let dispatch_seal = hex::encode(
+            mac(&key, &dispatch_scope(original))?
+                .finalize()
+                .into_bytes(),
+        );
+        command["taskOperationExpected"] = json!({"requestId":original.request_id,"context":expected,"dispatchSeal":dispatch_seal});
         command["retainedTaskOnly"] = json!(true);
         command["noTransportReplay"] = json!(true);
     }
@@ -613,6 +808,7 @@ fn native_kernel_admit(
         .to_owned();
     let prior = operation_history(state, task_id)?.values().any(|row| {
         row.request_id != command["id"]
+            && row.state != BrowserTaskOperationState::OwnerRefusedNoEffect
             && row.action == "native_input"
             && row
                 .evidence_references
@@ -952,6 +1148,11 @@ pub(crate) fn native_site_policy(command: &Value, verified_origin: &str) -> Resu
 /// or origin changes. No recognized page text or URL path is retained.
 #[cfg(test)]
 pub(crate) fn retain_native_site_policy(command: &Value, binding: &Value) -> Result<(), String> {
+    if let Some(tag) = command["_taskOperationCallerFingerprint"].as_str() {
+        original
+            .evidence_references
+            .insert("callerCommandFingerprint".into(), tag.into());
+    }
     let mut store = BrowserSessionSqliteStore::default_sqlite()?;
     let expected = store.load_session_state()?;
     retain_native_site_policy_for_owner(&mut store, command, binding, &expected).map(|_| ())
@@ -1593,6 +1794,7 @@ fn image_attempt_budget(
         .values()
         .filter(|row| {
             row.request_id != request
+                && row.state != BrowserTaskOperationState::OwnerRefusedNoEffect
                 && row.action == "native_input"
                 && row
                     .evidence_references
@@ -1715,6 +1917,9 @@ fn login_episode_step(
     let task_context = context(state, task)?;
     let mut prior = Vec::new();
     for row in history.values() {
+        if row.state == BrowserTaskOperationState::OwnerRefusedNoEffect {
+            continue;
+        }
         let Some(id) = row.evidence_references.get("nativeLoginEpisode") else {
             continue;
         };

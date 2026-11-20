@@ -5,13 +5,30 @@ use agent_browser_service_model::BrowserTaskOperation;
 use serde_json::{json, Value};
 
 pub(super) fn projection(operation: &BrowserTaskOperation) -> Value {
+    let references = operation
+        .evidence_references
+        .iter()
+        .filter(|(key, _)| {
+            !matches!(
+                key.as_str(),
+                "nativeOwnerNoEffectProof"
+                    | "nativeOwnerNoEffectSignature"
+                    | "callerCommandFingerprint"
+            )
+        })
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let no_effect = operation.state
+        == agent_browser_service_model::BrowserTaskOperationState::OwnerRefusedNoEffect;
     json!({"requestId":operation.request_id,"taskId":operation.task_id,
         "profileId":operation.profile_id,"browserId":operation.browser_id,
         "tabId":operation.tab_id,"targetId":operation.target_id,
         "processPid":operation.process_pid,"controlEpoch":operation.control_epoch,
         "action":operation.action,"state":operation.state,
         "createdAtMs":operation.created_at_ms,"completedAtMs":operation.completed_at_ms,
-        "evidenceReferences":operation.evidence_references,"retryAllowed":false,
+        "evidenceReferences":references,"retryAllowed":false,
+        "effectStatus":if no_effect {"no_effect"} else if operation.state == agent_browser_service_model::BrowserTaskOperationState::OwnerAcknowledged {"acknowledged"} else {"uncertain"},
+        "originalResponse":crate::native::browser_task_operations::original_no_effect_failure(operation).map(|error| json!({"success":false,"error":error})),
         "siteOutcome":"unverified"})
 }
 
@@ -27,6 +44,7 @@ pub(super) fn lookup(task_id: &str, request_id: &str) -> Result<Value, String> {
         .or(store.archived_task_operation(task_id, request_id)?)
         .filter(|row| row.task_id == task_id && row.request_id == request_id)
         .ok_or("browser_task_operation_not_found")?;
+    crate::native::browser_task_operations::validate_no_effect_outcome(&operation)?;
     let current = state.sessions.get(task_id);
     let unchanged = current.is_some_and(|task| {
         task.browser_id == operation.browser_id
@@ -55,7 +73,12 @@ pub(super) fn lookup(task_id: &str, request_id: &str) -> Result<Value, String> {
 
 pub(super) fn call(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
     let task_id = required_string_argument(arguments, "taskId")?;
-    let data = if arguments["params"]["operation"] == "capacity" {
+    let data = if arguments["params"]["operation"] == "reconcile" {
+        let request = required_string_argument(&arguments["params"], "requestId")?;
+        crate::native::browser_task_operations::reconcile_native_no_effect(task_id, request)
+            .map_err(|error| JsonRpcError::invalid_params(&error))?;
+        lookup(task_id, request).map_err(|error| JsonRpcError::invalid_params(&error))?
+    } else if arguments["params"]["operation"] == "capacity" {
         let policy = arguments["params"]
             .get("policy")
             .map(|value| serde_json::from_value(value.clone()))
@@ -182,6 +205,25 @@ fn response_data(
     data.insert("replayed".into(), json!(replayed));
     data.insert("dispatchAttempted".into(), json!(!replayed));
     response.data = Some(Value::Object(data));
+}
+
+fn existing_response(original: &BrowserTaskOperation) -> crate::connection::Response {
+    let mut response = crate::connection::Response {
+        success: original.state
+            == agent_browser_service_model::BrowserTaskOperationState::OwnerAcknowledged,
+        id: Some(original.request_id.clone()),
+        error: (original.state
+            != agent_browser_service_model::BrowserTaskOperationState::OwnerAcknowledged)
+            .then(|| {
+                crate::native::browser_task_operations::original_no_effect_failure(original)
+                    .unwrap_or_else(|| {
+                        "browser_task_operation_uncertain: inspect original; no retry".into()
+                    })
+            }),
+        ..Default::default()
+    };
+    response_data(&mut response, original, true);
+    response
 }
 
 /// Return only reviewed static completion diagnostics. Store errors can contain
@@ -340,6 +382,30 @@ pub(super) fn transport_with_latency(
         if let Some(request_id) = context.request_id {
             command["id"] = json!(request_id);
         }
+        if command["action"] == "native_input"
+            && operations::eligible_native("native_input", &command)
+        {
+            // Historical failed originals are read before any current routing or
+            // process probe. Only our normalized actual caller args mint the tag.
+            let request = command["id"]
+                .as_str()
+                .ok_or("browser_task_operation_request_id_invalid")?;
+            let original = operations::exact_original(&context.task_id, request)?;
+            if original.as_ref().is_none_or(|row| {
+                row.evidence_references
+                    .contains_key("callerCommandFingerprint")
+            }) {
+                let tag = operations::native_caller_fingerprint(&context.task_id, &command)?;
+                if let Some(row) = original.as_ref().filter(|row| row.state == agent_browser_service_model::BrowserTaskOperationState::OwnerRefusedNoEffect) {
+                    operations::validate_no_effect_outcome(row)?;
+                    if row.evidence_references.get("callerCommandFingerprint") != Some(&tag) {
+                        return Err("browser_task_operation_request_conflict: inspect the original request; no replay".into());
+                    }
+                    return Ok(existing_response(row));
+                }
+                command["_taskOperationCallerFingerprint"] = json!(tag);
+            }
+        }
         let routing = crate::connection::latency::PhaseCapture::start("routing");
         let addressed = super::workflow::address_task_command_with_latency(
             &mut command,
@@ -361,19 +427,7 @@ pub(super) fn transport_with_latency(
             operations::begin(&context.task_id, &mut command)?
         };
         match admitted {
-            Admission::Existing(original) => {
-                let mut response = crate::connection::Response {
-                success: original.state
-                    == agent_browser_service_model::BrowserTaskOperationState::OwnerAcknowledged,
-                id: Some(original.request_id.clone()),
-                error: (original.state
-                    != agent_browser_service_model::BrowserTaskOperationState::OwnerAcknowledged)
-                    .then(|| "browser_task_operation_uncertain: inspect original; no retry".into()),
-                ..Default::default()
-            };
-                response_data(&mut response, &original, true);
-                Ok(response)
-            }
+            Admission::Existing(original) => Ok(existing_response(&original)),
             Admission::Dispatch(original) => {
                 bind_native_owner_allowance(&mut command, original.created_at_ms);
                 match run(command) {

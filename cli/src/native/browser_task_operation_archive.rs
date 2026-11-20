@@ -90,7 +90,16 @@ fn has_archive(connection: &Connection) -> Result<bool, String> {
     connection.query_row("SELECT 1 FROM sqlite_master WHERE type='table' AND name='task_operation_archive'", [], |_| Ok(())).optional().map(|v| v.is_some()).map_err(|_| "browser_task_operation_archive_read_failed: retry capacity inspection; original history is retained".into())
 }
 fn initialize(connection: &Connection) -> Result<(), String> {
-    connection.execute_batch("CREATE TABLE IF NOT EXISTS task_operation_archive(task_id TEXT NOT NULL, request_id TEXT NOT NULL, json TEXT NOT NULL, PRIMARY KEY(task_id,request_id)); PRAGMA user_version=6;").map_err(|_| "browser_task_operation_archive_unavailable: inspect runtime storage and retry the same request; no new effect was dispatched".into())
+    connection.execute_batch("CREATE TABLE IF NOT EXISTS task_operation_archive(task_id TEXT NOT NULL, request_id TEXT NOT NULL, json TEXT NOT NULL, PRIMARY KEY(task_id,request_id));").map_err(|_| "browser_task_operation_archive_unavailable: inspect runtime storage and retry the same request; no new effect was dispatched")?;
+    let version: i64 = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .map_err(|_| "browser_task_operation_archive_unavailable")?;
+    if version < 6 {
+        connection
+            .pragma_update(None, "user_version", 6)
+            .map_err(|_| "browser_task_operation_archive_unavailable")?;
+    }
+    Ok(())
 }
 /// Return an immutable original without loading unrelated archived history.
 pub(crate) fn archived(
@@ -161,10 +170,7 @@ pub(crate) fn make_room(
     }
     let completed: Vec<String> = rows
         .iter()
-        .filter(|(_, row)| {
-            row.state == BrowserTaskOperationState::OwnerAcknowledged
-                && row.completed_at_ms.is_some()
-        })
+        .filter(|(_, row)| row.state.is_terminal() && row.completed_at_ms.is_some())
         .map(|(id, _)| id.clone())
         .collect();
     if !completed.is_empty() {
@@ -318,7 +324,7 @@ impl BrowserSessionSqliteStore {
             .get(task)
             .into_iter()
             .flat_map(|r| r.values())
-            .filter(|r| r.state != BrowserTaskOperationState::OwnerAcknowledged)
+            .filter(|r| !r.state.is_terminal())
             .count();
         let artifact_count = state.task_artifact_references.get(task).map_or(0, Vec::len);
         let result = json!({"artifactReferenceCount":artifact_count,"artifactReferenceLimit":policy.maximum_artifact_references,"schemaVersion":POLICY_SCHEMA,"taskId":task,"policy":policy,"policySource":source,"capacity":capacity,"activeCount":active,"archivedCount":archived,"unresolvedCount":unresolved,"automaticArchival":true,"automaticExtension":true,"requiresRestart":false,"nextAction":{"tool":"browser_command","arguments":{"taskId":task,"action":"task_operation","params":{"operation":"capacity"}}}});
