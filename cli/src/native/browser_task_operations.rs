@@ -714,6 +714,11 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
             BTreeMap::new()
         },
     };
+    if let Some(tag) = command["_taskOperationCallerFingerprint"].as_str() {
+        original
+            .evidence_references
+            .insert("callerCommandFingerprint".into(), tag.into());
+    }
     let mut writer = BrowserSessionSqliteStore::default_sqlite()?;
     let admitted = writer.mutate_session_state_with_connection(|state, connection| {
         if let Some(prior) = state
@@ -781,7 +786,8 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
         command["taskOperationExpected"] = json!({"requestId":original.request_id,"context":expected,"dispatchSeal":dispatch_seal});
         command["retainedTaskOnly"] = json!(true);
         command["noTransportReplay"] = json!(true);
-        if native && action == "native_input" && command.get("ownerTimeoutMs").is_some() {
+        if native && command["action"] == "native_input" && command.get("ownerTimeoutMs").is_some()
+        {
             // The original MAC and durable admission above exclude this private
             // observation. Reuse this boundary's qualified observation; the
             // physical owner still samples fresh time immediately before input.
@@ -1159,11 +1165,6 @@ pub(crate) fn native_site_policy(command: &Value, verified_origin: &str) -> Resu
 /// or origin changes. No recognized page text or URL path is retained.
 #[cfg(test)]
 pub(crate) fn retain_native_site_policy(command: &Value, binding: &Value) -> Result<(), String> {
-    if let Some(tag) = command["_taskOperationCallerFingerprint"].as_str() {
-        original
-            .evidence_references
-            .insert("callerCommandFingerprint".into(), tag.into());
-    }
     let mut store = BrowserSessionSqliteStore::default_sqlite()?;
     let expected = store.load_session_state()?;
     retain_native_site_policy_for_owner(&mut store, command, binding, &expected).map(|_| ())

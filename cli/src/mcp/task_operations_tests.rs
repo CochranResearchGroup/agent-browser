@@ -37,7 +37,8 @@ fn native_owner_allowance_uses_private_service_admission_only_for_input() {
         json!({"action":"native_input","ownerTimeoutMs":1000}),
         |_| { panic!("Unqualified input allowance cannot dispatch") }
     )
-    .unwrap_err()
+    .err()
+    .expect("Unqualified input allowance must fail before dispatch")
     .contains("stable_time_client_start_failed"));
 }
 
