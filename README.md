@@ -45,6 +45,10 @@ Read recent task-scoped records without starting a browser:
 {"name":"browser_command","arguments":{"taskId":"session:report","action":"failure_log","params":{"occurrenceId":"RETURNED-OCCURRENCE-ID","limit":100}}}
 ```
 
+A known `occurrenceId` can be looked up without `taskId`, including admission
+failures before task creation. HTTP clients can use
+`GET /api/service/failures?occurrenceId=RETURNED-OCCURRENCE-ID`.
+
 Omit `occurrenceId` for recent task records. Filtering occurs before the result limit, so unrelated polling failures do not
 hide the selected occurrence. At most `limit` matching records are returned. The authenticated
 `GET /api/service/failures` and private journal remain available for diagnostics.

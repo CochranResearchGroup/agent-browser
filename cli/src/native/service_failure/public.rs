@@ -6,6 +6,15 @@ use crate::native::service_failure_journal::{
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
+fn code_token(value: &str) -> Option<&str> {
+    (!value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_'))
+    .then_some(value)
+}
+
 /// Preserve existing typed evidence, add executable exact-task inspection and
 /// publish sanitized refusal metadata. Request payloads never enter the journal.
 pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, source: &str) {
@@ -17,19 +26,25 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
         response,
         command["action"].as_str().unwrap_or("unknown"),
     );
-    let error = response["error"].as_str().unwrap_or("operation_failed");
+    let error = response["error"]
+        .as_str()
+        .unwrap_or("operation_failed")
+        .to_owned();
     let candidate = error.split(':').next().unwrap_or_default();
-    let code = if !candidate.is_empty()
-        && candidate.len() <= 128
-        && candidate
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
-    {
-        candidate
-    } else {
-        "service_operation_failed"
+    let code = code_token(candidate)
+        .unwrap_or("service_operation_failed")
+        .to_owned();
+    if had_failure {
+        if let Ok(Value::Object(defaults)) = serde_json::to_value(classify_service_failure(&error))
+        {
+            let fields = response["failure"]
+                .as_object_mut()
+                .expect("existing failure is an object");
+            for (key, value) in defaults {
+                fields.entry(key).or_insert(value);
+            }
+        }
     }
-    .to_owned();
     let failure = &mut response["failure"];
     if !had_failure && command["jobId"].is_null() && command["serviceJobId"].is_null() {
         failure
@@ -46,6 +61,19 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
     let request = command["requestId"]
         .as_str()
         .or_else(|| command["id"].as_str());
+    if command["action"] == "failure_log" {
+        failure["effectState"] = json!("no_effect");
+    }
+    if code == "browser_task_operation_capacity_reached" {
+        failure["effectState"] = json!("no_effect");
+        failure["phase"] = json!("child_admission");
+        failure["recommendedAction"] = json!("inspect_task_operation_capacity");
+        if let Some(task) = task {
+            failure["executableNextAction"] = json!({"tool":"browser_command","executable":true,
+                "arguments":{"taskId":task,"action":"task_operation","params":{"operation":"capacity"}},
+                "purpose":"Inspect capacity and unresolved originals before adjusting configured limits"});
+        }
+    }
     if failure["executableNextAction"].is_null() {
         failure["executableNextAction"] = if let Some(task) = task {
             json!({"tool":"browser_command","executable":true,
@@ -60,12 +88,17 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
     if failure["occurrenceId"].is_string() {
         return;
     }
+    let journal_code = failure["code"]
+        .as_str()
+        .and_then(code_token)
+        .unwrap_or(&code)
+        .to_owned();
     let record = ServiceFailureRecord::new(
         ServiceFailureCategory::ServiceAction,
         source,
         "public_refusal",
-        &code,
-        &code,
+        &journal_code,
+        &journal_code,
     )
     .with_action(command["action"].as_str().unwrap_or("unknown"))
     .with_references(ServiceFailureReferences {

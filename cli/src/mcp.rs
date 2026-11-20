@@ -5595,7 +5595,7 @@ fn call_service_mcp_tool_inner(
         && !(name == "browser_command"
             && matches!(
                 arguments["action"].as_str(),
-                Some("profile_duplicate" | "browser_build")
+                Some("profile_duplicate" | "browser_build" | "failure_log")
             ))
     {
         required_string_argument(arguments, "taskId")?;
@@ -5735,14 +5735,28 @@ fn call_service_mcp_tool_inner(
             return task_retirement::call(arguments, session);
         }
         if arguments["action"] == "failure_log" {
-            let task = required_string_argument(arguments, "taskId")?;
+            let task = optional_string_argument(arguments, "taskId")?;
             let params = &arguments["params"];
-            let limit = params["limit"].as_u64().unwrap_or(100).clamp(1, 1000) as usize;
-            let journal = crate::native::service_failure_journal::read_task_failures(
-                task,
-                params["occurrenceId"].as_str(),
-                limit,
-            )
+            let occurrence = optional_string_argument(params, "occurrenceId")?;
+            let limit = match params.get("limit") {
+                None => 100,
+                Some(value) => value
+                    .as_u64()
+                    .filter(|limit| (1..=1000).contains(limit))
+                    .ok_or_else(|| {
+                        JsonRpcError::invalid_params("failure_log limit must be an integer1..1000")
+                    })? as usize,
+            };
+            let journal = match task {
+                Some(task) => crate::native::service_failure_journal::read_task_failures(
+                    task, occurrence, limit,
+                ),
+                None => crate::native::service_failure_journal::read_failure_occurrence(
+                    occurrence.ok_or_else(|| {
+                        JsonRpcError::invalid_params("failure_log requires taskId or occurrenceId")
+                    })?,
+                ),
+            }
             .map_err(|error| JsonRpcError::invalid_params(&error))?;
             return Ok(tool_response_from_payload(
                 "browser_command",

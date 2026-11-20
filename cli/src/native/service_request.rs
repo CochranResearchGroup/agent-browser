@@ -542,6 +542,8 @@ impl ServiceRequestIssue {
 pub(crate) struct ServiceRequestRejection {
     issue: ServiceRequestIssue,
     request_id: String,
+    occurrence_id: String,
+    logging: Option<Value>,
 }
 
 impl ServiceRequestRejection {
@@ -555,13 +557,21 @@ impl ServiceRequestRejection {
         let record = service_request_rejection_failure_record(
             source, action, request_id, session_id, &issue,
         );
+        let occurrence_id = record.occurrence_id.clone();
         #[cfg(not(test))]
-        crate::native::service_failure_journal::append_service_failure_best_effort(&record);
+        let logging = Some(
+            match crate::native::service_failure_journal::append_service_failure(&record) {
+                Ok(_) => json!({"state":"durable_pending","projection":"asynchronous"}),
+                Err(_) => json!({"state":"failed","code":"failure_journal_custody_failed"}),
+            },
+        );
         #[cfg(test)]
-        let _ = record;
+        let logging = None;
         Self {
             issue,
             request_id: request_id.to_string(),
+            occurrence_id,
+            logging,
         }
     }
 
@@ -602,6 +612,16 @@ impl ServiceRequestRejection {
         failure.code = self.issue.code().to_string();
         failure.phase = ServiceFailurePhase::IngressValidation;
         failure.effect_state = ServiceEffectState::NoEffect;
+        failure.occurrence_id = Some(self.occurrence_id.clone());
+        failure.logging = self.logging.clone();
+        if failure.executable_next_action.is_none() {
+            failure.executable_next_action = Some(json!({
+                "executable":true,"interface":"mcp","method":"resources/read",
+                "params":{"uri":"agent-browser://contracts"},
+                "alternatives":[{"interface":"http","method":"GET","path":"/api/service/contracts"}],
+                "purpose":"Read the supported request contract and correct the rejected request"
+            }));
+        }
         let mut response = json!({ "success": false, "id": self.request_id,
             "error": self.issue.message(), "failure": failure });
         if let Some(decision) = self.issue.access_decision.as_ref() {

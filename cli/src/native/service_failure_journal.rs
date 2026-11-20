@@ -467,6 +467,15 @@ pub fn read_task_failures(
     })
 }
 
+/// Locate a known occurrence even when admission failed before a task existed.
+pub fn read_failure_occurrence(occurrence: &str) -> Result<ServiceFailureJournalReadback, String> {
+    uuid::Uuid::parse_str(occurrence).map_err(|_| "failure_occurrence_id_invalid")?;
+    flush_failure_journal_best_effort();
+    read_service_failures_matching_at(&default_failure_journal_path()?, 1, |record| {
+        record.occurrence_id == occurrence
+    })
+}
+
 /// Read a coherent snapshot, allowing a short writer to finish. Lock admission
 /// is bounded so a stuck writer cannot indefinitely block diagnostic reads.
 pub fn read_service_failures_at(

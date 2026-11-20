@@ -18,7 +18,7 @@ pub use agent_browser_service_model::{
 /// are left unchanged.
 pub fn attach_service_failure_recourse(response: &mut Value) {
     if response.get("success").and_then(Value::as_bool) != Some(false)
-        || response.get("failure").is_some()
+        || response.get("failure").is_some_and(Value::is_object)
     {
         return;
     }

@@ -1046,9 +1046,17 @@ async fn handle_service_api_request(
             .unwrap_or(100);
         // Disk reads and bounded writer-lock admission must not stall the
         // dashboard's asynchronous request workers.
-        let readback = tokio::task::spawn_blocking(move || read_service_failures(limit))
-            .await
-            .unwrap_or_else(|_| Err("failure_journal_reader_task_failed".to_string()));
+        let occurrence = split_path_query(path).1.and_then(|query| {
+            url::form_urlencoded::parse(query.as_bytes())
+                .find(|(key, _)| key == "occurrenceId")
+                .map(|(_, value)| value.into_owned())
+        });
+        let readback = tokio::task::spawn_blocking(move || match occurrence {
+            Some(id) => crate::native::service_failure_journal::read_failure_occurrence(&id),
+            None => read_service_failures(limit),
+        })
+        .await
+        .unwrap_or_else(|_| Err("failure_journal_reader_task_failed".to_string()));
         match readback {
             Ok(readback) => {
                 write_json_value(
@@ -1062,12 +1070,27 @@ async fn handle_service_api_request(
                 .await
             }
             Err(error) => {
-                write_json_error_with_code(
+                let invalid = error == "failure_occurrence_id_invalid";
+                let code = if invalid {
+                    "failure_occurrence_id_invalid"
+                } else {
+                    "failure_journal_read_failed"
+                };
+                let request_id = uuid::Uuid::new_v4().to_string();
+                let mut response = json!({"success":false,"id":request_id,"error":error,"code":code,"failure":{"code":code}});
+                crate::native::service_failure::attach_public_failure(
+                    &mut response,
+                    &json!({"action":"failure_log","id":request_id}),
+                    "http_failure_journal",
+                );
+                write_json_value(
                     stream,
-                    "500 Internal Server Error",
-                    &error,
-                    Some("failure_journal_read_failed"),
-                    None,
+                    if invalid {
+                        "400 Bad Request"
+                    } else {
+                        "500 Internal Server Error"
+                    },
+                    response,
                 )
                 .await
             }
