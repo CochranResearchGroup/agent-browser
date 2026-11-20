@@ -49,3 +49,6 @@ Two historical external owner-SDK compatibility inputs still fail before an appr
 Related historical issues683/684/489 retain their own outcome boundaries. Exact-task reconnect and stale-admission repair do not prove the original unexplained transport termination cause or every decoding reproduction fixed.
 
 No production installation, provider deployment, hosted CI, formal release, raw private-log publication or foreign checkout/process cleanup is part of this outcome. Auxiliary clean source refs are preserved through governed closeout; the clean merged provider checkout is retained with its integration receipt.
+
+
+Subsequent operator-authorized deployment is recorded in [the Auth recourse and deployment checkpoint](auth-approval-recourse771.md). Production-shaped source dd2ad701e includes the merged749 implementation and one-code Auth recourse. Its installed260-operation acceptance and durable Native browser workflow pass; provider989 software is adopted. Finite disposable retention remains explicitly pending reliable-time qualification and launcher activation. The source-only boundary above records the original closeout, not a denial of this later deployment.
