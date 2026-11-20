@@ -52,7 +52,7 @@ function createImageClient({callTool,selectCandidates,resolvePolicy,verifyCleara
       const text=reply?.content?.find(block=>block.type==='text')?.text;
       if(typeof text!=='string'||text.length>8*1024*1024)fail('native_image_original_unverified');
       let envelope;try{envelope=JSON.parse(text)}catch{fail('native_image_original_unverified')}
-      if(reply?.isError||envelope.success!==true){if(missing(envelope.error))return null;fail('native_image_original_unverified')}
+      if(reply?.isError||envelope.success!==true||isResponseFailure(envelope)){if(missing(envelope.error)||missing(envelope.failure)||missing(envelope.data?.failure))return null;throw responseFailureError(envelope,'native_image_original_unverified')}
       response={data:envelope.data};
     }catch(error){
       if(missing(error))return null;

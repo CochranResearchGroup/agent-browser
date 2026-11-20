@@ -375,3 +375,9 @@ assert.ok(delayedReadTimes.length <= 4, "cold catch-up must not increase the thr
 assert.equal(delayedTimers.length, 0, "unmount cancels the delayed startup timer");
 
 console.log("dashboard read coordinator tests passed");
+
+let innerRefusalReads760=0;
+const innerRefusalCoordinator760=new DashboardReadCoordinator({fetch:async()=>{innerRefusalReads760++;return Response.json({success:true,data:{ok:false,failure:{code:'browser_task_operation_outcome_uncertain'}}});},isVisible:()=>true,monotonicNow:()=>1000});
+await innerRefusalCoordinator760.read('/api/service/status',{freshForMs:10000});
+await innerRefusalCoordinator760.read('/api/service/status',{freshForMs:10000});
+assert.equal(innerRefusalReads760,2,'an HTTP-success application refusal must never become a fresh success cache entry');

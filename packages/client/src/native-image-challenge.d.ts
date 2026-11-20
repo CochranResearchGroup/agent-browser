@@ -34,6 +34,7 @@ export interface NativeImageOptions {
   steadyNow?:()=>number;
 }
 export interface NativeImageResult {
+  failure?:Record<string,unknown>;occurrenceId?:string|null;
   taskId:string;status:'verified_access_after_native_image'|'awaiting_operator'|'intervention';reason?:string;
   originalOperation:Record<string,unknown>|null;roundOperations?:Array<Record<string,unknown>>;retryAllowed:false;
   binding?:ChallengeBinding;verification?:{clearance:string;access:string;frameSha256:string};continuation?:Record<string,unknown>;

@@ -164,3 +164,7 @@ await assert.rejects(longClient.inspect({...longSelection,expected:{...longSelec
 for(const taskId of ['x'.repeat(4001),'task\u0085break','   '])
   await assert.rejects(longClient.inspect({...longSelection,expected:{...longSelection.expected,taskId}}),/teaching_binding_required/);
 console.log('teaching evidence: persisted source substitution refuses and long exact task identity passes');
+
+const ownerFailure760={code:'recording_access_denied',occurrenceId:'teaching-owner-760',effectState:'not_dispatched'};
+const refusedReader760=createTeachingRecordingReader({url:'https://recordings.test',accessToken:'scoped-record',fetch:async()=>Response.json({success:true,data:{ok:false,failure:ownerFailure760}})});
+await assert.rejects(refusedReader760({recordingId}),error=>error.code===ownerFailure760.code&&error.failure.occurrenceId===ownerFailure760.occurrenceId);

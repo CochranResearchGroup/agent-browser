@@ -1,3 +1,5 @@
+import { dashboardResponseFailureError, responseFailureMetadata } from "./response-failure.ts";
+
 export interface TeachingContext {
   taskId: string;
   profileId: string;
@@ -30,13 +32,13 @@ export type SiteGuidesTransport = (request:Record<string,unknown>)=>Promise<any>
 export const requestSiteGuides: SiteGuidesTransport = async request => {
  const response=await fetch('/api/dashboard/siteguides',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)});
  const result=await response.json();
- if(!response.ok||result.success!==true)throw Error(result.error??'SiteGuides unavailable');
+ if(!response.ok||result.success!==true||responseFailureMetadata(result))throw dashboardResponseFailureError(result,'siteguides_request_unconfirmed');
  return result.data;
 };
 /** Existing authenticated operator-confirmation owner, with teaching-specific purpose. */
 export async function confirmTeachingReceipt(ref:string,request:Record<string,unknown>) {
  const response=await fetch('/api/app-intelligence/operator/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmationId:ref,action:{kind:'operator_confirmation',confirmationId:ref,label:'Confirm exact teaching content',request}})});
- const result=await response.json();if(!response.ok||result.success!==true)throw Error(result.error??'Teaching confirmation unconfirmed; read the original receipt before continuing.');
+ const result=await response.json();if(!response.ok||result.success!==true||responseFailureMetadata(result))throw dashboardResponseFailureError(result,'teaching_confirmation_unconfirmed');
  return ref;
 }
 export const teachingOperationId=()=>`teaching-${crypto.randomUUID()}`;

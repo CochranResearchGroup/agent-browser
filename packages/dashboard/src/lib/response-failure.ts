@@ -1,5 +1,5 @@
 /** A projection of owner failure metadata, never a new authorization decision. */
-export function responseFailureMetadata(payload: unknown): { code: string; observationId?: string } | null {
+export function responseFailureMetadata(payload: unknown, fallback = "application_failure"): { code: string; observationId?: string } | null {
   if (!payload || typeof payload !== "object") return null;
   const envelope = payload as Record<string, any>;
   if (envelope.success !== false && envelope.ok !== false && envelope.data?.ok !== false && envelope.data?.success !== false) return null;
@@ -7,7 +7,20 @@ export function responseFailureMetadata(payload: unknown): { code: string; obser
   const candidate = failure?.code ?? envelope.data?.code ?? envelope.code;
   const occurrence = failure?.occurrenceId ?? envelope.data?.occurrenceId ?? envelope.occurrenceId;
   return {
-    code: typeof candidate === "string" && /^[a-z][a-z0-9_]{0,127}$/.test(candidate) ? candidate : "application_failure",
+    code: typeof candidate === "string" && /^[a-z][a-z0-9_]{0,127}$/.test(candidate) ? candidate : fallback,
     ...(typeof occurrence === "string" && /^[a-zA-Z0-9_-]{1,160}$/.test(occurrence) ? { observationId: occurrence } : {}),
   };
+}
+
+/** Carry the owner object for callers; logging uses only the projection above. */
+export function dashboardResponseFailureError(payload: unknown, fallback: string): Error {
+  const envelope = payload as {error?: unknown; failure?: unknown; data?: {failure?: unknown}} | null;
+  const metadata = responseFailureMetadata(payload, fallback);
+  const publicMessage = typeof envelope?.error === "string" && envelope.error.length <= 512
+    ? envelope.error : null;
+  return Object.assign(new Error(publicMessage ?? metadata?.code ?? fallback), {
+    code: metadata?.code ?? fallback,
+    failure: envelope?.failure ?? envelope?.data?.failure ?? null,
+    occurrenceId: metadata?.observationId ?? null,
+  });
 }

@@ -19,6 +19,7 @@ export interface NativeChallengePolicySource {
   };
 }
 export interface BoundedNativeChallengeResult {
+  failure?:Record<string,unknown>;occurrenceId?:string|null;
   taskId: string;
   status: 'awaiting_operator' | 'intervention' | 'verified_access_after_native' | 'verified_access_after_passive_wait';
   retryAllowed: false; taskCompleted?: false; reason?: string; binding?: ChallengeBinding;

@@ -3279,3 +3279,6 @@ main().catch((err) => {
   console.error(err?.stack || err?.message || String(err));
   process.exit(1);
 });
+
+const nestedOwner760 = {code:'browser_task_operation_outcome_uncertain',occurrenceId:'observability-original-760',effectState:'effect_uncertain'};
+await assert.rejects(getServiceContracts({baseUrl:'https://owner.invalid',fetch:async()=>new Response(JSON.stringify({success:true,data:{ok:false,failure:nestedOwner760},privateValue:'never-in-error-message'}))}), error=>error.code===nestedOwner760.code&&error.failure.effectState==='effect_uncertain'&&!error.message.includes('never-in-error-message'));

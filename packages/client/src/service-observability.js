@@ -1,3 +1,4 @@
+import { isResponseFailure, responseFailureError } from './response-failure.js';
 // @ts-check
 
 import { postServiceRequest, requestServiceTab } from './service-request.js';
@@ -2783,13 +2784,9 @@ async function serviceGet({ baseUrl, fetch = globalThis.fetch, signal, headers =
   appendQuery(url, query);
 
   const response = await fetch(url, { method: 'GET', headers, signal });
-  if (!response.ok) {
-    throw new Error(`agent-browser service read failed: ${response.status}`);
-  }
-
   const payload = await response.json();
-  if (!payload?.success) {
-    throw new Error(`agent-browser service read failed: ${JSON.stringify(payload)}`);
+  if (!response.ok || !payload?.success || isResponseFailure(payload)) {
+    throw responseFailureError(payload, 'service_observability_read_failed');
   }
 
   return payload.data;
@@ -2841,13 +2838,9 @@ async function servicePost(
     body: body === undefined ? undefined : JSON.stringify(body),
     signal,
   });
-  if (!response.ok) {
-    throw new Error(`agent-browser service write failed: ${response.status}`);
-  }
-
   const payload = await response.json();
-  if (!payload?.success) {
-    throw new Error(`agent-browser service write failed: ${JSON.stringify(payload)}`);
+  if (!response.ok || !payload?.success || isResponseFailure(payload)) {
+    throw responseFailureError(payload, 'service_observability_write_failed');
   }
 
   return payload.data;
@@ -2868,13 +2861,9 @@ async function serviceDelete({ baseUrl, fetch = globalThis.fetch, signal }, path
   }
 
   const response = await fetch(new URL(pathname, baseUrl), { method: 'DELETE', signal });
-  if (!response.ok) {
-    throw new Error(`agent-browser service delete failed: ${response.status}`);
-  }
-
   const payload = await response.json();
-  if (!payload?.success) {
-    throw new Error(`agent-browser service delete failed: ${JSON.stringify(payload)}`);
+  if (!response.ok || !payload?.success || isResponseFailure(payload)) {
+    throw responseFailureError(payload, 'service_observability_delete_failed');
   }
 
   return payload.data;

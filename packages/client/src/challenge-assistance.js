@@ -70,8 +70,8 @@ export function createChallengeAssistanceClient({callTool,verifyClearance,verify
     let envelope;
     try{envelope=JSON.parse(text);}catch{fail('challenge_original_operation_unverified');}
     if(reply?.isError||envelope.success!==true||isResponseFailure(envelope)) {
-      if(missing(envelope.error))return null;
-      fail('challenge_original_operation_unverified');
+      if(missing(envelope.error)||missing(envelope.failure)||missing(envelope.data?.failure))return null;
+      throw responseFailureError(envelope,'challenge_original_operation_unverified');
     }
     const operation=envelope.data?.operation;
     if(operation?.taskId!==taskId||operation.requestId!==requestId||operation.action!=='native_input')fail('challenge_original_operation_unverified');
@@ -160,7 +160,7 @@ export function createChallengeAssistanceClient({callTool,verifyClearance,verify
         let delivered;
         try { delivered=await call('browser_command',{taskId,action:'native_input',requestId,
           params:{nativeAttempt:{observationRequestId:requestId+':observation',registeredActionId}}}); }
-        catch { retained=await original(taskId,requestId);return assist('native_input_uncertain_or_refused'); }
+        catch(error) { retained=await original(taskId,requestId);return {...await assist('native_input_uncertain_or_refused'),...(error?.failure?{failure:error.failure,occurrenceId:error.occurrenceId}:{})}; }
         retained=delivered.taskOperation;
         if(retained?.requestId!==requestId||retained.taskId!==taskId||retained.action!=='native_input'||
           retained.state!=='owner_acknowledged'||delivered.delivery!=='dispatched')return assist('native_input_not_acknowledged');

@@ -165,10 +165,12 @@ export function installDashboardFetchFailureInstrumentation(): () => void {
       const response = await current(input, init);
       if (metadata) metadata.observation.elapsedMs = Math.max(0, performance.now() - startedAt);
       if (metadata?.deferUntilRecovery && !response.ok) {
+        const payload: unknown = await response.clone().json().catch(() => null);
         dashboardReadFailureDeliveryQueue.enqueue({
-          ...metadata.observation,
-          code: `http_${response.status}`,
-          summary: "Dashboard read received a non-success HTTP response.",
+            ...metadata.observation,
+            code: `http_${response.status}`,
+            ...responseFailureMetadata(payload, `http_${response.status}`),
+            summary: "Dashboard read received a non-success HTTP response.",
         });
       } else if (metadata?.deferUntilRecovery && !isJsonResponse(response)) {
         dashboardReadFailureDeliveryQueue.enqueue({
@@ -196,11 +198,12 @@ export function installDashboardFetchFailureInstrumentation(): () => void {
           });
         });
       } else if (metadata && !response.ok) {
-        void reportDashboardFailure({
+        void response.clone().json().catch(() => null).then((payload: unknown) => reportDashboardFailure({
           ...metadata.observation,
           code: `http_${response.status}`,
+          ...responseFailureMetadata(payload, `http_${response.status}`),
           summary: "Dashboard action received a non-success HTTP response.",
-        }, current);
+        }, current));
       } else if (metadata && isJsonResponse(response)) {
         void response.clone().json().then((payload: unknown) => {
           const failure = responseFailureMetadata(payload);

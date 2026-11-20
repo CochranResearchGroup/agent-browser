@@ -1,3 +1,4 @@
+import { isResponseFailure, responseFailureError } from './response-failure.js';
 /** HTTP adapters for the existing Remote View and Speech owner routes. */
 function endpoint(value) {
   const url=new URL(value);
@@ -12,7 +13,6 @@ function transport({url,token,fetch:fetcher=globalThis.fetch,maximumResponseByte
     let response;
     try {response=await fetcher(base+path,{method:body===undefined?'GET':'POST',redirect:'error',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',...(origin?{Origin:origin}:{})},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(30000)});}
     catch {throw new Error('teaching_owner_unavailable');}
-    if(!response.ok) {await response.body?.cancel();throw new Error(`teaching_owner_rejected_${response.status}`);}
     const chunks=[];let size=0;
     try {
       for await(const chunk of response.body ?? []) {
@@ -20,8 +20,11 @@ function transport({url,token,fetch:fetcher=globalThis.fetch,maximumResponseByte
         if(size>maximumResponseBytes) throw new Error('teaching_owner_response_limit');
         chunks.push(Buffer.from(chunk));
       }
-      try{return JSON.parse(Buffer.concat(chunks).toString('utf8'));}
+      let payload;
+      try{payload=JSON.parse(Buffer.concat(chunks).toString('utf8'));}
       catch{throw new Error('teaching_owner_response_invalid');}
+      if(!response.ok||isResponseFailure(payload))throw responseFailureError(payload,`teaching_owner_rejected_${response.status}`);
+      return payload;
     } finally {for(const chunk of chunks)chunk.fill(0);}
   };
 }
