@@ -11,6 +11,22 @@ pub enum BrowserIdleRetirementStoreError {
     InvalidRecord,
     Conflict,
     ActivityActive,
+    /// Current activity admission rejected a specific observed fact.
+    ActivityAdmission(BrowserActivityAdmissionConflict),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BrowserActivityAdmissionConflict {
+    ExpectedIdentityChanged,
+    CurrentIdentityChanged,
+    CurrentBrowserMissing,
+    CurrentProcessChanged,
+    CurrentEndpointChanged,
+    CurrentProfileChanged,
+    CurrentDesktopChanged,
+    BrowserRetired,
+    RequestAlreadyRecorded,
+    RetirementActive,
 }
 type Result<T> = std::result::Result<T, BrowserIdleRetirementStoreError>;
 

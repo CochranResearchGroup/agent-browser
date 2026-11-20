@@ -177,6 +177,27 @@ fn native_capture_completion_failure_keeps_pending_original_without_replay() {
     );
     assert!(failure.contains("original-capture:inspect original; no retry"));
     assert!(!failure.contains("canary"));
+    let lost_params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_capture","requestId":"lost-transport-capture","params":{"classifyChallenges":true,"registeredActionId":"hcaptcha-checkbox-p181-v2"}}});
+    task_operations::with_context(Some(&lost_params), || {
+        let failure = task_operations::transport(command.clone(), |_| {
+            Err("Transport closed: https://private.invalid/?token=never-publish".into())
+        })
+        .err()
+        .expect("lost acknowledgement must remain uncertain");
+        assert!(failure.contains("cause=transport_closed"));
+        assert!(failure.contains("lost-transport-capture"));
+        assert!(!failure.contains("never-publish"));
+        let original = task_operations::lookup("task", "lost-transport-capture").unwrap();
+        assert_eq!(original["operation"]["state"], "uncertain");
+        assert_eq!(original["operation"]["retryAllowed"], false);
+        let replay = task_operations::transport(command.clone(), |_| {
+            panic!("lost acknowledgement must never redispatch")
+        })
+        .unwrap();
+        assert_eq!(replay.data.unwrap()["dispatchAttempted"], false);
+        Ok(Value::Null)
+    })
+    .unwrap();
     let readback = task_operations::lookup("task", "original-capture").unwrap();
     assert_eq!(readback["operation"]["state"], "pending");
     assert_eq!(readback["operation"]["retryAllowed"], false);

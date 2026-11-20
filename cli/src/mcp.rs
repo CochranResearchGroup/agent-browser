@@ -12662,6 +12662,57 @@ mod tests {
         assert_eq!(store.load_session_state().unwrap(), enriched);
         store.save_session_state(&state).unwrap();
         assert_eq!(cli["data"], mcp["data"]);
+        let reconnect = mcp_command_response(&[
+            "mcp".into(),
+            "host-reconnect".into(),
+            "task".into(),
+            "status".into(),
+        ])
+        .unwrap();
+        assert_eq!(reconnect["data"]["taskId"], "task");
+        assert_eq!(reconnect["data"]["browserId"], "browser");
+        assert_eq!(reconnect["data"]["status"], "task_retained");
+        assert_eq!(
+            reconnect["data"]["recovery"]["freshFacadeCommand"]["args"][3],
+            "task"
+        );
+        assert_eq!(reconnect["data"]["recovery"]["replayAllowed"], false);
+        let missing = mcp_command_response(&[
+            "mcp".into(),
+            "host-reconnect".into(),
+            "missing-task".into(),
+            "reconnect".into(),
+        ]);
+        assert!(missing
+            .unwrap_err()
+            .contains("browser_reconnect_task_metadata_unavailable"));
+        let mut ended = state.clone();
+        ended.sessions.remove("task");
+        ended.session_history.push(
+            serde_json::from_value(json!({
+                    "id":"task","name":"lane","profileId":"profile","browserId":"browser",
+                    "createdAtMs":1,"lastActivityAtMs":1,"endedAtMs":2,"reason":"explicit_close"}))
+            .unwrap(),
+        );
+        store.save_session_state(&ended).unwrap();
+        let closed = mcp_command_response(&[
+            "mcp".into(),
+            "host-reconnect".into(),
+            "task".into(),
+            "reconnect".into(),
+        ]);
+        assert!(closed.unwrap_err().contains("browser_reconnect_task_ended"));
+        let ended_status = mcp_command_response(&[
+            "mcp".into(),
+            "host-reconnect".into(),
+            "task".into(),
+            "status".into(),
+        ])
+        .unwrap();
+        assert_eq!(ended_status["data"]["status"], "task_ended");
+        assert_eq!(ended_status["data"]["terminalReason"], "explicit_close");
+        assert_eq!(store.load_session_state().unwrap(), ended);
+        store.save_session_state(&state).unwrap();
         let wrong = mcp_command_response(&["mcp".into(), "task-briefing".into(), "lane".into()]);
         assert!(wrong.unwrap_err().contains("browser_task_not_found"));
         assert_eq!(store.load_session_state().unwrap(), state);

@@ -279,6 +279,24 @@ fn bind_native_owner_allowance(command: &mut Value, admitted_at_ms: u64) {
     }
 }
 
+/// Static transport cause only: raw socket errors can contain private endpoints.
+fn transport_failure_cause(error: &str) -> &'static str {
+    let error = error.to_ascii_lowercase();
+    if error.contains("transport closed") || error.contains("connection closed") {
+        "transport_closed"
+    } else if error.contains("timed out") || error.contains("timeout") {
+        "transport_timeout"
+    } else if error.contains("connection refused") {
+        "transport_connection_refused"
+    } else if error.contains("connection reset") || error.contains("broken pipe") {
+        "transport_connection_lost"
+    } else if error.contains("workflow_transport_start_failed") {
+        "transport_start_failed"
+    } else {
+        "transport_failure_unclassified"
+    }
+}
+
 /// The marker is durable before this closure can ensure a transport or send.
 pub(super) fn transport(
     command: Value,
@@ -375,11 +393,11 @@ pub(super) fn transport_with_latency(
                         response_data(&mut response, &completed, false);
                         Ok(response)
                     }
-                    Err(_) => {
+                    Err(error) => {
                         let _ = operations::finish(&original, None);
                         Err(format!(
-                            "browser_task_operation_uncertain:{}:inspect original; no retry",
-                            original.request_id
+                            "browser_task_operation_uncertain:{}:inspect original; no retry;cause={}; taskId={}; use browser_command task_operation with original requestId, then browser_reconnect status on the same task through an initialized or fresh facade",
+                            original.request_id, transport_failure_cause(&error), original.task_id
                         ))
                     }
                 }

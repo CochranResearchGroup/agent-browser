@@ -697,7 +697,8 @@ impl BrowserSessionPersistence for BrowserSessionSqliteStore {
                         agent_browser_service_model::BrowserIdleRetirementStoreError::ActivityActive => {
                             "browser_session_idle_publication_activity_active"
                         }
-                        agent_browser_service_model::BrowserIdleRetirementStoreError::Conflict => {
+                        agent_browser_service_model::BrowserIdleRetirementStoreError::Conflict
+                        | agent_browser_service_model::BrowserIdleRetirementStoreError::ActivityAdmission(_) => {
                             "browser_session_idle_publication_conflict"
                         }
                     }

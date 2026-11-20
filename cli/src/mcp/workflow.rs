@@ -133,8 +133,14 @@ pub(super) fn execute(command: Value, session: &str) -> Result<Value, JsonRpcErr
     let mut readiness = Vec::new();
     let (result, mut samples) =
         super::task_operations::transport_with_latency(command, |command| {
-            ensure_transport(&session, &mut readiness)
-                .map_err(|_| "workflow_transport_start_failed".to_string())?;
+            ensure_transport(&session, &mut readiness).map_err(|error| {
+                let cause = error
+                    .data
+                    .as_ref()
+                    .and_then(|data| data["message"].as_str())
+                    .unwrap_or(error.message);
+                format!("workflow_transport_start_failed:{cause}")
+            })?;
             send_command(command, &session)
         });
     samples.extend(readiness);
@@ -794,7 +800,11 @@ pub(super) fn continue_task(
             json!({}),
             json!({"taskId":task_id,"status":"intervention_required","reason":reason,
             "transientPageState":"unavailable_not_reconstructed","briefing":briefing,
-            "nextAction":"inspect_original_operations_and_choose_explicit_recovery_without_replay"}),
+            "nextAction":"inspect_original_operations_and_choose_explicit_recovery_without_replay",
+            "modeEvidence":mode,
+            "recovery":{"tool":"browser_reconnect","arguments":{"taskId":task_id,"operation":"status"},
+                "freshFacadeCommand":{"executable":"agent-browser","args":["--json","mcp","host-reconnect",task_id,"status"]},
+                "resumeCondition":"fresh original process/target proof; original uncertain operations remain non-replayable"}}),
             false,
         )
     };
@@ -811,7 +821,20 @@ pub(super) fn continue_task(
         transport_session,
     ) {
         Ok(observed) => observed,
-        Err(_) => return Ok(intervention("current_target_observation_failed")),
+        Err(mut error) => {
+            // Keep the original failure, operation references and optional phase
+            // timings. A successful wrapper must not hide lost acknowledgement.
+            let data = error.data.get_or_insert_with(|| json!({}));
+            if let Some(data) = data.as_object_mut() {
+                data.insert("taskId".into(), json!(task_id));
+                data.insert("retainedContext".into(), context.clone());
+                data.insert("recovery".into(), json!({"tool":"browser_reconnect",
+                    "arguments":{"taskId":task_id,"operation":"status"},
+                    "freshFacadeCommand":{"executable":"agent-browser","args":["--json","mcp","host-reconnect",task_id,"status"]},
+                    "resume":"reconnect exact task only after inspecting original operations; do not replay uncertain effects"}));
+            }
+            return Err(error);
+        }
     };
     if crate::native::browser_task_operations::retained_context(task_id).map_err(issue)? != context
     {
