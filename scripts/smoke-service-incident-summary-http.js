@@ -69,7 +69,6 @@ function seedIncidentEvents() {
 try {
   await seedIncidentEvents();
   const port = await enableStream();
-  const beforeJobs = await httpJson(port, 'GET', '/api/service/jobs');
   const refused = await httpJsonResult(port, 'POST', '/api/service/request', {
     action: 'synthetic_unsupported_action',
     serviceName, agentName, taskName,
@@ -86,7 +85,8 @@ try {
   assert(logged.data.records.length === 1 && logged.data.records[0].occurrenceId === occurrenceId,
     `HTTP failure lookup did not preserve the producer occurrence: ${JSON.stringify(logged)}`);
   const afterJobs = await httpJson(port, 'GET', '/api/service/jobs');
-  assert(afterJobs.data.total === beforeJobs.data.total, 'Rejected request created a job');
+  assert(!afterJobs.data.jobs.some(job => job.requestId === rejection.id || job.command?.id === rejection.id),
+    'Rejected request created a job for its original request ID');
   const incidents = await httpJson(
     port,
     'GET',

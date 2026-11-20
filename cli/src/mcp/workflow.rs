@@ -167,7 +167,7 @@ pub(super) fn execute(command: Value, session: &str) -> Result<Value, JsonRpcErr
 /// Workflow projections retain already sampled response diagnostics without
 /// adding readiness checks or changing the browser operation itself.
 fn retain_phase_diagnostics(mut output: Value, sources: &[(&str, &Value)]) -> Value {
-    let phases = sources
+    let phases: Vec<Value> = sources
         .iter()
         .filter_map(|(stage, source)| {
             source["latencyPhases"]
