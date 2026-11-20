@@ -4,6 +4,7 @@ use crate::native::service_failure_journal::{
     append_service_failure, ServiceFailureCategory, ServiceFailureRecord, ServiceFailureReferences,
 };
 use serde_json::json;
+use sha2::{Digest, Sha256};
 
 /// Preserve existing typed evidence, add executable exact-task inspection and
 /// publish sanitized refusal metadata. Request payloads never enter the journal.
@@ -11,6 +12,7 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
     if response["success"] != false {
         return;
     }
+    let had_failure = response["failure"].is_object();
     attach_service_failure_recourse_for_action(
         response,
         command["action"].as_str().unwrap_or("unknown"),
@@ -29,6 +31,12 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
     }
     .to_owned();
     let failure = &mut response["failure"];
+    if !had_failure && command["jobId"].is_null() && command["serviceJobId"].is_null() {
+        failure
+            .as_object_mut()
+            .expect("classified failure is an object")
+            .remove("jobId");
+    }
     if failure["code"] == "service_operation_failed" {
         failure["code"] = json!(code);
     }
@@ -68,6 +76,9 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
     .with_details(json!({
         "effectState":failure["effectState"],
         "retryDisposition":failure["retryDisposition"],
+            "recommendedAction":failure["recommendedAction"],
+            "blockingCheck":code,
+            "taskIdSha256":task.map(|id| format!("{:x}", Sha256::digest(id.as_bytes()))),
         "evidenceFreshness":"not_supplied",
         "policySource":"not_supplied"
     }));

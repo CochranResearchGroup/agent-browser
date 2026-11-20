@@ -5524,7 +5524,10 @@ fn call_service_mcp_tool(
     });
     result
         .map(|mut result| {
-            if let Some(text) = result["content"][0]["text"].as_str() {
+            if let Some(text) = result["content"][0]["text"]
+                .as_str()
+                .filter(|_| result["isError"] == true)
+            {
                 if let Ok(mut payload) = serde_json::from_str::<Value>(text) {
                     if payload["success"] == false {
                         crate::native::service_failure::attach_public_failure(
@@ -5735,16 +5738,12 @@ fn call_service_mcp_tool_inner(
             let task = required_string_argument(arguments, "taskId")?;
             let params = &arguments["params"];
             let limit = params["limit"].as_u64().unwrap_or(100).clamp(1, 1000) as usize;
-            let mut journal = crate::native::service_failure_journal::read_service_failures(1000)
-                .map_err(|error| JsonRpcError::invalid_params(&error))?;
-            journal.records.retain(|record| {
-                record.references.session_id.as_deref() == Some(task)
-                    && params["occurrenceId"]
-                        .as_str()
-                        .is_none_or(|id| record.occurrence_id == id)
-            });
-            let remove = journal.records.len().saturating_sub(limit);
-            journal.records.drain(..remove);
+            let journal = crate::native::service_failure_journal::read_task_failures(
+                task,
+                params["occurrenceId"].as_str(),
+                limit,
+            )
+            .map_err(|error| JsonRpcError::invalid_params(&error))?;
             return Ok(tool_response_from_payload(
                 "browser_command",
                 session,

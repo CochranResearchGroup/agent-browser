@@ -41,9 +41,8 @@ Read recent task-scoped records without starting a browser:
 {"name":"browser_command","arguments":{"taskId":"session:report","action":"failure_log","params":{"occurrenceId":"RETURNED-OCCURRENCE-ID","limit":100}}}
 ```
 
-Omit `occurrenceId` for recent task records. This view searches the most recent
-1,000 journal entries and returns at most `limit` matching records; absence
-outside that window does not prove no refusal occurred. The authenticated
+Omit `occurrenceId` for recent task records. Filtering occurs before the result limit, so unrelated polling failures do not
+hide the selected occurrence. At most `limit` matching records are returned. The authenticated
 `GET /api/service/failures` and private journal remain available for diagnostics.
 Use the returned `executableNextAction` for supported inspection. Inspection
 itself does not resolve an uncertain operation or establish that replay is safe.
