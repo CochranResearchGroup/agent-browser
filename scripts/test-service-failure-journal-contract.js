@@ -102,9 +102,20 @@ process.stdout.write('Service failure journal contract checks passed\n');
 // This registry is deliberately exact-code. A future named producer error in a
 // reviewed family cannot inherit a generic plan without review.
 const recoveryRegistry = JSON.parse(readFileSync('docs/dev/contracts/public-error-recovery-registry.v1.json', 'utf8'));
+const externalRecoveryTools = {};
 for (const path of recoveryRegistry.fragments ?? []) {
   const fragment = JSON.parse(readFileSync(path, 'utf8'));
   assert.equal(fragment.schemaVersion, recoveryRegistry.schemaVersion);
+  if (fragment.externalToolContract) {
+    assert.equal(fragment.externalToolContract, 'docs/dev/contracts/client-external-owner-tools.v1.json', 'Unreviewed external recovery tool contract');
+    const contract = JSON.parse(readFileSync(fragment.externalToolContract, 'utf8'));
+    assert.equal(contract.schemaVersion, 'agent-browser.client-external-owner-tools.v1');
+    for (const [name, declaration] of Object.entries(contract.tools)) {
+      assert(['remote_view_recordings','remote_view_recording_pin'].includes(name), 'Unreviewed external recovery tool');
+      assert(declaration.provenance.includes(`mcp__remote_view__${name}`), 'Missing external owner declaration provenance');
+      externalRecoveryTools[name] = declaration;
+    }
+  }
   for (const key of ['exclusions', 'enforcedProducerCodePrefixes', 'enforcedProducerSources', 'enforcedProducerSourceFamilies']) recoveryRegistry[key] = [...(recoveryRegistry[key] ?? []), ...(fragment[key] ?? [])];
   for (const key of ['recipes', 'codes', 'interfaces']) {
     recoveryRegistry[key] ??= {};
@@ -157,6 +168,19 @@ function validateClientQualification(contract, registry) {
 }
 const validatedSourceReferences = new Set();
 function validateRecoveryCall(call) {
+  if (externalRecoveryTools[call.tool]) {
+    const declaration = externalRecoveryTools[call.tool];
+    const schema = declaration.arguments;
+    assert(call.arguments && !Array.isArray(call.arguments), 'External owner arguments must be an object');
+    for (const required of schema.required ?? []) assert(Object.hasOwn(call.arguments, required), `Missing external owner argument ${required}`);
+    for (const [name, value] of Object.entries(call.arguments)) {
+      assert(Object.hasOwn(schema.properties, name), `Unavailable external owner argument ${name}`);
+      assert.equal(typeof value, schema.properties[name].type, `Invalid external owner argument ${name}`);
+      assert(name !== 'accessToken', 'Recovery recipes must not retain private owner tokens');
+    }
+    assert.equal(call.arguments.recordingId, '$recordingId', 'External owner recipe must retain exact original recording');
+    return;
+  }
   if (call.interface === 'caller_error') {
     assert.equal(call.kind, 'source_reference');
     assert.deepEqual(call.fields, ['code', 'source', 'owningFunction', 'message']);
@@ -306,7 +330,11 @@ function validateRecoveryInventory(registry, discovered) {
     validateRecoveryCall(recipe.verification);
     for (const step of recipe.remediation) {
       assert(step.instruction?.length > 20 && step.precondition?.length > 10, `${code} lacks an actionable remedy precondition`);
-      if (step.call) validateRecoveryCall(step.call);
+      if (step.call) {
+        validateRecoveryCall(step.call);
+        const owner = externalRecoveryTools[step.call.tool]?.requiredActor;
+        if (owner) assert(recipe.requiredActor.includes(owner) && step.precondition?.length > 20, 'External owner mutation requires explicit actual owner authority');
+      }
       else {
         assert(step.interface, `${code} has no supported owner interface`);
         if (recoveryRegistry.interfaces?.[step.interface]) validateRecoveryInterface(step.interface);
@@ -356,3 +384,5 @@ if (process.argv.includes('--require-complete-recovery')) {
 process.stdout.write(`Exact recovery contracts checked: ${Object.keys(recoveryRegistry.codes).length}; reviewed namespace code candidates checked: ${discoveredReviewedCodes.size}; full inventory: ${recoveryRegistry.inventoryStatus}\n`);
 
 assert.throws(() => validateComposedOwningCheck('unreviewed_anything', {path:'cli/src/native/service_profile_recovery.rs',codeComposition:{prefix:'unreviewed_',source:'fake.rs',suffix:'anything'}}), /Unreviewed composed producer source/);
+
+assert.throws(() => validateRecoveryCall({tool:'remote_view_recording_pin',arguments:{recordingId:'$recordingId',pinned:true,override:true}}), /Unavailable external owner argument/);
