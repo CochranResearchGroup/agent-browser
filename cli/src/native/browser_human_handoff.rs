@@ -273,6 +273,9 @@ fn claim(
     if intent(control, id, digest) != "interactive" {
         return Err("browser_handoff_target_changed".into());
     }
+    if control.human && viewer_claims(control).is_empty() {
+        return Err("browser_handoff_control_already_held".into());
+    }
     // A newly admitted real activity sample supersedes only the earlier soft
     // activity pause. Explicit independent viewer claims are never discarded.
     if !explicit {
@@ -301,9 +304,6 @@ fn claim(
         }
     }
     let mut handoff = invitation(control, id).ok_or("browser_handoff_target_changed")?;
-    if control.human && viewer_claims(control).is_empty() {
-        return Err("browser_handoff_control_already_held".into());
-    }
     for outcome in control
         .flights
         .values_mut()
