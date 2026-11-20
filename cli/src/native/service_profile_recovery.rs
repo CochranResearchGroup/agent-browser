@@ -1450,6 +1450,13 @@ async fn acquire_profile_command(
         "profile_acquisition_time_uncertain",
     )?;
     let expires_at = optional_command_string(command, "expiresAt").unwrap_or(default_expiry);
+    profile_deadline_admission(
+        &time,
+        &expires_at,
+        "profile_acquisition_authority_time_invalid",
+        "profile_acquisition_plan_expired",
+        "profile_acquisition_time_uncertain",
+    )?;
     let idempotency_key = optional_command_string(command, "idempotencyKey")
         .unwrap_or_else(|| format!("profile-acquisition-{}", uuid::Uuid::new_v4()));
     let policy = if command
