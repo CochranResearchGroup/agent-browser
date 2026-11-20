@@ -1631,8 +1631,9 @@ fn original_login_observation(
     )?;
     Ok(observation)
 }
-/// The original per-task episode cannot be replaced to renew its budget. Only
-/// acknowledged previous steps allow progression; pending/unknown input stops.
+/// An episode is a scoped progress sequence, not a permanent task-wide veto.
+/// New episodes require all previous task input settled; every new step still
+/// binds a fresh owner observation and exact current task/process context.
 fn login_episode_step(
     state: &BrowserSessionState,
     task: &str,
@@ -1643,67 +1644,61 @@ fn login_episode_step(
         .as_str()
         .ok_or("browser_native_login_episode_invalid")?;
     let history = operation_history(state, task)?;
-    let rows = Some(&history);
-    let mut prior = vec![];
-    if let Some(rows) = rows {
-        for row in rows.values() {
-            if let Some(id) = row.evidence_references.get("nativeLoginEpisode") {
-                if id != episode {
-                    return Err("browser_native_login_episode_changed".into());
-                }
-                if current == Some(row.request_id.as_str()) {
-                    continue;
-                }
-                prior.push(row);
+    let task_context = context(state, task)?;
+    let mut prior = Vec::new();
+    for row in history.values() {
+        let Some(id) = row.evidence_references.get("nativeLoginEpisode") else {
+            continue;
+        };
+        if current == Some(row.request_id.as_str()) {
+            continue;
+        }
+        if row.state != BrowserTaskOperationState::OwnerAcknowledged {
+            return Err(format!("browser_native_login_previous_input_unsettled: requestId={}; inspect browser_command action=task_operation params.requestId for this original and reconcile before continuing any login episode; no input replay", row.request_id));
+        }
+        if id == episode {
+            if RetainedContext::from_operation(row) != task_context {
+                return Err("browser_native_login_context_changed: inspect browser_command action=task_briefing and original task_operation records; after settling prior inputs, begin a new scoped episode with a fresh native_capture".into());
             }
+            prior.push(row);
         }
     }
     prior.sort_by_key(|row| {
         row.evidence_references
             .get("nativeLoginStep")
-            .and_then(|s| s.parse::<usize>().ok())
+            .and_then(|step| step.parse::<usize>().ok())
             .unwrap_or(usize::MAX)
     });
-    let now = now_ms()?;
-    if prior.len() >= 3 {
-        return Err("browser_native_login_budget_exhausted".into());
-    }
     for (step, row) in prior.iter().enumerate() {
-        if row.state != BrowserTaskOperationState::OwnerAcknowledged
-            || RetainedContext::from_operation(row) != context(state, task)?
-            || row.evidence_references.get("nativeLoginStep") != Some(&step.to_string())
-            || row
-                .evidence_references
-                .get("nativeLoginKind")
-                .map(String::as_str)
-                != Some(["username", "credential_entry", "submit"][step])
+        if row.evidence_references.get("nativeLoginStep") != Some(&step.to_string())
+            || !matches!(
+                row.evidence_references
+                    .get("nativeLoginKind")
+                    .map(String::as_str),
+                Some("username" | "credential_entry" | "submit")
+            )
         {
-            return Err("browser_native_login_previous_input_unsettled".into());
+            return Err("browser_native_login_previous_input_unsettled: inspect original task_operation records before explicit episode continuation; no input replay".into());
         }
     }
-    let start = prior
-        .first()
-        .map(|r| r.created_at_ms)
-        .or_else(|| {
-            current
-                .and_then(|id| rows.and_then(|rows| rows.get(id)))
-                .map(|r| r.created_at_ms)
-        })
-        .unwrap_or(now);
-    // Elapsed time is an SDK invocation policy, not authority to replay input.
-    // Retain rollback rejection; ordered ACKs, current context and fresh targets
-    // above/below still fence a later continuation of this same episode.
-    if now < start {
-        return Err("browser_native_login_budget_exhausted".into());
+    let store = BrowserSessionSqliteStore::open_read_only(
+        &BrowserSessionSqliteStore::default_sqlite_path()?,
+    )?;
+    let maximum = store.login_step_limit(task)?;
+    if prior.len() >= maximum {
+        return Err(format!("browser_native_login_budget_exhausted: completedSteps={};maximumLoginSteps={maximum}; inspect browser_command action=task_operation params={{\"operation\":\"capacity\"}} and increase policy.maximumLoginSteps for this task before continuing the same episode; acknowledged originals are retained", prior.len()));
     }
-    let selection = super::native_login_perception::select_target(
+    let now = now_ms()?;
+    if prior.first().is_some_and(|row| now < row.created_at_ms) {
+        return Err("browser_native_login_clock_unqualified: inspect reliable time and obtain a fresh native_capture before continuing; original inputs remain retained".into());
+    }
+    // select_target retains account matching, submit/form and fresh-frame guards;
+    // a hardcoded username/credential/submit order is not a page-state proof.
+    super::native_login_perception::select_target(
         &original_login_observation(state, task, command)?,
         command["loginTarget"]["targetRef"].as_str().unwrap(),
         now,
     )?;
-    if selection.kind != ["username", "credential_entry", "submit"][prior.len()] {
-        return Err("browser_native_login_step_invalid".into());
-    }
     Ok(prior.len())
 }
 pub(crate) fn native_login_attempt_observation(command: &Value) -> Result<Value, String> {

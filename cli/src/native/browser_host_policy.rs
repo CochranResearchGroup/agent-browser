@@ -275,7 +275,7 @@ pub(crate) fn apply(state: &mut BrowserSessionState, command: &Value) -> Result<
     let host_id = binding.request.host_id.clone();
     let operation = command["operation"].as_str().unwrap_or("status");
     let mut token = None;
-    if operation != "status" {
+    if !matches!(operation, "status" | "override_lookup") {
         let expected = command["expectedRevision"]
             .as_u64()
             .ok_or("browser_policy_revision_required")?;
@@ -285,7 +285,19 @@ pub(crate) fn apply(state: &mut BrowserSessionState, command: &Value) -> Result<
         let reason = command["reason"]
             .as_str()
             .ok_or("browser_policy_attribution_required")?;
-        if operation == "override" {
+        if operation == "override_capacity" {
+            let capacity = serde_json::from_value(command["capacity"].clone())
+                .map_err(|_| "browser_policy_override_capacity_invalid")?;
+            state.host_policies.configure_override_capacity(
+                expected,
+                &host_id,
+                task_id,
+                command["scope"].as_str().unwrap_or("task"),
+                capacity,
+                actor,
+                reason,
+            )?;
+        } else if operation == "override" {
             let id = uuid::Uuid::new_v4().to_string();
             state.host_policies.issue_override(
                 expected,
@@ -314,8 +326,33 @@ pub(crate) fn apply(state: &mut BrowserSessionState, command: &Value) -> Result<
             )?;
         }
     }
+    let original_override = if operation == "override_lookup" {
+        let id = command["overrideId"]
+            .as_str()
+            .ok_or("browser_policy_override_id_required")?;
+        let grant = state.host_policies.operator_overrides.get(id).or_else(||state.host_policies.archived_operator_overrides.get(id))
+            .filter(|grant|grant.host_id == host_id && grant.task_id == task_id).ok_or("browser_policy_override_not_found: inspect browser_policy status for this exact task")?;
+        Some(
+            json!({"overrideId":id,"taskId":task_id,"action":grant.action,"requestId":grant.request_id,"revision":grant.revision,"actor":grant.actor,"reason":grant.reason,"state":if state.host_policies.revoked_override_ids.contains(id) {"revoked"} else if state.host_policies.archived_operator_overrides.contains_key(id) {"archived"} else {"active"}}),
+        )
+    } else {
+        None
+    };
+    let (capacity, source) = state.host_policies.override_capacity(&host_id, task_id);
+    let active = state
+        .host_policies
+        .operator_overrides
+        .values()
+        .filter(|grant| grant.host_id == host_id && grant.task_id == task_id)
+        .count();
+    let archived = state
+        .host_policies
+        .archived_operator_overrides
+        .values()
+        .filter(|grant| grant.host_id == host_id && grant.task_id == task_id)
+        .count();
     Ok(
-        json!({"taskId":task_id,"hostId":host_id,"revision":state.host_policies.revision,"policy":state.host_policies.effective(&host_id,task_id),"overrideId":token,"lastChange":state.host_policies.audit.last()}),
+        json!({"taskId":task_id,"hostId":host_id,"revision":state.host_policies.revision,"policy":state.host_policies.effective(&host_id,task_id),"overrideId":token,"originalOverride":original_override,"overrideCapacity":{"policy":capacity,"source":source,"activeCount":active,"archivedCount":archived,"archivalPreservesAuthorization":true,"requiresRestart":false},"lastChange":state.host_policies.audit.last()}),
     )
 }
 

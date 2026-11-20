@@ -21,6 +21,12 @@ pub(crate) struct CapacityPolicy {
     pub(crate) initial_capacity: usize,
     pub(crate) extension_increment: usize,
     pub(crate) maximum_capacity: usize,
+    /// Per episode; live updates do not reset unresolved task input.
+    #[serde(default = "default_login_steps")]
+    pub(crate) maximum_login_steps: usize,
+}
+fn default_login_steps() -> usize {
+    32
 }
 impl Default for CapacityPolicy {
     fn default() -> Self {
@@ -30,6 +36,7 @@ impl Default for CapacityPolicy {
             initial_capacity: 256,
             extension_increment: 256,
             maximum_capacity: 4096,
+            maximum_login_steps: default_login_steps(),
         }
     }
 }
@@ -38,6 +45,7 @@ impl CapacityPolicy {
         if self.initial_capacity == 0
             || self.extension_increment == 0
             || self.maximum_capacity < self.initial_capacity
+            || self.maximum_login_steps == 0
         {
             return Err("browser_task_operation_capacity_policy_invalid: use positive initialCapacity and extensionIncrement with maximumCapacity at least initialCapacity".into());
         }
@@ -218,6 +226,12 @@ pub(super) fn strip_archived_json(
     serde_json::to_string(&value).map_err(|_| "browser_task_operation_document_invalid".into())
 }
 impl BrowserSessionSqliteStore {
+    pub(crate) fn login_step_limit(&self, task: &str) -> Result<usize, String> {
+        let config = configuration(&self.connection)?;
+        let (policy, _) = config.effective(task);
+        policy.validate()?;
+        Ok(policy.maximum_login_steps)
+    }
     pub(crate) fn archived_task_operation(
         &self,
         task: &str,

@@ -9,21 +9,26 @@ const same=(a,b,keys)=>keys.every(k=>a?.[k]!==undefined&&a[k]===b?.[k]);
 export function createNativeSavedLoginClient({callTool,store,verifyAccess,expectedAccount,now=Date.now,timeoutMs=300000}){
  if(typeof callTool!=='function'||typeof verifyAccess!=='function'||!store||['load','save','withEpisode'].some(k=>typeof store[k]!=='function')||typeof expectedAccount!=='string'||!expectedAccount||expectedAccount.length>254||!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>2147483647)throw TypeError('native_saved_login_configuration_required');
  const accountDigest=createHash('sha256').update(expectedAccount).digest('hex');
- return {async resolve({taskId,episodeId,allowAcknowledgedResume=false}){
-  if(typeof taskId!=='string'||!taskId||typeof episodeId!=='string'||!/^[-A-Za-z0-9_.:]{1,96}$/.test(episodeId)||typeof allowAcknowledgedResume!=='boolean')throw TypeError('native_saved_login_stable_identity_required');
+ return {async resolve({taskId,episodeId,allowAcknowledgedResume=false,steps:requestedSteps}){
+  if(typeof taskId!=='string'||!taskId||typeof episodeId!=='string'||!/^[-A-Za-z0-9_.:]{1,96}$/.test(episodeId)||typeof allowAcknowledgedResume!=='boolean'||requestedSteps!==undefined&&(!Array.isArray(requestedSteps)||!requestedSteps.length||requestedSteps.some(kind=>!kinds.includes(kind))))throw TypeError('native_saved_login_stable_identity_required');
   const invocationStartedAtMs=now(),invocationDeadlineAtMs=invocationStartedAtMs+timeoutMs;
   return store.withEpisode(episodeId,async()=>{
    /** @type {import('./native-saved-login.d.ts').SavedLoginResult} */
    const result={taskId,episodeId,status:'human_required',reason:'native_saved_login_unverified',retryAllowed:false};
    let episode=await store.load(episodeId);const fresh=episode===null;
    if(!episode&&allowAcknowledgedResume)return {...result,reason:'native_saved_login_acknowledged_resume_unverified'};
-   if(!episode){const start=now();episode={schemaVersion:1,episodeId,taskId,accountDigest,createdAtMs:start,deadlineAtMs:start+timeoutMs,timeoutMs,inputs:[],captureSequence:0};await store.save(episode);}
-   if(episode.schemaVersion!==1||episode.taskId!==taskId||episode.episodeId!==episodeId||episode.accountDigest!==accountDigest||!Number.isSafeInteger(episode.createdAtMs)||!Number.isSafeInteger(episode.deadlineAtMs)||!Number.isSafeInteger(episode.timeoutMs??60000)||(episode.timeoutMs??60000)<1||(episode.timeoutMs??60000)>2147483647||episode.deadlineAtMs!==episode.createdAtMs+(episode.timeoutMs??60000)||episode.inputs.length>3)return {...result,reason:'native_saved_login_retained_identity_changed'};
+   if(!episode){const start=now();episode={schemaVersion:1,episodeId,taskId,accountDigest,createdAtMs:start,deadlineAtMs:start+timeoutMs,timeoutMs,inputs:[],captureSequence:0,steps:requestedSteps??[...kinds]};await store.save(episode);}
+   if(episode.schemaVersion!==1||episode.taskId!==taskId||episode.episodeId!==episodeId||episode.accountDigest!==accountDigest||!Number.isSafeInteger(episode.createdAtMs)||!Number.isSafeInteger(episode.deadlineAtMs)||!Number.isSafeInteger(episode.timeoutMs??60000)||(episode.timeoutMs??60000)<1||(episode.timeoutMs??60000)>2147483647||episode.deadlineAtMs!==episode.createdAtMs+(episode.timeoutMs??60000)||!Array.isArray(episode.inputs))return {...result,reason:'native_saved_login_retained_identity_changed'};
    const checkpoint=episode;
+   const previousSteps=checkpoint.steps??[...kinds];
+   const steps=[...(requestedSteps??previousSteps)];
+   if(!Array.isArray(steps)||!steps.length||steps.some(kind=>!kinds.includes(kind))||checkpoint.inputs.length>steps.length||checkpoint.inputs.some((input,index)=>input.kind!==steps[index]))return {...result,reason:'native_saved_login_retained_identity_changed'};
+   if(requestedSteps&&!fresh&&JSON.stringify(requestedSteps)!==JSON.stringify(previousSteps)&&(!allowAcknowledgedResume||checkpoint.inputs.some(input=>input.state!=='acknowledged')))return {...result,status:'uncertain',reason:'native_saved_login_original_uncertain'};
+   checkpoint.steps=[...steps];await store.save(checkpoint);
    // Explicit continuation never promotes an uncertain/intent prefix. The host
    // retains the original checkpoint; save() may write a qualified sidecar.
    if(allowAcknowledgedResume&&checkpoint.inputs.some(input=>input.state!=='acknowledged'))return {...result,status:'uncertain',reason:'native_saved_login_original_uncertain'};
-   if(allowAcknowledgedResume&&(checkpoint.inputs.length<1||checkpoint.inputs.length>2||checkpoint.inputs.some((input,index)=>input.requestId!==episodeId+':input'+(index+1)||input.kind!==kinds[index]||typeof input.targetRef!=='string'||!input.targetRef||typeof input.observationRequestId!=='string'||!input.observationRequestId)||!logical.every(k=>typeof checkpoint.binding?.[k]==='string'&&checkpoint.binding[k])||!Number.isSafeInteger(checkpoint.controlEpoch)||!same(checkpoint.physical,checkpoint.physical,physical)))return {...result,reason:'native_saved_login_acknowledged_resume_unverified'};
+   if(allowAcknowledgedResume&&(checkpoint.inputs.length<1||checkpoint.inputs.length>=steps.length||checkpoint.inputs.some((input,index)=>input.requestId!==episodeId+':input'+(index+1)||input.kind!==steps[index]||typeof input.targetRef!=='string'||!input.targetRef||typeof input.observationRequestId!=='string'||!input.observationRequestId)||!logical.every(k=>typeof checkpoint.binding?.[k]==='string'&&checkpoint.binding[k])||!Number.isSafeInteger(checkpoint.controlEpoch)||!same(checkpoint.physical,checkpoint.physical,physical)))return {...result,reason:'native_saved_login_acknowledged_resume_unverified'};
    let resumeVerified=false;
    const fail=reason=>{throw Error(reason)};
    function remaining(){const time=now(),deadline=allowAcknowledgedResume?invocationDeadlineAtMs:Math.min(checkpoint.deadlineAtMs,invocationDeadlineAtMs);if(time<checkpoint.createdAtMs||time<invocationStartedAtMs||time>=deadline)fail('native_saved_login_budget_exhausted');return deadline-time;}
@@ -40,17 +45,17 @@ export function createNativeSavedLoginClient({callTool,store,verifyAccess,expect
     if(reply?.isError||envelope.success!==true){if(action==='task_operation'&&envelope.error?.code==='browser_task_operation_not_found')return null;fail('native_saved_login_operation_refused')};return envelope.data;
    }
    async function briefing(){const data=await call('task_briefing');if(!same(data,data,logical)||!logical.every(k=>typeof data[k]==='string'&&data[k].length>0)||data.taskId!==taskId||data.control?.owner!=='agent'||!Number.isSafeInteger(data.control?.epoch))fail('native_saved_login_task_control_changed');if(checkpoint.binding&&!same(data,checkpoint.binding,logical))fail('native_saved_login_task_binding_changed');if(checkpoint.controlEpoch!==undefined&&checkpoint.controlEpoch!==data.control.epoch)fail('native_saved_login_task_control_changed');return data;}
-   async function original(input){const data=await call('task_operation',{params:{requestId:input.requestId}});if(!data)return null;const op=data.operation;if(op?.taskId!==taskId||op.requestId!==input.requestId||op.action!=='native_input')fail('native_saved_login_original_unverified');const refs=op.evidenceReferences;if(op.state!=='owner_acknowledged'||refs?.nativeLoginEpisode!==episodeId||refs.nativeLoginKind!==input.kind||refs.nativeDelivery!=='dispatched'||refs.nativeLoginStep!==String(kinds.indexOf(input.kind))||(input.targetRef&&refs.nativeLoginTargetRef!==input.targetRef)||(input.observationRequestId&&refs.nativeLoginObservationRequestId!==input.observationRequestId))fail('native_saved_login_original_uncertain');return op;}
+   async function original(input){const data=await call('task_operation',{params:{requestId:input.requestId}});if(!data)return null;const op=data.operation;if(op?.taskId!==taskId||op.requestId!==input.requestId||op.action!=='native_input')fail('native_saved_login_original_unverified');const refs=op.evidenceReferences;if(op.state!=='owner_acknowledged'||refs?.nativeLoginEpisode!==episodeId||refs.nativeLoginKind!==input.kind||refs.nativeDelivery!=='dispatched'||refs.nativeLoginStep!==String(Number(input.requestId.slice((episodeId+':input').length))-1)||(input.targetRef&&refs.nativeLoginTargetRef!==input.targetRef)||(input.observationRequestId&&refs.nativeLoginObservationRequestId!==input.observationRequestId))fail('native_saved_login_original_uncertain');return op;}
    try{
     if(allowAcknowledgedResume){
      for(const retained of checkpoint.inputs)if(!await original(retained))fail('native_saved_login_original_uncertain');
      await briefing();
      const index=checkpoint.inputs.length;
-     if(await original({requestId:episodeId+':input'+(index+1),kind:kinds[index],state:'intent'}))fail('native_saved_login_acknowledged_resume_unverified');
+     if(await original({requestId:episodeId+':input'+(index+1),kind:steps[index],state:'intent'}))fail('native_saved_login_acknowledged_resume_unverified');
      resumeVerified=true;
     }
-    for(let index=0;index<3;index++){
-     const kind=kinds[index],requestId=episodeId+':input'+(index+1),retained=checkpoint.inputs[index];
+    for(let index=0;index<steps.length;index++){
+     const kind=steps[index],requestId=episodeId+':input'+(index+1),retained=checkpoint.inputs[index];
      if(retained){if(retained.requestId!==requestId||retained.kind!==kind)fail('native_saved_login_retained_identity_changed');if(!await original(retained))fail('native_saved_login_original_uncertain');retained.state='acknowledged';await store.save(checkpoint);continue;}
      /** @type {import('./native-saved-login.d.ts').SavedLoginInput} */
      const proposed={requestId,kind,state:'intent'};
@@ -123,7 +128,7 @@ export function createNativeSavedLoginClient({callTool,store,verifyAccess,expect
     const proof=await bounded(({signal})=>verifyAccess({taskId,episodeId,binding:checkpoint.binding,expectedAccount,signal}));
     if(proof?.state!=='verified'||proof.accountMatched!==true||!same(proof,after,logical)||typeof proof.evidenceRef!=='string'||!proof.evidenceRef||proof.evidenceRef.length>256)fail('native_saved_login_access_unverified');
     return {...result,status:'verified_access_after_native_saved_login',reason:'independent_account_access_verified',evidenceRef:proof.evidenceRef};
-   }catch(error){const reason=error instanceof Error&&/^native_saved_login_[a-z_]+$/.test(error.message)?error.message:'native_saved_login_observation_unavailable';return {...result,status:reason.includes('uncertain')||checkpoint.inputs.some(input=>input.state!=='acknowledged')?'uncertain':'human_required',reason};}
+   }catch(error){const reason=error instanceof Error&&/^native_saved_login_[a-z_]+$/.test(error.message)?error.message:'native_saved_login_observation_unavailable';const unsettled=checkpoint.inputs.some(input=>input.state!=='acknowledged');return {...result,status:reason.includes('uncertain')||unsettled?'uncertain':'human_required',reason,...(!unsettled&&checkpoint.inputs.length===steps.length?{continuation:{method:'resolve',arguments:{taskId,episodeId,allowAcknowledgedResume:true,steps:[...steps]},instruction:'Observe the next page and append its supported control kinds to steps before resolving; acknowledged originals will not replay.'}}:{})};}
   });
  }};
 }

@@ -127,9 +127,10 @@ fn input(
     .map_err(native_request_error)
 }
 #[test]
-fn native_login_perception_public_journal_retains_three_steps_and_refuses_replay_or_new_episode() {
+fn native_login_perception_public_journal_extends_and_renews_settled_episodes_without_replay() {
     let _fixture = fixture();
     let mut calls = 0;
+    BrowserSessionSqliteStore::default_sqlite().unwrap().task_operation_capacity("task", "task", Some(serde_json::from_value(json!({"initialCapacity":256,"extensionIncrement":256,"maximumCapacity":4096,"maximumLoginSteps":3})).unwrap())).unwrap();
     for (n, kind) in ["username", "credential_entry", "submit"]
         .iter()
         .enumerate()
@@ -148,25 +149,49 @@ fn native_login_perception_public_journal_retains_three_steps_and_refuses_replay
         "2"
     );
     capture("fresh-capture", "username");
-    assert!(input(
-        "new-episode",
-        "fresh-capture",
-        "renewed-episode",
-        false,
-        &mut calls
-    )
-    .unwrap_err()
-    .contains("episode_changed"));
-    assert!(input(
+    let exhausted = input(
         "extra-input",
         "fresh-capture",
         "original-episode",
         false,
-        &mut calls
+        &mut calls,
     )
-    .unwrap_err()
-    .contains("budget_exhausted"));
-    assert_eq!(calls, 3);
+    .unwrap_err();
+    assert!(exhausted.contains("budget_exhausted"));
+    assert!(exhausted.contains("maximumLoginSteps"));
+    BrowserSessionSqliteStore::default_sqlite().unwrap().task_operation_capacity("task", "task", Some(serde_json::from_value(json!({"initialCapacity":256,"extensionIncrement":256,"maximumCapacity":4096,"maximumLoginSteps":4})).unwrap())).unwrap();
+    input(
+        "extra-input",
+        "fresh-capture",
+        "original-episode",
+        false,
+        &mut calls,
+    )
+    .unwrap();
+    input(
+        "extra-input",
+        "fresh-capture",
+        "original-episode",
+        false,
+        &mut calls,
+    )
+    .unwrap();
+    assert_eq!(calls, 4);
+    capture("renewed-capture", "credential_entry");
+    input(
+        "renewed-input",
+        "renewed-capture",
+        "renewed-episode",
+        false,
+        &mut calls,
+    )
+    .unwrap();
+    assert_eq!(calls, 5);
+    let renewed = task_operations::lookup("task", "renewed-input").unwrap();
+    assert_eq!(
+        renewed["operation"]["evidenceReferences"]["nativeLoginStep"],
+        "0"
+    );
 }
 #[test]
 fn native_login_perception_public_journal_unknown_input_survives_reopen_and_blocks_progression() {
@@ -176,6 +201,15 @@ fn native_login_perception_public_journal_unknown_input_survives_reopen_and_bloc
     input("input-0", "cap-0", "episode", false, &mut calls).unwrap();
     capture("cap-1", "credential_entry");
     assert!(input("input-1", "cap-1", "episode", true, &mut calls).is_err());
+    assert!(input(
+        "new-episode-after-unknown",
+        "cap-1",
+        "renewed-episode",
+        false,
+        &mut calls
+    )
+    .unwrap_err()
+    .contains("previous_input_unsettled"));
     let reopened = BrowserSessionSqliteStore::default_sqlite().unwrap();
     let original =
         reopened.load_session_state().unwrap().task_operations["task"]["input-1"].clone();

@@ -101,6 +101,26 @@ pub struct BrowserPolicyOverride {
     pub actor: String,
     pub reason: String,
 }
+/// Active override working-set policy. Archived grants retain exactly the same
+/// task/action/request/policy matching and revocation checks as active grants.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BrowserOverrideCapacity {
+    pub active_limit: usize,
+}
+impl Default for BrowserOverrideCapacity {
+    fn default() -> Self {
+        Self { active_limit: 256 }
+    }
+}
+impl BrowserOverrideCapacity {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.active_limit == 0 {
+            return Err("browser_policy_override_capacity_invalid: set capacity.activeLimit to a positive integer; archived grants preserve exact authorization".into());
+        }
+        Ok(())
+    }
+}
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BrowserHostPolicies {
@@ -113,6 +133,14 @@ pub struct BrowserHostPolicies {
     pub task_overrides: BTreeMap<String, BrowserTaskPolicy>,
     #[serde(default)]
     pub operator_overrides: BTreeMap<String, BrowserPolicyOverride>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub archived_operator_overrides: BTreeMap<String, BrowserPolicyOverride>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub revoked_override_ids: BTreeSet<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub app_override_capacities: BTreeMap<String, BrowserOverrideCapacity>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub task_override_capacities: BTreeMap<String, BrowserOverrideCapacity>,
     #[serde(default)]
     pub audit: Vec<BrowserPolicyAudit>,
 }
@@ -132,17 +160,82 @@ impl BrowserHostPolicies {
             && self.app_defaults.is_empty()
             && self.task_overrides.is_empty()
             && self.operator_overrides.is_empty()
+            && self.archived_operator_overrides.is_empty()
+            && self.revoked_override_ids.is_empty()
+            && self.app_override_capacities.is_empty()
+            && self.task_override_capacities.is_empty()
             && self.audit.is_empty()
     }
     pub fn has_rules(&self) -> bool {
         !self.app_defaults.is_empty() || !self.task_overrides.is_empty()
     }
-    /// Task-scoped rules and grants expire with their task. Retain compact audit
-    /// history and app defaults without accumulating closed-task dispatch state.
+    /// Task-scoped rules expire with their task. Archived closed grants remain
+    /// attributable revoked evidence and can never authorize another task.
     pub fn retain_active_tasks(&mut self, active: &BTreeSet<String>) {
         self.task_overrides.retain(|id, _| active.contains(id));
-        self.operator_overrides
-            .retain(|_, grant| active.contains(&grant.task_id));
+        let closed: Vec<String> = self
+            .operator_overrides
+            .iter()
+            .chain(self.archived_operator_overrides.iter())
+            .filter(|(_, grant)| !active.contains(&grant.task_id))
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in closed {
+            self.revoked_override_ids.insert(id.clone());
+            if let Some(grant) = self.operator_overrides.remove(&id) {
+                self.archived_operator_overrides.insert(id, grant);
+            }
+        }
+        self.task_override_capacities
+            .retain(|task, _| active.contains(task));
+    }
+
+    pub fn override_capacity(
+        &self,
+        host: &str,
+        task: &str,
+    ) -> (BrowserOverrideCapacity, &'static str) {
+        if let Some(policy) = self.task_override_capacities.get(task) {
+            return (policy.clone(), "task_override");
+        }
+        if let Some(policy) = self.app_override_capacities.get(host) {
+            return (policy.clone(), "app_default");
+        }
+        (BrowserOverrideCapacity::default(), "system_default")
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn configure_override_capacity(
+        &mut self,
+        expected: u64,
+        host: &str,
+        task: &str,
+        scope: &str,
+        capacity: BrowserOverrideCapacity,
+        actor: &str,
+        reason: &str,
+    ) -> Result<(), String> {
+        if self.revision != expected {
+            return Err("browser_policy_revision_changed: read browser_policy status and retry with its current expectedRevision".into());
+        }
+        attribution(actor, reason)?;
+        self.revision
+            .checked_add(1)
+            .ok_or("browser_policy_revision_exhausted")?;
+        capacity.validate()?;
+        match scope {
+            "app" => {
+                self.app_override_capacities.insert(host.into(), capacity);
+            }
+            "task" => {
+                self.task_override_capacities.insert(task.into(), capacity);
+            }
+            _ => {
+                return Err(
+                    "browser_policy_override_capacity_scope_invalid: choose app or task".into(),
+                )
+            }
+        }
+        self.advance(task, "override_capacity", actor, reason)
     }
 
     pub fn effective(&self, host: &str, task: &str) -> Option<&BrowserTaskPolicy> {
@@ -193,10 +286,22 @@ impl BrowserHostPolicies {
             }
             _ => return Err("browser_policy_operation_invalid".into()),
         }
-        self.operator_overrides.retain(|_, grant| match operation {
-            "set_app" | "clear_app" => grant.host_id != host,
-            _ => grant.task_id != task,
-        });
+        let revoked: Vec<String> = self
+            .operator_overrides
+            .iter()
+            .chain(self.archived_operator_overrides.iter())
+            .filter(|(_, grant)| match operation {
+                "set_app" | "clear_app" => grant.host_id == host,
+                _ => grant.task_id == task,
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in revoked {
+            self.revoked_override_ids.insert(id.clone());
+            if let Some(grant) = self.operator_overrides.remove(&id) {
+                self.archived_operator_overrides.insert(id, grant);
+            }
+        }
         self.advance(task, operation, actor, reason)
     }
     #[allow(clippy::too_many_arguments)]
@@ -223,8 +328,31 @@ impl BrowserHostPolicies {
         {
             return Err("browser_policy_override_invalid".into());
         }
-        if self.operator_overrides.len() >= 256 {
-            return Err("browser_policy_override_limit: change the scoped policy instead".into());
+        if self.operator_overrides.contains_key(&token)
+            || self.archived_operator_overrides.contains_key(&token)
+        {
+            return Err("browser_policy_override_id_conflict: inspect the original grant; request a new attributable scoped override rather than replacing its identity".into());
+        }
+        let (capacity, _) = self.override_capacity(host, task);
+        capacity.validate()?;
+        if self
+            .operator_overrides
+            .values()
+            .filter(|grant| grant.host_id == host && grant.task_id == task)
+            .count()
+            >= capacity.active_limit
+        {
+            let ids: Vec<String> = self
+                .operator_overrides
+                .iter()
+                .filter(|(_, grant)| grant.host_id == host && grant.task_id == task)
+                .map(|(id, _)| id.clone())
+                .collect();
+            for id in ids {
+                if let Some(grant) = self.operator_overrides.remove(&id) {
+                    self.archived_operator_overrides.insert(id, grant);
+                }
+            }
         }
         self.operator_overrides.insert(
             token,
@@ -271,7 +399,12 @@ impl BrowserHostPolicies {
             return Ok(());
         }
         if override_id
-            .and_then(|id| self.operator_overrides.get(id))
+            .filter(|id| !self.revoked_override_ids.contains(*id))
+            .and_then(|id| {
+                self.operator_overrides
+                    .get(id)
+                    .or_else(|| self.archived_operator_overrides.get(id))
+            })
             .is_some_and(|grant| {
                 grant.task_id == task
                     && grant.action == action

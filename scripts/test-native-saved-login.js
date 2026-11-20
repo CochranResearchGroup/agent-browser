@@ -189,3 +189,24 @@ test('saved login resume never creates a fresh episode or extends a fully spent 
  const fresh=fixture();assert.equal((await createNativeSavedLoginClient({...fresh,expectedAccount:'configured@example.test'}).resolve({taskId:'task',episodeId:'episode',allowAcknowledgedResume:true})).reason,'native_saved_login_acknowledged_resume_unverified');assert.equal(fresh.episodes.size,0);
  const spent=fixture(),client=createNativeSavedLoginClient({...spent,expectedAccount:'configured@example.test'});await client.resolve({taskId:'task',episodeId:'episode'});const old=structuredClone(spent.episodes.get('episode'));assert.equal((await client.resolve({taskId:'task',episodeId:'episode',allowAcknowledgedResume:true})).reason,'native_saved_login_acknowledged_resume_unverified');assert.equal(spent.inputs.length,3);assert.deepEqual(spent.episodes.get('episode'),old);
 });
+
+// An acknowledged completed plan can be extended at runtime for a further page.
+const extended=fixture(),extendedBase=extended.callTool;
+extended.verifyAccess=async()=>({...extended.binding,state:'verified',accountMatched:extended.inputs.length===4,evidenceRef:'next-page-account-proof'});
+extended.callTool=async(name,args)=>{
+ const reply=await extendedBase(name,args);
+ if(args.action==='native_input'){
+  const op=extended.operations.get(args.requestId);
+  op.evidenceReferences.nativeLoginEpisode=args.params.loginTarget.episodeId;
+  op.evidenceReferences.nativeLoginKind=['username','credential_entry','submit','submit'][extended.inputs.length-1];
+ }
+ return reply;
+};
+const extendedClient=createNativeSavedLoginClient({...extended,expectedAccount:'configured@example.test'});
+const firstPage=await extendedClient.resolve({taskId:'task',episodeId:'episode'});
+assert.equal(firstPage.status,'human_required');
+assert(firstPage.continuation,'An unverified completed page must offer executable continuation');
+const nextPage=await extendedClient.resolve({taskId:'task',episodeId:'episode',allowAcknowledgedResume:true,steps:['username','credential_entry','submit','submit']});
+assert.equal(nextPage.status,'verified_access_after_native_saved_login');
+assert.equal(extended.inputs.length,4,'Acknowledged first-page inputs must not replay');
+console.log('native saved login: runtime extension continues an acknowledged multi-page plan');
